@@ -11,6 +11,18 @@ export const applicationScopeSchema = z.enum(applicationScopes)
 const nonEmptyString = z.string().trim().min(1)
 const optionalUrl = z.url().optional()
 
+export const paginationQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+})
+
+export const paginationMetadataSchema = z.object({
+  limit: z.number().int().positive(),
+  offset: z.number().int().min(0),
+  total: z.number().int().min(0),
+  hasMore: z.boolean(),
+})
+
 export const applicationSecretMetadataSchema = z.object({
   id: z.string(),
   version: z.number().int().positive(),
@@ -103,6 +115,21 @@ export const rotateClientSecretResponseSchema = z.object({
   secret: applicationSecretMetadataSchema,
 })
 
+export const listApplicationsResponseSchema = z.object({
+  applications: z.array(applicationResponseSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const listClientSecretsResponseSchema = z.object({
+  secrets: z.array(applicationSecretMetadataSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const listRedirectUrisResponseSchema = z.object({
+  redirectUris: z.array(z.string()),
+  pagination: paginationMetadataSchema,
+})
+
 export const consentRequestQuerySchema = z.object({
   client_id: nonEmptyString,
   redirect_uri: nonEmptyString,
@@ -130,9 +157,14 @@ export const createConsentRequestSchema = z.object({
 })
 
 export type ApplicationResponse = z.infer<typeof applicationResponseSchema>
+export type PaginationQuery = z.infer<typeof paginationQuerySchema>
+export type PaginationMetadata = z.infer<typeof paginationMetadataSchema>
 export type CreateApplicationRequest = z.infer<typeof createApplicationRequestSchema>
 export type UpdateApplicationRequest = z.infer<typeof updateApplicationRequestSchema>
 export type ReplaceRedirectUrisRequest = z.infer<typeof replaceRedirectUrisRequestSchema>
 export type RotateClientSecretResponse = z.infer<typeof rotateClientSecretResponseSchema>
+export type ListApplicationsResponse = z.infer<typeof listApplicationsResponseSchema>
+export type ListClientSecretsResponse = z.infer<typeof listClientSecretsResponseSchema>
+export type ListRedirectUrisResponse = z.infer<typeof listRedirectUrisResponseSchema>
 export type ConsentRequestResponse = z.infer<typeof consentRequestResponseSchema>
 export type CreateConsentRequest = z.infer<typeof createConsentRequestSchema>

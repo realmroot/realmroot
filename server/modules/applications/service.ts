@@ -4,6 +4,10 @@ import {
   applicationScopes,
   type CreateApplicationRequest,
   type CreateConsentRequest,
+  type ListApplicationsResponse,
+  type ListClientSecretsResponse,
+  type PaginationMetadata,
+  type PaginationQuery,
   type ReplaceRedirectUrisRequest,
   type RotateClientSecretResponse,
   type UpdateApplicationRequest,
@@ -51,12 +55,17 @@ export interface ConsentRecord {
   grantedAt: Date
 }
 
+export interface PaginatedResult<T> {
+  items: T[]
+  pagination: PaginationMetadata
+}
+
 export interface ApplicationRepository {
   create(input: {
     application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
     clientSecret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'> | null
   }): Promise<ApplicationAggregate>
-  list(): Promise<ApplicationAggregate[]>
+  list(pagination: PaginationQuery): Promise<PaginatedResult<ApplicationAggregate>>
   findById(id: string): Promise<ApplicationAggregate | null>
   findByClientId(clientId: string): Promise<ApplicationAggregate | null>
   update(
@@ -64,7 +73,7 @@ export interface ApplicationRepository {
     patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'createdAt' | 'updatedAt'>>,
   ): Promise<void>
   delete(id: string): Promise<void>
-  listSecrets(applicationId: string): Promise<ClientSecretRecord[]>
+  listSecrets(applicationId: string, pagination: PaginationQuery): Promise<PaginatedResult<ClientSecretRecord>>
   rotateSecret(input: {
     applicationId: string
     secret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'>
@@ -137,23 +146,27 @@ export class ApplicationService {
     })
 
     return {
-      ...this.toResponse(application, await this.repository.listSecrets(application.id)),
+      ...this.toResponse(application, (await this.repository.listSecrets(application.id, defaultPagination())).items),
       ...(clientSecret ? { clientSecret } : {}),
     }
   }
 
-  async list(): Promise<ApplicationResponse[]> {
-    const applications = await this.repository.list()
-    return Promise.all(
-      applications.map(async (application) =>
-        this.toResponse(application, await this.repository.listSecrets(application.id)),
+  async list(pagination: PaginationQuery): Promise<ListApplicationsResponse> {
+    const result = await this.repository.list(pagination)
+    const applications = await Promise.all(
+      result.items.map(async (application) =>
+        this.toResponse(application, (await this.repository.listSecrets(application.id, defaultPagination())).items),
       ),
     )
+    return {
+      applications,
+      pagination: result.pagination,
+    }
   }
 
   async get(id: string): Promise<ApplicationResponse> {
     const application = await this.requireApplication(id)
-    return this.toResponse(application, await this.repository.listSecrets(id))
+    return this.toResponse(application, (await this.repository.listSecrets(id, defaultPagination())).items)
   }
 
   async update(id: string, input: UpdateApplicationRequest): Promise<ApplicationResponse> {
@@ -203,9 +216,13 @@ export class ApplicationService {
     await this.repository.delete(id)
   }
 
-  async listSecrets(id: string) {
+  async listSecrets(id: string, pagination: PaginationQuery): Promise<ListClientSecretsResponse> {
     await this.requireApplication(id)
-    return (await this.repository.listSecrets(id)).map(toSecretMetadata)
+    const result = await this.repository.listSecrets(id, pagination)
+    return {
+      secrets: result.items.map(toSecretMetadata),
+      pagination: result.pagination,
+    }
   }
 
   async rotateSecret(id: string, actorUserId: string): Promise<RotateClientSecretResponse> {
@@ -363,6 +380,10 @@ function normalizeClientSettings(
     allowedGrantTypes: normalizedGrantTypes,
     allowedScopes: normalizedScopes,
   }
+}
+
+function defaultPagination(): PaginationQuery {
+  return { limit: 50, offset: 0 }
 }
 
 function normalizeRequestedScopes(scope: string | undefined, allowedScopes: ApplicationResponse['allowedScopes']) {

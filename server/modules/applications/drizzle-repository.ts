@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   application,
@@ -40,13 +40,20 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       }
     },
 
-    async list() {
+    async list(pagination) {
       const rows = await db
         .select({ application, oauthClient })
         .from(application)
         .innerJoin(oauthClient, eq(application.oauthClientId, oauthClient.clientId))
         .orderBy(desc(application.createdAt))
-      return rows.map((row) => toAggregate(row.application, row.oauthClient))
+        .limit(pagination.limit)
+        .offset(pagination.offset)
+      const totalRows = await db.select({ total: count() }).from(application)
+      const total = totalRows[0]?.total ?? 0
+      return {
+        items: rows.map((row) => toAggregate(row.application, row.oauthClient)),
+        pagination: toPaginationMetadata(pagination, total),
+      }
     },
 
     async findById(id) {
@@ -117,12 +124,23 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       })
     },
 
-    async listSecrets(applicationId) {
-      return db
+    async listSecrets(applicationId, pagination) {
+      const rows = await db
         .select()
         .from(applicationClientSecret)
         .where(eq(applicationClientSecret.applicationId, applicationId))
         .orderBy(desc(applicationClientSecret.version))
+        .limit(pagination.limit)
+        .offset(pagination.offset)
+      const totalRows = await db
+        .select({ total: count() })
+        .from(applicationClientSecret)
+        .where(eq(applicationClientSecret.applicationId, applicationId))
+      const total = totalRows[0]?.total ?? 0
+      return {
+        items: rows,
+        pagination: toPaginationMetadata(pagination, total),
+      }
     },
 
     async rotateSecret(input) {
@@ -293,6 +311,15 @@ function toConsent(row: typeof applicationConsent.$inferSelect): ConsentRecord {
     id: row.id,
     scopes: row.scopes.filter(isScope),
     grantedAt: row.grantedAt,
+  }
+}
+
+function toPaginationMetadata(pagination: { limit: number; offset: number }, total: number) {
+  return {
+    limit: pagination.limit,
+    offset: pagination.offset,
+    total,
+    hasMore: pagination.offset + pagination.limit < total,
   }
 }
 

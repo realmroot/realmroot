@@ -37,7 +37,15 @@ describe('ApplicationService', () => {
       redirectUris: ['https://app.example.com/callback'],
     })
 
-    await expect(service.list()).resolves.toHaveLength(1)
+    await expect(service.list({ limit: 50, offset: 0 })).resolves.toMatchObject({
+      applications: [{ id: created.id }],
+      pagination: {
+        limit: 50,
+        offset: 0,
+        total: 1,
+        hasMore: false,
+      },
+    })
 
     const updated = await service.update(created.id, {
       name: 'Admin Console',
@@ -98,11 +106,67 @@ describe('ApplicationService', () => {
 
     expect(rotated.clientSecret).toMatch(/^fas_/)
     expect(rotated.secret.version).toBe(2)
-    const secrets = await service.listSecrets(created.id)
-    expect(secrets).toMatchObject([
-      { version: 2, status: 'active', revokedAt: null },
-      { version: 1, status: 'revoked' },
-    ])
+    const secrets = await service.listSecrets(created.id, { limit: 1, offset: 0 })
+    expect(secrets).toMatchObject({
+      secrets: [{ version: 2, status: 'active', revokedAt: null }],
+      pagination: {
+        limit: 1,
+        offset: 0,
+        total: 2,
+        hasMore: true,
+      },
+    })
+
+    await expect(service.listSecrets(created.id, { limit: 1, offset: 1 })).resolves.toMatchObject({
+      secrets: [{ version: 1, status: 'revoked' }],
+      pagination: {
+        limit: 1,
+        offset: 1,
+        total: 2,
+        hasMore: false,
+      },
+    })
+  })
+
+  it('paginates application collection responses', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+
+    const first = await service.create(
+      {
+        name: 'First App',
+        clientType: 'public_spa',
+        redirectUris: ['https://first.example.com/callback'],
+      },
+      'admin-1',
+    )
+    const second = await service.create(
+      {
+        name: 'Second App',
+        clientType: 'public_spa',
+        redirectUris: ['https://second.example.com/callback'],
+      },
+      'admin-1',
+    )
+
+    await expect(service.list({ limit: 1, offset: 0 })).resolves.toMatchObject({
+      applications: [{ id: first.id }],
+      pagination: {
+        limit: 1,
+        offset: 0,
+        total: 2,
+        hasMore: true,
+      },
+    })
+    await expect(service.list({ limit: 1, offset: 1 })).resolves.toMatchObject({
+      applications: [{ id: second.id }],
+      pagination: {
+        limit: 1,
+        offset: 1,
+        total: 2,
+        hasMore: false,
+      },
+    })
   })
 
   it('validates redirect URIs and client grant settings at the API boundary', async () => {
@@ -216,8 +280,12 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     return application
   }
 
-  async list() {
-    return [...this.applications.values()]
+  async list(pagination: { limit: number; offset: number }) {
+    const applications = [...this.applications.values()]
+    return {
+      items: applications.slice(pagination.offset, pagination.offset + pagination.limit),
+      pagination: toPaginationMetadata(pagination, applications.length),
+    }
   }
 
   async findById(id: string) {
@@ -244,8 +312,12 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     this.secrets.delete(id)
   }
 
-  async listSecrets(applicationId: string) {
-    return [...(this.secrets.get(applicationId) ?? [])].sort((a, b) => b.version - a.version)
+  async listSecrets(applicationId: string, pagination: { limit: number; offset: number }) {
+    const secrets = [...(this.secrets.get(applicationId) ?? [])].sort((a, b) => b.version - a.version)
+    return {
+      items: secrets.slice(pagination.offset, pagination.offset + pagination.limit),
+      pagination: toPaginationMetadata(pagination, secrets.length),
+    }
   }
 
   async rotateSecret(input: {
@@ -295,4 +367,13 @@ function consentKey(applicationId: string, userId: string) {
 
 function withoutUndefined<T extends object>(input: T) {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as Partial<T>
+}
+
+function toPaginationMetadata(pagination: { limit: number; offset: number }, total: number) {
+  return {
+    limit: pagination.limit,
+    offset: pagination.offset,
+    total,
+    hasMore: pagination.offset + pagination.limit < total,
+  }
 }

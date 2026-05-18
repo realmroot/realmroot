@@ -2,6 +2,7 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import {
   createApplicationRequestSchema,
+  paginationQuerySchema,
   replaceRedirectUrisRequestSchema,
   updateApplicationRequestSchema,
 } from '../../../../shared/api/applications'
@@ -13,7 +14,9 @@ export const adminApplicationsRoute = new Hono<{ Bindings: ApplicationBindings }
 
 adminApplicationsRoute.use('*', requireAdmin())
 
-adminApplicationsRoute.get('/', async (c) => c.json({ applications: await createApplicationService(c).list() }))
+adminApplicationsRoute.get('/', zValidator('query', paginationQuerySchema), async (c) =>
+  c.json(await createApplicationService(c).list(c.req.valid('query'))),
+)
 
 adminApplicationsRoute.post('/', zValidator('json', createApplicationRequestSchema), async (c) => {
   const { user } = getAuthContext(c)
@@ -36,9 +39,18 @@ adminApplicationsRoute.delete('/:applicationId', async (c) => {
   return c.body(null, 204)
 })
 
-adminApplicationsRoute.get('/:applicationId/redirect-uris', async (c) => {
+adminApplicationsRoute.get('/:applicationId/redirect-uris', zValidator('query', paginationQuerySchema), async (c) => {
   const application = await createApplicationService(c).get(c.req.param('applicationId'))
-  return c.json({ redirectUris: application.redirectUris })
+  const pagination = c.req.valid('query')
+  const redirectUris = application.redirectUris.slice(pagination.offset, pagination.offset + pagination.limit)
+  return c.json({
+    redirectUris,
+    pagination: {
+      ...pagination,
+      total: application.redirectUris.length,
+      hasMore: pagination.offset + pagination.limit < application.redirectUris.length,
+    },
+  })
 })
 
 adminApplicationsRoute.put(
@@ -53,10 +65,9 @@ adminApplicationsRoute.put(
   },
 )
 
-adminApplicationsRoute.get('/:applicationId/client-secrets', async (c) => {
-  const secrets = await createApplicationService(c).listSecrets(c.req.param('applicationId'))
-  return c.json({ secrets })
-})
+adminApplicationsRoute.get('/:applicationId/client-secrets', zValidator('query', paginationQuerySchema), async (c) =>
+  c.json(await createApplicationService(c).listSecrets(c.req.param('applicationId'), c.req.valid('query'))),
+)
 
 adminApplicationsRoute.post('/:applicationId/client-secrets', async (c) => {
   const { user } = getAuthContext(c)
