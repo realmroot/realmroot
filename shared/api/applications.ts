@@ -156,6 +156,8 @@ export const createConsentRequestSchema = z.object({
   permissions: z.array(nonEmptyString).optional(),
 })
 
+export const hostedConsentApprovalRequestSchema = createConsentRequestSchema.omit({ permissions: true }).strict()
+
 export type ApplicationResponse = z.infer<typeof applicationResponseSchema>
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>
 export type PaginationMetadata = z.infer<typeof paginationMetadataSchema>
@@ -168,3 +170,4 @@ export type ListClientSecretsResponse = z.infer<typeof listClientSecretsResponse
 export type ListRedirectUrisResponse = z.infer<typeof listRedirectUrisResponseSchema>
 export type ConsentRequestResponse = z.infer<typeof consentRequestResponseSchema>
 export type CreateConsentRequest = z.infer<typeof createConsentRequestSchema>
+export type HostedConsentApprovalRequest = z.infer<typeof hostedConsentApprovalRequestSchema>

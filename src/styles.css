@@ -1,5 +1,12 @@
 :root {
-  color: #18212f;
+  --brand-primary: #b42318;
+  --brand-background: #f7f3ee;
+  --ink: #18181b;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --surface: #ffffff;
+  --soft: #f8fafc;
+  color: var(--ink);
   background: #f8fafc;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -15,6 +22,17 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
 }
 
 a {
@@ -47,20 +65,32 @@ a {
   font-weight: 700;
 }
 
-.brandMark {
+.brandLink {
+  width: max-content;
+}
+
+.brandMark,
+.brandLogo {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   place-items: center;
   border-radius: 8px;
   color: #ffffff;
-  background: #e85d04;
+  background: var(--brand-primary);
+  object-fit: cover;
 }
 
-.actions a {
+.actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.actions a,
+.primaryAction {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
+  min-height: 40px;
   padding: 0 14px;
   border-radius: 8px;
   font-size: 14px;
@@ -78,19 +108,26 @@ a {
 }
 
 .eyebrow {
-  margin: 0 0 16px;
-  color: #c2410c;
+  margin: 0 0 12px;
+  color: var(--brand-primary);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
+h1,
+h2,
+h3,
+p {
+  overflow-wrap: anywhere;
+}
+
 h1 {
   max-width: 760px;
   margin: 0;
   font-size: 56px;
-  line-height: 1.02;
+  line-height: 1.04;
   letter-spacing: 0;
 }
 
@@ -110,16 +147,21 @@ h1 {
   margin: 0 auto;
 }
 
+.feature,
+.settingsPanel,
+.authPanel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
 .feature {
   min-height: 184px;
   padding: 24px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #ffffff;
 }
 
 .feature svg {
-  color: #e85d04;
+  color: var(--brand-primary);
 }
 
 .feature h2 {
@@ -127,19 +169,469 @@ h1 {
   font-size: 18px;
 }
 
-.feature p {
+.feature p,
+.muted {
   margin: 0;
-  color: #64748b;
+  color: var(--muted);
   line-height: 1.6;
 }
 
-@media (max-width: 760px) {
+.authShell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 480px);
+  gap: 32px;
+  min-height: 100dvh;
+  padding: 32px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand-background) 82%, white), #ffffff 68%),
+    var(--brand-background);
+}
+
+.authBrandPanel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 16px 0 32px;
+}
+
+.authBrandPanel h1 {
+  max-width: 720px;
+}
+
+.authBrandPanel p:not(.eyebrow) {
+  max-width: 620px;
+  color: #52525b;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.authPanel {
+  align-self: center;
+  width: 100%;
+  padding: 28px;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 8%);
+}
+
+.authCardHeader h2,
+.settingsPanel h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.authCardHeader p {
+  margin: 0 0 20px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.formStack {
+  display: grid;
+  gap: 14px;
+}
+
+.compactForm {
+  margin-top: 20px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+  color: #27272a;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.field small {
+  color: var(--muted);
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.textInput {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  outline: none;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.textArea {
+  min-height: 108px;
+  resize: vertical;
+}
+
+.textInput:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 18%, transparent);
+}
+
+.uiButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.uiButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.uiButton-primary {
+  color: #ffffff;
+  background: var(--brand-primary);
+}
+
+.uiButton-secondary {
+  border-color: var(--line);
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.uiButton-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--brand-primary);
+}
+
+.uiButton-danger {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 18px;
+  padding: 4px;
+  border-radius: 8px;
+  background: #f4f4f5;
+}
+
+.segmented button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #52525b;
+  font-weight: 700;
+}
+
+.segmented button.active {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: 0 1px 8px rgb(24 24 27 / 8%);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  color: #1f2937;
+  background: #f3f4f6;
+  line-height: 1.5;
+}
+
+.status-success {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.status-error {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.status-warning {
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.socialGrid,
+.challengeGrid,
+.authLinks {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.socialGrid,
+.challengeGrid {
+  padding: 0;
+  border: 0;
+}
+
+.socialGrid legend,
+.challengeGrid legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.socialButton,
+.challengeGrid div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #27272a;
+  font-weight: 650;
+}
+
+.challengeGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.challengeGrid div {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.authLinks {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.authLinks a {
+  color: var(--brand-primary);
+  font-weight: 700;
+}
+
+.accountShell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--soft);
+}
+
+.accountSidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  min-height: 100dvh;
+  padding: 24px;
+  border-right: 1px solid var(--line);
+  background: #ffffff;
+}
+
+.accountNav {
+  display: grid;
+  gap: 6px;
+  margin-top: 32px;
+}
+
+.accountNav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #52525b;
+  font-weight: 700;
+  text-align: left;
+}
+
+.accountNav button.active {
+  background: #fff1f2;
+  color: var(--brand-primary);
+}
+
+.accountContent {
+  min-width: 0;
+  padding: 32px;
+}
+
+.accountHeader,
+.panelHeader,
+.buttonRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.accountHeader {
+  margin-bottom: 24px;
+}
+
+.accountGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.settingsPanel {
+  min-width: 0;
+  padding: 22px;
+}
+
+.settingsPanel > p {
+  margin-bottom: 16px;
+}
+
+.itemList {
+  display: grid;
+  gap: 10px;
+}
+
+.itemRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.itemRow h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.itemRow p,
+.emptyState {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.consentStack {
+  display: grid;
+  gap: 18px;
+}
+
+.applicationSummary {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.applicationSummary img {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+}
+
+.applicationSummary h2 {
+  margin: 0 0 4px;
+  font-size: 21px;
+}
+
+.applicationSummary p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.scopeList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scopeItem {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.scopeItem span {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 860px) {
+  .authShell,
+  .accountShell {
+    grid-template-columns: 1fr;
+  }
+
+  .authShell {
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .authBrandPanel {
+    gap: 48px;
+    justify-content: flex-start;
+    padding: 0;
+  }
+
+  .authPanel {
+    align-self: stretch;
+    padding: 20px;
+  }
+
+  .accountSidebar {
+    position: static;
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .accountNav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 20px;
+  }
+
+  .accountContent {
+    padding: 20px;
+  }
+
+  .accountGrid,
+  .featureGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
   .shell {
     padding: 18px;
   }
 
-  .topbar {
-    align-items: flex-start;
+  .topbar,
+  .accountHeader,
+  .panelHeader,
+  .buttonRow,
+  .itemRow {
+    align-items: stretch;
     flex-direction: column;
   }
 
@@ -151,11 +643,15 @@ h1 {
     font-size: 40px;
   }
 
-  .intro {
+  .intro,
+  .authBrandPanel p:not(.eyebrow) {
     font-size: 18px;
   }
 
-  .featureGrid {
+  .segmented,
+  .challengeGrid,
+  .authLinks,
+  .accountNav {
     grid-template-columns: 1fr;
   }
 }

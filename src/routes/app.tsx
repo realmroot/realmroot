@@ -28,8 +28,9 @@ export function App() {
         </div>
         <div className="actions">
           <a href="/sign-in">Sign in</a>
-          <a className="primaryAction" href="/admin">
-            Admin
+          <a href="/sign-up">Sign up</a>
+          <a className="primaryAction" href="/account">
+            Account
           </a>
         </div>
       </nav>
