@@ -1,17 +1,21 @@
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
 import { Hono } from 'hono'
+import type { SecurityPolicy } from '../shared/api/security'
 import type { Auth } from './auth'
 import { handleApiError, notFound } from './lib/errors'
 import { accessLog } from './middleware/access-log'
 import { authContext, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
+import { requireDeploymentMfa } from './middleware/security-policy'
+import type { SecurityRepository } from './modules/security/repository'
 import type { UserRepository } from './modules/users/repository'
 import { accountRoutes } from './routes/account'
 import { adminApiResourcesRoute } from './routes/admin/api-resources'
 import { adminApplicationsRoute } from './routes/admin/applications'
 import { adminOrganizationsRoute } from './routes/admin/organizations'
 import { adminRolesRoute } from './routes/admin/roles'
+import { adminSecurityRoutes } from './routes/admin/security'
 import { adminUserRoutes } from './routes/admin/users'
 import type { ExperienceAuthApi, ManagementAuthApi } from './routes/auth-api'
 import { createExperienceRoutes } from './routes/experience'
@@ -27,6 +31,8 @@ type AuthHandler = Pick<Auth, 'handler'> & {
 export interface AppOptions {
   trustedOrigins?: string[]
   userRepository?: UserRepository
+  securityRepository?: SecurityRepository
+  securityPolicy?: SecurityPolicy
   experienceServiceFactory?: Parameters<typeof createExperienceRoutes>[1]
 }
 
@@ -37,6 +43,10 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
   app.use('*', accessLog())
   app.use('/api/*', trustedOriginCors(options.trustedOrigins ?? []))
   app.use('/api/*', authContext(auth))
+
+  if (options.securityRepository && options.securityPolicy) {
+    app.use('/api/*', requireDeploymentMfa(options.securityPolicy, options.securityRepository))
+  }
 
   app.onError((error, c) => handleApiError(error, c))
   app.notFound((c) => handleApiError(notFound(), c))
@@ -61,7 +71,14 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
   if (options.userRepository) {
     const managementApi = auth.api as unknown as ManagementAuthApi
     app.route('/api/admin/users', adminUserRoutes(managementApi, options.userRepository))
-    app.route('/api/account', accountRoutes(managementApi, options.userRepository))
+    app.route('/api/account', accountRoutes(managementApi, options.userRepository, options.securityRepository))
+
+    if (options.securityRepository && options.securityPolicy) {
+      app.route(
+        '/api/admin/security',
+        adminSecurityRoutes(managementApi, options.userRepository, options.securityRepository, options.securityPolicy),
+      )
+    }
   }
 
   app.get('/api/auth/.well-known/openid-configuration', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))

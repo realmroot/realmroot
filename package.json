@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@better-auth/oauth-provider": "^1.6.10",
+    "@better-auth/passkey": "^1.6.10",
     "@hono/zod-validator": "^0.8.0",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-router": "^1.93.0",

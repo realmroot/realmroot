@@ -11,6 +11,7 @@ describe('createAuth OAuth Provider metadata', () => {
       'https://auth.example.com',
       ['https://auth.example.com'],
       createEmailSenderMock(),
+      createSecurityPolicy(),
     )
 
     const response = await createApp(auth).request('/api/auth/.well-known/openid-configuration')
@@ -41,6 +42,7 @@ describe('createAuth OAuth Provider metadata', () => {
       'https://auth.example.com',
       ['https://auth.example.com'],
       emailSender,
+      createSecurityPolicy(),
     )
 
     await auth.options.emailVerification?.sendVerificationEmail?.({
@@ -120,17 +122,22 @@ describe('createAuth OAuth Provider metadata', () => {
     })
   })
 
-  it('exposes magic link, email OTP, username, and organization invitation APIs', () => {
+  it('exposes security, magic link, email OTP, username, and organization invitation APIs', () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
       'https://auth.example.com',
       ['https://auth.example.com'],
       createEmailSenderMock(),
+      createSecurityPolicy(),
     )
 
     expect(Object.keys(auth.api)).toEqual(
       expect.arrayContaining([
+        'enableTwoFactor',
+        'verifyTOTP',
+        'listPasskeys',
+        'generatePasskeyRegistrationOptions',
         'signInMagicLink',
         'sendVerificationOTP',
         'requestPasswordResetEmailOTP',
@@ -151,6 +158,7 @@ describe('createAuth OAuth Provider metadata', () => {
       'https://auth.example.com',
       ['https://auth.example.com'],
       createEmailSenderMock(),
+      createSecurityPolicy(),
     )
 
     const organizationPlugin = auth.options.plugins?.find((plugin) => plugin.id === 'organization')
@@ -172,6 +180,7 @@ describe('createAuth OAuth Provider metadata', () => {
       'https://auth.example.com',
       ['https://auth.example.com'],
       createEmailSenderMock(),
+      createSecurityPolicy(),
     )
 
     expect(auth.options.user?.changeEmail?.enabled).toBe(true)
@@ -197,6 +206,7 @@ describe('createAuth OAuth Provider metadata', () => {
       'https://auth.example.com',
       ['https://auth.example.com'],
       createEmailSenderMock(),
+      createSecurityPolicy(),
     )
 
     const plugin = findPlugin<UsernamePluginOptions>(auth, 'username')
@@ -205,6 +215,79 @@ describe('createAuth OAuth Provider metadata', () => {
     expect(plugin.options.maxUsernameLength).toBe(64)
     expect(plugin.options.usernameValidator('ada_lovelace-1')).toBe(true)
     expect(plugin.options.usernameValidator('not allowed')).toBe(false)
+  })
+
+  it('configures deployment security policy for sessions and passkeys', () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy({
+        passkeys: {
+          enabled: true,
+          rpId: 'auth.example.com',
+          rpName: 'Example Auth',
+          origins: ['https://auth.example.com', 'https://preview.example.workers.dev'],
+        },
+        sessions: {
+          expiresInSeconds: 3600,
+          updateAgeSeconds: 300,
+          freshAgeSeconds: 600,
+          cookieCacheSeconds: 60,
+        },
+      }),
+    )
+
+    expect(auth.options.session).toMatchObject({
+      expiresIn: 3600,
+      updateAge: 300,
+      freshAge: 600,
+      cookieCache: {
+        enabled: true,
+        maxAge: 60,
+      },
+    })
+    expect(findPlugin<PasskeyPluginOptions>(auth, 'passkey').options).toMatchObject({
+      rpID: 'auth.example.com',
+      rpName: 'Example Auth',
+      origin: ['https://auth.example.com', 'https://preview.example.workers.dev'],
+    })
+    expect(findPlugin<TwoFactorPluginOptions>(auth, 'two-factor').options).toMatchObject({
+      issuer: 'FlareAuth',
+      allowPasswordless: true,
+    })
+  })
+
+  it('disables direct passkey auth endpoints when passkeys are disabled by deployment policy', () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy({
+        passkeys: {
+          enabled: false,
+          rpId: 'auth.example.com',
+          rpName: 'FlareAuth',
+          origins: ['https://auth.example.com'],
+        },
+      }),
+    )
+
+    expect(auth.options.disabledPaths).toEqual(
+      expect.arrayContaining([
+        '/passkey/generate-register-options',
+        '/passkey/generate-authenticate-options',
+        '/passkey/verify-registration',
+        '/passkey/verify-authentication',
+        '/passkey/list-user-passkeys',
+        '/passkey/delete-passkey',
+        '/passkey/update-passkey',
+      ]),
+    )
   })
 })
 
@@ -246,6 +329,58 @@ type UsernamePluginOptions = {
   minUsernameLength: number
   maxUsernameLength: number
   usernameValidator: (value: string) => boolean
+}
+
+type PasskeyPluginOptions = {
+  rpID: string
+  rpName: string
+  origin: string[]
+}
+
+type TwoFactorPluginOptions = {
+  issuer: string
+  allowPasswordless: boolean
+}
+
+function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {
+  return {
+    mfa: {
+      mode: 'optional',
+      ...overrides.mfa,
+    },
+    passkeys: {
+      enabled: true,
+      rpId: 'auth.example.com',
+      rpName: 'FlareAuth',
+      origins: ['https://auth.example.com'],
+      ...overrides.passkeys,
+    },
+    sessions: {
+      expiresInSeconds: 60 * 60 * 24 * 7,
+      updateAgeSeconds: 60 * 60 * 24,
+      freshAgeSeconds: 60 * 60 * 24,
+      cookieCacheSeconds: 60 * 5,
+      ...overrides.sessions,
+    },
+  } satisfies SecurityPolicyInput
+}
+
+interface SecurityPolicyInput {
+  mfa: {
+    mode: 'optional' | 'required'
+  }
+  passkeys: {
+    enabled: boolean
+    rpId: string
+    rpName: string
+    origins: string[]
+  }
+  sessions: {
+    expiresInSeconds: number
+    updateAgeSeconds: number
+    freshAgeSeconds: number
+    cookieCacheSeconds: number
+  }
 }
 
 function findPlugin<TOptions extends object>(auth: ReturnType<typeof createAuth>, id: string) {

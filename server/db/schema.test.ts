@@ -14,8 +14,10 @@ import {
   memberRoleAssignment,
   oauthClient,
   organization,
+  passkey,
   rolePermission,
   session,
+  twoFactor,
   user,
   userRoleAssignment,
 } from './schema'
@@ -116,5 +118,45 @@ describe('database schema', () => {
 
   it('stores account profile fields on the Better Auth user table', () => {
     expect(columnNames(user)).toEqual(expect.arrayContaining(['username', 'display_username', 'avatar_asset_id']))
+  })
+
+  it('keeps Better Auth security plugin tables compatible with the configured plugins', () => {
+    expect(columnNames(user)).toContain('two_factor_enabled')
+
+    expect(getTableConfig(twoFactor).name).toBe('two_factor')
+    expect(columnNames(twoFactor)).toEqual(
+      expect.arrayContaining(['id', 'secret', 'backup_codes', 'user_id', 'verified']),
+    )
+    expect(indexNames(twoFactor)).toEqual(expect.arrayContaining(['twoFactor_secret_idx', 'twoFactor_userId_idx']))
+    expect(foreignKeyReferences(twoFactor)).toContainEqual({
+      columns: ['user_id'],
+      foreignColumns: ['id'],
+      foreignTable: 'user',
+      onDelete: 'cascade',
+    })
+
+    expect(getTableConfig(passkey).name).toBe('passkey')
+    expect(columnNames(passkey)).toEqual(
+      expect.arrayContaining([
+        'id',
+        'name',
+        'public_key',
+        'user_id',
+        'credential_id',
+        'counter',
+        'device_type',
+        'backed_up',
+        'transports',
+        'created_at',
+        'aaguid',
+      ]),
+    )
+    expect(indexNames(passkey)).toEqual(expect.arrayContaining(['passkey_userId_idx', 'passkey_credentialID_idx']))
+    expect(foreignKeyReferences(passkey)).toContainEqual({
+      columns: ['user_id'],
+      foreignColumns: ['id'],
+      foreignTable: 'user',
+      onDelete: 'cascade',
+    })
   })
 })

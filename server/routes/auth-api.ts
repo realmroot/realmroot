@@ -12,12 +12,26 @@ export interface ManagementAuthApi {
   unbanUser: AuthEndpoint<{ body: { userId: string }; headers: Headers }, unknown>
   removeUser: AuthEndpoint<{ body: { userId: string }; headers: Headers }, unknown>
   listUserSessions: AuthEndpoint<{ body: { userId: string }; headers: Headers }, unknown>
+  listSessions: AuthEndpoint<{ headers: Headers }, unknown>
+  revokeSession: AuthEndpoint<{ body: { token: string }; headers: Headers }, unknown>
+  revokeSessions: AuthEndpoint<{ headers: Headers }, unknown>
   revokeUserSession: AuthEndpoint<{ body: { sessionToken: string }; headers: Headers }, unknown>
   revokeUserSessions: AuthEndpoint<{ body: { userId: string }; headers: Headers }, unknown>
   requestPasswordReset: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   sendVerificationEmail: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   changeEmail: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   changePassword: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  enableTwoFactor: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  disableTwoFactor: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  verifyTOTP: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  sendTwoFactorOTP: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  verifyTwoFactorOTP: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  generateBackupCodes: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  listPasskeys: AuthEndpoint<{ headers: Headers }, unknown>
+  generatePasskeyRegistrationOptions: AuthEndpoint<{ query: Record<string, unknown>; headers: Headers }, unknown>
+  verifyPasskeyRegistration: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  deletePasskey: AuthEndpoint<{ body: { id: string }; headers: Headers }, unknown>
+  updatePasskey: AuthEndpoint<{ body: { id: string; name: string }; headers: Headers }, unknown>
 }
 
 export interface ExperienceAuthApi {

@@ -42,7 +42,71 @@ describe('validateEnv', () => {
       emailFrom: 'noreply@example.com',
       emailFromName: undefined,
       trustedOrigins: ['https://tenant.example.com', 'https://admin.example.com'],
+      securityPolicy: {
+        mfa: {
+          mode: 'optional',
+        },
+        passkeys: {
+          enabled: true,
+          rpId: 'tenant.example.com',
+          rpName: 'FlareAuth',
+          origins: ['https://tenant.example.com', 'https://admin.example.com'],
+        },
+        sessions: {
+          expiresInSeconds: 60 * 60 * 24 * 7,
+          updateAgeSeconds: 60 * 60 * 24,
+          freshAgeSeconds: 60 * 60 * 24,
+          cookieCacheSeconds: 60 * 5,
+        },
+      },
     })
+  })
+
+  it('parses deployment security policy and explicit WebAuthn origins', () => {
+    expect(
+      validateEnv(
+        createEnv({
+          MFA_POLICY: 'required',
+          PASSKEY_ENABLED: 'false',
+          WEBAUTHN_RP_ID: 'auth.example.com',
+          WEBAUTHN_RP_NAME: 'Example Auth',
+          WEBAUTHN_ORIGINS: 'https://auth.example.com, https://preview.example.workers.dev',
+          SESSION_DURATION_SECONDS: '3600',
+          SESSION_UPDATE_AGE_SECONDS: '300',
+          SESSION_FRESH_AGE_SECONDS: '600',
+          SESSION_COOKIE_CACHE_SECONDS: '60',
+        }),
+        'https://tenant.example.com/api/health',
+      ).securityPolicy,
+    ).toEqual({
+      mfa: {
+        mode: 'required',
+      },
+      passkeys: {
+        enabled: false,
+        rpId: 'auth.example.com',
+        rpName: 'Example Auth',
+        origins: ['https://auth.example.com', 'https://preview.example.workers.dev'],
+      },
+      sessions: {
+        expiresInSeconds: 3600,
+        updateAgeSeconds: 300,
+        freshAgeSeconds: 600,
+        cookieCacheSeconds: 60,
+      },
+    })
+  })
+
+  it('fails fast for invalid security policy values', () => {
+    expect(() => validateEnv(createEnv({ MFA_POLICY: 'sometimes' }), 'https://tenant.example.com')).toThrow(
+      'MFA_POLICY must be one of: optional, required',
+    )
+    expect(() =>
+      validateEnv(createEnv({ WEBAUTHN_RP_ID: 'https://auth.example.com' }), 'https://tenant.example.com'),
+    ).toThrow('WEBAUTHN_RP_ID must be a domain name or localhost: https://auth.example.com')
+    expect(() => validateEnv(createEnv({ SESSION_DURATION_SECONDS: '0' }), 'https://tenant.example.com')).toThrow(
+      'SESSION_DURATION_SECONDS must be greater than 0',
+    )
   })
 })
 

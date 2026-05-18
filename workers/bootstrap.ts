@@ -2,6 +2,7 @@ import { createApp } from '../server/app'
 import { type Auth, createAuth } from '../server/auth'
 import { createDb } from '../server/db/client'
 import { createEmailSender } from '../server/lib/email/sender'
+import { createSecurityRepository } from '../server/modules/security/repository'
 import { createUserRepository } from '../server/modules/users/repository'
 import { type Env, type RuntimeConfig, validateEnv } from '../shared/env'
 
@@ -15,11 +16,12 @@ export default {
     const config = validateEnv(env, request.url)
     const auth = getAuth(env, config)
     const db = createDb(env.DB)
-    return createApp(auth, { trustedOrigins: config.trustedOrigins, userRepository: createUserRepository(db) }).fetch(
-      request,
-      env,
-      ctx,
-    )
+    return createApp(auth, {
+      trustedOrigins: config.trustedOrigins,
+      userRepository: createUserRepository(db),
+      securityRepository: createSecurityRepository(db, config.securityPolicy),
+      securityPolicy: config.securityPolicy,
+    }).fetch(request, env, ctx)
   },
 }
 
@@ -30,6 +32,7 @@ function getAuth(env: Env, config: RuntimeConfig): Auth {
     config.emailFrom,
     config.emailFromName ?? '',
     config.trustedOrigins.join(','),
+    JSON.stringify(config.securityPolicy),
   ].join('\n')
 
   if (!cachedAuth || cachedKey !== cacheKey || cachedDb !== env.DB || cachedEmail !== env.EMAIL) {
@@ -38,7 +41,14 @@ function getAuth(env: Env, config: RuntimeConfig): Auth {
       fromName: config.emailFromName,
     })
 
-    cachedAuth = createAuth(createDb(env.DB), config.authSecret, config.baseURL, config.trustedOrigins, emailSender)
+    cachedAuth = createAuth(
+      createDb(env.DB),
+      config.authSecret,
+      config.baseURL,
+      config.trustedOrigins,
+      emailSender,
+      config.securityPolicy,
+    )
     cachedKey = cacheKey
     cachedDb = env.DB
     cachedEmail = env.EMAIL

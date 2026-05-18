@@ -1,12 +1,14 @@
 import { oauthProvider } from '@better-auth/oauth-provider'
+import { passkey } from '@better-auth/passkey'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { admin, jwt } from 'better-auth/plugins'
+import { admin, jwt, twoFactor } from 'better-auth/plugins'
 import { createAccessControl } from 'better-auth/plugins/access'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { magicLink } from 'better-auth/plugins/magic-link'
 import { organization } from 'better-auth/plugins/organization'
 import { username } from 'better-auth/plugins/username'
+import type { SecurityPolicy } from '../shared/api/security'
 import type { Database } from './db/client'
 import * as schema from './db/schema'
 import type { TransactionalEmailSender } from './lib/email/sender'
@@ -53,14 +55,29 @@ export function createAuth(
   baseURL: string,
   trustedOrigins: string[],
   emailSender: TransactionalEmailSender,
+  securityPolicy: SecurityPolicy,
 ) {
   const authorization = new AuthorizationService(createDrizzleAuthorizationRepository(db))
 
   return betterAuth({
+    appName: 'FlareAuth',
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     secret,
     baseURL,
-    disabledPaths: ['/token'],
+    disabledPaths: [
+      '/token',
+      ...(!securityPolicy.passkeys.enabled
+        ? [
+            '/passkey/generate-register-options',
+            '/passkey/generate-authenticate-options',
+            '/passkey/verify-registration',
+            '/passkey/verify-authentication',
+            '/passkey/list-user-passkeys',
+            '/passkey/delete-passkey',
+            '/passkey/update-passkey',
+          ]
+        : []),
+    ],
     trustedOrigins,
     user: {
       additionalFields: {
@@ -119,9 +136,12 @@ export function createAuth(
       },
     },
     session: {
+      expiresIn: securityPolicy.sessions.expiresInSeconds,
+      updateAge: securityPolicy.sessions.updateAgeSeconds,
+      freshAge: securityPolicy.sessions.freshAgeSeconds,
       cookieCache: {
         enabled: true,
-        maxAge: 60 * 5,
+        maxAge: securityPolicy.sessions.cookieCacheSeconds,
       },
     },
     plugins: [
@@ -132,6 +152,32 @@ export function createAuth(
         },
       }),
       admin(),
+      twoFactor({
+        issuer: 'FlareAuth',
+        allowPasswordless: true,
+        twoFactorCookieMaxAge: 60 * 10,
+        trustDeviceMaxAge: 60 * 60 * 24 * 30,
+        otpOptions: {
+          sendOTP: async ({ user, otp }) => {
+            await emailSender.send({
+              to: user.email,
+              template: {
+                type: 'otp',
+                otp,
+              },
+            })
+          },
+        },
+      }),
+      passkey({
+        rpID: securityPolicy.passkeys.rpId,
+        rpName: securityPolicy.passkeys.rpName,
+        origin: securityPolicy.passkeys.origins,
+        authenticatorSelection: {
+          residentKey: 'preferred',
+          userVerification: 'preferred',
+        },
+      }),
       magicLink({
         sendMagicLink: async ({ email, url }) => {
           await emailSender.send({

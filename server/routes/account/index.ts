@@ -8,12 +8,14 @@ import { paginationMetadata, paginationQuerySchema } from '../../../shared/api/p
 import { badRequest } from '../../lib/errors'
 import { requireAuth } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
+import type { SecurityRepository } from '../../modules/security/repository'
 import type { UserRepository } from '../../modules/users/repository'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
 import { readJson, readQuery } from '../validation'
+import { accountSecurityRoutes } from './security'
 
-export function accountRoutes(authApi: ManagementAuthApi, users: UserRepository) {
+export function accountRoutes(authApi: ManagementAuthApi, users: UserRepository, security?: SecurityRepository) {
   const app = new Hono()
 
   app.use('*', requireAuth())
@@ -95,6 +97,10 @@ export function accountRoutes(authApi: ManagementAuthApi, users: UserRepository)
     const page = await users.listSessions(getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema))
     return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
   })
+
+  if (security) {
+    app.route('/security', accountSecurityRoutes(authApi, users, security))
+  }
 
   return app
 }

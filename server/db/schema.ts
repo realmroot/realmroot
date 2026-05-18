@@ -8,6 +8,7 @@ export const user = sqliteTable('user', {
   displayUsername: text('display_username'),
   email: text('email').notNull().unique(),
   emailVerified: integer('email_verified', { mode: 'boolean' }).default(false).notNull(),
+  twoFactorEnabled: integer('two_factor_enabled', { mode: 'boolean' }).default(false),
   image: text('image'),
   avatarAssetId: text('avatar_asset_id'),
   role: text('role'),
@@ -90,6 +91,40 @@ export const verification = sqliteTable(
       .notNull(),
   },
   (table) => [index('verification_identifier_idx').on(table.identifier)],
+)
+
+export const twoFactor = sqliteTable(
+  'two_factor',
+  {
+    id: text('id').primaryKey(),
+    secret: text('secret').notNull(),
+    backupCodes: text('backup_codes').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    verified: integer('verified', { mode: 'boolean' }).default(true),
+  },
+  (table) => [index('twoFactor_secret_idx').on(table.secret), index('twoFactor_userId_idx').on(table.userId)],
+)
+
+export const passkey = sqliteTable(
+  'passkey',
+  {
+    id: text('id').primaryKey(),
+    name: text('name'),
+    publicKey: text('public_key').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    credentialID: text('credential_id').notNull(),
+    counter: integer('counter').notNull(),
+    deviceType: text('device_type').notNull(),
+    backedUp: integer('backed_up', { mode: 'boolean' }).notNull(),
+    transports: text('transports'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    aaguid: text('aaguid'),
+  },
+  (table) => [index('passkey_userId_idx').on(table.userId), index('passkey_credentialID_idx').on(table.credentialID)],
 )
 
 export const oauthClient = sqliteTable(
@@ -744,6 +779,8 @@ export const customDomain = sqliteTable(
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  passkeys: many(passkey),
+  twoFactors: many(twoFactor),
   oauthClients: many(oauthClient),
   oauthRefreshTokens: many(oauthRefreshToken),
   oauthAccessTokens: many(oauthAccessToken),
@@ -751,6 +788,20 @@ export const userRelations = relations(user, ({ many }) => ({
   ownedApplications: many(application),
   organizationMemberships: many(member),
   roleAssignments: many(userRoleAssignment),
+}))
+
+export const twoFactorRelations = relations(twoFactor, ({ one }) => ({
+  user: one(user, {
+    fields: [twoFactor.userId],
+    references: [user.id],
+  }),
+}))
+
+export const passkeyRelations = relations(passkey, ({ one }) => ({
+  user: one(user, {
+    fields: [passkey.userId],
+    references: [user.id],
+  }),
 }))
 
 export const sessionRelations = relations(session, ({ one }) => ({
