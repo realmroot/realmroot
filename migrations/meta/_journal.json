@@ -8,6 +8,13 @@
       "when": 1779066734867,
       "tag": "0000_bitter_medusa",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779087390207,
+      "tag": "0001_curly_virginia_dare",
+      "breakpoints": true
     }
   ]
 }
