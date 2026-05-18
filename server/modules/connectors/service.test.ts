@@ -82,7 +82,7 @@ describe('ConnectorService', () => {
   })
 
   it('rejects duplicate provider configuration before inserting', async () => {
-    const existing = connector({ providerType: 'social', providerId: 'github' })
+    const existing = connector({ providerType: 'generic_oauth', providerId: 'github' })
     const repository = createRepository({ existingProvider: existing })
     const service = new ConnectorService(repository)
 
@@ -98,6 +98,7 @@ describe('ConnectorService', () => {
       status: 400,
       message: 'Connector provider is already configured.',
     })
+    expect(repository.findByProviderId).toHaveBeenCalledWith('github')
     expect(repository.create).not.toHaveBeenCalled()
   })
 
@@ -142,7 +143,7 @@ function createRepository(
     list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     listEnabled: vi.fn().mockResolvedValue(overrides.enabled ?? []),
     findById: vi.fn().mockResolvedValue(overrides.byId ?? null),
-    findByProvider: vi.fn().mockResolvedValue(overrides.existingProvider ?? null),
+    findByProviderId: vi.fn().mockResolvedValue(overrides.existingProvider ?? null),
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),

@@ -41,7 +41,7 @@ export class ConnectorService {
 
   async create(input: CreateConnectorRequest) {
     assertSupportedProvider(input.providerType, input.providerId)
-    await assertProviderAvailable(this.repository, input.providerType, input.providerId)
+    await assertProviderAvailable(this.repository, input.providerId)
     const now = new Date()
     const candidate = {
       id: `idp_${crypto.randomUUID().replaceAll('-', '')}`,
@@ -172,12 +172,8 @@ function assertComplete(connector: ConnectorRow) {
   }
 }
 
-async function assertProviderAvailable(
-  repository: ConnectorRepository,
-  providerType: ConnectorProviderType,
-  providerId: string,
-) {
-  const existing = await repository.findByProvider(providerType, providerId)
+async function assertProviderAvailable(repository: ConnectorRepository, providerId: string) {
+  const existing = await repository.findByProviderId(providerId)
   if (existing) throw badRequest('Connector provider is already configured.')
 }
 

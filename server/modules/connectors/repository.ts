@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm'
+import { count, desc, eq } from 'drizzle-orm'
 import type { PaginationInput } from '../../../shared/api/pagination'
 import type { Database } from '../../db/client'
 import { identityProviderConnector } from '../../db/schema'
@@ -10,7 +10,7 @@ export interface ConnectorRepository {
   list(page: PaginationInput): Promise<{ items: ConnectorRow[]; total: number }>
   listEnabled(): Promise<ConnectorRow[]>
   findById(id: string): Promise<ConnectorRow | null>
-  findByProvider(providerType: string, providerId: string): Promise<ConnectorRow | null>
+  findByProviderId(providerId: string): Promise<ConnectorRow | null>
   create(input: ConnectorInsert): Promise<ConnectorRow>
   update(id: string, input: Partial<ConnectorInsert>): Promise<ConnectorRow | null>
   delete(id: string): Promise<void>
@@ -39,16 +39,11 @@ export function createConnectorRepository(db: Database): ConnectorRepository {
       return row ?? null
     },
 
-    async findByProvider(providerType, providerId) {
+    async findByProviderId(providerId) {
       const [row] = await db
         .select()
         .from(identityProviderConnector)
-        .where(
-          and(
-            eq(identityProviderConnector.providerType, providerType),
-            eq(identityProviderConnector.providerId, providerId),
-          ),
-        )
+        .where(eq(identityProviderConnector.providerId, providerId))
       return row ?? null
     },
 

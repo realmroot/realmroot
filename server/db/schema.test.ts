@@ -115,7 +115,7 @@ describe('database schema', () => {
       '{"email":"mail","name":"displayName"}',
     )
     expect(indexNames(identityProviderConnector)).toEqual(
-      expect.arrayContaining(['identityProviderConnector_providerType_providerId_unique']),
+      expect.arrayContaining(['identityProviderConnector_providerId_unique']),
     )
   })
 
