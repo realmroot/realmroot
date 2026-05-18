@@ -1,6 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiRequestError } from './api'
-import { nativeAuth, signInWithSocial, verifyEmail } from './auth-client'
+import {
+  nativeAuth,
+  requestEmailOtp,
+  requestEmailOtpPasswordReset,
+  requestEmailVerification,
+  requestMagicLink,
+  requestPasswordReset,
+  resetPassword,
+  resetPasswordWithEmailOtp,
+  signInWithEmailOtp,
+  signInWithPassword,
+  signInWithSocial,
+  signInWithUsername,
+  signOut,
+  signUp,
+  verifyEmail,
+  verifyEmailOtp,
+} from './auth-client'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -43,6 +60,58 @@ describe('native auth client', () => {
       name: 'ApiRequestError',
       status: 401,
       message: 'Invalid credentials',
+    } satisfies Partial<ApiRequestError>)
+  })
+
+  it('maps hosted auth actions to native Better Auth endpoints', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    await signInWithPassword({ email: 'jane@example.com', password: 'password-1' })
+    await signInWithUsername({ username: 'jane', password: 'password-1' })
+    await signOut()
+    await signUp({ email: 'jane@example.com', name: 'Jane', password: 'password-1', username: 'jane' })
+    await requestPasswordReset({ email: 'jane@example.com', redirectTo: '/forgot-password' })
+    await resetPassword({ token: 'token-1', newPassword: 'new-password' })
+    await requestEmailVerification({ email: 'jane@example.com', callbackURL: '/account' })
+    await requestMagicLink({ email: 'jane@example.com', callbackURL: '/account' })
+    await requestEmailOtp({ email: 'jane@example.com', type: 'sign-in' })
+    await signInWithEmailOtp({ email: 'jane@example.com', otp: '123456' })
+    await verifyEmailOtp({ email: 'jane@example.com', otp: '123456' })
+    await requestEmailOtpPasswordReset({ email: 'jane@example.com' })
+    await resetPasswordWithEmailOtp({ email: 'jane@example.com', otp: '123456', password: 'new-password' })
+
+    expect(requests.map((request) => request.url)).toEqual([
+      '/api/auth/sign-in/email',
+      '/api/auth/sign-in/username',
+      '/api/auth/sign-out',
+      '/api/auth/sign-up/email',
+      '/api/auth/request-password-reset',
+      '/api/auth/reset-password',
+      '/api/auth/send-verification-email',
+      '/api/auth/sign-in/magic-link',
+      '/api/auth/email-otp/send-verification-otp',
+      '/api/auth/sign-in/email-otp',
+      '/api/auth/email-otp/verify-email',
+      '/api/auth/email-otp/request-password-reset',
+      '/api/auth/email-otp/reset-password',
+    ])
+  })
+
+  it('falls back to plain response text for non-JSON native errors', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(
+      new Response('upstream unavailable', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain' },
+      }),
+    )
+
+    await expect(nativeAuth('/sign-in/email', { email: 'jane@example.com' })).rejects.toMatchObject({
+      message: 'upstream unavailable',
+      status: 503,
     } satisfies Partial<ApiRequestError>)
   })
 })

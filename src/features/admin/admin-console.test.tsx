@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRouter, queryClient } from '@/router'
-import { ApplicationsPage, UsersPage } from './admin-console'
+import { AdminOnboardingPage, ApplicationsPage, UsersPage } from './admin-console'
 
 afterEach(() => {
   cleanup()
@@ -136,6 +136,58 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('Email already exists.')).toBeTruthy()
+  })
+
+  it('creates the first OIDC client from admin onboarding and copies integration details', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: clipboard,
+    })
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/applications' && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(application, 201))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<AdminOnboardingPage />)
+
+    fireEvent.change(await screen.findByLabelText('Application name'), { target: { value: 'Review app' } })
+    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'review-app' } })
+    fireEvent.change(screen.getByLabelText('Redirect URIs'), {
+      target: { value: 'http://localhost:4173/oidc/callback' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create OIDC client' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          url: '/api/management/applications',
+          body: {
+            name: 'Review app',
+            slug: 'review-app',
+            clientType: 'public_spa',
+            redirectUris: ['http://localhost:4173/oidc/callback'],
+          },
+        },
+      ])
+    })
+    expect(await screen.findByText('client-1')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy details' }))
+
+    await waitFor(() => expect(clipboard.writeText).toHaveBeenCalled())
+    expect(JSON.parse(clipboard.writeText.mock.calls[0]?.[0])).toEqual({
+      issuer: 'http://localhost:3000/api/auth',
+      discoveryUrl: 'http://localhost:3000/api/auth/.well-known/openid-configuration',
+      clientId: 'client-1',
+      redirectUri: 'http://localhost:4173/oidc/callback',
+      scopes: 'openid profile email',
+    })
   })
 })
 

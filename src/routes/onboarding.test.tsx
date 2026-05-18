@@ -44,6 +44,27 @@ describe('OnboardingRoute', () => {
     expect(screen.getByText('First admin created. Sign in to finish admin onboarding.')).toBeTruthy()
     expect(screen.queryByLabelText('Password')).toBeNull()
   })
+
+  it('shows first-admin creation errors without clearing the form', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz()))
+      if (url === '/api/onboarding/status') return Promise.resolve(jsonResponse({ required: true }))
+      return Promise.resolve(jsonResponse({ error: { message: 'First admin already exists.' } }, 409))
+    })
+
+    render(<OnboardingRoute />)
+
+    fireEvent.change(await screen.findByLabelText('Name', { exact: true }), {
+      target: { value: 'Admin User' },
+    })
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'admin@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create first admin' }))
+
+    expect(await screen.findByText('First admin already exists.')).toBeTruthy()
+    expect(screen.getByLabelText('Password')).toBeTruthy()
+  })
 })
 
 function jsonResponse(body: unknown, status = 200) {

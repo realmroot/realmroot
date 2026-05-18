@@ -1,6 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ForgotPasswordPage, resolveAuthRedirect, SignInPage } from './auth-pages'
+import {
+  AuthCallbackPage,
+  EmailVerificationPage,
+  ForgotPasswordPage,
+  resolveAuthRedirect,
+  SignInPage,
+  SignUpPage,
+} from './auth-pages'
 import { ConsentPage } from './consent-page'
 
 const configz = {
@@ -229,6 +236,120 @@ describe('hosted auth pages', () => {
         body: { email: 'jane@example.com', otp: '123456', password: 'new-password' },
       })
     })
+  })
+
+  it('creates accounts through native sign-up and removes password fields after success', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ user: { id: 'user-1' } }))
+    })
+
+    render(<SignUpPage />)
+
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Jane Stone' } })
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'jane' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/sign-up/email',
+        body: {
+          email: 'jane@example.com',
+          name: 'Jane Stone',
+          password: 'password-1',
+          username: 'jane',
+        },
+      })
+    })
+    expect(await screen.findByText('Account created. Check your email if verification is required.')).toBeTruthy()
+    expect(screen.queryByLabelText('Password')).toBeNull()
+  })
+
+  it('requests and verifies email with OTP through native auth endpoints', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<EmailVerificationPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send verification' }))
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/send-verification-email',
+        body: { email: 'jane@example.com' },
+      })
+    })
+
+    fireEvent.change(screen.getByLabelText('One-time code'), { target: { value: '654321' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verify email' }))
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/email-otp/verify-email',
+        body: { email: 'jane@example.com', otp: '654321' },
+      })
+    })
+  })
+
+  it('verifies email token links through native auth', async () => {
+    window.history.pushState(null, '', '/email-verification?token=token-1')
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<EmailVerificationPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify email' }))
+
+    await waitFor(() => {
+      expect(window.fetch).toHaveBeenCalledWith('/api/auth/verify-email?token=token-1', {
+        method: 'GET',
+        headers: undefined,
+        body: undefined,
+      })
+    })
+  })
+
+  it('renders callback errors, consent handoff, and safe account continuation', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
+
+    window.history.pushState(null, '', '/auth/callback?error=access_denied&error_description=Denied')
+    render(<AuthCallbackPage />)
+    expect(await screen.findByRole('heading', { name: 'Sign-in could not continue.' })).toBeTruthy()
+    expect(screen.getByText('Denied')).toBeTruthy()
+
+    cleanup()
+    window.history.pushState(
+      null,
+      '',
+      '/auth/callback?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    render(<AuthCallbackPage />)
+    expect(await screen.findByRole('heading', { name: 'Consent is required before redirecting.' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe(
+      '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+
+    cleanup()
+    window.history.pushState(null, '', '/auth/callback?return_to=/admin/onboarding')
+    render(<AuthCallbackPage />)
+    expect(await screen.findByRole('heading', { name: 'Sign-in complete.' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/admin/onboarding')
+  })
+
+  it('accepts callbackURL fields from native auth responses', () => {
+    expect(resolveAuthRedirect({ callbackURL: '/admin/onboarding' }, '/account')).toBe('/admin/onboarding')
   })
 })
 

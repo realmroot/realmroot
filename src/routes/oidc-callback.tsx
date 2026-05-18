@@ -3,10 +3,14 @@ import { useEffect } from 'react'
 const oidcStateStorageKey = 'flareauth.demo.oidcState'
 const oidcVerifierStorageKey = 'flareauth.demo.oidcVerifier'
 
-export function OidcStartRoute() {
+export function OidcStartRoute({
+  startAuthorization = () => startOidcDemoAuthorization((url) => window.location.assign(url)),
+}: {
+  startAuthorization?: () => Promise<void>
+}) {
   useEffect(() => {
-    void startOidcDemoAuthorization()
-  }, [])
+    void startAuthorization()
+  }, [startAuthorization])
 
   return (
     <main className="shell">
@@ -45,7 +49,7 @@ export function OidcCallbackRoute() {
   )
 }
 
-async function startOidcDemoAuthorization() {
+export async function startOidcDemoAuthorization(redirect: (url: URL) => void) {
   const currentUrl = new URL(window.location.href)
   const state = randomUrlToken()
   const verifier = randomUrlToken()
@@ -65,7 +69,7 @@ async function startOidcDemoAuthorization() {
   authorizationUrl.searchParams.set('code_challenge', await pkceChallenge(verifier))
   authorizationUrl.searchParams.set('code_challenge_method', 'S256')
 
-  window.location.assign(authorizationUrl)
+  redirect(authorizationUrl)
 }
 
 function randomUrlToken() {
