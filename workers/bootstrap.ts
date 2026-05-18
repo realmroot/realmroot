@@ -2,6 +2,7 @@ import { createApp } from '../server/app'
 import { type Auth, createAuth } from '../server/auth'
 import { createDb } from '../server/db/client'
 import { createEmailSender } from '../server/lib/email/sender'
+import { createUserRepository } from '../server/modules/users/repository'
 import { type Env, type RuntimeConfig, validateEnv } from '../shared/env'
 
 let cachedAuth: Auth | null = null
@@ -13,7 +14,12 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const config = validateEnv(env, request.url)
     const auth = getAuth(env, config)
-    return createApp(auth, { trustedOrigins: config.trustedOrigins }).fetch(request, env, ctx)
+    const db = createDb(env.DB)
+    return createApp(auth, { trustedOrigins: config.trustedOrigins, userRepository: createUserRepository(db) }).fetch(
+      request,
+      env,
+      ctx,
+    )
   },
 }
 

@@ -22,6 +22,13 @@
       "when": 1779089625297,
       "tag": "0002_fantastic_sue_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1779092624922,
+      "tag": "0003_user_profile_fields",
+      "breakpoints": true
     }
   ]
 }

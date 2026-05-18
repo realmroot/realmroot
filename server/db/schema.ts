@@ -4,9 +4,11 @@ import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqli
 export const user = sqliteTable('user', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  username: text('username').unique(),
   email: text('email').notNull().unique(),
   emailVerified: integer('email_verified', { mode: 'boolean' }).default(false).notNull(),
   image: text('image'),
+  avatarAssetId: text('avatar_asset_id'),
   role: text('role'),
   banned: integer('banned', { mode: 'boolean' }).default(false),
   banReason: text('ban_reason'),

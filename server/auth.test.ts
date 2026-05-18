@@ -99,6 +99,31 @@ describe('createAuth OAuth Provider metadata', () => {
       ]),
     )
   })
+
+  it('configures account profile fields and email changes', () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+    )
+
+    expect(auth.options.user?.changeEmail?.enabled).toBe(true)
+    expect(auth.options.user?.additionalFields).toMatchObject({
+      username: {
+        type: 'string',
+        required: false,
+        unique: true,
+        fieldName: 'username',
+      },
+      avatarAssetId: {
+        type: 'string',
+        required: false,
+        fieldName: 'avatar_asset_id',
+      },
+    })
+  })
 })
 
 function createEmailSenderMock() {

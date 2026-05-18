@@ -6,7 +6,11 @@ import { accessLog } from './middleware/access-log'
 import { authContext, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
+import type { UserRepository } from './modules/users/repository'
+import { accountRoutes } from './routes/account'
 import { adminApplicationsRoute } from './routes/admin/applications'
+import { adminUserRoutes } from './routes/admin/users'
+import type { ManagementAuthApi } from './routes/auth-api'
 import { oauthConsentRoute } from './routes/oauth/consent'
 
 type AuthHandler = Pick<Auth, 'handler'> & {
@@ -18,6 +22,7 @@ type AuthHandler = Pick<Auth, 'handler'> & {
 
 export interface AppOptions {
   trustedOrigins?: string[]
+  userRepository?: UserRepository
 }
 
 export function createApp(auth: AuthHandler, options: AppOptions = {}) {
@@ -40,6 +45,12 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
 
   app.route('/api/admin/applications', adminApplicationsRoute)
   app.route('/api/oauth/consent', oauthConsentRoute)
+
+  if (options.userRepository) {
+    const managementApi = auth.api as unknown as ManagementAuthApi
+    app.route('/api/admin/users', adminUserRoutes(managementApi, options.userRepository))
+    app.route('/api/account', accountRoutes(managementApi, options.userRepository))
+  }
 
   app.get('/api/auth/.well-known/openid-configuration', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))
   app.on(['GET', 'POST'], '/api/auth/**', (c) => auth.handler(c.req.raw))

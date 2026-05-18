@@ -16,6 +16,7 @@ import {
   organization,
   rolePermission,
   session,
+  user,
   userRoleAssignment,
 } from './schema'
 
@@ -111,5 +112,9 @@ describe('database schema', () => {
     expect(identityProviderConnector.attributeMapping.mapToDriverValue({ email: 'mail', name: 'displayName' })).toBe(
       '{"email":"mail","name":"displayName"}',
     )
+  })
+
+  it('stores account profile fields on the Better Auth user table', () => {
+    expect(columnNames(user)).toEqual(expect.arrayContaining(['username', 'avatar_asset_id']))
   })
 })

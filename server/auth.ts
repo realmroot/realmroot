@@ -25,6 +25,24 @@ export function createAuth(
     baseURL,
     disabledPaths: ['/token'],
     trustedOrigins,
+    user: {
+      additionalFields: {
+        username: {
+          type: 'string',
+          required: false,
+          unique: true,
+          fieldName: 'username',
+        },
+        avatarAssetId: {
+          type: 'string',
+          required: false,
+          fieldName: 'avatar_asset_id',
+        },
+      },
+      changeEmail: {
+        enabled: true,
+      },
+    },
     emailVerification: {
       sendOnSignUp: true,
       sendVerificationEmail: async ({ user, url }) => {
