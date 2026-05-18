@@ -6,6 +6,8 @@ import { accessLog } from './middleware/access-log'
 import { authContext, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
+import { adminApplicationsRoute } from './routes/admin/applications'
+import { oauthConsentRoute } from './routes/oauth/consent'
 
 type AuthHandler = Pick<Auth, 'handler'> & {
   api: {
@@ -35,6 +37,9 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
       service: 'flareauth',
     }),
   )
+
+  app.route('/api/admin/applications', adminApplicationsRoute)
+  app.route('/api/oauth/consent', oauthConsentRoute)
 
   app.get('/api/auth/.well-known/openid-configuration', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))
   app.on(['GET', 'POST'], '/api/auth/**', (c) => auth.handler(c.req.raw))
