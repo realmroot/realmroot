@@ -164,8 +164,11 @@ const journeyAssertions: Record<
   'oidc-client-callback': {
     suite: 'OAuth consent journey',
     assert: async ({ page }) => {
-      await page.goto('/oidc/start?client_id=client-1&redirect_uri=http%3A%2F%2Flocalhost%3A4173%2Foidc%2Fcallback', {
-        waitUntil: 'commit',
+      await page.goto('/')
+      await page.evaluate(() => {
+        window.location.assign(
+          '/oidc/start?client_id=client-1&redirect_uri=http%3A%2F%2Flocalhost%3A4173%2Foidc%2Fcallback',
+        )
       })
       await expect(page.getByRole('heading', { name: 'Demo client callback' })).toBeVisible()
       await expect(page.getByText(/code=demo-code&state=/)).toBeVisible()
