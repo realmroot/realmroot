@@ -18,7 +18,7 @@ describe('admin console', () => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings')
         return Promise.resolve(jsonResponse({ error: 'Unauthorized' }, 401))
-      if (url === '/api/experience') return Promise.resolve(jsonResponse(experienceConfig))
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       return Promise.resolve(jsonResponse({}))
     })
     window.history.pushState(null, '', '/admin/applications')
@@ -34,7 +34,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse({ error: 'Forbidden' }, 403))
-      if (url === '/api/experience') return Promise.resolve(jsonResponse(experienceConfig))
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       return Promise.resolve(jsonResponse({}))
     })
     window.history.pushState(null, '', '/admin/users')
@@ -200,7 +200,8 @@ const user = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 }
 
-const experienceConfig = {
+const configz = {
+  onboarding: { required: false, href: '/onboarding' },
   signIn: {
     passwordEnabled: true,
     signupEnabled: true,
@@ -232,4 +233,31 @@ const experienceConfig = {
     applicationId: null,
     redirectUri: null,
   },
+  auth: {
+    basePath: '/api/auth',
+    signInEmailPath: '/api/auth/sign-in/email',
+    signInUsernamePath: '/api/auth/sign-in/username',
+    signUpEmailPath: '/api/auth/sign-up/email',
+    signOutPath: '/api/auth/sign-out',
+    requestPasswordResetPath: '/api/auth/request-password-reset',
+    resetPasswordPath: '/api/auth/reset-password',
+    sendVerificationEmailPath: '/api/auth/send-verification-email',
+    verifyEmailPath: '/api/auth/verify-email',
+    magicLinkPath: '/api/auth/sign-in/magic-link',
+    emailOtpPath: '/api/auth/email-otp/send-verification-otp',
+    emailOtpSignInPath: '/api/auth/sign-in/email-otp',
+    emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
+    emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
+    emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
+  },
+  oidc: {
+    issuer: 'https://auth.example.com/api/auth',
+    discoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+    authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
+    tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+    jwksUri: 'https://auth.example.com/api/auth/jwks',
+    userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+    endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+  },
+  security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
 }

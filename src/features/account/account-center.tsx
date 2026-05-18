@@ -4,8 +4,7 @@ import { BrandIdentity } from '@/components/layout/auth-layout'
 import { Button } from '@/components/ui/button'
 import { Field, TextInput } from '@/components/ui/field'
 import { Status } from '@/components/ui/status'
-import { useExperienceConfig } from '@/features/auth/hooks'
-import { signOut } from '@/lib/api'
+import { useConfigz } from '@/features/auth/hooks'
 import {
   changeAccountPassword,
   createPasskeyRegistrationOptions,
@@ -26,6 +25,7 @@ import {
   verifyPasskeyRegistration,
   verifyTotp,
 } from '@/lib/api/account'
+import { signOut } from '@/lib/auth-client'
 
 type UserProfile = {
   id: string
@@ -100,7 +100,7 @@ const emptyAccountData: AccountData = {
 }
 
 export function AccountCenterPage() {
-  const { data: config } = useExperienceConfig()
+  const { data: config } = useConfigz()
   const [active, setActive] = useState('profile')
   const [data, setData] = useState(emptyAccountData)
   const [loading, setLoading] = useState(true)
@@ -503,7 +503,7 @@ function TotpEnrollmentDetails({ enrollment }: { enrollment: TotpEnrollmentDispl
       {enrollment.qrCode ? <img className="setupQr" src={enrollment.qrCode} alt="Authenticator app QR code" /> : null}
       {enrollment.otpAuthUri ? (
         <p>
-          <strong>Setup URI</strong>
+          <strong>Enrollment URI</strong>
           <code>{enrollment.otpAuthUri}</code>
         </p>
       ) : null}

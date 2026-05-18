@@ -1,11 +1,8 @@
-import type {
-  ExperienceCallbackQuery,
-  ExperienceCallbackResponse,
-  ExperienceConfigResponse,
-} from '../../../shared/api/experience'
-import { badRequest, notFound } from '../../lib/errors'
+import type { ConfigzConfigResponse } from '../../../shared/api/configz'
+import type { SecurityPolicy } from '../../../shared/api/security'
+import type { OnboardingRepository } from '../onboarding/repository'
 
-export interface ExperienceSettings {
+export interface ConfigzSettings {
   defaultApplicationId: string | null
   passwordEnabled: boolean
   signupEnabled: boolean
@@ -18,7 +15,7 @@ export interface ExperienceSettings {
   metadata: Record<string, unknown> | null
 }
 
-export interface ExperienceBranding {
+export interface ConfigzBranding {
   logoUrl: string | null
   faviconUrl: string | null
   primaryColor: string | null
@@ -26,32 +23,33 @@ export interface ExperienceBranding {
   customCss: string | null
 }
 
-export interface ExperienceIdentityProvider {
+export interface ConfigzIdentityProvider {
   slug: string
   providerType: string
   providerId: string
   displayName: string
 }
 
-export interface ExperienceApplication {
+export interface ConfigzApplication {
   id: string
   clientId: string
   redirectUris: string[]
   disabled: boolean
 }
 
-export interface ExperienceRepository {
-  getSettings(): Promise<ExperienceSettings | null>
-  getBranding(applicationId: string | null): Promise<ExperienceBranding | null>
-  listEnabledIdentityProviders(): Promise<ExperienceIdentityProvider[]>
-  findApplicationByClientId(clientId: string): Promise<ExperienceApplication | null>
+export interface ConfigzRepository {
+  getSettings(): Promise<ConfigzSettings | null>
+  getBranding(applicationId: string | null): Promise<ConfigzBranding | null>
+  listEnabledIdentityProviders(): Promise<ConfigzIdentityProvider[]>
 }
 
-export interface ExperienceServiceOptions {
+export interface ConfigzServiceOptions {
   issuer: string
   magicLinkEnabled: boolean
   emailOtpEnabled: boolean
   usernameEnabled: boolean
+  onboardingRepository?: OnboardingRepository
+  securityPolicy?: SecurityPolicy
 }
 
 const defaultCopy = {
@@ -60,21 +58,26 @@ const defaultCopy = {
   description: 'Use your account to continue securely.',
 }
 
-export class ExperienceService {
+export class ConfigzService {
   constructor(
-    private readonly repository: ExperienceRepository,
-    private readonly options: ExperienceServiceOptions,
+    private readonly repository: ConfigzRepository,
+    private readonly options: ConfigzServiceOptions,
   ) {}
 
-  async getConfig(): Promise<ExperienceConfigResponse> {
+  async getConfig(): Promise<ConfigzConfigResponse> {
     const settings = await this.repository.getSettings()
     const branding = await this.repository.getBranding(settings?.defaultApplicationId ?? null)
     const identityProviders = await this.repository.listEnabledIdentityProviders()
     const copy = readCopy(settings?.metadata)
     const passwordEnabled = settings?.passwordEnabled ?? true
     const signupEnabled = settings?.signupEnabled ?? true
+    const issuer = this.options.issuer.replace(/\/$/, '')
 
     return {
+      onboarding: {
+        required: this.options.onboardingRepository ? !(await this.options.onboardingRepository.hasUsers()) : false,
+        href: '/onboarding',
+      },
       signIn: {
         passwordEnabled,
         signupEnabled,
@@ -96,10 +99,8 @@ export class ExperienceService {
           ? identityProviders.map((provider) => ({
               slug: provider.slug,
               providerType: provider.providerType,
+              providerId: provider.providerId,
               displayName: provider.displayName,
-              authorizationUrl: `${this.options.issuer}/api/auth/sign-in/social?provider=${encodeURIComponent(
-                provider.providerId,
-              )}`,
             }))
           : [],
       links: {
@@ -112,59 +113,36 @@ export class ExperienceService {
         applicationId: settings?.defaultApplicationId ?? null,
         redirectUri: settings?.defaultRedirectUri ?? null,
       },
-    }
-  }
-
-  async getCallbackState(query: ExperienceCallbackQuery): Promise<ExperienceCallbackResponse> {
-    const returnTo = query.return_to ?? query.redirect_uri ?? null
-
-    if (query.error) {
-      return {
-        state: query.state ?? null,
-        returnTo,
-        error: {
-          code: query.error,
-          description: query.error_description ?? null,
-        },
-        consent: null,
-      }
-    }
-
-    if (!query.client_id && !query.redirect_uri) {
-      return {
-        state: query.state ?? null,
-        returnTo,
-        error: null,
-        consent: null,
-      }
-    }
-
-    if (!query.client_id || !query.redirect_uri) {
-      throw badRequest('client_id and redirect_uri are both required for OAuth callback state.')
-    }
-
-    const application = await this.repository.findApplicationByClientId(query.client_id)
-    if (!application || application.disabled) {
-      throw notFound('OAuth client was not found.')
-    }
-    if (!application.redirectUris.includes(query.redirect_uri)) {
-      throw badRequest('redirect_uri is not registered for this client.')
-    }
-
-    const params = new URLSearchParams({
-      client_id: query.client_id,
-      redirect_uri: query.redirect_uri,
-    })
-    if (query.state) params.set('state', query.state)
-
-    return {
-      state: query.state ?? null,
-      returnTo,
-      error: null,
-      consent: {
-        clientId: query.client_id,
-        redirectUri: query.redirect_uri,
-        href: `/oauth/consent?${params.toString()}`,
+      auth: {
+        basePath: '/api/auth',
+        signInEmailPath: '/api/auth/sign-in/email',
+        signInUsernamePath: '/api/auth/sign-in/username',
+        signUpEmailPath: '/api/auth/sign-up/email',
+        signOutPath: '/api/auth/sign-out',
+        requestPasswordResetPath: '/api/auth/request-password-reset',
+        resetPasswordPath: '/api/auth/reset-password',
+        sendVerificationEmailPath: '/api/auth/send-verification-email',
+        verifyEmailPath: '/api/auth/verify-email',
+        magicLinkPath: '/api/auth/sign-in/magic-link',
+        emailOtpPath: '/api/auth/email-otp/send-verification-otp',
+        emailOtpSignInPath: '/api/auth/sign-in/email-otp',
+        emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
+        emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
+        emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
+      },
+      oidc: {
+        issuer: `${issuer}/api/auth`,
+        discoveryUrl: `${issuer}/api/auth/.well-known/openid-configuration`,
+        authorizationEndpoint: `${issuer}/api/auth/oauth2/authorize`,
+        tokenEndpoint: `${issuer}/api/auth/oauth2/token`,
+        jwksUri: `${issuer}/api/auth/jwks`,
+        userInfoEndpoint: `${issuer}/api/auth/userinfo`,
+        endSessionEndpoint: `${issuer}/api/auth/oauth2/logout`,
+      },
+      security: {
+        mfaRequired: this.options.securityPolicy?.mfa.mode === 'required',
+        sessionExpiresInSeconds: this.options.securityPolicy?.sessions.expiresInSeconds ?? 0,
+        passkeysEnabled: this.options.securityPolicy?.passkeys.enabled ?? false,
       },
     }
   }

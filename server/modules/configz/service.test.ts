@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { type ExperienceRepository, ExperienceService } from './service'
+import { type ConfigzRepository, ConfigzService } from './service'
 
-describe('ExperienceService', () => {
+describe('ConfigzService', () => {
   it('composes hosted auth config from defaults without leaking connector secrets', async () => {
-    const service = new ExperienceService(createRepository(), {
+    const service = new ConfigzService(createRepository(), {
       issuer: 'https://auth.example.com',
       magicLinkEnabled: true,
       emailOtpEnabled: true,
@@ -11,6 +11,10 @@ describe('ExperienceService', () => {
     })
 
     await expect(service.getConfig()).resolves.toEqual({
+      onboarding: {
+        required: false,
+        href: '/onboarding',
+      },
       signIn: {
         passwordEnabled: true,
         signupEnabled: true,
@@ -42,11 +46,42 @@ describe('ExperienceService', () => {
         applicationId: null,
         redirectUri: null,
       },
+      auth: {
+        basePath: '/api/auth',
+        signInEmailPath: '/api/auth/sign-in/email',
+        signInUsernamePath: '/api/auth/sign-in/username',
+        signUpEmailPath: '/api/auth/sign-up/email',
+        signOutPath: '/api/auth/sign-out',
+        requestPasswordResetPath: '/api/auth/request-password-reset',
+        resetPasswordPath: '/api/auth/reset-password',
+        sendVerificationEmailPath: '/api/auth/send-verification-email',
+        verifyEmailPath: '/api/auth/verify-email',
+        magicLinkPath: '/api/auth/sign-in/magic-link',
+        emailOtpPath: '/api/auth/email-otp/send-verification-otp',
+        emailOtpSignInPath: '/api/auth/sign-in/email-otp',
+        emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
+        emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
+        emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
+      },
+      oidc: {
+        issuer: 'https://auth.example.com/api/auth',
+        discoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+        authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
+        tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+        jwksUri: 'https://auth.example.com/api/auth/jwks',
+        userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+        endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+      },
+      security: {
+        mfaRequired: false,
+        sessionExpiresInSeconds: 0,
+        passkeysEnabled: false,
+      },
     })
   })
 
   it('returns configured methods, branding, legal links, copy, defaults, and IdP summaries', async () => {
-    const service = new ExperienceService(
+    const service = new ConfigzService(
       createRepository({
         settings: {
           defaultApplicationId: 'app-1',
@@ -104,8 +139,8 @@ describe('ExperienceService', () => {
         {
           slug: 'google',
           providerType: 'oauth2',
+          providerId: 'google',
           displayName: 'Google',
-          authorizationUrl: 'https://auth.example.com/api/auth/sign-in/social?provider=google',
         },
       ],
       links: {
@@ -126,7 +161,7 @@ describe('ExperienceService', () => {
   })
 
   it('hides identity providers when social login is disabled', async () => {
-    const service = new ExperienceService(
+    const service = new ConfigzService(
       createRepository({
         settings: {
           ...defaultSettings(),
@@ -153,7 +188,7 @@ describe('ExperienceService', () => {
   })
 
   it('reports effective passwordless method availability when signup is disabled', async () => {
-    const service = new ExperienceService(
+    const service = new ConfigzService(
       createRepository({
         settings: {
           ...defaultSettings(),
@@ -172,138 +207,20 @@ describe('ExperienceService', () => {
     })
   })
 
-  it('normalizes OAuth callback errors without validating redirect data', async () => {
-    const service = new ExperienceService(createRepository(), defaultOptions())
-
-    await expect(
-      service.getCallbackState({
-        client_id: 'missing-client',
-        redirect_uri: 'https://evil.example.com/callback',
-        state: 'state-1',
-        error: 'access_denied',
-        error_description: 'The user denied consent.',
-      }),
-    ).resolves.toEqual({
-      state: 'state-1',
-      returnTo: 'https://evil.example.com/callback',
-      error: {
-        code: 'access_denied',
-        description: 'The user denied consent.',
-      },
-      consent: null,
-    })
-  })
-
-  it('returns neutral callback state when no OAuth query is present', async () => {
-    const service = new ExperienceService(createRepository(), defaultOptions())
-
-    await expect(service.getCallbackState({ return_to: '/dashboard' })).resolves.toEqual({
-      state: null,
-      returnTo: '/dashboard',
-      error: null,
-      consent: null,
-    })
-  })
-
-  it('rejects partial OAuth callback query state', async () => {
-    const service = new ExperienceService(createRepository(), defaultOptions())
-
-    await expect(service.getCallbackState({ client_id: 'client-1' })).rejects.toMatchObject({
-      status: 400,
-      code: 'bad_request',
-      message: 'client_id and redirect_uri are both required for OAuth callback state.',
-    })
-  })
-
-  it('rejects missing or disabled OAuth callback clients', async () => {
-    const missingService = new ExperienceService(createRepository(), defaultOptions())
-    const disabledService = new ExperienceService(
-      createRepository({
-        application: {
-          id: 'app-1',
-          clientId: 'client-1',
-          redirectUris: ['https://client.example.com/callback'],
-          disabled: true,
-        },
-      }),
-      defaultOptions(),
-    )
-
-    await expect(
-      missingService.getCallbackState({
-        client_id: 'client-1',
-        redirect_uri: 'https://client.example.com/callback',
-      }),
-    ).rejects.toMatchObject({
-      status: 404,
-      code: 'not_found',
-      message: 'OAuth client was not found.',
-    })
-    await expect(
-      disabledService.getCallbackState({
-        client_id: 'client-1',
-        redirect_uri: 'https://client.example.com/callback',
-      }),
-    ).rejects.toMatchObject({
-      status: 404,
-      code: 'not_found',
-      message: 'OAuth client was not found.',
-    })
-  })
-
-  it('validates OAuth callback client redirect before returning consent handoff', async () => {
-    const service = new ExperienceService(
-      createRepository({
-        application: {
-          id: 'app-1',
-          clientId: 'client-1',
-          redirectUris: ['https://client.example.com/callback'],
-          disabled: false,
-        },
-      }),
-      defaultOptions(),
-    )
-
-    await expect(
-      service.getCallbackState({
-        client_id: 'client-1',
-        redirect_uri: 'https://client.example.com/callback',
-        state: 'state-1',
-      }),
-    ).resolves.toEqual({
-      state: 'state-1',
-      returnTo: 'https://client.example.com/callback',
-      error: null,
-      consent: {
-        clientId: 'client-1',
-        redirectUri: 'https://client.example.com/callback',
-        href: '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+  it('reports first-run onboarding when no admin exists', async () => {
+    const service = new ConfigzService(createRepository(), {
+      ...defaultOptions(),
+      onboardingRepository: {
+        hasUsers: async () => false,
+        createBootstrapAdmin: async () => ({ id: 'user-1', email: 'admin@example.com', role: 'admin' }),
       },
     })
-  })
 
-  it('rejects unregistered OAuth callback redirects', async () => {
-    const service = new ExperienceService(
-      createRepository({
-        application: {
-          id: 'app-1',
-          clientId: 'client-1',
-          redirectUris: ['https://client.example.com/callback'],
-          disabled: false,
-        },
-      }),
-      defaultOptions(),
-    )
-
-    await expect(
-      service.getCallbackState({
-        client_id: 'client-1',
-        redirect_uri: 'https://evil.example.com/callback',
-      }),
-    ).rejects.toMatchObject({
-      status: 400,
-      code: 'bad_request',
-      message: 'redirect_uri is not registered for this client.',
+    await expect(service.getConfig()).resolves.toMatchObject({
+      onboarding: {
+        required: true,
+        href: '/onboarding',
+      },
     })
   })
 })
@@ -332,19 +249,16 @@ function defaultSettings() {
   }
 }
 
-function createRepository(overrides: Partial<MockData> = {}): ExperienceRepository {
+function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository {
   return {
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => overrides.branding ?? null,
     listEnabledIdentityProviders: async () => overrides.identityProviders ?? [],
-    findApplicationByClientId: async (clientId) =>
-      overrides.application?.clientId === clientId ? overrides.application : null,
   }
 }
 
 type MockData = {
-  settings: NonNullable<Awaited<ReturnType<ExperienceRepository['getSettings']>>>
-  branding: NonNullable<Awaited<ReturnType<ExperienceRepository['getBranding']>>>
-  identityProviders: Awaited<ReturnType<ExperienceRepository['listEnabledIdentityProviders']>>
-  application: NonNullable<Awaited<ReturnType<ExperienceRepository['findApplicationByClientId']>>>
+  settings: NonNullable<Awaited<ReturnType<ConfigzRepository['getSettings']>>>
+  branding: NonNullable<Awaited<ReturnType<ConfigzRepository['getBranding']>>>
+  identityProviders: Awaited<ReturnType<ConfigzRepository['listEnabledIdentityProviders']>>
 }

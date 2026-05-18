@@ -1,9 +1,9 @@
-import type { ExperienceConfigResponse } from '@shared/api/experience'
+import type { ConfigzConfigResponse } from '@shared/api/configz'
 import type { ReactNode } from 'react'
 
 type AuthLayoutProps = {
   children: ReactNode
-  config: ExperienceConfigResponse | null
+  config: ConfigzConfigResponse | null
   eyebrow?: string
   title: string
   description: string
@@ -33,7 +33,7 @@ export function AuthLayout({ children, config, eyebrow, title, description }: Au
   )
 }
 
-export function BrandIdentity({ config }: { config: ExperienceConfigResponse | null }) {
+export function BrandIdentity({ config }: { config: ConfigzConfigResponse | null }) {
   const productName = config?.copy.productName ?? 'FlareAuth'
   return (
     <a className="brand brandLink" href="/">

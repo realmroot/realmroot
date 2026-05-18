@@ -1,19 +1,5 @@
 import type { HostedConsentApprovalRequest } from '@shared/api/applications'
-import type {
-  EmailOtpPasswordResetInput,
-  EmailOtpPasswordResetRequest,
-  EmailOtpRequest,
-  EmailOtpSignIn,
-  EmailOtpVerification,
-  EmailVerificationInput,
-  EmailVerificationRequest,
-  MagicLinkRequest,
-  PasswordResetInput,
-  PasswordResetRequest,
-  PasswordSignInRequest,
-  SignUpRequest,
-  UsernameSignInRequest,
-} from '@shared/api/experience'
+import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import { type ClientResponse, hc } from 'hono/client'
 import type { AppType } from '../../../server/app'
 
@@ -68,12 +54,8 @@ export function getPlatformStatus() {
   return readRpcResponse(apiClient.api.health.$get())
 }
 
-export function getExperienceConfig() {
-  return readRpcResponse(apiClient.api.experience.$get())
-}
-
-export function getCallbackState(search: string) {
-  return readRpcResponse(apiClient.api.experience.callback.$get({ query: query(search) }))
+export function getConfigz() {
+  return readRpcResponse(apiClient.api.configz.$get())
 }
 
 export function getConsentRequest(search: string) {
@@ -88,60 +70,27 @@ export function createConsent(input: HostedConsentApprovalRequest) {
   return readRpcResponse(apiClient.api.oauth.consent.$post({ json: input }))
 }
 
-export function signInWithPassword(input: PasswordSignInRequest) {
-  return readRpcResponse(apiClient.api.experience['sign-ins'].password.$post({ json: input }))
+export async function getOnboardingStatus(): Promise<{ required: boolean }> {
+  const response = await fetch('/api/onboarding/status')
+  if (!response.ok) {
+    throw new ApiRequestError(await responseMessage(response), response.status)
+  }
+  return response.json() as Promise<{ required: boolean }>
 }
 
-export function signInWithUsername(input: UsernameSignInRequest) {
-  return readRpcResponse(apiClient.api.experience['sign-ins'].username.$post({ json: input }))
-}
-
-export function signOut() {
-  return readRpcResponse(apiClient.api.experience.session.$delete())
-}
-
-export function signUp(input: SignUpRequest) {
-  return readRpcResponse(apiClient.api.experience['sign-ups'].$post({ json: input }))
-}
-
-export function requestPasswordReset(input: PasswordResetRequest) {
-  return readRpcResponse(apiClient.api.experience['password-reset-requests'].$post({ json: input }))
-}
-
-export function resetPassword(input: PasswordResetInput) {
-  return readRpcResponse(apiClient.api.experience['password-resets'].$post({ json: input }))
-}
-
-export function requestEmailVerification(input: EmailVerificationRequest) {
-  return readRpcResponse(apiClient.api.experience['email-verification-requests'].$post({ json: input }))
-}
-
-export function verifyEmail(input: EmailVerificationInput) {
-  return readRpcResponse(apiClient.api.experience['email-verifications'].$post({ json: input }))
-}
-
-export function requestMagicLink(input: MagicLinkRequest) {
-  return readRpcResponse(apiClient.api.experience['magic-links'].$post({ json: input }))
-}
-
-export function requestEmailOtp(input: EmailOtpRequest) {
-  return readRpcResponse(apiClient.api.experience['email-otps'].$post({ json: input }))
-}
-
-export function signInWithEmailOtp(input: EmailOtpSignIn) {
-  return readRpcResponse(apiClient.api.experience['email-otp']['sign-ins'].$post({ json: input }))
-}
-
-export function verifyEmailOtp(input: EmailOtpVerification) {
-  return readRpcResponse(apiClient.api.experience['email-otp']['email-verifications'].$post({ json: input }))
-}
-
-export function requestEmailOtpPasswordReset(input: EmailOtpPasswordResetRequest) {
-  return readRpcResponse(apiClient.api.experience['email-otp']['password-reset-requests'].$post({ json: input }))
-}
-
-export function resetPasswordWithEmailOtp(input: EmailOtpPasswordResetInput) {
-  return readRpcResponse(apiClient.api.experience['email-otp']['password-resets'].$post({ json: input }))
+export async function createOnboardingAdmin(input: OnboardingAdminRequest) {
+  const response = await fetch('/api/onboarding/admin-users', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) {
+    throw new ApiRequestError(await responseMessage(response), response.status)
+  }
+  return response.json() as Promise<{
+    user: { id: string; email: string; role: string | null }
+    onboarding: { locked: true }
+  }>
 }
 
 function query(search: string): Record<string, string> {

@@ -11,13 +11,13 @@ import {
   paginationQuerySchema,
   roleResponseSchema,
 } from './authorization'
+import { configzMethodSchema } from './configz'
 import {
   connectorResponseSchema,
   createConnectorRequestSchema,
   listConnectorsResponseSchema,
   updateConnectorRequestSchema,
 } from './connectors'
-import { experienceMethodSchema } from './experience'
 import {
   adminBanUserSchema,
   adminCreateUserSchema,
@@ -37,7 +37,7 @@ export const managementErrorResponseSchema = z.object({
 })
 
 export const managementSignInSettingsResponseSchema = z.object({
-  signIn: experienceMethodSchema,
+  signIn: configzMethodSchema,
   defaults: z.object({
     applicationId: z.string().nullable(),
     redirectUri: z.string().nullable(),

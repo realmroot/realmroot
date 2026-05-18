@@ -1,16 +1,16 @@
-import type { SetupAdminRequest } from '../../../shared/api/setup'
+import type { OnboardingAdminRequest } from '../../../shared/api/onboarding'
 import { forbidden } from '../../lib/errors'
 
-export interface BootstrapAdminInput extends SetupAdminRequest {
+export interface BootstrapAdminInput extends OnboardingAdminRequest {
   passwordHash: string
 }
 
-export interface SetupRepository {
+export interface OnboardingRepository {
   hasUsers(): Promise<boolean>
   createBootstrapAdmin(input: BootstrapAdminInput): Promise<{ id: string; email: string; role: string | null }>
 }
 
-export function createSetupRepository(db: D1Database): SetupRepository {
+export function createOnboardingRepository(db: D1Database): OnboardingRepository {
   return {
     async hasUsers() {
       const row = await db.prepare('select 1 as value from user limit 1').first<{ value: number }>()
@@ -44,7 +44,7 @@ where exists (select 1 from user where id = ?2 and role = 'admin')
       const [userInsert, accountInsert] = await db.batch(statements)
 
       if (userInsert.meta.changes !== 1 || accountInsert.meta.changes !== 1) {
-        throw forbidden('Setup is locked after the first user exists.')
+        throw forbidden('Onboarding is locked after the first user exists.')
       }
 
       return {

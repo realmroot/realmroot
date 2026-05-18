@@ -99,7 +99,7 @@ function mockAccountFetch() {
     const method = init?.method ?? 'GET'
     const body = init?.body ? JSON.parse(String(init.body)) : null
     if (method !== 'GET') requests.push({ path, method, body })
-    if (path === '/api/experience') return Promise.resolve(jsonResponse(experienceConfig()))
+    if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
     if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
     if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
     if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
@@ -130,8 +130,9 @@ function mockAccountFetch() {
   return requests
 }
 
-function experienceConfig() {
+function configz() {
   return {
+    onboarding: { required: false, href: '/onboarding' },
     signIn: {
       passwordEnabled: true,
       signupEnabled: true,
@@ -156,6 +157,33 @@ function experienceConfig() {
       description: 'Hosted identity.',
     },
     defaults: { applicationId: null, redirectUri: null },
+    auth: {
+      basePath: '/api/auth',
+      signInEmailPath: '/api/auth/sign-in/email',
+      signInUsernamePath: '/api/auth/sign-in/username',
+      signUpEmailPath: '/api/auth/sign-up/email',
+      signOutPath: '/api/auth/sign-out',
+      requestPasswordResetPath: '/api/auth/request-password-reset',
+      resetPasswordPath: '/api/auth/reset-password',
+      sendVerificationEmailPath: '/api/auth/send-verification-email',
+      verifyEmailPath: '/api/auth/verify-email',
+      magicLinkPath: '/api/auth/sign-in/magic-link',
+      emailOtpPath: '/api/auth/email-otp/send-verification-otp',
+      emailOtpSignInPath: '/api/auth/sign-in/email-otp',
+      emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
+      emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
+      emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
+    },
+    oidc: {
+      issuer: 'https://auth.example.com/api/auth',
+      discoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+      authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
+      tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+      jwksUri: 'https://auth.example.com/api/auth/jwks',
+      userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+      endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+    },
+    security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
   }
 }
 

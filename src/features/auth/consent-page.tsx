@@ -5,10 +5,10 @@ import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
 import { createConsent, getConsentRequest } from '@/lib/api'
-import { useExperienceConfig } from './hooks'
+import { useConfigz } from './hooks'
 
 export function ConsentPage() {
-  const { data: config } = useExperienceConfig()
+  const { data: config } = useConfigz()
   const [consent, setConsent] = useState<ConsentRequestResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)

@@ -33,15 +33,15 @@ describe('v1.0 release product journey', () => {
     releaseState.authorization = createAuthorizationServiceDouble()
   })
 
-  it('covers setup, OAuth, admin, account, connector, MFA/passkey, RBAC claims, and deployment boundaries', async () => {
-    const setup = createSetupRepositoryDouble()
+  it('covers onboarding, OAuth, admin, account, connector, MFA/passkey, RBAC claims, and deployment boundaries', async () => {
+    const onboarding = createOnboardingRepositoryDouble()
     const auth = createAuthDouble()
     const users = createUserRepositoryDouble()
     const security = createSecurityRepositoryDouble()
     const connectors = createConnectorServiceDouble()
     const app = createApp(auth, {
       trustedOrigins: ['https://console.example.com'],
-      setupRepository: setup,
+      onboardingRepository: onboarding,
       userRepository: users,
       securityRepository: security,
       securityPolicy: securityPolicy(),
@@ -54,9 +54,9 @@ describe('v1.0 release product journey', () => {
     })
     expect(lockedAuth.status).toBe(403)
 
-    await expectJson(await app.request('/api/setup'), 200, { required: true })
+    await expectJson(await app.request('/api/onboarding/status'), 200, { required: true })
     await expectJson(
-      await app.request('/api/setup/admin', {
+      await app.request('/api/onboarding/admin-users', {
         method: 'POST',
         body: JSON.stringify({
           email: 'admin@example.com',
@@ -67,7 +67,7 @@ describe('v1.0 release product journey', () => {
       }),
       201,
       {
-        setup: { locked: true },
+        onboarding: { locked: true },
         user: { id: 'admin-1', email: 'admin@example.com', role: 'admin' },
       },
     )
@@ -449,7 +449,7 @@ function createAuthDouble() {
   }
 }
 
-function createSetupRepositoryDouble() {
+function createOnboardingRepositoryDouble() {
   let hasUsers = false
   return {
     hasUsers: vi.fn(async () => hasUsers),

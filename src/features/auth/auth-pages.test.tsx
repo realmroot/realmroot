@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ForgotPasswordPage, resolveAuthRedirect, SignInPage, socialAuthorizationUrl } from './auth-pages'
+import { ForgotPasswordPage, resolveAuthRedirect, SignInPage } from './auth-pages'
 import { ConsentPage } from './consent-page'
 
-const experienceConfig = {
+const configz = {
+  onboarding: { required: false, href: '/onboarding' },
   signIn: {
     passwordEnabled: true,
     signupEnabled: true,
@@ -24,8 +25,8 @@ const experienceConfig = {
     {
       slug: 'github',
       providerType: 'social',
+      providerId: 'github',
       displayName: 'GitHub',
-      authorizationUrl: '/api/auth/sign-in/social/github',
     },
   ],
   links: {
@@ -42,6 +43,9 @@ const experienceConfig = {
     applicationId: null,
     redirectUri: null,
   },
+  auth: authPaths(),
+  oidc: oidcMetadata(),
+  security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
 }
 
 const consentResponse = {
@@ -87,8 +91,8 @@ afterEach(() => {
 })
 
 describe('hosted auth pages', () => {
-  it('renders enabled sign-in methods and social connectors from experience config', async () => {
-    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(experienceConfig))
+  it('renders enabled sign-in methods and social connectors from configz', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
 
     render(<SignInPage />)
 
@@ -96,17 +100,15 @@ describe('hosted auth pages', () => {
     expect(screen.getByRole('button', { name: 'Password' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Magic link' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'OTP' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Continue with GitHub' }).getAttribute('href')).toBe(
-      '/api/auth/sign-in/social/github',
-    )
+    expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeTruthy()
   })
 
   it('uses magic link when password auth is disabled', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(
       jsonResponse({
-        ...experienceConfig,
+        ...configz,
         signIn: {
-          ...experienceConfig.signIn,
+          ...configz.signIn,
           passwordEnabled: false,
           magicLinkEnabled: true,
           emailOtpEnabled: false,
@@ -126,24 +128,41 @@ describe('hosted auth pages', () => {
     expect(resolveAuthRedirect({ token: 'token-1' }, undefined)).toBe('/account')
   })
 
-  it('preserves OAuth authorize callback on social connector links', () => {
+  it('posts native Better Auth social sign-in and redirects to the provider authorization URL', async () => {
     window.history.pushState(
       null,
       '',
       '/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
     )
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ url: 'https://github.com/login/oauth/authorize?state=social-state' }))
+    })
 
-    expect(socialAuthorizationUrl('/api/auth/sign-in/social/github?prompt=select_account', callbackFromPage())).toBe(
-      '/api/auth/sign-in/social/github?prompt=select_account&callbackURL=%2Fapi%2Fauth%2Foauth2%2Fauthorize%3Fclient_id%3Dclient-1%26redirect_uri%3Dhttps%253A%252F%252Fclient.example.com%252Fcallback%26state%3Dstate-1',
-    )
-    expect(
-      socialAuthorizationUrl(
-        'https://auth.example.com/api/auth/sign-in/social/github?prompt=select_account',
-        callbackFromPage(),
-      ),
-    ).toBe(
-      'https://auth.example.com/api/auth/sign-in/social/github?prompt=select_account&callbackURL=%2Fapi%2Fauth%2Foauth2%2Fauthorize%3Fclient_id%3Dclient-1%26redirect_uri%3Dhttps%253A%252F%252Fclient.example.com%252Fcallback%26state%3Dstate-1',
-    )
+    render(<SignInPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with GitHub' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          url: '/api/auth/sign-in/social',
+          body: {
+            provider: 'github',
+            callbackURL:
+              '/api/auth/oauth2/authorize?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+          },
+        },
+      ])
+    })
+  })
+
+  it('rejects external redirect targets from native auth responses and query params', () => {
+    expect(resolveAuthRedirect({ url: 'https://evil.example.com/callback' }, '/account')).toBe('/account')
+    expect(resolveAuthRedirect({ redirectTo: '//evil.example.com' }, '/account')).toBe('/account')
+    expect(resolveAuthRedirect({}, 'https://evil.example.com/callback')).toBe('/account')
   })
 
   it('posts OAuth consent approval and returns to the authorization endpoint', async () => {
@@ -155,7 +174,7 @@ describe('hosted auth pages', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.startsWith('/api/experience')) return Promise.resolve(jsonResponse(experienceConfig))
+      if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
       if (url.startsWith('/api/oauth/consent') && init?.method !== 'POST') {
         return Promise.resolve(jsonResponse(consentResponse))
       }
@@ -182,7 +201,7 @@ describe('hosted auth pages', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/experience') return Promise.resolve(jsonResponse(experienceConfig))
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
       return Promise.resolve(jsonResponse({ success: true }))
     })
@@ -195,7 +214,7 @@ describe('hosted auth pages', () => {
 
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/experience/email-otp/password-reset-requests',
+        url: '/api/auth/email-otp/request-password-reset',
         body: { email: 'jane@example.com' },
       })
     })
@@ -206,7 +225,7 @@ describe('hosted auth pages', () => {
 
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/experience/email-otp/password-resets',
+        url: '/api/auth/email-otp/reset-password',
         body: { email: 'jane@example.com', otp: '123456', password: 'new-password' },
       })
     })
@@ -220,6 +239,34 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
-function callbackFromPage() {
-  return `/api/auth/oauth2/authorize${window.location.search}`
+function authPaths() {
+  return {
+    basePath: '/api/auth',
+    signInEmailPath: '/api/auth/sign-in/email',
+    signInUsernamePath: '/api/auth/sign-in/username',
+    signUpEmailPath: '/api/auth/sign-up/email',
+    signOutPath: '/api/auth/sign-out',
+    requestPasswordResetPath: '/api/auth/request-password-reset',
+    resetPasswordPath: '/api/auth/reset-password',
+    sendVerificationEmailPath: '/api/auth/send-verification-email',
+    verifyEmailPath: '/api/auth/verify-email',
+    magicLinkPath: '/api/auth/sign-in/magic-link',
+    emailOtpPath: '/api/auth/email-otp/send-verification-otp',
+    emailOtpSignInPath: '/api/auth/sign-in/email-otp',
+    emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
+    emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
+    emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
+  }
+}
+
+function oidcMetadata() {
+  return {
+    issuer: 'https://auth.example.com/api/auth',
+    discoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+    authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
+    tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+    jwksUri: 'https://auth.example.com/api/auth/jwks',
+    userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+    endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+  }
 }

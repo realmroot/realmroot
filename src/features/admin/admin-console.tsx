@@ -6,7 +6,7 @@ import {
 } from '@shared/api/authorization'
 import { createManagementConnectorRequestSchema, managementCreateUserRequestSchema } from '@shared/api/management'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
+import { AlertCircle, Copy, MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
 import { type FormEvent, type ReactNode, useState } from 'react'
 import type { z } from 'zod'
 import { Badge } from '@/components/ui/badge'
@@ -72,7 +72,7 @@ export function AdminDashboardPage() {
       <PageHeader
         eyebrow="Overview"
         title="Tenant health"
-        description="Operational counts and configuration states across identity, access, and experience modules."
+        description="Operational counts and configuration states across identity, access, and hosted UI modules."
       />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Applications" value={dashboard.applications.pagination.total} />
@@ -218,6 +218,123 @@ export function ApplicationsPage() {
   )
 }
 
+export function AdminOnboardingPage() {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    name: 'Demo application',
+    slug: 'demo-application',
+    redirectUris: `${window.location.origin}/oidc/callback`,
+  })
+  const createMutation = useAdminMutation({
+    mutationFn: createApplication,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+  })
+  const application = createMutation.data
+
+  return (
+    <ResourcePage
+      title="Admin onboarding"
+      description="Create the first OIDC client, review auth readiness, and copy the standards-based integration details."
+      error={createMutation.error}
+      loading={false}
+    >
+      <div className="resourceGrid">
+        <Card>
+          <CardHeader>
+            <CardTitle>First OIDC application</CardTitle>
+            <CardDescription>Use a localhost or review-environment callback while validating the flow.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="formStack"
+              onSubmit={(event) => {
+                event.preventDefault()
+                createMutation.mutate(
+                  parseForm(createApplicationRequestSchema, {
+                    name: form.name,
+                    slug: form.slug,
+                    clientType: 'public_spa',
+                    redirectUris: form.redirectUris.split('\n').filter(Boolean),
+                  }),
+                )
+              }}
+            >
+              <Field label="Application name">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
+                  required
+                  value={form.name}
+                />
+              </Field>
+              <Field label="Slug">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, slug: event.target.value }))}
+                  required
+                  value={form.slug}
+                />
+              </Field>
+              <Field label="Redirect URIs">
+                <TextArea
+                  onChange={(event) => setForm((value) => ({ ...value, redirectUris: event.target.value }))}
+                  required
+                  value={form.redirectUris}
+                />
+              </Field>
+              <Button disabled={createMutation.isPending} type="submit">
+                <Plus data-icon="inline-start" />
+                Create OIDC client
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Client integration</CardTitle>
+            <CardDescription>Use OIDC discovery with authorization code and PKCE.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SettingRow
+              label="Discovery"
+              value={`${window.location.origin}/api/auth/.well-known/openid-configuration`}
+            />
+            <SettingRow label="Issuer" value={`${window.location.origin}/api/auth`} />
+            <SettingRow label="Callback" value={form.redirectUris.split('\n')[0] ?? ''} />
+            {application ? (
+              <>
+                <SettingRow label="Client ID" value={application.clientId} />
+                <SettingRow label="Auth method" value={application.tokenEndpointAuthMethod} />
+                <SettingRow label="Scopes" value={application.allowedScopes.join(' ')} />
+              </>
+            ) : null}
+            <Button
+              onClick={() =>
+                navigator.clipboard.writeText(
+                  JSON.stringify(
+                    {
+                      issuer: `${window.location.origin}/api/auth`,
+                      discoveryUrl: `${window.location.origin}/api/auth/.well-known/openid-configuration`,
+                      clientId: application?.clientId ?? '<create-client-first>',
+                      redirectUri: form.redirectUris.split('\n')[0] ?? '',
+                      scopes: 'openid profile email',
+                    },
+                    null,
+                    2,
+                  ),
+                )
+              }
+              type="button"
+              variant="secondary"
+            >
+              <Copy data-icon="inline-start" />
+              Copy details
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </ResourcePage>
+  )
+}
+
 export function UsersPage() {
   const [search, setSearch] = useState('')
   const query = useQuery({
@@ -333,7 +450,7 @@ export function ConnectorsPage() {
   return (
     <ResourcePage
       title="Connectors"
-      description="Configure social and generic OAuth providers used by the hosted sign-in experience."
+      description="Configure social and generic OAuth providers used by the hosted sign-in settings."
       action={
         <Button onClick={() => setDialogOpen(true)}>
           <Plus data-icon="inline-start" />
@@ -392,13 +509,13 @@ export function ConnectorsPage() {
   )
 }
 
-export function SignInExperiencePage() {
+export function SignInSettingsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
 
   return (
     <ResourcePage
-      title="Sign-in experience"
-      description="Review enabled identifiers, authentication methods, and hosted experience links."
+      title="Sign-in settings"
+      description="Review enabled identifiers, authentication methods, and hosted auth links."
       error={query.error}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
@@ -419,7 +536,7 @@ export function SignInExperiencePage() {
           <Card>
             <CardHeader>
               <CardTitle>Defaults and links</CardTitle>
-              <CardDescription>Hosted experience destinations and support references.</CardDescription>
+              <CardDescription>Hosted auth destinations and support references.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               <SettingRow label="Default application" value={query.data.defaults.applicationId ?? 'Not set'} />
@@ -696,7 +813,7 @@ export function BrandingPage() {
           <CardContent className="grid gap-3">
             <SettingRow label="Product name" value="FlareAuth" />
             <SettingRow label="Primary color" value="var(--brand-primary)" />
-            <SettingRow label="Custom CSS" value="Configured through experience service" />
+            <SettingRow label="Custom CSS" value="Configured through configz service" />
           </CardContent>
         </Card>
       </div>
@@ -1169,6 +1286,8 @@ function useAdminMutation<TInput, TOutput>({
   })
 
   return {
+    data: mutation.data,
+    error: mutation.error,
     errorMessage,
     isPending: mutation.isPending,
     mutate: (input: TInput) => mutation.mutate(input),

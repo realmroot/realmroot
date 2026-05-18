@@ -3,6 +3,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, red
 import { AdminShell } from '@/components/layout/admin-shell'
 import {
   AdminDashboardPage,
+  AdminOnboardingPage,
   ApiResourcesPage,
   ApplicationsPage,
   BrandingPage,
@@ -11,7 +12,7 @@ import {
   OrganizationsPage,
   RolesPage,
   SecurityPage,
-  SignInExperiencePage,
+  SignInSettingsPage,
   UsersPage,
 } from '@/features/admin/admin-console'
 import { ApiRequestError } from '@/lib/api'
@@ -22,6 +23,8 @@ import { AuthCallbackRoute } from '@/routes/auth-callback'
 import { EmailVerificationRoute } from '@/routes/email-verification'
 import { ForgotPasswordRoute } from '@/routes/forgot-password'
 import { OAuthConsentRoute } from '@/routes/oauth/consent'
+import { OidcCallbackRoute, OidcStartRoute } from '@/routes/oidc-callback'
+import { OnboardingRoute } from '@/routes/onboarding'
 import { SignInRoute } from '@/routes/sign-in'
 import { SignUpRoute } from '@/routes/sign-up'
 
@@ -71,6 +74,24 @@ const oauthConsentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/oauth/consent',
   component: OAuthConsentRoute,
+})
+
+const onboardingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/onboarding',
+  component: OnboardingRoute,
+})
+
+const oidcCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oidc/callback',
+  component: OidcCallbackRoute,
+})
+
+const oidcStartRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oidc/start',
+  component: OidcStartRoute,
 })
 
 const accountRoute = createRoute({
@@ -126,7 +147,7 @@ const adminConnectorsRoute = createRoute({
 const adminSignInRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/sign-in',
-  component: SignInExperiencePage,
+  component: SignInSettingsPage,
 })
 
 const adminSecurityRoute = createRoute({
@@ -165,8 +186,17 @@ const adminDeploymentRoute = createRoute({
   component: DeploymentSettingsPage,
 })
 
+const adminOnboardingRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/onboarding',
+  component: AdminOnboardingPage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  onboardingRoute,
+  oidcStartRoute,
+  oidcCallbackRoute,
   signInRoute,
   signUpRoute,
   forgotPasswordRoute,
@@ -186,6 +216,7 @@ const routeTree = rootRoute.addChildren([
     adminApiResourcesRoute,
     adminBrandingRoute,
     adminDeploymentRoute,
+    adminOnboardingRoute,
   ]),
 ])
 

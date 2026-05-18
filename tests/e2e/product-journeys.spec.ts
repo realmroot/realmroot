@@ -25,7 +25,11 @@ type JourneyId = (typeof journeyCoverage.journeys)[number]['id']
 const journeyAssertions: Record<
   JourneyId,
   {
-    suite: 'public and auth journeys' | 'OAuth consent journey' | 'account center journey' | 'admin management journeys'
+    suite:
+      | 'public and auth journeys'
+      | 'OAuth consent journey'
+      | 'account center journey'
+      | 'admin management journeys'
     assert: (context: JourneyContext) => Promise<void>
   }
 > = {
@@ -35,6 +39,24 @@ const journeyAssertions: Record<
       await page.goto('/')
       await expect(page.getByRole('heading', { name: 'One auth service for every app on your edge.' })).toBeVisible()
       await expect(page.getByText('API status: online')).toBeVisible()
+    },
+  },
+  'public-onboarding': {
+    suite: 'public and auth journeys',
+    assert: async ({ page, requests }) => {
+      await page.goto('/onboarding')
+      await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Admin User')
+      await page.getByLabel('Email').fill('admin@example.com')
+      await page.getByLabel('Username').fill('admin')
+      await page.getByLabel('Password').fill('password-1')
+      await page.getByRole('button', { name: 'Create first admin' }).click()
+      await expect(page.getByText('First admin created.')).toBeVisible()
+      await expect(page.getByLabel('Password')).toHaveCount(0)
+      expect(requests).toContainEqual({
+        method: 'POST',
+        path: '/api/onboarding/admin-users',
+        body: { email: 'admin@example.com', name: 'Admin User', password: 'password-1', username: 'admin' },
+      })
     },
   },
   'public-sign-in': {
@@ -56,7 +78,7 @@ const journeyAssertions: Record<
       await expect(page).toHaveURL(/\/account$/)
       expect(requests).toContainEqual({
         method: 'POST',
-        path: '/api/experience/sign-ins/password',
+        path: '/api/auth/sign-in/email',
         body: { email: 'jane@example.com', password: 'password-1', rememberMe: true },
       })
     },
@@ -96,7 +118,7 @@ const journeyAssertions: Record<
       await page.getByRole('button', { name: 'Create account' }).click()
       expect(requests).toContainEqual({
         method: 'POST',
-        path: '/api/experience/sign-ups',
+        path: '/api/auth/sign-up/email',
         body: {
           email: 'jane@example.com',
           name: 'Jane Stone',
@@ -129,7 +151,7 @@ const journeyAssertions: Record<
   'oauth-consent': {
     suite: 'OAuth consent journey',
     assert: async ({ page, requests }) => {
-      await page.goto('/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback')
+      await page.goto('/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2Flocalhost%3A4173%2Foidc%2Fcallback')
       await expect(page.getByRole('heading', { name: 'Customer portal' })).toBeVisible()
       await page.getByRole('button', { name: 'Approve access' }).click()
       expect(requests).toContainEqual({
@@ -137,6 +159,14 @@ const journeyAssertions: Record<
         path: '/api/oauth/consent',
         body: { clientId: 'client-1', scopes: ['openid', 'profile'] },
       })
+    },
+  },
+  'oidc-client-callback': {
+    suite: 'OAuth consent journey',
+    assert: async ({ page }) => {
+      await page.goto('/oidc/start?client_id=client-1&redirect_uri=http%3A%2F%2Flocalhost%3A4173%2Foidc%2Fcallback')
+      await expect(page.getByRole('heading', { name: 'Demo client callback' })).toBeVisible()
+      await expect(page.getByText(/code=demo-code&state=/)).toBeVisible()
     },
   },
   'account-center': {
@@ -234,6 +264,29 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Tenant health' })).toBeVisible()
     },
   },
+  'admin-onboarding': {
+    suite: 'admin management journeys',
+    assert: async ({ page, requests }) => {
+      await page.goto('/admin/onboarding')
+      await expect(page.getByRole('heading', { name: 'Admin onboarding' })).toBeVisible()
+      await page.getByLabel('Application name').fill('Review client')
+      await page.getByLabel('Slug').fill('review-client')
+      await page.getByLabel('Redirect URIs').fill('http://localhost:4173/oidc/callback')
+      await page.getByRole('button', { name: 'Create OIDC client' }).click()
+      await expect(page.getByText('Client ID')).toBeVisible()
+      await expect(page.getByText('http://localhost:4173/oidc/callback').nth(1)).toBeVisible()
+      expect(requests).toContainEqual({
+        method: 'POST',
+        path: '/api/management/applications',
+        body: {
+          name: 'Review client',
+          slug: 'review-client',
+          clientType: 'public_spa',
+          redirectUris: ['http://localhost:4173/oidc/callback'],
+        },
+      })
+    },
+  },
   'admin-create-user': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
@@ -258,7 +311,7 @@ const journeyAssertions: Record<
       await page.getByRole('button', { name: 'New application' }).click()
       await page.getByLabel('Name').fill('Admin console')
       await page.getByLabel('Slug').fill('admin-console')
-      await page.getByLabel('Redirect URIs').fill('https://app.example.com/callback')
+      await page.getByLabel('Redirect URIs').fill('http://localhost:4173/oidc/callback')
       await page.getByRole('button', { name: 'Save' }).click()
       expect(requests).toContainEqual({
         method: 'POST',
@@ -267,7 +320,7 @@ const journeyAssertions: Record<
           name: 'Admin console',
           slug: 'admin-console',
           clientType: 'public_spa',
-          redirectUris: ['https://app.example.com/callback'],
+          redirectUris: ['http://localhost:4173/oidc/callback'],
         },
       })
     },
@@ -399,6 +452,14 @@ async function mockApi(page: Page) {
 
     if (method !== 'GET') requests.push({ method, path, body })
 
+    if (path === '/api/auth/oauth2/authorize') {
+      await route.fulfill({
+        status: 302,
+        headers: { location: `/oidc/callback?code=demo-code&state=${url.searchParams.get('state') ?? ''}` },
+      })
+      return
+    }
+
     await fulfill(route, await responseFor(path, method))
   })
 
@@ -439,13 +500,20 @@ async function responseFor(path: string, method: string): Promise<unknown> {
     const response = await createApp(createAuthMock()).request('/api/health', { method })
     return response.json()
   }
-  if (path === '/api/experience') return experienceConfig
+  if (path === '/api/configz') return configz
+  if (path === '/api/onboarding/status') return { required: true }
+  if (path === '/api/onboarding/admin-users') {
+    return {
+      user: { id: 'user-admin', email: 'admin@example.com', role: 'admin' },
+      onboarding: { locked: true },
+    }
+  }
   if (path === '/api/oauth/consent' && method === 'GET') return consentResponse
   if (path === '/api/management/sign-in-settings') {
     return {
-      signIn: experienceConfig.signIn,
-      defaults: experienceConfig.defaults,
-      links: experienceConfig.links,
+      signIn: configz.signIn,
+      defaults: configz.defaults,
+      links: configz.links,
     }
   }
   if (path === '/api/management/security/policy') return { policy: securityPolicy }
@@ -508,7 +576,8 @@ const emptyPagination = {
   total: 0,
 }
 
-const experienceConfig = {
+const configz = {
+  onboarding: { required: false, href: '/onboarding' },
   signIn: {
     passwordEnabled: true,
     signupEnabled: true,
@@ -540,6 +609,33 @@ const experienceConfig = {
     applicationId: null,
     redirectUri: null,
   },
+  auth: {
+    basePath: '/api/auth',
+    signInEmailPath: '/api/auth/sign-in/email',
+    signInUsernamePath: '/api/auth/sign-in/username',
+    signUpEmailPath: '/api/auth/sign-up/email',
+    signOutPath: '/api/auth/sign-out',
+    requestPasswordResetPath: '/api/auth/request-password-reset',
+    resetPasswordPath: '/api/auth/reset-password',
+    sendVerificationEmailPath: '/api/auth/send-verification-email',
+    verifyEmailPath: '/api/auth/verify-email',
+    magicLinkPath: '/api/auth/sign-in/magic-link',
+    emailOtpPath: '/api/auth/email-otp/send-verification-otp',
+    emailOtpSignInPath: '/api/auth/sign-in/email-otp',
+    emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
+    emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
+    emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
+  },
+  oidc: {
+    issuer: 'https://auth.example.com/api/auth',
+    discoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+    authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
+    tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+    jwksUri: 'https://auth.example.com/api/auth/jwks',
+    userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+    endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+  },
+  security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
 }
 
 const application = {
@@ -556,7 +652,7 @@ const application = {
   trusted: true,
   disabled: false,
   disabledReason: null,
-  redirectUris: ['https://app.example.com/callback'],
+  redirectUris: ['http://localhost:4173/oidc/callback'],
   allowedGrantTypes: ['authorization_code'],
   allowedScopes: ['openid', 'profile'],
   requirePkce: true,

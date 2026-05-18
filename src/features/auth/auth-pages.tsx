@@ -5,7 +5,6 @@ import { Button, LinkButton } from '@/components/ui/button'
 import { Field, TextInput } from '@/components/ui/field'
 import { Status } from '@/components/ui/status'
 import {
-  getCallbackState,
   requestEmailOtp,
   requestEmailOtpPasswordReset,
   requestEmailVerification,
@@ -15,12 +14,13 @@ import {
   resetPasswordWithEmailOtp,
   signInWithEmailOtp,
   signInWithPassword,
+  signInWithSocial,
   signInWithUsername,
   signUp,
   verifyEmail,
   verifyEmailOtp,
-} from '@/lib/api'
-import { callbackURL, useExperienceConfig } from './hooks'
+} from '@/lib/auth-client'
+import { callbackURL, safeRedirectPath, useConfigz } from './hooks'
 
 type SubmitState = {
   loading: boolean
@@ -37,7 +37,7 @@ const initialSubmitState: SubmitState = {
 }
 
 export function SignInPage() {
-  const { data: config, error, loading } = useExperienceConfig()
+  const { data: config, error, loading } = useConfigz()
   const [mode, setMode] = useState<SignInMode>('password')
   const [submit, setSubmit] = useState(initialSubmitState)
   const [identifier, setIdentifier] = useState('')
@@ -202,12 +202,13 @@ export function SignInPage() {
 }
 
 export function SignUpPage() {
-  const { data: config } = useExperienceConfig()
+  const { data: config } = useConfigz()
   const [submit, setSubmit] = useState(initialSubmitState)
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const created = submit.message !== null && submit.error === null
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -230,38 +231,44 @@ export function SignUpPage() {
       title="Start with your identity."
       description="Create a hosted account for every connected application."
     >
-      <form className="formStack" onSubmit={onSubmit}>
-        <Field label="Name">
-          <TextInput autoComplete="name" onChange={(event) => setName(event.target.value)} required value={name} />
-        </Field>
-        <Field label="Email">
-          <TextInput
-            autoComplete="email"
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            type="email"
-            value={email}
-          />
-        </Field>
-        {config?.signIn.usernameEnabled ? (
-          <Field label="Username">
-            <TextInput autoComplete="username" onChange={(event) => setUsername(event.target.value)} value={username} />
+      {created ? null : (
+        <form className="formStack" onSubmit={onSubmit}>
+          <Field label="Name">
+            <TextInput autoComplete="name" onChange={(event) => setName(event.target.value)} required value={name} />
           </Field>
-        ) : null}
-        <Field label="Password" help="Use at least 8 characters.">
-          <TextInput
-            autoComplete="new-password"
-            minLength={8}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            type="password"
-            value={password}
-          />
-        </Field>
-        <Button disabled={submit.loading} type="submit">
-          Create account
-        </Button>
-      </form>
+          <Field label="Email">
+            <TextInput
+              autoComplete="email"
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              type="email"
+              value={email}
+            />
+          </Field>
+          {config?.signIn.usernameEnabled ? (
+            <Field label="Username">
+              <TextInput
+                autoComplete="username"
+                onChange={(event) => setUsername(event.target.value)}
+                value={username}
+              />
+            </Field>
+          ) : null}
+          <Field label="Password" help="Use at least 8 characters.">
+            <TextInput
+              autoComplete="new-password"
+              minLength={8}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              type="password"
+              value={password}
+            />
+          </Field>
+          <Button disabled={submit.loading} type="submit">
+            Create account
+          </Button>
+        </form>
+      )}
       <SubmitStatus state={submit} />
       <div className="authLinks">
         <a href="/sign-in">Already have an account?</a>
@@ -271,7 +278,7 @@ export function SignUpPage() {
 }
 
 export function ForgotPasswordPage() {
-  const { data: config } = useExperienceConfig()
+  const { data: config } = useConfigz()
   const [submit, setSubmit] = useState(initialSubmitState)
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
@@ -355,6 +362,7 @@ export function ForgotPasswordPage() {
         {token || otpRequested ? (
           <Field label="New password">
             <TextInput
+              autoComplete="new-password"
               minLength={8}
               onChange={(event) => setPassword(event.target.value)}
               required
@@ -380,7 +388,7 @@ export function ForgotPasswordPage() {
 }
 
 export function EmailVerificationPage() {
-  const { data: config } = useExperienceConfig()
+  const { data: config } = useConfigz()
   const [submit, setSubmit] = useState(initialSubmitState)
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
@@ -443,43 +451,14 @@ export function EmailVerificationPage() {
 }
 
 export function AuthCallbackPage() {
-  const { data: config } = useExperienceConfig()
+  const { data: config } = useConfigz()
   const [state, setState] = useState<{ loading: boolean; message: string; href?: string; error?: string }>({
     loading: true,
     message: 'Completing sign-in',
   })
 
   useEffect(() => {
-    let active = true
-    getCallbackState(window.location.search)
-      .then((result) => {
-        if (!active) return
-        if (result.error) {
-          setState({
-            loading: false,
-            message: 'Sign-in could not continue.',
-            error: result.error.description ?? result.error.code,
-          })
-          return
-        }
-        if (result.consent) {
-          setState({ loading: false, message: 'Consent is required before redirecting.', href: result.consent.href })
-          return
-        }
-        setState({ loading: false, message: 'Sign-in complete.', href: result.returnTo ?? '/account' })
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setState({
-            loading: false,
-            message: 'Sign-in could not continue.',
-            error: error instanceof Error ? error.message : 'Unknown error.',
-          })
-        }
-      })
-    return () => {
-      active = false
-    }
+    setState(readCallbackState(window.location.search))
   }, [])
 
   return (
@@ -501,41 +480,66 @@ export function AuthCallbackPage() {
   )
 }
 
+function readCallbackState(search: string): { loading: false; message: string; href?: string; error?: string } {
+  const params = new URLSearchParams(search)
+  const error = params.get('error')
+  if (error) {
+    return {
+      loading: false,
+      message: 'Sign-in could not continue.',
+      error: params.get('error_description') ?? error,
+    }
+  }
+
+  const clientId = params.get('client_id')
+  const redirectUri = params.get('redirect_uri')
+  if (clientId && redirectUri) {
+    const consentParams = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri })
+    const state = params.get('state')
+    if (state) consentParams.set('state', state)
+    return {
+      loading: false,
+      message: 'Consent is required before redirecting.',
+      href: safeRedirectPath(`/oauth/consent?${consentParams.toString()}`),
+    }
+  }
+
+  return {
+    loading: false,
+    message: 'Sign-in complete.',
+    href: safeRedirectPath(params.get('return_to')) ?? '/account',
+  }
+}
+
 function SocialButtons({
   callback,
   providers,
 }: {
   callback: string | undefined
-  providers: Array<{ slug: string; displayName: string; authorizationUrl: string }>
+  providers: Array<{ slug: string; providerId: string; displayName: string }>
 }) {
   if (providers.length === 0) return null
+
+  async function onSocialClick(provider: { providerId: string }) {
+    const response = await signInWithSocial({ provider: provider.providerId, callbackURL: callback })
+    const redirectUrl = readRedirectUrl(response, { allowExternal: true })
+    if (redirectUrl) window.location.assign(redirectUrl)
+  }
 
   return (
     <fieldset className="socialGrid">
       <legend>Social sign-in providers</legend>
       {providers.map((provider) => (
-        <a
-          className="socialButton"
-          href={socialAuthorizationUrl(provider.authorizationUrl, callback)}
-          key={provider.slug}
-        >
+        <button className="socialButton" key={provider.slug} onClick={() => onSocialClick(provider)} type="button">
           <BadgeCheck size={18} />
           Continue with {provider.displayName}
-        </a>
+        </button>
       ))}
     </fieldset>
   )
 }
 
-export function socialAuthorizationUrl(authorizationUrl: string, callback: string | undefined) {
-  if (!callback) return authorizationUrl
-  const relative = authorizationUrl.startsWith('/')
-  const url = new URL(authorizationUrl, window.location.origin)
-  url.searchParams.set('callbackURL', callback)
-  return relative ? `${url.pathname}${url.search}${url.hash}` : url.toString()
-}
-
-function signInMethods(enabled: NonNullable<ReturnType<typeof useExperienceConfig>['data']>['signIn']) {
+function signInMethods(enabled: NonNullable<ReturnType<typeof useConfigz>['data']>['signIn']) {
   const methods: Array<{ id: SignInMode; label: string }> = []
   if (enabled.passwordEnabled) methods.push({ id: 'password', label: 'Password' })
   if (enabled.magicLinkEnabled) methods.push({ id: 'magic', label: 'Magic link' })
@@ -551,15 +555,21 @@ function navigateAfterAuth(response: unknown, callback: string | undefined) {
 }
 
 export function resolveAuthRedirect(response: unknown, callback: string | undefined) {
-  return readRedirectUrl(response) ?? callback ?? '/account'
+  return readRedirectUrl(response) ?? safeRedirectPath(callback) ?? '/account'
 }
 
-function readRedirectUrl(response: unknown): string | null {
+function readRedirectUrl(response: unknown, options: { allowExternal?: boolean } = {}): string | null {
   if (typeof response !== 'object' || response === null) return null
-  if ('url' in response && typeof response.url === 'string') return response.url
-  if ('redirectTo' in response && typeof response.redirectTo === 'string') return response.redirectTo
-  if ('callbackURL' in response && typeof response.callbackURL === 'string') return response.callbackURL
+  if ('url' in response && typeof response.url === 'string') return safeAuthRedirect(response.url, options)
+  if ('redirectTo' in response && typeof response.redirectTo === 'string') return safeAuthRedirect(response.redirectTo)
+  if ('callbackURL' in response && typeof response.callbackURL === 'string')
+    return safeAuthRedirect(response.callbackURL)
   return null
+}
+
+function safeAuthRedirect(value: string, options: { allowExternal?: boolean } = {}) {
+  if (options.allowExternal) return value
+  return safeRedirectPath(value) ?? null
 }
 
 function ChallengePreview() {

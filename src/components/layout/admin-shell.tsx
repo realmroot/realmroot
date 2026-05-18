@@ -17,16 +17,17 @@ import { cn } from '@/lib/utils'
 
 const adminNavItems = [
   { href: '/admin', label: 'Dashboard', icon: Gauge },
+  { href: '/admin/onboarding', label: 'Onboarding', icon: Rocket },
   { href: '/admin/applications', label: 'Applications', icon: AppWindow },
   { href: '/admin/users', label: 'Users', icon: UsersRound },
   { href: '/admin/connectors', label: 'Connectors', icon: Cable },
-  { href: '/admin/sign-in', label: 'Sign-in experience', icon: Fingerprint },
+  { href: '/admin/sign-in', label: 'Sign-in settings', icon: Fingerprint },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
   { href: '/admin/organizations', label: 'Organizations', icon: Building2 },
   { href: '/admin/roles', label: 'Roles', icon: LockKeyhole },
   { href: '/admin/api-resources', label: 'API resources', icon: KeyRound },
   { href: '/admin/branding', label: 'Branding', icon: Palette },
-  { href: '/admin/deployment', label: 'Deployment', icon: Rocket },
+  { href: '/admin/deployment', label: 'Deployment', icon: ShieldCheck },
 ]
 
 export function AdminShell({ children }: { children: ReactNode }) {

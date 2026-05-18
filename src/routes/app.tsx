@@ -1,6 +1,6 @@
 import { KeyRound, ShieldCheck, UsersRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { getPlatformStatus } from '@/lib/api'
+import { getConfigz, getPlatformStatus } from '@/lib/api'
 
 const features = [
   {
@@ -22,6 +22,7 @@ const features = [
 
 export function App() {
   const [status, setStatus] = useState<'loading' | 'online' | 'unavailable'>('loading')
+  const [onboardingRequired, setOnboardingRequired] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -37,6 +38,16 @@ export function App() {
     }
   }, [])
 
+  useEffect(() => {
+    let active = true
+    getConfigz().then((config) => {
+      if (active) setOnboardingRequired(config.onboarding.required)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
     <main className="shell">
       <nav className="topbar">
@@ -45,6 +56,7 @@ export function App() {
           <span>FlareAuth</span>
         </div>
         <div className="actions">
+          {onboardingRequired ? <a href="/onboarding">First-run onboarding</a> : null}
           <a href="/sign-in">Sign in</a>
           <a href="/sign-up">Sign up</a>
           <a className="primaryAction" href="/account">

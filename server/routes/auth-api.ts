@@ -37,24 +37,6 @@ export interface ManagementAuthApi {
   unlinkAccount: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
 }
 
-export interface ExperienceAuthApi {
-  signInEmail: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  signInUsername: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  signUpEmail: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  signOut: AuthResponseEndpoint<{ headers: Headers }>
-  requestPasswordReset: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  resetPassword: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  sendVerificationEmail: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  verifyEmail: AuthResponseEndpoint<{ query: Record<string, unknown>; headers: Headers }>
-  signInMagicLink: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  sendVerificationOTP: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  signInEmailOTP: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  verifyEmailOTP: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  requestPasswordResetEmailOTP: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  resetPasswordEmailOTP: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-  isUsernameAvailable: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
-}
-
 export function toBoundaryError(error: unknown): Error {
   if (isBetterAuthApiError(error)) {
     return new ApiError(error.statusCode, statusCode(error.statusCode), errorMessage(error))

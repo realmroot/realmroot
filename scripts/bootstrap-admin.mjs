@@ -6,7 +6,7 @@ const password = requireEnv('FLAREAUTH_ADMIN_PASSWORD')
 const name = process.env.FLAREAUTH_ADMIN_NAME || 'FlareAuth Admin'
 const username = process.env.FLAREAUTH_ADMIN_USERNAME
 
-const response = await fetch(`${baseUrl}/api/setup/admin`, {
+const response = await fetch(`${baseUrl}/api/onboarding/admin-users`, {
   method: 'POST',
   headers: {
     'content-type': 'application/json',

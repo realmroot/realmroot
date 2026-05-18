@@ -1,6 +1,6 @@
-import type { ExperienceConfigResponse } from '@shared/api/experience'
+import type { ConfigzConfigResponse } from '@shared/api/configz'
 import { useEffect, useState } from 'react'
-import { getExperienceConfig } from '@/lib/api'
+import { getConfigz } from '@/lib/api'
 
 type LoadState<T> = {
   data: T | null
@@ -8,8 +8,8 @@ type LoadState<T> = {
   loading: boolean
 }
 
-export function useExperienceConfig(): LoadState<ExperienceConfigResponse> {
-  const [state, setState] = useState<LoadState<ExperienceConfigResponse>>({
+export function useConfigz(): LoadState<ConfigzConfigResponse> {
+  const [state, setState] = useState<LoadState<ConfigzConfigResponse>>({
     data: null,
     error: null,
     loading: true,
@@ -18,7 +18,7 @@ export function useExperienceConfig(): LoadState<ExperienceConfigResponse> {
   useEffect(() => {
     let active = true
 
-    getExperienceConfig()
+    getConfigz()
       .then((data) => {
         if (active) setState({ data, error: null, loading: false })
       })
@@ -40,5 +40,11 @@ export function callbackURL() {
   if (params.has('client_id') && params.has('redirect_uri')) {
     return `/api/auth/oauth2/authorize${window.location.search}`
   }
-  return params.get('callbackURL') ?? params.get('return_to') ?? undefined
+  return safeRedirectPath(params.get('callbackURL')) ?? safeRedirectPath(params.get('return_to')) ?? undefined
+}
+
+export function safeRedirectPath(value: string | null | undefined): string | undefined {
+  if (!value?.startsWith('/') || value.startsWith('//')) return undefined
+  if (value.startsWith('/api/') && !value.startsWith('/api/auth/oauth2/authorize')) return undefined
+  return value
 }

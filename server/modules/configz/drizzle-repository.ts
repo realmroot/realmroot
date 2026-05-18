@@ -1,17 +1,10 @@
 import type { SQL } from 'drizzle-orm'
 import { eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import {
-  application,
-  brandingSetting,
-  identityProviderConnector,
-  oauthClient,
-  signInExperience,
-  uploadedAsset,
-} from '../../db/schema'
-import type { ExperienceIdentityProvider, ExperienceRepository, ExperienceSettings } from './service'
+import { brandingSetting, identityProviderConnector, signInExperience, uploadedAsset } from '../../db/schema'
+import type { ConfigzIdentityProvider, ConfigzRepository, ConfigzSettings } from './service'
 
-export function createDrizzleExperienceRepository(db: Database): ExperienceRepository {
+export function createDrizzleConfigzRepository(db: Database): ConfigzRepository {
   return {
     async getSettings() {
       const rows = await db.select().from(signInExperience).limit(1)
@@ -30,25 +23,6 @@ export function createDrizzleExperienceRepository(db: Database): ExperienceRepos
     async listEnabledIdentityProviders() {
       const rows = await db.select().from(identityProviderConnector).where(eq(identityProviderConnector.enabled, true))
       return rows.map(toIdentityProvider)
-    },
-
-    async findApplicationByClientId(clientId) {
-      const rows = await db
-        .select({ application, oauthClient })
-        .from(application)
-        .innerJoin(oauthClient, eq(application.oauthClientId, oauthClient.clientId))
-        .where(eq(oauthClient.clientId, clientId))
-        .limit(1)
-
-      const row = rows[0]
-      return row
-        ? {
-            id: row.application.id,
-            clientId: row.oauthClient.clientId,
-            redirectUris: parseList(row.oauthClient.redirectUris),
-            disabled: row.application.disabled || !!row.oauthClient.disabled,
-          }
-        : null
     },
   }
 }
@@ -89,7 +63,7 @@ async function findBranding(db: Database, where: SQL) {
 type SignInExperienceRow = typeof signInExperience.$inferSelect
 type IdentityProviderConnectorRow = typeof identityProviderConnector.$inferSelect
 
-function toSettings(row: SignInExperienceRow): ExperienceSettings {
+function toSettings(row: SignInExperienceRow): ConfigzSettings {
   return {
     defaultApplicationId: row.defaultApplicationId,
     passwordEnabled: row.passwordEnabled,
@@ -104,17 +78,11 @@ function toSettings(row: SignInExperienceRow): ExperienceSettings {
   }
 }
 
-function toIdentityProvider(row: IdentityProviderConnectorRow): ExperienceIdentityProvider {
+function toIdentityProvider(row: IdentityProviderConnectorRow): ConfigzIdentityProvider {
   return {
     slug: row.slug,
     providerType: row.providerType,
     providerId: row.providerId,
     displayName: row.displayName,
   }
-}
-
-function parseList(value: string | null): string[] {
-  if (!value) return []
-  const parsed = JSON.parse(value) as unknown
-  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
 }

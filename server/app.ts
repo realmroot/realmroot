@@ -34,23 +34,7 @@ import type {
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '../shared/api/authorization'
-import type {
-  EmailOtpPasswordResetInput,
-  EmailOtpPasswordResetRequest,
-  EmailOtpRequest,
-  EmailOtpSignIn,
-  EmailOtpVerification,
-  EmailVerificationInput,
-  EmailVerificationRequest,
-  ExperienceCallbackResponse,
-  ExperienceConfigResponse,
-  MagicLinkRequest,
-  PasswordResetInput,
-  PasswordResetRequest,
-  PasswordSignInRequest,
-  SignUpRequest,
-  UsernameSignInRequest,
-} from '../shared/api/experience'
+import type { ConfigzConfigResponse } from '../shared/api/configz'
 import type {
   CreateManagementConnectorRequest,
   ListManagementConnectorsResponse,
@@ -78,8 +62,8 @@ import { authContext, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
 import { requireDeploymentMfa } from './middleware/security-policy'
+import type { OnboardingRepository } from './modules/onboarding/repository'
 import type { SecurityRepository } from './modules/security/repository'
-import type { SetupRepository } from './modules/setup/repository'
 import type { UserRepository } from './modules/users/repository'
 import { accountRoutes } from './routes/account'
 import { adminApiResourcesRoute } from './routes/admin/api-resources'
@@ -89,12 +73,12 @@ import { adminOrganizationsRoute } from './routes/admin/organizations'
 import { adminRolesRoute } from './routes/admin/roles'
 import { adminSecurityRoutes } from './routes/admin/security'
 import { adminUserRoutes } from './routes/admin/users'
-import type { ExperienceAuthApi, ManagementAuthApi } from './routes/auth-api'
-import { createExperienceRoutes } from './routes/experience'
-import { createManagementRoutes, type ManagementExperienceServiceFactory } from './routes/management'
+import type { ManagementAuthApi } from './routes/auth-api'
+import { type ConfigzServiceFactory, createConfigzRoutes } from './routes/configz'
+import { createManagementRoutes, type ManagementConfigzServiceFactory } from './routes/management'
 import type { ConnectorServiceFactory } from './routes/management/connectors'
 import { oauthConsentRoute } from './routes/oauth/consent'
-import { setupRoutes } from './routes/setup'
+import { onboardingRoutes } from './routes/onboarding'
 
 type AuthHandler = Pick<Auth, 'handler'> & {
   api: {
@@ -107,9 +91,9 @@ export interface AppOptions {
   trustedOrigins?: string[]
   userRepository?: UserRepository
   securityRepository?: SecurityRepository
-  setupRepository?: SetupRepository
+  onboardingRepository?: OnboardingRepository
   securityPolicy?: SecurityPolicy
-  experienceServiceFactory?: ManagementExperienceServiceFactory
+  configzServiceFactory?: ConfigzServiceFactory & ManagementConfigzServiceFactory
   connectorServiceFactory?: ConnectorServiceFactory
 }
 
@@ -153,8 +137,8 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
 
   app.get('/api/auth/.well-known/openid-configuration', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))
   app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
-    if (options.setupRepository) {
-      await requireSetupComplete(options.setupRepository)
+    if (options.onboardingRepository) {
+      await requireOnboardingComplete(options.onboardingRepository)
     }
 
     return auth.handler(c.req.raw)
@@ -183,53 +167,8 @@ type RpcSchema = {
   '/api/health': {
     $get: RpcEndpoint<RpcNoInput, { ok: true; service: string }>
   }
-  '/api/experience': {
-    $get: RpcEndpoint<RpcNoInput, ExperienceConfigResponse>
-  }
-  '/api/experience/callback': {
-    $get: RpcEndpoint<{ query: Record<string, string> }, ExperienceCallbackResponse>
-  }
-  '/api/experience/sign-ins/password': {
-    $post: RpcEndpoint<{ json: PasswordSignInRequest }, EmptyResponse>
-  }
-  '/api/experience/sign-ins/username': {
-    $post: RpcEndpoint<{ json: UsernameSignInRequest }, EmptyResponse>
-  }
-  '/api/experience/sign-ups': {
-    $post: RpcEndpoint<{ json: SignUpRequest }, EmptyResponse>
-  }
-  '/api/experience/session': {
-    $delete: RpcEndpoint<RpcNoInput, EmptyResponse>
-  }
-  '/api/experience/password-reset-requests': {
-    $post: RpcEndpoint<{ json: PasswordResetRequest }, EmptyResponse>
-  }
-  '/api/experience/password-resets': {
-    $post: RpcEndpoint<{ json: PasswordResetInput }, EmptyResponse>
-  }
-  '/api/experience/email-verification-requests': {
-    $post: RpcEndpoint<{ json: EmailVerificationRequest }, EmptyResponse>
-  }
-  '/api/experience/email-verifications': {
-    $post: RpcEndpoint<{ json: EmailVerificationInput }, EmptyResponse>
-  }
-  '/api/experience/magic-links': {
-    $post: RpcEndpoint<{ json: MagicLinkRequest }, EmptyResponse>
-  }
-  '/api/experience/email-otps': {
-    $post: RpcEndpoint<{ json: EmailOtpRequest }, EmptyResponse>
-  }
-  '/api/experience/email-otp/sign-ins': {
-    $post: RpcEndpoint<{ json: EmailOtpSignIn }, EmptyResponse>
-  }
-  '/api/experience/email-otp/email-verifications': {
-    $post: RpcEndpoint<{ json: EmailOtpVerification }, EmptyResponse>
-  }
-  '/api/experience/email-otp/password-reset-requests': {
-    $post: RpcEndpoint<{ json: EmailOtpPasswordResetRequest }, EmptyResponse>
-  }
-  '/api/experience/email-otp/password-resets': {
-    $post: RpcEndpoint<{ json: EmailOtpPasswordResetInput }, EmptyResponse>
+  '/api/configz': {
+    $get: RpcEndpoint<RpcNoInput, ConfigzConfigResponse>
   }
   '/api/oauth/consent': {
     $get: RpcEndpoint<
@@ -359,12 +298,8 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
     .route('/api/admin/roles', adminRolesRoute)
     .route('/api/oauth/consent', oauthConsentRoute)
     .route(
-      '/api/experience',
-      createExperienceRoutes(
-        auth.api as unknown as ExperienceAuthApi,
-        options.experienceServiceFactory,
-        options.setupRepository,
-      ),
+      '/api/configz',
+      createConfigzRoutes(options.configzServiceFactory, options.onboardingRepository, options.securityPolicy),
     )
     .route(
       '/api/management',
@@ -373,13 +308,13 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
         userRepository: options.userRepository,
         securityRepository: options.securityRepository,
         securityPolicy: options.securityPolicy,
-        experienceServiceFactory: options.experienceServiceFactory,
+        configzServiceFactory: options.configzServiceFactory,
         connectorServiceFactory: options.connectorServiceFactory,
       }),
     )
 
-  if (options.setupRepository) {
-    api = api.route('/api/setup', setupRoutes(options.setupRepository))
+  if (options.onboardingRepository) {
+    api = api.route('/api/onboarding', onboardingRoutes(options.onboardingRepository))
   }
 
   return api
@@ -396,8 +331,8 @@ function mountRpcRoutes(app: Hono, auth: AuthHandler, options: RpcAppOptions) {
     )
 }
 
-async function requireSetupComplete(setup: SetupRepository) {
-  if (!(await setup.hasUsers())) {
-    throw forbidden('Complete first-admin setup before using auth flows.')
+async function requireOnboardingComplete(onboarding: OnboardingRepository) {
+  if (!(await onboarding.hasUsers())) {
+    throw forbidden('Complete first-admin onboarding before using auth flows.')
   }
 }

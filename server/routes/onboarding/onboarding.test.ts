@@ -2,10 +2,10 @@ import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleApiError } from '../../lib/errors'
 import * as password from '../../lib/password'
-import type { SetupRepository } from '../../modules/setup/repository'
-import { setupRoutes } from '.'
+import type { OnboardingRepository } from '../../modules/onboarding/repository'
+import { onboardingRoutes } from '.'
 
-describe('setupRoutes', () => {
+describe('onboardingRoutes', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
     vi.spyOn(password, 'hashPassword').mockResolvedValue('hashed-password')
@@ -15,17 +15,17 @@ describe('setupRoutes', () => {
     vi.restoreAllMocks()
   })
 
-  it('reports whether first-user setup is required', async () => {
-    const setup = createSetupRepositoryMock({ hasUsers: false })
-    const response = await createTestApp(setup).request('/api/setup')
+  it('reports whether first-user onboarding is required', async () => {
+    const onboarding = createOnboardingRepositoryMock({ hasUsers: false })
+    const response = await createTestApp(onboarding).request('/api/onboarding/status')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ required: true })
   })
 
-  it('creates the first admin through the auth signup flow and locks setup', async () => {
-    const setup = createSetupRepositoryMock({ hasUsers: false })
-    const response = await createTestApp(setup).request('/api/setup/admin', {
+  it('creates the first admin through the auth signup flow and locks onboarding', async () => {
+    const onboarding = createOnboardingRepositoryMock({ hasUsers: false })
+    const response = await createTestApp(onboarding).request('/api/onboarding/admin-users', {
       method: 'POST',
       body: JSON.stringify({
         email: 'admin@example.com',
@@ -37,7 +37,7 @@ describe('setupRoutes', () => {
 
     expect(response.status).toBe(201)
     expect(password.hashPassword).toHaveBeenCalledWith('password-1')
-    expect(setup.createBootstrapAdmin).toHaveBeenCalledWith({
+    expect(onboarding.createBootstrapAdmin).toHaveBeenCalledWith({
       email: 'admin@example.com',
       password: 'password-1',
       name: 'Admin User',
@@ -50,15 +50,15 @@ describe('setupRoutes', () => {
         email: 'admin@example.com',
         role: 'admin',
       },
-      setup: {
+      onboarding: {
         locked: true,
       },
     })
   })
 
   it('rejects admin bootstrap after a user exists', async () => {
-    const setup = createSetupRepositoryMock({ hasUsers: true })
-    const response = await createTestApp(setup).request('/api/setup/admin', {
+    const onboarding = createOnboardingRepositoryMock({ hasUsers: true })
+    const response = await createTestApp(onboarding).request('/api/onboarding/admin-users', {
       method: 'POST',
       body: JSON.stringify({
         email: 'admin@example.com',
@@ -68,24 +68,24 @@ describe('setupRoutes', () => {
     })
 
     expect(response.status).toBe(403)
-    expect(setup.createBootstrapAdmin).not.toHaveBeenCalled()
+    expect(onboarding.createBootstrapAdmin).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: 'forbidden',
-        message: 'Setup is locked after the first user exists.',
+        message: 'Onboarding is locked after the first user exists.',
       },
     })
   })
 })
 
-function createTestApp(setup: SetupRepository) {
+function createTestApp(onboarding: OnboardingRepository) {
   const app = new Hono()
   app.onError((error, c) => handleApiError(error, c))
-  app.route('/api/setup', setupRoutes(setup))
+  app.route('/api/onboarding', onboardingRoutes(onboarding))
   return app
 }
 
-function createSetupRepositoryMock(options: { hasUsers: boolean }): SetupRepository {
+function createOnboardingRepositoryMock(options: { hasUsers: boolean }): OnboardingRepository {
   return {
     hasUsers: vi.fn().mockResolvedValue(options.hasUsers),
     createBootstrapAdmin: vi.fn().mockResolvedValue({

@@ -76,9 +76,9 @@ use the preview Wrangler config, while `main` and local builds use production
 config. Pull requests still run GitHub CI for typecheck, lint, tests, and build,
 but deployment and preview URLs come from Cloudflare Dashboard, not GitHub Actions.
 
-## Fresh Setup
+## Fresh Onboarding
 
-For a fresh deployment, create the resources, set secrets, run D1 migrations, deploy, then create the first admin:
+For a fresh deployment, create the resources, set secrets, run D1 migrations, deploy, then open `/onboarding` to create the first admin from the browser. The CLI helper uses the same onboarding API:
 
 ```bash
 FLAREAUTH_URL=https://auth.example.com \
@@ -87,7 +87,9 @@ FLAREAUTH_ADMIN_PASSWORD='replace-with-a-long-password' \
 npm run bootstrap:admin
 ```
 
-Setup is available only while the D1 database has no users. After the first admin exists, `/api/setup` returns `{ "required": false }` and `/api/setup/admin` is locked.
+First-admin onboarding is available only while the D1 database has no users. After the first admin exists, `/api/onboarding/status` returns `{ "required": false }` and `/api/onboarding/admin-users` is locked.
+
+Frontend runtime state is read from `/api/configz`. Hosted auth actions use Better Auth native `/api/auth/*` routes, and product applications should integrate with standard OIDC discovery plus authorization code with PKCE. If a consuming product also uses Better Auth, it can use Better Auth as an OIDC client; product apps do not need FlareAuth management or account APIs.
 
 ## Deployment Docs
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createSetupRepository } from './repository'
+import { createOnboardingRepository } from './repository'
 
-describe('createSetupRepository', () => {
+describe('createOnboardingRepository', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -12,10 +12,10 @@ describe('createSetupRepository', () => {
       .mockReturnValueOnce('00000000-0000-4000-8000-000000000002')
 
     const db = new FakeD1Database()
-    const setup = createSetupRepository(db as unknown as D1Database)
+    const onboarding = createOnboardingRepository(db as unknown as D1Database)
 
     await expect(
-      setup.createBootstrapAdmin({
+      onboarding.createBootstrapAdmin({
         email: 'admin@example.com',
         password: 'password-1',
         passwordHash: 'hashed-password',
@@ -47,7 +47,7 @@ describe('createSetupRepository', () => {
         userId: '00000000-0000-4000-8000-000000000001',
       },
     ])
-    await expect(setup.hasUsers()).resolves.toBe(true)
+    await expect(onboarding.hasUsers()).resolves.toBe(true)
   })
 
   it('rejects bootstrap creation after any user exists', async () => {
@@ -60,16 +60,16 @@ describe('createSetupRepository', () => {
       role: null,
       username: null,
     })
-    const setup = createSetupRepository(db as unknown as D1Database)
+    const onboarding = createOnboardingRepository(db as unknown as D1Database)
 
     await expect(
-      setup.createBootstrapAdmin({
+      onboarding.createBootstrapAdmin({
         email: 'admin@example.com',
         password: 'password-1',
         passwordHash: 'hashed-password',
         name: 'Admin User',
       }),
-    ).rejects.toThrow('Setup is locked after the first user exists.')
+    ).rejects.toThrow('Onboarding is locked after the first user exists.')
 
     expect(db.users).toHaveLength(1)
     expect(db.accounts).toHaveLength(0)

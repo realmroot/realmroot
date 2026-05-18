@@ -147,7 +147,7 @@ describe('management routes', () => {
 
   it('exposes managed sign-in settings', async () => {
     const app = createApp(createAuthMock(), {
-      experienceServiceFactory: createExperienceServiceMock(),
+      configzServiceFactory: createConfigzServiceMock(),
     })
 
     const settings = await app.request('/api/management/sign-in-settings', { headers: adminHeaders() })
@@ -342,9 +342,13 @@ function createUserRepositoryMock(): UserRepository {
   }
 }
 
-function createExperienceServiceMock() {
+function createConfigzServiceMock() {
   return () => ({
     getConfig: async () => ({
+      onboarding: {
+        required: false,
+        href: '/onboarding',
+      },
       signIn: {
         passwordEnabled: true,
         signupEnabled: true,
@@ -365,12 +369,14 @@ function createExperienceServiceMock() {
         {
           slug: 'google',
           providerType: 'oauth2',
+          providerId: 'google',
           displayName: 'Google',
           authorizationUrl: 'https://auth.example.com/api/auth/sign-in/social?provider=google',
         },
         {
           slug: 'github',
           providerType: 'oauth2',
+          providerId: 'github',
           displayName: 'GitHub',
           authorizationUrl: 'https://auth.example.com/api/auth/sign-in/social?provider=github',
         },
@@ -389,8 +395,38 @@ function createExperienceServiceMock() {
         applicationId: 'app-1',
         redirectUri: 'https://app.example.com/callback',
       },
+      auth: {
+        basePath: '/api/auth' as const,
+        signInEmailPath: '/api/auth/sign-in/email' as const,
+        signInUsernamePath: '/api/auth/sign-in/username' as const,
+        signUpEmailPath: '/api/auth/sign-up/email' as const,
+        signOutPath: '/api/auth/sign-out' as const,
+        requestPasswordResetPath: '/api/auth/request-password-reset' as const,
+        resetPasswordPath: '/api/auth/reset-password' as const,
+        sendVerificationEmailPath: '/api/auth/send-verification-email' as const,
+        verifyEmailPath: '/api/auth/verify-email' as const,
+        magicLinkPath: '/api/auth/sign-in/magic-link' as const,
+        emailOtpPath: '/api/auth/email-otp/send-verification-otp' as const,
+        emailOtpSignInPath: '/api/auth/sign-in/email-otp' as const,
+        emailOtpVerificationPath: '/api/auth/email-otp/verify-email' as const,
+        emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset' as const,
+        emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password' as const,
+      },
+      oidc: {
+        issuer: 'https://auth.example.com/api/auth',
+        discoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+        authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
+        tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+        jwksUri: 'https://auth.example.com/api/auth/jwks',
+        userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+        endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+      },
+      security: {
+        mfaRequired: false,
+        sessionExpiresInSeconds: 0,
+        passkeysEnabled: false,
+      },
     }),
-    getCallbackState: vi.fn(),
   })
 }
 

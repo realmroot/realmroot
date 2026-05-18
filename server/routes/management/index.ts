@@ -9,7 +9,7 @@ import type { SecurityPolicy } from '../../../shared/api/security'
 import { requireAdmin } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
 import { type AuthorizationBindings, createAuthorizationService } from '../../modules/authorization/context'
-import { createExperienceService, type ExperienceBindings } from '../../modules/experience/context'
+import { type ConfigzBindings, createConfigzService } from '../../modules/configz/context'
 import type { SecurityRepository } from '../../modules/security/repository'
 import type { UserRepository } from '../../modules/users/repository'
 import { adminApiResourcesRoute } from '../admin/api-resources'
@@ -22,15 +22,14 @@ import type { ManagementAuthApi } from '../auth-api'
 import { readJson } from '../validation'
 import { type ConnectorServiceFactory, createManagementConnectorRoutes } from './connectors'
 
-interface ManagementExperienceConfig {
+interface ManagementConfigz {
   signIn: ManagementSignInSettingsResponse['signIn']
   defaults: ManagementSignInSettingsResponse['defaults']
   links: ManagementSignInSettingsResponse['links']
 }
 
-export type ManagementExperienceServiceFactory = (c: Context<{ Bindings: ExperienceBindings }>) => {
-  getConfig: () => Promise<ManagementExperienceConfig>
-  getCallbackState: (query: unknown) => Promise<unknown>
+export type ManagementConfigzServiceFactory = (c: Context<{ Bindings: ConfigzBindings }>) => {
+  getConfig: () => Promise<ManagementConfigz>
 }
 
 interface ManagementRoutesOptions {
@@ -38,12 +37,12 @@ interface ManagementRoutesOptions {
   userRepository?: UserRepository
   securityRepository?: SecurityRepository
   securityPolicy?: SecurityPolicy
-  experienceServiceFactory?: ManagementExperienceServiceFactory
+  configzServiceFactory?: ManagementConfigzServiceFactory
   connectorServiceFactory?: ConnectorServiceFactory
 }
 
 export function createManagementRoutes(options: ManagementRoutesOptions) {
-  const app = new Hono<{ Bindings: AuthorizationBindings & ExperienceBindings }>()
+  const app = new Hono<{ Bindings: AuthorizationBindings & ConfigzBindings }>()
 
   app.route('/applications', adminApplicationsRoute)
   app.route('/api-resources', adminApiResourcesRoute)
@@ -80,12 +79,12 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   }
 
   {
-    const experienceServiceFactory = options.experienceServiceFactory ?? createExperienceService
+    const configzServiceFactory = options.configzServiceFactory ?? createConfigzService
 
     app.use('/sign-in-settings', requireAdmin())
 
     app.get('/sign-in-settings', async (c) => {
-      const config = await experienceServiceFactory(c).getConfig()
+      const config = await configzServiceFactory(c).getConfig()
       const response = {
         signIn: config.signIn,
         defaults: config.defaults,
