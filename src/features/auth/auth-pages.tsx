@@ -279,7 +279,10 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [password, setPassword] = useState('')
+  const [resetMethod, setResetMethod] = useState<'email' | 'otp'>('email')
+  const [otpRequested, setOtpRequested] = useState(false)
   const token = new URLSearchParams(window.location.search).get('token')
+  const otpResetEnabled = config?.signIn.emailOtpEnabled === true
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -292,12 +295,21 @@ export function ForgotPasswordPage() {
         return 'Password reset. You can sign in with the new password.'
       }
 
-      if (otp && password) {
+      if (otpRequested && otp && password) {
         await apiRequest('/api/experience/email-otp/password-resets', {
           method: 'POST',
           body: { email, otp, password },
         })
         return 'Password reset. You can sign in with the new password.'
+      }
+
+      if (resetMethod === 'otp' && otpResetEnabled) {
+        await apiRequest('/api/experience/email-otp/password-reset-requests', {
+          method: 'POST',
+          body: { email },
+        })
+        setOtpRequested(true)
+        return 'Password reset code sent.'
       }
 
       await apiRequest('/api/experience/password-reset-requests', {
@@ -316,6 +328,24 @@ export function ForgotPasswordPage() {
       description="Request a reset email or finish the reset with a token or one-time code."
     >
       <form className="formStack" onSubmit={onSubmit}>
+        {otpResetEnabled && !token ? (
+          <div className="segmented" role="tablist" aria-label="Password reset method">
+            <button
+              className={resetMethod === 'email' ? 'active' : ''}
+              onClick={() => setResetMethod('email')}
+              type="button"
+            >
+              Email link
+            </button>
+            <button
+              className={resetMethod === 'otp' ? 'active' : ''}
+              onClick={() => setResetMethod('otp')}
+              type="button"
+            >
+              OTP code
+            </button>
+          </div>
+        ) : null}
         {!token ? (
           <Field label="Email">
             <TextInput
@@ -327,7 +357,7 @@ export function ForgotPasswordPage() {
             />
           </Field>
         ) : null}
-        {config?.signIn.emailOtpEnabled && !token ? (
+        {otpResetEnabled && resetMethod === 'otp' && otpRequested && !token ? (
           <Field label="One-time code">
             <TextInput
               autoComplete="one-time-code"
@@ -337,7 +367,7 @@ export function ForgotPasswordPage() {
             />
           </Field>
         ) : null}
-        {token || otp ? (
+        {token || otpRequested ? (
           <Field label="New password">
             <TextInput
               minLength={8}
@@ -349,7 +379,11 @@ export function ForgotPasswordPage() {
           </Field>
         ) : null}
         <Button disabled={submit.loading} type="submit">
-          {token || otp ? 'Reset password' : 'Send reset email'}
+          {token || otpRequested
+            ? 'Reset password'
+            : resetMethod === 'otp' && otpResetEnabled
+              ? 'Send reset code'
+              : 'Send reset email'}
         </Button>
       </form>
       <SubmitStatus state={submit} />

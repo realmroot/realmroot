@@ -496,6 +496,41 @@ h1 {
   gap: 10px;
 }
 
+.setupPanel {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.setupPanel h3,
+.setupPanel p {
+  margin: 0;
+}
+
+.setupPanel p {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.setupPanel code {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+}
+
+.setupQr {
+  width: 168px;
+  max-width: 100%;
+  border-radius: 8px;
+}
+
 .itemRow {
   display: flex;
   align-items: center;

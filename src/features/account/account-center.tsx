@@ -55,6 +55,12 @@ type Passkey = {
   createdAt: string | null
 }
 
+type TotpEnrollmentDisplay = {
+  qrCode: string | null
+  otpAuthUri: string | null
+  secret: string | null
+}
+
 type AccountData = {
   profile: UserProfile | null
   linkedAccounts: LinkedAccount[]
@@ -112,15 +118,17 @@ export function AccountCenterPage() {
     void reload()
   }, [reload])
 
-  async function mutate(label: string, operation: () => Promise<unknown>) {
+  async function mutate<T>(label: string, operation: () => Promise<T>): Promise<T | undefined> {
     setMessage(null)
     setError(null)
     try {
-      await operation()
+      const result = await operation()
       setMessage(label)
       await reload()
+      return result
     } catch (mutationError) {
       setError(mutationError instanceof Error ? mutationError.message : 'Account update failed.')
+      return undefined
     }
   }
 
@@ -283,6 +291,7 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [passkeyName, setPasskeyName] = useState('')
+  const [totpEnrollment, setTotpEnrollment] = useState<TotpEnrollmentDisplay | null>(null)
   const mfaRequired = data.security?.policy.mfa.mode === 'required'
 
   return (
@@ -294,9 +303,14 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
           className="formStack"
           onSubmit={(event) => {
             event.preventDefault()
-            return mutate('TOTP enrollment started.', () =>
-              apiRequest('/api/account/security/mfa/totp-enrollment', { method: 'POST', body: { password } }),
-            )
+            return mutate('TOTP enrollment started.', async () => {
+              const enrollment = await apiRequest<unknown>('/api/account/security/mfa/totp-enrollment', {
+                method: 'POST',
+                body: { password },
+              })
+              setTotpEnrollment(readTotpEnrollment(enrollment))
+              return enrollment
+            })
           }}
         >
           <Field label="Password">
@@ -306,6 +320,7 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
             Enroll authenticator app
           </Button>
         </form>
+        {totpEnrollment ? <TotpEnrollmentDetails enrollment={totpEnrollment} /> : null}
         <form
           className="formStack compactForm"
           onSubmit={(event) => {
@@ -344,12 +359,7 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
           className="formStack"
           onSubmit={(event) => {
             event.preventDefault()
-            return mutate('Passkey enrollment options created.', () =>
-              apiRequest('/api/account/security/passkeys/registration-options', {
-                method: 'POST',
-                body: { name: passkeyName },
-              }),
-            )
+            return mutate('Passkey enrolled.', () => enrollPasskey(passkeyName))
           }}
         >
           <Field label="Passkey name">
@@ -473,7 +483,7 @@ function ApplicationsSection({ applications }: { applications: ConsentedApplicat
   )
 }
 
-type MutationHandler = (label: string, operation: () => Promise<unknown>) => Promise<void>
+type MutationHandler = <T>(label: string, operation: () => Promise<T>) => Promise<T | undefined>
 
 type ListItem = {
   id: string
@@ -498,6 +508,148 @@ function ItemList({ empty, items }: { empty: string; items: ListItem[] }) {
       ))}
     </div>
   )
+}
+
+function TotpEnrollmentDetails({ enrollment }: { enrollment: TotpEnrollmentDisplay }) {
+  return (
+    <div className="setupPanel">
+      <h3>Authenticator setup</h3>
+      {enrollment.qrCode ? <img className="setupQr" src={enrollment.qrCode} alt="Authenticator app QR code" /> : null}
+      {enrollment.otpAuthUri ? (
+        <p>
+          <strong>Setup URI</strong>
+          <code>{enrollment.otpAuthUri}</code>
+        </p>
+      ) : null}
+      {enrollment.secret ? (
+        <p>
+          <strong>Secret</strong>
+          <code>{enrollment.secret}</code>
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function readTotpEnrollment(value: unknown): TotpEnrollmentDisplay {
+  const record = asRecord(value)
+  return {
+    qrCode: readString(record.qrCode) ?? readString(record.qrCodeUrl) ?? readString(record.qr),
+    otpAuthUri:
+      readString(record.otpAuthUri) ??
+      readString(record.otpAuthURI) ??
+      readString(record.totpURI) ??
+      readString(record.totpUri) ??
+      readString(record.uri),
+    secret: readString(record.secret),
+  }
+}
+
+async function enrollPasskey(name: string) {
+  const options = await apiRequest<unknown>('/api/account/security/passkeys/registration-options', {
+    method: 'POST',
+    body: { name: name || undefined },
+  })
+  const credential = await createPasskeyCredential(options)
+  return apiRequest('/api/account/security/passkeys/registration-verification', {
+    method: 'POST',
+    body: { response: credential, name: name || undefined },
+  })
+}
+
+async function createPasskeyCredential(optionsResponse: unknown) {
+  if (!navigator.credentials?.create) {
+    throw new Error('Passkey registration is not supported by this browser.')
+  }
+
+  const credential = await navigator.credentials.create({
+    publicKey: passkeyCreationOptions(optionsResponse),
+  })
+
+  if (!credential) {
+    throw new Error('Passkey registration was cancelled.')
+  }
+
+  return serializePasskeyCredential(credential)
+}
+
+function passkeyCreationOptions(optionsResponse: unknown): PublicKeyCredentialCreationOptions {
+  const response = asRecord(optionsResponse)
+  const options = asRecord(
+    response.publicKey ?? asRecord(response.options).publicKey ?? response.options ?? optionsResponse,
+  )
+  const user = asRecord(options.user)
+
+  return {
+    ...options,
+    challenge: base64UrlToBuffer(readRequiredString(options.challenge, 'challenge')),
+    user: {
+      ...user,
+      id: base64UrlToBuffer(readRequiredString(user.id, 'user.id')),
+      name: readRequiredString(user.name, 'user.name'),
+      displayName: readRequiredString(user.displayName, 'user.displayName'),
+    },
+    excludeCredentials: Array.isArray(options.excludeCredentials)
+      ? options.excludeCredentials.map((credential) => {
+          const credentialRecord = asRecord(credential)
+          return {
+            ...credentialRecord,
+            id: base64UrlToBuffer(readRequiredString(credentialRecord.id, 'excludeCredentials.id')),
+          } as PublicKeyCredentialDescriptor
+        })
+      : undefined,
+  } as PublicKeyCredentialCreationOptions
+}
+
+function serializePasskeyCredential(credential: Credential) {
+  const publicKeyCredential = credential as PublicKeyCredential
+  const response = publicKeyCredential.response as AuthenticatorAttestationResponse
+  return {
+    id: publicKeyCredential.id,
+    rawId: bufferToBase64Url(publicKeyCredential.rawId),
+    type: publicKeyCredential.type,
+    response: {
+      attestationObject: bufferToBase64Url(response.attestationObject),
+      clientDataJSON: bufferToBase64Url(response.clientDataJSON),
+      transports: response.getTransports?.() ?? [],
+    },
+    clientExtensionResults: publicKeyCredential.getClientExtensionResults?.() ?? {},
+  }
+}
+
+function base64UrlToBuffer(value: string): ArrayBuffer {
+  const normalized = value.replaceAll('-', '+').replaceAll('_', '/')
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+  const binary = atob(padded)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes.buffer
+}
+
+function bufferToBase64Url(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+}
+
+function readString(value: unknown) {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function readRequiredString(value: unknown, field: string) {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`Passkey registration option ${field} is required.`)
+  }
+  return value
 }
 
 function formatDate(value: string) {

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resolveAuthRedirect, SignInPage, socialAuthorizationUrl } from './auth-pages'
+import { ForgotPasswordPage, resolveAuthRedirect, SignInPage, socialAuthorizationUrl } from './auth-pages'
 import { ConsentPage } from './consent-page'
 
 const experienceConfig = {
@@ -175,6 +175,40 @@ describe('hosted auth pages', () => {
           body: { clientId: 'client-1', scopes: ['openid', 'profile'] },
         },
       ])
+    })
+  })
+
+  it('requests an OTP password reset code before OTP reset completion', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/experience') return Promise.resolve(jsonResponse(experienceConfig))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ success: true }))
+    })
+
+    render(<ForgotPasswordPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'OTP code' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send reset code' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/experience/email-otp/password-reset-requests',
+        body: { email: 'jane@example.com' },
+      })
+    })
+
+    fireEvent.change(await screen.findByLabelText('One-time code'), { target: { value: '123456' } })
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/experience/email-otp/password-resets',
+        body: { email: 'jane@example.com', otp: '123456', password: 'new-password' },
+      })
     })
   })
 })
