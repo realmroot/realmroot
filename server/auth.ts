@@ -2,6 +2,7 @@ import { oauthProvider } from '@better-auth/oauth-provider'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { admin, jwt } from 'better-auth/plugins'
+import { createAccessControl } from 'better-auth/plugins/access'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { magicLink } from 'better-auth/plugins/magic-link'
 import { organization } from 'better-auth/plugins/organization'
@@ -10,8 +11,41 @@ import type { Database } from './db/client'
 import * as schema from './db/schema'
 import type { TransactionalEmailSender } from './lib/email/sender'
 import { hashPassword, verifyPassword } from './lib/password'
+import { createDrizzleAuthorizationRepository } from './modules/authorization/drizzle-repository'
+import { AuthorizationService } from './modules/authorization/service'
 
 const oauthScopes = ['openid', 'profile', 'email', 'offline_access']
+const organizationAccessControl = createAccessControl({
+  organization: ['create', 'read', 'update', 'delete'],
+  member: ['create', 'read', 'update', 'delete'],
+  invitation: ['create', 'read', 'cancel'],
+  role: ['create', 'read', 'update', 'delete', 'assign'],
+  apiResource: ['create', 'read', 'update', 'delete'],
+} as const)
+
+const organizationRoles = {
+  owner: organizationAccessControl.newRole({
+    organization: ['create', 'read', 'update', 'delete'],
+    member: ['create', 'read', 'update', 'delete'],
+    invitation: ['create', 'read', 'cancel'],
+    role: ['create', 'read', 'update', 'delete', 'assign'],
+    apiResource: ['create', 'read', 'update', 'delete'],
+  }),
+  admin: organizationAccessControl.newRole({
+    organization: ['read', 'update'],
+    member: ['create', 'read', 'update', 'delete'],
+    invitation: ['create', 'read', 'cancel'],
+    role: ['read', 'assign'],
+    apiResource: ['read'],
+  }),
+  member: organizationAccessControl.newRole({
+    organization: ['read'],
+    member: ['read'],
+    invitation: ['read'],
+    role: ['read'],
+    apiResource: ['read'],
+  }),
+}
 
 export function createAuth(
   db: Database,
@@ -20,6 +54,8 @@ export function createAuth(
   trustedOrigins: string[],
   emailSender: TransactionalEmailSender,
 ) {
+  const authorization = new AuthorizationService(createDrizzleAuthorizationRepository(db))
+
   return betterAuth({
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     secret,
@@ -124,6 +160,14 @@ export function createAuth(
         usernameValidator: (value) => /^[a-zA-Z0-9_.-]+$/.test(value),
       }),
       organization({
+        teams: {
+          enabled: false,
+        },
+        dynamicAccessControl: {
+          enabled: true,
+        },
+        ac: organizationAccessControl,
+        roles: organizationRoles,
         sendInvitationEmail: async ({ email, id, inviter }) => {
           await emailSender.send({
             to: email,
@@ -139,6 +183,17 @@ export function createAuth(
         loginPage: '/sign-in',
         consentPage: '/oauth/consent',
         scopes: oauthScopes,
+        customAccessTokenClaims: ({ user, scopes, resource, referenceId, metadata }) =>
+          authorization.buildTokenClaims({
+            userId: user?.id,
+            applicationId: readString(metadata, 'applicationId'),
+            organizationId: referenceId,
+            resource,
+            scopes: [...scopes],
+          }),
+        customIdTokenClaims: ({ metadata }) => ({
+          ...(readString(metadata, 'applicationId') ? { application_id: readString(metadata, 'applicationId') } : {}),
+        }),
         clientRegistrationDefaultScopes: ['openid', 'profile', 'email'],
         clientRegistrationAllowedScopes: oauthScopes,
         storeClientSecret: 'hashed',
@@ -153,3 +208,8 @@ export function createAuth(
 }
 
 export type Auth = ReturnType<typeof createAuth>
+
+function readString(metadata: Record<string, unknown> | undefined, key: string) {
+  const value = metadata?.[key]
+  return typeof value === 'string' ? value : undefined
+}

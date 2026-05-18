@@ -8,7 +8,10 @@ import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
 import type { UserRepository } from './modules/users/repository'
 import { accountRoutes } from './routes/account'
+import { adminApiResourcesRoute } from './routes/admin/api-resources'
 import { adminApplicationsRoute } from './routes/admin/applications'
+import { adminOrganizationsRoute } from './routes/admin/organizations'
+import { adminRolesRoute } from './routes/admin/roles'
 import { adminUserRoutes } from './routes/admin/users'
 import type { ExperienceAuthApi, ManagementAuthApi } from './routes/auth-api'
 import { createExperienceRoutes } from './routes/experience'
@@ -46,6 +49,9 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
   )
 
   app.route('/api/admin/applications', adminApplicationsRoute)
+  app.route('/api/admin/api-resources', adminApiResourcesRoute)
+  app.route('/api/admin/organizations', adminOrganizationsRoute)
+  app.route('/api/admin/roles', adminRolesRoute)
   app.route('/api/oauth/consent', oauthConsentRoute)
   app.route(
     '/api/experience',

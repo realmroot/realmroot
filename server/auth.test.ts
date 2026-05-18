@@ -139,6 +139,30 @@ describe('createAuth OAuth Provider metadata', () => {
         'createInvitation',
       ]),
     )
+    expect(Object.keys(auth.api)).not.toEqual(
+      expect.arrayContaining(['createTeam', 'listOrganizationTeams', 'setActiveTeam', 'addTeamMember']),
+    )
+  })
+
+  it('configures organization access control with teams disabled', () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+    )
+
+    const organizationPlugin = auth.options.plugins?.find((plugin) => plugin.id === 'organization')
+
+    expect(organizationPlugin?.options).toMatchObject({
+      teams: {
+        enabled: false,
+      },
+      dynamicAccessControl: {
+        enabled: true,
+      },
+    })
   })
 
   it('configures account profile fields and email changes', () => {

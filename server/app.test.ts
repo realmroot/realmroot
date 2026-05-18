@@ -103,6 +103,18 @@ describe('createApp', () => {
     expect(response.headers.get('access-control-allow-origin')).toBe('https://tenant.example.com')
     expect(response.headers.get('access-control-allow-credentials')).toBe('true')
   })
+
+  it('mounts admin authorization routes behind the admin auth boundary', async () => {
+    const app = createApp(createAuthMock())
+
+    const organizations = await app.request('/api/admin/organizations')
+    const resources = await app.request('/api/admin/api-resources')
+    const roles = await app.request('/api/admin/roles')
+
+    expect(organizations.status).toBe(401)
+    expect(resources.status).toBe(401)
+    expect(roles.status).toBe(401)
+  })
 })
 
 function createAuthMock() {

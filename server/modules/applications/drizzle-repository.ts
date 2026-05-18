@@ -276,6 +276,7 @@ function toOAuthClientInsert(
     type: input.clientType,
     requirePKCE: input.requirePkce,
     scopes: serializeList(input.allowedScopes),
+    metadata: JSON.stringify({ applicationId: input.id }),
     createdAt: now,
     updatedAt: now,
   }
