@@ -43,6 +43,7 @@ export interface Env {
   WEBAUTHN_RP_ID?: string
   WEBAUTHN_RP_NAME?: string
   WEBAUTHN_ORIGINS?: string
+  [binding: string]: unknown
 }
 
 export interface RuntimeConfig {

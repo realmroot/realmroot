@@ -114,6 +114,9 @@ describe('database schema', () => {
     expect(identityProviderConnector.attributeMapping.mapToDriverValue({ email: 'mail', name: 'displayName' })).toBe(
       '{"email":"mail","name":"displayName"}',
     )
+    expect(indexNames(identityProviderConnector)).toEqual(
+      expect.arrayContaining(['identityProviderConnector_providerType_providerId_unique']),
+    )
   })
 
   it('stores account profile fields on the Better Auth user table', () => {

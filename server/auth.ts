@@ -2,7 +2,7 @@ import { oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { admin, jwt, twoFactor } from 'better-auth/plugins'
+import { admin, genericOAuth, jwt, twoFactor } from 'better-auth/plugins'
 import { createAccessControl } from 'better-auth/plugins/access'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { magicLink } from 'better-auth/plugins/magic-link'
@@ -15,6 +15,7 @@ import type { TransactionalEmailSender } from './lib/email/sender'
 import { hashPassword, verifyPassword } from './lib/password'
 import { createDrizzleAuthorizationRepository } from './modules/authorization/drizzle-repository'
 import { AuthorizationService } from './modules/authorization/service'
+import type { AuthConnectorConfig } from './modules/connectors/service'
 
 const oauthScopes = ['openid', 'profile', 'email', 'offline_access']
 const organizationAccessControl = createAccessControl({
@@ -56,6 +57,12 @@ export function createAuth(
   trustedOrigins: string[],
   emailSender: TransactionalEmailSender,
   securityPolicy: SecurityPolicy,
+  connectors: AuthConnectorConfig = {
+    trustedProviders: [],
+    socialProviders: {},
+    genericOAuthProviders: [],
+    cacheKey: '[]',
+  },
 ) {
   const authorization = new AuthorizationService(createDrizzleAuthorizationRepository(db))
 
@@ -79,6 +86,12 @@ export function createAuth(
         : []),
     ],
     trustedOrigins,
+    socialProviders: connectors.socialProviders,
+    account: {
+      accountLinking: {
+        trustedProviders: connectors.trustedProviders,
+      },
+    },
     user: {
       additionalFields: {
         username: {
@@ -224,6 +237,9 @@ export function createAuth(
             },
           })
         },
+      }),
+      genericOAuth({
+        config: connectors.genericOAuthProviders,
       }),
       oauthProvider({
         loginPage: '/sign-in',

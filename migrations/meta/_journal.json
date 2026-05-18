@@ -43,6 +43,13 @@
       "when": 1779097367730,
       "tag": "0005_superb_pandemic",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1779097216000,
+      "tag": "0006_identity_provider_unique_provider",
+      "breakpoints": true
     }
   ]
 }

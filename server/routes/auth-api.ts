@@ -32,6 +32,9 @@ export interface ManagementAuthApi {
   verifyPasskeyRegistration: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   deletePasskey: AuthEndpoint<{ body: { id: string }; headers: Headers }, unknown>
   updatePasskey: AuthEndpoint<{ body: { id: string; name: string }; headers: Headers }, unknown>
+  linkSocialAccount: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  oAuth2LinkAccount: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  unlinkAccount: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
 }
 
 export interface ExperienceAuthApi {

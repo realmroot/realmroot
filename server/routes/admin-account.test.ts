@@ -251,6 +251,26 @@ describe('admin and account routes', () => {
         revokeOtherSessions: true,
       }),
     })
+    await app.request('/api/account/linked-accounts', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        providerType: 'social',
+        providerId: 'google',
+        callbackURL: '/account/linked-accounts',
+        scopes: ['openid', 'email'],
+      }),
+    })
+    await app.request('/api/account/linked-accounts', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        providerType: 'generic_oauth',
+        providerId: 'okta-main',
+        callbackURL: '/account/linked-accounts',
+      }),
+    })
+    await app.request('/api/account/linked-accounts/google?accountId=google-account-1', { method: 'DELETE', headers })
 
     expect(users.updateProfile).toHaveBeenCalledWith('user-1', {
       displayName: 'Grace Hopper',
@@ -273,6 +293,31 @@ describe('admin and account routes', () => {
         currentPassword: 'old-password',
         newPassword: 'new-password',
         revokeOtherSessions: true,
+      },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.linkSocialAccount).toHaveBeenCalledWith({
+      body: {
+        provider: 'google',
+        callbackURL: '/account/linked-accounts',
+        errorCallbackURL: undefined,
+        scopes: ['openid', 'email'],
+      },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.oAuth2LinkAccount).toHaveBeenCalledWith({
+      body: {
+        providerId: 'okta-main',
+        callbackURL: '/account/linked-accounts',
+        errorCallbackURL: undefined,
+        scopes: undefined,
+      },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.unlinkAccount).toHaveBeenCalledWith({
+      body: {
+        providerId: 'google',
+        accountId: 'google-account-1',
       },
       headers: expect.any(Headers),
     })
@@ -359,6 +404,29 @@ describe('admin and account routes', () => {
     expect(response.status).toBe(400)
     expect(users.updateProfile).not.toHaveBeenCalled()
   })
+
+  it('validates connector configuration before admin route persistence', async () => {
+    const response = await createApp(createAuthMock(), { userRepository: createUserRepositoryMock() }).request(
+      '/api/admin/connectors',
+      {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          providerType: 'generic_oauth',
+          providerId: 'okta-main',
+          displayName: 'Okta',
+          clientId: 'client-id',
+        }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        message: expect.stringContaining('clientSecretBinding is required.'),
+      },
+    })
+  })
 })
 
 function createAuthMock() {
@@ -396,6 +464,9 @@ function createAuthMock() {
       sendVerificationEmail: vi.fn().mockResolvedValue({ status: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
       changePassword: vi.fn().mockResolvedValue({ status: true }),
+      linkSocialAccount: vi.fn().mockResolvedValue({ url: 'https://accounts.example.com/oauth', redirect: true }),
+      oAuth2LinkAccount: vi.fn().mockResolvedValue({ url: 'https://idp.example.com/oauth', redirect: true }),
+      unlinkAccount: vi.fn().mockResolvedValue({ status: true }),
     },
     handler: async () => new Response(null, { status: 204 }),
   }

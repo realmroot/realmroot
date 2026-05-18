@@ -13,6 +13,7 @@ import type { UserRepository } from './modules/users/repository'
 import { accountRoutes } from './routes/account'
 import { adminApiResourcesRoute } from './routes/admin/api-resources'
 import { adminApplicationsRoute } from './routes/admin/applications'
+import { adminConnectorsRoute } from './routes/admin/connectors'
 import { adminOrganizationsRoute } from './routes/admin/organizations'
 import { adminRolesRoute } from './routes/admin/roles'
 import { adminSecurityRoutes } from './routes/admin/security'
@@ -60,6 +61,7 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
 
   app.route('/api/admin/applications', adminApplicationsRoute)
   app.route('/api/admin/api-resources', adminApiResourcesRoute)
+  app.route('/api/admin/connectors', adminConnectorsRoute)
   app.route('/api/admin/organizations', adminOrganizationsRoute)
   app.route('/api/admin/roles', adminRolesRoute)
   app.route('/api/oauth/consent', oauthConsentRoute)

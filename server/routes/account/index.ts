@@ -4,6 +4,7 @@ import {
   accountPasswordChangeSchema,
   accountProfileUpdateSchema,
 } from '../../../shared/api/account'
+import { linkAccountRequestSchema, unlinkAccountQuerySchema } from '../../../shared/api/connectors'
 import { paginationMetadata, paginationQuerySchema } from '../../../shared/api/pagination'
 import { badRequest } from '../../lib/errors'
 import { requireAuth } from '../../middleware/admin'
@@ -86,6 +87,58 @@ export function accountRoutes(authApi: ManagementAuthApi, users: UserRepository,
   app.get('/linked-accounts', async (c) => {
     const page = await users.listLinkedAccounts(getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema))
     return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
+  })
+
+  app.post('/linked-accounts', async (c) => {
+    const body = await readJson(c, linkAccountRequestSchema)
+
+    try {
+      if (body.providerType === 'generic_oauth') {
+        return c.json(
+          await authApi.oAuth2LinkAccount({
+            body: {
+              providerId: body.providerId,
+              callbackURL: body.callbackURL,
+              errorCallbackURL: body.errorCallbackURL,
+              scopes: body.scopes,
+            },
+            headers: c.req.raw.headers,
+          }),
+        )
+      }
+
+      return c.json(
+        await authApi.linkSocialAccount({
+          body: {
+            provider: body.providerId,
+            callbackURL: body.callbackURL,
+            errorCallbackURL: body.errorCallbackURL,
+            scopes: body.scopes,
+          },
+          headers: c.req.raw.headers,
+        }),
+      )
+    } catch (error) {
+      throw toBoundaryError(error)
+    }
+  })
+
+  app.delete('/linked-accounts/:providerId', async (c) => {
+    const query = readQuery(c, unlinkAccountQuerySchema)
+
+    try {
+      return c.json(
+        await authApi.unlinkAccount({
+          body: {
+            providerId: c.req.param('providerId'),
+            accountId: query.accountId,
+          },
+          headers: c.req.raw.headers,
+        }),
+      )
+    } catch (error) {
+      throw toBoundaryError(error)
+    }
   })
 
   app.get('/applications', async (c) => {
