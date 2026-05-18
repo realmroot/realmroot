@@ -5,6 +5,7 @@ import { createEmailSender } from '../server/lib/email/sender'
 import { createConnectorRepository } from '../server/modules/connectors/repository'
 import { loadAuthConnectorConfig } from '../server/modules/connectors/service'
 import { createSecurityRepository } from '../server/modules/security/repository'
+import { createSetupRepository } from '../server/modules/setup/repository'
 import { createUserRepository } from '../server/modules/users/repository'
 import { type Env, type RuntimeConfig, validateEnv } from '../shared/env'
 
@@ -22,6 +23,7 @@ export default {
       trustedOrigins: config.trustedOrigins,
       userRepository: createUserRepository(db),
       securityRepository: createSecurityRepository(db, config.securityPolicy),
+      setupRepository: createSetupRepository(env.DB),
       securityPolicy: config.securityPolicy,
     }).fetch(request, env, ctx)
   },

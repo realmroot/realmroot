@@ -2,13 +2,14 @@ import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } fr
 import { Hono } from 'hono'
 import type { SecurityPolicy } from '../shared/api/security'
 import type { Auth } from './auth'
-import { handleApiError, notFound } from './lib/errors'
+import { forbidden, handleApiError, notFound } from './lib/errors'
 import { accessLog } from './middleware/access-log'
 import { authContext, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
 import { requireDeploymentMfa } from './middleware/security-policy'
 import type { SecurityRepository } from './modules/security/repository'
+import type { SetupRepository } from './modules/setup/repository'
 import type { UserRepository } from './modules/users/repository'
 import { accountRoutes } from './routes/account'
 import { adminApiResourcesRoute } from './routes/admin/api-resources'
@@ -23,6 +24,7 @@ import { createExperienceRoutes } from './routes/experience'
 import { createManagementRoutes, type ManagementExperienceServiceFactory } from './routes/management'
 import type { ConnectorServiceFactory } from './routes/management/connectors'
 import { oauthConsentRoute } from './routes/oauth/consent'
+import { setupRoutes } from './routes/setup'
 
 type AuthHandler = Pick<Auth, 'handler'> & {
   api: {
@@ -35,6 +37,7 @@ export interface AppOptions {
   trustedOrigins?: string[]
   userRepository?: UserRepository
   securityRepository?: SecurityRepository
+  setupRepository?: SetupRepository
   securityPolicy?: SecurityPolicy
   experienceServiceFactory?: ManagementExperienceServiceFactory
   connectorServiceFactory?: ConnectorServiceFactory
@@ -62,6 +65,10 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
     }),
   )
 
+  if (options.setupRepository) {
+    app.route('/api/setup', setupRoutes(options.setupRepository))
+  }
+
   app.route('/api/admin/applications', adminApplicationsRoute)
   app.route('/api/admin/api-resources', adminApiResourcesRoute)
   app.route('/api/admin/connectors', adminConnectorsRoute)
@@ -70,7 +77,11 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
   app.route('/api/oauth/consent', oauthConsentRoute)
   app.route(
     '/api/experience',
-    createExperienceRoutes(auth.api as unknown as ExperienceAuthApi, options.experienceServiceFactory),
+    createExperienceRoutes(
+      auth.api as unknown as ExperienceAuthApi,
+      options.experienceServiceFactory,
+      options.setupRepository,
+    ),
   )
 
   if (options.userRepository) {
@@ -99,10 +110,22 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
   )
 
   app.get('/api/auth/.well-known/openid-configuration', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))
-  app.on(['GET', 'POST'], '/api/auth/**', (c) => auth.handler(c.req.raw))
+  app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
+    if (options.setupRepository) {
+      await requireSetupComplete(options.setupRepository)
+    }
+
+    return auth.handler(c.req.raw)
+  })
   app.get('/.well-known/oauth-authorization-server/api/auth', (c) => oauthProviderAuthServerMetadata(auth)(c.req.raw))
 
   return app
 }
 
 export type AppType = ReturnType<typeof createApp>
+
+async function requireSetupComplete(setup: SetupRepository) {
+  if (!(await setup.hasUsers())) {
+    throw forbidden('Complete first-admin setup before using auth flows.')
+  }
+}

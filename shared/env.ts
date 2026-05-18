@@ -29,6 +29,8 @@ export interface Env {
   DB: D1Database
   ASSETS: Fetcher
   EMAIL: SendEmail
+  ASSET_BUCKET: R2Bucket
+  EMAIL_QUEUE: Queue
   BETTER_AUTH_SECRET: string
   EMAIL_FROM: string
   EMAIL_FROM_NAME?: string
@@ -65,8 +67,20 @@ export function validateEnv(env: Env, requestUrl: string): RuntimeConfig {
     throw new Error('DB binding is not configured for this deployment.')
   }
 
+  if (!env.ASSETS) {
+    throw new Error('ASSETS binding is not configured for this deployment.')
+  }
+
   if (!env.EMAIL) {
     throw new Error('EMAIL binding is not configured for this deployment.')
+  }
+
+  if (!env.ASSET_BUCKET) {
+    throw new Error('ASSET_BUCKET binding is not configured for this deployment.')
+  }
+
+  if (!env.EMAIL_QUEUE) {
+    throw new Error('EMAIL_QUEUE binding is not configured for this deployment.')
   }
 
   if (!env.BETTER_AUTH_SECRET) {

@@ -19,6 +19,7 @@ import {
 } from '../../../shared/api/experience'
 import { forbidden } from '../../lib/errors'
 import { createExperienceService, type ExperienceBindings } from '../../modules/experience/context'
+import type { SetupRepository } from '../../modules/setup/repository'
 import { type ExperienceAuthApi, toBoundaryError } from '../auth-api'
 import { readJson, readQuery } from '../validation'
 
@@ -38,6 +39,7 @@ type ExperienceServicePort = {
 export function createExperienceRoutes(
   authApi: ExperienceAuthApi,
   createService: (c: Context<{ Bindings: ExperienceBindings }>) => ExperienceServicePort = createExperienceService,
+  setup?: SetupRepository,
 ) {
   const app = new Hono<{ Bindings: ExperienceBindings }>()
 
@@ -46,6 +48,14 @@ export function createExperienceRoutes(
   app.get('/callback', async (c) =>
     c.json(await createService(c).getCallbackState(readQuery(c, experienceCallbackQuerySchema))),
   )
+
+  app.use('*', async (c, next) => {
+    if (c.req.method !== 'GET') {
+      await requireSetupComplete(setup)
+    }
+
+    await next()
+  })
 
   app.post('/sign-ins/password', async (c) => {
     const body = await readJson(c, passwordSignInRequestSchema)
@@ -142,6 +152,12 @@ export function createExperienceRoutes(
   })
 
   return app
+}
+
+async function requireSetupComplete(setup: SetupRepository | undefined) {
+  if (setup && !(await setup.hasUsers())) {
+    throw forbidden('Complete first-admin setup before using auth flows.')
+  }
 }
 
 async function callAuth<T>(operation: () => Promise<T>): Promise<T> {

@@ -8,6 +8,21 @@ describe('validateEnv', () => {
     )
   })
 
+  it('fails fast for each missing Cloudflare deployment binding', () => {
+    expect(() => validateEnv(createEnv({ ASSETS: undefined }), 'https://tenant.example.com')).toThrow(
+      'ASSETS binding is not configured for this deployment.',
+    )
+    expect(() => validateEnv(createEnv({ EMAIL: undefined }), 'https://tenant.example.com')).toThrow(
+      'EMAIL binding is not configured for this deployment.',
+    )
+    expect(() => validateEnv(createEnv({ ASSET_BUCKET: undefined }), 'https://tenant.example.com')).toThrow(
+      'ASSET_BUCKET binding is not configured for this deployment.',
+    )
+    expect(() => validateEnv(createEnv({ EMAIL_QUEUE: undefined }), 'https://tenant.example.com')).toThrow(
+      'EMAIL_QUEUE binding is not configured for this deployment.',
+    )
+  })
+
   it('normalizes trusted origins and rejects non-origin entries', () => {
     expect(
       validateEnv(
@@ -117,6 +132,8 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     EMAIL: {
       send: async () => ({ messageId: 'email-1' }),
     },
+    ASSET_BUCKET: {},
+    EMAIL_QUEUE: {},
     BETTER_AUTH_SECRET: 'secret',
     EMAIL_FROM: 'noreply@example.com',
     ...overrides,

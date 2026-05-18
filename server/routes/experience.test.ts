@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../app'
+import type { SetupRepository } from '../modules/setup/repository'
 import { createExperienceRoutes } from './experience'
 
 describe('experience routes', () => {
@@ -101,6 +102,76 @@ describe('experience routes', () => {
       asResponse: true,
     })
     expect(auth.api.signOut).toHaveBeenCalledWith({ headers: expect.any(Headers), asResponse: true })
+  })
+
+  it('blocks hosted auth mutations until first-admin setup is complete', async () => {
+    const auth = createAuthMock()
+    const app = createApp(auth, {
+      experienceServiceFactory: createExperienceServiceMock(),
+      setupRepository: createSetupRepositoryMock(false),
+    })
+
+    const signUpResponse = await app.request('/api/experience/sign-ups', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'ada@example.com',
+        password: 'password-1',
+        name: 'Ada Lovelace',
+      }),
+    })
+    const magicLinkResponse = await app.request('/api/experience/magic-links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'ada@example.com' }),
+    })
+    const emailOtpResponse = await app.request('/api/experience/email-otp/sign-ins', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'ada@example.com', otp: '123456' }),
+    })
+
+    expect(signUpResponse.status).toBe(403)
+    expect(magicLinkResponse.status).toBe(403)
+    expect(emailOtpResponse.status).toBe(403)
+    expect(auth.api.signUpEmail).not.toHaveBeenCalled()
+    expect(auth.api.signInMagicLink).not.toHaveBeenCalled()
+    expect(auth.api.signInEmailOTP).not.toHaveBeenCalled()
+    await expect(signUpResponse.json()).resolves.toMatchObject({
+      error: {
+        code: 'forbidden',
+        message: 'Complete first-admin setup before using auth flows.',
+      },
+    })
+  })
+
+  it('blocks native Better Auth routes until first-admin setup is complete', async () => {
+    const auth = createAuthMock()
+    const app = createApp(auth, {
+      experienceServiceFactory: createExperienceServiceMock(),
+      setupRepository: createSetupRepositoryMock(false),
+    })
+
+    const response = await app.request('/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'ada@example.com',
+        password: 'password-1',
+        name: 'Ada Lovelace',
+      }),
+    })
+    const callbackResponse = await app.request('/api/auth/callback/google')
+
+    expect(response.status).toBe(403)
+    expect(callbackResponse.status).toBe(403)
+    expect(auth.handler).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'forbidden',
+        message: 'Complete first-admin setup before using auth flows.',
+      },
+    })
   })
 
   it('delegates verification, password reset, magic link, email OTP, and username availability flows', async () => {
@@ -329,7 +400,7 @@ function createAuthMock() {
       resetPasswordEmailOTP: vi.fn().mockResolvedValue(authResponse({ success: true })),
       isUsernameAvailable: vi.fn().mockResolvedValue(authResponse({ available: true })),
     },
-    handler: async () => new Response(null, { status: 204 }),
+    handler: vi.fn().mockResolvedValue(new Response(null, { status: 204 })),
   }
 }
 
@@ -382,6 +453,13 @@ function createExperienceServiceMock(overrides: Partial<ConfigMethods> = {}) {
       },
     }),
   })
+}
+
+function createSetupRepositoryMock(hasUsers: boolean): SetupRepository {
+  return {
+    hasUsers: vi.fn().mockResolvedValue(hasUsers),
+    createBootstrapAdmin: vi.fn(),
+  }
 }
 
 type ConfigMethods = {

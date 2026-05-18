@@ -8,7 +8,9 @@
     "dev": "vite dev",
     "build": "[ \"$WORKERS_CI\" = \"1\" ] && [ \"$WORKERS_CI_BRANCH\" != \"main\" ] && export CF_WRANGLER_CONFIG=wrangler.preview.toml; vite build",
     "deploy": "npm run deploy:prod",
+    "deploy:check": "node scripts/check-cloudflare-config.mjs",
     "deploy:prod": "npm run db:migrate:prod && npm run build && wrangler deploy",
+    "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply flareauth-db --local",
     "db:migrate:staging": "wrangler d1 migrations apply flareauth-db-staging --remote --config wrangler.preview.toml",
@@ -70,6 +72,15 @@
       },
       "DB": {
         "description": "D1 database for FlareAuth identity data"
+      },
+      "ASSET_BUCKET": {
+        "description": "R2 bucket for uploaded avatars, organization logos, and application logos"
+      },
+      "EMAIL": {
+        "description": "Cloudflare Email Routing send_email binding"
+      },
+      "EMAIL_QUEUE": {
+        "description": "Queue producer reserved for async email delivery and retries"
       }
     }
   },
