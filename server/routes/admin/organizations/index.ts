@@ -65,6 +65,7 @@ adminOrganizationsRoute.post('/:organizationId/members', async (c) =>
 adminOrganizationsRoute.patch('/:organizationId/members/:memberId', async (c) =>
   c.json(
     await createAuthorizationService(c).updateMember(
+      c.req.param('organizationId'),
       c.req.param('memberId'),
       await readJson(c, updateMemberRequestSchema),
     ),
@@ -72,7 +73,7 @@ adminOrganizationsRoute.patch('/:organizationId/members/:memberId', async (c) =>
 )
 
 adminOrganizationsRoute.delete('/:organizationId/members/:memberId', async (c) => {
-  await createAuthorizationService(c).removeMember(c.req.param('memberId'))
+  await createAuthorizationService(c).removeMember(c.req.param('organizationId'), c.req.param('memberId'))
   return c.body(null, 204)
 })
 
@@ -98,6 +99,6 @@ adminOrganizationsRoute.post('/:organizationId/invitations', async (c) => {
 })
 
 adminOrganizationsRoute.delete('/:organizationId/invitations/:invitationId', async (c) => {
-  await createAuthorizationService(c).cancelInvitation(c.req.param('invitationId'))
+  await createAuthorizationService(c).cancelInvitation(c.req.param('organizationId'), c.req.param('invitationId'))
   return c.body(null, 204)
 })

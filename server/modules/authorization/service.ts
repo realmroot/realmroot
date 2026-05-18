@@ -58,6 +58,7 @@ export interface AuthorizationRepository {
   removeMember(id: string): Promise<void>
   createInvitation(input: InvitationRecordInput): Promise<InvitationResponse>
   listInvitations(organizationId: string, pagination: PaginationQuery): Promise<PaginatedResult<InvitationResponse>>
+  findInvitation(id: string): Promise<InvitationResponse | null>
   cancelInvitation(id: string): Promise<void>
   createResource(input: ApiResourceRecordInput): Promise<ApiResourceResponse>
   listResources(pagination: PaginationQuery): Promise<PaginatedResult<ApiResourceResponse>>
@@ -159,14 +160,14 @@ export class AuthorizationService {
     return { members: page.items, pagination: page.pagination }
   }
 
-  async updateMember(memberId: string, input: UpdateMemberRequest) {
-    await this.requireMember(memberId)
+  async updateMember(organizationId: string, memberId: string, input: UpdateMemberRequest) {
+    await this.requireMemberForOrganization(memberId, organizationId)
     await this.repository.updateMember(memberId, input)
     return this.requireMember(memberId)
   }
 
-  async removeMember(memberId: string) {
-    await this.requireMember(memberId)
+  async removeMember(organizationId: string, memberId: string) {
+    await this.requireMemberForOrganization(memberId, organizationId)
     await this.repository.removeMember(memberId)
   }
 
@@ -189,7 +190,11 @@ export class AuthorizationService {
     return { invitations: page.items, pagination: page.pagination }
   }
 
-  cancelInvitation(id: string) {
+  async cancelInvitation(organizationId: string, id: string) {
+    const invitation = await this.repository.findInvitation(id)
+    if (!invitation || invitation.organizationId !== organizationId) {
+      throw notFound('Organization invitation was not found.')
+    }
     return this.repository.cancelInvitation(id)
   }
 
@@ -248,20 +253,20 @@ export class AuthorizationService {
     return { scopes: page.items, pagination: page.pagination }
   }
 
-  async updateScope(id: string, input: UpdateApiScopeRequest) {
-    await this.requireScope(id)
+  async updateScope(resourceId: string, id: string, input: UpdateApiScopeRequest) {
+    await this.requireScopeForResource(id, resourceId)
     await this.repository.updateScope(id, input)
     return this.requireScope(id)
   }
 
-  async deleteScope(id: string) {
-    await this.requireScope(id)
+  async deleteScope(resourceId: string, id: string) {
+    await this.requireScopeForResource(id, resourceId)
     await this.repository.deleteScope(id)
   }
 
   async createPermission(resourceId: string, input: CreateApiPermissionRequest) {
     await this.getResource(resourceId)
-    if (input.scopeId) await this.requireScopeForResource(input.scopeId, resourceId)
+    if (input.scopeId) await this.requireScopeBelongsToResource(input.scopeId, resourceId)
     return this.repository.createPermission(resourceId, {
       id: createId('perm'),
       resourceId,
@@ -278,15 +283,15 @@ export class AuthorizationService {
     return { permissions: page.items, pagination: page.pagination }
   }
 
-  async updatePermission(id: string, input: UpdateApiPermissionRequest) {
-    const permission = await this.requirePermission(id)
-    if (input.scopeId) await this.requireScopeForResource(input.scopeId, permission.resourceId)
+  async updatePermission(resourceId: string, id: string, input: UpdateApiPermissionRequest) {
+    await this.requirePermissionForResource(id, resourceId)
+    if (input.scopeId) await this.requireScopeBelongsToResource(input.scopeId, resourceId)
     await this.repository.updatePermission(id, input)
     return this.requirePermission(id)
   }
 
-  async deletePermission(id: string) {
-    await this.requirePermission(id)
+  async deletePermission(resourceId: string, id: string) {
+    await this.requirePermissionForResource(id, resourceId)
     await this.repository.deletePermission(id)
   }
 
@@ -410,6 +415,14 @@ export class AuthorizationService {
     return member
   }
 
+  private async requireMemberForOrganization(id: string, organizationId: string) {
+    const member = await this.requireMember(id)
+    if (member.organizationId !== organizationId) {
+      throw notFound('Organization member was not found.')
+    }
+    return member
+  }
+
   private async requireScope(id: string) {
     const scope = await this.repository.findScope(id)
     if (!scope) throw notFound('API scope was not found.')
@@ -417,6 +430,14 @@ export class AuthorizationService {
   }
 
   private async requireScopeForResource(id: string, resourceId: string) {
+    const scope = await this.requireScope(id)
+    if (scope.resourceId !== resourceId) {
+      throw notFound('API scope was not found.')
+    }
+    return scope
+  }
+
+  private async requireScopeBelongsToResource(id: string, resourceId: string) {
     const scope = await this.requireScope(id)
     if (scope.resourceId !== resourceId) {
       throw badRequest('API scope must belong to the same API resource as the permission.')
@@ -427,6 +448,14 @@ export class AuthorizationService {
   private async requirePermission(id: string) {
     const permission = await this.repository.findPermission(id)
     if (!permission) throw notFound('API permission was not found.')
+    return permission
+  }
+
+  private async requirePermissionForResource(id: string, resourceId: string) {
+    const permission = await this.requirePermission(id)
+    if (permission.resourceId !== resourceId) {
+      throw notFound('API permission was not found.')
+    }
     return permission
   }
 }
@@ -486,11 +515,11 @@ function toTokenClaims(
       : roleClaims
 
   return {
+    ...explicitClaims,
     authorization,
     roles,
     permissions,
     ...namespaced,
-    ...explicitClaims,
   }
 }
 

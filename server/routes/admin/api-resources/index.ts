@@ -62,6 +62,7 @@ adminApiResourcesRoute.post('/:resourceId/scopes', async (c) =>
 adminApiResourcesRoute.patch('/:resourceId/scopes/:scopeId', async (c) =>
   c.json(
     await createAuthorizationService(c).updateScope(
+      c.req.param('resourceId'),
       c.req.param('scopeId'),
       await readJson(c, updateApiScopeRequestSchema),
     ),
@@ -69,7 +70,7 @@ adminApiResourcesRoute.patch('/:resourceId/scopes/:scopeId', async (c) =>
 )
 
 adminApiResourcesRoute.delete('/:resourceId/scopes/:scopeId', async (c) => {
-  await createAuthorizationService(c).deleteScope(c.req.param('scopeId'))
+  await createAuthorizationService(c).deleteScope(c.req.param('resourceId'), c.req.param('scopeId'))
   return c.body(null, 204)
 })
 
@@ -92,6 +93,7 @@ adminApiResourcesRoute.post('/:resourceId/permissions', async (c) =>
 adminApiResourcesRoute.patch('/:resourceId/permissions/:permissionId', async (c) =>
   c.json(
     await createAuthorizationService(c).updatePermission(
+      c.req.param('resourceId'),
       c.req.param('permissionId'),
       await readJson(c, updateApiPermissionRequestSchema),
     ),
@@ -99,6 +101,6 @@ adminApiResourcesRoute.patch('/:resourceId/permissions/:permissionId', async (c)
 )
 
 adminApiResourcesRoute.delete('/:resourceId/permissions/:permissionId', async (c) => {
-  await createAuthorizationService(c).deletePermission(c.req.param('permissionId'))
+  await createAuthorizationService(c).deletePermission(c.req.param('resourceId'), c.req.param('permissionId'))
   return c.body(null, 204)
 })

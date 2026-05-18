@@ -123,6 +123,11 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return { items: rows.map(toInvitation), pagination: toPagination(pagination, total) }
     },
 
+    async findInvitation(id) {
+      const rows = await db.select().from(invitation).where(eq(invitation.id, id)).limit(1)
+      return rows[0] ? toInvitation(rows[0]) : null
+    },
+
     async cancelInvitation(id) {
       await db.update(invitation).set({ status: 'canceled', revokedAt: new Date() }).where(eq(invitation.id, id))
     },
