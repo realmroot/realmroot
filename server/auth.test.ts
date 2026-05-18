@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createApp } from './app'
-import { createAuth } from './auth'
+import { buildOAuthAccessTokenClaims, createAuth } from './auth'
 import type { Database } from './db/client'
 
 describe('createAuth OAuth Provider metadata', () => {
@@ -170,6 +170,41 @@ describe('createAuth OAuth Provider metadata', () => {
       dynamicAccessControl: {
         enabled: true,
       },
+    })
+  })
+
+  it('maps OAuth provider context into authorization token claims', async () => {
+    const authorization = {
+      buildTokenClaims: vi.fn().mockResolvedValue({
+        authorization: {
+          roles: ['contacts-reader'],
+        },
+      }),
+    }
+
+    await expect(
+      buildOAuthAccessTokenClaims(authorization, {
+        user: { id: 'user-1' },
+        scopes: new Set(['openid', 'contacts:read']),
+        resource: 'https://api.example.com/contacts',
+        referenceId: 'org-1',
+        metadata: {
+          applicationId: 'app-1',
+          ignored: 'value',
+        },
+      }),
+    ).resolves.toEqual({
+      authorization: {
+        roles: ['contacts-reader'],
+      },
+    })
+
+    expect(authorization.buildTokenClaims).toHaveBeenCalledWith({
+      userId: 'user-1',
+      applicationId: 'app-1',
+      organizationId: 'org-1',
+      resource: 'https://api.example.com/contacts',
+      scopes: ['openid', 'contacts:read'],
     })
   })
 

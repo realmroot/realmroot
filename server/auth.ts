@@ -14,7 +14,7 @@ import * as schema from './db/schema'
 import type { TransactionalEmailSender } from './lib/email/sender'
 import { hashPassword, verifyPassword } from './lib/password'
 import { createDrizzleAuthorizationRepository } from './modules/authorization/drizzle-repository'
-import { AuthorizationService } from './modules/authorization/service'
+import { AuthorizationService, type AuthorizationTokenClaimInput } from './modules/authorization/service'
 import type { AuthConnectorConfig } from './modules/connectors/service'
 
 const oauthScopes = ['openid', 'profile', 'email', 'offline_access']
@@ -245,14 +245,7 @@ export function createAuth(
         loginPage: '/sign-in',
         consentPage: '/oauth/consent',
         scopes: oauthScopes,
-        customAccessTokenClaims: ({ user, scopes, resource, referenceId, metadata }) =>
-          authorization.buildTokenClaims({
-            userId: user?.id,
-            applicationId: readString(metadata, 'applicationId'),
-            organizationId: referenceId,
-            resource,
-            scopes: [...scopes],
-          }),
+        customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(authorization, input),
         customIdTokenClaims: ({ metadata }) => ({
           ...(readString(metadata, 'applicationId') ? { application_id: readString(metadata, 'applicationId') } : {}),
         }),
@@ -270,6 +263,25 @@ export function createAuth(
 }
 
 export type Auth = ReturnType<typeof createAuth>
+
+export function buildOAuthAccessTokenClaims(
+  authorization: Pick<AuthorizationService, 'buildTokenClaims'>,
+  input: {
+    user?: { id?: string } | null
+    scopes: Iterable<string>
+    resource?: string
+    referenceId?: string
+    metadata?: Record<string, unknown>
+  },
+): Promise<Record<string, unknown>> {
+  return authorization.buildTokenClaims({
+    userId: input.user?.id,
+    applicationId: readString(input.metadata, 'applicationId'),
+    organizationId: input.referenceId,
+    resource: input.resource,
+    scopes: [...input.scopes],
+  } satisfies AuthorizationTokenClaimInput)
+}
 
 function readString(metadata: Record<string, unknown> | undefined, key: string) {
   const value = metadata?.[key]
