@@ -1,15 +1,17 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from './app'
 
 describe('createApp', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('serves health status', async () => {
-    const auth = {
-      api: {
-        getOAuthServerConfig: vi.fn(),
-        getOpenIdConfig: vi.fn(),
-      },
-      handler: async () => new Response(null, { status: 204 }),
-    }
+    const auth = createAuthMock()
     const response = await createApp(auth).request('/api/health')
 
     await expect(response.json()).resolves.toEqual({
@@ -33,6 +35,7 @@ describe('createApp', () => {
       api: {
         getOAuthServerConfig,
         getOpenIdConfig: vi.fn(),
+        getSession: vi.fn().mockResolvedValue(null),
       },
       handler: async () => new Response(null, { status: 204 }),
     }
@@ -50,4 +53,65 @@ describe('createApp', () => {
       asResponse: false,
     })
   })
+
+  it('returns consistent JSON errors from the boundary', async () => {
+    const response = await createApp(createAuthMock()).request('/api/missing', {
+      headers: {
+        'cf-ray': 'request-1',
+      },
+    })
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'not_found',
+        message: 'Resource not found.',
+        requestId: 'request-1',
+      },
+    })
+  })
+
+  it('rejects untrusted API origins before handlers run', async () => {
+    const auth = createAuthMock()
+    const response = await createApp(auth, { trustedOrigins: ['https://tenant.example.com'] }).request('/api/health', {
+      headers: {
+        origin: 'https://evil.example.com',
+      },
+    })
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'forbidden',
+        message: 'Origin is not trusted for this issuer.',
+      },
+    })
+    expect(auth.api.getSession).not.toHaveBeenCalled()
+  })
+
+  it('allows trusted API origins and emits CORS response headers', async () => {
+    const response = await createApp(createAuthMock(), { trustedOrigins: ['https://tenant.example.com'] }).request(
+      '/api/health',
+      {
+        headers: {
+          origin: 'https://tenant.example.com',
+        },
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('access-control-allow-origin')).toBe('https://tenant.example.com')
+    expect(response.headers.get('access-control-allow-credentials')).toBe('true')
+  })
 })
+
+function createAuthMock() {
+  return {
+    api: {
+      getOAuthServerConfig: vi.fn(),
+      getOpenIdConfig: vi.fn(),
+      getSession: vi.fn().mockResolvedValue(null),
+    },
+    handler: async () => new Response(null, { status: 204 }),
+  }
+}

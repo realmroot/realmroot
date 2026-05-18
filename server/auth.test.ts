@@ -1,13 +1,17 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createApp } from './app'
 import { createAuth } from './auth'
 import type { Database } from './db/client'
 
 describe('createAuth OAuth Provider metadata', () => {
   it('serves OIDC discovery from the mounted Better Auth issuer', async () => {
-    const auth = createAuth({} as Database, '01234567890123456789012345678901', 'https://auth.example.com', [
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
       'https://auth.example.com',
-    ])
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+    )
 
     const response = await createApp(auth).request('/api/auth/.well-known/openid-configuration')
 
@@ -28,4 +32,89 @@ describe('createAuth OAuth Provider metadata', () => {
     })
     expect(metadata.token_endpoint_auth_methods_supported).not.toContain('none')
   })
+
+  it('wires Better Auth email flows to the transactional email sender', async () => {
+    const emailSender = createEmailSenderMock()
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      emailSender,
+    )
+
+    await auth.options.emailVerification?.sendVerificationEmail?.({
+      user: createUser(),
+      url: 'https://auth.example.com/verify',
+      token: 'verification-token',
+    })
+    await auth.options.emailAndPassword?.sendResetPassword?.({
+      user: createUser(),
+      url: 'https://auth.example.com/reset',
+      token: 'reset-token',
+    })
+    await auth.options.emailAndPassword?.onPasswordReset?.({
+      user: createUser(),
+    })
+
+    expect(emailSender.send).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      template: {
+        type: 'verification',
+        url: 'https://auth.example.com/verify',
+      },
+    })
+    expect(emailSender.send).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      template: {
+        type: 'password-reset',
+        url: 'https://auth.example.com/reset',
+      },
+    })
+    expect(emailSender.send).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      template: {
+        type: 'security-notification',
+        title: 'Your password was changed',
+        body: 'Your FlareAuth password was changed. If this was not you, reset your password immediately.',
+      },
+    })
+  })
+
+  it('exposes magic link, email OTP, and organization invitation APIs', () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+    )
+
+    expect(Object.keys(auth.api)).toEqual(
+      expect.arrayContaining([
+        'signInMagicLink',
+        'sendVerificationOTP',
+        'requestPasswordResetEmailOTP',
+        'createInvitation',
+      ]),
+    )
+  })
 })
+
+function createEmailSenderMock() {
+  return {
+    send: vi.fn().mockResolvedValue({ messageId: 'email-1' }),
+  }
+}
+
+function createUser() {
+  return {
+    id: 'user-1',
+    name: 'User',
+    email: 'user@example.com',
+    emailVerified: false,
+    image: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+}
