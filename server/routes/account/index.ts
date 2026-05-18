@@ -4,13 +4,14 @@ import {
   accountPasswordChangeSchema,
   accountProfileUpdateSchema,
 } from '../../../shared/api/account'
+import { paginationMetadata, paginationQuerySchema } from '../../../shared/api/pagination'
 import { badRequest } from '../../lib/errors'
 import { requireAuth } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
 import type { UserRepository } from '../../modules/users/repository'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
-import { readJson } from '../validation'
+import { readJson, readQuery } from '../validation'
 
 export function accountRoutes(authApi: ManagementAuthApi, users: UserRepository) {
   const app = new Hono()
@@ -80,15 +81,20 @@ export function accountRoutes(authApi: ManagementAuthApi, users: UserRepository)
     }
   })
 
-  app.get('/linked-accounts', async (c) =>
-    c.json({ accounts: await users.listLinkedAccounts(getAuthContext(c).user!.id) }),
-  )
+  app.get('/linked-accounts', async (c) => {
+    const page = await users.listLinkedAccounts(getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema))
+    return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
+  })
 
-  app.get('/applications', async (c) =>
-    c.json({ applications: await users.listConsentedApplications(getAuthContext(c).user!.id) }),
-  )
+  app.get('/applications', async (c) => {
+    const page = await users.listConsentedApplications(getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema))
+    return c.json({ applications: page.items, pagination: paginationMetadata(page) })
+  })
 
-  app.get('/sessions', async (c) => c.json({ sessions: await users.listSessions(getAuthContext(c).user!.id) }))
+  app.get('/sessions', async (c) => {
+    const page = await users.listSessions(getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema))
+    return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
+  })
 
   return app
 }

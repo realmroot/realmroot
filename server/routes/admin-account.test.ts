@@ -151,14 +151,52 @@ describe('admin and account routes', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       user: { id: 'user-1' },
-      linkedAccounts: [],
-      consentedApplications: [],
-      sessions: [],
     })
     expect(auth.api.getUser).toHaveBeenCalledWith({ query: { id: 'user-1' }, headers: expect.any(Headers) })
-    expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1')
-    expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1')
-    expect(users.listSessions).toHaveBeenCalledWith('user-1')
+    expect(users.listLinkedAccounts).not.toHaveBeenCalled()
+    expect(users.listConsentedApplications).not.toHaveBeenCalled()
+    expect(users.listSessions).not.toHaveBeenCalled()
+  })
+
+  it('serves admin user sub-collections with pagination metadata', async () => {
+    const users = createUserRepositoryMock()
+    const app = createApp(createAuthMock(), { userRepository: users })
+    const headers = adminHeaders()
+
+    const accounts = await app.request('/api/admin/users/user-1/linked-accounts?limit=2&offset=4', { headers })
+    const applications = await app.request('/api/admin/users/user-1/applications?limit=3&offset=6', { headers })
+    const sessions = await app.request('/api/admin/users/user-1/sessions?limit=4&offset=8', { headers })
+
+    await expect(accounts.json()).resolves.toEqual({
+      accounts: [],
+      pagination: {
+        limit: 2,
+        offset: 4,
+        total: 10,
+        nextOffset: 6,
+      },
+    })
+    await expect(applications.json()).resolves.toEqual({
+      applications: [],
+      pagination: {
+        limit: 3,
+        offset: 6,
+        total: 10,
+        nextOffset: 9,
+      },
+    })
+    await expect(sessions.json()).resolves.toEqual({
+      sessions: [],
+      pagination: {
+        limit: 4,
+        offset: 8,
+        total: 10,
+        nextOffset: null,
+      },
+    })
+    expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
+    expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1', { limit: 3, offset: 6 })
+    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })
   })
 
   it('lists and revokes admin-visible user sessions without exposing token lookup in the route', async () => {
@@ -170,10 +208,8 @@ describe('admin and account routes', () => {
     await app.request('/api/admin/users/user-1/sessions', { method: 'DELETE', headers: adminHeaders() })
     await app.request('/api/admin/users/user-1/sessions/session-1', { method: 'DELETE', headers: adminHeaders() })
 
-    expect(auth.api.listUserSessions).toHaveBeenCalledWith({
-      body: { userId: 'user-1' },
-      headers: expect.any(Headers),
-    })
+    expect(auth.api.listUserSessions).not.toHaveBeenCalled()
+    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 20, offset: 0 })
     expect(users.getSessionToken).toHaveBeenCalledWith('user-1', 'session-1')
     expect(auth.api.revokeUserSession).toHaveBeenCalledWith({
       body: { sessionToken: 'session-token-1' },
@@ -248,14 +284,41 @@ describe('admin and account routes', () => {
     const headers = userHeaders()
 
     await app.request('/api/account/profile', { headers })
-    await app.request('/api/account/linked-accounts', { headers })
-    await app.request('/api/account/applications', { headers })
-    await app.request('/api/account/sessions', { headers })
+    const accounts = await app.request('/api/account/linked-accounts?limit=2&offset=4', { headers })
+    const applications = await app.request('/api/account/applications?limit=3&offset=6', { headers })
+    const sessions = await app.request('/api/account/sessions?limit=4&offset=8', { headers })
 
     expect(users.getUser).toHaveBeenCalledWith('user-1')
-    expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1')
-    expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1')
-    expect(users.listSessions).toHaveBeenCalledWith('user-1')
+    expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
+    expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1', { limit: 3, offset: 6 })
+    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })
+    await expect(accounts.json()).resolves.toMatchObject({
+      accounts: [],
+      pagination: {
+        limit: 2,
+        offset: 4,
+        total: 10,
+        nextOffset: 6,
+      },
+    })
+    await expect(applications.json()).resolves.toMatchObject({
+      applications: [],
+      pagination: {
+        limit: 3,
+        offset: 6,
+        total: 10,
+        nextOffset: 9,
+      },
+    })
+    await expect(sessions.json()).resolves.toMatchObject({
+      sessions: [],
+      pagination: {
+        limit: 4,
+        offset: 8,
+        total: 10,
+        nextOffset: null,
+      },
+    })
   })
 
   it('translates Better Auth API errors to the JSON error boundary', async () => {
@@ -344,10 +407,18 @@ function createUserRepositoryMock(): UserRepository {
     updateProfile: vi.fn().mockResolvedValue({ id: 'user-1' }),
     assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
     assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
-    listLinkedAccounts: vi.fn().mockResolvedValue([]),
-    listConsentedApplications: vi.fn().mockResolvedValue([]),
-    listSessions: vi.fn().mockResolvedValue([]),
+    listLinkedAccounts: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
+    listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
+    listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
+  }
+}
+
+function createPage(page: { limit: number; offset: number }) {
+  return {
+    items: [],
+    total: 10,
+    ...page,
   }
 }
 

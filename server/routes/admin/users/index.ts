@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { paginationMetadata, paginationQuerySchema } from '../../../../shared/api/pagination'
 import {
   adminBanUserSchema,
   adminCreateUserSchema,
@@ -87,22 +88,24 @@ export function adminUserRoutes(authApi: ManagementAuthApi, users: UserRepositor
 
   app.get('/:id', async (c) => {
     try {
-      const [user, linkedAccounts, consentedApplications, sessions] = await Promise.all([
-        authApi.getUser({ query: { id: c.req.param('id') }, headers: c.req.raw.headers }),
-        users.listLinkedAccounts(c.req.param('id')),
-        users.listConsentedApplications(c.req.param('id')),
-        users.listSessions(c.req.param('id')),
-      ])
+      const user = await authApi.getUser({ query: { id: c.req.param('id') }, headers: c.req.raw.headers })
 
       return c.json({
         user,
-        linkedAccounts,
-        consentedApplications,
-        sessions,
       })
     } catch (error) {
       throw toBoundaryError(error)
     }
+  })
+
+  app.get('/:id/linked-accounts', async (c) => {
+    const page = await users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
+  })
+
+  app.get('/:id/applications', async (c) => {
+    const page = await users.listConsentedApplications(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    return c.json({ applications: page.items, pagination: paginationMetadata(page) })
   })
 
   app.patch('/:id', async (c) => {
@@ -167,11 +170,8 @@ export function adminUserRoutes(authApi: ManagementAuthApi, users: UserRepositor
   })
 
   app.get('/:id/sessions', async (c) => {
-    try {
-      return c.json(await authApi.listUserSessions({ body: { userId: c.req.param('id') }, headers: c.req.raw.headers }))
-    } catch (error) {
-      throw toBoundaryError(error)
-    }
+    const page = await users.listSessions(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
   })
 
   app.delete('/:id/sessions', async (c) => {

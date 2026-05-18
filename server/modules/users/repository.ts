@@ -1,5 +1,6 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, isNull } from 'drizzle-orm'
 import type { AccountProfileUpdateInput } from '../../../shared/api/account'
+import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
 import type { Database } from '../../db/client'
 import { account, application, applicationConsent, session, uploadedAsset, user } from '../../db/schema'
 import { badRequest, notFound } from '../../lib/errors'
@@ -55,9 +56,9 @@ export interface UserRepository {
   updateProfile(userId: string, input: AccountProfileUpdateInput): Promise<UserProfile>
   assertAccountAvatarReference(userId: string, avatarAssetId: string | null | undefined): Promise<void>
   assertAdminAvatarReference(avatarAssetId: string | null | undefined): Promise<void>
-  listLinkedAccounts(userId: string): Promise<LinkedAccount[]>
-  listConsentedApplications(userId: string): Promise<ConsentedApplication[]>
-  listSessions(userId: string): Promise<UserSessionDevice[]>
+  listLinkedAccounts(userId: string, page: PaginationInput): Promise<PaginatedResult<LinkedAccount>>
+  listConsentedApplications(userId: string, page: PaginationInput): Promise<PaginatedResult<ConsentedApplication>>
+  listSessions(userId: string, page: PaginationInput): Promise<PaginatedResult<UserSessionDevice>>
   getSessionToken(userId: string, sessionId: string): Promise<string>
 }
 
@@ -91,7 +92,7 @@ export function createUserRepository(db: Database): UserRepository {
       await assertAdminAvatarReference(db, avatarAssetId)
     },
 
-    async listLinkedAccounts(userId) {
+    async listLinkedAccounts(userId, page) {
       const rows = await db
         .select({
           id: account.id,
@@ -102,11 +103,19 @@ export function createUserRepository(db: Database): UserRepository {
         })
         .from(account)
         .where(eq(account.userId, userId))
+        .orderBy(desc(account.createdAt))
+        .limit(page.limit)
+        .offset(page.offset)
 
-      return rows
+      return {
+        items: rows,
+        total: await countRows(db, account, eq(account.userId, userId)),
+        ...page,
+      }
     },
 
-    async listConsentedApplications(userId) {
+    async listConsentedApplications(userId, page) {
+      const where = and(eq(applicationConsent.userId, userId), isNull(applicationConsent.revokedAt))
       const rows = await db
         .select({
           id: applicationConsent.id,
@@ -120,12 +129,19 @@ export function createUserRepository(db: Database): UserRepository {
         })
         .from(applicationConsent)
         .innerJoin(application, eq(applicationConsent.applicationId, application.id))
-        .where(and(eq(applicationConsent.userId, userId), isNull(applicationConsent.revokedAt)))
+        .where(where)
+        .orderBy(desc(applicationConsent.grantedAt))
+        .limit(page.limit)
+        .offset(page.offset)
 
-      return rows
+      return {
+        items: rows,
+        total: await countRows(db, applicationConsent, where),
+        ...page,
+      }
     },
 
-    async listSessions(userId) {
+    async listSessions(userId, page) {
       const rows = await db
         .select({
           id: session.id,
@@ -139,8 +155,15 @@ export function createUserRepository(db: Database): UserRepository {
         })
         .from(session)
         .where(eq(session.userId, userId))
+        .orderBy(desc(session.createdAt))
+        .limit(page.limit)
+        .offset(page.offset)
 
-      return rows
+      return {
+        items: rows,
+        total: await countRows(db, session, eq(session.userId, userId)),
+        ...page,
+      }
     },
 
     async getSessionToken(userId, sessionId) {
@@ -156,6 +179,15 @@ export function createUserRepository(db: Database): UserRepository {
       return row.token
     },
   }
+}
+
+async function countRows(
+  db: Database,
+  table: typeof account | typeof applicationConsent | typeof session,
+  where: ReturnType<typeof eq> | ReturnType<typeof and>,
+): Promise<number> {
+  const [row] = await db.select({ value: count() }).from(table).where(where)
+  return row?.value ?? 0
 }
 
 async function findUser(db: Database, userId: string): Promise<UserProfile> {
