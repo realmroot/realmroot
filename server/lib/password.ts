@@ -1,6 +1,7 @@
 const HASH_ALGORITHM = 'PBKDF2'
 const DIGEST = 'SHA-256'
-const ITERATIONS = 210_000
+const ITERATIONS = 100_000
+const MAX_ITERATIONS = 210_000
 const KEY_BYTES = 32
 const SALT_BYTES = 16
 const FORMAT = 'pbkdf2-sha256'
@@ -14,21 +15,29 @@ export async function hashPassword(password: string): Promise<string> {
 export async function verifyPassword(hash: string, password: string): Promise<boolean> {
   const [format, iterations, encodedSalt, encodedKey] = hash.split(':')
   if (format !== FORMAT) throw new Error(`Unsupported password hash format: ${format}`)
-  if (iterations !== ITERATIONS.toString()) throw new Error(`Unsupported password hash iterations: ${iterations}`)
+  const iterationCount = parseIterations(iterations)
 
   const salt = decodeBase64Url(encodedSalt)
   const expectedKey = decodeBase64Url(encodedKey)
-  const actualKey = await deriveKey(password, salt)
+  const actualKey = await deriveKey(password, salt, iterationCount)
 
   return timingSafeEqual(actualKey, expectedKey)
 }
 
-async function deriveKey(password: string, salt: Uint8Array): Promise<Uint8Array> {
+function parseIterations(value: string): number {
+  const iterations = Number(value)
+  if (!Number.isInteger(iterations) || iterations < 1 || iterations > MAX_ITERATIONS) {
+    throw new Error(`Unsupported password hash iterations: ${value}`)
+  }
+  return iterations
+}
+
+async function deriveKey(password: string, salt: Uint8Array, iterations = ITERATIONS): Promise<Uint8Array> {
   const passwordKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), HASH_ALGORITHM, false, [
     'deriveBits',
   ])
   const bits = await crypto.subtle.deriveBits(
-    { name: HASH_ALGORITHM, hash: DIGEST, salt: toArrayBuffer(salt), iterations: ITERATIONS },
+    { name: HASH_ALGORITHM, hash: DIGEST, salt: toArrayBuffer(salt), iterations },
     passwordKey,
     KEY_BYTES * 8,
   )

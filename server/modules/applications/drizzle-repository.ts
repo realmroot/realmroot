@@ -1,4 +1,5 @@
 import { and, count, desc, eq, isNull } from 'drizzle-orm'
+import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
   application,
@@ -17,22 +18,25 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
   return {
     async create(input) {
       const now = new Date()
-      await db.transaction(async (tx) => {
-        await tx
+      const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
+        db
           .insert(oauthClient)
-          .values(toOAuthClientInsert(input.application, input.clientSecret?.secretHash ?? null, now))
-        await tx.insert(application).values(toApplicationInsert(input.application, now))
-        await tx.insert(applicationClientMetadata).values({
+          .values(toOAuthClientInsert(input.application, input.clientSecret?.secretHash ?? null, now)),
+        db.insert(application).values(toApplicationInsert(input.application, now)),
+        db.insert(applicationClientMetadata).values({
           applicationId: input.application.id,
-        })
-        if (input.clientSecret) {
-          await tx.insert(applicationClientSecret).values({
+        }),
+      ]
+      if (input.clientSecret) {
+        statements.push(
+          db.insert(applicationClientSecret).values({
             ...input.clientSecret,
             applicationId: input.application.id,
             materializedToOauthClientAt: now,
-          })
-        }
-      })
+          }),
+        )
+      }
+      await db.batch(statements)
       return {
         ...input.application,
         createdAt: now,
@@ -80,48 +84,45 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
 
     async update(id, patch) {
       const now = new Date()
-      await db.transaction(async (tx) => {
-        const applicationPatch = {
-          ...(patch.slug !== undefined ? { slug: patch.slug } : {}),
-          ...(patch.name !== undefined ? { name: patch.name } : {}),
-          ...(patch.description !== undefined ? { description: patch.description } : {}),
-          ...(patch.homepageUrl !== undefined ? { homepageUrl: patch.homepageUrl } : {}),
-          ...(patch.iconUrl !== undefined ? { metadata: { iconUrl: patch.iconUrl } } : {}),
-          ...(patch.firstParty !== undefined ? { firstParty: patch.firstParty } : {}),
-          ...(patch.trusted !== undefined ? { trusted: patch.trusted } : {}),
-          ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
-          ...(patch.disabledReason !== undefined ? { disabledReason: patch.disabledReason } : {}),
-          updatedAt: now,
-        }
-        await tx.update(application).set(applicationPatch).where(eq(application.id, id))
+      const applicationPatch = {
+        ...(patch.slug !== undefined ? { slug: patch.slug } : {}),
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.description !== undefined ? { description: patch.description } : {}),
+        ...(patch.homepageUrl !== undefined ? { homepageUrl: patch.homepageUrl } : {}),
+        ...(patch.iconUrl !== undefined ? { metadata: { iconUrl: patch.iconUrl } } : {}),
+        ...(patch.firstParty !== undefined ? { firstParty: patch.firstParty } : {}),
+        ...(patch.trusted !== undefined ? { trusted: patch.trusted } : {}),
+        ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
+        ...(patch.disabledReason !== undefined ? { disabledReason: patch.disabledReason } : {}),
+        updatedAt: now,
+      }
+      const currentRows = await db.select().from(application).where(eq(application.id, id)).limit(1)
+      const current = currentRows[0]
+      if (!current) return
 
-        const currentRows = await tx.select().from(application).where(eq(application.id, id)).limit(1)
-        const current = currentRows[0]
-        if (!current) return
-
-        const oauthPatch = {
-          ...(patch.name !== undefined ? { name: patch.name } : {}),
-          ...(patch.homepageUrl !== undefined ? { uri: patch.homepageUrl } : {}),
-          ...(patch.iconUrl !== undefined ? { icon: patch.iconUrl } : {}),
-          ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
-          ...(patch.trusted !== undefined ? { skipConsent: patch.trusted } : {}),
-          ...(patch.redirectUris !== undefined ? { redirectUris: serializeList(patch.redirectUris) } : {}),
-          ...(patch.allowedGrantTypes !== undefined ? { grantTypes: serializeList(patch.allowedGrantTypes) } : {}),
-          ...(patch.allowedScopes !== undefined ? { scopes: serializeList(patch.allowedScopes) } : {}),
-          updatedAt: now,
-        }
-        await tx.update(oauthClient).set(oauthPatch).where(eq(oauthClient.clientId, current.oauthClientId))
-      })
+      const oauthPatch = {
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.homepageUrl !== undefined ? { uri: patch.homepageUrl } : {}),
+        ...(patch.iconUrl !== undefined ? { icon: patch.iconUrl } : {}),
+        ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
+        ...(patch.trusted !== undefined ? { skipConsent: patch.trusted } : {}),
+        ...(patch.redirectUris !== undefined ? { redirectUris: serializeList(patch.redirectUris) } : {}),
+        ...(patch.allowedGrantTypes !== undefined ? { grantTypes: serializeList(patch.allowedGrantTypes) } : {}),
+        ...(patch.allowedScopes !== undefined ? { scopes: serializeList(patch.allowedScopes) } : {}),
+        updatedAt: now,
+      }
+      await db.batch([
+        db.update(application).set(applicationPatch).where(eq(application.id, id)),
+        db.update(oauthClient).set(oauthPatch).where(eq(oauthClient.clientId, current.oauthClientId)),
+      ])
     },
 
     async delete(id) {
-      await db.transaction(async (tx) => {
-        const rows = await tx.select().from(application).where(eq(application.id, id)).limit(1)
-        const app = rows[0]
-        if (app) {
-          await tx.delete(oauthClient).where(eq(oauthClient.clientId, app.oauthClientId))
-        }
-      })
+      const rows = await db.select().from(application).where(eq(application.id, id)).limit(1)
+      const app = rows[0]
+      if (app) {
+        await db.delete(oauthClient).where(eq(oauthClient.clientId, app.oauthClientId))
+      }
     },
 
     async listSecrets(applicationId, pagination) {
@@ -145,40 +146,39 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
 
     async rotateSecret(input) {
       const now = new Date()
-      const version = await db.transaction(async (tx) => {
-        const versions = await tx
-          .select({ version: applicationClientSecret.version })
-          .from(applicationClientSecret)
-          .where(eq(applicationClientSecret.applicationId, input.applicationId))
-          .orderBy(desc(applicationClientSecret.version))
-          .limit(1)
-        const nextVersion = (versions[0]?.version ?? 0) + 1
+      const versions = await db
+        .select({ version: applicationClientSecret.version })
+        .from(applicationClientSecret)
+        .where(eq(applicationClientSecret.applicationId, input.applicationId))
+        .orderBy(desc(applicationClientSecret.version))
+        .limit(1)
+      const version = (versions[0]?.version ?? 0) + 1
 
-        const rows = await tx.select().from(application).where(eq(application.id, input.applicationId)).limit(1)
-        const app = rows[0]
-        if (!app) return nextVersion
-
-        await tx
-          .update(applicationClientSecret)
-          .set({ status: 'revoked', revokedAt: now })
-          .where(
-            and(
-              eq(applicationClientSecret.applicationId, input.applicationId),
-              eq(applicationClientSecret.status, 'active'),
+      const rows = await db.select().from(application).where(eq(application.id, input.applicationId)).limit(1)
+      const app = rows[0]
+      if (app) {
+        await db.batch([
+          db
+            .update(applicationClientSecret)
+            .set({ status: 'revoked', revokedAt: now })
+            .where(
+              and(
+                eq(applicationClientSecret.applicationId, input.applicationId),
+                eq(applicationClientSecret.status, 'active'),
+              ),
             ),
-          )
-        await tx.insert(applicationClientSecret).values({
-          ...input.secret,
-          version: nextVersion,
-          applicationId: input.applicationId,
-          materializedToOauthClientAt: now,
-        })
-        await tx
-          .update(oauthClient)
-          .set({ clientSecret: input.secret.secretHash, updatedAt: now })
-          .where(eq(oauthClient.clientId, app.oauthClientId))
-        return nextVersion
-      })
+          db.insert(applicationClientSecret).values({
+            ...input.secret,
+            version,
+            applicationId: input.applicationId,
+            materializedToOauthClientAt: now,
+          }),
+          db
+            .update(oauthClient)
+            .set({ clientSecret: input.secret.secretHash, updatedAt: now })
+            .where(eq(oauthClient.clientId, app.oauthClientId)),
+        ])
+      }
 
       return {
         ...input.secret,
@@ -208,24 +208,24 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
     async createConsent(input) {
       const now = new Date()
       const id = `consent_${crypto.randomUUID().replaceAll('-', '')}`
-      await db.transaction(async (tx) => {
-        await tx.insert(applicationConsent).values({
+      await db.batch([
+        db.insert(applicationConsent).values({
           id,
           applicationId: input.applicationId,
           userId: input.userId,
           scopes: input.scopes,
           permissions: input.permissions,
           grantedAt: now,
-        })
-        await tx.insert(oauthConsent).values({
+        }),
+        db.insert(oauthConsent).values({
           id: `oauthconsent_${crypto.randomUUID().replaceAll('-', '')}`,
           clientId: input.clientId,
           userId: input.userId,
           scopes: serializeList(input.scopes),
           createdAt: now,
           updatedAt: now,
-        })
-      })
+        }),
+      ])
 
       return {
         id,

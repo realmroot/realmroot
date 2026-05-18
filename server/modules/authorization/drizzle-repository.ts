@@ -1,4 +1,5 @@
 import { and, count, desc, eq, gt, isNull, or } from 'drizzle-orm'
+import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
   apiPermission,
@@ -266,12 +267,15 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
     },
 
     async replaceRolePermissions(roleId, permissionIds) {
-      await db.transaction(async (tx) => {
-        await tx.delete(rolePermission).where(eq(rolePermission.roleId, roleId))
-        if (permissionIds.length > 0) {
-          await tx.insert(rolePermission).values(permissionIds.map((permissionId) => ({ roleId, permissionId })))
-        }
-      })
+      const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
+        db.delete(rolePermission).where(eq(rolePermission.roleId, roleId)),
+      ]
+      if (permissionIds.length > 0) {
+        statements.push(
+          db.insert(rolePermission).values(permissionIds.map((permissionId) => ({ roleId, permissionId }))),
+        )
+      }
+      await db.batch(statements)
     },
 
     async assignUserRole(input) {

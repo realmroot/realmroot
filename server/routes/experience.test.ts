@@ -376,6 +376,32 @@ describe('experience routes', () => {
       },
     })
   })
+
+  it('does not expose Better Auth internal errors from hosted auth flows', async () => {
+    const auth = createAuthMock()
+    auth.api.signInMagicLink.mockRejectedValueOnce({
+      statusCode: 500,
+      body: { message: 'database adapter leaked detail' },
+      message: 'database adapter leaked detail',
+    })
+
+    const response = await createApp(auth, { experienceServiceFactory: createExperienceServiceMock() }).request(
+      '/api/experience/magic-links',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'ada@example.com' }),
+      },
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'internal_error',
+        message: 'Internal server error.',
+      },
+    })
+  })
 })
 
 function createAuthMock() {

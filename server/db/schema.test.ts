@@ -10,6 +10,7 @@ import {
   applicationRoleAssignment,
   identityProviderConnector,
   invitation,
+  jwks,
   member,
   memberRoleAssignment,
   oauthClient,
@@ -161,5 +162,11 @@ describe('database schema', () => {
       foreignTable: 'user',
       onDelete: 'cascade',
     })
+  })
+
+  it('stores Better Auth JWT key metadata required by generated JWKs', () => {
+    expect(columnNames(jwks)).toEqual(
+      expect.arrayContaining(['id', 'public_key', 'private_key', 'alg', 'crv', 'created_at', 'expires_at']),
+    )
   })
 })

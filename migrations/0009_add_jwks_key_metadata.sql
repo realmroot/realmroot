@@ -1,0 +1,2 @@
+ALTER TABLE `jwks` ADD COLUMN `alg` text;
+ALTER TABLE `jwks` ADD COLUMN `crv` text;

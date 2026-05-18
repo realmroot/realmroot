@@ -49,7 +49,7 @@ Cloudflare Email Routing must be active for the sending domain before deployment
 ```toml
 [[send_email]]
 name = "EMAIL"
-allowed_sender_addresses = ["noreply@flareauth.com"]
+allowed_sender_addresses = ["noreply@agent-kanban.dev"]
 ```
 
 The `allowed_sender_addresses` value must match a verified address for the product domain.

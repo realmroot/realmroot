@@ -71,6 +71,9 @@ export function createAuth(
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     secret,
     baseURL,
+    experimental: {
+      joins: true,
+    },
     disabledPaths: [
       '/token',
       ...(!securityPolicy.passkeys.enabled

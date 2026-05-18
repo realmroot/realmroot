@@ -6,7 +6,7 @@ workers_dev = true
 preview_urls = true
 
 [vars]
-EMAIL_FROM = "noreply@flareauth.com"
+EMAIL_FROM = "noreply@agent-kanban.dev"
 EMAIL_FROM_NAME = "FlareAuth"
 
 [assets]
@@ -17,7 +17,7 @@ run_worker_first = ["/api/*", "/.well-known/*"]
 
 [[send_email]]
 name = "EMAIL"
-allowed_sender_addresses = ["noreply@flareauth.com"]
+allowed_sender_addresses = ["noreply@agent-kanban.dev"]
 
 [[r2_buckets]]
 binding = "ASSET_BUCKET"

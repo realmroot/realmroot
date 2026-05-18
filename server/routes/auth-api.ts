@@ -57,7 +57,7 @@ export interface ExperienceAuthApi {
 
 export function toBoundaryError(error: unknown): Error {
   if (isBetterAuthApiError(error)) {
-    return new ApiError(error.statusCode, statusCode(error.statusCode), error.body?.message ?? error.message)
+    return new ApiError(error.statusCode, statusCode(error.statusCode), errorMessage(error))
   }
 
   return error instanceof Error ? error : new Error('Unexpected error.')
@@ -77,4 +77,9 @@ function statusCode(status: number) {
   if (status === 403) return 'forbidden'
   if (status === 404) return 'not_found'
   return 'internal_error'
+}
+
+function errorMessage(error: { statusCode: number; message: string; body?: { message?: string } }) {
+  if (error.statusCode >= 500) return 'Internal server error.'
+  return error.body?.message ?? error.message
 }
