@@ -5,6 +5,7 @@ import { admin, jwt } from 'better-auth/plugins'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { magicLink } from 'better-auth/plugins/magic-link'
 import { organization } from 'better-auth/plugins/organization'
+import { username } from 'better-auth/plugins/username'
 import type { Database } from './db/client'
 import * as schema from './db/schema'
 import type { TransactionalEmailSender } from './lib/email/sender'
@@ -116,6 +117,11 @@ export function createAuth(
             },
           })
         },
+      }),
+      username({
+        minUsernameLength: 3,
+        maxUsernameLength: 64,
+        usernameValidator: (value) => /^[a-zA-Z0-9_.-]+$/.test(value),
       }),
       organization({
         sendInvitationEmail: async ({ email, id, inviter }) => {

@@ -56,6 +56,23 @@ describe('createAuth OAuth Provider metadata', () => {
     await auth.options.emailAndPassword?.onPasswordReset?.({
       user: createUser(),
     })
+    await findPlugin<MagicLinkPluginOptions>(auth, 'magic-link').options.sendMagicLink({
+      email: 'user@example.com',
+      url: 'https://auth.example.com/magic',
+      token: 'magic-token',
+    })
+    await findPlugin<EmailOtpPluginOptions>(auth, 'email-otp').options.sendVerificationOTP({
+      email: 'user@example.com',
+      otp: '123456',
+      type: 'sign-in',
+    })
+    await findPlugin<OrganizationPluginOptions>(auth, 'organization').options.sendInvitationEmail({
+      email: 'user@example.com',
+      id: 'invitation-1',
+      inviter: {
+        user: createUser(),
+      },
+    })
 
     expect(emailSender.send).toHaveBeenCalledWith({
       to: 'user@example.com',
@@ -79,9 +96,31 @@ describe('createAuth OAuth Provider metadata', () => {
         body: 'Your FlareAuth password was changed. If this was not you, reset your password immediately.',
       },
     })
+    expect(emailSender.send).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      template: {
+        type: 'magic-link',
+        url: 'https://auth.example.com/magic',
+      },
+    })
+    expect(emailSender.send).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      template: {
+        type: 'otp',
+        otp: '123456',
+      },
+    })
+    expect(emailSender.send).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      template: {
+        type: 'invitation',
+        inviterName: 'User',
+        url: 'https://auth.example.com/organization/accept-invitation?id=invitation-1',
+      },
+    })
   })
 
-  it('exposes magic link, email OTP, and organization invitation APIs', () => {
+  it('exposes magic link, email OTP, username, and organization invitation APIs', () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
@@ -95,6 +134,8 @@ describe('createAuth OAuth Provider metadata', () => {
         'signInMagicLink',
         'sendVerificationOTP',
         'requestPasswordResetEmailOTP',
+        'signInUsername',
+        'isUsernameAvailable',
         'createInvitation',
       ]),
     )
@@ -124,6 +165,23 @@ describe('createAuth OAuth Provider metadata', () => {
       },
     })
   })
+
+  it('configures username plugin policy', () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+    )
+
+    const plugin = findPlugin<UsernamePluginOptions>(auth, 'username')
+
+    expect(plugin.options.minUsernameLength).toBe(3)
+    expect(plugin.options.maxUsernameLength).toBe(64)
+    expect(plugin.options.usernameValidator('ada_lovelace-1')).toBe(true)
+    expect(plugin.options.usernameValidator('not allowed')).toBe(false)
+  })
 })
 
 function createEmailSenderMock() {
@@ -142,4 +200,36 @@ function createUser() {
     createdAt: new Date(),
     updatedAt: new Date(),
   }
+}
+
+type MagicLinkPluginOptions = {
+  sendMagicLink: (input: { email: string; url: string; token: string }) => Promise<void>
+}
+
+type EmailOtpPluginOptions = {
+  sendVerificationOTP: (input: { email: string; otp: string; type: string }) => Promise<void>
+}
+
+type OrganizationPluginOptions = {
+  sendInvitationEmail: (input: {
+    email: string
+    id: string
+    inviter: { user: ReturnType<typeof createUser> }
+  }) => Promise<void>
+}
+
+type UsernamePluginOptions = {
+  minUsernameLength: number
+  maxUsernameLength: number
+  usernameValidator: (value: string) => boolean
+}
+
+function findPlugin<TOptions extends object>(auth: ReturnType<typeof createAuth>, id: string) {
+  const plugin = auth.options.plugins?.find((candidate) => candidate.id === id)
+
+  if (!plugin) {
+    throw new Error(`Plugin not found: ${id}`)
+  }
+
+  return plugin as unknown as { options: TOptions }
 }

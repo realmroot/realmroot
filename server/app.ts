@@ -10,7 +10,8 @@ import type { UserRepository } from './modules/users/repository'
 import { accountRoutes } from './routes/account'
 import { adminApplicationsRoute } from './routes/admin/applications'
 import { adminUserRoutes } from './routes/admin/users'
-import type { ManagementAuthApi } from './routes/auth-api'
+import type { ExperienceAuthApi, ManagementAuthApi } from './routes/auth-api'
+import { createExperienceRoutes } from './routes/experience'
 import { oauthConsentRoute } from './routes/oauth/consent'
 
 type AuthHandler = Pick<Auth, 'handler'> & {
@@ -23,6 +24,7 @@ type AuthHandler = Pick<Auth, 'handler'> & {
 export interface AppOptions {
   trustedOrigins?: string[]
   userRepository?: UserRepository
+  experienceServiceFactory?: Parameters<typeof createExperienceRoutes>[1]
 }
 
 export function createApp(auth: AuthHandler, options: AppOptions = {}) {
@@ -45,6 +47,10 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
 
   app.route('/api/admin/applications', adminApplicationsRoute)
   app.route('/api/oauth/consent', oauthConsentRoute)
+  app.route(
+    '/api/experience',
+    createExperienceRoutes(auth.api as unknown as ExperienceAuthApi, options.experienceServiceFactory),
+  )
 
   if (options.userRepository) {
     const managementApi = auth.api as unknown as ManagementAuthApi

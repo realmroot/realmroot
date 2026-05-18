@@ -115,6 +115,6 @@ describe('database schema', () => {
   })
 
   it('stores account profile fields on the Better Auth user table', () => {
-    expect(columnNames(user)).toEqual(expect.arrayContaining(['username', 'avatar_asset_id']))
+    expect(columnNames(user)).toEqual(expect.arrayContaining(['username', 'display_username', 'avatar_asset_id']))
   })
 })
