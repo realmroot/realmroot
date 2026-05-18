@@ -128,6 +128,52 @@ describe('ApplicationService', () => {
     })
   })
 
+  it('updates metadata without changing OAuth client settings', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com/' })
+    const created = await service.create(
+      {
+        name: 'Metadata App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+      },
+      'admin-1',
+    )
+
+    await expect(service.update(created.id, { name: 'Renamed App' })).resolves.toMatchObject({
+      name: 'Renamed App',
+      redirectUris: ['https://spa.example.com/callback'],
+      oidc: {
+        issuer: 'https://auth.example.com/api/auth',
+      },
+    })
+  })
+
+  it('normalizes partial OAuth client setting updates against existing values', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const created = await service.create(
+      {
+        name: 'Partial Settings App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+        allowedScopes: ['openid', 'profile'],
+      },
+      'admin-1',
+    )
+
+    await expect(service.update(created.id, { allowedGrantTypes: ['authorization_code'] })).resolves.toMatchObject({
+      allowedGrantTypes: ['authorization_code'],
+      allowedScopes: ['openid', 'profile', 'offline_access'],
+      redirectUris: ['https://spa.example.com/callback'],
+    })
+    await expect(
+      service.replaceRedirectUris(created.id, { redirectUris: ['http://localhost:4173/oidc/callback'] }),
+    ).resolves.toMatchObject({
+      redirectUris: ['http://localhost:4173/oidc/callback'],
+    })
+  })
+
   it('paginates application collection responses', async () => {
     const repository = new InMemoryApplicationRepository()
     const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
@@ -221,6 +267,64 @@ describe('ApplicationService', () => {
     ).resolves.toMatchObject({
       redirectUris: ['com.example.app:/oauth/callback'],
     })
+    await expect(
+      service.create(
+        {
+          name: 'Relative Redirect',
+          clientType: 'public_spa',
+          redirectUris: ['/callback'],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({ status: 400, message: 'Redirect URIs must be absolute URLs.' })
+    await expect(
+      service.create(
+        {
+          name: 'Plain HTTP Redirect',
+          clientType: 'public_spa',
+          redirectUris: ['http://app.example.com/callback'],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Redirect URIs must use HTTPS except localhost development URLs.',
+    })
+    await expect(
+      service.create(
+        {
+          name: 'Bad Private Scheme',
+          clientType: 'public_native',
+          redirectUris: ['mobile:/callback'],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Native redirect URI schemes must use a reverse-domain private-use scheme.',
+    })
+    await expect(
+      service.create(
+        {
+          name: 'Unsupported Scope',
+          clientType: 'public_spa',
+          redirectUris: ['http://localhost:5173/callback'],
+          allowedScopes: ['openid', 'bad-scope' as 'openid'],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({ status: 400, message: 'Unsupported scope: bad-scope' })
+    await expect(
+      service.create(
+        {
+          name: 'Unsupported Grant',
+          clientType: 'confidential_web',
+          redirectUris: ['https://app.example.com/callback'],
+          allowedGrantTypes: ['authorization_code', 'bad-grant' as 'authorization_code'],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({ status: 400, message: 'Unsupported grant type: bad-grant' })
   })
 
   it('loads consent data for an authorization request and records consent', async () => {
@@ -259,6 +363,70 @@ describe('ApplicationService', () => {
       },
     })
     expect(consent.application).not.toHaveProperty('secretMetadata')
+    await expect(
+      service.loadConsentRequest(
+        {
+          clientId: created.clientId,
+          redirectUri: 'https://evil.example.com/callback',
+          scope: 'openid',
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ status: 400, message: 'redirect_uri is not registered for this client.' })
+    await expect(
+      service.createConsent({ clientId: created.clientId, scopes: ['bad-scope' as 'openid'] }, 'user-1'),
+    ).rejects.toMatchObject({ status: 400, message: 'Scope is not allowed for this client: bad-scope' })
+  })
+
+  it('handles OAuth consent defaults and rejects disabled or missing clients', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const created = await service.create(
+      {
+        name: 'Consent Defaults App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+      },
+      'admin-1',
+    )
+
+    await expect(
+      service.loadConsentRequest(
+        {
+          clientId: created.clientId,
+          redirectUri: 'https://spa.example.com/callback',
+        },
+        'user-1',
+      ),
+    ).resolves.toMatchObject({
+      requestedScopes: ['openid'],
+      existingConsent: null,
+      state: null,
+    })
+
+    await service.update(created.id, { disabled: true })
+
+    await expect(
+      service.loadConsentRequest(
+        {
+          clientId: created.clientId,
+          redirectUri: 'https://spa.example.com/callback',
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
+    await expect(
+      service.createConsent({ clientId: created.clientId, scopes: ['openid'] }, 'user-1'),
+    ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
+    await expect(
+      service.loadConsentRequest(
+        {
+          clientId: 'missing-client',
+          redirectUri: 'https://spa.example.com/callback',
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
   })
 })
 

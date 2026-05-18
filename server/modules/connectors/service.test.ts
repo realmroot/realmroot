@@ -102,6 +102,67 @@ describe('ConnectorService', () => {
     expect(repository.create).not.toHaveBeenCalled()
   })
 
+  it('lists, creates, gets, updates, and deletes connector records', async () => {
+    const created = connector({ id: 'idp_github', providerId: 'github', slug: 'github', displayName: 'GitHub' })
+    const repository = createRepository({
+      byId: created,
+      createResult: created,
+      updateResult: { ...created, enabled: false },
+    })
+    const service = new ConnectorService(repository)
+
+    await expect(service.list({ limit: 25, offset: 0 })).resolves.toMatchObject({
+      connectors: [],
+      pagination: { limit: 25, offset: 0, total: 0, hasMore: false, nextOffset: null },
+    })
+    await expect(
+      service.create({
+        providerType: 'social',
+        providerId: 'github',
+        displayName: 'GitHub',
+        clientId: 'client-id',
+        clientSecretBinding: 'GITHUB_CLIENT_SECRET',
+        scopes: ['read:user'],
+        providerMetadata: { prompt: 'consent' },
+      }),
+    ).resolves.toMatchObject({
+      id: 'idp_github',
+      providerId: 'github',
+      scopes: [],
+      providerMetadata: {},
+    })
+    await expect(service.get('idp_github')).resolves.toMatchObject({ id: 'idp_github' })
+    await expect(service.update('idp_github', { enabled: false })).resolves.toMatchObject({
+      id: 'idp_github',
+      enabled: false,
+    })
+    await expect(service.delete('idp_github')).resolves.toBeUndefined()
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: 'github',
+        slug: 'github',
+        enabled: true,
+        clientSecretBinding: 'GITHUB_CLIENT_SECRET',
+      }),
+    )
+    expect(repository.update).toHaveBeenCalledWith('idp_github', {
+      enabled: false,
+      updatedAt: expect.any(Date),
+    })
+    expect(repository.delete).toHaveBeenCalledWith('idp_github')
+  })
+
+  it('returns not found for missing connector reads, updates, and deletes', async () => {
+    const service = new ConnectorService(createRepository())
+
+    await expect(service.get('missing')).rejects.toMatchObject({ status: 404, message: 'Connector not found.' })
+    await expect(service.update('missing', { enabled: false })).rejects.toMatchObject({
+      status: 404,
+      message: 'Connector not found.',
+    })
+    await expect(service.delete('missing')).rejects.toMatchObject({ status: 404, message: 'Connector not found.' })
+  })
+
   it('validates update candidates before persisting enabled connectors', async () => {
     const current = connector({ id: 'idp_google', providerId: 'google' })
     const repository = createRepository({ byId: current })
@@ -134,18 +195,105 @@ describe('ConnectorService', () => {
       message: 'Enabled Cognito connector requires providerMetadata.userPoolId.',
     })
   })
+
+  it('accepts disabled incomplete connectors and generic OAuth endpoint configuration', async () => {
+    const disabled = connector({ enabled: false, clientId: null, clientSecretBinding: null })
+    const repository = createRepository({ createResult: disabled })
+    const service = new ConnectorService(repository)
+    const endpointConfigured = connector({
+      providerType: 'generic_oauth',
+      providerId: 'generic-oauth',
+      issuer: null,
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      clientSecretBinding: 'GENERIC_CLIENT_SECRET',
+      scopes: null,
+    })
+    await expect(
+      service.create({
+        providerType: 'social',
+        providerId: 'google',
+        displayName: 'Google',
+        enabled: false,
+      }),
+    ).resolves.toMatchObject({ enabled: false, clientId: null })
+    const config = await loadAuthConnectorConfig(createRepository({ enabled: [endpointConfigured] }), {
+      GENERIC_CLIENT_SECRET: 'generic-secret',
+    } as unknown as Env)
+
+    expect(config.genericOAuthProviders).toEqual([
+      expect.objectContaining({
+        providerId: 'generic-oauth',
+        authorizationUrl: 'https://idp.example.com/authorize',
+        tokenUrl: 'https://idp.example.com/token',
+        userInfoUrl: 'https://idp.example.com/userinfo',
+      }),
+    ])
+  })
+
+  it('rejects unsupported, incomplete, and empty-secret enabled connector configurations', async () => {
+    const service = new ConnectorService(createRepository())
+
+    await expect(
+      service.create({
+        providerType: 'social',
+        providerId: 'unsupported',
+        displayName: 'Unsupported',
+        clientId: 'client-id',
+        clientSecretBinding: 'UNSUPPORTED_SECRET',
+      }),
+    ).rejects.toMatchObject({ status: 400, message: 'Unsupported social provider.' })
+    await expect(
+      loadAuthConnectorConfig(createRepository({ enabled: [connector({ clientId: null })] }), {
+        GOOGLE_CLIENT_SECRET: 'google-secret',
+      } as unknown as Env),
+    ).rejects.toMatchObject({ status: 400, message: 'Enabled connector requires clientId.' })
+    await expect(
+      loadAuthConnectorConfig(
+        createRepository({ enabled: [connector({ clientSecretBinding: 'GOOGLE_CLIENT_SECRET' })] }),
+        { GOOGLE_CLIENT_SECRET: '' } as unknown as Env,
+      ),
+    ).rejects.toThrow('OAuth connector secret binding is not configured: GOOGLE_CLIENT_SECRET')
+    await expect(
+      loadAuthConnectorConfig(
+        createRepository({
+          enabled: [
+            connector({
+              providerType: 'generic_oauth',
+              providerId: 'generic-oauth',
+              issuer: null,
+              authorizationEndpoint: 'https://idp.example.com/authorize',
+              tokenEndpoint: null,
+              clientSecretBinding: 'GENERIC_CLIENT_SECRET',
+            }),
+          ],
+        }),
+        { GENERIC_CLIENT_SECRET: 'generic-secret' } as unknown as Env,
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Enabled generic OAuth connector requires tokenEndpoint when issuer is not provided.',
+    })
+  })
 })
 
 function createRepository(
-  overrides: { enabled?: ConnectorRow[]; byId?: ConnectorRow | null; existingProvider?: ConnectorRow | null } = {},
+  overrides: {
+    enabled?: ConnectorRow[]
+    byId?: ConnectorRow | null
+    existingProvider?: ConnectorRow | null
+    createResult?: ConnectorRow
+    updateResult?: ConnectorRow | null
+  } = {},
 ): ConnectorRepository {
   return {
     list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     listEnabled: vi.fn().mockResolvedValue(overrides.enabled ?? []),
     findById: vi.fn().mockResolvedValue(overrides.byId ?? null),
     findByProviderId: vi.fn().mockResolvedValue(overrides.existingProvider ?? null),
-    create: vi.fn(),
-    update: vi.fn(),
+    create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
+    update: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
     delete: vi.fn(),
   }
 }

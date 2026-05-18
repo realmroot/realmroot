@@ -23,6 +23,48 @@ describe('account center', () => {
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
   })
 
+  it('updates profile, email, and password from the profile section', async () => {
+    const requests = mockAccountFetch()
+
+    render(<AccountCenterPage />)
+
+    fireEvent.change(await screen.findByLabelText('Display name'), { target: { value: 'Jane Updated' } })
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Avatar asset ID'), { target: { value: 'asset-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Change email' }))
+    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'old-password' } })
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Change password' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual(
+        expect.arrayContaining([
+          {
+            path: '/api/account/profile',
+            method: 'PATCH',
+            body: { displayName: 'Jane Updated', username: null, avatarAssetId: 'asset-1' },
+          },
+          {
+            path: '/api/account/email/change',
+            method: 'POST',
+            body: { email: 'new@example.com', callbackURL: 'http://localhost:3000/email-verification' },
+          },
+          {
+            path: '/api/account/password/change',
+            method: 'POST',
+            body: {
+              currentPassword: 'old-password',
+              newPassword: 'new-password',
+              revokeOtherSessions: true,
+            },
+          },
+        ]),
+      )
+    })
+  })
+
   it('shows TOTP enrollment setup data before verification', async () => {
     const requests = mockAccountFetch()
 
@@ -84,6 +126,175 @@ describe('account center', () => {
     })
     expect(navigator.credentials.create).toHaveBeenCalled()
   })
+
+  it('manages MFA verification, linked accounts, sessions, passkeys, and application consent display', async () => {
+    const requests = mockAccountFetch()
+
+    render(<AccountCenterPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Security' }))
+    expect(screen.getByText('Laptop key')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Authenticator code'), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verify code' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Disable MFA' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Linked accounts' }))
+    expect(screen.getByText('google')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sessions' }))
+    expect(screen.getByText('Chrome on macOS')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Consented apps' }))
+    expect(screen.getByText('Customer Portal')).toBeTruthy()
+    expect(screen.getByText(/openid, email/)).toBeTruthy()
+
+    await waitFor(() => {
+      expect(requests).toEqual(
+        expect.arrayContaining([
+          {
+            path: '/api/account/security/mfa/totp-verification',
+            method: 'POST',
+            body: { code: '123456', trustDevice: true },
+          },
+          { path: '/api/account/security/mfa/totp', method: 'DELETE', body: { password: '' } },
+          { path: '/api/account/security/passkeys/passkey-1', method: 'DELETE', body: null },
+          { path: '/api/account/linked-accounts/google?accountId=google-account-1', method: 'DELETE', body: null },
+          { path: '/api/account/security/sessions', method: 'DELETE', body: null },
+          { path: '/api/account/security/sessions/session-1', method: 'DELETE', body: null },
+        ]),
+      )
+    })
+  })
+
+  it('surfaces load and mutation failures', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const path = String(input)
+      if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
+      if (path === '/api/account/profile' && init?.method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Profile rejected.' } }, 400))
+      }
+      if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
+      if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
+      if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
+      if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))
+      if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security: security() }))
+      if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<AccountCenterPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save profile' }))
+
+    expect(await screen.findByText('Profile rejected.')).toBeTruthy()
+
+    cleanup()
+    vi.restoreAllMocks()
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      if (String(input) === '/api/configz') return Promise.resolve(jsonResponse(configz()))
+      return Promise.resolve(jsonResponse({ error: { message: 'Account unavailable.' } }, 503))
+    })
+
+    render(<AccountCenterPage />)
+
+    expect(await screen.findByText('Account unavailable.')).toBeTruthy()
+  })
+
+  it('renders account center fallback states and alternate security enrollment fields', async () => {
+    const requests: RequestRecord[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const path = String(input)
+      const method = init?.method ?? 'GET'
+      const body = init?.body ? JSON.parse(String(init.body)) : null
+      if (method !== 'GET') requests.push({ path, method, body })
+      if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
+      if (path === '/api/account/profile') {
+        return Promise.resolve(jsonResponse({ user: { ...profile(), emailVerified: false, username: null } }))
+      }
+      if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
+      if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
+      if (path === '/api/account/sessions') {
+        return Promise.resolve(jsonResponse({ sessions: [{ ...sessions()[0], ipAddress: null, userAgent: null }] }))
+      }
+      if (path === '/api/account/security') {
+        return Promise.resolve(jsonResponse({ security: { ...security(), mfa: { enabled: true, factors: ['totp'] } } }))
+      }
+      if (path === '/api/account/security/passkeys') {
+        return Promise.resolve(jsonResponse({ passkeys: [{ ...passkeys()[0], name: null, backedUp: false }] }))
+      }
+      if (path === '/api/account/security/mfa/totp-enrollment') {
+        return Promise.resolve(
+          jsonResponse({
+            qrCodeUrl: 'data:image/png;base64,ZmFrZQ',
+            totpUri: 'otpauth://totp/Acme:jane@example.com?secret=XYZ789',
+            secret: 'XYZ789',
+          }),
+        )
+      }
+      if (path === '/api/account/security/passkeys/registration-options') {
+        return Promise.resolve(
+          jsonResponse({
+            challenge: 'AQID',
+            rp: { name: 'Acme ID', id: 'localhost' },
+            user: { id: 'BAUG', name: 'jane@example.com', displayName: 'Jane Stone' },
+            pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+            excludeCredentials: [{ id: 'CgsM', type: 'public-key', transports: ['internal'] }],
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+    Object.defineProperty(window.navigator, 'credentials', {
+      configurable: true,
+      value: {
+        create: vi.fn().mockResolvedValue({
+          ...passkeyCredential(),
+          response: {
+            attestationObject: new Uint8Array([4, 5, 6]).buffer,
+            clientDataJSON: new Uint8Array([7, 8, 9]).buffer,
+          },
+        }),
+      },
+    })
+
+    render(<AccountCenterPage />)
+
+    expect(await screen.findByText('Verification required')).toBeTruthy()
+    await waitFor(() => expect((screen.getByLabelText('Username') as HTMLInputElement).value).toBe(''))
+    fireEvent.click(screen.getByRole('button', { name: 'Security' }))
+    expect(screen.getByText('Enabled')).toBeTruthy()
+    expect(screen.getByText('Unnamed passkey')).toBeTruthy()
+    expect(screen.getByText('singleDevice')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enroll authenticator app' }))
+    expect(await screen.findByText('otpauth://totp/Acme:jane@example.com?secret=XYZ789')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add passkey' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        path: '/api/account/security/passkeys/registration-options',
+        method: 'POST',
+        body: {},
+      })
+      expect(requests).toContainEqual(
+        expect.objectContaining({
+          path: '/api/account/security/passkeys/registration-verification',
+        }),
+      )
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sessions' }))
+    expect(screen.getByText(/Unknown device/)).toBeTruthy()
+    expect(screen.getByText(/No IP/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Linked accounts' }))
+    expect(screen.getByText('No linked social accounts.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Consented apps' }))
+    expect(screen.getByText('No application consents.')).toBeTruthy()
+  })
 })
 
 type RequestRecord = {
@@ -101,11 +312,11 @@ function mockAccountFetch() {
     if (method !== 'GET') requests.push({ path, method, body })
     if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
     if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
-    if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
-    if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
-    if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))
+    if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts() }))
+    if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: applications() }))
+    if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: sessions() }))
     if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security: security() }))
-    if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
+    if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: passkeys() }))
     if (path === '/api/account/security/mfa/totp-enrollment') {
       return Promise.resolve(
         jsonResponse({
@@ -199,6 +410,49 @@ function profile() {
   }
 }
 
+function linkedAccounts() {
+  return [
+    { id: 'linked-1', accountId: 'google-account-1', providerId: 'google', createdAt: '2026-01-01T00:00:00.000Z' },
+  ]
+}
+
+function applications() {
+  return [
+    {
+      id: 'consent-1',
+      applicationName: 'Customer Portal',
+      applicationSlug: 'customer-portal',
+      scopes: ['openid', 'email'],
+      grantedAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: null,
+    },
+  ]
+}
+
+function sessions() {
+  return [
+    {
+      id: 'session-1',
+      expiresAt: '2026-02-01T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      ipAddress: '127.0.0.1',
+      userAgent: 'Chrome on macOS',
+    },
+  ]
+}
+
+function passkeys() {
+  return [
+    {
+      id: 'passkey-1',
+      name: 'Laptop key',
+      deviceType: 'singleDevice',
+      backedUp: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ]
+}
+
 function security() {
   return {
     mfa: { enabled: false, factors: [] },
@@ -213,9 +467,9 @@ function security() {
   }
 }
 
-function jsonResponse(body: unknown) {
+function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { 'Content-Type': 'application/json' },
   })
 }

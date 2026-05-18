@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { callbackURL } from './hooks'
+import { callbackURL, safeRedirectPath } from './hooks'
 
 afterEach(() => {
   window.history.pushState(null, '', '/')
@@ -22,5 +22,19 @@ describe('auth callback URL resolution', () => {
     window.history.pushState(null, '', '/sign-in?callbackURL=%2Faccount&redirect_uri=https%3A%2F%2Fclient.example.com')
 
     expect(callbackURL()).toBe('/account')
+  })
+
+  it('rejects unsafe hosted callback paths', () => {
+    window.history.pushState(
+      null,
+      '',
+      '/sign-in?callbackURL=https%3A%2F%2Fclient.example.com&return_to=%2F%2Fevil.example',
+    )
+
+    expect(callbackURL()).toBeUndefined()
+    expect(safeRedirectPath('/api/account')).toBeUndefined()
+    expect(safeRedirectPath('/api/auth/oauth2/authorize?client_id=client-1')).toBe(
+      '/api/auth/oauth2/authorize?client_id=client-1',
+    )
   })
 })

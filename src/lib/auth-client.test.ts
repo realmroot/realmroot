@@ -63,6 +63,32 @@ describe('native auth client', () => {
     } satisfies Partial<ApiRequestError>)
   })
 
+  it('accepts empty native auth responses', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(new Response(null, { status: 204 }))
+
+    await expect(signOut()).resolves.toEqual({})
+  })
+
+  it('uses native error fallbacks for empty and string error bodies', async () => {
+    vi.spyOn(window, 'fetch')
+      .mockResolvedValueOnce(new Response('', { status: 500 }))
+      .mockResolvedValueOnce(jsonResponse({ error: 'Email is invalid' }, 400))
+      .mockResolvedValueOnce(jsonResponse({ detail: 'unknown shape' }, 418))
+
+    await expect(nativeAuth('/sign-in/email', { email: 'jane@example.com' })).rejects.toMatchObject({
+      message: 'Request failed with status 500.',
+      status: 500,
+    } satisfies Partial<ApiRequestError>)
+    await expect(nativeAuth('/sign-in/email', { email: 'jane@example.com' })).rejects.toMatchObject({
+      message: 'Email is invalid',
+      status: 400,
+    } satisfies Partial<ApiRequestError>)
+    await expect(nativeAuth('/sign-in/email', { email: 'jane@example.com' })).rejects.toMatchObject({
+      message: '{"detail":"unknown shape"}',
+      status: 418,
+    } satisfies Partial<ApiRequestError>)
+  })
+
   it('maps hosted auth actions to native Better Auth endpoints', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

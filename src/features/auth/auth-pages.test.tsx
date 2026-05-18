@@ -129,6 +129,82 @@ describe('hosted auth pages', () => {
     expect(screen.queryByLabelText('Password')).toBeNull()
   })
 
+  it('submits password and OTP sign-in through native auth endpoints', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ url: '/account' }))
+    })
+
+    render(<SignInPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email or username'), { target: { value: 'jane@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    fireEvent.click(screen.getByRole('button', { name: 'OTP' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Send code' }) as HTMLButtonElement).disabled).toBe(false),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Send code' }))
+    fireEvent.change(await screen.findByLabelText('One-time code'), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verify code' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual(
+        expect.arrayContaining([
+          {
+            url: '/api/auth/sign-in/email',
+            body: { email: 'jane@example.com', password: 'password-1', rememberMe: true },
+          },
+          { url: '/api/auth/email-otp/send-verification-otp', body: { email: 'jane@example.com', type: 'sign-in' } },
+          { url: '/api/auth/sign-in/email-otp', body: { email: 'jane@example.com', otp: '123456' } },
+        ]),
+      )
+    })
+  })
+
+  it('submits magic link sign-in through the native auth endpoint', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<SignInPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Magic link' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send magic link' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        { url: '/api/auth/sign-in/magic-link', body: { email: 'jane@example.com', errorCallbackURL: '/sign-in' } },
+      ])
+    })
+    expect(screen.getByText('Magic link sent. Check your email to continue.')).toBeTruthy()
+  })
+
+  it('surfaces native auth submission failures', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      return Promise.resolve(jsonResponse({ error: { message: 'Invalid credentials.' } }, 401))
+    })
+
+    render(<SignInPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email or username'), { target: { value: 'jane@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wrong-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByText('Invalid credentials.')).toBeTruthy()
+  })
+
   it('navigates after successful password sign-in', async () => {
     expect(resolveAuthRedirect({ url: '/auth/callback' }, '/account')).toBe('/auth/callback')
     expect(resolveAuthRedirect({ token: 'token-1' }, '/account')).toBe('/account')
@@ -202,6 +278,55 @@ describe('hosted auth pages', () => {
         },
       ])
     })
+  })
+
+  it('surfaces OAuth consent load and approval failures', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
+      return Promise.resolve(jsonResponse({ error: { message: 'Consent request expired.' } }, 400))
+    })
+
+    render(<ConsentPage />)
+
+    expect(await screen.findByText('Consent request expired.')).toBeTruthy()
+    cleanup()
+    vi.restoreAllMocks()
+    window.history.pushState(null, '', '/oauth/consent?client_id=client-1&state=state-1')
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
+      if (url.startsWith('/api/oauth/consent') && init?.method !== 'POST') {
+        return Promise.resolve(
+          jsonResponse({
+            ...consentResponse,
+            application: {
+              ...consentResponse.application,
+              description: null,
+              homepageUrl: null,
+              iconUrl: 'https://client.example.com/icon.png',
+            },
+            requestedScopes: ['email', 'offline_access', 'custom:scope'],
+            existingConsent: { id: 'consent-1', scopes: ['email'], grantedAt: '2026-01-02T00:00:00.000Z' },
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({ error: { message: 'Consent approval failed.' } }, 400))
+    })
+    vi.spyOn(window.history, 'back').mockImplementation(() => undefined)
+
+    render(<ConsentPage />)
+
+    expect(await screen.findByText('OAuth client application')).toBeTruthy()
+    expect(screen.getByText('Share your email address and verification state.')).toBeTruthy()
+    expect(screen.getByText('Allow refresh tokens for continued access.')).toBeTruthy()
+    expect(screen.getByText('Allow this application to request this scope.')).toBeTruthy()
+    expect(screen.getByText(/Previously approved on/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(window.history.back).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+
+    expect(await screen.findByText('Consent approval failed.')).toBeTruthy()
   })
 
   it('requests an OTP password reset code before OTP reset completion', async () => {

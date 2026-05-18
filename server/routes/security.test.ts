@@ -73,6 +73,79 @@ describe('security routes', () => {
     })
   })
 
+  it('serves account MFA/passkey resources and delegates OTP, backup code, and passkey management', async () => {
+    const auth = createAuthMock()
+    const security = createSecurityRepositoryMock()
+    const app = createApp(auth, {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: security,
+      securityPolicy: securityPolicy(),
+    })
+    const headers = userHeaders()
+
+    const mfa = await app.request('/api/account/security/mfa', { headers })
+    await app.request('/api/account/security/mfa/otp', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ password: 'password-1' }),
+    })
+    await app.request('/api/account/security/mfa/otp-verification', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ code: '654321' }),
+    })
+    const backupCodes = await app.request('/api/account/security/mfa/backup-codes', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ password: 'password-1' }),
+    })
+    const passkeys = await app.request('/api/account/security/passkeys?limit=3&offset=6', { headers })
+    await app.request('/api/account/security/passkeys/passkey-1', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ name: 'Laptop key' }),
+    })
+    await app.request('/api/account/security/passkeys/passkey-1', { method: 'DELETE', headers })
+
+    await expect(mfa.json()).resolves.toMatchObject({
+      mfa: { enabled: true },
+      policy: { mode: 'optional' },
+    })
+    expect(backupCodes.status).toBe(201)
+    await expect(passkeys.json()).resolves.toEqual({
+      passkeys: [],
+      policy: securityPolicy().passkeys,
+      pagination: {
+        limit: 3,
+        offset: 6,
+        total: 10,
+        hasMore: true,
+        nextOffset: 9,
+      },
+    })
+    expect(auth.api.sendTwoFactorOTP).toHaveBeenCalledWith({
+      body: {},
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.verifyTwoFactorOTP).toHaveBeenCalledWith({
+      body: { code: '654321' },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.generateBackupCodes).toHaveBeenCalledWith({
+      body: { password: 'password-1' },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.updatePasskey).toHaveBeenCalledWith({
+      body: { id: 'passkey-1', name: 'Laptop key' },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.deletePasskey).toHaveBeenCalledWith({
+      body: { id: 'passkey-1' },
+      headers: expect.any(Headers),
+    })
+    expect(security.listPasskeys).toHaveBeenCalledWith('user-1', { limit: 3, offset: 6 })
+  })
+
   it('revokes account sessions by resolving the user-owned session token', async () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock()

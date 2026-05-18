@@ -96,6 +96,19 @@ describe('AuthorizationService', () => {
     })
   })
 
+  it('surfaces missing organizations and resources at service boundaries', async () => {
+    const service = new AuthorizationService(new InMemoryAuthorizationRepository())
+
+    await expect(service.getOrganization('missing')).rejects.toMatchObject({
+      status: 404,
+      message: 'Organization was not found.',
+    })
+    await expect(service.getResource('missing')).rejects.toMatchObject({
+      status: 404,
+      message: 'API resource was not found.',
+    })
+  })
+
   it('keeps role scope immutable and rejects token claim overrides', async () => {
     const service = new AuthorizationService(new InMemoryAuthorizationRepository())
     const role = await service.createRole({
@@ -104,6 +117,14 @@ describe('AuthorizationService', () => {
     })
 
     await expect(service.updateRole(role.id, { organizationId: 'org-1' })).rejects.toMatchObject({
+      status: 400,
+      message: 'Role resource and subject scope cannot be changed after creation.',
+    })
+    await expect(service.updateRole(role.id, { resourceId: 'resource-1' })).rejects.toMatchObject({
+      status: 400,
+      message: 'Role resource and subject scope cannot be changed after creation.',
+    })
+    await expect(service.updateRole(role.id, { applicationId: 'app-1' })).rejects.toMatchObject({
       status: 400,
       message: 'Role resource and subject scope cannot be changed after creation.',
     })
@@ -277,6 +298,68 @@ describe('AuthorizationService', () => {
     })
   })
 
+  it('updates and deletes nested authorization resources when parent ownership matches', async () => {
+    const service = new AuthorizationService(new InMemoryAuthorizationRepository())
+    const organization = await service.createOrganization({ slug: 'acme-workspace', name: 'Acme Workspace' })
+    const member = await service.addMember(organization.id, { userId: 'user-1', role: 'member' })
+    const resource = await service.createResource({
+      identifier: 'contacts-api',
+      name: 'Contacts API',
+      audience: 'https://api.example.com/contacts',
+    })
+    const scope = await service.createScope(resource.id, { value: 'contacts:read' })
+    const permission = await service.createPermission(resource.id, { key: 'contacts.read' })
+    const role = await service.createRole({ key: 'auditor', name: 'Auditor' })
+
+    await expect(service.updateMember(organization.id, member.id, { title: 'Owner' })).resolves.toMatchObject({
+      id: member.id,
+      title: 'Owner',
+    })
+    await expect(service.updateScope(resource.id, scope.id, { description: 'Read contacts' })).resolves.toMatchObject({
+      id: scope.id,
+      description: 'Read contacts',
+    })
+    await expect(
+      service.updatePermission(resource.id, permission.id, { description: 'Read contacts' }),
+    ).resolves.toMatchObject({
+      id: permission.id,
+      description: 'Read contacts',
+    })
+    await expect(service.updateRole(role.id, { name: 'Workspace Auditor' })).resolves.toMatchObject({
+      id: role.id,
+      name: 'Workspace Auditor',
+    })
+    await expect(service.deleteRole(role.id)).resolves.toBeUndefined()
+    await expect(service.removeMember(organization.id, member.id)).resolves.toBeUndefined()
+    await expect(service.deleteScope(resource.id, scope.id)).resolves.toBeUndefined()
+    await expect(service.deletePermission(resource.id, permission.id)).resolves.toBeUndefined()
+  })
+
+  it('reports missing nested authorization children', async () => {
+    const service = new AuthorizationService(new InMemoryAuthorizationRepository())
+    const organization = await service.createOrganization({ slug: 'acme-workspace', name: 'Acme Workspace' })
+    const resource = await service.createResource({
+      identifier: 'contacts-api',
+      name: 'Contacts API',
+      audience: 'https://api.example.com/contacts',
+    })
+
+    await expect(service.updateMember(organization.id, 'missing', { title: 'Owner' })).rejects.toMatchObject({
+      status: 404,
+      message: 'Organization member was not found.',
+    })
+    await expect(service.updateScope(resource.id, 'missing', { description: 'Read contacts' })).rejects.toMatchObject({
+      status: 404,
+      message: 'API scope was not found.',
+    })
+    await expect(
+      service.updatePermission(resource.id, 'missing', { description: 'Read contacts' }),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: 'API permission was not found.',
+    })
+  })
+
   it('combines application and member assignments into resource token claims while filtering unrelated roles', async () => {
     const repository = new InMemoryAuthorizationRepository()
     const service = new AuthorizationService(repository)
@@ -404,6 +487,37 @@ describe('AuthorizationService', () => {
     })
 
     expect(unknownResourceClaims).toMatchObject({
+      authorization: {
+        scopes: ['openid'],
+        roles: [],
+        permissions: [],
+        organization_id: organization.id,
+      },
+      roles: [],
+      permissions: [],
+    })
+
+    const anonymousClaims = await service.buildTokenClaims({
+      scopes: ['openid'],
+    })
+
+    expect(anonymousClaims).toMatchObject({
+      authorization: {
+        scopes: ['openid'],
+        roles: [],
+        permissions: [],
+      },
+      roles: [],
+      permissions: [],
+    })
+
+    const missingMemberClaims = await service.buildTokenClaims({
+      userId: 'missing-user',
+      organizationId: organization.id,
+      scopes: ['openid'],
+    })
+
+    expect(missingMemberClaims).toMatchObject({
       authorization: {
         scopes: ['openid'],
         roles: [],
