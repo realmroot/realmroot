@@ -1,9 +1,9 @@
 # FlareAuth
 
 [![CI](https://github.com/saltbo/flareauth/actions/workflows/ci.yml/badge.svg)](https://github.com/saltbo/flareauth/actions/workflows/ci.yml)
+[![E2E](https://github.com/saltbo/flareauth/actions/workflows/e2e.yml/badge.svg)](https://github.com/saltbo/flareauth/actions/workflows/e2e.yml)
 [![License](https://img.shields.io/github/license/saltbo/flareauth.svg)](LICENSE)
-[![Code Coverage](https://img.shields.io/badge/code%20coverage-90%25%20required-blue.svg)](vite.config.ts)
-[![E2E Journeys](https://img.shields.io/badge/E2E%20journeys-100%25%20required-blue.svg)](tests/e2e/journey-coverage.json)
+[![Coverage](https://codecov.io/gh/saltbo/flareauth/branch/main/graph/badge.svg)](https://codecov.io/gh/saltbo/flareauth)
 [![Node](https://img.shields.io/badge/node-%3E%3D24-339933.svg)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178c6.svg)](package.json)
 
@@ -30,7 +30,7 @@ npm run test:coverage
 npm run test:e2e
 ```
 
-Coverage gates target 90% overall automated code coverage and 100% critical browser journey coverage. Browser journey coverage is declared in `tests/e2e/journey-coverage.json`.
+Code coverage is uploaded from CI to Codecov. Browser E2E status is reported by the E2E workflow; the suite enforces complete declared journey coverage from `tests/e2e/journey-coverage.json`.
 
 Check Cloudflare binding coverage before review:
 
