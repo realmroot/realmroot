@@ -1,6 +1,16 @@
 import type { ConsentRequestResponse, HostedConsentApprovalRequest } from '@shared/api/applications'
 import type { ExperienceCallbackResponse, ExperienceConfigResponse } from '@shared/api/experience'
 
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+    this.name = 'ApiRequestError'
+  }
+}
+
 type RequestOptions = {
   method?: string
   body?: unknown
@@ -14,8 +24,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   })
 
   if (!response.ok) {
-    throw new Error(await responseMessage(response))
+    throw new ApiRequestError(await responseMessage(response), response.status)
   }
+
+  if (response.status === 204) return undefined as T
 
   return (await response.json()) as T
 }

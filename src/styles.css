@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   --brand-primary: #b42318;
   --brand-background: #f7f3ee;
@@ -6,12 +8,43 @@
   --line: #e5e7eb;
   --surface: #ffffff;
   --soft: #f8fafc;
+  --background: #ffffff;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --primary: #b42318;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #27272a;
+  --muted-color: #f4f4f5;
+  --muted-foreground: #71717a;
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --border: #e4e4e7;
+  --input: #d4d4d8;
   color: var(--ink);
   background: #f8fafc;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted-color);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
 }
 
 * {
@@ -284,6 +317,12 @@ h1 {
 .uiButton:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+[data-icon] {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
 }
 
 .uiButton-primary {
