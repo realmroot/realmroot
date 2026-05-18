@@ -11,8 +11,8 @@ export const usernameSchema = z
 export const adminUserListQuerySchema = z.object({
   search: z.string().min(1).optional(),
   searchField: z.enum(['email', 'name']).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
   sortBy: z.enum(['createdAt', 'updatedAt', 'email', 'name']).optional(),
   sortDirection: z.enum(['asc', 'desc']).optional(),
   role: z.string().min(1).optional(),

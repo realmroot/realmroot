@@ -21,6 +21,7 @@ export const paginationMetadataSchema = z.object({
   offset: z.number().int().min(0),
   total: z.number().int().min(0),
   hasMore: z.boolean(),
+  nextOffset: z.number().int().min(0).nullable(),
 })
 
 export const applicationSecretMetadataSchema = z.object({

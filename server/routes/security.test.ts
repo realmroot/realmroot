@@ -93,6 +93,7 @@ describe('security routes', () => {
         limit: 2,
         offset: 4,
         total: 10,
+        hasMore: true,
         nextOffset: 6,
       },
     })
@@ -284,6 +285,7 @@ describe('security routes', () => {
         limit: 2,
         offset: 4,
         total: 10,
+        hasMore: true,
         nextOffset: 6,
       },
     })
@@ -293,6 +295,7 @@ describe('security routes', () => {
         limit: 3,
         offset: 6,
         total: 10,
+        hasMore: true,
         nextOffset: 9,
       },
     })

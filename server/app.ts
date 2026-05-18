@@ -20,6 +20,8 @@ import { adminSecurityRoutes } from './routes/admin/security'
 import { adminUserRoutes } from './routes/admin/users'
 import type { ExperienceAuthApi, ManagementAuthApi } from './routes/auth-api'
 import { createExperienceRoutes } from './routes/experience'
+import { createManagementRoutes, type ManagementExperienceServiceFactory } from './routes/management'
+import type { ConnectorServiceFactory } from './routes/management/connectors'
 import { oauthConsentRoute } from './routes/oauth/consent'
 
 type AuthHandler = Pick<Auth, 'handler'> & {
@@ -34,7 +36,8 @@ export interface AppOptions {
   userRepository?: UserRepository
   securityRepository?: SecurityRepository
   securityPolicy?: SecurityPolicy
-  experienceServiceFactory?: Parameters<typeof createExperienceRoutes>[1]
+  experienceServiceFactory?: ManagementExperienceServiceFactory
+  connectorServiceFactory?: ConnectorServiceFactory
 }
 
 export function createApp(auth: AuthHandler, options: AppOptions = {}) {
@@ -82,6 +85,18 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
       )
     }
   }
+
+  app.route(
+    '/api/management',
+    createManagementRoutes({
+      authApi: auth.api as unknown as ManagementAuthApi,
+      userRepository: options.userRepository,
+      securityRepository: options.securityRepository,
+      securityPolicy: options.securityPolicy,
+      experienceServiceFactory: options.experienceServiceFactory,
+      connectorServiceFactory: options.connectorServiceFactory,
+    }),
+  )
 
   app.get('/api/auth/.well-known/openid-configuration', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))
   app.on(['GET', 'POST'], '/api/auth/**', (c) => auth.handler(c.req.raw))

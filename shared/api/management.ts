@@ -1,0 +1,127 @@
+import { z } from 'zod'
+import { applicationResponseSchema, listApplicationsResponseSchema, paginationMetadataSchema } from './applications'
+import {
+  apiResourceResponseSchema,
+  apiScopeResponseSchema,
+  listApiResourcesResponseSchema,
+  listApiScopesResponseSchema,
+  listOrganizationsResponseSchema,
+  listRolesResponseSchema,
+  organizationResponseSchema,
+  paginationQuerySchema,
+  roleResponseSchema,
+} from './authorization'
+import {
+  connectorResponseSchema,
+  createConnectorRequestSchema,
+  listConnectorsResponseSchema,
+  updateConnectorRequestSchema,
+} from './connectors'
+import { experienceMethodSchema } from './experience'
+import {
+  adminBanUserSchema,
+  adminCreateUserSchema,
+  adminPasswordResetSchema,
+  adminUpdateUserSchema,
+  adminUserListQuerySchema,
+} from './users'
+
+export const managementApiBasePath = '/api/management' as const
+
+export const managementErrorResponseSchema = z.object({
+  error: z.object({
+    code: z.enum(['bad_request', 'unauthorized', 'forbidden', 'not_found', 'internal_error']),
+    message: z.string(),
+    requestId: z.string().optional(),
+  }),
+})
+
+export const managementSignInSettingsResponseSchema = z.object({
+  signIn: experienceMethodSchema,
+  defaults: z.object({
+    applicationId: z.string().nullable(),
+    redirectUri: z.string().nullable(),
+  }),
+  links: z.object({
+    termsUri: z.string().nullable(),
+    privacyUri: z.string().nullable(),
+    supportEmail: z.string().nullable(),
+  }),
+})
+
+export const managementConnectorResponseSchema = connectorResponseSchema
+export const listManagementConnectorsResponseSchema = listConnectorsResponseSchema
+export const createManagementConnectorRequestSchema = createConnectorRequestSchema
+export const updateManagementConnectorRequestSchema = updateConnectorRequestSchema
+
+export const managementUserResponseSchema = z
+  .object({
+    id: z.string(),
+    email: z.string().optional(),
+    name: z.string().optional(),
+    role: z
+      .union([z.string(), z.array(z.string())])
+      .nullable()
+      .optional(),
+    banned: z.boolean().nullable().optional(),
+    createdAt: z.union([z.string(), z.date()]).optional(),
+    updatedAt: z.union([z.string(), z.date()]).optional(),
+  })
+  .passthrough()
+
+export const listManagementUsersResponseSchema = z.object({
+  users: z.array(managementUserResponseSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const managementResourceSchemas = {
+  users: managementUserResponseSchema,
+  applications: applicationResponseSchema,
+  organizations: organizationResponseSchema,
+  apiResources: apiResourceResponseSchema,
+  apiScopes: apiScopeResponseSchema,
+  roles: roleResponseSchema,
+  signInSettings: managementSignInSettingsResponseSchema,
+  connectors: managementConnectorResponseSchema,
+} as const
+
+export const managementCollectionSchemas = {
+  users: listManagementUsersResponseSchema,
+  applications: listApplicationsResponseSchema,
+  organizations: listOrganizationsResponseSchema,
+  apiResources: listApiResourcesResponseSchema,
+  apiScopes: listApiScopesResponseSchema,
+  roles: listRolesResponseSchema,
+  connectors: listManagementConnectorsResponseSchema,
+} as const
+
+export const managementUserListQuerySchema = adminUserListQuerySchema
+export const managementCreateUserRequestSchema = adminCreateUserSchema
+export const managementUpdateUserRequestSchema = adminUpdateUserSchema
+export const managementBanUserRequestSchema = adminBanUserSchema
+export const managementPasswordResetRequestSchema = adminPasswordResetSchema
+
+export const managementCollectionRoutes = [
+  '/applications',
+  '/users',
+  '/organizations',
+  '/roles',
+  '/api-resources',
+  '/connectors',
+] as const
+
+export { paginationQuerySchema }
+
+export type ManagementErrorResponse = z.infer<typeof managementErrorResponseSchema>
+export type ManagementUserResponse = z.infer<typeof managementUserResponseSchema>
+export type ListManagementUsersResponse = z.infer<typeof listManagementUsersResponseSchema>
+export type ManagementUserListQuery = z.infer<typeof managementUserListQuerySchema>
+export type ManagementCreateUserRequest = z.infer<typeof managementCreateUserRequestSchema>
+export type ManagementUpdateUserRequest = z.infer<typeof managementUpdateUserRequestSchema>
+export type ManagementBanUserRequest = z.infer<typeof managementBanUserRequestSchema>
+export type ManagementPasswordResetRequest = z.infer<typeof managementPasswordResetRequestSchema>
+export type ManagementSignInSettingsResponse = z.infer<typeof managementSignInSettingsResponseSchema>
+export type ManagementConnectorResponse = z.infer<typeof managementConnectorResponseSchema>
+export type ListManagementConnectorsResponse = z.infer<typeof listManagementConnectorsResponseSchema>
+export type CreateManagementConnectorRequest = z.infer<typeof createManagementConnectorRequestSchema>
+export type UpdateManagementConnectorRequest = z.infer<typeof updateManagementConnectorRequestSchema>

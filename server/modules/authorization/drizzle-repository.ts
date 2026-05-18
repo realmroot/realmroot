@@ -492,11 +492,14 @@ function toRole(row: typeof role.$inferSelect) {
 }
 
 function toPagination(pagination: { limit: number; offset: number }, total: number) {
+  const nextOffset = pagination.offset + pagination.limit < total ? pagination.offset + pagination.limit : null
+
   return {
     limit: pagination.limit,
     offset: pagination.offset,
     total,
-    hasMore: pagination.offset + pagination.limit < total,
+    hasMore: nextOffset !== null,
+    nextOffset,
   }
 }
 

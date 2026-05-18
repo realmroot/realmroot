@@ -1,0 +1,460 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  listManagementConnectorsResponseSchema,
+  managementCollectionRoutes,
+  managementConnectorResponseSchema,
+} from '../../shared/api/management'
+import { createApp } from '../app'
+import type { UserRepository } from '../modules/users/repository'
+
+describe('management routes', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined)
+  })
+
+  it('mounts the documented management collections behind the admin boundary', async () => {
+    const app = createApp(createAuthMock(), { userRepository: createUserRepositoryMock() })
+
+    for (const route of managementCollectionRoutes) {
+      const response = await app.request(`/api/management${route}`)
+      expect(response.status, route).toBe(401)
+      await expect(response.json()).resolves.toMatchObject({
+        error: {
+          code: 'unauthorized',
+        },
+      })
+    }
+  })
+
+  it('rejects non-admin sessions from management APIs', async () => {
+    const response = await createApp(createAuthMock(), { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users',
+      {
+        headers: userHeaders(),
+      },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'forbidden',
+        message: 'Admin access is required.',
+      },
+    })
+  })
+
+  it('delegates management user collection requests through the stable management path', async () => {
+    const auth = createAuthMock()
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users?limit=10&offset=20&banned=false',
+      { headers: adminHeaders() },
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      users: [],
+      pagination: {
+        limit: 10,
+        offset: 20,
+        total: 0,
+        hasMore: false,
+        nextOffset: null,
+      },
+    })
+    expect(auth.api.listUsers).toHaveBeenCalledWith({
+      query: expect.objectContaining({
+        limit: 10,
+        offset: 20,
+        filterField: 'banned',
+        filterValue: false,
+      }),
+      headers: expect.any(Headers),
+    })
+  })
+
+  it('keeps admin user list compatibility while normalizing management user lists', async () => {
+    const auth = createAuthMock()
+    auth.api.listUsers.mockResolvedValueOnce({ users: [{ id: 'user-1' }], total: 1, limit: 50 })
+    auth.api.listUsers.mockResolvedValueOnce({ users: [{ id: 'user-1' }], total: 1, limit: 50 })
+    const app = createApp(auth, { userRepository: createUserRepositoryMock() })
+
+    const adminResponse = await app.request('/api/admin/users', { headers: adminHeaders() })
+    const managementResponse = await app.request('/api/management/users', { headers: adminHeaders() })
+
+    await expect(adminResponse.json()).resolves.toEqual({ users: [{ id: 'user-1' }], total: 1, limit: 50 })
+    await expect(managementResponse.json()).resolves.toEqual({
+      users: [{ id: 'user-1' }],
+      pagination: {
+        limit: 50,
+        offset: 0,
+        total: 1,
+        hasMore: false,
+        nextOffset: null,
+      },
+    })
+  })
+
+  it('returns the Management error envelope for malformed application JSON', async () => {
+    const response = await createApp(createAuthMock()).request('/api/management/applications', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: '{',
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'bad_request',
+        message: 'Invalid JSON body.',
+      },
+    })
+  })
+
+  it('supports REST-shaped management account action resources', async () => {
+    const auth = createAuthMock()
+    const app = createApp(auth, { userRepository: createUserRepositoryMock() })
+    const headers = adminHeaders()
+
+    await app.request('/api/management/users/password-reset-requests', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email: 'ada@example.com', redirectTo: 'https://app.example.com/reset' }),
+    })
+    await app.request('/api/management/users/user-1/ban', {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ reason: 'abuse', expiresInSeconds: 3600 }),
+    })
+    await app.request('/api/management/users/user-1/ban', { method: 'DELETE', headers })
+
+    expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
+      body: {
+        email: 'ada@example.com',
+        redirectTo: 'https://app.example.com/reset',
+      },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.banUser).toHaveBeenCalledWith({
+      body: {
+        userId: 'user-1',
+        banReason: 'abuse',
+        banExpiresIn: 3600,
+      },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.unbanUser).toHaveBeenCalledWith({ body: { userId: 'user-1' }, headers: expect.any(Headers) })
+  })
+
+  it('exposes managed sign-in settings', async () => {
+    const app = createApp(createAuthMock(), {
+      experienceServiceFactory: createExperienceServiceMock(),
+    })
+
+    const settings = await app.request('/api/management/sign-in-settings', { headers: adminHeaders() })
+
+    expect(settings.status).toBe(200)
+    await expect(settings.json()).resolves.toEqual({
+      signIn: {
+        passwordEnabled: true,
+        signupEnabled: true,
+        socialLoginEnabled: true,
+        magicLinkEnabled: true,
+        emailOtpEnabled: true,
+        usernameEnabled: true,
+        identifierFirst: false,
+      },
+      defaults: {
+        applicationId: 'app-1',
+        redirectUri: 'https://app.example.com/callback',
+      },
+      links: {
+        termsUri: null,
+        privacyUri: null,
+        supportEmail: 'support@example.com',
+      },
+    })
+  })
+
+  it('exposes management connector config CRUD with pagination', async () => {
+    const connectors = createConnectorServiceMock()
+    const app = createApp(createAuthMock(), {
+      connectorServiceFactory: () => connectors,
+    })
+    const headers = adminHeaders()
+
+    const list = await app.request('/api/management/connectors?limit=1&offset=0', { headers })
+    const created = await app.request('/api/management/connectors', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        slug: 'google',
+        providerType: 'social',
+        providerId: 'google',
+        displayName: 'Google',
+        enabled: true,
+        clientId: 'client-1',
+        clientSecretBinding: 'secret://google',
+        issuer: 'https://accounts.google.com',
+        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+        tokenEndpoint: 'https://oauth2.googleapis.com/token',
+        userInfoEndpoint: 'https://openidconnect.googleapis.com/v1/userinfo',
+        jwksEndpoint: 'https://www.googleapis.com/oauth2/v3/certs',
+        scopes: ['openid', 'email', 'profile'],
+        providerMetadata: { prompt: 'select_account' },
+      }),
+    })
+    const detail = await app.request('/api/management/connectors/connector-1', { headers })
+    const updated = await app.request('/api/management/connectors/connector-1', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ enabled: false, displayName: 'Google Workspace' }),
+    })
+    const deleted = await app.request('/api/management/connectors/connector-1', { method: 'DELETE', headers })
+
+    expect(list.status).toBe(200)
+    await expect(list.json()).resolves.toEqual(
+      listManagementConnectorsResponseSchema.parse({
+        connectors: [connectorFixture()],
+        pagination: {
+          limit: 1,
+          offset: 0,
+          total: 1,
+          hasMore: false,
+          nextOffset: null,
+        },
+      }),
+    )
+    expect(created.status).toBe(201)
+    await expect(created.json()).resolves.toEqual(managementConnectorResponseSchema.parse(connectorFixture()))
+    await expect(detail.json()).resolves.toEqual(managementConnectorResponseSchema.parse(connectorFixture()))
+    await expect(updated.json()).resolves.toEqual(
+      managementConnectorResponseSchema.parse({
+        ...connectorFixture(),
+        enabled: false,
+        displayName: 'Google Workspace',
+      }),
+    )
+    expect(deleted.status).toBe(204)
+    expect(connectors.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'google',
+        providerType: 'social',
+        clientSecretBinding: 'secret://google',
+        scopes: ['openid', 'email', 'profile'],
+      }),
+    )
+    expect(connectors.update).toHaveBeenCalledWith('connector-1', { enabled: false, displayName: 'Google Workspace' })
+    expect(connectors.delete).toHaveBeenCalledWith('connector-1')
+  })
+
+  it('rejects unsupported connector provider types at the request boundary', async () => {
+    const connectors = createConnectorServiceMock()
+    const response = await createApp(createAuthMock(), {
+      connectorServiceFactory: () => connectors,
+    }).request('/api/management/connectors', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        slug: 'saml',
+        providerType: 'saml',
+        providerId: 'saml',
+        displayName: 'SAML',
+        clientId: 'client-1',
+        clientSecretBinding: 'secret://saml',
+      }),
+    })
+
+    expect(response.status).toBe(400)
+    expect(connectors.create).not.toHaveBeenCalled()
+  })
+
+  it('reuses connector contracts for generic OAuth request validation', async () => {
+    const connectors = createConnectorServiceMock()
+    const response = await createApp(createAuthMock(), {
+      connectorServiceFactory: () => connectors,
+    }).request('/api/management/connectors', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        providerType: 'generic_oauth',
+        providerId: 'okta-main',
+        displayName: 'Okta',
+        clientId: 'client-1',
+        clientSecretBinding: 'secret://okta',
+        authorizationEndpoint: 'https://idp.example.com/oauth2/v1/authorize',
+      }),
+    })
+
+    expect(response.status).toBe(400)
+    expect(connectors.create).not.toHaveBeenCalled()
+  })
+})
+
+function createAuthMock() {
+  return {
+    api: {
+      getOAuthServerConfig: vi.fn(),
+      getOpenIdConfig: vi.fn(),
+      getSession: vi.fn().mockImplementation(({ headers }: { headers: Headers }) => {
+        const id = headers.get('x-user-id')
+
+        if (!id) {
+          return null
+        }
+
+        return {
+          session: { id: 'session-1' },
+          user: {
+            id,
+            email: `${id}@example.com`,
+            role: headers.get('x-user-role'),
+          },
+        }
+      }),
+      listUsers: vi.fn().mockResolvedValue({ users: [], total: 0 }),
+      getUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+      createUser: vi.fn().mockResolvedValue({ user: { id: 'user-1' } }),
+      adminUpdateUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+      banUser: vi.fn().mockResolvedValue({ user: { id: 'user-1', banned: true } }),
+      unbanUser: vi.fn().mockResolvedValue({ user: { id: 'user-1', banned: false } }),
+      removeUser: vi.fn().mockResolvedValue({ success: true }),
+      revokeUserSession: vi.fn().mockResolvedValue({ success: true }),
+      revokeUserSessions: vi.fn().mockResolvedValue({ success: true }),
+      requestPasswordReset: vi.fn().mockResolvedValue({ status: true }),
+      sendVerificationEmail: vi.fn().mockResolvedValue({ status: true }),
+      changeEmail: vi.fn().mockResolvedValue({ status: true }),
+      changePassword: vi.fn().mockResolvedValue({ status: true }),
+    },
+    handler: async () => new Response(null, { status: 204 }),
+  }
+}
+
+function createUserRepositoryMock(): UserRepository {
+  return {
+    getUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+    updateProfile: vi.fn().mockResolvedValue({ id: 'user-1' }),
+    assertAccountAvatarReference: vi.fn().mockResolvedValue(undefined),
+    assertAdminAvatarReference: vi.fn().mockResolvedValue(undefined),
+    listLinkedAccounts: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
+    listConsentedApplications: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
+    listSessions: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
+    getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
+  }
+}
+
+function createExperienceServiceMock() {
+  return () => ({
+    getConfig: async () => ({
+      signIn: {
+        passwordEnabled: true,
+        signupEnabled: true,
+        socialLoginEnabled: true,
+        magicLinkEnabled: true,
+        emailOtpEnabled: true,
+        usernameEnabled: true,
+        identifierFirst: false,
+      },
+      branding: {
+        logoUrl: null,
+        faviconUrl: null,
+        primaryColor: null,
+        backgroundColor: null,
+        customCss: null,
+      },
+      identityProviders: [
+        {
+          slug: 'google',
+          providerType: 'oauth2',
+          displayName: 'Google',
+          authorizationUrl: 'https://auth.example.com/api/auth/sign-in/social?provider=google',
+        },
+        {
+          slug: 'github',
+          providerType: 'oauth2',
+          displayName: 'GitHub',
+          authorizationUrl: 'https://auth.example.com/api/auth/sign-in/social?provider=github',
+        },
+      ],
+      links: {
+        termsUri: null,
+        privacyUri: null,
+        supportEmail: 'support@example.com',
+      },
+      copy: {
+        productName: 'FlareAuth',
+        headline: 'Sign in',
+        description: 'Continue.',
+      },
+      defaults: {
+        applicationId: 'app-1',
+        redirectUri: 'https://app.example.com/callback',
+      },
+    }),
+    getCallbackState: vi.fn(),
+  })
+}
+
+function createConnectorServiceMock() {
+  return {
+    list: vi.fn().mockResolvedValue({
+      connectors: [connectorFixture()],
+      pagination: {
+        limit: 1,
+        offset: 0,
+        total: 1,
+        hasMore: false,
+        nextOffset: null,
+      },
+    }),
+    create: vi.fn().mockResolvedValue(connectorFixture()),
+    get: vi.fn().mockResolvedValue(connectorFixture()),
+    update: vi.fn().mockResolvedValue({ ...connectorFixture(), enabled: false, displayName: 'Google Workspace' }),
+    delete: vi.fn().mockResolvedValue(undefined),
+  }
+}
+
+function connectorFixture() {
+  return {
+    id: 'connector-1',
+    slug: 'google',
+    providerType: 'social',
+    providerId: 'google',
+    displayName: 'Google',
+    enabled: true,
+    clientId: 'client-1',
+    clientSecretBinding: 'secret://google',
+    issuer: 'https://accounts.google.com',
+    authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenEndpoint: 'https://oauth2.googleapis.com/token',
+    userInfoEndpoint: 'https://openidconnect.googleapis.com/v1/userinfo',
+    jwksEndpoint: 'https://www.googleapis.com/oauth2/v3/certs',
+    scopes: ['openid', 'email', 'profile'],
+    providerMetadata: { prompt: 'select_account' },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function createPage(page: { limit: number; offset: number }) {
+  return {
+    items: [],
+    total: 10,
+    ...page,
+  }
+}
+
+function adminHeaders() {
+  return {
+    'content-type': 'application/json',
+    'x-user-id': 'admin-1',
+    'x-user-role': 'admin',
+  }
+}
+
+function userHeaders() {
+  return {
+    'content-type': 'application/json',
+    'x-user-id': 'user-1',
+    'x-user-role': 'user',
+  }
+}

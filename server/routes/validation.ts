@@ -2,8 +2,16 @@ import type { Context } from 'hono'
 import type { z } from 'zod'
 import { badRequest } from '../lib/errors'
 
-export function readJson<T extends z.ZodType>(c: Context, schema: T): Promise<z.infer<T>> {
-  return c.req.json().then((body) => parse(schema, body))
+export async function readJson<T extends z.ZodType>(c: Context, schema: T): Promise<z.infer<T>> {
+  let body: unknown
+
+  try {
+    body = await c.req.json()
+  } catch {
+    throw badRequest('Invalid JSON body.')
+  }
+
+  return parse(schema, body)
 }
 
 export function readQuery<T extends z.ZodType>(c: Context, schema: T): z.infer<T> {

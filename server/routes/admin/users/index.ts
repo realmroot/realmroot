@@ -1,4 +1,7 @@
+import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { z } from 'zod'
+import { listManagementUsersResponseSchema } from '../../../../shared/api/management'
 import { paginationMetadata, paginationQuerySchema } from '../../../../shared/api/pagination'
 import {
   adminBanUserSchema,
@@ -7,13 +10,22 @@ import {
   adminUpdateUserSchema,
   adminUserListQuerySchema,
 } from '../../../../shared/api/users'
+import { badRequest } from '../../../lib/errors'
 import { requireAdmin } from '../../../middleware/admin'
 import type { UserRepository } from '../../../modules/users/repository'
 import type { ManagementAuthApi } from '../../auth-api'
 import { toBoundaryError } from '../../auth-api'
 import { readJson, readQuery } from '../../validation'
 
-export function adminUserRoutes(authApi: ManagementAuthApi, users: UserRepository) {
+interface AdminUserRoutesOptions {
+  normalizeListResponse?: boolean
+}
+
+export function adminUserRoutes(
+  authApi: ManagementAuthApi,
+  users: UserRepository,
+  options: AdminUserRoutesOptions = {},
+) {
   const app = new Hono()
 
   app.use('*', requireAdmin())
@@ -22,20 +34,23 @@ export function adminUserRoutes(authApi: ManagementAuthApi, users: UserRepositor
     const query = readQuery(c, adminUserListQuerySchema)
 
     try {
+      const response = await authApi.listUsers({
+        query: {
+          searchValue: query.search,
+          searchField: query.searchField,
+          limit: query.limit,
+          offset: query.offset,
+          sortBy: query.sortBy,
+          sortDirection: query.sortDirection,
+          filterField: query.role !== undefined ? 'role' : query.banned !== undefined ? 'banned' : undefined,
+          filterValue: query.role ?? query.banned,
+        },
+        headers: c.req.raw.headers,
+      })
       return c.json(
-        await authApi.listUsers({
-          query: {
-            searchValue: query.search,
-            searchField: query.searchField,
-            limit: query.limit,
-            offset: query.offset,
-            sortBy: query.sortBy,
-            sortDirection: query.sortDirection,
-            filterField: query.role !== undefined ? 'role' : query.banned !== undefined ? 'banned' : undefined,
-            filterValue: query.role ?? query.banned,
-          },
-          headers: c.req.raw.headers,
-        }),
+        options.normalizeListResponse
+          ? toListUsersResponse(response, { limit: query.limit, offset: query.offset })
+          : response,
       )
     } catch (error) {
       throw toBoundaryError(error)
@@ -68,7 +83,7 @@ export function adminUserRoutes(authApi: ManagementAuthApi, users: UserRepositor
     }
   })
 
-  app.post('/password-reset', async (c) => {
+  const requestPasswordReset = async (c: Context) => {
     const body = await readJson(c, adminPasswordResetSchema)
 
     try {
@@ -84,7 +99,10 @@ export function adminUserRoutes(authApi: ManagementAuthApi, users: UserRepositor
     } catch (error) {
       throw toBoundaryError(error)
     }
-  })
+  }
+
+  app.post('/password-reset', requestPasswordReset)
+  app.post('/password-reset-requests', requestPasswordReset)
 
   app.get('/:id', async (c) => {
     try {
@@ -134,14 +152,14 @@ export function adminUserRoutes(authApi: ManagementAuthApi, users: UserRepositor
     }
   })
 
-  app.post('/:id/ban', async (c) => {
+  const banUser = async (c: Context) => {
     const body = await readJson(c, adminBanUserSchema)
 
     try {
       return c.json(
         await authApi.banUser({
           body: {
-            userId: c.req.param('id'),
+            userId: userIdParam(c),
             banReason: body.reason,
             banExpiresIn: body.expiresInSeconds,
           },
@@ -151,15 +169,21 @@ export function adminUserRoutes(authApi: ManagementAuthApi, users: UserRepositor
     } catch (error) {
       throw toBoundaryError(error)
     }
-  })
+  }
 
-  app.post('/:id/unban', async (c) => {
+  app.post('/:id/ban', banUser)
+  app.put('/:id/ban', banUser)
+
+  const unbanUser = async (c: Context) => {
     try {
-      return c.json(await authApi.unbanUser({ body: { userId: c.req.param('id') }, headers: c.req.raw.headers }))
+      return c.json(await authApi.unbanUser({ body: { userId: userIdParam(c) }, headers: c.req.raw.headers }))
     } catch (error) {
       throw toBoundaryError(error)
     }
-  })
+  }
+
+  app.post('/:id/unban', unbanUser)
+  app.delete('/:id/ban', unbanUser)
 
   app.delete('/:id', async (c) => {
     try {
@@ -195,4 +219,35 @@ export function adminUserRoutes(authApi: ManagementAuthApi, users: UserRepositor
   })
 
   return app
+}
+
+function userIdParam(c: Context) {
+  const userId = c.req.param('id')
+
+  if (!userId) {
+    throw badRequest('User id is required.')
+  }
+
+  return userId
+}
+
+function toListUsersResponse(response: unknown, page: { limit: number; offset: number }) {
+  const parsed = z
+    .object({
+      users: z.array(z.object({ id: z.string() }).passthrough()),
+      total: z.number().int().min(0),
+    })
+    .parse(response)
+  const nextOffset = page.offset + page.limit < parsed.total ? page.offset + page.limit : null
+
+  return listManagementUsersResponseSchema.parse({
+    users: parsed.users,
+    pagination: {
+      limit: page.limit,
+      offset: page.offset,
+      total: parsed.total,
+      hasMore: nextOffset !== null,
+      nextOffset,
+    },
+  })
 }

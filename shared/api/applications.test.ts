@@ -20,6 +20,7 @@ describe('application API pagination contracts', () => {
       offset: 0,
       total: 0,
       hasMore: false,
+      nextOffset: null,
     }
 
     expect(listApplicationsResponseSchema.parse({ applications: [], pagination })).toEqual({

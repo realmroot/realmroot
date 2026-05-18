@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const paginationQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 })
 
@@ -22,6 +22,7 @@ export function paginationMetadata(page: PaginationInput & { total: number }) {
     limit: page.limit,
     offset: page.offset,
     total: page.total,
+    hasMore: nextOffset !== null,
     nextOffset,
   }
 }

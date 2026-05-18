@@ -691,13 +691,16 @@ class InMemoryAuthorizationRepository implements AuthorizationRepository {
 }
 
 function page<T>(items: T[], pagination: PaginationQuery) {
+  const nextOffset = pagination.offset + pagination.limit < items.length ? pagination.offset + pagination.limit : null
+
   return {
     items: items.slice(pagination.offset, pagination.offset + pagination.limit),
     pagination: {
       limit: pagination.limit,
       offset: pagination.offset,
       total: items.length,
-      hasMore: pagination.offset + pagination.limit < items.length,
+      hasMore: nextOffset !== null,
+      nextOffset,
     },
   }
 }

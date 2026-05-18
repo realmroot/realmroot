@@ -173,6 +173,7 @@ describe('admin and account routes', () => {
         limit: 2,
         offset: 4,
         total: 10,
+        hasMore: true,
         nextOffset: 6,
       },
     })
@@ -182,6 +183,7 @@ describe('admin and account routes', () => {
         limit: 3,
         offset: 6,
         total: 10,
+        hasMore: true,
         nextOffset: 9,
       },
     })
@@ -191,6 +193,7 @@ describe('admin and account routes', () => {
         limit: 4,
         offset: 8,
         total: 10,
+        hasMore: false,
         nextOffset: null,
       },
     })
@@ -209,7 +212,7 @@ describe('admin and account routes', () => {
     await app.request('/api/admin/users/user-1/sessions/session-1', { method: 'DELETE', headers: adminHeaders() })
 
     expect(auth.api.listUserSessions).not.toHaveBeenCalled()
-    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 20, offset: 0 })
+    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 50, offset: 0 })
     expect(users.getSessionToken).toHaveBeenCalledWith('user-1', 'session-1')
     expect(auth.api.revokeUserSession).toHaveBeenCalledWith({
       body: { sessionToken: 'session-token-1' },
@@ -343,6 +346,7 @@ describe('admin and account routes', () => {
         limit: 2,
         offset: 4,
         total: 10,
+        hasMore: true,
         nextOffset: 6,
       },
     })
@@ -352,6 +356,7 @@ describe('admin and account routes', () => {
         limit: 3,
         offset: 6,
         total: 10,
+        hasMore: true,
         nextOffset: 9,
       },
     })
@@ -361,6 +366,7 @@ describe('admin and account routes', () => {
         limit: 4,
         offset: 8,
         total: 10,
+        hasMore: false,
         nextOffset: null,
       },
     })
