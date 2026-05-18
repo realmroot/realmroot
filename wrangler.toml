@@ -11,6 +11,7 @@ EMAIL_FROM_NAME = "FlareAuth"
 
 [assets]
 binding = "ASSETS"
+directory = "./dist/client"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*", "/.well-known/*"]
 

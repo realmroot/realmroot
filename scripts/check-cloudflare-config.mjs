@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 const configs = ['wrangler.toml', 'wrangler.preview.toml']
 const requiredSnippets = [
   'binding = "ASSETS"',
+  'directory = "./dist/client"',
   'name = "EMAIL"',
   'binding = "ASSET_BUCKET"',
   'binding = "DB"',
