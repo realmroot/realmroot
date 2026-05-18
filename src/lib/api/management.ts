@@ -1,5 +1,4 @@
 import type {
-  ApplicationResponse,
   CreateApplicationRequest,
   ListApplicationsResponse,
   PaginationMetadata,
@@ -20,18 +19,14 @@ import type {
   CreateManagementConnectorRequest,
   ListManagementConnectorsResponse,
   ListManagementUsersResponse,
-  ManagementConnectorResponse,
   ManagementCreateUserRequest,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
   ManagementUserListQuery,
-  ManagementUserResponse,
   UpdateManagementConnectorRequest,
 } from '@shared/api/management'
 import type { SecurityPolicy } from '@shared/api/security'
-import { apiRequest } from '@/lib/api'
-
-const basePath = '/api/management'
+import { apiClient, readRpcResponse } from '@/lib/api'
 
 export const adminQueryKeys = {
   dashboard: ['admin', 'dashboard'] as const,
@@ -94,15 +89,15 @@ export function getAdminDashboard(): Promise<AdminDashboard> {
 }
 
 export function listApplications() {
-  return apiRequest<ListApplicationsResponse>(`${basePath}/applications`)
+  return readRpcResponse(apiClient.api.management.applications.$get())
 }
 
 export function createApplication(input: CreateApplicationRequest) {
-  return apiRequest<ApplicationResponse>(`${basePath}/applications`, { method: 'POST', body: input })
+  return readRpcResponse(apiClient.api.management.applications.$post({ json: input }))
 }
 
 export function updateApplication(id: string, input: UpdateApplicationRequest) {
-  return apiRequest<ApplicationResponse>(`${basePath}/applications/${id}`, { method: 'PATCH', body: input })
+  return readRpcResponse(apiClient.api.management.applications[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function listUsers(query: Partial<ManagementUserListQuery> = {}) {
@@ -110,74 +105,73 @@ export function listUsers(query: Partial<ManagementUserListQuery> = {}) {
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) params.set(key, String(value))
   }
-  const search = params.toString()
-  return apiRequest<ListManagementUsersResponse>(`${basePath}/users${search ? `?${search}` : ''}`)
+  return readRpcResponse(apiClient.api.management.users.$get({ query: Object.fromEntries(params) }))
 }
 
 export function createUser(input: ManagementCreateUserRequest) {
-  return apiRequest<ManagementUserResponse>(`${basePath}/users`, { method: 'POST', body: input })
+  return readRpcResponse(apiClient.api.management.users.$post({ json: input }))
 }
 
 export function updateUser(id: string, input: ManagementUpdateUserRequest) {
-  return apiRequest<{ user: ManagementUserResponse }>(`${basePath}/users/${id}`, { method: 'PATCH', body: input })
+  return readRpcResponse(apiClient.api.management.users[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function requestPasswordReset(email: string) {
-  return apiRequest<unknown>(`${basePath}/users/password-reset-requests`, { method: 'POST', body: { email } })
+  return readRpcResponse(apiClient.api.management.users['password-reset-requests'].$post({ json: { email } }))
 }
 
 export function listConnectors() {
-  return apiRequest<ListManagementConnectorsResponse>(`${basePath}/connectors`)
+  return readRpcResponse(apiClient.api.management.connectors.$get())
 }
 
 export function createConnector(input: CreateManagementConnectorRequest) {
-  return apiRequest<ManagementConnectorResponse>(`${basePath}/connectors`, { method: 'POST', body: input })
+  return readRpcResponse(apiClient.api.management.connectors.$post({ json: input }))
 }
 
 export function updateConnector(id: string, input: UpdateManagementConnectorRequest) {
-  return apiRequest<ManagementConnectorResponse>(`${basePath}/connectors/${id}`, { method: 'PATCH', body: input })
+  return readRpcResponse(apiClient.api.management.connectors[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function getSignInSettings() {
-  return apiRequest<ManagementSignInSettingsResponse>(`${basePath}/sign-in-settings`)
+  return readRpcResponse(apiClient.api.management['sign-in-settings'].$get())
 }
 
 export function getSecurityPolicy() {
-  return apiRequest<{ policy: SecurityPolicy }>(`${basePath}/security/policy`)
+  return readRpcResponse(apiClient.api.management.security.policy.$get())
 }
 
 export function listOrganizations() {
-  return apiRequest<ListOrganizationsResponse>(`${basePath}/organizations`)
+  return readRpcResponse(apiClient.api.management.organizations.$get())
 }
 
 export function createOrganization(input: CreateOrganizationRequest) {
-  return apiRequest<OrganizationResponse>(`${basePath}/organizations`, { method: 'POST', body: input })
+  return readRpcResponse(apiClient.api.management.organizations.$post({ json: input }))
 }
 
 export function updateOrganization(id: string, input: UpdateOrganizationRequest) {
-  return apiRequest<OrganizationResponse>(`${basePath}/organizations/${id}`, { method: 'PATCH', body: input })
+  return readRpcResponse(apiClient.api.management.organizations[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function listRoles() {
-  return apiRequest<ListRolesResponse>(`${basePath}/roles`)
+  return readRpcResponse(apiClient.api.management.roles.$get())
 }
 
 export function createRole(input: CreateRoleRequest) {
-  return apiRequest<RoleResponse>(`${basePath}/roles`, { method: 'POST', body: input })
+  return readRpcResponse(apiClient.api.management.roles.$post({ json: input }))
 }
 
 export function updateRole(id: string, input: UpdateRoleRequest) {
-  return apiRequest<RoleResponse>(`${basePath}/roles/${id}`, { method: 'PATCH', body: input })
+  return readRpcResponse(apiClient.api.management.roles[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function listApiResources() {
-  return apiRequest<ListApiResourcesResponse>(`${basePath}/api-resources`)
+  return readRpcResponse(apiClient.api.management['api-resources'].$get())
 }
 
 export function createApiResource(input: CreateApiResourceRequest) {
-  return apiRequest<ApiResourceResponse>(`${basePath}/api-resources`, { method: 'POST', body: input })
+  return readRpcResponse(apiClient.api.management['api-resources'].$post({ json: input }))
 }
 
 export function updateApiResource(id: string, input: UpdateApiResourceRequest) {
-  return apiRequest<ApiResourceResponse>(`${basePath}/api-resources/${id}`, { method: 'PATCH', body: input })
+  return readRpcResponse(apiClient.api.management['api-resources'][':id'].$patch({ param: { id }, json: input }))
 }

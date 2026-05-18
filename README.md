@@ -1,5 +1,14 @@
 # FlareAuth
 
+[![CI](https://github.com/saltbo/flareauth/actions/workflows/ci.yml/badge.svg)](https://github.com/saltbo/flareauth/actions/workflows/ci.yml)
+[![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
+[![Stack: Cloudflare + Hono + React](https://img.shields.io/badge/stack-Cloudflare%20%2B%20Hono%20%2B%20React-24292f.svg)](package.json)
+[![Open Source](https://img.shields.io/badge/open%20source-yes-brightgreen.svg)](LICENSE)
+[![Coverage Thresholds](https://img.shields.io/badge/coverage-62%25%20lines%20%7C%2060%25%20branches-informational.svg)](vite.config.ts)
+[![UI Journey E2E](https://img.shields.io/badge/UI%20journey%20E2E-25%2F25%20journeys-success.svg)](tests/e2e/journey-coverage.json)
+[![Hono RPC Smoke](https://img.shields.io/badge/Hono%20RPC%20smoke-1%2F1%20journeys-success.svg)](tests/e2e/journey-coverage.json)
+[![Platform Status](https://img.shields.io/badge/platform%20status-%2Fapi%2Fhealth-success.svg)](server/app.ts)
+
 Cloudflare-native identity provider built on Better Auth.
 
 ## Stack
@@ -19,7 +28,11 @@ npm run dev
 npm run typecheck
 npm run lint
 npm test
+npm run test:coverage
+npm run test:e2e
 ```
+
+Browser UI journey coverage is declared in `tests/e2e/journey-coverage.json` and currently covers 25/25 declared critical product journeys. The same suite includes a Hono RPC smoke path for the product-facing platform status journey through the real `/api/health` handler; remaining browser journeys use deterministic API fixtures and are backed by server route tests for Hono behavior.
 
 Check Cloudflare binding coverage before review:
 

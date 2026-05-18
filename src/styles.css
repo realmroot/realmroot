@@ -209,6 +209,27 @@ h1 {
   line-height: 1.6;
 }
 
+.platformStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 1120px;
+  margin: 20px auto 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.statusDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #f59e0b;
+}
+
+.statusDot.online {
+  background: #16a34a;
+}
+
 .authShell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 480px);

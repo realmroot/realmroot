@@ -5,7 +5,27 @@ import { Button } from '@/components/ui/button'
 import { Field, TextInput } from '@/components/ui/field'
 import { Status } from '@/components/ui/status'
 import { useExperienceConfig } from '@/features/auth/hooks'
-import { apiRequest } from '@/lib/api'
+import { signOut } from '@/lib/api'
+import {
+  changeAccountPassword,
+  createPasskeyRegistrationOptions,
+  deletePasskey,
+  disableTotp,
+  getAccountProfile,
+  getAccountSecurity,
+  listAccountSessions,
+  listConsentedApplications,
+  listLinkedAccounts,
+  listPasskeys,
+  requestAccountEmailChange,
+  revokeOtherSessions,
+  revokeSession,
+  startTotpEnrollment,
+  unlinkAccount,
+  updateAccountProfile,
+  verifyPasskeyRegistration,
+  verifyTotp,
+} from '@/lib/api/account'
 
 type UserProfile = {
   id: string
@@ -92,12 +112,12 @@ export function AccountCenterPage() {
     setError(null)
     try {
       const [profile, linkedAccounts, applications, sessions, security, passkeys] = await Promise.all([
-        apiRequest<{ user: UserProfile }>('/api/account/profile'),
-        apiRequest<{ accounts: LinkedAccount[] }>('/api/account/linked-accounts'),
-        apiRequest<{ applications: ConsentedApplication[] }>('/api/account/applications'),
-        apiRequest<{ sessions: UserSessionDevice[] }>('/api/account/sessions'),
-        apiRequest<{ security: SecurityState }>('/api/account/security'),
-        apiRequest<{ passkeys: Passkey[] }>('/api/account/security/passkeys'),
+        getAccountProfile(),
+        listLinkedAccounts(),
+        listConsentedApplications(),
+        listAccountSessions(),
+        getAccountSecurity(),
+        listPasskeys(),
       ])
       setData({
         profile: profile.user,
@@ -156,10 +176,7 @@ export function AccountCenterPage() {
             <p className="eyebrow">Account center</p>
             <h1>{data.profile?.displayName ?? 'Your account'}</h1>
           </div>
-          <Button
-            onClick={() => mutate('Signed out.', () => apiRequest('/api/experience/session', { method: 'DELETE' }))}
-            variant="secondary"
-          >
+          <Button onClick={() => mutate('Signed out.', signOut)} variant="secondary">
             Sign out
           </Button>
         </div>
@@ -200,9 +217,10 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
   function saveProfile(event: FormEvent) {
     event.preventDefault()
     return mutate('Profile updated.', () =>
-      apiRequest('/api/account/profile', {
-        method: 'PATCH',
-        body: { displayName, username: username || null, avatarAssetId: avatarAssetId || null },
+      updateAccountProfile({
+        displayName,
+        username: username || null,
+        avatarAssetId: avatarAssetId || null,
       }),
     )
   }
@@ -210,20 +228,14 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
   function changeEmail(event: FormEvent) {
     event.preventDefault()
     return mutate('Email change requested.', () =>
-      apiRequest('/api/account/email/change', {
-        method: 'POST',
-        body: { email, callbackURL: `${window.location.origin}/email-verification` },
-      }),
+      requestAccountEmailChange({ email, callbackURL: `${window.location.origin}/email-verification` }),
     )
   }
 
   function changePassword(event: FormEvent) {
     event.preventDefault()
     return mutate('Password changed.', () =>
-      apiRequest('/api/account/password/change', {
-        method: 'POST',
-        body: { currentPassword, newPassword, revokeOtherSessions: true },
-      }),
+      changeAccountPassword({ currentPassword, newPassword, revokeOtherSessions: true }),
     )
   }
 
@@ -304,10 +316,7 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
           onSubmit={(event) => {
             event.preventDefault()
             return mutate('TOTP enrollment started.', async () => {
-              const enrollment = await apiRequest<unknown>('/api/account/security/mfa/totp-enrollment', {
-                method: 'POST',
-                body: { password },
-              })
+              const enrollment = await startTotpEnrollment({ password })
               setTotpEnrollment(readTotpEnrollment(enrollment))
               return enrollment
             })
@@ -325,12 +334,7 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
           className="formStack compactForm"
           onSubmit={(event) => {
             event.preventDefault()
-            return mutate('MFA challenge verified.', () =>
-              apiRequest('/api/account/security/mfa/totp-verification', {
-                method: 'POST',
-                body: { code, trustDevice: true },
-              }),
-            )
+            return mutate('MFA challenge verified.', () => verifyTotp({ code, trustDevice: true }))
           }}
         >
           <Field label="Authenticator code">
@@ -342,11 +346,7 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
         </form>
         <Button
           disabled={mfaRequired}
-          onClick={() =>
-            mutate('MFA disabled.', () =>
-              apiRequest('/api/account/security/mfa/totp', { method: 'DELETE', body: { password } }),
-            )
-          }
+          onClick={() => mutate('MFA disabled.', () => disableTotp({ password }))}
           type="button"
           variant="danger"
         >
@@ -378,11 +378,7 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
             meta: `${passkey.deviceType}${passkey.backedUp ? ' / backed up' : ''}`,
             action: (
               <Button
-                onClick={() =>
-                  mutate('Passkey removed.', () =>
-                    apiRequest(`/api/account/security/passkeys/${passkey.id}`, { method: 'DELETE' }),
-                  )
-                }
+                onClick={() => mutate('Passkey removed.', () => deletePasskey(passkey.id))}
                 type="button"
                 variant="ghost"
               >
@@ -409,11 +405,7 @@ function ConnectionsSection({ accounts, mutate }: { accounts: LinkedAccount[]; m
           action: (
             <Button
               onClick={() =>
-                mutate('Linked account removed.', () =>
-                  apiRequest(`/api/account/linked-accounts/${account.providerId}?accountId=${account.accountId}`, {
-                    method: 'DELETE',
-                  }),
-                )
+                mutate('Linked account removed.', () => unlinkAccount(account.providerId, account.accountId))
               }
               type="button"
               variant="ghost"
@@ -433,9 +425,7 @@ function SessionsSection({ sessions, mutate }: { sessions: UserSessionDevice[]; 
       <div className="panelHeader">
         <h2>Sessions and devices</h2>
         <Button
-          onClick={() =>
-            mutate('Other sessions revoked.', () => apiRequest('/api/account/security/sessions', { method: 'DELETE' }))
-          }
+          onClick={() => mutate('Other sessions revoked.', revokeOtherSessions)}
           type="button"
           variant="secondary"
         >
@@ -450,11 +440,7 @@ function SessionsSection({ sessions, mutate }: { sessions: UserSessionDevice[]; 
           meta: `${session.ipAddress ?? 'No IP'} / expires ${formatDate(session.expiresAt)}`,
           action: (
             <Button
-              onClick={() =>
-                mutate('Session revoked.', () =>
-                  apiRequest(`/api/account/security/sessions/${session.id}`, { method: 'DELETE' }),
-                )
-              }
+              onClick={() => mutate('Session revoked.', () => revokeSession(session.id))}
               type="button"
               variant="ghost"
             >
@@ -546,15 +532,9 @@ function readTotpEnrollment(value: unknown): TotpEnrollmentDisplay {
 }
 
 async function enrollPasskey(name: string) {
-  const options = await apiRequest<unknown>('/api/account/security/passkeys/registration-options', {
-    method: 'POST',
-    body: { name: name || undefined },
-  })
+  const options = await createPasskeyRegistrationOptions({ name: name || undefined })
   const credential = await createPasskeyCredential(options)
-  return apiRequest('/api/account/security/passkeys/registration-verification', {
-    method: 'POST',
-    body: { response: credential, name: name || undefined },
-  })
+  return verifyPasskeyRegistration({ response: credential, name: name || undefined })
 }
 
 async function createPasskeyCredential(optionsResponse: unknown) {

@@ -172,3 +172,10 @@ export type ListRedirectUrisResponse = z.infer<typeof listRedirectUrisResponseSc
 export type ConsentRequestResponse = z.infer<typeof consentRequestResponseSchema>
 export type CreateConsentRequest = z.infer<typeof createConsentRequestSchema>
 export type HostedConsentApprovalRequest = z.infer<typeof hostedConsentApprovalRequestSchema>
+export type ConsentApprovalResponse = {
+  consent: {
+    id: string
+    scopes: string[]
+    grantedAt: string
+  }
+}

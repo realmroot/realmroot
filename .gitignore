@@ -4,4 +4,6 @@ dist
 .dev.vars
 *.local
 coverage
+playwright-report
+test-results
 *.tsbuildinfo

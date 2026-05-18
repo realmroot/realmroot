@@ -4,7 +4,22 @@ import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button, LinkButton } from '@/components/ui/button'
 import { Field, TextInput } from '@/components/ui/field'
 import { Status } from '@/components/ui/status'
-import { apiRequest, getCallbackState } from '@/lib/api'
+import {
+  getCallbackState,
+  requestEmailOtp,
+  requestEmailOtpPasswordReset,
+  requestEmailVerification,
+  requestMagicLink,
+  requestPasswordReset,
+  resetPassword,
+  resetPasswordWithEmailOtp,
+  signInWithEmailOtp,
+  signInWithPassword,
+  signInWithUsername,
+  signUp,
+  verifyEmail,
+  verifyEmailOtp,
+} from '@/lib/api'
 import { callbackURL, useExperienceConfig } from './hooks'
 
 type SubmitState = {
@@ -39,15 +54,9 @@ export function SignInPage() {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
       const useUsername = enabled?.usernameEnabled && !identifier.includes('@')
-      const response = await apiRequest<unknown>(
-        useUsername ? '/api/experience/sign-ins/username' : '/api/experience/sign-ins/password',
-        {
-          method: 'POST',
-          body: useUsername
-            ? { username: identifier, password, callbackURL: callback, rememberMe: true }
-            : { email: identifier, password, callbackURL: callback, rememberMe: true },
-        },
-      )
+      const response = useUsername
+        ? await signInWithUsername({ username: identifier, password, callbackURL: callback, rememberMe: true })
+        : await signInWithPassword({ email: identifier, password, callbackURL: callback, rememberMe: true })
       navigateAfterAuth(response, callback)
       return 'Signed in. Redirecting to the requested application.'
     })
@@ -56,13 +65,10 @@ export function SignInPage() {
   async function onMagicSubmit(event: FormEvent) {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
-      await apiRequest('/api/experience/magic-links', {
-        method: 'POST',
-        body: {
-          email: identifier,
-          callbackURL: callback,
-          errorCallbackURL: '/sign-in',
-        },
+      await requestMagicLink({
+        email: identifier,
+        callbackURL: callback,
+        errorCallbackURL: '/sign-in',
       })
       return 'Magic link sent. Check your email to continue.'
     })
@@ -72,17 +78,11 @@ export function SignInPage() {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
       if (!otp) {
-        await apiRequest('/api/experience/email-otps', {
-          method: 'POST',
-          body: { email: identifier, type: 'sign-in' },
-        })
+        await requestEmailOtp({ email: identifier, type: 'sign-in' })
         return 'One-time code sent. Enter it here to finish signing in.'
       }
 
-      const response = await apiRequest<unknown>('/api/experience/email-otp/sign-ins', {
-        method: 'POST',
-        body: { email: identifier, otp },
-      })
+      const response = await signInWithEmailOtp({ email: identifier, otp })
       navigateAfterAuth(response, callback)
       return 'Code accepted. Redirecting to the requested application.'
     })
@@ -212,15 +212,12 @@ export function SignUpPage() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
-      await apiRequest('/api/experience/sign-ups', {
-        method: 'POST',
-        body: {
-          email,
-          name,
-          password,
-          username: config?.signIn.usernameEnabled && username ? username : undefined,
-          callbackURL: callbackURL(),
-        },
+      await signUp({
+        email,
+        name,
+        password,
+        username: config?.signIn.usernameEnabled && username ? username : undefined,
+        callbackURL: callbackURL(),
       })
       return 'Account created. Check your email if verification is required.'
     })
@@ -288,34 +285,22 @@ export function ForgotPasswordPage() {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
       if (token) {
-        await apiRequest('/api/experience/password-resets', {
-          method: 'POST',
-          body: { token, newPassword: password },
-        })
+        await resetPassword({ token, newPassword: password })
         return 'Password reset. You can sign in with the new password.'
       }
 
       if (otpRequested && otp && password) {
-        await apiRequest('/api/experience/email-otp/password-resets', {
-          method: 'POST',
-          body: { email, otp, password },
-        })
+        await resetPasswordWithEmailOtp({ email, otp, password })
         return 'Password reset. You can sign in with the new password.'
       }
 
       if (resetMethod === 'otp' && otpResetEnabled) {
-        await apiRequest('/api/experience/email-otp/password-reset-requests', {
-          method: 'POST',
-          body: { email },
-        })
+        await requestEmailOtpPasswordReset({ email })
         setOtpRequested(true)
         return 'Password reset code sent.'
       }
 
-      await apiRequest('/api/experience/password-reset-requests', {
-        method: 'POST',
-        body: { email, redirectTo: `${window.location.origin}/forgot-password` },
-      })
+      await requestPasswordReset({ email, redirectTo: `${window.location.origin}/forgot-password` })
       return 'Password reset email sent.'
     })
   }
@@ -405,25 +390,16 @@ export function EmailVerificationPage() {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
       if (token) {
-        await apiRequest('/api/experience/email-verifications', {
-          method: 'POST',
-          body: { token, callbackURL: callbackURL() },
-        })
+        await verifyEmail({ token, callbackURL: callbackURL() })
         return 'Email verified.'
       }
 
       if (otp) {
-        await apiRequest('/api/experience/email-otp/email-verifications', {
-          method: 'POST',
-          body: { email, otp },
-        })
+        await verifyEmailOtp({ email, otp })
         return 'Email verified.'
       }
 
-      await apiRequest('/api/experience/email-verification-requests', {
-        method: 'POST',
-        body: { email, callbackURL: callbackURL() },
-      })
+      await requestEmailVerification({ email, callbackURL: callbackURL() })
       return 'Verification email sent.'
     })
   }

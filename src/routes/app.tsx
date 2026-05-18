@@ -1,4 +1,6 @@
 import { KeyRound, ShieldCheck, UsersRound } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { getPlatformStatus } from '@/lib/api'
 
 const features = [
   {
@@ -19,6 +21,22 @@ const features = [
 ]
 
 export function App() {
+  const [status, setStatus] = useState<'loading' | 'online' | 'unavailable'>('loading')
+
+  useEffect(() => {
+    let active = true
+    getPlatformStatus()
+      .then(() => {
+        if (active) setStatus('online')
+      })
+      .catch(() => {
+        if (active) setStatus('unavailable')
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
     <main className="shell">
       <nav className="topbar">
@@ -51,6 +69,11 @@ export function App() {
             <p>{feature.description}</p>
           </article>
         ))}
+      </section>
+
+      <section className="platformStatus" aria-label="Platform status">
+        <span className={status === 'online' ? 'statusDot online' : 'statusDot'} />
+        <span>API status: {status}</span>
       </section>
     </main>
   )

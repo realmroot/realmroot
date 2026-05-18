@@ -25,6 +25,17 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
   },
   test: {
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary', 'lcov'],
+      thresholds: {
+        branches: 60,
+        functions: 46,
+        lines: 62,
+        statements: 62,
+      },
+    },
     environment: 'jsdom',
+    exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**'],
   },
 }))

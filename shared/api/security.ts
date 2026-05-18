@@ -60,3 +60,22 @@ export const securityPasskeyRegistrationOptionsSchema = z.object({
 export const securityPasskeyVerificationSchema = z.record(z.string(), z.unknown())
 
 export type SecurityPolicy = z.infer<typeof securityPolicySchema>
+export type SecurityTotpEnrollmentInput = z.infer<typeof securityTotpEnrollmentSchema>
+export type SecurityTotpDisableInput = z.infer<typeof securityTotpDisableSchema>
+export type SecurityTotpVerificationInput = z.infer<typeof securityTotpVerificationSchema>
+export type SecurityOtpRequestInput = z.infer<typeof securityOtpRequestSchema>
+export type SecurityOtpVerificationInput = z.infer<typeof securityOtpVerificationSchema>
+export type SecurityBackupCodesInput = z.infer<typeof securityBackupCodesRequestSchema>
+export type SecurityPasskeyUpdateInput = z.infer<typeof securityPasskeyUpdateSchema>
+export type SecurityPasskeyRegistrationOptionsInput = z.infer<typeof securityPasskeyRegistrationOptionsSchema>
+export type SecurityPasskeyVerificationInput = z.infer<typeof securityPasskeyVerificationSchema>
+
+export type PasskeysResponse = {
+  passkeys: Array<{
+    id: string
+    name: string | null
+    deviceType: string
+    backedUp: boolean
+    createdAt: string | null
+  }>
+}
