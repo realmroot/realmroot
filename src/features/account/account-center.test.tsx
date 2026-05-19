@@ -30,8 +30,7 @@ describe('account center', () => {
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Avatar' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Email' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Identifiers' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Password' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'MFA' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Passkeys' })).toBeTruthy()
@@ -40,8 +39,8 @@ describe('account center', () => {
     expect(screen.getByRole('heading', { name: 'Authorized apps' })).toBeTruthy()
 
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
-    expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('64')
-    expect(document.querySelector('img.assetPreview')?.getAttribute('height')).toBe('64')
+    expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('48')
+    expect(document.querySelector('img.assetPreview')?.getAttribute('height')).toBe('48')
   })
 
   it('updates profile, email, and password from the profile section', async () => {
@@ -59,16 +58,24 @@ describe('account center', () => {
     const usernameInput = screen.getByLabelText('Username') as HTMLInputElement
     await user.clear(usernameInput)
     expect(usernameInput.value).toBe('')
-    await user.click(screen.getByRole('button', { name: 'Save profile' }))
+    await user.click(screen.getByRole('button', { name: 'Save identifiers' }))
 
     const emailInput = screen.getByLabelText('Email') as HTMLInputElement
     await user.clear(emailInput)
     await user.type(emailInput, 'new@example.com')
     expect(emailInput.value).toBe('new@example.com')
     await user.click(screen.getByRole('button', { name: 'Change email' }))
-    expect(document.querySelector('input[autocomplete="username"]')).toHaveProperty('value', 'jane@example.com')
+    expect(
+      screen
+        .getByRole('heading', { name: 'Password' })
+        .closest('section')
+        ?.querySelector('input[autocomplete="username"]'),
+    ).toHaveProperty('value', 'jane@example.com')
     expect(screen.getByLabelText('Current password').getAttribute('autocomplete')).toBe('current-password')
     expect(screen.getByLabelText('New password').getAttribute('autocomplete')).toBe('new-password')
+    expect(
+      screen.getByRole('heading', { name: 'MFA' }).closest('section')?.querySelector('input[autocomplete="username"]'),
+    ).toHaveProperty('value', 'jane@example.com')
     await user.type(screen.getByLabelText('Current password'), 'old-password')
     await user.type(screen.getByLabelText('New password'), 'new-password')
     await user.click(screen.getByRole('button', { name: 'Change password' }))
@@ -106,6 +113,12 @@ describe('account center', () => {
     render(<AccountCenterPage />)
 
     const avatarInput = (await screen.findByLabelText('Avatar image')) as HTMLInputElement
+    const requestsBeforeEmptySelection = requests.length
+    fireEvent.change(avatarInput, {
+      target: { files: [] },
+    })
+    expect(requests).toHaveLength(requestsBeforeEmptySelection)
+
     fireEvent.change(avatarInput, {
       target: { files: [new File(['avatar'], 'avatar.png', { type: 'image/png' })] },
     })

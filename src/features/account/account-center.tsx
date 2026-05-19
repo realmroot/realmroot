@@ -213,7 +213,12 @@ export function AccountCenter() {
           {!loading && data.profile ? (
             <div className="accountSectionStack">
               <ProfileSections profile={data.profile} mutate={mutate} />
-              <SecuritySections confirm={setConfirmation} data={data} mutate={mutate} />
+              <SecuritySections
+                confirm={setConfirmation}
+                data={data}
+                mutate={mutate}
+                profileEmail={data.profile.email}
+              />
               <ConnectionsSection accounts={data.linkedAccounts} confirm={setConfirmation} mutate={mutate} />
               <SessionsSection confirm={setConfirmation} sessions={data.sessions} mutate={mutate} />
               <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
@@ -284,38 +289,53 @@ function ProfileSections({ profile, mutate }: { profile: UserProfile; mutate: Mu
       <section className="settingsPanel">
         <h2>Profile</h2>
         <form className="formStack" onSubmit={saveProfile}>
+          <div className="assetUploadRow">
+            {avatarPreview ? (
+              <img alt="" className="assetPreview" src={avatarPreview} width="48" height="48" />
+            ) : (
+              <div className="assetPreview" aria-hidden="true">
+                <UserRound size={28} />
+              </div>
+            )}
+            <Field help="PNG, JPEG, or WebP up to 2 MB." label="Avatar image">
+              <TextInput
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => uploadAvatar(event.currentTarget.files?.[0])}
+                type="file"
+              />
+            </Field>
+          </div>
           <Field label="Display name">
-            <TextInput onChange={(event) => setDisplayName(event.target.value)} required value={displayName} />
-          </Field>
-          <Field label="Username">
-            <TextInput onChange={(event) => setUsername(event.target.value)} value={username} />
+            <TextInput
+              autoComplete="name"
+              onChange={(event) => setDisplayName(event.target.value)}
+              required
+              value={displayName}
+            />
           </Field>
           <Button type="submit">Save profile</Button>
         </form>
       </section>
       <section className="settingsPanel">
-        <h2>Avatar</h2>
-        <div className="assetUploadRow">
-          {avatarPreview ? (
-            <img alt="" className="assetPreview" src={avatarPreview} width="64" height="64" />
-          ) : (
-            <UserRound size={42} />
-          )}
-          <Field help="PNG, JPEG, or WebP up to 2 MB." label="Avatar image">
-            <TextInput
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(event) => uploadAvatar(event.currentTarget.files?.[0])}
-              type="file"
-            />
-          </Field>
-        </div>
-      </section>
-      <section className="settingsPanel">
-        <h2>Email</h2>
+        <h2>Identifiers</h2>
         <p className="muted">{profile.emailVerified ? 'Verified email address' : 'Verification required'}</p>
+        <form className="formStack" onSubmit={saveProfile}>
+          <Field label="Username">
+            <TextInput autoComplete="username" onChange={(event) => setUsername(event.target.value)} value={username} />
+          </Field>
+          <Button type="submit" variant="secondary">
+            Save identifiers
+          </Button>
+        </form>
         <form className="formStack" onSubmit={changeEmail}>
           <Field label="Email">
-            <TextInput onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
+            <TextInput
+              autoComplete="email"
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              type="email"
+              value={email}
+            />
           </Field>
           <Button type="submit" variant="secondary">
             <Mail size={18} />
@@ -360,10 +380,12 @@ function SecuritySections({
   confirm,
   data,
   mutate,
+  profileEmail,
 }: {
   confirm: ConfirmDestructiveHandler
   data: AccountData
   mutate: MutationHandler
+  profileEmail: string
 }) {
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
@@ -391,6 +413,7 @@ function SecuritySections({
             )
           }}
         >
+          <input autoComplete="username" hidden readOnly type="text" value={profileEmail} />
           <Field label="Password">
             <TextInput
               autoComplete="current-password"

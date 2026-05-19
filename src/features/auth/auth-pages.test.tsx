@@ -115,10 +115,14 @@ describe('hosted auth pages', () => {
     render(<SignInPage />)
 
     expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Password' })).toBeTruthy()
+    expect(screen.getByRole('main', { name: 'Hosted authentication' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Sign in to Acme.' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Password' }).className).toBe('active')
     expect(screen.getByRole('button', { name: 'Magic link' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'OTP' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeTruthy()
+    expect(screen.getByText('Powered by Acme ID')).toBeTruthy()
+    expect(screen.queryByText('Authenticator verification')).toBeNull()
   })
 
   it('renders social connector icon variants from configz metadata', async () => {
@@ -366,8 +370,12 @@ describe('hosted auth pages', () => {
 
     render(<SignInPage />)
 
-    fireEvent.change(await screen.findByLabelText('Email or username'), { target: { value: 'jane@example.com' } })
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    const identifier = await screen.findByLabelText('Email or username')
+    expect(identifier.getAttribute('autocomplete')).toBe('username')
+    fireEvent.change(identifier, { target: { value: 'jane@example.com' } })
+    const password = screen.getByLabelText('Password')
+    expect(password.getAttribute('autocomplete')).toBe('current-password')
+    fireEvent.change(password, { target: { value: 'password-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
     fireEvent.click(screen.getByRole('button', { name: 'OTP' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
@@ -667,6 +675,8 @@ describe('hosted auth pages', () => {
 
     fireEvent.change(await screen.findByLabelText('One-time code'), { target: { value: '123456' } })
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password' } })
+    expect(document.querySelector('input[autocomplete="username"]')).toHaveProperty('value', 'jane@example.com')
+    expect(screen.getByLabelText('New password').getAttribute('autocomplete')).toBe('new-password')
     fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
 
     await waitFor(() => {
@@ -724,6 +734,31 @@ describe('hosted auth pages', () => {
     })
   })
 
+  it('renders token password reset with a username field for password managers', async () => {
+    window.history.pushState(null, '', '/forgot-password?token=token-1')
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ success: true }))
+    })
+
+    render(<ForgotPasswordPage />)
+
+    expect((await screen.findByLabelText('New password')).getAttribute('autocomplete')).toBe('new-password')
+    expect(document.querySelector('input[autocomplete="username"]')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/reset-password',
+        body: { token: 'token-1', newPassword: 'new-password' },
+      })
+    })
+  })
+
   it('creates accounts through native sign-up and removes password fields after success', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -736,9 +771,13 @@ describe('hosted auth pages', () => {
     render(<SignUpPage />)
 
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Jane Stone' } })
-    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    const email = screen.getByLabelText('Email')
+    expect(email.getAttribute('autocomplete')).toBe('email')
+    fireEvent.change(email, { target: { value: 'jane@example.com' } })
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'jane' } })
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    const password = screen.getByLabelText('Password')
+    expect(password.getAttribute('autocomplete')).toBe('new-password')
+    fireEvent.change(password, { target: { value: 'password-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
 
     await waitFor(() => {
@@ -770,6 +809,7 @@ describe('hosted auth pages', () => {
     render(<SignUpPage />)
 
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Jane Stone' } })
+    expect(screen.getByLabelText('Email').getAttribute('autocomplete')).toBe('username')
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
     expect(screen.queryByLabelText('Username')).toBeNull()
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })

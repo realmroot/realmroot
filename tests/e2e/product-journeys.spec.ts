@@ -25,8 +25,7 @@ type JourneyId = (typeof journeyCoverage.journeys)[number]['id']
 
 const accountSections = [
   'Profile',
-  'Avatar',
-  'Email',
+  'Identifiers',
   'Password',
   'MFA',
   'Passkeys',
@@ -212,6 +211,47 @@ const journeyAssertions: Record<
       })
     },
   },
+  'normal-signup-signin-account': {
+    suite: 'public and auth journeys',
+    assert: async ({ page, requests }) => {
+      accountSignedIn = false
+      try {
+        await page.goto('/sign-up')
+        await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Jane Stone')
+        await page.getByLabel('Email').fill('jane@example.com')
+        await page.getByLabel('Username').fill('jane')
+        await page.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
+        await page.getByRole('button', { name: 'Create account' }).click()
+        await expect(page.getByText('Account created. Check your email if verification is required.')).toBeVisible()
+
+        await page.goto('/sign-in')
+        await page.getByLabel('Email or username').fill('jane@example.com')
+        await page.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
+        await page.getByRole('button', { name: 'Sign in' }).click()
+
+        await expect(page).toHaveURL(/\/account$/)
+        await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
+        await expectAccountSinglePageSections(page)
+        expect(requests).toContainEqual({
+          method: 'POST',
+          path: '/api/auth/sign-up/email',
+          body: {
+            email: 'jane@example.com',
+            name: 'Jane Stone',
+            password: 'password-1',
+            username: 'jane',
+          },
+        })
+        expect(requests).toContainEqual({
+          method: 'POST',
+          path: '/api/auth/sign-in/email',
+          body: { email: 'jane@example.com', password: 'password-1', rememberMe: true },
+        })
+      } finally {
+        accountSignedIn = true
+      }
+    },
+  },
   'password-recovery': {
     suite: 'public and auth journeys',
     assert: async ({ page }) => {
@@ -392,7 +432,7 @@ const journeyAssertions: Record<
         mimeType: 'image/png',
         buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       })
-      await expect(page.locator('section', { has: page.getByRole('heading', { name: 'Avatar' }) }).locator('img')).toBeVisible()
+      await expect(page.locator('section', { has: page.getByRole('heading', { name: 'Profile' }) }).locator('img')).toBeVisible()
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/account/avatar',
@@ -1394,10 +1434,10 @@ async function expectHostedAuthCompactShell(page: Page) {
   expect(metrics).not.toBeNull()
   expect(metrics?.panelWidth).toBeLessThanOrEqual(400)
   expect(metrics?.panelCenterOffset).toBeLessThanOrEqual(1)
-  expect(metrics?.panelBorderTopWidth).toBe(0)
-  expect(metrics?.panelBoxShadow).toBe('none')
+  expect(metrics?.panelBorderTopWidth).toBeLessThanOrEqual(1)
+  expect(metrics?.panelBoxShadow).not.toBe('none')
   expect(metrics?.headingFontSize).toBeLessThanOrEqual(24)
-  expect(metrics?.inputHeights.every((height) => height >= 40 && height <= 44)).toBe(true)
+  expect(metrics?.inputHeights.every((height) => height >= 38 && height <= 44)).toBe(true)
   expect(metrics?.buttonHeights.every((height) => height >= 32 && height <= 44)).toBe(true)
   expect(metrics?.heroCount).toBe(0)
 }
@@ -1516,6 +1556,10 @@ async function responseFor(path: string, method: string, body: unknown): Promise
   if (path === '/api/auth/sign-out' && method === 'POST') {
     accountSignedIn = false
     return {}
+  }
+  if (path === '/api/auth/sign-in/email' && method === 'POST') {
+    accountSignedIn = true
+    return { ok: true }
   }
   if (path === '/api/management/sign-in-settings') {
     if (method === 'PATCH') {

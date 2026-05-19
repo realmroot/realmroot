@@ -1,16 +1,4 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  CircleAlert,
-  Eye,
-  EyeOff,
-  Fingerprint,
-  KeyRound,
-  LinkIcon,
-  LoaderCircle,
-  Mail,
-  ShieldCheck,
-} from 'lucide-react'
+import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff, KeyRound, LinkIcon, LoaderCircle, Mail } from 'lucide-react'
 import { type ComponentProps, type FormEvent, useEffect, useMemo, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button, LinkButton } from '@/components/ui/button'
@@ -261,7 +249,6 @@ export function SignInPage() {
         {enabled?.signupEnabled ? <a href="/sign-up">Create account</a> : null}
         {enabled?.passwordEnabled ? <a href="/forgot-password">Forgot password?</a> : null}
       </div>
-      <ChallengePreview />
     </AuthLayout>
   )
 }
@@ -310,7 +297,7 @@ export function SignUpPage() {
           </Field>
           <Field label="Email">
             <TextInput
-              autoComplete="email"
+              autoComplete={config?.signIn.usernameEnabled ? 'email' : 'username'}
               onChange={(event) => setEmail(event.target.value)}
               required
               type="email"
@@ -441,6 +428,7 @@ export function ForgotPasswordPage() {
             />
           </Field>
         ) : null}
+        {token || otpRequested ? <input autoComplete="username" hidden readOnly type="text" value={email} /> : null}
         {token || otpRequested ? (
           <Field label="New password">
             <PasswordInput
@@ -712,22 +700,6 @@ function readRedirectUrl(response: unknown, options: { allowExternal?: boolean }
 function safeAuthRedirect(value: string, options: { allowExternal?: boolean } = {}) {
   if (options.allowExternal) return value
   return safeRedirectPath(value) ?? null
-}
-
-function ChallengePreview() {
-  return (
-    <fieldset className="challengeGrid">
-      <legend>Additional security challenges</legend>
-      <div>
-        <ShieldCheck size={18} />
-        <span>Authenticator verification</span>
-      </div>
-      <div>
-        <Fingerprint size={18} />
-        <span>Passkey sign-in support</span>
-      </div>
-    </fieldset>
-  )
 }
 
 function LoadingMessage({ label }: { label: string }) {

@@ -288,10 +288,15 @@ h1 {
 
 .authPanel {
   width: min(100%, 400px);
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 12%, var(--line));
+  border-radius: 8px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 16px 48px rgb(24 24 27 / 10%);
 }
 
 .authContent {
-  margin-top: 22px;
+  margin-top: 18px;
 }
 
 .authBrandPanel {
@@ -303,13 +308,14 @@ h1 {
 
 .authBrandPanel .brand {
   justify-content: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+  font-size: 14px;
 }
 
 .authBrandPanel h1 {
   max-width: 420px;
   margin: 0;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1.18;
 }
 
@@ -323,8 +329,8 @@ h1 {
 
 .authMessageIcon {
   display: grid;
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   margin-bottom: 4px;
   border: 1px solid color-mix(in srgb, var(--brand-primary) 18%, var(--line));
@@ -380,7 +386,7 @@ h1 {
 
 .formStack {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .compactForm {
@@ -403,7 +409,7 @@ h1 {
 
 .textInput {
   width: 100%;
-  min-height: 40px;
+  min-height: 38px;
   padding: 8px 10px;
   border: 1px solid #d4d4d8;
   border-radius: 8px;
@@ -477,17 +483,16 @@ h1 {
 
 .assetUploadRow {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  margin-bottom: 16px;
 }
 
 .assetPreview {
   display: grid;
   flex-shrink: 0;
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -585,7 +590,7 @@ h1 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   padding: 4px;
   border-radius: 8px;
   background: #f4f4f5;
@@ -675,7 +680,6 @@ h1 {
 }
 
 .socialGrid,
-.challengeGrid,
 .authLinks {
   display: grid;
   gap: 10px;
@@ -683,13 +687,13 @@ h1 {
 }
 
 .socialGrid,
-.challengeGrid {
+.socialGrid {
   padding: 0;
   border: 0;
 }
 
 .socialGrid legend,
-.challengeGrid legend {
+.socialGrid legend {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -697,8 +701,7 @@ h1 {
   clip: rect(0, 0, 0, 0);
 }
 
-.socialButton,
-.challengeGrid div {
+.socialButton {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -729,16 +732,6 @@ h1 {
   line-height: 1;
 }
 
-.challengeGrid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.challengeGrid div {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .authLinks {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -760,7 +753,7 @@ h1 {
 }
 
 .authPoweredBy {
-  margin-top: 22px;
+  margin-top: 18px;
   color: var(--muted);
   font-size: 12px;
   text-align: center;
@@ -774,8 +767,8 @@ h1 {
 
 .accountChrome {
   display: grid;
-  gap: 28px;
-  max-width: 1120px;
+  gap: 22px;
+  max-width: 820px;
   margin: 0 auto;
 }
 
@@ -809,7 +802,7 @@ h1 {
 
 .accountContent .settingsPanel {
   min-width: 0;
-  padding: 18px;
+  padding: 16px;
 }
 
 .accountContent .settingsPanel h2 {
@@ -818,6 +811,10 @@ h1 {
 
 .accountContent .settingsPanel > p {
   margin-bottom: 14px;
+}
+
+.accountContent .settingsPanel > .formStack + .formStack {
+  margin-top: 12px;
 }
 
 .itemList {
@@ -1101,7 +1098,6 @@ h1 {
 
   .segmented,
   .consentStack .buttonRow,
-  .challengeGrid,
   .authLinks,
   .accountNav {
     grid-template-columns: 1fr;

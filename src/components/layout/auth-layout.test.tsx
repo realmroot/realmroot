@@ -84,9 +84,10 @@ describe('AuthLayout', () => {
       </AuthLayout>,
     )
 
-    const shell = screen.getByRole('main')
+    const shell = screen.getByRole('main', { name: 'Hosted authentication' })
     expect(shell.getAttribute('style')).toContain('--brand-primary: #2563eb')
     expect(shell.getAttribute('style')).toContain('--auth-panel-radius: 12px')
+    expect(screen.getByRole('region', { name: 'Welcome' })).toBeTruthy()
     expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe(
       'https://cdn.example.com/favicon.ico',
     )
@@ -142,7 +143,8 @@ describe('AuthLayout', () => {
       </AuthLayout>,
     )
 
-    expect(screen.getByRole('main').className).toContain('authShell-message')
+    expect(screen.getByRole('main', { name: 'Hosted authentication' }).className).toContain('authShell-message')
+    expect(screen.getByRole('region', { name: 'Request expired.' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe('/sign-in')
     expect(screen.getByText('!').closest('.authMessageIcon')).toBeTruthy()
     expect(screen.queryByText('Acme ID')).toBeNull()

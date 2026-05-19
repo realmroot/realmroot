@@ -37,18 +37,18 @@ export function AuthLayout({
   }, [config?.branding.faviconUrl])
 
   return (
-    <main className={`authShell authShell-${variant}`} style={style}>
+    <main className={`authShell authShell-${variant}`} style={style} aria-label="Hosted authentication">
       {backHref ? (
         <a className="authBackLink" href={backHref}>
           <ArrowLeft aria-hidden="true" size={16} />
           {backLabel}
         </a>
       ) : null}
-      <section className="authPanel" aria-label={title}>
+      <section className="authPanel" aria-labelledby="auth-title">
         <div className="authBrandPanel">
           {icon ? <div className="authMessageIcon">{icon}</div> : <BrandIdentity config={config} />}
           {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-          <h1>{title}</h1>
+          <h1 id="auth-title">{title}</h1>
           <p>{description}</p>
         </div>
         <div className="authContent">{children}</div>
