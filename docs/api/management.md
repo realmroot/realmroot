@@ -10,6 +10,10 @@ The Management API is mounted at:
 
 The older `/api/admin/*` routes remain available for the operator UI and compatibility, but `/api/management/*` is the public v1.0 contract.
 
+Product applications should not use this API for sign-in, session, or profile
+integration. Products consume FlareAuth through standard OIDC discovery and
+authorization code with PKCE under `/api/auth/*`.
+
 ## Authentication And Authorization
 
 Every Management API route requires an authenticated administrator session. Requests without a session return `401`; authenticated non-admin users return `403`.
@@ -80,6 +84,7 @@ Connector `providerType` is restricted to `social` and `generic_oauth`, matching
 
 `GET /connectors/{id}/readiness` returns a configuration-readiness report for the saved connector. It checks stored configuration and runtime secret binding availability without returning raw secret values or contacting third-party providers.
 - Sign-in settings: `/sign-in-settings`.
+- Branding settings: `/branding-settings`.
 - Readiness: `/readiness`.
 - Organizations: `/organizations`, `/organizations/{id}`, `POST /organizations/{id}/logo`, `/organizations/{id}/members`, `/organizations/{id}/invitations`.
 - Branding assets: `POST /branding/logo`, `POST /branding/favicon`.
@@ -101,6 +106,12 @@ Roles and API resources are complete resource-style surfaces. `GET /api-resource
 Role assignments are idempotent `POST` requests. `roleId` identifies the role, `subjectId` is the user id, application id, or organization member id for the selected assignment endpoint, and optional `tokenClaims` must not override reserved `authorization`, `roles`, `permissions`, or URL-namespaced claims.
 
 Security administrators can delete a user passkey with `DELETE /security/users/{id}/passkeys/{passkeyId}`, revoke all user sessions with `DELETE /security/users/{id}/sessions`, and revoke one user session with `DELETE /security/users/{id}/sessions/{sessionId}`.
+
+Compatibility action routes inherited from the admin UI surface remain
+documented in OpenAPI and marked deprecated where appropriate. New Management API
+consumers should prefer resource-shaped routes such as
+`POST /users/password-reset-requests`, `PUT /users/{id}/ban`,
+`DELETE /users/{id}/ban`, and the top-level role assignment resources.
 
 ## Asset Uploads
 
@@ -129,4 +140,4 @@ Uploaded assets are returned with a same-origin public URL at `/api/assets/{asse
 
 `missing` currently contains `oidc_application` when no OIDC client exists. Future readiness checks should add explicit enum values rather than overloading this field with display copy.
 
-The maintained OpenAPI contract lives in [management.openapi.json](./management.openapi.json).
+The maintained OpenAPI contract lives in [management.openapi.json](./management.openapi.json). Contract tests compare the mounted Hono Management route table to this document so newly implemented Management endpoints fail tests until OpenAPI coverage is added.

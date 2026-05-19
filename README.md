@@ -91,6 +91,18 @@ First-admin onboarding is available only while the D1 database has no users. Aft
 
 Frontend runtime state is read from `/api/configz`. Hosted auth actions use Better Auth native `/api/auth/*` routes, and product applications should integrate with standard OIDC discovery plus authorization code with PKCE. If a consuming product also uses Better Auth, it can use Better Auth as an OIDC client; product apps do not need FlareAuth management or account APIs.
 
+## Product App Integration
+
+FlareAuth is consumed through standard OIDC, not a product-side FlareAuth SDK.
+Use `/api/auth/.well-known/openid-configuration`, then run authorization code
+with PKCE against the advertised authorize and token endpoints. Public clients
+must use PKCE S256 and the client auth method shown on their FlareAuth client
+record; Better Auth 1.6.10 does not advertise public-client `none` support in
+discovery metadata while unauthenticated dynamic registration is disabled.
+Confidential server clients authenticate at the token endpoint. Better Auth
+product apps can register FlareAuth as a generic OAuth/OIDC provider. See
+[Auth Provider Architecture](docs/architecture/auth-provider.md#product-application-integration).
+
 ## Deployment Docs
 
 - [Cloudflare deployment](docs/deploy/cloudflare.md)

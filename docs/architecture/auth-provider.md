@@ -83,6 +83,115 @@ OAuth clients are first-class provider records in `oauth_client`.
 - `skipConsent` is reserved for trusted first-party clients only.
 - Client ownership is currently user-based through `user_id`; `reference_id` is reserved for future organization-owned clients.
 
+## Product Application Integration
+
+Product applications integrate with FlareAuth as a standard OIDC provider. They
+should not call FlareAuth `/api/management/*` or `/api/account/*` routes and do
+not need a FlareAuth custom SDK.
+
+Use discovery to get the current protocol endpoints:
+
+```bash
+FLAREAUTH_ORIGIN=https://auth.example.com
+curl "$FLAREAUTH_ORIGIN/api/auth/.well-known/openid-configuration"
+```
+
+The issuer is:
+
+```text
+https://auth.example.com/api/auth
+```
+
+Public browser, native, SPA, and CLI clients use authorization code with PKCE
+S256. Generate a verifier and challenge in the product app, save the verifier
+and `state` in same-site app state, then redirect:
+
+```js
+const verifierBytes = crypto.getRandomValues(new Uint8Array(32))
+const verifier = btoa(String.fromCharCode(...verifierBytes))
+  .replace(/\+/g, '-')
+  .replace(/\//g, '_')
+  .replace(/=+$/, '')
+const challengeBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+const challenge = btoa(String.fromCharCode(...new Uint8Array(challengeBytes)))
+  .replace(/\+/g, '-')
+  .replace(/\//g, '_')
+  .replace(/=+$/, '')
+
+const authorizeUrl = new URL('https://auth.example.com/api/auth/oauth2/authorize')
+authorizeUrl.search = new URLSearchParams({
+  client_id: 'public-client-id',
+  redirect_uri: 'https://app.example.com/auth/callback',
+  response_type: 'code',
+  scope: 'openid profile email offline_access',
+  state: crypto.randomUUID(),
+  code_challenge: challenge,
+  code_challenge_method: 'S256',
+}).toString()
+
+location.assign(authorizeUrl)
+```
+
+On callback, reject the response unless the returned `state` exactly matches the
+saved value. Exchange the callback `code` with the saved verifier. Public-client
+records use `token_endpoint_auth_method: "none"` and send no client secret, even
+though Better Auth 1.6.10 currently omits `none` from discovery metadata while
+unauthenticated dynamic registration is disabled:
+
+```bash
+curl -X POST "$FLAREAUTH_ORIGIN/api/auth/oauth2/token" \
+  -H 'content-type: application/x-www-form-urlencoded' \
+  --data-urlencode 'grant_type=authorization_code' \
+  --data-urlencode 'client_id=public-client-id' \
+  --data-urlencode 'redirect_uri=https://app.example.com/auth/callback' \
+  --data-urlencode 'code=AUTHORIZATION_CODE_FROM_CALLBACK' \
+  --data-urlencode 'code_verifier=SAVED_PKCE_VERIFIER'
+```
+
+Confidential server-side clients use the same authorization request and include
+client authentication at the token endpoint:
+
+```bash
+curl -X POST "$FLAREAUTH_ORIGIN/api/auth/oauth2/token" \
+  -u 'confidential-client-id:one-time-client-secret' \
+  -H 'content-type: application/x-www-form-urlencoded' \
+  --data-urlencode 'grant_type=authorization_code' \
+  --data-urlencode 'redirect_uri=https://app.example.com/auth/callback' \
+  --data-urlencode 'code=AUTHORIZATION_CODE_FROM_CALLBACK'
+```
+
+Use the advertised `jwks_uri` to verify JWT access tokens and ID tokens. Call the
+advertised `userinfo_endpoint` with a bearer access token when the product needs
+normalized OpenID profile claims. Request `offline_access` only when the product
+needs refresh tokens.
+
+Better Auth applications can use FlareAuth as an OIDC-compatible upstream through
+the generic OAuth plugin:
+
+```ts
+import { betterAuth } from 'better-auth'
+import { genericOAuth } from 'better-auth/plugins'
+
+export const auth = betterAuth({
+  plugins: [
+    genericOAuth({
+      config: [
+        {
+          providerId: 'flareauth',
+          discoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+          issuer: 'https://auth.example.com/api/auth',
+          clientId: process.env.FLAREAUTH_CLIENT_ID!,
+          clientSecret: process.env.FLAREAUTH_CLIENT_SECRET,
+          redirectURI: 'https://app.example.com/api/auth/callback/flareauth',
+          scopes: ['openid', 'profile', 'email'],
+          pkce: true,
+        },
+      ],
+    }),
+  ],
+})
+```
+
 ## Secret Handling
 
 - `BETTER_AUTH_SECRET` remains the root Better Auth signing secret and must be configured per environment.

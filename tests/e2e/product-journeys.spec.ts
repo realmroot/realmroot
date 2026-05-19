@@ -309,7 +309,7 @@ const journeyAssertions: Record<
       await page.goto('/account')
       await page.getByLabel('Display name').fill('Jane Q. Stone')
       await page.getByRole('button', { name: 'Save profile' }).click()
-      expect(requests).toContainEqual({
+      await expect.poll(() => requests).toContainEqual({
         method: 'PATCH',
         path: '/api/account/profile',
         body: { displayName: 'Jane Q. Stone', username: 'jane', avatarAssetId: null },
