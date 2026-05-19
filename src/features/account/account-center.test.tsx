@@ -39,7 +39,9 @@ describe('account center', () => {
 
     render(<AccountCenterPage />)
 
-    fireEvent.change(await screen.findByLabelText('Display name'), { target: { value: 'Jane Updated' } })
+    const displayNameInput = (await screen.findByLabelText('Display name')) as HTMLInputElement
+    fireEvent.change(displayNameInput, { target: { value: 'Jane Updated' } })
+    await waitFor(() => expect(displayNameInput.value).toBe('Jane Updated'))
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
@@ -94,6 +96,21 @@ describe('account center', () => {
     })
   })
 
+  it('does not upload an avatar when no file is selected', async () => {
+    const requests = mockAccountFetch()
+
+    render(<AccountCenterPage />)
+
+    const avatarInput = (await screen.findByLabelText('Avatar image')) as HTMLInputElement
+    fireEvent.change(avatarInput, { target: { files: [] } })
+
+    expect(requests).not.toContainEqual({
+      path: '/api/account/avatar',
+      method: 'POST',
+      body: '[form-data]',
+    })
+  })
+
   it('shows TOTP enrollment setup data before verification', async () => {
     const requests = mockAccountFetch()
 
@@ -113,6 +130,29 @@ describe('account center', () => {
       body: { password: 'password-1' },
       method: 'POST',
     })
+  })
+
+  it('shows TOTP enrollment setup without a QR code when only text setup data is returned', async () => {
+    mockAccountFetch(
+      {},
+      {
+        totpEnrollment: {
+          totpURI: 'otpauth://totp/Acme:jane@example.com?secret=TEXTONLY',
+          secret: 'TEXTONLY',
+        },
+      },
+    )
+
+    render(<AccountCenter section="security" />)
+
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enroll authenticator app' }))
+
+    expect(await screen.findByText('Authenticator setup')).toBeTruthy()
+    expect(screen.queryByAltText('Authenticator app QR code')).toBeNull()
+    expect(screen.getByText('otpauth://totp/Acme:jane@example.com?secret=TEXTONLY')).toBeTruthy()
+    expect(screen.getByText('TEXTONLY')).toBeTruthy()
   })
 
   it('completes passkey registration with WebAuthn create and verification', async () => {
@@ -367,13 +407,17 @@ type MockProfile = Omit<ReturnType<typeof profile>, 'image'> & {
   image: string | null
 }
 
+type MockAccountOptions = {
+  totpEnrollment?: Record<string, unknown>
+}
+
 function clickAndConfirm(triggerName: string, confirmName: string) {
   fireEvent.click(screen.getByRole('button', { name: triggerName }))
   const buttons = screen.getAllByRole('button', { name: confirmName })
   fireEvent.click(buttons.at(-1) as HTMLButtonElement)
 }
 
-function mockAccountFetch(profileOverrides: Partial<MockProfile> = {}) {
+function mockAccountFetch(profileOverrides: Partial<MockProfile> = {}, options: MockAccountOptions = {}) {
   const requests: RequestRecord[] = []
   vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
     const path = String(input)
@@ -390,11 +434,13 @@ function mockAccountFetch(profileOverrides: Partial<MockProfile> = {}) {
     if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: passkeys() }))
     if (path === '/api/account/security/mfa/totp-enrollment') {
       return Promise.resolve(
-        jsonResponse({
-          qrCode: 'data:image/png;base64,ZmFrZQ',
-          totpURI: 'otpauth://totp/Acme:jane@example.com?secret=ABC123',
-          secret: 'ABC123',
-        }),
+        jsonResponse(
+          options.totpEnrollment ?? {
+            qrCode: 'data:image/png;base64,ZmFrZQ',
+            totpURI: 'otpauth://totp/Acme:jane@example.com?secret=ABC123',
+            secret: 'ABC123',
+          },
+        ),
       )
     }
     if (path === '/api/account/security/passkeys/registration-options') {
