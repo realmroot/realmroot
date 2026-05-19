@@ -202,7 +202,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
           label: 'Create an OIDC application',
           description: 'Register the first client so product routes can complete authorization code flows.',
           complete: hasOidcApplication,
-          href: '/admin/onboarding',
+          href: '/console/onboarding',
           action: 'Create client',
         }),
         readinessItem({
@@ -210,7 +210,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
           label: 'Enable a sign-in method',
           description: 'Keep at least one hosted sign-in method available for users.',
           complete: hasSignInMethod,
-          href: '/admin/sign-in',
+          href: '/console/sign-in-experience/sign-up-and-sign-in',
           action: 'Review methods',
         }),
       ]
@@ -221,7 +221,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
           description:
             'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
           complete: emailDeliveryReady,
-          href: '/admin/deployment',
+          href: '/console/tenant-settings/oidc-configs',
           action: 'Review deployment',
         }),
         readinessItem({
@@ -229,7 +229,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
           label: 'Set branding basics',
           description: 'Product name, colors, logo, and favicon make hosted auth recognizable to users.',
           complete: brandingReady,
-          href: '/admin/branding',
+          href: '/console/sign-in-experience/branding',
           action: 'Edit branding',
         }),
         readinessItem({
@@ -237,7 +237,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
           label: 'Review security baseline',
           description: 'MFA or passkeys should be enabled before production rollout.',
           complete: securityReady,
-          href: '/admin/security',
+          href: '/console/security/password-policy',
           action: 'Review security',
         }),
         readinessItem({
@@ -245,7 +245,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
           label: 'Check connector status',
           description: 'Social sign-in should have at least one enabled connector, or stay disabled until configured.',
           complete: connectorReady,
-          href: '/admin/connectors',
+          href: '/console/connectors/passwordless',
           action: 'Review connectors',
         }),
       ]
@@ -257,7 +257,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
         recommended,
         admin: {
           setupRequired: missing.length > 0,
-          setupHref: '/admin/onboarding',
+          setupHref: '/console/onboarding',
           missing,
         },
       } satisfies ManagementReadinessResponse

@@ -158,7 +158,7 @@ const optionalAuthorizationFieldNames = new Set([
 export function AdminDashboardPage() {
   const query = useQuery({ queryKey: adminQueryKeys.dashboard, queryFn: getAdminDashboard })
 
-  if (query.isLoading) return <LoadingState label="Loading admin dashboard" />
+  if (query.isLoading) return <LoadingState label="Loading Console dashboard" />
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />
 
   const dashboard = query.data
@@ -422,7 +422,7 @@ export function ApplicationsPage() {
             {query.data.applications.map((application) => (
               <TableRow key={application.id}>
                 <TableCell>
-                  <a className="font-medium hover:underline" href={`/admin/applications/${application.id}`}>
+                  <a className="font-medium hover:underline" href={`/console/applications/${application.id}`}>
                     {application.name}
                   </a>
                   <div className="text-xs text-muted-foreground">{application.slug}</div>
@@ -517,7 +517,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.readiness }),
       ])
-      await navigate({ to: '/admin/applications' })
+      await navigate({ to: '/console/applications' })
     },
   })
   const logoMutation = useAdminMutation({
@@ -537,7 +537,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
       description="Review client configuration, manage redirect URIs, rotate confidential secrets, and copy standard OIDC integration details."
       framed={false}
       action={
-        <Link className="uiButton uiButton-secondary" to="/admin/applications">
+        <Link className="uiButton uiButton-secondary" to="/console/applications">
           Back to applications
         </Link>
       }
@@ -579,7 +579,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
                   onClick={() =>
                     updateMutation.mutate({
                       disabled: !application.disabled,
-                      disabledReason: application.disabled ? null : 'Disabled from admin console',
+                      disabledReason: application.disabled ? null : 'Disabled from Console',
                     })
                   }
                   type="button"
@@ -753,8 +753,8 @@ export function AdminOnboardingPage() {
 
   return (
     <ResourcePage
-      title="Admin onboarding"
-      description="Complete required setup gates, then review production recommendations without blocking the console."
+      title="Console setup"
+      description="Complete required setup gates, then review production recommendations without blocking the Console."
       error={readinessQuery.error ?? createMutation.error}
       framed={false}
       loading={readinessQuery.isLoading}
@@ -767,7 +767,7 @@ export function AdminOnboardingPage() {
               <div>
                 <CardTitle>Setup checklist</CardTitle>
                 <CardDescription>
-                  Required items unlock admin routes. Recommended items prepare production.
+                  Required items unlock Console routes. Recommended items prepare production.
                 </CardDescription>
               </div>
               <Badge variant={readinessQuery.data?.admin?.setupRequired ? 'outline' : 'secondary'}>
@@ -983,7 +983,7 @@ export function UsersPage() {
             {query.data?.users.map((user) => (
               <TableRow key={user.id}>
                 <TableCell>
-                  <a className="font-medium hover:underline" href={`/admin/users/${user.id}`}>
+                  <a className="font-medium hover:underline" href={`/console/users/${user.id}`}>
                     {userDisplayName(user)}
                   </a>
                   <div className="text-xs text-muted-foreground">{user.id}</div>
@@ -1114,7 +1114,7 @@ export function UserDetailPage({ userId }: { userId: string }) {
     mutationFn: () => deleteUser(userId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
-      await navigate({ to: '/admin/users' })
+      await navigate({ to: '/console/users' })
     },
   })
   const revokeAllMutation = useMutation({
@@ -1141,7 +1141,7 @@ export function UserDetailPage({ userId }: { userId: string }) {
       description="Inspect profile, access state, linked accounts, MFA, passkeys, sessions, and account operations."
       framed={false}
       action={
-        <Link className="uiButton uiButton-secondary" to="/admin/users">
+        <Link className="uiButton uiButton-secondary" to="/console/users">
           Back to users
         </Link>
       }
@@ -1954,14 +1954,14 @@ export function SignInSettingsPage() {
   )
 }
 
-export function SecurityPage() {
+export function SecurityPage({ title = 'Security' }: { title?: string }) {
   const query = useQuery({ queryKey: adminQueryKeys.security, queryFn: getSecurityPolicy })
   const [tab, setTab] = useState('mfa')
 
   return (
     <ResourcePage
-      title="Security"
-      description="Review MFA, passkey, and session policy surfaced by the admin API."
+      title={title}
+      description="Review MFA, passkey, and session policy surfaced by the management API."
       error={query.error}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
@@ -2141,7 +2141,7 @@ export function RolesPage() {
           {query.data?.roles.map((role) => (
             <TableRow key={role.id}>
               <TableCell>
-                <a className="font-medium hover:underline" href={`/admin/roles/${role.id}`}>
+                <a className="font-medium hover:underline" href={`/console/roles/${role.id}`}>
                   {role.name}
                 </a>
                 <div className="text-xs text-muted-foreground">{role.key}</div>
@@ -2199,7 +2199,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
     mutationFn: () => deleteRole(roleId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.roles })
-      await navigate({ to: '/admin/roles' })
+      await navigate({ to: '/console/roles' })
     },
   })
   const permissionMutation = useMutation({
@@ -2223,7 +2223,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
       description="Manage role metadata, API permissions, and user, application, or organization member assignments."
       framed={false}
       action={
-        <a className="uiButton uiButton-secondary" href="/admin/roles">
+        <a className="uiButton uiButton-secondary" href="/console/roles">
           Back to roles
         </a>
       }
@@ -2461,7 +2461,7 @@ export function ApiResourcesPage() {
           {query.data?.resources.map((resource) => (
             <TableRow key={resource.id}>
               <TableCell>
-                <a className="font-medium hover:underline" href={`/admin/api-resources/${resource.id}`}>
+                <a className="font-medium hover:underline" href={`/console/api-resources/${resource.id}`}>
                   {resource.name}
                 </a>
                 <div className="text-xs text-muted-foreground">{resource.identifier}</div>
@@ -2510,7 +2510,7 @@ export function ApiResourceDetailPage({ resourceId }: { resourceId: string }) {
     mutationFn: () => deleteApiResource(resourceId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.apiResources })
-      await navigate({ to: '/admin/api-resources' })
+      await navigate({ to: '/console/api-resources' })
     },
   })
   const createScopeMutation = useMutation({
@@ -2549,7 +2549,7 @@ export function ApiResourceDetailPage({ resourceId }: { resourceId: string }) {
       description="Manage the protected API audience, OAuth scopes, and permission keys used by RBAC roles."
       framed={false}
       action={
-        <a className="uiButton uiButton-secondary" href="/admin/api-resources">
+        <a className="uiButton uiButton-secondary" href="/console/api-resources">
           Back to API resources
         </a>
       }
@@ -2924,15 +2924,12 @@ export function BrandingPage() {
 
 export function DeploymentSettingsPage() {
   return (
-    <ResourcePage
-      title="Deployment"
-      description="Operational settings and public metadata for this Cloudflare deployment."
-    >
+    <ResourcePage title="OIDC configs" description="Review issuer metadata and management endpoints for this tenant.">
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Runtime</CardTitle>
-            <CardDescription>Static console settings tied to the current deployment.</CardDescription>
+            <CardTitle>Runtime endpoints</CardTitle>
+            <CardDescription>Static Console settings tied to the current deployment.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <SettingRow label="Platform" value="Cloudflare Workers" />
@@ -2942,6 +2939,32 @@ export function DeploymentSettingsPage() {
           </CardContent>
         </Card>
       </div>
+    </ResourcePage>
+  )
+}
+
+export function ConsolePlaceholderPage({
+  description,
+  rows,
+  title,
+}: {
+  description: string
+  rows: Array<[string, string]>
+  title: string
+}) {
+  return (
+    <ResourcePage title={title} description={description} framed={false}>
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {rows.map(([label, value]) => (
+            <SettingRow key={label} label={label} value={value} />
+          ))}
+        </CardContent>
+      </Card>
     </ResourcePage>
   )
 }
@@ -3135,7 +3158,7 @@ function ResourcePage({
         action={empty ? undefined : action}
         breadcrumb={['Console', title]}
         description={description}
-        eyebrow="Admin"
+        eyebrow="Console"
         title={title}
       />
       {toolbar ? <div className="max-w-sm">{toolbar}</div> : null}

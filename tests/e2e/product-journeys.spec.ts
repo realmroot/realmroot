@@ -453,10 +453,10 @@ const journeyAssertions: Record<
   'admin-dashboard': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin')
+      await page.goto('/console')
       await expect(page.getByRole('heading', { name: 'Tenant health' })).toBeVisible()
-      await page.goto('/admin/onboarding')
-      await expect(page).toHaveURL(/\/admin$/)
+      await page.goto('/console/onboarding')
+      await expect(page).toHaveURL(/\/console$/)
       await expect(page.getByRole('heading', { name: 'Tenant health' })).toBeVisible()
     },
   },
@@ -465,12 +465,12 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       adminSetupRequired = true
       try {
-        await page.goto('/admin/applications')
-        await expect(page).toHaveURL(/\/admin\/onboarding$/)
-        await expect(page.getByRole('heading', { name: 'Admin onboarding' })).toBeVisible()
+        await page.goto('/console/applications')
+        await expect(page).toHaveURL(/\/console\/onboarding$/)
+        await expect(page.getByRole('heading', { name: 'Console setup' })).toBeVisible()
         await expect(page.getByText('Setup checklist')).toBeVisible()
         await expect(page.getByText('Create an OIDC application')).toBeVisible()
-        await expect(page.getByRole('navigation', { name: 'Admin' }).getByText('Onboarding')).toHaveCount(0)
+        await expect(page.getByRole('navigation', { name: 'Console' }).getByText('Onboarding')).toHaveCount(0)
       } finally {
         adminSetupRequired = false
       }
@@ -481,8 +481,8 @@ const journeyAssertions: Record<
     assert: async ({ page, requests }) => {
       adminSetupRequired = true
       try {
-        await page.goto('/admin/onboarding')
-        await expect(page.getByRole('heading', { name: 'Admin onboarding' })).toBeVisible()
+        await page.goto('/console/onboarding')
+        await expect(page.getByRole('heading', { name: 'Console setup' })).toBeVisible()
         await page.getByLabel('Application name').fill('Review client')
         await page.getByLabel('Slug').fill('review-client')
         await page.getByLabel('Redirect URIs').fill('http://localhost:4173/oidc/callback')
@@ -507,35 +507,48 @@ const journeyAssertions: Record<
   'admin-route-backed-navigation': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin')
-      const adminNav = page.getByRole('navigation', { name: 'Admin' })
-      await expect(adminNav.getByText('Onboarding')).toHaveCount(0)
+      await page.goto('/console')
+      const consoleNav = page.getByRole('navigation', { name: 'Console' })
+      await expect(consoleNav.getByText('Onboarding')).toHaveCount(0)
 
       for (const item of [
-        { label: 'Dashboard', href: '/admin', heading: 'Tenant health' },
-        { label: 'Applications', href: '/admin/applications', heading: 'Applications' },
-        { label: 'Users', href: '/admin/users', heading: 'Users' },
-        { label: 'Connectors', href: '/admin/connectors', heading: 'Connectors' },
-        { label: 'Sign-in experience', href: '/admin/sign-in', heading: 'Sign-in experience' },
-        { label: 'Security', href: '/admin/security', heading: 'Security' },
-        { label: 'Organizations', href: '/admin/organizations', heading: 'Organizations' },
-        { label: 'Roles', href: '/admin/roles', heading: 'Roles' },
-        { label: 'API resources', href: '/admin/api-resources', heading: 'API resources' },
-        { label: 'Branding', href: '/admin/branding', heading: 'Branding' },
-        { label: 'Deployment', href: '/admin/deployment', heading: 'Deployment' },
+        { label: 'Dashboard', href: '/console', heading: 'Tenant health' },
+        { label: 'Applications', href: '/console/applications', heading: 'Applications' },
+        {
+          label: 'Sign-in & account',
+          href: '/console/sign-in-experience/sign-up-and-sign-in',
+          heading: 'Sign-in experience',
+        },
+        { label: 'Multi-factor auth', href: '/console/mfa', heading: 'Multi-factor auth' },
+        { label: 'Connectors', href: '/console/connectors/passwordless', heading: 'Connectors' },
+        { label: 'Security', href: '/console/security/password-policy', heading: 'Security' },
+        { label: 'API resources', href: '/console/api-resources', heading: 'API resources' },
+        { label: 'Roles', href: '/console/roles', heading: 'Roles' },
+        {
+          label: 'Organization template',
+          href: '/console/organization-template/organization-roles',
+          heading: 'Organization roles',
+        },
+        { label: 'Organizations', href: '/console/organizations', heading: 'Organizations' },
+        { label: 'User management', href: '/console/users', heading: 'Users' },
+        { label: 'Custom JWT', href: '/console/customize-jwt', heading: 'Custom JWT' },
+        { label: 'Webhooks', href: '/console/webhooks', heading: 'Webhooks' },
+        { label: 'Audit logs', href: '/console/audit-logs', heading: 'Audit logs' },
+        { label: 'Settings', href: '/console/tenant-settings/oidc-configs', heading: 'OIDC configs' },
       ]) {
-        const link = adminNav.getByRole('link', { name: item.label })
+        const link = consoleNav.locator(`a[href="${item.href}"]`)
+        await expect(link).toContainText(item.label)
         await expect(link).toHaveAttribute('href', item.href)
         await link.click()
         await expect(page).toHaveURL(new RegExp(`${item.href.replace('/', '\\/')}$`))
-        await expect(page.getByRole('heading', { name: item.heading })).toBeVisible()
+        await expect(page.getByRole('heading', { name: item.heading }).first()).toBeVisible()
       }
     },
   },
   'admin-application-inventory': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin/applications')
+      await page.goto('/console/applications')
       await expect(page.getByRole('heading', { name: 'Applications' })).toBeVisible()
       await expect(page.getByRole('link', { name: 'Customer portal' })).toBeVisible()
       await expect(page.getByText('client-1')).toBeVisible()
@@ -546,7 +559,7 @@ const journeyAssertions: Record<
   'admin-create-user': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
-      await page.goto('/admin/users')
+      await page.goto('/console/users')
       await expect(page.getByText('jane@example.com')).toBeVisible()
       await page.getByRole('button', { name: 'New user' }).click()
       await page.getByLabel('Email').fill('new@example.com')
@@ -562,7 +575,7 @@ const journeyAssertions: Record<
   'admin-user-inventory': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin/users')
+      await page.goto('/console/users')
       await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible()
       await page.getByLabel('Search users').fill('jane')
       await expect(page.getByText('Jane Stone')).toBeVisible()
@@ -574,9 +587,9 @@ const journeyAssertions: Record<
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
       adminUserBanned = false
-      await page.goto('/admin/users')
+      await page.goto('/console/users')
       await page.getByRole('link', { name: 'Jane Stone' }).click()
-      await expect(page).toHaveURL(/\/admin\/users\/user-1$/)
+      await expect(page).toHaveURL(/\/console\/users\/user-1$/)
       await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
       await expect(page.getByText('MFA and passkeys')).toBeVisible()
       await expect(page.getByText('github-jane')).toBeVisible()
@@ -643,7 +656,7 @@ const journeyAssertions: Record<
   'admin-create-application': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
-      await page.goto('/admin/applications')
+      await page.goto('/console/applications')
       await expect(page.getByRole('link', { name: 'Customer portal' })).toBeVisible()
       await page.getByRole('button', { name: 'New application' }).click()
       await page.getByLabel('Name').fill('Admin console')
@@ -666,7 +679,7 @@ const journeyAssertions: Record<
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
       applicationDisabled = false
-      await page.goto('/admin/applications/app-1')
+      await page.goto('/console/applications/app-1')
       await expect(page.getByRole('heading', { name: 'Customer portal' })).toBeVisible()
       await expect(page.getByText('Use these values with any standards-compliant OIDC SDK.')).toBeVisible()
       await expect(page.getByText('https://auth.example.com/api/auth/.well-known/openid-configuration')).toBeVisible()
@@ -682,7 +695,7 @@ const journeyAssertions: Record<
       await page.getByRole('button', { name: 'Save redirect URIs' }).click()
       await page.getByRole('button', { name: 'Disable application' }).click()
       await page.getByRole('button', { name: 'Enable application' }).click()
-      await page.goto('/admin/applications/confidential-app')
+      await page.goto('/console/applications/confidential-app')
       await expect(page.getByRole('heading', { name: 'Server app' })).toBeVisible()
       await expect(page.getByText('fas_existing')).toBeVisible()
       await page.getByRole('button', { name: 'Rotate client secret' }).click()
@@ -700,7 +713,7 @@ const journeyAssertions: Record<
       expect(requests).toContainEqual({
         method: 'PATCH',
         path: '/api/management/applications/app-1',
-        body: { disabled: true, disabledReason: 'Disabled from admin console' },
+        body: { disabled: true, disabledReason: 'Disabled from Console' },
       })
       expect(requests).toContainEqual({
         method: 'PATCH',
@@ -717,7 +730,7 @@ const journeyAssertions: Record<
   'admin-connector-inventory': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin/connectors')
+      await page.goto('/console/connectors/passwordless')
       await expect(page.getByRole('heading', { name: 'Connectors' })).toBeVisible()
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await expect(page.getByRole('cell', { name: 'github', exact: true })).toBeVisible()
@@ -728,7 +741,7 @@ const journeyAssertions: Record<
   'admin-sign-in-settings': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
-      await page.goto('/admin/sign-in')
+      await page.goto('/console/sign-in-experience/sign-up-and-sign-in')
       await expect(page.getByRole('heading', { name: 'Sign-in experience' })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Authentication methods' })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Defaults and links' })).toBeVisible()
@@ -766,10 +779,29 @@ const journeyAssertions: Record<
       })
     },
   },
+  'admin-sign-in-experience-routes': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      for (const route of [
+        {
+          path: '/console/sign-in-experience/sign-up-and-sign-in',
+          heading: 'Sign-in experience',
+        },
+        { path: '/console/sign-in-experience/branding', heading: 'Branding' },
+        { path: '/console/sign-in-experience/collect-user-profile', heading: 'Collect user profile' },
+        { path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
+        { path: '/console/sign-in-experience/content', heading: 'Content' },
+      ]) {
+        await page.goto(route.path)
+        await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`))
+        await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible()
+      }
+    },
+  },
   'admin-security-policy': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin/security')
+      await page.goto('/console/security/password-policy')
       await expect(page.getByRole('heading', { name: 'Security' })).toBeVisible()
       await expect(page.getByText('Multi-factor authentication')).toBeVisible()
       await expect(page.getByText('Mode')).toBeVisible()
@@ -791,7 +823,7 @@ const journeyAssertions: Record<
   'admin-create-connector': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
-      await page.goto('/admin/connectors')
+      await page.goto('/console/connectors/passwordless')
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'New connector' }).click()
       await page.getByLabel('Template').selectOption('google')
@@ -822,7 +854,7 @@ const journeyAssertions: Record<
         body: expect.objectContaining({ displayName: 'GitHub Enterprise' }),
       })
       await page.getByRole('button', { name: 'Close' }).click()
-      await page.goto('/admin/connectors')
+      await page.goto('/console/connectors/passwordless')
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await page.getByLabel('Actions for GitHub').click()
       await page.getByText('Delete').click()
@@ -833,7 +865,7 @@ const journeyAssertions: Record<
   'admin-create-organization': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin/organizations')
+      await page.goto('/console/organizations')
       await page.getByRole('button', { name: 'New organization' }).click()
       await page.getByLabel('Slug').fill('acme')
       await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Acme')
@@ -844,7 +876,7 @@ const journeyAssertions: Record<
   'admin-create-role': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin/roles')
+      await page.goto('/console/roles')
       await page.getByRole('button', { name: 'New role' }).click()
       await page.getByLabel('Key').fill('support')
       await page.getByLabel('Name').fill('Support')
@@ -854,7 +886,7 @@ const journeyAssertions: Record<
   'admin-create-api-resource': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin/api-resources')
+      await page.goto('/console/api-resources')
       await page.getByRole('button', { name: 'New resource' }).click()
       await page.getByLabel('Identifier').fill('orders')
       await page.getByLabel('Name').fill('Orders API')
@@ -865,7 +897,7 @@ const journeyAssertions: Record<
   'admin-authorization-inventory': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
-      await page.goto('/admin/organizations')
+      await page.goto('/console/organizations')
       await expect(page.getByRole('heading', { name: 'Organizations' })).toBeVisible()
       await expect(page.getByText('Acme Inc.')).toBeVisible()
       await page.getByLabel('Upload logo for Acme').setInputFiles({
@@ -873,7 +905,7 @@ const journeyAssertions: Record<
         mimeType: 'image/png',
         buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       })
-      await page.goto('/admin/roles')
+      await page.goto('/console/roles')
       await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible()
       await expect(page.getByRole('row').filter({ hasText: 'Support' }).filter({ hasText: 'support' })).toBeVisible()
       await page.getByRole('link', { name: 'Support' }).click()
@@ -881,7 +913,7 @@ const journeyAssertions: Record<
       await page.getByLabel('Subject ID').fill('user-1')
       await page.getByLabel('Token claims JSON').fill('{"tier":"gold"}')
       await page.getByRole('button', { name: 'Assign role' }).click()
-      await page.goto('/admin/api-resources')
+      await page.goto('/console/api-resources')
       await expect(page.getByRole('heading', { name: 'API resources' })).toBeVisible()
       await expect(page.getByText('Orders API')).toBeVisible()
       await expect(page.getByText('https://api.example.com/orders')).toBeVisible()
@@ -916,7 +948,7 @@ const journeyAssertions: Record<
   'admin-branding-settings': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
-      await page.goto('/admin/branding')
+      await page.goto('/console/sign-in-experience/branding')
       const main = page.getByRole('main')
       await expect(page.getByRole('heading', { name: 'Branding' })).toBeVisible()
       await expect(main.getByText('Brand preview')).toBeVisible()
@@ -971,9 +1003,9 @@ const journeyAssertions: Record<
   'admin-deployment-settings': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
-      await page.goto('/admin/deployment')
+      await page.goto('/console/tenant-settings/oidc-configs')
       const main = page.getByRole('main')
-      await expect(page.getByRole('heading', { name: 'Deployment' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'OIDC configs' })).toBeVisible()
       await expect(main.getByText('Runtime')).toBeVisible()
       await expect(main.getByText('Platform')).toBeVisible()
       await expect(main.getByText('Cloudflare Workers')).toBeVisible()
@@ -1039,10 +1071,10 @@ test('admin console desktop and mobile screenshot evidence', async ({ page }, te
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
 
     for (const route of [
-      { name: 'dashboard', path: '/admin', heading: 'Tenant health' },
-      { name: 'applications', path: '/admin/applications', heading: 'Applications' },
-      { name: 'sign-in-experience', path: '/admin/sign-in', heading: 'Sign-in experience' },
-      { name: 'security', path: '/admin/security', heading: 'Security' },
+      { name: 'dashboard', path: '/console', heading: 'Tenant health' },
+      { name: 'applications', path: '/console/applications', heading: 'Applications' },
+      { name: 'sign-in-experience', path: '/console/sign-in-experience/branding', heading: 'Branding' },
+      { name: 'security', path: '/console/security/password-policy', heading: 'Security' },
     ]) {
       await page.goto(route.path)
       await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
@@ -1052,14 +1084,14 @@ test('admin console desktop and mobile screenshot evidence', async ({ page }, te
         path: testInfo.outputPath(`admin-${route.name}-${viewport.name}.png`),
       })
       if (viewport.name === 'mobile' && route.name === 'dashboard') {
-        await page.getByRole('button', { name: 'Open admin navigation' }).click()
-        await expect(page.getByRole('navigation', { name: 'Admin mobile' })).toBeVisible()
-        await expect(page.getByRole('link', { name: /Sign-in experience/ })).toBeVisible()
+        await page.getByRole('button', { name: 'Open console navigation' }).click()
+        await expect(page.getByRole('navigation', { name: 'Console mobile' })).toBeVisible()
+        await expect(page.getByRole('link', { name: /Sign-in & account/ })).toBeVisible()
         await page.screenshot({
           fullPage: true,
           path: testInfo.outputPath('admin-dashboard-mobile-navigation.png'),
         })
-        await page.getByRole('button', { name: 'Close admin navigation' }).click()
+        await page.getByRole('button', { name: 'Close console navigation' }).click()
       }
     }
   }
@@ -1088,7 +1120,7 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
       { name: 'account-profile', path: '/account/profile', heading: 'Jane Stone' },
       { name: 'account-security', path: '/account/security', heading: 'MFA' },
       { name: 'account-authorized-apps', path: '/account/authorized-apps', heading: 'Consented applications' },
-      { name: 'admin-branding', path: '/admin/branding', heading: 'Branding' },
+      { name: 'admin-branding', path: '/console/sign-in-experience/branding', heading: 'Branding' },
     ]) {
       await page.goto(route.path)
       await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
@@ -1206,7 +1238,7 @@ async function responseFor(path: string, method: string, body: unknown): Promise
     }
   }
   if (path === '/api/onboarding/status') return { required: firstAdminRequired }
-  if (path === '/api/onboarding/admin-users') {
+  if (path === '/api/onboarding/console-users') {
     return {
       user: { id: 'user-admin', email: 'admin@example.com', role: 'admin' },
       onboarding: { locked: true },
@@ -1252,7 +1284,7 @@ async function responseFor(path: string, method: string, body: unknown): Promise
           label: 'Create an OIDC application',
           description: 'Register the first client so product routes can complete authorization code flows.',
           status: adminSetupRequired ? 'action_needed' : 'complete',
-          href: '/admin/onboarding',
+          href: '/console/onboarding',
           action: 'Create client',
         },
         {
@@ -1260,7 +1292,7 @@ async function responseFor(path: string, method: string, body: unknown): Promise
           label: 'Enable a sign-in method',
           description: 'Keep at least one hosted sign-in method available for users.',
           status: 'complete',
-          href: '/admin/sign-in',
+          href: '/console/sign-in-experience/sign-up-and-sign-in',
           action: 'Review methods',
         },
       ],
@@ -1270,13 +1302,13 @@ async function responseFor(path: string, method: string, body: unknown): Promise
           label: 'Confirm email delivery',
           description: 'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
           status: 'complete',
-          href: '/admin/deployment',
+          href: '/console/tenant-settings/oidc-configs',
           action: 'Review deployment',
         },
       ],
       admin: {
         setupRequired: adminSetupRequired,
-        setupHref: '/admin/onboarding',
+        setupHref: '/console/onboarding',
         missing: adminSetupRequired ? ['oidc_application'] : [],
       },
     }

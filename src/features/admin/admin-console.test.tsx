@@ -146,7 +146,7 @@ describe('admin console', () => {
     await waitFor(() => expect(requests.filter((url) => url === '/api/management/applications').length).toBe(2))
   })
 
-  it('redirects unauthorized admin routes to sign-in with the requested return target', async () => {
+  it('redirects unauthorized Console routes to sign-in with the requested return target', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings')
@@ -154,23 +154,23 @@ describe('admin console', () => {
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       return Promise.resolve(jsonResponse({}))
     })
-    window.history.pushState(null, '', '/admin/applications')
+    window.history.pushState(null, '', '/console/applications')
 
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
-    expect(decodeURIComponent(window.location.search)).toContain('return_to=/admin/applications')
+    expect(decodeURIComponent(window.location.search)).toContain('return_to=/console/applications')
   })
 
-  it('redirects forbidden admin routes to sign-in with return target', async () => {
+  it('redirects forbidden Console routes to sign-in with return target', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse({ error: 'Forbidden' }, 403))
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       return Promise.resolve(jsonResponse({}))
     })
-    window.history.pushState(null, '', '/admin/users')
+    window.history.pushState(null, '', '/console/users')
 
     render(<AppRouter />)
 
@@ -258,8 +258,8 @@ describe('admin console', () => {
       '/sign-up',
       '/account',
       '/account/security',
-      '/admin',
-      '/admin/applications',
+      '/console',
+      '/console/applications',
     ]) {
       window.history.pushState(null, '', path)
       render(<AppRouter />)
@@ -272,7 +272,7 @@ describe('admin console', () => {
     }
   })
 
-  it('redirects stale first-admin onboarding visits to admin setup', async () => {
+  it('redirects stale first-admin onboarding visits to Console setup', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
@@ -281,7 +281,7 @@ describe('admin console', () => {
       if (url === '/api/management/readiness') {
         return Promise.resolve(
           jsonResponse({
-            admin: { setupRequired: true, setupHref: '/admin/onboarding', missing: ['oidc_application'] },
+            admin: { setupRequired: true, setupHref: '/console/onboarding', missing: ['oidc_application'] },
           }),
         )
       }
@@ -291,8 +291,8 @@ describe('admin console', () => {
 
     render(<AppRouter />)
 
-    expect(await screen.findByRole('heading', { name: 'Admin onboarding' })).toBeTruthy()
-    await waitFor(() => expect(window.location.pathname).toBe('/admin/onboarding'))
+    expect(await screen.findByRole('heading', { name: 'Console setup' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/console/onboarding'))
   })
 
   it('redirects account root to the profile route', async () => {
@@ -318,7 +318,7 @@ describe('admin console', () => {
       window.history.pushState(null, '', path)
       render(<AppRouter />)
 
-      expect(await screen.findByRole('heading', { name: heading })).toBeTruthy()
+      expect((await screen.findAllByRole('heading', { name: heading })).length).toBeGreaterThan(0)
       expect(window.location.pathname).toBe(path)
 
       cleanup()
@@ -326,7 +326,7 @@ describe('admin console', () => {
     }
   })
 
-  it('redirects protected admin routes to admin onboarding while setup is incomplete', async () => {
+  it('redirects protected Console routes to Console setup while setup is incomplete', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
@@ -335,22 +335,22 @@ describe('admin console', () => {
       if (url === '/api/management/readiness') {
         return Promise.resolve(
           jsonResponse({
-            admin: { setupRequired: true, setupHref: '/admin/onboarding', missing: ['oidc_application'] },
+            admin: { setupRequired: true, setupHref: '/console/onboarding', missing: ['oidc_application'] },
           }),
         )
       }
       return Promise.resolve(jsonResponse({}))
     })
-    window.history.pushState(null, '', '/admin/applications')
+    window.history.pushState(null, '', '/console/applications')
 
     render(<AppRouter />)
 
-    expect(await screen.findByRole('heading', { name: 'Admin onboarding' })).toBeTruthy()
-    await waitFor(() => expect(window.location.pathname).toBe('/admin/onboarding'))
+    expect(await screen.findByRole('heading', { name: 'Console setup' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/console/onboarding'))
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
   })
 
-  it('redirects stale admin onboarding visits to the console after setup is complete', async () => {
+  it('redirects stale Console setup visits to the Console after setup is complete', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
@@ -358,7 +358,7 @@ describe('admin console', () => {
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/applications')
@@ -376,12 +376,97 @@ describe('admin console', () => {
       if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return Promise.resolve(jsonResponse({}))
     })
-    window.history.pushState(null, '', '/admin/onboarding')
+    window.history.pushState(null, '', '/console/onboarding')
 
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Tenant health' })).toBeTruthy()
-    await waitFor(() => expect(window.location.pathname).toBe('/admin'))
+    await waitFor(() => expect(window.location.pathname).toBe('/console'))
+  })
+
+  it('renders canonical Console routes and default nested redirects', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
+
+    for (const [path, finalPath, heading] of [
+      ['/console', '/console', 'Tenant health'],
+      ['/console/applications', '/console/applications', 'Applications'],
+      ['/console/sign-in-experience', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-in experience'],
+      [
+        '/console/sign-in-experience/sign-up-and-sign-in',
+        '/console/sign-in-experience/sign-up-and-sign-in',
+        'Sign-in experience',
+      ],
+      ['/console/sign-in-experience/branding', '/console/sign-in-experience/branding', 'Branding'],
+      [
+        '/console/sign-in-experience/collect-user-profile',
+        '/console/sign-in-experience/collect-user-profile',
+        'Collect user profile',
+      ],
+      ['/console/sign-in-experience/account-center', '/console/sign-in-experience/account-center', 'Account Center'],
+      ['/console/sign-in-experience/content', '/console/sign-in-experience/content', 'Content'],
+      ['/console/security', '/console/security/password-policy', 'Security'],
+      ['/console/security/password-policy', '/console/security/password-policy', 'Security'],
+      ['/console/mfa', '/console/mfa', 'Multi-factor auth'],
+      ['/console/connectors', '/console/connectors/passwordless', 'Connectors'],
+      ['/console/connectors/passwordless', '/console/connectors/passwordless', 'Connectors'],
+      ['/console/organization-template', '/console/organization-template/organization-roles', 'Organization roles'],
+      [
+        '/console/organization-template/organization-roles',
+        '/console/organization-template/organization-roles',
+        'Organization roles',
+      ],
+      ['/console/customize-jwt', '/console/customize-jwt', 'Custom JWT'],
+      ['/console/webhooks', '/console/webhooks', 'Webhooks'],
+      ['/console/audit-logs', '/console/audit-logs', 'Audit logs'],
+      ['/console/tenant-settings', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
+      ['/console/tenant-settings/oidc-configs', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
+    ] as const) {
+      window.history.pushState(null, '', path)
+      render(<AppRouter />)
+
+      expect((await screen.findAllByRole('heading', { name: heading })).length).toBeGreaterThan(0)
+      await waitFor(() => expect(window.location.pathname).toBe(finalPath))
+      expect(screen.getByRole('navigation', { name: 'Console' })).toBeTruthy()
+
+      cleanup()
+      queryClient.clear()
+    }
+  })
+
+  it('redirects old admin links to matching Console routes', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
+
+    for (const [path, finalPath, heading] of [
+      ['/admin/sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-in experience'],
+      ['/admin/branding', '/console/sign-in-experience/branding', 'Branding'],
+      ['/admin/connectors', '/console/connectors/passwordless', 'Connectors'],
+      ['/admin/security', '/console/security/password-policy', 'Security'],
+      ['/admin/deployment', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
+      ['/admin/applications/app-1', '/console/applications/app-1', 'Customer portal'],
+    ] as const) {
+      window.history.pushState(null, '', path)
+      render(<AppRouter />)
+
+      expect((await screen.findAllByRole('heading', { name: heading })).length).toBeGreaterThan(0)
+      await waitFor(() => expect(window.location.pathname).toBe(finalPath))
+
+      cleanup()
+      queryClient.clear()
+    }
+  })
+
+  it('preserves query string and hash when redirecting old admin links', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
+    window.history.pushState(null, '', '/admin/users?search=alice#row-1')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Users' })).toBeTruthy()
+    await waitFor(() =>
+      expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(
+        '/console/users?search=alice#row-1',
+      ),
+    )
   })
 
   it('renders authorization detail routes with route params', async () => {
@@ -392,7 +477,7 @@ describe('admin console', () => {
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/roles/role-1') {
@@ -414,19 +499,19 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    window.history.pushState(null, '', '/admin/roles/role-1')
+    window.history.pushState(null, '', '/console/roles/role-1')
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/admin/roles/role-1')
+    expect(window.location.pathname).toBe('/console/roles/role-1')
 
     cleanup()
     queryClient.clear()
-    window.history.pushState(null, '', '/admin/api-resources/resource-1')
+    window.history.pushState(null, '', '/console/api-resources/resource-1')
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/admin/api-resources/resource-1')
+    expect(window.location.pathname).toBe('/console/api-resources/resource-1')
   })
 
   it('surfaces non-auth admin readiness errors instead of converting them to sign-in redirects', async () => {
@@ -438,12 +523,12 @@ describe('admin console', () => {
       if (url === '/api/management/readiness') return Promise.resolve(jsonResponse({ error: 'Readiness failed.' }, 500))
       return Promise.resolve(jsonResponse({}))
     })
-    window.history.pushState(null, '', '/admin/applications')
+    window.history.pushState(null, '', '/console/applications')
 
     render(<AppRouter />)
 
     expect(await screen.findByText('Readiness failed.')).toBeTruthy()
-    expect(window.location.pathname).toBe('/admin/applications')
+    expect(window.location.pathname).toBe('/console/applications')
   })
 
   it('renders application rows and posts validated create input', async () => {
@@ -647,7 +732,7 @@ describe('admin console', () => {
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/applications/app-1' && method === 'PATCH') {
@@ -674,7 +759,7 @@ describe('admin console', () => {
       }
       return Promise.resolve(jsonResponse({}))
     })
-    window.history.pushState(null, '', '/admin/applications/app-1')
+    window.history.pushState(null, '', '/console/applications/app-1')
 
     render(<AppRouter />)
 
@@ -724,7 +809,7 @@ describe('admin console', () => {
         {
           url: '/api/management/applications/app-1',
           method: 'PATCH',
-          body: { disabled: true, disabledReason: 'Disabled from admin console' },
+          body: { disabled: true, disabledReason: 'Disabled from Console' },
         },
         {
           url: '/api/management/applications/app-1',
@@ -734,7 +819,7 @@ describe('admin console', () => {
         { url: '/api/management/applications/app-1', method: 'DELETE', body: null },
       ])
     })
-    await waitFor(() => expect(window.location.pathname).toBe('/admin/applications'))
+    await waitFor(() => expect(window.location.pathname).toBe('/console/applications'))
   })
 
   it('shows confidential client secret metadata and one-time rotated secret material', async () => {
@@ -762,7 +847,7 @@ describe('admin console', () => {
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url.startsWith('/api/management/applications/app-1/client-secrets') && init?.method === 'POST') {
@@ -787,7 +872,7 @@ describe('admin console', () => {
       if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(confidentialApplication))
       return Promise.resolve(jsonResponse({}))
     })
-    window.history.pushState(null, '', '/admin/applications/app-1')
+    window.history.pushState(null, '', '/console/applications/app-1')
 
     render(<AppRouter />)
 
@@ -807,7 +892,7 @@ describe('admin console', () => {
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/applications/app-1/redirect-uris' && init?.method === 'PUT') {
@@ -816,7 +901,7 @@ describe('admin console', () => {
       if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
       return Promise.resolve(jsonResponse({}))
     })
-    window.history.pushState(null, '', '/admin/applications/app-1')
+    window.history.pushState(null, '', '/console/applications/app-1')
 
     render(<AppRouter />)
 
@@ -1034,7 +1119,7 @@ describe('admin console', () => {
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/users/user-1' && method === 'GET') {
@@ -1104,7 +1189,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    window.history.pushState(null, '', '/admin/users/user-1')
+    window.history.pushState(null, '', '/console/users/user-1')
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
@@ -1192,7 +1277,7 @@ describe('admin console', () => {
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/users/user-1' && method === 'GET') {
@@ -1237,7 +1322,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    window.history.pushState(null, '', '/admin/users/user-1')
+    window.history.pushState(null, '', '/console/users/user-1')
     render(<AppRouter />)
 
     expect(await screen.findByText('abuse')).toBeTruthy()
@@ -1268,7 +1353,7 @@ describe('admin console', () => {
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/users/user-1' && method === 'GET') {
@@ -1294,7 +1379,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    window.history.pushState(null, '', '/admin/users/user-1')
+    window.history.pushState(null, '', '/console/users/user-1')
     render(<AppRouter />)
 
     expect(await screen.findByText('User unavailable.')).toBeTruthy()
@@ -1323,7 +1408,7 @@ describe('admin console', () => {
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/users/user-1' && method === 'GET') {
@@ -1379,7 +1464,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    window.history.pushState(null, '', '/admin/users/user-1')
+    window.history.pushState(null, '', '/console/users/user-1')
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'user-1' })).toBeTruthy()
@@ -1407,7 +1492,7 @@ describe('admin console', () => {
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/users/user-1' && method === 'GET') {
@@ -1435,7 +1520,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    window.history.pushState(null, '', '/admin/users/user-1')
+    window.history.pushState(null, '', '/console/users/user-1')
     render(<AppRouter />)
 
     expect(await screen.findByLabelText('Role')).toHaveProperty('disabled', true)
@@ -2527,7 +2612,7 @@ describe('admin console', () => {
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (url === '/api/management/roles/role-1' && method === 'DELETE') {
@@ -2555,22 +2640,22 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    window.history.pushState(null, '', '/admin/roles/role-1')
+    window.history.pushState(null, '', '/console/roles/role-1')
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Delete role' }))
-    await waitFor(() => expect(window.location.pathname).toBe('/admin/roles'))
+    await waitFor(() => expect(window.location.pathname).toBe('/console/roles'))
     expect(requests).toContainEqual({ url: '/api/management/roles/role-1', method: 'DELETE' })
 
     cleanup()
     queryClient.clear()
-    window.history.pushState(null, '', '/admin/api-resources/resource-1')
+    window.history.pushState(null, '', '/console/api-resources/resource-1')
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Delete resource' }))
-    await waitFor(() => expect(window.location.pathname).toBe('/admin/api-resources'))
+    await waitFor(() => expect(window.location.pathname).toBe('/console/api-resources'))
     expect(requests).toContainEqual({ url: '/api/management/api-resources/resource-1', method: 'DELETE' })
   })
 
@@ -2993,7 +3078,7 @@ describe('admin console', () => {
     }
   })
 
-  it('renders editable branding and deployment settings pages', async () => {
+  it('renders editable branding and tenant settings pages', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
@@ -3008,7 +3093,7 @@ describe('admin console', () => {
     unmount()
     renderWithQuery(<DeploymentSettingsPage />)
 
-    expect(screen.getByRole('heading', { name: 'Deployment' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'OIDC configs' })).toBeTruthy()
     expect(screen.getByText('Cloudflare Workers')).toBeTruthy()
     expect(screen.getByText('/api/management')).toBeTruthy()
   })
@@ -3022,7 +3107,7 @@ describe('admin console', () => {
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
       if (init?.method === 'POST') {
@@ -3168,6 +3253,38 @@ function accountRouteFetch(input: RequestInfo | URL, init?: RequestInit) {
   if (url === '/api/account/security') return Promise.resolve(jsonResponse({ security: accountSecurity }))
   if (url === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
   return Promise.resolve(jsonResponse(init?.method ? { ok: true } : {}))
+}
+
+function consoleRouteFetch(input: RequestInfo | URL) {
+  const url = String(input)
+  if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+  if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+  if (url === '/api/management/readiness') {
+    return Promise.resolve(
+      jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+    )
+  }
+  if (url === '/api/management/applications') {
+    return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+  }
+  if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
+  if (url.startsWith('/api/management/users')) return Promise.resolve(jsonResponse({ users: [user], pagination }))
+  if (url === '/api/management/connectors') {
+    return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+  }
+  if (url === '/api/management/connectors/templates') {
+    return Promise.resolve(jsonResponse(connectorTemplates))
+  }
+  if (url === '/api/management/organizations') {
+    return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+  }
+  if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+  if (url === '/api/management/api-resources') {
+    return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+  }
+  if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+  if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+  return Promise.resolve(jsonResponse({}))
 }
 
 const pagination = {
@@ -3424,7 +3541,7 @@ const readinessIncomplete = {
       label: 'Create an OIDC application',
       description: 'Register the first client so product routes can complete authorization code flows.',
       status: 'action_needed',
-      href: '/admin/onboarding',
+      href: '/console/onboarding',
       action: 'Create client',
     },
     {
@@ -3432,7 +3549,7 @@ const readinessIncomplete = {
       label: 'Enable a sign-in method',
       description: 'Keep at least one hosted sign-in method available for users.',
       status: 'complete',
-      href: '/admin/sign-in',
+      href: '/console/sign-in-experience/sign-up-and-sign-in',
       action: 'Review methods',
     },
   ],
@@ -3442,11 +3559,11 @@ const readinessIncomplete = {
       label: 'Confirm email delivery',
       description: 'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
       status: 'action_needed',
-      href: '/admin/deployment',
+      href: '/console/tenant-settings/oidc-configs',
       action: 'Review deployment',
     },
   ],
-  admin: { setupRequired: true, setupHref: '/admin/onboarding', missing: ['oidc_application'] },
+  admin: { setupRequired: true, setupHref: '/console/onboarding', missing: ['oidc_application'] },
 }
 
 const accountSecurity = {

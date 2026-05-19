@@ -41,7 +41,7 @@ describe('OnboardingRoute', () => {
         },
       ])
     })
-    expect(screen.getByText('First admin created. Sign in to finish admin onboarding.')).toBeTruthy()
+    expect(screen.getByText('First admin created. Sign in to finish Console setup.')).toBeTruthy()
     expect(screen.queryByLabelText('Password')).toBeNull()
   })
 

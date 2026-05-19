@@ -559,7 +559,7 @@ describe('management routes', () => {
           label: 'Create an OIDC application',
           description: 'Register the first client so product routes can complete authorization code flows.',
           status: 'action_needed',
-          href: '/admin/onboarding',
+          href: '/console/onboarding',
           action: 'Create client',
         },
         {
@@ -567,13 +567,13 @@ describe('management routes', () => {
           label: 'Enable a sign-in method',
           description: 'Keep at least one hosted sign-in method available for users.',
           status: 'complete',
-          href: '/admin/sign-in',
+          href: '/console/sign-in-experience/sign-up-and-sign-in',
           action: 'Review methods',
         },
       ],
       admin: {
         setupRequired: true,
-        setupHref: '/admin/onboarding',
+        setupHref: '/console/onboarding',
         missing: ['oidc_application'],
       },
     })
@@ -598,7 +598,7 @@ describe('management routes', () => {
     const body = managementReadinessResponseSchema.parse(await readiness.json())
     expect(body.admin).toEqual({
       setupRequired: false,
-      setupHref: '/admin/onboarding',
+      setupHref: '/console/onboarding',
       missing: [],
     })
     expect(body.required.every((item: { status: string }) => item.status === 'complete')).toBe(true)
@@ -637,7 +637,7 @@ describe('management routes', () => {
     const body = managementReadinessResponseSchema.parse(await readiness.json())
     expect(body.admin).toEqual({
       setupRequired: true,
-      setupHref: '/admin/onboarding',
+      setupHref: '/console/onboarding',
       missing: ['sign_in_method'],
     })
     expect(body.required.find((item) => item.id === 'sign_in_method')?.status).toBe('action_needed')

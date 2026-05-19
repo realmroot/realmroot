@@ -37,7 +37,7 @@ export function OnboardingRoute() {
         username: username || undefined,
       })
       setStatus({ required: false })
-      setSubmit({ loading: false, message: 'First admin created. Sign in to finish admin onboarding.', error: null })
+      setSubmit({ loading: false, message: 'First admin created. Sign in to finish Console setup.', error: null })
     } catch (error) {
       setSubmit({
         loading: false,
@@ -52,12 +52,12 @@ export function OnboardingRoute() {
       config={config}
       eyebrow="First-run onboarding"
       title="Create the first admin."
-      description="Start this deployment from the browser, then continue to the admin console."
+      description="Start this deployment from the browser, then continue to Console setup."
     >
       {status?.required === false || submit.message ? (
         <>
           <Status tone="success">{submit.message ?? 'First-admin onboarding is already locked.'}</Status>
-          <LinkButton href="/sign-in?return_to=/admin/onboarding">
+          <LinkButton href="/sign-in?return_to=/console/onboarding">
             <KeyRound size={18} />
             Continue to sign in
           </LinkButton>

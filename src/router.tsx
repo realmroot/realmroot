@@ -10,6 +10,7 @@ import {
   ApplicationsPage,
   BrandingPage,
   ConnectorsPage,
+  ConsolePlaceholderPage,
   DeploymentSettingsPage,
   OrganizationsPage,
   RoleDetailPage,
@@ -42,7 +43,7 @@ const rootRoute = createRootRoute({
       throw redirect({ to: '/onboarding' })
     }
     if (!config.onboarding.required && location.pathname === '/onboarding') {
-      throw redirect({ to: '/admin/onboarding' })
+      throw redirect({ to: '/console/onboarding' })
     }
   },
   component: () => <Outlet />,
@@ -162,15 +163,15 @@ const accountAuthorizedAppsRoute = createRoute({
   component: () => <AccountRoute section="authorized-apps" />,
 })
 
-const adminRoute = createRoute({
+const consoleRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/admin',
+  path: '/console',
   beforeLoad: async ({ location }) => {
     try {
       await queryClient.fetchQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
       const readiness = await loadAdminReadiness()
-      if (readiness.admin.setupRequired && location.pathname !== readiness.admin.setupHref) {
-        throw redirect({ to: '/admin/onboarding' })
+      if (readiness.admin.setupRequired && location.pathname !== '/console/onboarding') {
+        throw redirect({ to: '/console/onboarding' })
       }
     } catch (error) {
       if (isRedirect(error)) throw error
@@ -187,118 +188,358 @@ const adminRoute = createRoute({
   ),
 })
 
-const adminIndexRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleIndexRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/',
   component: AdminDashboardPage,
 })
 
-const adminApplicationsRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleApplicationsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/applications',
   component: ApplicationsPage,
 })
 
-const adminApplicationDetailRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleApplicationDetailRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/applications/{$applicationId}',
   component: () => {
-    const params = adminApplicationDetailRoute.useParams()
+    const params = consoleApplicationDetailRoute.useParams()
     return <ApplicationDetailPage applicationId={params.applicationId} />
   },
 })
 
-const adminUsersRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleUsersRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/users',
   component: UsersPage,
 })
 
-const adminUserDetailRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleUserDetailRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/users/{$userId}',
   component: () => {
-    const params = adminUserDetailRoute.useParams()
+    const params = consoleUserDetailRoute.useParams()
     return <UserDetailPage userId={params.userId} />
   },
 })
 
-const adminConnectorsRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleConnectorsIndexRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/connectors',
+  beforeLoad: () => {
+    throw redirect({ to: '/console/connectors/passwordless' })
+  },
+})
+
+const consoleConnectorsPasswordlessRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/connectors/passwordless',
   component: ConnectorsPage,
 })
 
-const adminSignInRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: '/sign-in',
+const consoleSignInExperienceIndexRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/sign-in-experience',
+  beforeLoad: () => {
+    throw redirect({ to: '/console/sign-in-experience/sign-up-and-sign-in' })
+  },
+})
+
+const consoleSignInSignUpAndSignInRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/sign-in-experience/sign-up-and-sign-in',
   component: SignInSettingsPage,
 })
 
-const adminSecurityRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleSignInBrandingRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/sign-in-experience/branding',
+  component: BrandingPage,
+})
+
+const consoleSignInCollectUserProfileRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/sign-in-experience/collect-user-profile',
+  component: () => (
+    <ConsolePlaceholderPage
+      title="Collect user profile"
+      description="Configure the profile fields collected during hosted sign-up and account completion."
+      rows={[
+        ['Profile fields', 'Name, email, username, and avatar policy.'],
+        ['Boundary', 'Validated through the existing hosted auth settings.'],
+      ]}
+    />
+  ),
+})
+
+const consoleSignInAccountCenterRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/sign-in-experience/account-center',
+  component: () => (
+    <ConsolePlaceholderPage
+      title="Account Center"
+      description="Review the self-service account experience exposed outside Console."
+      rows={[
+        ['Route', '/account'],
+        ['Sections', 'Profile, security, linked accounts, sessions, and authorized apps.'],
+      ]}
+    />
+  ),
+})
+
+const consoleSignInContentRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/sign-in-experience/content',
+  component: () => (
+    <ConsolePlaceholderPage
+      title="Content"
+      description="Manage hosted authentication copy and support links."
+      rows={[
+        ['Copy source', 'Sign-in settings'],
+        ['Links', 'Terms, privacy, and support contact.'],
+      ]}
+    />
+  ),
+})
+
+const consoleMultiFactorAuthRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/mfa',
+  component: () => <SecurityPage title="Multi-factor auth" />,
+})
+
+const consoleSecurityIndexRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/security',
+  beforeLoad: () => {
+    throw redirect({ to: '/console/security/password-policy' })
+  },
+})
+
+const consoleSecurityPasswordPolicyRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/security/password-policy',
   component: SecurityPage,
 })
 
-const adminOrganizationsRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleOrganizationsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/organizations',
   component: OrganizationsPage,
 })
 
-const adminRolesRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleRolesRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/roles',
   component: RolesPage,
 })
 
-const adminRoleDetailRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleRoleDetailRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/roles/{$roleId}',
   component: () => {
-    const params = adminRoleDetailRoute.useParams()
+    const params = consoleRoleDetailRoute.useParams()
     return <RoleDetailPage roleId={params.roleId} />
   },
 })
 
-const adminApiResourcesRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleApiResourcesRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/api-resources',
   component: ApiResourcesPage,
 })
 
-const adminApiResourceDetailRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleApiResourceDetailRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/api-resources/{$resourceId}',
   component: () => {
-    const params = adminApiResourceDetailRoute.useParams()
+    const params = consoleApiResourceDetailRoute.useParams()
     return <ApiResourceDetailPage resourceId={params.resourceId} />
   },
 })
 
-const adminBrandingRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: '/branding',
-  component: BrandingPage,
+const consoleOrganizationTemplateIndexRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/organization-template',
+  beforeLoad: () => {
+    throw redirect({ to: '/console/organization-template/organization-roles' })
+  },
 })
 
-const adminDeploymentRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: '/deployment',
+const consoleOrganizationTemplateRolesRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/organization-template/organization-roles',
+  component: () => (
+    <ConsolePlaceholderPage
+      title="Organization roles"
+      description="Define the role model applied when new organizations are provisioned."
+      rows={[
+        ['Scope', 'Organization template'],
+        ['Contract', 'Uses the existing role and organization management boundaries.'],
+      ]}
+    />
+  ),
+})
+
+const consoleCustomJwtRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/customize-jwt',
+  component: () => (
+    <ConsolePlaceholderPage
+      title="Custom JWT"
+      description="Review the token customization surface for tenant-issued credentials."
+      rows={[
+        ['Issuer', '/api/auth'],
+        ['Claims source', 'Configured through tenant authorization policy.'],
+      ]}
+    />
+  ),
+})
+
+const consoleWebhooksRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/webhooks',
+  component: () => (
+    <ConsolePlaceholderPage
+      title="Webhooks"
+      description="Manage event delivery endpoints for tenant identity activity."
+      rows={[
+        ['Events', 'User, organization, application, and security activity.'],
+        ['Delivery', 'Runtime webhook dispatch uses the management boundary.'],
+      ]}
+    />
+  ),
+})
+
+const consoleAuditLogsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/audit-logs',
+  component: () => (
+    <ConsolePlaceholderPage
+      title="Audit logs"
+      description="Inspect administrative and authentication activity retained by the tenant."
+      rows={[
+        ['Coverage', 'Console actions and auth events'],
+        ['Retention', 'Configured by deployment policy.'],
+      ]}
+    />
+  ),
+})
+
+const consoleTenantSettingsIndexRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/tenant-settings',
+  beforeLoad: () => {
+    throw redirect({ to: '/console/tenant-settings/oidc-configs' })
+  },
+})
+
+const consoleTenantSettingsOidcRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/tenant-settings/oidc-configs',
   component: DeploymentSettingsPage,
 })
 
-const adminOnboardingRoute = createRoute({
-  getParentRoute: () => adminRoute,
+const consoleOnboardingRoute = createRoute({
+  getParentRoute: () => consoleRoute,
   path: '/onboarding',
   beforeLoad: async () => {
     const readiness = await loadAdminReadiness()
     if (!readiness.admin.setupRequired) {
-      throw redirect({ to: '/admin' })
+      throw redirect({ to: '/console' })
     }
   },
   component: AdminOnboardingPage,
+})
+
+const adminCompatibilityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin',
+  beforeLoad: ({ location }) => {
+    throw redirect({ href: consoleHrefForAdminLocation(location) })
+  },
+  component: () => null,
+})
+
+const adminCompatibilityIndexRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/',
+})
+
+const adminCompatibilityApplicationsRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/applications',
+})
+
+const adminCompatibilityApplicationDetailRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/applications/{$applicationId}',
+})
+
+const adminCompatibilityUsersRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/users',
+})
+
+const adminCompatibilityUserDetailRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/users/{$userId}',
+})
+
+const adminCompatibilityConnectorsRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/connectors',
+})
+
+const adminCompatibilitySignInRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/sign-in',
+})
+
+const adminCompatibilitySecurityRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/security',
+})
+
+const adminCompatibilityOrganizationsRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/organizations',
+})
+
+const adminCompatibilityRolesRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/roles',
+})
+
+const adminCompatibilityRoleDetailRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/roles/{$roleId}',
+})
+
+const adminCompatibilityApiResourcesRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/api-resources',
+})
+
+const adminCompatibilityApiResourceDetailRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/api-resources/{$resourceId}',
+})
+
+const adminCompatibilityBrandingRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/branding',
+})
+
+const adminCompatibilityDeploymentRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/deployment',
+})
+
+const adminCompatibilityOnboardingRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/onboarding',
 })
 
 const routeTree = rootRoute.addChildren([
@@ -320,23 +561,54 @@ const routeTree = rootRoute.addChildren([
     accountSessionsRoute,
     accountAuthorizedAppsRoute,
   ]),
-  adminRoute.addChildren([
-    adminIndexRoute,
-    adminApplicationsRoute,
-    adminApplicationDetailRoute,
-    adminUsersRoute,
-    adminUserDetailRoute,
-    adminConnectorsRoute,
-    adminSignInRoute,
-    adminSecurityRoute,
-    adminOrganizationsRoute,
-    adminRolesRoute,
-    adminRoleDetailRoute,
-    adminApiResourcesRoute,
-    adminApiResourceDetailRoute,
-    adminBrandingRoute,
-    adminDeploymentRoute,
-    adminOnboardingRoute,
+  consoleRoute.addChildren([
+    consoleIndexRoute,
+    consoleApplicationsRoute,
+    consoleApplicationDetailRoute,
+    consoleUsersRoute,
+    consoleUserDetailRoute,
+    consoleConnectorsIndexRoute,
+    consoleConnectorsPasswordlessRoute,
+    consoleSignInExperienceIndexRoute,
+    consoleSignInSignUpAndSignInRoute,
+    consoleSignInBrandingRoute,
+    consoleSignInCollectUserProfileRoute,
+    consoleSignInAccountCenterRoute,
+    consoleSignInContentRoute,
+    consoleMultiFactorAuthRoute,
+    consoleSecurityIndexRoute,
+    consoleSecurityPasswordPolicyRoute,
+    consoleOrganizationsRoute,
+    consoleRolesRoute,
+    consoleRoleDetailRoute,
+    consoleApiResourcesRoute,
+    consoleApiResourceDetailRoute,
+    consoleOrganizationTemplateIndexRoute,
+    consoleOrganizationTemplateRolesRoute,
+    consoleCustomJwtRoute,
+    consoleWebhooksRoute,
+    consoleAuditLogsRoute,
+    consoleTenantSettingsIndexRoute,
+    consoleTenantSettingsOidcRoute,
+    consoleOnboardingRoute,
+  ]),
+  adminCompatibilityRoute.addChildren([
+    adminCompatibilityIndexRoute,
+    adminCompatibilityApplicationsRoute,
+    adminCompatibilityApplicationDetailRoute,
+    adminCompatibilityUsersRoute,
+    adminCompatibilityUserDetailRoute,
+    adminCompatibilityConnectorsRoute,
+    adminCompatibilitySignInRoute,
+    adminCompatibilitySecurityRoute,
+    adminCompatibilityOrganizationsRoute,
+    adminCompatibilityRolesRoute,
+    adminCompatibilityRoleDetailRoute,
+    adminCompatibilityApiResourcesRoute,
+    adminCompatibilityApiResourceDetailRoute,
+    adminCompatibilityBrandingRoute,
+    adminCompatibilityDeploymentRoute,
+    adminCompatibilityOnboardingRoute,
   ]),
 ])
 
@@ -350,6 +622,20 @@ async function loadAdminReadiness() {
   const readiness = await getAdminReadiness()
   queryClient.setQueryData(adminQueryKeys.readiness, readiness)
   return readiness
+}
+
+function consoleHrefForAdminLocation(location: { hash: string; pathname: string; searchStr: string }) {
+  return `${consolePathForAdminPath(location.pathname)}${location.searchStr}${location.hash ? `#${location.hash}` : ''}`
+}
+
+function consolePathForAdminPath(pathname: string) {
+  if (pathname === '/admin') return '/console'
+  if (pathname === '/admin/sign-in') return '/console/sign-in-experience/sign-up-and-sign-in'
+  if (pathname === '/admin/branding') return '/console/sign-in-experience/branding'
+  if (pathname === '/admin/connectors') return '/console/connectors/passwordless'
+  if (pathname === '/admin/security') return '/console/security/password-policy'
+  if (pathname === '/admin/deployment') return '/console/tenant-settings/oidc-configs'
+  return `/console${pathname.slice('/admin'.length)}`
 }
 
 export function AppRouter() {

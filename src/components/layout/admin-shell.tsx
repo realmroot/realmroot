@@ -2,92 +2,151 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import {
   Activity,
   AppWindow,
+  BellRing,
   Boxes,
   Building2,
   Cable,
   ChevronRight,
-  Cloud,
+  Code2,
+  FileClock,
   Fingerprint,
   Gauge,
   KeyRound,
   LockKeyhole,
   Menu,
-  Palette,
+  Network,
+  Settings,
+  Shield,
   ShieldCheck,
-  Sparkles,
+  UserCog,
   UsersRound,
   X,
 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { cn } from '@/lib/utils'
 
-const adminNavGroups = [
+type ConsoleNavItem = {
+  description: string
+  href: string
+  icon: typeof Gauge
+  label: string
+  match?: string
+}
+
+type ConsoleNavGroup = {
+  items: ConsoleNavItem[]
+  label: string
+}
+
+const adminNavGroups: ConsoleNavGroup[] = [
   {
     label: 'Overview',
-    items: [{ href: '/admin', label: 'Dashboard', description: 'Tenant health', icon: Gauge }],
+    items: [{ href: '/console', label: 'Dashboard', description: 'Tenant health', icon: Gauge }],
   },
   {
-    label: 'Identity',
+    label: 'Authentication',
     items: [
-      { href: '/admin/users', label: 'Users', description: 'Profiles and access', icon: UsersRound },
-      { href: '/admin/organizations', label: 'Organizations', description: 'Tenant groups', icon: Building2 },
-    ],
-  },
-  {
-    label: 'Applications',
-    items: [
-      { href: '/admin/applications', label: 'Applications', description: 'OIDC clients', icon: AppWindow },
-      { href: '/admin/connectors', label: 'Connectors', description: 'Social and OAuth IdPs', icon: Cable },
+      { href: '/console/applications', label: 'Applications', description: 'OIDC clients', icon: AppWindow },
+      {
+        href: '/console/sign-in-experience/sign-up-and-sign-in',
+        label: 'Sign-in & account',
+        description: 'Hosted auth settings',
+        icon: Fingerprint,
+        match: '/console/sign-in-experience',
+      },
+      {
+        href: '/console/mfa',
+        label: 'Multi-factor auth',
+        description: 'MFA posture',
+        icon: ShieldCheck,
+      },
+      {
+        href: '/console/connectors/passwordless',
+        label: 'Connectors',
+        description: 'Identity providers',
+        icon: Cable,
+        match: '/console/connectors',
+      },
+      {
+        href: '/console/security/password-policy',
+        label: 'Security',
+        description: 'Password and session policy',
+        icon: Shield,
+        match: '/console/security',
+      },
     ],
   },
   {
     label: 'Authorization',
     items: [
-      { href: '/admin/roles', label: 'Roles', description: 'RBAC definitions', icon: LockKeyhole },
-      { href: '/admin/api-resources', label: 'API resources', description: 'Audiences and scopes', icon: KeyRound },
-      { href: '/admin/security', label: 'Security', description: 'MFA, passkeys, sessions', icon: ShieldCheck },
+      { href: '/console/api-resources', label: 'API resources', description: 'Audiences and scopes', icon: KeyRound },
+      { href: '/console/roles', label: 'Roles', description: 'RBAC definitions', icon: LockKeyhole },
+      {
+        href: '/console/organization-template/organization-roles',
+        label: 'Organization template',
+        description: 'Default org policy',
+        icon: Network,
+        match: '/console/organization-template',
+      },
     ],
   },
   {
-    label: 'Experience',
+    label: 'Users',
+    items: [
+      { href: '/console/organizations', label: 'Organizations', description: 'Tenant groups', icon: Building2 },
+      { href: '/console/users', label: 'User management', description: 'Profiles and access', icon: UsersRound },
+    ],
+  },
+  {
+    label: 'Developer',
+    items: [
+      { href: '/console/customize-jwt', label: 'Custom JWT', description: 'Token claims', icon: Code2 },
+      { href: '/console/webhooks', label: 'Webhooks', description: 'Event delivery', icon: BellRing },
+      { href: '/console/audit-logs', label: 'Audit logs', description: 'Activity trail', icon: FileClock },
+    ],
+  },
+  {
+    label: 'Tenant',
     items: [
       {
-        href: '/admin/sign-in',
-        label: 'Sign-in experience',
-        description: 'Identifiers and hosted auth',
-        icon: Fingerprint,
+        href: '/console/tenant-settings/oidc-configs',
+        label: 'Settings',
+        description: 'OIDC metadata',
+        icon: Settings,
+        match: '/console/tenant-settings',
       },
-      { href: '/admin/branding', label: 'Branding', description: 'Hosted UI identity', icon: Palette },
     ],
-  },
-  {
-    label: 'Operations',
-    items: [{ href: '/admin/deployment', label: 'Deployment', description: 'Runtime and endpoints', icon: Cloud }],
   },
 ]
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const currentItem = adminNavGroups.flatMap((group) => group.items).find((item) => isActive(pathname, item.href))
-  const currentGroup = adminNavGroups.find((group) => group.items.some((item) => isActive(pathname, item.href)))
+  const currentItem = adminNavGroups
+    .flatMap((group) => group.items)
+    .find((item) => isActive(pathname, getItemMatchPath(item)))
+  const currentGroup = adminNavGroups.find((group) =>
+    group.items.some((item) => isActive(pathname, getItemMatchPath(item))),
+  )
 
   return (
     <div className="min-h-dvh bg-muted/60 text-foreground">
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-border bg-background lg:flex lg:flex-col">
         <ConsoleBrand />
-        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Admin">
+        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Console">
           <AdminNavigation pathname={pathname} />
         </nav>
         <div className="border-t border-border p-4">
-          <div className="rounded-lg border border-border bg-muted/35 p-3">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-              <Activity data-icon="inline-start" />
-              Production
-            </div>
-            <p className="mt-2 text-sm font-semibold">Default tenant</p>
-            <p className="text-xs leading-5 text-muted-foreground">Cloudflare Workers deployment</p>
-          </div>
+          <a
+            className="flex min-h-12 items-center gap-3 rounded-md border border-border bg-muted/35 px-3 py-2 text-sm font-semibold hover:bg-muted"
+            href="/account"
+          >
+            <span className="grid size-8 place-items-center rounded-full bg-primary/10 text-xs text-primary">AC</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">Account center</span>
+              <span className="block truncate text-xs font-medium text-muted-foreground">Profile and sessions</span>
+            </span>
+          </a>
         </div>
       </aside>
       <div className="lg:pl-72">
@@ -95,7 +154,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <div className="flex min-h-16 items-center justify-between gap-3 px-4 lg:px-6">
             <button
               aria-expanded={mobileNavOpen}
-              aria-label={mobileNavOpen ? 'Close admin navigation' : 'Open admin navigation'}
+              aria-label={mobileNavOpen ? 'Close console navigation' : 'Open console navigation'}
               className="inline-flex size-11 items-center justify-center rounded-md border border-border bg-background lg:hidden"
               onClick={() => setMobileNavOpen((open) => !open)}
               type="button"
@@ -117,20 +176,21 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <div className="hidden items-center gap-2 rounded-lg border border-border bg-muted/35 px-3 py-2 text-sm lg:flex">
               <Boxes className="size-4 text-muted-foreground" aria-hidden="true" />
               <div>
-                <p className="text-xs font-medium leading-none text-muted-foreground">Environment</p>
-                <p className="mt-1 font-semibold leading-none">Production</p>
+                <p className="text-xs font-medium leading-none text-muted-foreground">Tenant</p>
+                <p className="mt-1 font-semibold leading-none">Default</p>
               </div>
             </div>
             <a
-              className="inline-flex min-h-10 items-center rounded-md px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
               href="/account"
             >
+              <UserCog data-icon="inline-start" />
               Account
             </a>
           </div>
           {mobileNavOpen ? (
             <div className="border-t border-border bg-background p-3 lg:hidden">
-              <nav aria-label="Admin mobile">
+              <nav aria-label="Console mobile">
                 <AdminNavigation onNavigate={() => setMobileNavOpen(false)} pathname={pathname} />
               </nav>
             </div>
@@ -152,7 +212,7 @@ function ConsoleBrand() {
         <p className="text-sm font-semibold leading-none">FlareAuth</p>
         <p className="mt-1 truncate text-xs text-muted-foreground">Identity Console</p>
       </div>
-      <Sparkles className="ml-auto size-4 text-primary" aria-hidden="true" />
+      <Activity className="ml-auto size-4 text-primary" aria-hidden="true" />
     </div>
   )
 }
@@ -164,7 +224,7 @@ function AdminNavigation({ onNavigate, pathname }: { onNavigate?: () => void; pa
         <div className="grid gap-1" key={group.label}>
           <p className="px-3 text-xs font-semibold uppercase tracking-normal text-muted-foreground">{group.label}</p>
           {group.items.map((item) => {
-            const active = isActive(pathname, item.href)
+            const active = isActive(pathname, getItemMatchPath(item))
             return (
               <Link
                 className={cn(
@@ -189,7 +249,11 @@ function AdminNavigation({ onNavigate, pathname }: { onNavigate?: () => void; pa
   )
 }
 
+function getItemMatchPath(item: ConsoleNavItem) {
+  return item.match ?? item.href
+}
+
 function isActive(pathname: string, href: string) {
-  if (href === '/admin') return pathname === href
+  if (href === '/console') return pathname === href
   return pathname === href || pathname.startsWith(`${href}/`)
 }

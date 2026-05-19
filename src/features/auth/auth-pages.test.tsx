@@ -818,10 +818,10 @@ describe('hosted auth pages', () => {
     )
 
     cleanup()
-    window.history.pushState(null, '', '/auth/callback?return_to=/admin/onboarding')
+    window.history.pushState(null, '', '/auth/callback?return_to=/console/onboarding')
     render(<AuthCallbackPage />)
     expect(await screen.findByRole('heading', { name: 'Sign-in complete.' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/admin/onboarding')
+    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/console/onboarding')
   })
 
   it('renders callback fallback error and account continuation defaults', async () => {
@@ -840,7 +840,7 @@ describe('hosted auth pages', () => {
   })
 
   it('accepts callbackURL fields from native auth responses', () => {
-    expect(resolveAuthRedirect({ callbackURL: '/admin/onboarding' }, '/account')).toBe('/admin/onboarding')
+    expect(resolveAuthRedirect({ callbackURL: '/console/onboarding' }, '/account')).toBe('/console/onboarding')
   })
 })
 
