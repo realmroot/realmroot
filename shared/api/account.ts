@@ -32,6 +32,7 @@ export type AccountProfileResponse = {
     username: string | null
     avatarAssetId: string | null
     image: string | null
+    role: string | null
   }
 }
 

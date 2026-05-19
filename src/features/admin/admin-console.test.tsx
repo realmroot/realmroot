@@ -182,7 +182,28 @@ describe('admin console', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
     expect(decodeURIComponent(window.location.search)).toContain('return_to=/console/applications')
-    expect(requestedUrls.slice(0, 2)).toEqual(['/api/configz', '/api/account/profile'])
+    expect(requestedUrls.filter((url) => url !== '/api/configz')[0]).toBe('/api/account/profile')
+    expect(requestedUrls).not.toContain('/api/management/sign-in-settings')
+    expect(requestedUrls).not.toContain('/api/management/readiness')
+  })
+
+  it('redirects signed-in non-admin Console routes before management requests', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: { ...profile, role: 'user' } }))
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/console/users')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
+    expect(decodeURIComponent(window.location.search)).toContain('return_to=/console/users')
+    expect(requestedUrls.filter((url) => url !== '/api/configz')[0]).toBe('/api/account/profile')
     expect(requestedUrls).not.toContain('/api/management/sign-in-settings')
     expect(requestedUrls).not.toContain('/api/management/readiness')
   })
@@ -190,7 +211,7 @@ describe('admin console', () => {
   it('redirects forbidden Console routes to sign-in with return target', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse({ error: 'Forbidden' }, 403))
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       return Promise.resolve(jsonResponse({}))
@@ -568,6 +589,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
@@ -1034,6 +1056,7 @@ describe('admin console', () => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
@@ -1175,6 +1198,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
@@ -1254,6 +1278,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
@@ -1488,6 +1513,7 @@ describe('admin console', () => {
       fetches.push({ method, url })
 
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
@@ -1655,6 +1681,7 @@ describe('admin console', () => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
@@ -1733,6 +1760,7 @@ describe('admin console', () => {
       const method = init?.method ?? 'GET'
       requests.push({ method, url })
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
@@ -1791,6 +1819,7 @@ describe('admin console', () => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
@@ -1878,6 +1907,7 @@ describe('admin console', () => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
@@ -3571,6 +3601,7 @@ describe('admin console', () => {
       const method = init?.method ?? 'GET'
       if (method !== 'GET') requests.push({ url, method })
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
@@ -4548,6 +4579,11 @@ const profile = {
   username: 'jane',
   avatarAssetId: null,
   image: null,
+}
+
+const adminAccountProfile = {
+  ...profile,
+  role: 'admin',
 }
 
 const connector = {
