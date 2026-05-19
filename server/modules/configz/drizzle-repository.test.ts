@@ -96,6 +96,31 @@ describe('createDrizzleConfigzRepository', () => {
       customCss: null,
     })
   })
+
+  it('uses the generic OAuth icon for unknown enabled identity providers', async () => {
+    const repository = createDrizzleConfigzRepository(
+      new FakeDb({
+        identityProviderRows: [
+          {
+            slug: 'custom',
+            providerType: 'generic_oauth',
+            providerId: 'custom-idp',
+            displayName: 'Custom IdP',
+          },
+        ],
+      }) as unknown as Database,
+    )
+
+    await expect(repository.listEnabledIdentityProviders()).resolves.toEqual([
+      {
+        slug: 'custom',
+        providerType: 'generic_oauth',
+        providerId: 'custom-idp',
+        displayName: 'Custom IdP',
+        icon: 'oauth',
+      },
+    ])
+  })
 })
 
 class FakeDb {

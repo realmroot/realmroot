@@ -327,6 +327,26 @@ describe('ConnectorService', () => {
       message: 'Enabled generic OAuth connector requires tokenEndpoint when issuer is not provided.',
     })
     await expect(
+      loadAuthConnectorConfig(
+        createRepository({
+          enabled: [
+            connector({
+              providerType: 'generic_oauth',
+              providerId: 'generic-oauth',
+              issuer: null,
+              authorizationEndpoint: null,
+              tokenEndpoint: 'https://idp.example.com/token',
+              clientSecretBinding: 'GENERIC_CLIENT_SECRET',
+            }),
+          ],
+        }),
+        { GENERIC_CLIENT_SECRET: 'generic-secret' } as unknown as Env,
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Enabled generic OAuth connector requires issuer or authorizationEndpoint.',
+    })
+    await expect(
       service.create({
         providerType: 'generic_oauth',
         providerId: 'mixed',

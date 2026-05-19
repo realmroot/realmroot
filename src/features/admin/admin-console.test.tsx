@@ -1016,13 +1016,32 @@ describe('admin console', () => {
     fireEvent.click(await screen.findByText('View details'))
     expect(await screen.findByText('Secret binding available')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Workspace' } })
+    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'google-workspace' } })
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'workspace-client' } })
+    fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GOOGLE_WORKSPACE_SECRET' } })
+    fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Authorization endpoint'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Token endpoint'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('User info endpoint'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('JWKS endpoint'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email profile' } })
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"prompt":"consent"}' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(requests).toContainEqual({
         url: '/api/management/connectors/connector-1',
         method: 'PATCH',
-        body: expect.objectContaining({ displayName: 'Google Workspace' }),
+        body: expect.objectContaining({
+          clientId: 'workspace-client',
+          clientSecretBinding: 'GOOGLE_WORKSPACE_SECRET',
+          displayName: 'Google Workspace',
+          enabled: false,
+          providerMetadata: { prompt: 'consent' },
+          scopes: ['openid', 'email', 'profile'],
+          slug: 'google-workspace',
+        }),
       })
     })
 
