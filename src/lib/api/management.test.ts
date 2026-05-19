@@ -22,7 +22,20 @@ describe('management API client', () => {
     await management.listUsers({ search: 'jane', limit: 50, offset: undefined })
     await management.createUser({ email: 'jane@example.com', displayName: 'Jane Doe' })
     await management.updateUser('user-1', { role: 'admin' })
+    await management.getUser('user-1')
+    await management.deleteUser('user-1')
     await management.requestPasswordReset('jane@example.com')
+    await management.requestUserPasswordReset('user-1')
+    await management.banUser('user-1', { reason: 'abuse', expiresInSeconds: 3600 })
+    await management.unbanUser('user-1')
+    await management.listUserSessions('user-1', { limit: 10, offset: 20 })
+    await management.revokeUserSessions('user-1')
+    await management.revokeUserSession('user-1', 'session-1')
+    await management.listUserLinkedAccounts('user-1', { limit: 5 })
+    await management.listUserApplications('user-1', { offset: 30 })
+    await management.getUserSecurity('user-1')
+    await management.listUserPasskeys('user-1', { limit: 2 })
+    await management.deleteUserPasskey('user-1', 'passkey-1')
     await management.listConnectors()
     await management.createConnector({
       providerId: 'google',
@@ -73,7 +86,20 @@ describe('management API client', () => {
       ['users.get', { query: { search: 'jane', limit: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
       ['users.patch', { param: { id: 'user-1' }, json: { role: 'admin' } }],
+      ['user.get', { param: { id: 'user-1' } }],
+      ['users.delete', { param: { id: 'user-1' } }],
       ['passwordReset.post', { json: { email: 'jane@example.com' } }],
+      ['userPasswordReset.post', { param: { id: 'user-1' }, json: {} }],
+      ['userBan.put', { param: { id: 'user-1' }, json: { reason: 'abuse', expiresInSeconds: 3600 } }],
+      ['userBan.delete', { param: { id: 'user-1' } }],
+      ['userSessions.get', { param: { id: 'user-1' }, query: { limit: '10', offset: '20' } }],
+      ['userSessions.delete', { param: { id: 'user-1' } }],
+      ['userSession.delete', { param: { id: 'user-1', sessionId: 'session-1' } }],
+      ['userLinkedAccounts.get', { param: { id: 'user-1' }, query: { limit: '5' } }],
+      ['userApplications.get', { param: { id: 'user-1' }, query: { offset: '30' } }],
+      ['userSecurity.get', { param: { id: 'user-1' } }],
+      ['userPasskeys.get', { param: { id: 'user-1' }, query: { limit: '2' } }],
+      ['userPasskey.delete', { param: { id: 'user-1', passkeyId: 'passkey-1' } }],
       ['connectors.get'],
       [
         'connectors.post',
@@ -170,7 +196,28 @@ async function loadManagementApi() {
           users: {
             $get: endpoint('users.get'),
             $post: endpoint('users.post'),
-            ':id': { $patch: endpoint('users.patch') },
+            ':id': {
+              $get: endpoint('user.get'),
+              $patch: endpoint('users.patch'),
+              $delete: endpoint('users.delete'),
+              'password-reset-requests': { $post: endpoint('userPasswordReset.post') },
+              ban: {
+                $put: endpoint('userBan.put'),
+                $delete: endpoint('userBan.delete'),
+              },
+              sessions: {
+                $get: endpoint('userSessions.get'),
+                $delete: endpoint('userSessions.delete'),
+                ':sessionId': { $delete: endpoint('userSession.delete') },
+              },
+              'linked-accounts': { $get: endpoint('userLinkedAccounts.get') },
+              applications: { $get: endpoint('userApplications.get') },
+              security: { $get: endpoint('userSecurity.get') },
+              passkeys: {
+                $get: endpoint('userPasskeys.get'),
+                ':passkeyId': { $delete: endpoint('userPasskey.delete') },
+              },
+            },
             'password-reset-requests': { $post: endpoint('passwordReset.post') },
           },
           connectors: {

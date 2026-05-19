@@ -31,13 +31,20 @@ import type {
 import type {
   CreateManagementConnectorRequest,
   ListManagementConnectorsResponse,
+  ListManagementUserApplicationsResponse,
+  ListManagementUserLinkedAccountsResponse,
+  ListManagementUserPasskeysResponse,
+  ListManagementUserSessionsResponse,
   ListManagementUsersResponse,
+  ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementCreateUserRequest,
   ManagementReadinessResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
+  ManagementUserDetailResponse,
   ManagementUserListQuery,
+  ManagementUserSecurityResponse,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
   UpdateManagementSignInSettingsRequest,
@@ -181,8 +188,86 @@ export function updateUser(id: string, input: ManagementUpdateUserRequest) {
   return readRpcResponse(apiClient.api.management.users[':id'].$patch({ param: { id }, json: input }))
 }
 
+export function getUser(id: string): Promise<ManagementUserDetailResponse> {
+  return readRpcResponse(apiClient.api.management.users[':id'].$get({ param: { id } }))
+}
+
+export function deleteUser(id: string) {
+  return readRpcResponse(apiClient.api.management.users[':id'].$delete({ param: { id } }))
+}
+
 export function requestPasswordReset(email: string) {
   return readRpcResponse(apiClient.api.management.users['password-reset-requests'].$post({ json: { email } }))
+}
+
+export function requestUserPasswordReset(id: string) {
+  return readRpcResponse(
+    apiClient.api.management.users[':id']['password-reset-requests'].$post({ param: { id }, json: {} }),
+  )
+}
+
+export function banUser(id: string, input: ManagementBanUserRequest = {}) {
+  return readRpcResponse(apiClient.api.management.users[':id'].ban.$put({ param: { id }, json: input }))
+}
+
+export function unbanUser(id: string) {
+  return readRpcResponse(apiClient.api.management.users[':id'].ban.$delete({ param: { id } }))
+}
+
+export function listUserSessions(
+  id: string,
+  query: Partial<PaginationQuery> = {},
+): Promise<ListManagementUserSessionsResponse> {
+  return readRpcResponse(
+    apiClient.api.management.users[':id'].sessions.$get({ param: { id }, query: stringifyQuery(query) }),
+  )
+}
+
+export function revokeUserSessions(id: string) {
+  return readRpcResponse(apiClient.api.management.users[':id'].sessions.$delete({ param: { id } }))
+}
+
+export function revokeUserSession(id: string, sessionId: string) {
+  return readRpcResponse(
+    apiClient.api.management.users[':id'].sessions[':sessionId'].$delete({ param: { id, sessionId } }),
+  )
+}
+
+export function listUserLinkedAccounts(
+  id: string,
+  query: Partial<PaginationQuery> = {},
+): Promise<ListManagementUserLinkedAccountsResponse> {
+  return readRpcResponse(
+    apiClient.api.management.users[':id']['linked-accounts'].$get({ param: { id }, query: stringifyQuery(query) }),
+  )
+}
+
+export function listUserApplications(
+  id: string,
+  query: Partial<PaginationQuery> = {},
+): Promise<ListManagementUserApplicationsResponse> {
+  return readRpcResponse(
+    apiClient.api.management.users[':id'].applications.$get({ param: { id }, query: stringifyQuery(query) }),
+  )
+}
+
+export function getUserSecurity(id: string): Promise<ManagementUserSecurityResponse> {
+  return readRpcResponse(apiClient.api.management.users[':id'].security.$get({ param: { id } }))
+}
+
+export function listUserPasskeys(
+  id: string,
+  query: Partial<PaginationQuery> = {},
+): Promise<ListManagementUserPasskeysResponse> {
+  return readRpcResponse(
+    apiClient.api.management.users[':id'].passkeys.$get({ param: { id }, query: stringifyQuery(query) }),
+  )
+}
+
+export function deleteUserPasskey(id: string, passkeyId: string) {
+  return readRpcResponse(
+    apiClient.api.management.users[':id'].passkeys[':passkeyId'].$delete({ param: { id, passkeyId } }),
+  )
 }
 
 export function listConnectors() {

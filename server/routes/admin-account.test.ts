@@ -152,7 +152,8 @@ describe('admin and account routes', () => {
     await expect(response.json()).resolves.toEqual({
       user: { id: 'user-1' },
     })
-    expect(auth.api.getUser).toHaveBeenCalledWith({ query: { id: 'user-1' }, headers: expect.any(Headers) })
+    expect(users.getUser).toHaveBeenCalledWith('user-1')
+    expect(auth.api.getUser).not.toHaveBeenCalled()
     expect(users.listLinkedAccounts).not.toHaveBeenCalled()
     expect(users.listConsentedApplications).not.toHaveBeenCalled()
     expect(users.listSessions).not.toHaveBeenCalled()

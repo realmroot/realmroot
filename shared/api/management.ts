@@ -136,23 +136,111 @@ export const listManagementConnectorsResponseSchema = listConnectorsResponseSche
 export const createManagementConnectorRequestSchema = createConnectorRequestSchema
 export const updateManagementConnectorRequestSchema = updateConnectorRequestSchema
 
-export const managementUserResponseSchema = z
-  .object({
-    id: z.string(),
-    email: z.string().optional(),
-    name: z.string().optional(),
-    role: z
-      .union([z.string(), z.array(z.string())])
-      .nullable()
-      .optional(),
-    banned: z.boolean().nullable().optional(),
-    createdAt: z.union([z.string(), z.date()]).optional(),
-    updatedAt: z.union([z.string(), z.date()]).optional(),
-  })
-  .passthrough()
+export const managementUserResponseSchema = z.object({
+  id: z.string(),
+  email: z.string().optional(),
+  emailVerified: z.boolean().optional(),
+  name: z.string().optional(),
+  displayName: z.string().optional(),
+  username: z.string().nullable().optional(),
+  avatarAssetId: z.string().nullable().optional(),
+  image: z.string().nullable().optional(),
+  role: z
+    .union([z.string(), z.array(z.string())])
+    .nullable()
+    .optional(),
+  banned: z.boolean().nullable().optional(),
+  banReason: z.string().nullable().optional(),
+  banExpires: z.union([z.string(), z.date()]).nullable().optional(),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+  updatedAt: z.union([z.string(), z.date()]).optional(),
+})
+
+export const managementUserDetailResponseSchema = z.object({
+  user: managementUserResponseSchema,
+})
 
 export const listManagementUsersResponseSchema = z.object({
   users: z.array(managementUserResponseSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const managementUserSessionSchema = z.object({
+  id: z.string(),
+  expiresAt: z.union([z.string(), z.date()]),
+  createdAt: z.union([z.string(), z.date()]),
+  updatedAt: z.union([z.string(), z.date()]).optional(),
+  ipAddress: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  activeOrganizationId: z.string().nullable().optional(),
+  impersonatedBy: z.string().nullable().optional(),
+})
+
+export const listManagementUserSessionsResponseSchema = z.object({
+  sessions: z.array(managementUserSessionSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const managementUserLinkedAccountSchema = z.object({
+  id: z.string(),
+  accountId: z.string(),
+  providerId: z.string(),
+  createdAt: z.union([z.string(), z.date()]),
+  updatedAt: z.union([z.string(), z.date()]).optional(),
+})
+
+export const listManagementUserLinkedAccountsResponseSchema = z.object({
+  accounts: z.array(managementUserLinkedAccountSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const managementUserApplicationSchema = z.object({
+  id: z.string(),
+  applicationId: z.string(),
+  applicationName: z.string(),
+  applicationSlug: z.string(),
+  scopes: z.array(z.string()),
+  permissions: z.array(z.string()).nullable().optional(),
+  grantedAt: z.union([z.string(), z.date()]),
+  expiresAt: z.union([z.string(), z.date()]).nullable(),
+})
+
+export const listManagementUserApplicationsResponseSchema = z.object({
+  applications: z.array(managementUserApplicationSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const managementUserSecurityResponseSchema = z.object({
+  security: z.object({
+    userId: z.string(),
+    mfa: z.object({
+      enabled: z.boolean(),
+      factors: z.array(z.object({ id: z.string(), type: z.string(), verified: z.boolean().nullable() })),
+    }),
+    passkeys: z.object({
+      enabled: z.boolean(),
+      count: z.number().int().min(0),
+    }),
+    policy: z.object({
+      mfa: z.object({ mode: z.enum(['optional', 'required']) }),
+      passkeys: z.object({ enabled: z.boolean(), rpName: z.string() }).passthrough(),
+    }),
+  }),
+})
+
+export const managementUserPasskeySchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  userId: z.string().optional(),
+  deviceType: z.string(),
+  backedUp: z.boolean(),
+  transports: z.string().nullable().optional(),
+  createdAt: z.union([z.string(), z.date()]).nullable(),
+  aaguid: z.string().nullable().optional(),
+})
+
+export const listManagementUserPasskeysResponseSchema = z.object({
+  passkeys: z.array(managementUserPasskeySchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -198,7 +286,13 @@ export { paginationQuerySchema }
 
 export type ManagementErrorResponse = z.infer<typeof managementErrorResponseSchema>
 export type ManagementUserResponse = z.infer<typeof managementUserResponseSchema>
+export type ManagementUserDetailResponse = z.infer<typeof managementUserDetailResponseSchema>
 export type ListManagementUsersResponse = z.infer<typeof listManagementUsersResponseSchema>
+export type ListManagementUserSessionsResponse = z.infer<typeof listManagementUserSessionsResponseSchema>
+export type ListManagementUserLinkedAccountsResponse = z.infer<typeof listManagementUserLinkedAccountsResponseSchema>
+export type ListManagementUserApplicationsResponse = z.infer<typeof listManagementUserApplicationsResponseSchema>
+export type ManagementUserSecurityResponse = z.infer<typeof managementUserSecurityResponseSchema>
+export type ListManagementUserPasskeysResponse = z.infer<typeof listManagementUserPasskeysResponseSchema>
 export type ManagementUserListQuery = z.infer<typeof managementUserListQuerySchema>
 export type ManagementCreateUserRequest = z.infer<typeof managementCreateUserRequestSchema>
 export type ManagementUpdateUserRequest = z.infer<typeof managementUpdateUserRequestSchema>

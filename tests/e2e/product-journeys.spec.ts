@@ -28,6 +28,7 @@ let adminSetupRequired = false
 let accountSignedIn = true
 let accountApplicationRevoked = false
 let applicationDisabled = false
+let adminUserBanned = false
 let identifierFirstRequired = false
 
 const journeyAssertions: Record<
@@ -562,6 +563,76 @@ const journeyAssertions: Record<
       await expect(page.getByText('Jane Stone')).toBeVisible()
       await expect(page.getByRole('cell', { name: 'admin' })).toBeVisible()
       await expect(page.getByLabel('Actions for jane@example.com')).toBeVisible()
+    },
+  },
+  'admin-user-detail': {
+    suite: 'admin management journeys',
+    assert: async ({ page, requests }) => {
+      adminUserBanned = false
+      await page.goto('/admin/users')
+      await page.getByRole('link', { name: 'Jane Stone' }).click()
+      await expect(page).toHaveURL(/\/admin\/users\/user-1$/)
+      await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
+      await expect(page.getByText('MFA and passkeys')).toBeVisible()
+      await expect(page.getByText('github-jane')).toBeVisible()
+      await expect(page.getByText('Customer portal')).toBeVisible()
+      await page.getByLabel('Display name').fill('Jane Q. Stone')
+      await page.getByLabel('Role').selectOption('user')
+      await page.getByLabel('Email verification').selectOption('false')
+      await page.getByRole('button', { name: 'Save profile' }).click()
+      await page.getByRole('button', { name: 'Send password reset' }).click()
+      await page.getByRole('button', { name: 'Revoke', exact: true }).click()
+      await page.getByRole('button', { name: 'Revoke session' }).click()
+      await page.getByRole('button', { name: 'Revoke all' }).click()
+      await page.getByRole('button', { name: 'Revoke sessions' }).click()
+      await page.getByRole('button', { name: 'Delete', exact: true }).click()
+      await page.getByRole('button', { name: 'Delete passkey' }).click()
+      await page.getByRole('button', { name: 'Ban user' }).click()
+      await page.getByLabel('Reason').fill('abuse')
+      await page.getByRole('dialog').getByRole('button', { name: 'Ban user' }).click()
+      await expect(page.getByRole('button', { name: 'Unban user' })).toBeVisible()
+      await page.getByRole('button', { name: 'Unban user' }).click()
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/management/users/user-1',
+        body: {
+          email: 'jane@example.com',
+          displayName: 'Jane Q. Stone',
+          username: 'jane',
+          role: 'user',
+          emailVerified: false,
+        },
+      })
+      expect(requests).toContainEqual({
+        method: 'POST',
+        path: '/api/management/users/user-1/password-reset-requests',
+        body: {},
+      })
+      expect(requests).toContainEqual({
+        method: 'DELETE',
+        path: '/api/management/users/user-1/sessions/session-1',
+        body: null,
+      })
+      expect(requests).toContainEqual({
+        method: 'DELETE',
+        path: '/api/management/users/user-1/sessions',
+        body: null,
+      })
+      expect(requests).toContainEqual({
+        method: 'DELETE',
+        path: '/api/management/users/user-1/passkeys/passkey-1',
+        body: null,
+      })
+      expect(requests).toContainEqual({
+        method: 'PUT',
+        path: '/api/management/users/user-1/ban',
+        body: { reason: 'abuse' },
+      })
+      expect(requests).toContainEqual({
+        method: 'DELETE',
+        path: '/api/management/users/user-1/ban',
+        body: null,
+      })
     },
   },
   'admin-create-application': {
@@ -1149,7 +1220,68 @@ async function responseFor(path: string, method: string, body: unknown): Promise
   }
   if (path === '/api/management/users') {
     if (method === 'POST') return user
-    return { users: [user], pagination }
+    return { users: [{ ...user, banned: adminUserBanned, emailVerified: true }], pagination }
+  }
+  if (path === '/api/management/users/user-1') {
+    if (method === 'PATCH') return { user: { ...profile, ...(body as object), banned: adminUserBanned } }
+    if (method === 'DELETE') return null
+    return { user: { ...profile, banned: adminUserBanned } }
+  }
+  if (path === '/api/management/users/user-1/password-reset-requests') return { status: true }
+  if (path === '/api/management/users/user-1/ban') {
+    adminUserBanned = method === 'PUT'
+    return { user: { ...profile, banned: adminUserBanned } }
+  }
+  if (path === '/api/management/users/user-1/sessions') {
+    if (method === 'DELETE') return { success: true }
+    return { sessions: [session], pagination }
+  }
+  if (path === '/api/management/users/user-1/sessions/session-1') return { success: true }
+  if (path === '/api/management/users/user-1/linked-accounts') return { accounts: [linkedAccount], pagination }
+  if (path === '/api/management/users/user-1/applications') {
+    return {
+      applications: [
+        {
+          id: 'consent-1',
+          applicationId: 'app-1',
+          applicationName: 'Customer portal',
+          applicationSlug: 'customer-portal',
+          scopes: ['openid', 'profile'],
+          permissions: null,
+          grantedAt: '2026-01-01T00:00:00.000Z',
+          expiresAt: null,
+        },
+      ],
+      pagination,
+    }
+  }
+  if (path === '/api/management/users/user-1/security') {
+    return {
+      security: {
+        userId: 'user-1',
+        mfa: { enabled: true, factors: [{ id: 'factor-1', type: 'totp', verified: true }] },
+        passkeys: { enabled: true, count: 1 },
+        policy: securityPolicy,
+      },
+    }
+  }
+  if (path === '/api/management/users/user-1/passkeys/passkey-1') return { success: true }
+  if (path === '/api/management/users/user-1/passkeys') {
+    return {
+      passkeys: [
+        {
+          id: 'passkey-1',
+          name: 'MacBook Touch ID',
+          userId: 'user-1',
+          deviceType: 'single_device',
+          backedUp: false,
+          transports: 'internal',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          aaguid: null,
+        },
+      ],
+      pagination,
+    }
   }
   if (path === '/api/management/connectors') {
     if (method === 'POST') return connector

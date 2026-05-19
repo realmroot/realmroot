@@ -45,15 +45,22 @@ import type { ConnectorReadinessResponse, ListConnectorTemplatesResponse } from 
 import type {
   CreateManagementConnectorRequest,
   ListManagementConnectorsResponse,
+  ListManagementUserApplicationsResponse,
+  ListManagementUserLinkedAccountsResponse,
+  ListManagementUserPasskeysResponse,
+  ListManagementUserSessionsResponse,
   ListManagementUsersResponse,
+  ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementConnectorResponse,
   ManagementCreateUserRequest,
   ManagementReadinessResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
+  ManagementUserDetailResponse,
   ManagementUserListQuery,
   ManagementUserResponse,
+  ManagementUserSecurityResponse,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
   UpdateManagementSignInSettingsRequest,
@@ -292,10 +299,53 @@ type RpcSchema = {
     $post: RpcEndpoint<{ json: ManagementCreateUserRequest }, EmptyResponse, 201>
   }
   '/api/management/users/:id': {
+    $get: RpcEndpoint<{ param: { id: string } }, ManagementUserDetailResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: ManagementUpdateUserRequest }, { user: ManagementUserResponse }>
+    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
   }
   '/api/management/users/password-reset-requests': {
     $post: RpcEndpoint<{ json: { email: string } }, EmptyResponse>
+  }
+  '/api/management/users/:id/password-reset-requests': {
+    $post: RpcEndpoint<{ param: { id: string }; json: { redirectTo?: string } }, EmptyResponse>
+  }
+  '/api/management/users/:id/ban': {
+    $put: RpcEndpoint<{ param: { id: string }; json: ManagementBanUserRequest }, EmptyResponse>
+    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
+  }
+  '/api/management/users/:id/sessions': {
+    $get: RpcEndpoint<
+      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListManagementUserSessionsResponse
+    >
+    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
+  }
+  '/api/management/users/:id/sessions/:sessionId': {
+    $delete: RpcEndpoint<{ param: { id: string; sessionId: string } }, EmptyResponse>
+  }
+  '/api/management/users/:id/linked-accounts': {
+    $get: RpcEndpoint<
+      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListManagementUserLinkedAccountsResponse
+    >
+  }
+  '/api/management/users/:id/applications': {
+    $get: RpcEndpoint<
+      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListManagementUserApplicationsResponse
+    >
+  }
+  '/api/management/users/:id/security': {
+    $get: RpcEndpoint<{ param: { id: string } }, ManagementUserSecurityResponse>
+  }
+  '/api/management/users/:id/passkeys': {
+    $get: RpcEndpoint<
+      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListManagementUserPasskeysResponse
+    >
+  }
+  '/api/management/users/:id/passkeys/:passkeyId': {
+    $delete: RpcEndpoint<{ param: { id: string; passkeyId: string } }, EmptyResponse>
   }
   '/api/management/connectors': {
     $get: RpcEndpoint<RpcNoInput, ListManagementConnectorsResponse>

@@ -13,7 +13,9 @@ import { hostedCustomCssSchema } from '@shared/api/configz'
 import type { ConnectorResponse, ConnectorTemplate } from '@shared/api/connectors'
 import {
   createManagementConnectorRequestSchema,
+  type ManagementUserResponse,
   managementCreateUserRequestSchema,
+  managementUpdateUserRequestSchema,
   updateManagementBrandingSettingsRequestSchema,
   updateManagementConnectorRequestSchema,
   updateManagementSignInSettingsRequestSchema,
@@ -62,6 +64,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   adminQueryKeys,
+  banUser,
   createApiResource,
   createApplication,
   createConnector,
@@ -70,6 +73,8 @@ import {
   createUser,
   deleteApplication,
   deleteConnector,
+  deleteUser,
+  deleteUserPasskey,
   getAdminDashboard,
   getApplication,
   getBrandingSettings,
@@ -77,6 +82,8 @@ import {
   getConnectorReadiness,
   getSecurityPolicy,
   getSignInSettings,
+  getUser,
+  getUserSecurity,
   listApiResources,
   listApplicationClientSecrets,
   listApplications,
@@ -84,10 +91,18 @@ import {
   listConnectorTemplates,
   listOrganizations,
   listRoles,
+  listUserApplications,
+  listUserLinkedAccounts,
+  listUserPasskeys,
+  listUserSessions,
   listUsers,
   replaceApplicationRedirectUris,
   requestPasswordReset,
+  requestUserPasswordReset,
+  revokeUserSession,
+  revokeUserSessions,
   rotateApplicationClientSecret,
+  unbanUser,
   updateApplication,
   updateBrandingSettings,
   updateConnector,
@@ -805,9 +820,19 @@ export function AdminOnboardingPage() {
 
 export function UsersPage() {
   const [search, setSearch] = useState('')
+  const [role, setRole] = useState('')
+  const [banned, setBanned] = useState('')
+  const [offset, setOffset] = useState(0)
   const query = useQuery({
-    queryKey: [...adminQueryKeys.users, search],
-    queryFn: () => listUsers(search ? { search } : {}),
+    queryKey: [...adminQueryKeys.users, { search, role, banned, offset }],
+    queryFn: () =>
+      listUsers({
+        ...(search ? { search } : {}),
+        ...(role ? { role } : {}),
+        ...(banned ? { banned: banned === 'true' } : {}),
+        limit: 10,
+        offset,
+      }),
   })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -847,66 +872,663 @@ export function UsersPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <TextInput
-          aria-label="Search users"
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search users"
-          value={search}
-        />
+        <div className="grid gap-2 sm:grid-cols-[1fr_10rem_10rem]">
+          <TextInput
+            aria-label="Search users"
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setOffset(0)
+            }}
+            placeholder="Search users"
+            value={search}
+          />
+          <SelectInput
+            aria-label="Filter role"
+            onChange={(event) => {
+              setRole(event.target.value)
+              setOffset(0)
+            }}
+            value={role}
+          >
+            <option value="">Any role</option>
+            <option value="admin">Admin</option>
+            <option value="user">User</option>
+          </SelectInput>
+          <SelectInput
+            aria-label="Filter status"
+            onChange={(event) => {
+              setBanned(event.target.value)
+              setOffset(0)
+            }}
+            value={banned}
+          >
+            <option value="">Any status</option>
+            <option value="false">Active</option>
+            <option value="true">Banned</option>
+          </SelectInput>
+        </div>
       }
     >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>User</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {query.data?.users.map((user) => (
-            <TableRow key={user.id}>
-              <TableCell>
-                <div className="font-medium">{user.name ?? user.email ?? user.id}</div>
-                <div className="text-xs text-muted-foreground">{user.email ?? user.id}</div>
-              </TableCell>
-              <TableCell>{Array.isArray(user.role) ? user.role.join(', ') : (user.role ?? 'user')}</TableCell>
-              <TableCell>{formatDate(user.createdAt)}</TableCell>
-              <TableCell>
-                <StatusBadge active={!user.banned} activeLabel="Active" inactiveLabel="Banned" />
-              </TableCell>
-              <TableCell className="text-right">
-                <DropdownMenu>
-                  <DropdownMenuTrigger aria-label={`Actions for ${user.email ?? user.id}`}>
-                    <MoreHorizontal data-icon="inline-start" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuGroup>
-                      {user.email ? (
-                        <DropdownMenuItem onClick={() => requestPasswordReset(user.email ?? '')}>
-                          Send password reset
-                        </DropdownMenuItem>
-                      ) : null}
-                      <DropdownMenuItem
-                        onClick={() =>
-                          updateUser(user.id, { role: user.role === 'admin' ? 'user' : 'admin' }).then(() =>
-                            queryClient.invalidateQueries({ queryKey: adminQueryKeys.users }),
-                          )
-                        }
-                      >
-                        Toggle admin role
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
+      <div className="grid gap-3">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>User</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {query.data?.users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>
+                  <a className="font-medium hover:underline" href={`/admin/users/${user.id}`}>
+                    {userDisplayName(user)}
+                  </a>
+                  <div className="text-xs text-muted-foreground">{user.id}</div>
+                </TableCell>
+                <TableCell>{formatRole(user.role)}</TableCell>
+                <TableCell>
+                  <div>{user.email ?? 'Unknown'}</div>
+                  <div className="text-xs text-muted-foreground">{user.emailVerified ? 'Verified' : 'Unverified'}</div>
+                </TableCell>
+                <TableCell>{formatDate(user.createdAt)}</TableCell>
+                <TableCell>
+                  <StatusBadge active={!user.banned} activeLabel="Active" inactiveLabel="Banned" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger aria-label={`Actions for ${user.email ?? user.id}`}>
+                      <MoreHorizontal data-icon="inline-start" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuGroup>
+                        {user.email ? (
+                          <DropdownMenuItem onClick={() => requestPasswordReset(user.email ?? '')}>
+                            Send password reset
+                          </DropdownMenuItem>
+                        ) : null}
+                        <DropdownMenuItem
+                          onClick={() =>
+                            updateUser(user.id, { role: user.role === 'admin' ? 'user' : 'admin' }).then(() =>
+                              queryClient.invalidateQueries({ queryKey: adminQueryKeys.users }),
+                            )
+                          }
+                        >
+                          Toggle admin role
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {query.data ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 text-sm text-muted-foreground">
+            <span>
+              Showing {query.data.pagination.offset + 1}-
+              {Math.min(query.data.pagination.offset + query.data.pagination.limit, query.data.pagination.total)} of{' '}
+              {query.data.pagination.total}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                disabled={offset === 0}
+                onClick={() => setOffset(Math.max(0, offset - (query.data?.pagination.limit ?? 10)))}
+                type="button"
+                variant="secondary"
+              >
+                Previous
+              </Button>
+              <Button
+                disabled={!query.data.pagination.hasMore || query.data.pagination.nextOffset === null}
+                onClick={() => setOffset(query.data?.pagination.nextOffset ?? offset)}
+                type="button"
+                variant="secondary"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </ResourcePage>
+  )
+}
+
+export function UserDetailPage({ userId }: { userId: string }) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [banDialogOpen, setBanDialogOpen] = useState(false)
+  const [revokeAllDialogOpen, setRevokeAllDialogOpen] = useState(false)
+  const [sessionToRevoke, setSessionToRevoke] = useState<string | null>(null)
+  const [passkeyToDelete, setPasskeyToDelete] = useState<string | null>(null)
+  const userQuery = useQuery({ queryKey: [...adminQueryKeys.users, userId], queryFn: () => getUser(userId) })
+  const sessionsQuery = useQuery({
+    queryKey: [...adminQueryKeys.users, userId, 'sessions'],
+    queryFn: () => listUserSessions(userId),
+  })
+  const linkedAccountsQuery = useQuery({
+    queryKey: [...adminQueryKeys.users, userId, 'linked-accounts'],
+    queryFn: () => listUserLinkedAccounts(userId),
+  })
+  const applicationsQuery = useQuery({
+    queryKey: [...adminQueryKeys.users, userId, 'applications'],
+    queryFn: () => listUserApplications(userId),
+  })
+  const securityQuery = useQuery({
+    queryKey: [...adminQueryKeys.users, userId, 'security'],
+    queryFn: () => getUserSecurity(userId),
+  })
+  const passkeysQuery = useQuery({
+    queryKey: [...adminQueryKeys.users, userId, 'passkeys'],
+    queryFn: () => listUserPasskeys(userId),
+  })
+  const updateMutation = useMutation({
+    mutationFn: (input: z.infer<typeof managementUpdateUserRequestSchema>) => updateUser(userId, input),
+    onSuccess: async (response) => {
+      queryClient.setQueryData([...adminQueryKeys.users, userId], response)
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
+    },
+  })
+  const resetMutation = useMutation({ mutationFn: () => requestUserPasswordReset(userId) })
+  const banMutation = useMutation({
+    mutationFn: (input: { reason?: string }) => banUser(userId, input),
+    onSuccess: async () => {
+      setBanDialogOpen(false)
+      await queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.users, userId] })
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
+    },
+  })
+  const unbanMutation = useMutation({
+    mutationFn: () => unbanUser(userId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.users, userId] })
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
+    },
+  })
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteUser(userId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
+      await navigate({ to: '/admin/users' })
+    },
+  })
+  const revokeAllMutation = useMutation({
+    mutationFn: () => revokeUserSessions(userId),
+    onSuccess: async () => {
+      setRevokeAllDialogOpen(false)
+      await sessionsQuery.refetch()
+    },
+  })
+  const revokeSessionMutation = useMutation({
+    mutationFn: (sessionId: string) => revokeUserSession(userId, sessionId),
+    onSuccess: () => sessionsQuery.refetch(),
+  })
+  const deletePasskeyMutation = useMutation({
+    mutationFn: (passkeyId: string) => deleteUserPasskey(userId, passkeyId),
+    onSuccess: () => Promise.all([passkeysQuery.refetch(), securityQuery.refetch()]),
+  })
+
+  const user = userQuery.data?.user
+
+  return (
+    <ResourcePage
+      title={user ? userDisplayName(user) : 'User'}
+      description="Inspect profile, access state, linked accounts, MFA, passkeys, sessions, and account operations."
+      framed={false}
+      action={
+        <Link className="uiButton uiButton-secondary" to="/admin/users">
+          Back to users
+        </Link>
+      }
+      error={userQuery.error}
+      loading={userQuery.isLoading}
+      onRetry={() => userQuery.refetch()}
+    >
+      {user ? (
+        <div className="grid gap-4 p-4 xl:grid-cols-[1fr_1fr]">
+          <UserProfileCard
+            error={updateMutation.error}
+            pending={updateMutation.isPending}
+            user={user}
+            onSubmit={updateMutation.mutate}
+          />
+          <Card>
+            <CardHeader>
+              <CardTitle>Account operations</CardTitle>
+              <CardDescription>Use confirmations for destructive or security-sensitive actions.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <SettingRow label="Status" value={user.banned ? 'Banned' : 'Active'} />
+              <SettingRow label="Ban reason" value={user.banReason ?? 'Not set'} />
+              <SettingRow label="Ban expires" value={formatDate(user.banExpires ?? undefined)} />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  disabled={resetMutation.isPending}
+                  onClick={() => resetMutation.mutate()}
+                  type="button"
+                  variant="secondary"
+                >
+                  Send password reset
+                </Button>
+                {user.banned ? (
+                  <Button
+                    disabled={unbanMutation.isPending}
+                    onClick={() => unbanMutation.mutate()}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Unban user
+                  </Button>
+                ) : (
+                  <Button onClick={() => setBanDialogOpen(true)} type="button" variant="danger">
+                    Ban user
+                  </Button>
+                )}
+                <Button onClick={() => setDeleteDialogOpen(true)} type="button" variant="danger">
+                  <Trash2 data-icon="inline-start" />
+                  Delete user
+                </Button>
+              </div>
+              <MutationError
+                error={resetMutation.error ?? banMutation.error ?? unbanMutation.error ?? deleteMutation.error}
+              />
+              {resetMutation.isSuccess ? (
+                <p className="text-sm text-muted-foreground">Password reset requested.</p>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <UserSecurityCard
+            error={securityQuery.error ?? passkeysQuery.error ?? deletePasskeyMutation.error}
+            passkeys={passkeysQuery.data?.passkeys ?? []}
+            security={securityQuery.data?.security}
+            onDeletePasskey={setPasskeyToDelete}
+          />
+          <UserSessionsCard
+            error={sessionsQuery.error ?? revokeAllMutation.error ?? revokeSessionMutation.error}
+            onRevokeAll={() => setRevokeAllDialogOpen(true)}
+            onRevokeSession={setSessionToRevoke}
+            pending={revokeAllMutation.isPending || revokeSessionMutation.isPending}
+            sessions={sessionsQuery.data?.sessions ?? []}
+          />
+          <UserLinkedAccountsCard
+            accounts={linkedAccountsQuery.data?.accounts ?? []}
+            error={linkedAccountsQuery.error}
+          />
+          <UserApplicationsCard
+            applications={applicationsQuery.data?.applications ?? []}
+            error={applicationsQuery.error}
+          />
+
+          <BanUserDialog
+            error={banMutation.error}
+            onClose={() => setBanDialogOpen(false)}
+            onConfirm={(reason) => banMutation.mutate(reason ? { reason } : {})}
+            open={banDialogOpen}
+            pending={banMutation.isPending}
+            userName={userDisplayName(user)}
+          />
+          <DangerConfirmDialog
+            actionLabel="Delete user"
+            description={`Deleting ${userDisplayName(user)} removes the account and cannot be undone.`}
+            error={deleteMutation.error}
+            onClose={() => setDeleteDialogOpen(false)}
+            onConfirm={() => deleteMutation.mutate()}
+            open={deleteDialogOpen}
+            pending={deleteMutation.isPending}
+            title="Delete user"
+          />
+          <DangerConfirmDialog
+            actionLabel="Revoke sessions"
+            description={`Revoke every active session for ${userDisplayName(user)}.`}
+            error={revokeAllMutation.error}
+            onClose={() => setRevokeAllDialogOpen(false)}
+            onConfirm={() => revokeAllMutation.mutate()}
+            open={revokeAllDialogOpen}
+            pending={revokeAllMutation.isPending}
+            title="Revoke all sessions"
+          />
+          <DangerConfirmDialog
+            actionLabel="Revoke session"
+            description={`Revoke session ${sessionToRevoke ?? ''} for ${userDisplayName(user)}.`}
+            error={revokeSessionMutation.error}
+            onClose={() => setSessionToRevoke(null)}
+            onConfirm={() => {
+              if (sessionToRevoke) revokeSessionMutation.mutate(sessionToRevoke)
+              setSessionToRevoke(null)
+            }}
+            open={sessionToRevoke !== null}
+            pending={revokeSessionMutation.isPending}
+            title="Revoke session"
+          />
+          <DangerConfirmDialog
+            actionLabel="Delete passkey"
+            description={`Delete passkey ${passkeyToDelete ?? ''} for ${userDisplayName(user)}.`}
+            error={deletePasskeyMutation.error}
+            onClose={() => setPasskeyToDelete(null)}
+            onConfirm={() => {
+              if (passkeyToDelete) deletePasskeyMutation.mutate(passkeyToDelete)
+              setPasskeyToDelete(null)
+            }}
+            open={passkeyToDelete !== null}
+            pending={deletePasskeyMutation.isPending}
+            title="Delete passkey"
+          />
+        </div>
+      ) : null}
+    </ResourcePage>
+  )
+}
+
+function UserProfileCard({
+  error,
+  onSubmit,
+  pending,
+  user,
+}: {
+  error: unknown
+  onSubmit: (input: z.infer<typeof managementUpdateUserRequestSchema>) => void
+  pending: boolean
+  user: ManagementUserResponse
+}) {
+  const [form, setForm] = useState<FormState>({
+    email: user.email ?? '',
+    displayName: user.displayName ?? user.name ?? '',
+    username: user.username ?? '',
+    role: Array.isArray(user.role) ? '' : (user.role ?? 'user'),
+    emailVerified: user.emailVerified ? 'true' : 'false',
+  })
+  const [validationError, setValidationError] = useState<string | null>(null)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Profile and access</CardTitle>
+        <CardDescription>Edit safe account fields and administrative access state.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="formStack"
+          noValidate={true}
+          onSubmit={(event) => {
+            event.preventDefault()
+            try {
+              setValidationError(null)
+              onSubmit(
+                parseForm(managementUpdateUserRequestSchema, {
+                  email: form.email,
+                  displayName: form.displayName,
+                  username: form.username || null,
+                  ...(form.role ? { role: form.role } : {}),
+                  emailVerified: form.emailVerified === 'true',
+                }),
+              )
+            } catch (submitError) {
+              setValidationError(submitError instanceof Error ? submitError.message : 'Invalid form input.')
+            }
+          }}
+        >
+          <Field label="Email">
+            <TextInput
+              onChange={(event) => setValue(setForm, 'email', event.target.value)}
+              type="email"
+              value={form.email}
+            />
+          </Field>
+          <Field label="Display name">
+            <TextInput
+              onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
+              value={form.displayName}
+            />
+          </Field>
+          <Field label="Username">
+            <TextInput onChange={(event) => setValue(setForm, 'username', event.target.value)} value={form.username} />
+          </Field>
+          <Field label="Role">
+            <SelectInput
+              disabled={Array.isArray(user.role)}
+              onChange={(event) => setValue(setForm, 'role', event.target.value)}
+              value={form.role}
+            >
+              {Array.isArray(user.role) ? <option value="">Multiple roles: {user.role.join(', ')}</option> : null}
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </SelectInput>
+          </Field>
+          <Field label="Email verification">
+            <SelectInput
+              onChange={(event) => setValue(setForm, 'emailVerified', event.target.value)}
+              value={form.emailVerified}
+            >
+              <option value="true">Verified</option>
+              <option value="false">Unverified</option>
+            </SelectInput>
+          </Field>
+          {validationError ? <MutationError error={validationError} /> : null}
+          <MutationError error={error} />
+          <Button disabled={pending} type="submit">
+            {pending ? 'Saving...' : 'Save profile'}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+function UserSecurityCard({
+  error,
+  onDeletePasskey,
+  passkeys,
+  security,
+}: {
+  error: unknown
+  onDeletePasskey: (passkeyId: string) => void
+  passkeys: Array<{
+    id: string
+    name: string | null
+    deviceType: string
+    backedUp: boolean
+    createdAt: string | Date | null
+  }>
+  security?: {
+    mfa: { enabled: boolean; factors: Array<{ id: string; type: string; verified: boolean | null }> }
+    passkeys: { enabled: boolean; count: number }
+    policy: { mfa: { mode: string }; passkeys: { enabled: boolean; rpName: string } }
+  }
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>MFA and passkeys</CardTitle>
+        <CardDescription>Overview only; no secret material is exposed.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <SettingRow label="MFA state" value={security?.mfa.enabled ? 'Enabled' : 'Disabled'} />
+        <SettingRow label="MFA policy" value={security?.policy.mfa.mode ?? 'Unknown'} />
+        <SettingRow label="Passkey policy" value={security?.policy.passkeys.enabled ? 'Enabled' : 'Disabled'} />
+        <SettingRow label="Passkey count" value={String(security?.passkeys.count ?? passkeys.length)} />
+        {security?.mfa.factors.length ? (
+          <div className="grid gap-2">
+            {security.mfa.factors.map((factor) => (
+              <SummaryRow
+                key={factor.id}
+                meta={factor.verified ? 'Verified' : 'Unverified'}
+                status={<Badge variant="secondary">{factor.type}</Badge>}
+                title={factor.id}
+              />
+            ))}
+          </div>
+        ) : null}
+        <div className="grid gap-2">
+          {passkeys.length ? (
+            passkeys.map((passkey) => (
+              <div
+                className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
+                key={passkey.id}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{passkey.name ?? passkey.id}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {passkey.deviceType}; {passkey.backedUp ? 'backed up' : 'not backed up'};{' '}
+                    {formatDate(passkey.createdAt ?? undefined)}
+                  </p>
+                </div>
+                <Button onClick={() => onDeletePasskey(passkey.id)} type="button" variant="danger">
+                  Delete
+                </Button>
+              </div>
+            ))
+          ) : (
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+              No passkeys registered.
+            </p>
+          )}
+        </div>
+        <MutationError error={error} />
+      </CardContent>
+    </Card>
+  )
+}
+
+function UserSessionsCard({
+  error,
+  onRevokeAll,
+  onRevokeSession,
+  pending,
+  sessions,
+}: {
+  error: unknown
+  onRevokeAll: () => void
+  onRevokeSession: (sessionId: string) => void
+  pending: boolean
+  sessions: Array<{
+    id: string
+    expiresAt: string | Date
+    createdAt: string | Date
+    ipAddress: string | null
+    userAgent: string | null
+  }>
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>Sessions</CardTitle>
+            <CardDescription>Revoke one session or require every device to sign in again.</CardDescription>
+          </div>
+          <Button disabled={pending || sessions.length === 0} onClick={onRevokeAll} type="button" variant="danger">
+            Revoke all
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {sessions.length ? (
+          sessions.map((session) => (
+            <div
+              className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
+              key={session.id}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{session.userAgent ?? session.id}</p>
+                <p className="text-xs text-muted-foreground">
+                  {session.ipAddress ?? 'Unknown IP'}; expires {formatDate(session.expiresAt)}
+                </p>
+              </div>
+              <Button disabled={pending} onClick={() => onRevokeSession(session.id)} type="button" variant="danger">
+                Revoke
+              </Button>
+            </div>
+          ))
+        ) : (
+          <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+            No active sessions.
+          </p>
+        )}
+        <MutationError error={error} />
+      </CardContent>
+    </Card>
+  )
+}
+
+function UserLinkedAccountsCard({
+  accounts,
+  error,
+}: {
+  accounts: Array<{ id: string; accountId: string; providerId: string; createdAt: string | Date }>
+  error: unknown
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Linked accounts</CardTitle>
+        <CardDescription>External identity accounts connected to this user.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {accounts.length ? (
+          accounts.map((account) => (
+            <SummaryRow
+              key={account.id}
+              meta={`${account.accountId}; linked ${formatDate(account.createdAt)}`}
+              status={<Badge variant="secondary">{account.providerId}</Badge>}
+              title={account.providerId}
+            />
+          ))
+        ) : (
+          <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+            No linked accounts.
+          </p>
+        )}
+        <MutationError error={error} />
+      </CardContent>
+    </Card>
+  )
+}
+
+function UserApplicationsCard({
+  applications,
+  error,
+}: {
+  applications: Array<{
+    id: string
+    applicationName: string
+    applicationSlug: string
+    scopes: string[]
+    grantedAt: string | Date
+  }>
+  error: unknown
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Authorized applications</CardTitle>
+        <CardDescription>OIDC clients with active user consent.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {applications.length ? (
+          applications.map((application) => (
+            <SummaryRow
+              key={application.id}
+              meta={`${application.scopes.join(' ')}; granted ${formatDate(application.grantedAt)}`}
+              status={<Badge variant="outline">{application.applicationSlug}</Badge>}
+              title={application.applicationName}
+            />
+          ))
+        ) : (
+          <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+            No authorized applications.
+          </p>
+        )}
+        <MutationError error={error} />
+      </CardContent>
+    </Card>
   )
 }
 
@@ -2101,6 +2723,91 @@ function DeleteApplicationDialog({
   )
 }
 
+function BanUserDialog({
+  error,
+  onClose,
+  onConfirm,
+  open,
+  pending,
+  userName,
+}: {
+  error: unknown
+  onClose: () => void
+  onConfirm: (reason: string) => void
+  open: boolean
+  pending: boolean
+  userName: string
+}) {
+  const [reason, setReason] = useState('')
+
+  return (
+    <Dialog open={open}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Ban user</DialogTitle>
+          <DialogDescription>Banning {userName} blocks sign-in until an admin unbans the account.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 p-4">
+          <Field label="Reason">
+            <TextArea onChange={(event) => setReason(event.target.value)} value={reason} />
+          </Field>
+          <MutationError error={error} />
+        </div>
+        <DialogFooter className="m-0">
+          <Button onClick={onClose} type="button" variant="secondary">
+            Cancel
+          </Button>
+          <Button disabled={pending} onClick={() => onConfirm(reason)} type="button" variant="danger">
+            Ban user
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DangerConfirmDialog({
+  actionLabel,
+  description,
+  error,
+  onClose,
+  onConfirm,
+  open,
+  pending,
+  title,
+}: {
+  actionLabel: string
+  description: string
+  error: unknown
+  onClose: () => void
+  onConfirm: () => void
+  open: boolean
+  pending: boolean
+  title: string
+}) {
+  return (
+    <Dialog open={open}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <div className="p-4">
+          <MutationError error={error} />
+        </div>
+        <DialogFooter className="m-0">
+          <Button onClick={onClose} type="button" variant="secondary">
+            Cancel
+          </Button>
+          <Button disabled={pending} onClick={onConfirm} type="button" variant="danger">
+            {actionLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function MutationError({ error }: { error: unknown }) {
   if (!error) return null
   return (
@@ -2882,4 +3589,13 @@ function useAdminMutation<TInput, TOutput>({
 function formatDate(value: string | Date | undefined) {
   if (!value) return 'Unknown'
   return new Date(value).toLocaleDateString()
+}
+
+function formatRole(role: ManagementUserResponse['role']) {
+  if (Array.isArray(role)) return role.join(', ')
+  return role ?? 'user'
+}
+
+function userDisplayName(user: ManagementUserResponse) {
+  return user.displayName ?? user.name ?? user.email ?? user.id
 }

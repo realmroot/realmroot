@@ -14,6 +14,7 @@ import {
   RolesPage,
   SecurityPage,
   SignInSettingsPage,
+  UserDetailPage,
   UsersPage,
 } from '@/features/admin/admin-console'
 import { ApiRequestError, getConfigz } from '@/lib/api'
@@ -211,6 +212,15 @@ const adminUsersRoute = createRoute({
   component: UsersPage,
 })
 
+const adminUserDetailRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/users/{$userId}',
+  component: () => {
+    const params = adminUserDetailRoute.useParams()
+    return <UserDetailPage userId={params.userId} />
+  },
+})
+
 const adminConnectorsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/connectors',
@@ -295,6 +305,7 @@ const routeTree = rootRoute.addChildren([
     adminApplicationsRoute,
     adminApplicationDetailRoute,
     adminUsersRoute,
+    adminUserDetailRoute,
     adminConnectorsRoute,
     adminSignInRoute,
     adminSecurityRoute,

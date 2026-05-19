@@ -6,6 +6,7 @@ import {
   managementReadinessResponseSchema,
 } from '../../shared/api/management'
 import { createApp } from '../app'
+import type { SecurityRepository } from '../modules/security/repository'
 import type { UserRepository } from '../modules/users/repository'
 
 describe('management routes', () => {
@@ -144,6 +145,180 @@ describe('management routes', () => {
       headers: expect.any(Headers),
     })
     expect(auth.api.unbanUser).toHaveBeenCalledWith({ body: { userId: 'user-1' }, headers: expect.any(Headers) })
+  })
+
+  it('aggregates management user detail and sub-collections without leaking unrelated lookups', async () => {
+    const auth = createAuthMock()
+    const users = createUserRepositoryMock()
+    users.getUser = vi.fn().mockResolvedValue({ id: 'user-1', email: 'user-1@example.com' })
+    users.listLinkedAccounts = vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page)))
+    users.listConsentedApplications = vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page)))
+    users.listSessions = vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page)))
+    const app = createApp(auth, { userRepository: users })
+    const headers = adminHeaders()
+
+    const detail = await app.request('/api/management/users/user-1', { headers })
+    const accounts = await app.request('/api/management/users/user-1/linked-accounts?limit=2&offset=4', { headers })
+    const applications = await app.request('/api/management/users/user-1/applications?limit=3&offset=6', { headers })
+    const sessions = await app.request('/api/management/users/user-1/sessions?limit=4&offset=8', { headers })
+    const reset = await app.request('/api/management/users/user-1/password-reset-requests', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ redirectTo: 'https://app.example.com/reset' }),
+    })
+
+    expect(detail.status).toBe(200)
+    await expect(detail.json()).resolves.toEqual({ user: { id: 'user-1', email: 'user-1@example.com' } })
+    await expect(accounts.json()).resolves.toEqual({
+      accounts: [],
+      pagination: {
+        limit: 2,
+        offset: 4,
+        total: 10,
+        hasMore: true,
+        nextOffset: 6,
+      },
+    })
+    await expect(applications.json()).resolves.toEqual({
+      applications: [],
+      pagination: {
+        limit: 3,
+        offset: 6,
+        total: 10,
+        hasMore: true,
+        nextOffset: 9,
+      },
+    })
+    await expect(sessions.json()).resolves.toEqual({
+      sessions: [],
+      pagination: {
+        limit: 4,
+        offset: 8,
+        total: 10,
+        hasMore: false,
+        nextOffset: null,
+      },
+    })
+    await expect(reset.json()).resolves.toEqual({ status: true })
+
+    expect(auth.api.getUser).not.toHaveBeenCalled()
+    expect(users.getUser).toHaveBeenCalledWith('user-1')
+    expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
+    expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1', { limit: 3, offset: 6 })
+    expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })
+    expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
+      body: {
+        email: 'user-1@example.com',
+        redirectTo: 'https://app.example.com/reset',
+      },
+      headers: expect.any(Headers),
+    })
+  })
+
+  it('exposes managed user security and passkey controls through safe repositories', async () => {
+    const security = createSecurityRepositoryMock()
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: security,
+    })
+    const headers = adminHeaders()
+
+    const securityState = await app.request('/api/management/users/user-1/security', { headers })
+    const passkeys = await app.request('/api/management/users/user-1/passkeys?limit=2&offset=4', { headers })
+    const deleted = await app.request('/api/management/users/user-1/passkeys/passkey-1', {
+      method: 'DELETE',
+      headers,
+    })
+
+    expect(securityState.status).toBe(200)
+    await expect(securityState.json()).resolves.toEqual({
+      security: {
+        userId: 'user-1',
+        mfa: { enabled: true, factors: [] },
+        passkeys: { enabled: true, count: 1 },
+        policy: securityPolicyFixture,
+      },
+    })
+    await expect(passkeys.json()).resolves.toEqual({
+      passkeys: [
+        {
+          id: 'passkey-1',
+          name: 'MacBook',
+          userId: 'user-1',
+          deviceType: 'platform',
+          backedUp: true,
+          transports: 'internal',
+          createdAt: null,
+          aaguid: null,
+        },
+      ],
+      pagination: {
+        limit: 2,
+        offset: 4,
+        total: 10,
+        hasMore: true,
+        nextOffset: 6,
+      },
+    })
+    expect(deleted.status).toBe(204)
+    expect(security.getSecurityState).toHaveBeenCalledWith('user-1')
+    expect(security.listPasskeys).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
+    expect(security.deletePasskey).toHaveBeenCalledWith('user-1', 'passkey-1')
+  })
+
+  it('updates and revokes specific managed users through the management boundary', async () => {
+    const auth = createAuthMock()
+    const users = createUserRepositoryMock()
+    const app = createApp(auth, { userRepository: users })
+    const headers = adminHeaders()
+
+    const updated = await app.request('/api/management/users/user-1', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        email: 'grace@example.com',
+        displayName: 'Grace Hopper',
+        username: 'Grace',
+        role: 'user',
+        emailVerified: false,
+      }),
+    })
+    const revokedOne = await app.request('/api/management/users/user-1/sessions/session-1', {
+      method: 'DELETE',
+      headers,
+    })
+    const revokedAll = await app.request('/api/management/users/user-1/sessions', {
+      method: 'DELETE',
+      headers,
+    })
+
+    expect(updated.status).toBe(200)
+    await expect(updated.json()).resolves.toEqual({ user: { id: 'user-1' } })
+    await expect(revokedOne.json()).resolves.toEqual({ success: true })
+    await expect(revokedAll.json()).resolves.toEqual({ success: true })
+
+    expect(auth.api.adminUpdateUser).toHaveBeenCalledWith({
+      body: {
+        userId: 'user-1',
+        data: {
+          email: 'grace@example.com',
+          emailVerified: false,
+          name: 'Grace Hopper',
+          username: 'grace',
+          role: 'user',
+        },
+      },
+      headers: expect.any(Headers),
+    })
+    expect(users.getSessionToken).toHaveBeenCalledWith('user-1', 'session-1')
+    expect(auth.api.revokeUserSession).toHaveBeenCalledWith({
+      body: { sessionToken: 'session-token-1' },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.revokeUserSessions).toHaveBeenCalledWith({
+      body: { userId: 'user-1' },
+      headers: expect.any(Headers),
+    })
   })
 
   it('exposes managed sign-in settings', async () => {
@@ -547,6 +722,49 @@ function createUserRepositoryMock(): UserRepository {
     listLinkedAccounts: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     listConsentedApplications: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     listSessions: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
+    getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
+  }
+}
+
+const securityPolicyFixture = {
+  mfa: { mode: 'optional' as const },
+  passkeys: { enabled: true, rpId: 'auth.example.com', rpName: 'FlareAuth', origins: ['https://auth.example.com'] },
+  sessions: {
+    expiresInSeconds: 3600,
+    updateAgeSeconds: 300,
+    freshAgeSeconds: 300,
+    cookieCacheSeconds: 60,
+  },
+}
+
+function createSecurityRepositoryMock(): SecurityRepository {
+  return {
+    getSecurityState: vi.fn().mockResolvedValue({
+      userId: 'user-1',
+      mfa: { enabled: true, factors: [] },
+      passkeys: { enabled: true, count: 1 },
+      policy: securityPolicyFixture,
+    }),
+    listPasskeys: vi.fn().mockImplementation((_userId, page) =>
+      Promise.resolve({
+        items: [
+          {
+            id: 'passkey-1',
+            name: 'MacBook',
+            userId: 'user-1',
+            deviceType: 'platform',
+            backedUp: true,
+            transports: 'internal',
+            createdAt: null,
+            aaguid: null,
+          },
+        ],
+        limit: page.limit,
+        offset: page.offset,
+        total: 10,
+      }),
+    ),
+    deletePasskey: vi.fn().mockResolvedValue(undefined),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
   }
 }

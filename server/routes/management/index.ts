@@ -101,7 +101,13 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   })
 
   if (options.userRepository) {
-    app.route('/users', adminUserRoutes(options.authApi, options.userRepository, { normalizeListResponse: true }))
+    app.route(
+      '/users',
+      adminUserRoutes(options.authApi, options.userRepository, {
+        normalizeListResponse: true,
+        securityRepository: options.securityRepository,
+      }),
+    )
   }
 
   if (options.userRepository && options.securityRepository && options.securityPolicy) {

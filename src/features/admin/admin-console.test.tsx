@@ -21,6 +21,7 @@ import {
 afterEach(() => {
   cleanup()
   queryClient.clear()
+  queryClient.setDefaultOptions({})
   vi.restoreAllMocks()
   window.history.pushState(null, '', '/')
 })
@@ -917,6 +918,485 @@ describe('admin console', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         { url: '/api/management/users/password-reset-requests', body: { email: 'jane@example.com' } },
+      ])
+    })
+  })
+
+  it('applies user list filters and pagination controls', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requests.push(url)
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(
+          jsonResponse({
+            users: [{ ...user, email: null, emailVerified: true, role: null }],
+            pagination: {
+              limit: 10,
+              offset: url.includes('offset=10') ? 10 : 0,
+              total: 30,
+              hasMore: true,
+              nextOffset: 10,
+            },
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<UsersPage />)
+
+    expect(await screen.findByText('user-1')).toBeTruthy()
+    expect(screen.getByText('user')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Filter role'), { target: { value: 'admin' } })
+    fireEvent.change(screen.getByLabelText('Filter status'), { target: { value: 'true' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Previous' }))
+
+    await waitFor(() => {
+      expect(
+        requests.some((url) => url.includes('role=admin') && url.includes('banned=true') && url.includes('offset=10')),
+      ).toBe(true)
+    })
+    fireEvent.click(screen.getByLabelText('Actions for user-1'))
+    expect(screen.queryByText('Send password reset')).toBeNull()
+  })
+
+  it('renders user detail data and sends scoped admin actions', async () => {
+    const requests: Array<{ method: string; url: string; body: unknown }> = []
+    const fetches: Array<{ method: string; url: string }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      fetches.push({ method, url })
+
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/users/user-1' && method === 'GET') {
+        return Promise.resolve(jsonResponse({ user: { ...profile, role: 'admin', banned: false, banReason: null } }))
+      }
+      if (url === '/api/management/users/user-1' && method === 'PATCH') {
+        requests.push({ method, url, body: JSON.parse(String(init?.body)) })
+        return Promise.resolve(
+          jsonResponse({
+            user: {
+              ...profile,
+              role: 'user',
+              banned: false,
+              banReason: null,
+              displayName: 'Jane Q. Stone',
+              emailVerified: false,
+            },
+          }),
+        )
+      }
+      if (url === '/api/management/users/user-1/password-reset-requests' && method === 'POST') {
+        requests.push({ method, url, body: JSON.parse(String(init?.body)) })
+        return Promise.resolve(jsonResponse({ accepted: true }))
+      }
+      if (url.startsWith('/api/management/users/user-1/sessions') && method === 'GET') {
+        return Promise.resolve(jsonResponse({ sessions: [adminSession], pagination }))
+      }
+      if (url === '/api/management/users/user-1/sessions/session-1' && method === 'DELETE') {
+        requests.push({ method, url, body: null })
+        return Promise.resolve(jsonResponse({ success: true }))
+      }
+      if (url === '/api/management/users/user-1/sessions' && method === 'DELETE') {
+        requests.push({ method, url, body: null })
+        return Promise.resolve(jsonResponse({ success: true }))
+      }
+      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+        return Promise.resolve(jsonResponse({ accounts: [linkedAccount], pagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/applications')) {
+        return Promise.resolve(jsonResponse({ applications: [userApplication], pagination }))
+      }
+      if (url === '/api/management/users/user-1/security') {
+        return Promise.resolve(jsonResponse({ security: adminSecurity }))
+      }
+      if (url === '/api/management/users/user-1/passkeys/passkey-1' && method === 'DELETE') {
+        requests.push({ method, url, body: null })
+        return Promise.resolve(jsonResponse({}))
+      }
+      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+        return Promise.resolve(jsonResponse({ passkeys: [adminPasskey], pagination }))
+      }
+      if (url === '/api/management/users/user-1/ban' && method === 'PUT') {
+        requests.push({ method, url, body: JSON.parse(String(init?.body)) })
+        return Promise.resolve(
+          jsonResponse({ user: { ...profile, role: 'user', banned: true, banReason: 'abuse', emailVerified: false } }),
+        )
+      }
+      if (url === '/api/management/users/user-1/ban' && method === 'DELETE') {
+        requests.push({ method, url, body: null })
+        return Promise.resolve(
+          jsonResponse({
+            user: { ...profile, role: 'user', banned: false, banReason: null, emailVerified: false },
+          }),
+        )
+      }
+
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    window.history.pushState(null, '', '/admin/users/user-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(screen.getByText('MFA and passkeys')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Send password reset' })).toBeTruthy()
+    expect(fetches.map((entry) => entry.url)).toEqual(
+      expect.arrayContaining([
+        '/api/management/users/user-1',
+        '/api/management/users/user-1/sessions?',
+        '/api/management/users/user-1/linked-accounts?',
+        '/api/management/users/user-1/applications?',
+        '/api/management/users/user-1/security',
+        '/api/management/users/user-1/passkeys?',
+      ]),
+    )
+
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Jane Q. Stone' } })
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'user' } })
+    fireEvent.change(screen.getByLabelText('Email verification'), { target: { value: 'false' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Save profile' }).closest('form')!)
+    await waitFor(() => expect(requests).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Send password reset' }))
+    await waitFor(() => expect(requests).toHaveLength(2))
+    fireEvent.click(screen.getByRole('button', { name: /^Revoke$/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke session' }))
+    await waitFor(() => expect(requests).toHaveLength(3))
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke sessions' }))
+    await waitFor(() => expect(requests).toHaveLength(4))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete passkey' }))
+    await waitFor(() => expect(requests).toHaveLength(5))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'abuse' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' }).at(-1)!)
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          method: 'PATCH',
+          url: '/api/management/users/user-1',
+          body: {
+            email: 'jane@example.com',
+            displayName: 'Jane Q. Stone',
+            username: 'jane',
+            role: 'user',
+            emailVerified: false,
+          },
+        },
+        {
+          method: 'POST',
+          url: '/api/management/users/user-1/password-reset-requests',
+          body: {},
+        },
+        {
+          method: 'DELETE',
+          url: '/api/management/users/user-1/sessions/session-1',
+          body: null,
+        },
+        {
+          method: 'DELETE',
+          url: '/api/management/users/user-1/sessions',
+          body: null,
+        },
+        {
+          method: 'DELETE',
+          url: '/api/management/users/user-1/passkeys/passkey-1',
+          body: null,
+        },
+        {
+          method: 'PUT',
+          url: '/api/management/users/user-1/ban',
+          body: { reason: 'abuse' },
+        },
+      ])
+    })
+  })
+
+  it('supports unbanning and confirmed deletion from user detail', async () => {
+    const requests: Array<{ method: string; url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/users/user-1' && method === 'GET') {
+        return Promise.resolve(
+          jsonResponse({
+            user: {
+              ...profile,
+              role: 'user',
+              banned: true,
+              banReason: 'abuse',
+              banExpires: '2027-01-01T00:00:00.000Z',
+            },
+          }),
+        )
+      }
+      if (url === '/api/management/users/user-1/ban' && method === 'DELETE') {
+        requests.push({ method, url, body: null })
+        return Promise.resolve(jsonResponse({ user: { ...profile, role: 'user', banned: false, banReason: null } }))
+      }
+      if (url === '/api/management/users/user-1' && method === 'DELETE') {
+        requests.push({ method, url, body: null })
+        return Promise.resolve(jsonResponse({ success: true }))
+      }
+      if (url.startsWith('/api/management/users/user-1/sessions')) {
+        return Promise.resolve(jsonResponse({ sessions: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+        return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/applications')) {
+        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/users/user-1/security') {
+        return Promise.resolve(jsonResponse({ security: adminSecurity }))
+      }
+      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+        return Promise.resolve(jsonResponse({ passkeys: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    window.history.pushState(null, '', '/admin/users/user-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByText('abuse')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Unban user' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({ method: 'DELETE', url: '/api/management/users/user-1/ban', body: null }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete user' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete user' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete user' }).at(-1)!)
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({ method: 'DELETE', url: '/api/management/users/user-1', body: null }),
+    )
+  })
+
+  it('retries user detail loading and cancels destructive dialogs', async () => {
+    const requests: Array<{ method: string; url: string }> = []
+    let detailAttempts = 0
+    queryClient.setDefaultOptions({ queries: { retry: false } })
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      requests.push({ method, url })
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/users/user-1' && method === 'GET') {
+        detailAttempts += 1
+        if (detailAttempts === 1) return Promise.resolve(jsonResponse({ error: { message: 'User unavailable.' } }, 503))
+        return Promise.resolve(jsonResponse({ user: { ...profile, role: 'user', banned: false } }))
+      }
+      if (url.startsWith('/api/management/users/user-1/sessions')) {
+        return Promise.resolve(jsonResponse({ sessions: [adminSession], pagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+        return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/applications')) {
+        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/users/user-1/security') {
+        return Promise.resolve(jsonResponse({ security: adminSecurity }))
+      }
+      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+        return Promise.resolve(jsonResponse({ passkeys: [adminPasskey], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    window.history.pushState(null, '', '/admin/users/user-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByText('User unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Revoke$/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(requests.filter((request) => request.method !== 'GET')).toEqual([])
+  })
+
+  it('renders user detail fallback states and submits no-reason bans', async () => {
+    const requests: Array<{ method: string; url: string; body: unknown }> = []
+    queryClient.setDefaultOptions({ queries: { retry: false } })
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/users/user-1' && method === 'GET') {
+        return Promise.resolve(
+          jsonResponse({
+            user: {
+              id: 'user-1',
+              emailVerified: false,
+              username: null,
+              role: ['admin', 'support'],
+              banned: false,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          }),
+        )
+      }
+      if (url === '/api/management/users/user-1/ban' && method === 'PUT') {
+        requests.push({ method, url, body: JSON.parse(String(init?.body)) })
+        return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'support'], banned: true } }))
+      }
+      if (url.startsWith('/api/management/users/user-1/sessions')) {
+        return Promise.resolve(
+          jsonResponse({ sessions: [{ ...adminSession, ipAddress: null, userAgent: null }], pagination }),
+        )
+      }
+      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+        return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/applications')) {
+        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/users/user-1/security') {
+        return Promise.resolve(
+          jsonResponse({
+            security: {
+              userId: 'user-1',
+              mfa: { enabled: false, factors: [{ id: 'factor-2', type: 'sms', verified: false }] },
+              passkeys: { enabled: false, count: 0 },
+              policy: { mfa: { mode: 'optional' }, passkeys: { enabled: false, rpName: 'Acme Auth' } },
+            },
+          }),
+        )
+      }
+      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+        return Promise.resolve(
+          jsonResponse({
+            passkeys: [{ ...adminPasskey, name: null, backedUp: false, createdAt: null }],
+            pagination,
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    window.history.pushState(null, '', '/admin/users/user-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'user-1' })).toBeTruthy()
+    expect(screen.getByText('Multiple roles: admin, support')).toBeTruthy()
+    expect(screen.getAllByText('Disabled')).toHaveLength(2)
+    expect(screen.getByText('sms')).toBeTruthy()
+    expect(screen.getByText('passkey-1')).toBeTruthy()
+    expect(screen.getByText(/not backed up/)).toBeTruthy()
+    expect(screen.getByText(/Unknown IP/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save profile' }).closest('form')?.noValidate).toBe(true)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' }).at(-1)!)
+    await waitFor(() => {
+      expect(requests).toEqual([{ method: 'PUT', url: '/api/management/users/user-1/ban', body: {} }])
+    })
+  })
+
+  it('preserves multi-role users when saving detail profile fields', async () => {
+    const requests: Array<{ method: string; url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/users/user-1' && method === 'GET') {
+        return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'viewer'], banned: false } }))
+      }
+      if (url === '/api/management/users/user-1' && method === 'PATCH') {
+        requests.push({ method, url, body: JSON.parse(String(init?.body)) })
+        return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'viewer'], banned: false } }))
+      }
+      if (url.startsWith('/api/management/users/user-1/sessions')) {
+        return Promise.resolve(jsonResponse({ sessions: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+        return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/applications')) {
+        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/users/user-1/security') {
+        return Promise.resolve(jsonResponse({ security: adminSecurity }))
+      }
+      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+        return Promise.resolve(jsonResponse({ passkeys: [], pagination: emptyPagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    window.history.pushState(null, '', '/admin/users/user-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByLabelText('Role')).toHaveProperty('disabled', true)
+    expect(screen.getByText('Multiple roles: admin, viewer')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'roles@example.com' } })
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Jane Roles' } })
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'janeroles' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Save profile' }).closest('form')!)
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          method: 'PATCH',
+          url: '/api/management/users/user-1',
+          body: {
+            email: 'roles@example.com',
+            displayName: 'Jane Roles',
+            username: 'janeroles',
+            emailVerified: true,
+          },
+        },
       ])
     })
   })
@@ -2357,6 +2837,55 @@ const accountSecurity = {
     mfa: { mode: 'optional' },
     passkeys: { enabled: true, rpName: 'Acme Auth' },
   },
+}
+
+const adminSecurity = {
+  userId: 'user-1',
+  mfa: { enabled: true, factors: [{ id: 'factor-1', type: 'totp', verified: true }] },
+  passkeys: { enabled: true, count: 1 },
+  policy: {
+    mfa: { mode: 'required' },
+    passkeys: { enabled: true, rpName: 'Acme Auth' },
+  },
+}
+
+const adminPasskey = {
+  id: 'passkey-1',
+  name: 'MacBook Touch ID',
+  userId: 'user-1',
+  deviceType: 'singleDevice',
+  backedUp: true,
+  transports: 'internal',
+  createdAt: '2026-01-01T00:00:00.000Z',
+}
+
+const adminSession = {
+  id: 'session-1',
+  expiresAt: '2026-01-01T01:00:00.000Z',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:30:00.000Z',
+  ipAddress: '127.0.0.1',
+  userAgent: 'Chrome',
+  activeOrganizationId: null,
+}
+
+const linkedAccount = {
+  id: 'account-1',
+  accountId: 'github-jane',
+  providerId: 'github',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const userApplication = {
+  id: 'grant-1',
+  applicationId: 'app-1',
+  applicationName: 'Customer portal',
+  applicationSlug: 'customer-portal',
+  scopes: ['openid', 'profile'],
+  permissions: ['read:profile'],
+  grantedAt: '2026-01-01T00:00:00.000Z',
+  expiresAt: null,
 }
 
 const configz = {
