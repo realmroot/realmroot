@@ -286,10 +286,16 @@ const journeyAssertions: Record<
       await page.goto('/account')
       await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
       await expect(page).toHaveURL(/\/account$/)
+      await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Avatar' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Email' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Password' })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'MFA' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Passkeys' })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Linked social accounts' })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Sessions and devices' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Consented applications' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Authorized apps' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
     },
   },
   'account-deep-links': {
@@ -306,7 +312,7 @@ const journeyAssertions: Record<
         await expect(page).toHaveURL(/\/account$/)
         await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
         await expect(page.getByRole('heading', { name: 'MFA' })).toBeVisible()
-        await expect(page.getByRole('heading', { name: 'Consented applications' })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Authorized apps' })).toBeVisible()
       }
     },
   },
@@ -332,7 +338,7 @@ const journeyAssertions: Record<
         mimeType: 'image/png',
         buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       })
-      await expect(page.locator('section', { has: page.getByRole('heading', { name: 'Profile' }) }).locator('img')).toBeVisible()
+      await expect(page.locator('section', { has: page.getByRole('heading', { name: 'Avatar' }) }).locator('img')).toBeVisible()
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/account/avatar',
@@ -444,13 +450,13 @@ const journeyAssertions: Record<
       await page.goto('/account/authorized-apps')
       await expect(page.getByText('Customer portal')).toBeVisible()
       await page
-        .locator('.settingsPanel', { has: page.getByRole('heading', { name: 'Consented applications' }) })
+        .locator('.settingsPanel', { has: page.getByRole('heading', { name: 'Authorized apps' }) })
         .getByRole('button', { name: 'Revoke' })
         .click()
       await expect(page.getByRole('dialog')).toBeVisible()
       await page.getByRole('button', { name: 'Cancel' }).click()
       await page
-        .locator('.settingsPanel', { has: page.getByRole('heading', { name: 'Consented applications' }) })
+        .locator('.settingsPanel', { has: page.getByRole('heading', { name: 'Authorized apps' }) })
         .getByRole('button', { name: 'Revoke' })
         .click()
       await page.getByRole('button', { name: 'Revoke access' }).click()
@@ -1224,7 +1230,7 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
       },
       { name: 'account-profile', path: '/account/profile', heading: 'Jane Stone' },
       { name: 'account-security', path: '/account/security', heading: 'MFA' },
-      { name: 'account-authorized-apps', path: '/account/authorized-apps', heading: 'Consented applications' },
+      { name: 'account-authorized-apps', path: '/account/authorized-apps', heading: 'Authorized apps' },
       { name: 'admin-branding', path: '/console/sign-in-experience/branding', heading: 'Branding' },
     ]) {
       await page.goto(route.path)

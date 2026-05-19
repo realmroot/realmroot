@@ -29,10 +29,14 @@ describe('account center', () => {
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Avatar' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Email' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Password' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'MFA' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Passkeys' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Linked social accounts' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Sessions and devices' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Consented applications' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Authorized apps' })).toBeTruthy()
 
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
     expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('64')
@@ -134,10 +138,34 @@ describe('account center', () => {
     ).toHaveLength(accountGetCount)
   })
 
+  it('shows the sign-out error message when sign-out fails with an Error', async () => {
+    mockAccountFetch({}, { signOutFailure: new Error('Sign-out unavailable.') })
+
+    render(<AccountCenterPage />)
+
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    expect(await screen.findByText('Sign-out unavailable.')).toBeTruthy()
+    expect(navigateMock).not.toHaveBeenCalled()
+  })
+
+  it('shows the fallback sign-out error when sign-out fails with a non-Error value', async () => {
+    mockAccountFetch({}, { signOutFailure: 'network-down' })
+
+    render(<AccountCenterPage />)
+
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    expect(await screen.findByText('Account update failed.')).toBeTruthy()
+    expect(navigateMock).not.toHaveBeenCalled()
+  })
+
   it('shows TOTP enrollment setup data before verification', async () => {
     const requests = mockAccountFetch()
 
-    render(<AccountCenter section="security" />)
+    render(<AccountCenter />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
@@ -164,7 +192,7 @@ describe('account center', () => {
       },
     })
 
-    render(<AccountCenter section="security" />)
+    render(<AccountCenter />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
     fireEvent.change(screen.getByLabelText('Passkey name'), { target: { value: 'MacBook Touch ID' } })
@@ -205,7 +233,7 @@ describe('account center', () => {
       value: {},
     })
 
-    render(<AccountCenter section="security" />)
+    render(<AccountCenter />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
     fireEvent.click(screen.getByRole('button', { name: 'Add passkey' }))
@@ -221,7 +249,7 @@ describe('account center', () => {
       },
     })
 
-    render(<AccountCenter section="security" />)
+    render(<AccountCenter />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
     fireEvent.click(screen.getByRole('button', { name: 'Add passkey' }))
@@ -256,7 +284,7 @@ describe('account center', () => {
       },
     })
 
-    render(<AccountCenter section="security" />)
+    render(<AccountCenter />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
     fireEvent.click(screen.getByRole('button', { name: 'Add passkey' }))
@@ -267,7 +295,7 @@ describe('account center', () => {
   it('manages MFA verification, linked accounts, sessions, passkeys, and application consent display', async () => {
     const requests = mockAccountFetch()
 
-    render(<AccountCenter section="security" />)
+    render(<AccountCenter />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Laptop key')).toBeTruthy()
@@ -277,20 +305,20 @@ describe('account center', () => {
     clickAndConfirm('Remove', 'Remove passkey')
 
     cleanup()
-    render(<AccountCenter section="linked-accounts" />)
+    render(<AccountCenter />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('google')).toBeTruthy()
     clickAndConfirm('Unlink', 'Unlink account')
 
     cleanup()
-    render(<AccountCenter section="sessions" />)
+    render(<AccountCenter />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Chrome on macOS')).toBeTruthy()
     clickAndConfirm('Revoke other sessions', 'Revoke sessions')
     clickAndConfirm('Revoke', 'Revoke session')
 
     cleanup()
-    render(<AccountCenter section="authorized-apps" />)
+    render(<AccountCenter />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Customer Portal')).toBeTruthy()
     expect(screen.getByText(/openid, email/)).toBeTruthy()
@@ -318,10 +346,10 @@ describe('account center', () => {
   it('does not run destructive account mutations when confirmation is canceled', async () => {
     const requests = mockAccountFetch()
 
-    render(<AccountCenter section="authorized-apps" />)
+    render(<AccountCenter />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' })[1] as HTMLButtonElement)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' }).at(-1) as HTMLButtonElement)
     expect(screen.getByRole('dialog')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
@@ -419,12 +447,12 @@ describe('account center', () => {
       },
     })
 
-    render(<AccountCenter section="profile" />)
+    render(<AccountCenter />)
 
     expect(await screen.findByText('Verification required')).toBeTruthy()
     await waitFor(() => expect((screen.getByLabelText('Username') as HTMLInputElement).value).toBe(''))
     cleanup()
-    render(<AccountCenter section="security" />)
+    render(<AccountCenter />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Enabled')).toBeTruthy()
     expect(screen.getByText('Unnamed passkey')).toBeTruthy()
@@ -448,16 +476,16 @@ describe('account center', () => {
     })
 
     cleanup()
-    render(<AccountCenter section="sessions" />)
+    render(<AccountCenter />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText(/Unknown device/)).toBeTruthy()
     expect(screen.getByText(/No IP/)).toBeTruthy()
     cleanup()
-    render(<AccountCenter section="linked-accounts" />)
+    render(<AccountCenter />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('No linked social accounts.')).toBeTruthy()
     cleanup()
-    render(<AccountCenter section="authorized-apps" />)
+    render(<AccountCenter />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('No application consents.')).toBeTruthy()
   })
@@ -479,7 +507,7 @@ function clickAndConfirm(triggerName: string, confirmName: string, index = 0) {
   fireEvent.click(buttons.at(-1) as HTMLButtonElement)
 }
 
-function mockAccountFetch(profileOverrides: Partial<MockProfile> = {}) {
+function mockAccountFetch(profileOverrides: Partial<MockProfile> = {}, options: { signOutFailure?: unknown } = {}) {
   const requests: RequestRecord[] = []
   vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
     const path = String(input)
@@ -528,6 +556,9 @@ function mockAccountFetch(profileOverrides: Partial<MockProfile> = {}) {
           201,
         ),
       )
+    }
+    if (path === '/api/auth/sign-out' && options.signOutFailure !== undefined) {
+      return Promise.reject(options.signOutFailure)
     }
     return Promise.resolve(jsonResponse({ ok: true }))
   })

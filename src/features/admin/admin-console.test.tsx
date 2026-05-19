@@ -329,7 +329,7 @@ describe('admin console', () => {
       ['/account/security', 'MFA'],
       ['/account/linked-accounts', 'Linked social accounts'],
       ['/account/sessions', 'Sessions and devices'],
-      ['/account/authorized-apps', 'Consented applications'],
+      ['/account/authorized-apps', 'Authorized apps'],
     ] as const) {
       window.history.pushState(null, '', path)
       render(<AppRouter />)

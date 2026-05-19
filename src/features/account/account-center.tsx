@@ -114,9 +114,7 @@ export function AccountCenterPage() {
   return <AccountCenter />
 }
 
-export type AccountSectionId = 'profile' | 'security' | 'linked-accounts' | 'sessions' | 'authorized-apps'
-
-export function AccountCenter({ section: _section }: { section?: AccountSectionId } = {}) {
+export function AccountCenter() {
   const navigate = useNavigate()
   const { data: config } = useConfigz()
   const [data, setData] = useState(emptyAccountData)
@@ -196,8 +194,9 @@ export function AccountCenter({ section: _section }: { section?: AccountSectionI
         <section className="accountContent">
           <div className="accountHeader">
             <div>
-              <p className="eyebrow">Profile</p>
+              <p className="eyebrow">Account</p>
               <h1>{data.profile?.displayName ?? 'Your account'}</h1>
+              {data.profile ? <p className="muted">{data.profile.email}</p> : null}
             </div>
             <Button onClick={() => void signOutFromAccount()} variant="secondary">
               Sign out
@@ -213,8 +212,8 @@ export function AccountCenter({ section: _section }: { section?: AccountSectionI
           {message ? <Status tone="success">{message}</Status> : null}
           {!loading && data.profile ? (
             <div className="accountSectionStack">
-              <ProfileSection profile={data.profile} mutate={mutate} />
-              <SecuritySection confirm={setConfirmation} data={data} mutate={mutate} />
+              <ProfileSections profile={data.profile} mutate={mutate} />
+              <SecuritySections confirm={setConfirmation} data={data} mutate={mutate} />
               <ConnectionsSection accounts={data.linkedAccounts} confirm={setConfirmation} mutate={mutate} />
               <SessionsSection confirm={setConfirmation} sessions={data.sessions} mutate={mutate} />
               <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
@@ -227,7 +226,7 @@ export function AccountCenter({ section: _section }: { section?: AccountSectionI
   )
 }
 
-function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: MutationHandler }) {
+function ProfileSections({ profile, mutate }: { profile: UserProfile; mutate: MutationHandler }) {
   const [displayName, setDisplayName] = useState(profile.displayName)
   const [username, setUsername] = useState(profile.username ?? '')
   const [avatarAssetId, setAvatarAssetId] = useState(profile.avatarAssetId ?? '')
@@ -281,9 +280,21 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
   }
 
   return (
-    <div className="accountGrid">
+    <>
       <section className="settingsPanel">
         <h2>Profile</h2>
+        <form className="formStack" onSubmit={saveProfile}>
+          <Field label="Display name">
+            <TextInput onChange={(event) => setDisplayName(event.target.value)} required value={displayName} />
+          </Field>
+          <Field label="Username">
+            <TextInput onChange={(event) => setUsername(event.target.value)} value={username} />
+          </Field>
+          <Button type="submit">Save profile</Button>
+        </form>
+      </section>
+      <section className="settingsPanel">
+        <h2>Avatar</h2>
         <div className="assetUploadRow">
           {avatarPreview ? (
             <img alt="" className="assetPreview" src={avatarPreview} width="64" height="64" />
@@ -298,15 +309,6 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
             />
           </Field>
         </div>
-        <form className="formStack" onSubmit={saveProfile}>
-          <Field label="Display name">
-            <TextInput onChange={(event) => setDisplayName(event.target.value)} required value={displayName} />
-          </Field>
-          <Field label="Username">
-            <TextInput onChange={(event) => setUsername(event.target.value)} value={username} />
-          </Field>
-          <Button type="submit">Save profile</Button>
-        </form>
       </section>
       <section className="settingsPanel">
         <h2>Email</h2>
@@ -350,11 +352,11 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
           </Button>
         </form>
       </section>
-    </div>
+    </>
   )
 }
 
-function SecuritySection({
+function SecuritySections({
   confirm,
   data,
   mutate,
@@ -370,7 +372,7 @@ function SecuritySection({
   const mfaRequired = data.security?.policy.mfa.mode === 'required'
 
   return (
-    <div className="accountGrid">
+    <>
       <section className="settingsPanel">
         <h2>MFA</h2>
         <p className="muted">{data.security?.mfa.enabled ? 'Enabled' : 'No factor enrolled'}</p>
@@ -469,7 +471,7 @@ function SecuritySection({
           }))}
         />
       </section>
-    </div>
+    </>
   )
 }
 
@@ -581,7 +583,7 @@ function ApplicationsSection({
 }) {
   return (
     <section className="settingsPanel">
-      <h2>Consented applications</h2>
+      <h2>Authorized apps</h2>
       <ItemList
         empty="No application consents."
         items={applications.map((application) => ({

@@ -738,7 +738,7 @@ h1 {
 }
 
 .accountHeader {
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .accountGrid {
@@ -749,16 +749,20 @@ h1 {
 
 .accountSectionStack {
   display: grid;
-  gap: 18px;
+  gap: 12px;
 }
 
-.settingsPanel {
+.accountContent .settingsPanel {
   min-width: 0;
-  padding: 20px;
+  padding: 18px;
 }
 
-.settingsPanel > p {
-  margin-bottom: 16px;
+.accountContent .settingsPanel h2 {
+  font-size: 17px;
+}
+
+.accountContent .settingsPanel > p {
+  margin-bottom: 14px;
 }
 
 .itemList {
