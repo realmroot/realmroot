@@ -69,9 +69,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Field, SelectInput, TextArea, TextInput } from '@/components/ui/field'
+import { PageHeader } from '@/components/ui/page-header'
+import { SettingRow } from '@/components/ui/setting-row'
 import { Switch } from '@/components/ui/switch'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableEmptyRow, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   adminQueryKeys,
@@ -147,6 +150,7 @@ import {
   uploadOrganizationLogo,
 } from '@/lib/api/management'
 import { cn } from '@/lib/utils'
+import { ConsoleActionBar, ConsoleDetailStack, ConsoleToolbar } from './console-primitives'
 
 type FormState = Record<string, string>
 
@@ -198,76 +202,104 @@ export function AdminDashboardPage() {
         />
         <MetricCard detail="Monthly active users. Activity API pending." label="Monthly active" pending value="--" />
       </div>
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle>Setup progress</CardTitle>
-                <CardDescription>Readiness checklist for operating the tenant in production.</CardDescription>
+      <Card>
+        <CardHeader className="border-b border-border">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle>Operational status</CardTitle>
+              <CardDescription>Setup, protocol metadata, and runtime controls in one production view.</CardDescription>
+            </div>
+            <Badge variant={dashboard.applications.pagination.total > 0 ? 'secondary' : 'outline'}>
+              {dashboard.applications.pagination.total > 0 ? 'Ready' : 'Action needed'}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4 p-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">Setup progress</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Readiness checklist for operating the tenant.</p>
+            </div>
+            <div className="grid gap-2">
+              <SetupItem
+                complete={dashboard.applications.pagination.total > 0}
+                label="Create an OIDC application"
+                value={
+                  dashboard.applications.pagination.total > 0 ? 'Client configured' : 'Required before app sign-in'
+                }
+              />
+              <SetupItem
+                complete={dashboard.connectors.pagination.total > 0}
+                label="Configure identity connectors"
+                value={
+                  dashboard.connectors.pagination.total > 0 ? 'Connector available' : 'Password sign-in still works'
+                }
+              />
+              <SetupItem
+                complete={
+                  dashboard.security.policy.passkeys.enabled || dashboard.security.policy.mfa.mode === 'required'
+                }
+                label="Review security policy"
+                value={`MFA ${dashboard.security.policy.mfa.mode}; passkeys ${
+                  dashboard.security.policy.passkeys.enabled ? 'enabled' : 'disabled'
+                }`}
+              />
+              <SetupItem
+                complete={dashboard.users.pagination.total > 0}
+                label="Invite or create users"
+                value={`${dashboard.users.pagination.total} user${dashboard.users.pagination.total === 1 ? '' : 's'}`}
+              />
+            </div>
+          </div>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <h2 className="text-sm font-semibold">OIDC endpoints</h2>
+              <p className="text-sm text-muted-foreground">Use discovery for client configuration.</p>
+              <div className="grid gap-2 text-sm">
+                <SettingRow label="Issuer" value={`${window.location.origin}/api/auth`} />
+                <SettingRow
+                  label="Discovery"
+                  value={`${window.location.origin}/api/auth/.well-known/openid-configuration`}
+                />
               </div>
-              <Badge variant={dashboard.applications.pagination.total > 0 ? 'secondary' : 'outline'}>
-                {dashboard.applications.pagination.total > 0 ? 'Ready' : 'Action needed'}
-              </Badge>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => window.open('/api/auth/.well-known/openid-configuration', '_blank', 'noopener')}
+                  type="button"
+                  variant="secondary"
+                >
+                  <ExternalLink data-icon="inline-start" />
+                  Discovery
+                </Button>
+                <Button
+                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/auth`)}
+                  type="button"
+                  variant="secondary"
+                >
+                  <Copy data-icon="inline-start" />
+                  Copy issuer
+                </Button>
+              </div>
             </div>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <SetupItem
-              complete={dashboard.applications.pagination.total > 0}
-              label="Create an OIDC application"
-              value={dashboard.applications.pagination.total > 0 ? 'Client configured' : 'Required before app sign-in'}
-            />
-            <SetupItem
-              complete={dashboard.connectors.pagination.total > 0}
-              label="Configure identity connectors"
-              value={dashboard.connectors.pagination.total > 0 ? 'Connector available' : 'Password sign-in still works'}
-            />
-            <SetupItem
-              complete={dashboard.security.policy.passkeys.enabled || dashboard.security.policy.mfa.mode === 'required'}
-              label="Review security policy"
-              value={`MFA ${dashboard.security.policy.mfa.mode}; passkeys ${
-                dashboard.security.policy.passkeys.enabled ? 'enabled' : 'disabled'
-              }`}
-            />
-            <SetupItem
-              complete={dashboard.users.pagination.total > 0}
-              label="Invite or create users"
-              value={`${dashboard.users.pagination.total} user${dashboard.users.pagination.total === 1 ? '' : 's'}`}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>OIDC endpoints</CardTitle>
-            <CardDescription>Use discovery for client configuration and environment validation.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm">
-            <SettingRow label="Issuer" value={`${window.location.origin}/api/auth`} />
-            <SettingRow
-              label="Discovery"
-              value={`${window.location.origin}/api/auth/.well-known/openid-configuration`}
-            />
-            <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={() => window.open('/api/auth/.well-known/openid-configuration', '_blank', 'noopener')}
-                type="button"
-                variant="secondary"
-              >
-                <ExternalLink data-icon="inline-start" />
-                Discovery
-              </Button>
-              <Button
-                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/auth`)}
-                type="button"
-                variant="ghost"
-              >
-                <Copy data-icon="inline-start" />
-                Copy issuer
-              </Button>
+            <div className="grid gap-2">
+              <h2 className="text-sm font-semibold">Health signals</h2>
+              <div className="grid gap-2">
+                <HealthRow icon={<Server aria-hidden="true" />} label="Runtime" value="Cloudflare Workers" />
+                <HealthRow
+                  icon={<ShieldCheck aria-hidden="true" />}
+                  label="Sessions"
+                  value={`${dashboard.security.policy.sessions.freshAgeSeconds}s fresh age`}
+                />
+                <HealthRow
+                  icon={<ListChecks aria-hidden="true" />}
+                  label="Authorization"
+                  value={`${dashboard.roles.pagination.total} roles, ${dashboard.apiResources.pagination.total} API resources`}
+                />
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
       <div className="grid gap-4 xl:grid-cols-3">
         <DashboardListCard
           description="Most recent OIDC clients and operational state."
@@ -312,7 +344,7 @@ export function AdminDashboardPage() {
           ))}
         </DashboardListCard>
       </div>
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4">
         <Card>
           <CardHeader>
             <CardTitle>Security status</CardTitle>
@@ -325,25 +357,6 @@ export function AdminDashboardPage() {
             <SettingRow
               label="Password sign-in"
               value={dashboard.signIn.signIn.passwordEnabled ? 'Enabled' : 'Disabled'}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Health signals</CardTitle>
-            <CardDescription>Signals that affect production readiness and operations.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <HealthRow icon={<Server aria-hidden="true" />} label="Runtime" value="Cloudflare Workers" />
-            <HealthRow
-              icon={<ShieldCheck aria-hidden="true" />}
-              label="Sessions"
-              value={`${dashboard.security.policy.sessions.freshAgeSeconds}s fresh age`}
-            />
-            <HealthRow
-              icon={<ListChecks aria-hidden="true" />}
-              label="Authorization"
-              value={`${dashboard.roles.pagination.total} roles, ${dashboard.apiResources.pagination.total} API resources`}
             />
           </CardContent>
         </Card>
@@ -422,7 +435,7 @@ export function ApplicationsPage() {
       onRetry={() => query.refetch()}
     >
       <Tabs setValue={(value) => setSelectedTab(value as 'my-apps' | 'third-party')} value={selectedTab}>
-        <div className="consoleToolbar border-b border-border p-4">
+        <ConsoleToolbar className="border-b border-border p-3">
           <TabsList aria-label="Application lists">
             <TabsTrigger value="my-apps">My apps</TabsTrigger>
             <TabsTrigger value="third-party">Third-party apps</TabsTrigger>
@@ -433,7 +446,7 @@ export function ApplicationsPage() {
             placeholder="Search applications"
             value={search}
           />
-        </div>
+        </ConsoleToolbar>
         <TabsContent value="my-apps">
           <ApplicationsTableContent
             applications={visibleApplications}
@@ -544,7 +557,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
       onRetry={() => query.refetch()}
     >
       {application ? (
-        <div className="consoleDetailStack">
+        <ConsoleDetailStack>
           <Link className="consoleBackLink" to="/console/applications">
             <Undo2 data-icon="inline-start" />
             Back to applications
@@ -590,7 +603,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
                       <SettingRow label="App ID" value={application.clientId} />
                       <SettingRow label="Type" value={clientTypeLabel(application.clientType)} />
                       <SettingRow label="Status" value={application.disabled ? 'Disabled' : 'Enabled'} />
-                      <StickyActionBar>
+                      <ConsoleActionBar>
                         <Button disabled={updateMutation.isPending} type="submit">
                           <Save data-icon="inline-start" />
                           Save changes
@@ -598,7 +611,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
                         <Button disabled={updateMutation.isPending} type="reset" variant="secondary">
                           Discard
                         </Button>
-                      </StickyActionBar>
+                      </ConsoleActionBar>
                       <MutationError error={updateMutation.error} />
                     </form>
                   </CardContent>
@@ -641,14 +654,14 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
                       <Field label="CORS origins" help="Pending API support.">
                         <TextArea disabled placeholder="No CORS origins configured" rows={3} />
                       </Field>
-                      <StickyActionBar>
+                      <ConsoleActionBar>
                         <Button disabled={redirectMutation.isPending} type="submit">
                           Save redirect URIs
                         </Button>
                         <Button disabled={redirectMutation.isPending} type="reset" variant="secondary">
                           Discard
                         </Button>
-                      </StickyActionBar>
+                      </ConsoleActionBar>
                       <MutationError error={redirectMutation.error} />
                     </form>
                   </CardContent>
@@ -804,7 +817,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
               </Card>
             </TabsContent>
           </Tabs>
-        </div>
+        </ConsoleDetailStack>
       ) : null}
       <SecretDisclosureDialog
         clientId={application?.clientId ?? null}
@@ -1903,6 +1916,7 @@ export function ConnectorsPage() {
   })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const [selectedConnectorId, setSelectedConnectorId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ConnectorResponse | null>(null)
   const createMutation = useAdminMutation({
@@ -1941,6 +1955,12 @@ export function ConnectorsPage() {
       return queryClient.invalidateQueries({ queryKey: adminQueryKeys.connectors })
     },
   })
+  const connectors = query.data?.connectors ?? []
+  const visibleConnectors = connectors.filter((connector) =>
+    [connector.displayName, connector.slug, connector.providerId].some((value) =>
+      value.toLowerCase().includes(search.trim().toLowerCase()),
+    ),
+  )
 
   return (
     <ResourcePage
@@ -1963,25 +1983,33 @@ export function ConnectorsPage() {
         />
       }
       error={query.error}
-      empty={query.data?.connectors.length === 0}
+      empty={connectors.length === 0}
       emptyDescription="Add social or OAuth identity providers when your sign-in experience needs them."
       emptyTitle="No social connectors yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <div className="inline-flex flex-wrap rounded-lg bg-muted p-1">
-          <a
-            className="inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground"
-            href="/console/connectors/passwordless"
-          >
-            Passwordless
-          </a>
-          <a
-            className="inline-flex min-h-9 items-center justify-center rounded-md bg-background px-3 text-sm font-medium text-foreground shadow-sm"
-            href="/console/connectors/social"
-          >
-            Social
-          </a>
+        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
+          <div className="inline-flex flex-wrap rounded-lg bg-muted p-1">
+            <a
+              className="inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground"
+              href="/console/connectors/passwordless"
+            >
+              Passwordless
+            </a>
+            <a
+              className="inline-flex min-h-9 items-center justify-center rounded-md bg-background px-3 text-sm font-medium text-foreground shadow-sm"
+              href="/console/connectors/social"
+            >
+              Social
+            </a>
+          </div>
+          <TextInput
+            aria-label="Search social connectors"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search connectors"
+            value={search}
+          />
         </div>
       }
     >
@@ -1997,8 +2025,8 @@ export function ConnectorsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {query.data?.connectors.length ? (
-            query.data.connectors.map((connector) => (
+          {visibleConnectors.length ? (
+            visibleConnectors.map((connector) => (
               <TableRow key={connector.id}>
                 <TableCell>
                   <div className="font-medium">{connector.displayName}</div>
@@ -2040,8 +2068,12 @@ export function ConnectorsPage() {
           ) : (
             <TableEmptyRow
               colSpan={6}
-              description="Add social or OAuth identity providers when your sign-in experience needs them."
-              title="No social connectors yet"
+              description={
+                search
+                  ? 'No social connectors match the current search.'
+                  : 'Add social or OAuth identity providers when your sign-in experience needs them.'
+              }
+              title={search ? 'No social connectors found' : 'No social connectors yet'}
             />
           )}
         </TableBody>
@@ -2407,7 +2439,7 @@ export function MfaPage() {
               </CardContent>
             </Card>
           </div>
-          <StickyActionBar>
+          <ConsoleActionBar>
             <Button disabled type="button">
               <Save data-icon="inline-start" />
               Save changes
@@ -2416,7 +2448,7 @@ export function MfaPage() {
               <Undo2 data-icon="inline-start" />
               Discard
             </Button>
-          </StickyActionBar>
+          </ConsoleActionBar>
         </div>
       ) : null}
     </ResourcePage>
@@ -2590,6 +2622,7 @@ export function OrganizationsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.organizations, queryFn: listOrganizations })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const createMutation = useAdminMutation({
     mutationFn: createOrganization,
     onSuccess: () => {
@@ -2601,6 +2634,12 @@ export function OrganizationsPage() {
     mutationFn: ({ id, file }: { id: string; file: File }) => uploadOrganizationLogo(id, file),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.organizations }),
   })
+  const organizations = query.data?.organizations ?? []
+  const visibleOrganizations = organizations.filter((organization) =>
+    [organization.name, organization.slug, organization.displayName ?? ''].some((value) =>
+      value.toLowerCase().includes(search.trim().toLowerCase()),
+    ),
+  )
 
   return (
     <ResourcePage
@@ -2628,11 +2667,22 @@ export function OrganizationsPage() {
         />
       }
       error={query.error}
-      empty={query.data?.organizations.length === 0}
+      empty={organizations.length === 0}
       emptyDescription="Create organizations when authorization needs tenant-owned groups."
       emptyTitle="No organizations yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
+      toolbar={
+        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
+          <p className="text-sm text-muted-foreground">Search tenant organizations by name, slug, or display name.</p>
+          <TextInput
+            aria-label="Search organizations"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search organizations"
+            value={search}
+          />
+        </div>
+      }
     >
       <Table>
         <TableHeader>
@@ -2644,8 +2694,8 @@ export function OrganizationsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {query.data?.organizations.length ? (
-            query.data.organizations.map((organization) => (
+          {visibleOrganizations.length ? (
+            visibleOrganizations.map((organization) => (
               <TableRow key={organization.id}>
                 <TableCell>
                   <a className="font-medium hover:underline" href={`/console/organizations/${organization.id}`}>
@@ -2670,8 +2720,12 @@ export function OrganizationsPage() {
           ) : (
             <TableEmptyRow
               colSpan={4}
-              description="Create organizations when authorization needs tenant-owned groups."
-              title="No organizations yet"
+              description={
+                search
+                  ? 'No organizations match the current search.'
+                  : 'Create organizations when authorization needs tenant-owned groups.'
+              }
+              title={search ? 'No organizations found' : 'No organizations yet'}
             />
           )}
         </TableBody>
@@ -2775,12 +2829,30 @@ export function RolesPage() {
   const resourcesQuery = useQuery({ queryKey: adminQueryKeys.apiResources, queryFn: listApiResources })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [scope, setScope] = useState('')
   const createMutation = useAdminMutation({
     mutationFn: createRole,
     onSuccess: () => {
       setDialogOpen(false)
       return queryClient.invalidateQueries({ queryKey: adminQueryKeys.roles })
     },
+  })
+  const roles = query.data?.roles ?? []
+  const visibleRoles = roles.filter((role) => {
+    const matchesSearch =
+      search.trim().length === 0 ||
+      [role.name, role.key, role.description ?? ''].some((value) =>
+        value.toLowerCase().includes(search.trim().toLowerCase()),
+      )
+    const roleScope = role.resourceId
+      ? 'resource'
+      : role.organizationId
+        ? 'organization'
+        : role.applicationId
+          ? 'application'
+          : 'global'
+    return matchesSearch && (scope.length === 0 || roleScope === scope)
   })
 
   return (
@@ -2804,11 +2876,35 @@ export function RolesPage() {
         />
       }
       error={query.error}
-      empty={query.data?.roles.length === 0}
+      empty={roles.length === 0}
       emptyDescription="Create roles to model tenant, organization, application, or API permissions."
       emptyTitle="No roles yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
+      toolbar={
+        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
+          <p className="text-sm text-muted-foreground">Search roles and filter by assignment scope.</p>
+          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[20rem_11rem]">
+            <TextInput
+              aria-label="Search roles"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search roles"
+              value={search}
+            />
+            <SelectInput
+              aria-label="Filter role scope"
+              onChange={(event) => setScope(event.target.value)}
+              value={scope}
+            >
+              <option value="">Any scope</option>
+              <option value="global">Global</option>
+              <option value="application">Application</option>
+              <option value="organization">Organization</option>
+              <option value="resource">API resource</option>
+            </SelectInput>
+          </div>
+        </div>
+      }
     >
       <Table>
         <TableHeader>
@@ -2819,8 +2915,8 @@ export function RolesPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {query.data?.roles.length ? (
-            query.data.roles.map((role) => (
+          {visibleRoles.length ? (
+            visibleRoles.map((role) => (
               <TableRow key={role.id}>
                 <TableCell>
                   <a className="font-medium hover:underline" href={`/console/roles/${role.id}`}>
@@ -2837,8 +2933,12 @@ export function RolesPage() {
           ) : (
             <TableEmptyRow
               colSpan={3}
-              description="Create roles to model tenant, organization, application, or API permissions."
-              title="No roles yet"
+              description={
+                search || scope
+                  ? 'No roles match the current search or scope filter.'
+                  : 'Create roles to model tenant, organization, application, or API permissions.'
+              }
+              title={search || scope ? 'No roles found' : 'No roles yet'}
             />
           )}
         </TableBody>
@@ -3097,6 +3197,7 @@ export function ApiResourcesPage() {
   const query = useQuery({ queryKey: adminQueryKeys.apiResources, queryFn: listApiResources })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const createMutation = useAdminMutation({
     mutationFn: createApiResource,
     onSuccess: () => {
@@ -3104,6 +3205,12 @@ export function ApiResourcesPage() {
       return queryClient.invalidateQueries({ queryKey: adminQueryKeys.apiResources })
     },
   })
+  const resources = query.data?.resources ?? []
+  const visibleResources = resources.filter((resource) =>
+    [resource.name, resource.identifier, resource.audience, resource.description ?? ''].some((value) =>
+      value.toLowerCase().includes(search.trim().toLowerCase()),
+    ),
+  )
 
   return (
     <ResourcePage
@@ -3132,11 +3239,22 @@ export function ApiResourcesPage() {
         />
       }
       error={query.error}
-      empty={query.data?.resources.length === 0}
+      empty={resources.length === 0}
       emptyDescription="Register APIs before issuing access tokens for protected resources."
       emptyTitle="No API resources yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
+      toolbar={
+        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
+          <p className="text-sm text-muted-foreground">Search protected APIs by name, identifier, or audience.</p>
+          <TextInput
+            aria-label="Search API resources"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search API resources"
+            value={search}
+          />
+        </div>
+      }
     >
       <Table>
         <TableHeader>
@@ -3147,8 +3265,8 @@ export function ApiResourcesPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {query.data?.resources.length ? (
-            query.data.resources.map((resource) => (
+          {visibleResources.length ? (
+            visibleResources.map((resource) => (
               <TableRow key={resource.id}>
                 <TableCell>
                   <a className="font-medium hover:underline" href={`/console/api-resources/${resource.id}`}>
@@ -3165,8 +3283,12 @@ export function ApiResourcesPage() {
           ) : (
             <TableEmptyRow
               colSpan={3}
-              description="Register APIs before issuing access tokens for protected resources."
-              title="No API resources yet"
+              description={
+                search
+                  ? 'No API resources match the current search.'
+                  : 'Register APIs before issuing access tokens for protected resources.'
+              }
+              title={search ? 'No API resources found' : 'No API resources yet'}
             />
           )}
         </TableBody>
@@ -4157,56 +4279,41 @@ export function WebhooksPage() {
     <ResourcePage
       title="Webhooks"
       description="Prepare event endpoint configuration. Delivery workers and persistence are not available in this build."
-      framed={false}
+      action={
+        <Button disabled type="button">
+          <Plus data-icon="inline-start" />
+          Create endpoint
+        </Button>
+      }
+      toolbar={
+        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
+          <p className="text-sm text-muted-foreground">Filter webhook endpoints by URL, event, or delivery status.</p>
+          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[20rem_10rem]">
+            <TextInput aria-label="Search webhooks" disabled placeholder="Search endpoints" />
+            <SelectInput aria-label="Filter webhook status" disabled value="">
+              <option value="">Any status</option>
+            </SelectInput>
+          </div>
+        </div>
+      }
     >
-      <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Create endpoint</CardTitle>
-            <CardDescription>Endpoint creation is disabled until webhook delivery storage exists.</CardDescription>
-          </CardHeader>
-          <CardContent className="formStack">
-            <Field label="Endpoint URL">
-              <TextInput disabled placeholder="https://example.com/webhooks/auth" type="url" />
-            </Field>
-            <Field label="Events">
-              <TextInput disabled placeholder="user.created, session.revoked" />
-            </Field>
-            <Field label="Signing secret">
-              <TextInput disabled placeholder="Generated when endpoint creation is supported" />
-            </Field>
-            <Button disabled type="button" variant="secondary">
-              <Plus data-icon="inline-start" />
-              Create endpoint
-            </Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Endpoints</CardTitle>
-            <CardDescription>Endpoint rows appear here after webhook delivery storage exists.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Endpoint</TableHead>
-                  <TableHead>Events</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableEmptyRow
-                  colSpan={4}
-                  description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
-                  title="Webhook delivery unavailable"
-                />
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Endpoint</TableHead>
+            <TableHead>Events</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Last delivery</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableEmptyRow
+            colSpan={4}
+            description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
+            title="Webhook delivery unavailable"
+          />
+        </TableBody>
+      </Table>
     </ResourcePage>
   )
 }
@@ -4216,42 +4323,37 @@ export function AuditLogsPage() {
     <ResourcePage
       title="Audit logs"
       description="Inspect available activity signals without claiming enterprise audit immutability."
-      framed={false}
-    >
-      <Card>
-        <CardHeader>
-          <CardTitle>Activity</CardTitle>
-          <CardDescription>Audit log persistence is not exposed by the management API in this build.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="grid gap-3 md:grid-cols-4">
+      toolbar={
+        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
+          <p className="text-sm text-muted-foreground">
+            Filter audit events by actor, resource, and date when the API is available.
+          </p>
+          <div className="grid w-full gap-2 md:w-auto md:grid-cols-4">
             <TextInput aria-label="Search audit logs" disabled placeholder="Search events" />
             <TextInput aria-label="Actor" disabled placeholder="Actor" />
             <TextInput aria-label="Resource" disabled placeholder="Resource" />
             <TextInput aria-label="Date" disabled type="date" />
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Time</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Event</TableHead>
-                <TableHead>Resource</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell colSpan={4}>
-                  <EmptyState
-                    description="No audit log API is available yet. Existing operational tables remain available from their Console modules."
-                    title="No audit events to display"
-                  />
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        </div>
+      }
+    >
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Time</TableHead>
+            <TableHead>Actor</TableHead>
+            <TableHead>Event</TableHead>
+            <TableHead>Resource</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableEmptyRow
+            colSpan={4}
+            description="No audit log API is available yet. Existing operational tables remain available from their Console modules."
+            title="No audit events to display"
+          />
+        </TableBody>
+      </Table>
     </ResourcePage>
   )
 }
@@ -4573,58 +4675,6 @@ function ObjectHeader({ badge, id, title }: { badge: string; id: string; title: 
   )
 }
 
-function TableEmptyRow({ colSpan, description, title }: { colSpan: number; description: string; title: string }) {
-  return (
-    <TableRow className="hover:bg-transparent">
-      <TableCell colSpan={colSpan}>
-        <div className="flex min-h-32 flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <p className="max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}
-
-function StickyActionBar({ children }: { children: ReactNode }) {
-  return <div className="stickyActionBar">{children}</div>
-}
-
-function PageHeader({
-  action,
-  breadcrumb,
-  description,
-  eyebrow,
-  title,
-}: {
-  action?: ReactNode
-  breadcrumb?: string[]
-  description: string
-  eyebrow: string
-  title: string
-}) {
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
-        {breadcrumb ? (
-          <div className="mb-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            {breadcrumb.map((crumb, index) => (
-              <span className="inline-flex items-center gap-1" key={crumb}>
-                {index > 0 ? <span aria-hidden="true">/</span> : null}
-                <span>{crumb}</span>
-              </span>
-            ))}
-          </div>
-        ) : null}
-        <p className="mb-1 text-xs font-semibold uppercase tracking-normal text-muted-foreground">{eyebrow}</p>
-        <h1 className="text-2xl font-semibold leading-tight tracking-normal">{title}</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p>
-      </div>
-      {action}
-    </div>
-  )
-}
-
 function MetricCard({
   detail,
   label,
@@ -4802,15 +4852,6 @@ function PolicyCard({ rows, title }: { rows: Array<[string, string]>; title: str
         ))}
       </CardContent>
     </Card>
-  )
-}
-
-function SettingRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-md border border-border p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      <span className="text-sm font-medium">{label}</span>
-      <span className="text-sm text-muted-foreground sm:max-w-[70%] sm:text-right">{value}</span>
-    </div>
   )
 }
 
@@ -5063,25 +5104,6 @@ function StatusBadge({
   inactiveLabel: string
 }) {
   return <Badge variant={active ? 'secondary' : 'outline'}>{active ? activeLabel : inactiveLabel}</Badge>
-}
-
-function EmptyState({ action, description, title }: { action?: ReactNode; description: string; title: string }) {
-  return (
-    <Card className="border-dashed">
-      <CardContent className="flex flex-col items-start gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="grid size-10 place-items-center rounded-md bg-muted text-muted-foreground">
-            <ListChecks aria-hidden="true" />
-          </span>
-          <div>
-            <h2 className="text-base font-semibold">{title}</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
-          </div>
-        </div>
-        {action}
-      </CardContent>
-    </Card>
-  )
 }
 
 function LoadingState({ label }: { label: string }) {
