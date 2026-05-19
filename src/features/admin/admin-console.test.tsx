@@ -2227,14 +2227,32 @@ describe('admin console', () => {
         return Promise.resolve(jsonResponse(role, 201))
       }
       if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/management/api-resources' && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(apiResource, 201))
+      }
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
       return Promise.resolve(jsonResponse({}))
     })
 
-    renderWithQuery(<RolesPage />)
+    const { unmount } = renderWithQuery(<RolesPage />)
 
     expect(await screen.findByText('Admin')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New role' }))
     fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'auditor' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
+
+    expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
+    expect(requests).toEqual([])
+
+    unmount()
+    renderWithQuery(<ApiResourcesPage />)
+
+    expect(await screen.findByText('Management API')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New resource' }))
+    fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'billing-api' } })
     fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
 
     expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
@@ -2251,7 +2269,7 @@ describe('admin console', () => {
         return Promise.resolve(jsonResponse({ ...apiResource, ...JSON.parse(String(init?.body)) }))
       }
       if (url === '/api/management/api-resources/resource-1' && method === 'DELETE') {
-        return Promise.resolve(jsonResponse(null, 204))
+        return Promise.resolve(new Response(null, { status: 204 }))
       }
       if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (url === '/api/management/api-resources/resource-1/scopes') {
@@ -2270,16 +2288,17 @@ describe('admin console', () => {
       if (url === '/api/management/roles/role-1')
         return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
       if (url === '/api/management/roles/role-1/permissions') {
-        if (method === 'PUT') return Promise.resolve(jsonResponse(null, 204))
+        if (method === 'PUT') return Promise.resolve(new Response(null, { status: 204 }))
         return Promise.resolve(jsonResponse({ permissions: [] }))
       }
       if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/management/api-resources') {
         return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
       }
-      if (url === '/api/management/user-role-assignments') return Promise.resolve(jsonResponse(null, 204))
-      if (url === '/api/management/application-role-assignments') return Promise.resolve(jsonResponse(null, 204))
-      if (url === '/api/management/member-role-assignments') return Promise.resolve(jsonResponse(null, 204))
+      if (url === '/api/management/user-role-assignments') return Promise.resolve(new Response(null, { status: 204 }))
+      if (url === '/api/management/application-role-assignments')
+        return Promise.resolve(new Response(null, { status: 204 }))
+      if (url === '/api/management/member-role-assignments') return Promise.resolve(new Response(null, { status: 204 }))
       return Promise.resolve(jsonResponse({}))
     })
 
@@ -2412,7 +2431,7 @@ describe('admin console', () => {
         return Promise.resolve(jsonResponse({ ...apiResource, ...JSON.parse(String(init?.body)) }))
       }
       if (url === '/api/management/api-resources/resource-1' && method === 'DELETE') {
-        return Promise.resolve(jsonResponse(null, 204))
+        return Promise.resolve(new Response(null, { status: 204 }))
       }
       if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (url === '/api/management/api-resources/resource-1/scopes') {
@@ -2425,7 +2444,7 @@ describe('admin console', () => {
         return Promise.resolve(jsonResponse({ ...role, system: false, ...JSON.parse(String(init?.body)) }))
       }
       if (url === '/api/management/roles/role-1' && method === 'DELETE') {
-        return Promise.resolve(jsonResponse(null, 204))
+        return Promise.resolve(new Response(null, { status: 204 }))
       }
       if (url === '/api/management/roles/role-1') {
         return Promise.resolve(jsonResponse({ ...role, system: false, resourceId: 'resource-1' }))
@@ -2490,6 +2509,64 @@ describe('admin console', () => {
         body: null,
       }),
     )
+  })
+
+  it('redirects after deleting authorization details from routed pages', async () => {
+    const requests: Array<{ url: string; method: string }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method !== 'GET') requests.push({ url, method })
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/roles/role-1' && method === 'DELETE') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url === '/api/management/roles/role-1') {
+        return Promise.resolve(jsonResponse({ ...role, system: false, resourceId: 'resource-1' }))
+      }
+      if (url === '/api/management/roles/role-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [] }))
+      }
+      if (url === '/api/management/api-resources/resource-1' && method === 'DELETE') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/scopes') {
+        return Promise.resolve(jsonResponse({ scopes: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [], pagination: emptyPagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    window.history.pushState(null, '', '/admin/roles/role-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete role' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/admin/roles'))
+    expect(requests).toContainEqual({ url: '/api/management/roles/role-1', method: 'DELETE' })
+
+    cleanup()
+    queryClient.clear()
+    window.history.pushState(null, '', '/admin/api-resources/resource-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete resource' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/admin/api-resources'))
+    expect(requests).toContainEqual({ url: '/api/management/api-resources/resource-1', method: 'DELETE' })
   })
 
   it('renders empty authorization detail rows and inline validation errors', async () => {
@@ -2579,6 +2656,43 @@ describe('admin console', () => {
     expect(await screen.findByText('orders.read')).toBeTruthy()
   })
 
+  it('refetches role permissions after saving permission assignments', async () => {
+    const requests: Array<{ url: string; method: string }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      requests.push({ url, method })
+      if (url === '/api/management/roles/role-1') {
+        return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
+      }
+      if (url === '/api/management/roles/role-1/permissions') {
+        if (method === 'PUT') return Promise.resolve(new Response(null, { status: 204 }))
+        return Promise.resolve(jsonResponse({ permissions: [] }))
+      }
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByText('orders.read')).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save permissions' }))
+
+    await waitFor(() =>
+      expect(requests.filter((request) => request.url === '/api/management/roles/role-1/permissions')).toEqual([
+        { url: '/api/management/roles/role-1/permissions', method: 'GET' },
+        { url: '/api/management/roles/role-1/permissions', method: 'PUT' },
+        { url: '/api/management/roles/role-1/permissions', method: 'GET' },
+      ]),
+    )
+  })
+
   it('removes a selected role permission from local assignment state', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -2588,7 +2702,7 @@ describe('admin console', () => {
       if (url === '/api/management/roles/role-1')
         return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
       if (url === '/api/management/roles/role-1/permissions') {
-        if (method === 'PUT') return Promise.resolve(jsonResponse(null, 204))
+        if (method === 'PUT') return Promise.resolve(new Response(null, { status: 204 }))
         return Promise.resolve(jsonResponse({ permissions: [apiPermission] }))
       }
       if (url === '/api/management/api-resources') {
