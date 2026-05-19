@@ -1,6 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import {
-  Activity,
   AppWindow,
   BellRing,
   Boxes,
@@ -8,7 +7,6 @@ import {
   Cable,
   ChevronRight,
   Code2,
-  FileClock,
   Fingerprint,
   Gauge,
   KeyRound,
@@ -18,7 +16,6 @@ import {
   Settings,
   Shield,
   ShieldCheck,
-  UserCog,
   UsersRound,
   X,
 } from 'lucide-react'
@@ -95,8 +92,12 @@ const adminNavGroups: ConsoleNavGroup[] = [
     label: 'Developer',
     items: [
       { href: '/console/customize-jwt', label: 'Custom JWT', icon: Code2 },
-      { href: '/console/webhooks/endpoints', label: 'Webhooks', icon: BellRing },
-      { href: '/console/audit-logs', label: 'Audit logs', icon: FileClock },
+      {
+        href: '/console/webhooks/endpoints',
+        label: 'Webhooks',
+        icon: BellRing,
+        match: '/console/webhooks',
+      },
     ],
   },
   {
@@ -123,18 +124,22 @@ export function AdminShell({ children }: { children: ReactNode }) {
   )
 
   return (
-    <div className="h-dvh overflow-hidden bg-muted/40 text-foreground">
-      <header className="h-16 w-full border-b border-border bg-background">
+    <div className="consoleShell text-foreground">
+      <header className="consoleTopbar">
         <div className="flex h-16 items-center justify-between gap-3 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               aria-expanded={mobileNavOpen}
               aria-label={mobileNavOpen ? 'Close console navigation' : 'Open console navigation'}
-              className="inline-flex size-11 items-center justify-center rounded-md border border-border bg-background lg:hidden"
+              className="inline-flex size-10 items-center justify-center rounded-md border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
               onClick={() => setMobileNavOpen((open) => !open)}
               type="button"
             >
-              {mobileNavOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+              {mobileNavOpen ? (
+                <X aria-hidden="true" className="size-4" />
+              ) : (
+                <Menu aria-hidden="true" className="size-4" />
+              )}
             </button>
             <ConsoleBrand />
           </div>
@@ -159,26 +164,35 @@ export function AdminShell({ children }: { children: ReactNode }) {
               <span className="font-medium">Default</span>
             </div>
             <a
-              aria-label="Account"
-              className="inline-flex size-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Open account center"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
               href="/account"
             >
-              <UserCog className="size-4" aria-hidden="true" />
+              <span className="grid size-6 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                AC
+              </span>
+              <span className="hidden sm:inline">Account</span>
             </a>
           </div>
         </div>
       </header>
       {mobileNavOpen ? (
-        <div className="fixed inset-x-0 top-16 bottom-0 z-40 bg-background/80 lg:hidden">
-          <aside className="h-full w-[min(320px,calc(100vw-32px))] border-r border-border bg-background shadow-lg">
+        <div className="consoleMobileNavLayer lg:hidden">
+          <button
+            aria-label="Dismiss console navigation"
+            className="absolute inset-0 cursor-default bg-transparent"
+            onClick={() => setMobileNavOpen(false)}
+            type="button"
+          />
+          <aside className="relative h-full w-[min(320px,calc(100vw-32px))] border-r border-border bg-background shadow-lg">
             <nav aria-label="Console mobile" className="h-full overflow-y-auto px-3 py-4">
               <AdminNavigation onNavigate={() => setMobileNavOpen(false)} pathname={pathname} />
             </nav>
           </aside>
         </div>
       ) : null}
-      <div className="h-[calc(100dvh-4rem)] lg:flex">
-        <aside className="hidden w-[248px] shrink-0 border-r border-border bg-background lg:flex lg:h-[calc(100dvh-4rem)] lg:flex-col">
+      <div className="consoleBody lg:flex">
+        <aside className="consoleRail hidden lg:flex">
           <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Console">
             <AdminNavigation pathname={pathname} />
           </nav>
@@ -194,10 +208,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </a>
           </div>
         </aside>
-        <main className="h-full min-w-0 flex-1 overflow-y-auto bg-muted/40">
-          <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-5 px-4 py-5 md:px-6 lg:px-8 lg:py-7">
-            {children}
-          </div>
+        <main className="consoleMain">
+          <div className="consoleContent">{children}</div>
         </main>
       </div>
     </div>
@@ -206,7 +218,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
 function ConsoleBrand() {
   return (
-    <a className="flex h-16 min-w-0 items-center gap-3 text-foreground" href="/console">
+    <a className="flex h-16 min-w-0 items-center gap-2.5 text-foreground" href="/console">
       <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
         F
       </span>
@@ -214,7 +226,6 @@ function ConsoleBrand() {
         <p className="text-sm font-semibold leading-none">FlareAuth</p>
         <p className="mt-1 truncate text-xs text-muted-foreground">Console</p>
       </div>
-      <Activity className="hidden size-4 text-primary sm:block" aria-hidden="true" />
     </a>
   )
 }
@@ -231,9 +242,10 @@ function AdminNavigation({ onNavigate, pathname }: { onNavigate?: () => void; pa
             const active = isActive(pathname, getItemMatchPath(item))
             return (
               <Link
+                aria-current={active ? 'page' : undefined}
                 className={cn(
                   'group flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                  active && 'bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary',
+                  active && 'bg-primary/10 text-foreground hover:bg-primary/10 hover:text-foreground',
                 )}
                 key={item.href}
                 onClick={onNavigate}

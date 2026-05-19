@@ -7,17 +7,19 @@ let pathname = '/console'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
+    'aria-current': ariaCurrent,
     children,
     className,
     onClick,
     to,
   }: {
+    'aria-current'?: 'page'
     children: ReactNode
     className?: string
     onClick?: () => void
     to: string
   }) => (
-    <a className={className} href={to} onClick={onClick}>
+    <a aria-current={ariaCurrent} className={className} href={to} onClick={onClick}>
       {children}
     </a>
   ),
@@ -36,12 +38,15 @@ describe('AdminShell', () => {
 
     expect(screen.getAllByText('Console').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Default').length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: /Open account center/ })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Account center/ }).getAttribute('href')).toBe('/account')
     expect(screen.getByText('Dashboard content')).toBeTruthy()
-    expect(screen.getByText('Dashboard content').closest('.h-dvh')?.className).toContain('overflow-hidden')
-    expect(document.querySelector('header')?.className).toContain('h-16')
-    expect(document.querySelector('header')?.className).toContain('w-full')
-    expect(document.querySelector('aside')?.className).toContain('w-[248px]')
-    expect(document.querySelector('main')?.className).toContain('overflow-y-auto')
+    expect(screen.getByText('Dashboard content').closest('.consoleShell')).toBeTruthy()
+    expect(document.querySelector('header')?.className).toContain('consoleTopbar')
+    expect(document.querySelector('aside')?.className).toContain('consoleRail')
+    expect(document.querySelector('main')?.className).toContain('consoleMain')
+    expect(screen.getByText('Dashboard content').closest('.consoleContent')).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].getAttribute('aria-current')).toBe('page')
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('bg-primary/10')
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('h-9')
     expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).not.toContain('bg-primary/10')
@@ -54,13 +59,12 @@ describe('AdminShell', () => {
     render(<AdminShell>Dashboard content</AdminShell>)
 
     const consoleNav = screen.getByRole('navigation', { name: 'Console' })
-    expect(within(consoleNav).getByText('Overview')).toBeTruthy()
-    expect(within(consoleNav).getByText('Authentication')).toBeTruthy()
-    expect(within(consoleNav).getByText('Authorization')).toBeTruthy()
-    expect(within(consoleNav).getByText('Users')).toBeTruthy()
-    expect(within(consoleNav).getByText('Developer')).toBeTruthy()
-    expect(within(consoleNav).getByText('Tenant')).toBeTruthy()
+    const groups = ['Overview', 'Authentication', 'Authorization', 'Users', 'Developer', 'Tenant']
+    expect(groups.map((group) => within(consoleNav).getByText(group).textContent)).toEqual(groups)
+    expect(within(consoleNav).getByRole('link', { name: /Custom JWT/ })).toBeTruthy()
+    expect(within(consoleNav).getByRole('link', { name: /Webhooks/ })).toBeTruthy()
     expect(screen.queryByText('Enterprise SSO')).toBeNull()
+    expect(screen.queryByRole('link', { name: /Audit logs/ })).toBeNull()
     expect(screen.queryByText('Cloud')).toBeNull()
   })
 
@@ -70,6 +74,7 @@ describe('AdminShell', () => {
     render(<AdminShell>Application details</AdminShell>)
 
     expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).toContain('bg-primary/10')
+    expect(screen.getAllByRole('link', { name: /Applications/ })[0].getAttribute('aria-current')).toBe('page')
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).not.toContain('bg-primary/10')
   })
 
@@ -82,18 +87,45 @@ describe('AdminShell', () => {
     expect(screen.getAllByRole('link', { name: /Security/ })[0].className).not.toContain('bg-primary/10')
   })
 
+  it('keeps grouped route-family active states for tenant and developer sections', () => {
+    pathname = '/console/webhooks/requests'
+
+    const { rerender } = render(<AdminShell>Webhook requests</AdminShell>)
+
+    expect(screen.getAllByRole('link', { name: /Webhooks/ })[0].className).toContain('bg-primary/10')
+    expect(screen.queryByRole('link', { name: /Audit logs/ })).toBeNull()
+
+    pathname = '/console/tenant-settings/runtime'
+    rerender(<AdminShell>Runtime settings</AdminShell>)
+
+    expect(screen.getAllByRole('link', { name: /Settings/ })[0].className).toContain('bg-primary/10')
+  })
+
   it('opens responsive Console navigation without exposing onboarding as persistent navigation', () => {
     render(<AdminShell>Users content</AdminShell>)
 
     fireEvent.click(screen.getByRole('button', { name: 'Open console navigation' }))
 
     expect(screen.getByRole('navigation', { name: 'Console mobile' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Dismiss console navigation' })).toBeTruthy()
     expect(screen.getAllByRole('link', { name: /Sign-in & account/ }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Audit logs/ })).toBeNull()
 
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'Console mobile' })).getByRole('link', { name: /Applications/ }),
     )
+
+    expect(screen.queryByRole('navigation', { name: 'Console mobile' })).toBeNull()
+  })
+
+  it('dismisses responsive Console navigation from the backdrop control', () => {
+    render(<AdminShell>Users content</AdminShell>)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open console navigation' }))
+    expect(screen.getByRole('navigation', { name: 'Console mobile' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss console navigation' }))
 
     expect(screen.queryByRole('navigation', { name: 'Console mobile' })).toBeNull()
   })

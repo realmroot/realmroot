@@ -303,7 +303,7 @@ const consoleRoutes = [
     kind: 'list',
     journeyId: 'admin-authorization-inventory',
     sentinel: 'No audit events to display',
-    activeNav: 'Audit logs',
+    activeNav: null,
   },
   {
     name: 'tenant-settings',
@@ -936,6 +936,7 @@ const journeyAssertions: Record<
       await page.goto('/console')
       const consoleNav = page.getByRole('navigation', { name: 'Console' })
       await expect(consoleNav.getByText('Onboarding')).toHaveCount(0)
+      await expect(consoleNav.getByRole('link', { name: 'Audit logs' })).toHaveCount(0)
 
       for (const item of [
         { label: 'Dashboard', href: '/console', heading: 'Tenant health' },
@@ -959,7 +960,6 @@ const journeyAssertions: Record<
         { label: 'User management', href: '/console/users', heading: 'Users' },
         { label: 'Custom JWT', href: '/console/customize-jwt', heading: 'Custom JWT' },
         { label: 'Webhooks', href: '/console/webhooks/endpoints', heading: 'Webhooks' },
-        { label: 'Audit logs', href: '/console/audit-logs', heading: 'Audit logs' },
         { label: 'Settings', href: '/console/tenant-settings/oidc-configs', heading: 'OIDC configs' },
       ]) {
         const link = consoleNav.locator(`a[href="${item.href}"]`)

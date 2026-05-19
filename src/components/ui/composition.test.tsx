@@ -83,6 +83,37 @@ describe('composed UI primitives', () => {
     expect(screen.queryByText('Hidden dialog')).toBeNull()
   })
 
+  it('keeps normal page sections as single shared card surfaces', () => {
+    render(
+      <main className="consoleMain">
+        <div className="consoleContent">
+          <section aria-label="Normal section">
+            <Card>
+              <CardHeader>
+                <CardTitle>Normal section</CardTitle>
+                <CardDescription>Uses one bordered surface for console content.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="consoleToolbar">
+                  <Button size="sm" variant="secondary">
+                    Search
+                  </Button>
+                  <Button size="sm">Create</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        </div>
+      </main>,
+    )
+
+    const section = screen.getByRole('region', { name: 'Normal section' })
+    expect(section.querySelectorAll('[data-ui="card"]')).toHaveLength(1)
+    expect(section.querySelector('[data-ui="card"]')?.className).toContain('rounded-md')
+    expect(screen.getByText('Normal section').parentElement?.className).toContain('p-4')
+    expect(screen.getByRole('button', { name: 'Search' }).parentElement?.className).toContain('consoleToolbar')
+  })
+
   it('renders status regions and responsive tables with shared semantics', () => {
     render(
       <>
