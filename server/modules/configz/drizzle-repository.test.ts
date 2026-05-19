@@ -162,7 +162,7 @@ describe('createDrizzleConfigzRepository', () => {
       {
         table: brandingSetting,
         values: expect.objectContaining({
-          id: 'global',
+          id: 'branding_default',
           applicationId: null,
           organizationId: null,
           logoUrl: 'https://cdn.example.com/logo.svg',

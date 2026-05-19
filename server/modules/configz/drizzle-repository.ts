@@ -11,7 +11,7 @@ import type {
 } from './service'
 
 const settingsId = 'default'
-const globalBrandingId = 'global'
+const globalBrandingId = 'branding_default'
 
 export function createDrizzleConfigzRepository(db: Database): ConfigzRepository {
   return {
