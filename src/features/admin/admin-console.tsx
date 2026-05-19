@@ -382,7 +382,7 @@ export function ApplicationsPage() {
             ))}
           </TableBody>
         </Table>
-      )}
+      ) : null}
     </ResourcePage>
   )
 }
