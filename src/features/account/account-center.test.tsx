@@ -44,6 +44,8 @@ describe('account center', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Change email' }))
+    expect(screen.getByLabelText('Current password').getAttribute('autocomplete')).toBe('current-password')
+    expect(screen.getByLabelText('New password').getAttribute('autocomplete')).toBe('new-password')
     fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'old-password' } })
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password' } })
     fireEvent.click(screen.getByRole('button', { name: 'Change password' }))

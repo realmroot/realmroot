@@ -323,6 +323,7 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
         <form className="formStack" onSubmit={changePassword}>
           <Field label="Current password">
             <TextInput
+              autoComplete="current-password"
               onChange={(event) => setCurrentPassword(event.target.value)}
               required
               type="password"
@@ -331,6 +332,7 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
           </Field>
           <Field label="New password">
             <TextInput
+              autoComplete="new-password"
               minLength={8}
               onChange={(event) => setNewPassword(event.target.value)}
               required
