@@ -56,7 +56,7 @@ describe('App', () => {
         authorizationEndpoint: '/api/auth/oauth2/authorize',
         tokenEndpoint: '/api/auth/oauth2/token',
         jwksUri: '/api/auth/jwks',
-        userInfoEndpoint: '/api/auth/userinfo',
+        userInfoEndpoint: '/api/auth/oauth2/userinfo',
         endSessionEndpoint: '/api/auth/oauth2/logout',
       },
       security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: false },

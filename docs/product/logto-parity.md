@@ -116,7 +116,7 @@ FlareAuth 1.0 is production ready only when all of these are true:
 | `/api/auth/oauth2/authorize` | Authorization endpoint for code flow with PKCE S256 and allowed redirect URI validation. | Public protocol endpoint. |
 | `/api/auth/oauth2/token` | Token endpoint for authorization-code exchange, public PKCE clients, confidential client authentication, and refresh where supported. | Client/protocol validation. |
 | `/api/auth/jwks` | JWKS endpoint for token verification. | Public. |
-| `/api/auth/userinfo` | UserInfo endpoint for OpenID profile claims. | Bearer token required. |
+| `/api/auth/oauth2/userinfo` | UserInfo endpoint for OpenID profile claims. | Bearer token required. |
 | `/api/auth/oauth2/logout` or `/api/auth/oauth2/end-session` | RP-initiated end-session endpoint. | Session/protocol validation. |
 | `/oidc/start` | Review/demo OIDC client starter. | Development and review only; not product navigation. |
 | `/oidc/callback` | Review/demo OIDC callback. | Development and review only; not product navigation. |

@@ -362,7 +362,7 @@ export class ApplicationService {
         authorizationEndpoint: `${issuer}/api/auth/oauth2/authorize`,
         tokenEndpoint: `${issuer}/api/auth/oauth2/token`,
         jwksUri: `${issuer}/api/auth/jwks`,
-        userInfoEndpoint: `${issuer}/api/auth/userinfo`,
+        userInfoEndpoint: `${issuer}/api/auth/oauth2/userinfo`,
         endSessionEndpoint: `${issuer}/api/auth/oauth2/logout`,
       },
       createdAt: application.createdAt.toISOString(),

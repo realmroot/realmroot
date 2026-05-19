@@ -81,7 +81,7 @@ const consentResponse = {
       authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
       tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
       jwksUri: 'https://auth.example.com/api/auth/jwks',
-      userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+      userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
       endSessionEndpoint: 'https://auth.example.com/api/auth/logout',
     },
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -878,7 +878,7 @@ function oidcMetadata() {
     authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
     tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
     jwksUri: 'https://auth.example.com/api/auth/jwks',
-    userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+    userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
     endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
   }
 }

@@ -324,7 +324,7 @@ describe('v1.0 release product journey', () => {
       },
     )
     await expectJson(
-      await app.request('/api/auth/userinfo', { headers: { authorization: `Bearer ${token.access_token}` } }),
+      await app.request('/api/auth/oauth2/userinfo', { headers: { authorization: `Bearer ${token.access_token}` } }),
       200,
       { sub: 'user-1', email: 'user-1@example.com', name: 'User One' },
     )
@@ -438,7 +438,7 @@ function createAuthDouble() {
           authorization: claims?.authorization,
         })
       }
-      if (url.pathname === '/api/auth/userinfo') {
+      if (url.pathname === '/api/auth/oauth2/userinfo') {
         if (request.headers.get('authorization') !== 'Bearer access-token-1') {
           return Response.json({ error: 'invalid_token' }, { status: 401 })
         }
@@ -498,7 +498,7 @@ function createApplicationServiceDouble() {
       authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
       tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
       jwksUri: 'https://auth.example.com/api/auth/jwks',
-      userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+      userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
       endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
     },
     createdAt: now(),

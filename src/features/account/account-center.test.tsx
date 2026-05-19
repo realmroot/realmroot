@@ -478,7 +478,7 @@ function configz() {
       authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
       tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
       jwksUri: 'https://auth.example.com/api/auth/jwks',
-      userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+      userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
       endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
     },
     security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
