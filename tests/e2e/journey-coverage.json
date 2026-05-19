@@ -32,6 +32,7 @@
     { "id": "session-revocation", "name": "Account center revokes all and single sessions" },
     { "id": "authorized-app-revoke", "name": "Account center revokes authorized application access" },
     { "id": "admin-dashboard", "name": "Admin dashboard loads tenant health" },
+    { "id": "admin-signed-out-redirect", "name": "Signed-out Console routes redirect without management API requests" },
     { "id": "admin-setup-gate", "name": "Admin routes redirect to setup onboarding when no OIDC client exists" },
     { "id": "admin-onboarding", "name": "Admin onboarding creates the first OIDC client and shows integration details" },
     { "id": "admin-route-backed-navigation", "name": "Admin navigation exposes only persistent route-backed product pages" },

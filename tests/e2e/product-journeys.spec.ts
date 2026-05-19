@@ -541,6 +541,34 @@ const journeyAssertions: Record<
       expect(accountUnauthorizedResponses).toEqual([])
     },
   },
+  'admin-signed-out-redirect': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      const managementRequests: string[] = []
+      const managementAuthFailures: string[] = []
+      page.on('request', (request) => {
+        const path = new URL(request.url()).pathname
+        if (path.startsWith('/api/management/')) managementRequests.push(path)
+      })
+      page.on('response', (response) => {
+        const path = new URL(response.url()).pathname
+        if (path.startsWith('/api/management/') && (response.status() === 401 || response.status() === 403)) {
+          managementAuthFailures.push(path)
+        }
+      })
+
+      accountSignedIn = false
+      try {
+        await page.goto('/console')
+        await expect(page).toHaveURL(/\/sign-in\?return_to=%2Fconsole$/)
+        await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
+        expect(managementRequests).toEqual([])
+        expect(managementAuthFailures).toEqual([])
+      } finally {
+        accountSignedIn = true
+      }
+    },
+  },
   'admin-dashboard': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {

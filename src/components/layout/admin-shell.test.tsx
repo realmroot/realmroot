@@ -37,13 +37,31 @@ describe('AdminShell', () => {
     expect(screen.getAllByText('Console').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Default').length).toBeGreaterThan(0)
     expect(screen.getByText('Dashboard content')).toBeTruthy()
-    expect(screen.getByText('Dashboard content').closest('.min-h-dvh')?.className).toContain('bg-muted/40')
+    expect(screen.getByText('Dashboard content').closest('.h-dvh')?.className).toContain('overflow-hidden')
+    expect(document.querySelector('header')?.className).toContain('h-16')
+    expect(document.querySelector('header')?.className).toContain('w-full')
+    expect(document.querySelector('aside')?.className).toContain('w-[248px]')
+    expect(document.querySelector('main')?.className).toContain('overflow-y-auto')
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('bg-primary/10')
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('h-9')
     expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).not.toContain('bg-primary/10')
     expect(screen.queryByText('Tenant health')).toBeNull()
     expect(screen.queryByText('OIDC clients')).toBeNull()
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
+  })
+
+  it('renders the expected grouped Console navigation rhythm', () => {
+    render(<AdminShell>Dashboard content</AdminShell>)
+
+    const consoleNav = screen.getByRole('navigation', { name: 'Console' })
+    expect(within(consoleNav).getByText('Overview')).toBeTruthy()
+    expect(within(consoleNav).getByText('Authentication')).toBeTruthy()
+    expect(within(consoleNav).getByText('Authorization')).toBeTruthy()
+    expect(within(consoleNav).getByText('Users')).toBeTruthy()
+    expect(within(consoleNav).getByText('Developer')).toBeTruthy()
+    expect(within(consoleNav).getByText('Tenant')).toBeTruthy()
+    expect(screen.queryByText('Enterprise SSO')).toBeNull()
+    expect(screen.queryByText('Cloud')).toBeNull()
   })
 
   it('marks nested Console navigation sections active', () => {
