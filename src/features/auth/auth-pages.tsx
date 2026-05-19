@@ -1,14 +1,4 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  BadgeCheck,
-  Fingerprint,
-  KeyRound,
-  LinkIcon,
-  LoaderCircle,
-  Mail,
-  ShieldCheck,
-} from 'lucide-react'
+import { ArrowLeft, ArrowRight, Fingerprint, KeyRound, LinkIcon, LoaderCircle, Mail, ShieldCheck } from 'lucide-react'
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button, LinkButton } from '@/components/ui/button'
@@ -603,7 +593,7 @@ function SocialButtons({
   providers,
 }: {
   callback: string | undefined
-  providers: Array<{ slug: string; providerId: string; displayName: string }>
+  providers: Array<{ slug: string; providerId: string; displayName: string; icon: string }>
 }) {
   if (providers.length === 0) return null
 
@@ -618,12 +608,24 @@ function SocialButtons({
       <legend>Social sign-in providers</legend>
       {providers.map((provider) => (
         <button className="socialButton" key={provider.slug} onClick={() => onSocialClick(provider)} type="button">
-          <BadgeCheck size={18} />
+          <span aria-hidden="true" className="providerIcon">
+            {providerIconLabel(provider)}
+          </span>
           Continue with {provider.displayName}
         </button>
       ))}
     </fieldset>
   )
+}
+
+function providerIconLabel(provider: { displayName: string; icon: string }) {
+  if (provider.icon === 'github') return 'GH'
+  if (provider.icon === 'google') return 'G'
+  if (provider.icon === 'microsoft') return 'MS'
+  if (provider.icon === 'gitlab') return 'GL'
+  if (provider.icon === 'facebook') return 'f'
+  if (provider.icon === 'apple') return 'A'
+  return provider.displayName.slice(0, 2).toUpperCase()
 }
 
 function signInMethods(enabled: NonNullable<ReturnType<typeof useConfigz>['data']>['signIn']) {

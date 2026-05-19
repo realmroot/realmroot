@@ -32,6 +32,7 @@ export const configzIdentityProviderSchema = z.object({
   providerType: z.string(),
   providerId: z.string(),
   displayName: z.string(),
+  icon: z.string(),
 })
 
 export const configzConfigResponseSchema = z.object({

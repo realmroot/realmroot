@@ -976,6 +976,9 @@ describe('admin console', () => {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(connector, 201))
       }
+      if (url === '/api/management/connectors/templates') {
+        return Promise.resolve(jsonResponse(connectorTemplates))
+      }
       if (url === '/api/management/connectors/connector-1') {
         requests.push({ url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ ...connector, enabled: false }))
@@ -1019,6 +1022,351 @@ describe('admin console', () => {
     })
   })
 
+  it('shows connector details, saves edits, displays readiness, and deletes connectors', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1/readiness') {
+        return Promise.resolve(
+          jsonResponse({
+            connectorId: 'connector-1',
+            ready: false,
+            checks: [
+              {
+                key: 'clientSecretAvailable',
+                label: 'Secret binding available',
+                ok: false,
+                message: 'Secret binding is not available in the runtime.',
+              },
+            ],
+          }),
+        )
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'GET') {
+        return Promise.resolve(jsonResponse(connector))
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'PATCH') {
+        requests.push({ url, method, body: JSON.parse(String(init?.body)) })
+        return Promise.resolve(jsonResponse({ ...connector, displayName: 'Google Workspace' }))
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'DELETE') {
+        requests.push({ url, method, body: null })
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('View details'))
+    expect(await screen.findByText('Secret binding available')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Workspace' } })
+    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'google-workspace' } })
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'workspace-client' } })
+    fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GOOGLE_WORKSPACE_SECRET' } })
+    fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://workspace.example.com' } })
+    fireEvent.change(screen.getByLabelText('Authorization endpoint'), {
+      target: { value: 'https://workspace.example.com/authorize' },
+    })
+    fireEvent.change(screen.getByLabelText('Token endpoint'), {
+      target: { value: 'https://workspace.example.com/token' },
+    })
+    fireEvent.change(screen.getByLabelText('User info endpoint'), {
+      target: { value: 'https://workspace.example.com/userinfo' },
+    })
+    fireEvent.change(screen.getByLabelText('JWKS endpoint'), {
+      target: { value: 'https://workspace.example.com/jwks' },
+    })
+    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email profile' } })
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Provider metadata must be a JSON object.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"prompt":"consent"}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/connectors/connector-1',
+        method: 'PATCH',
+        body: expect.objectContaining({
+          authorizationEndpoint: 'https://workspace.example.com/authorize',
+          clientId: 'workspace-client',
+          clientSecretBinding: 'GOOGLE_WORKSPACE_SECRET',
+          displayName: 'Google Workspace',
+          enabled: false,
+          issuer: 'https://workspace.example.com',
+          jwksEndpoint: 'https://workspace.example.com/jwks',
+          providerMetadata: { prompt: 'consent' },
+          scopes: ['openid', 'email', 'profile'],
+          slug: 'google-workspace',
+          tokenEndpoint: 'https://workspace.example.com/token',
+          userInfoEndpoint: 'https://workspace.example.com/userinfo',
+        }),
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    cleanup()
+    renderWithQuery(<ConnectorsPage />)
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/connectors/connector-1',
+        method: 'DELETE',
+        body: null,
+      })
+    })
+  })
+
+  it('closes connector delete confirmation without deleting', async () => {
+    const requests: Array<{ url: string; method: string }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1' && method === 'DELETE') {
+        requests.push({ url, method })
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Delete'))
+    expect(screen.getByRole('heading', { name: 'Delete connector' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Delete connector' })).toBeNull()
+    })
+    expect(requests).toEqual([])
+  })
+
+  it('shows connector delete pending and error states', async () => {
+    let resolveDelete: (response: Response) => void = () => {}
+    const deleteResponse = new Promise<Response>((resolve) => {
+      resolveDelete = resolve
+    })
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1' && method === 'DELETE') return deleteResponse
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByRole('button', { name: 'Deleting...' })).toHaveProperty('disabled', true)
+    resolveDelete(jsonResponse({ error: { message: 'Delete failed.' } }, 503))
+
+    expect(await screen.findByText('Delete failed.')).toBeTruthy()
+  })
+
+  it('covers connector draft creation, metadata validation, and generic OAuth ready details', async () => {
+    const genericConnector = {
+      ...connector,
+      id: 'connector-generic',
+      slug: 'generic-oauth',
+      providerId: 'generic-oauth',
+      providerType: 'generic_oauth',
+      displayName: 'Generic OAuth',
+      enabled: false,
+      clientId: null,
+      clientSecretBinding: null,
+      issuer: null,
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      scopes: [],
+      providerMetadata: {},
+    }
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors' && method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init?.body)) })
+        return Promise.resolve(jsonResponse(genericConnector, 201))
+      }
+      if (url === '/api/management/connectors/connector-generic/readiness') {
+        return Promise.resolve(
+          jsonResponse({
+            connectorId: 'connector-generic',
+            ready: true,
+            checks: [{ key: 'clientId', label: 'Client ID configured', ok: true, message: 'Client ID is configured.' }],
+          }),
+        )
+      }
+      if (url === '/api/management/connectors/connector-generic') return Promise.resolve(jsonResponse(genericConnector))
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [genericConnector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Generic OAuth')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.change(screen.getByLabelText('Template'), { target: { value: 'generic-oauth' } })
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
+    fireEvent.change(screen.getByLabelText('Authorization endpoint'), {
+      target: { value: 'https://idp.example.com/authorize' },
+    })
+    fireEvent.change(screen.getByLabelText('Token endpoint'), { target: { value: 'https://idp.example.com/token' } })
+    fireEvent.change(screen.getByLabelText('User info endpoint'), {
+      target: { value: 'https://idp.example.com/userinfo' },
+    })
+    fireEvent.change(screen.getByLabelText('JWKS endpoint'), { target: { value: 'https://idp.example.com/jwks' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Provider metadata must be a JSON object.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"pkce":true}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/connectors',
+        body: expect.objectContaining({
+          enabled: false,
+          authorizationEndpoint: 'https://idp.example.com/authorize',
+          jwksEndpoint: 'https://idp.example.com/jwks',
+          providerId: 'generic-oauth',
+          providerMetadata: { pkce: true },
+          tokenEndpoint: 'https://idp.example.com/token',
+          userInfoEndpoint: 'https://idp.example.com/userinfo',
+        }),
+      })
+    })
+
+    fireEvent.click(screen.getByLabelText('Actions for Generic OAuth'))
+    fireEvent.click(await screen.findByText('View details'))
+    expect(await screen.findByText('Ready')).toBeTruthy()
+    expect(screen.getByText(/generic OAuth connector configuration/)).toBeTruthy()
+    expect(screen.getByText('Client ID configured')).toBeTruthy()
+  })
+
+  it('saves connector detail edits with blank optional fields', async () => {
+    const incompleteConnector = {
+      ...connector,
+      clientId: null,
+      clientSecretBinding: null,
+      issuer: null,
+      scopes: [],
+      providerMetadata: {},
+    }
+    let resolvePatch: (response: Response) => void = () => {}
+    const patchResponse = new Promise<Response>((resolve) => {
+      resolvePatch = resolve
+    })
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1/readiness') {
+        return Promise.resolve(jsonResponse({ connectorId: 'connector-1', ready: false, checks: [] }))
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'GET') {
+        return Promise.resolve(jsonResponse(incompleteConnector))
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init?.body)) })
+        return patchResponse
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [incompleteConnector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('View details'))
+    expect(await screen.findByText('Needs attention')).toBeTruthy()
+    expect(screen.getByLabelText('Client ID')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Client secret binding')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Issuer')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', '')
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByRole('button', { name: 'Saving...' })).toHaveProperty('disabled', true)
+    resolvePatch(jsonResponse({ ...incompleteConnector, displayName: 'Google Draft' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          url: '/api/management/connectors/connector-1',
+          body: expect.objectContaining({
+            authorizationEndpoint: null,
+            clientId: null,
+            clientSecretBinding: null,
+            displayName: 'Google Draft',
+            issuer: null,
+            jwksEndpoint: null,
+            scopes: [],
+            tokenEndpoint: null,
+            userInfoEndpoint: null,
+          }),
+        },
+      ])
+    })
+  })
+
+  it('shows connector detail load errors while configuration is unavailable', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1/readiness') {
+        return Promise.resolve(jsonResponse({ connectorId: 'connector-1', ready: false, checks: [] }))
+      }
+      if (url === '/api/management/connectors/connector-1') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Connector detail unavailable.' } }, 503))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('View details'))
+
+    expect(await screen.findByRole('heading', { name: 'Connector details' })).toBeTruthy()
+    expect(await screen.findByText('Connector detail unavailable.')).toBeTruthy()
+  })
+
   it('shows client-side validation errors for connector creation', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -1042,6 +1390,31 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
     expect(requests).toEqual([])
+  })
+
+  it('resets connector template defaults when returning to a custom provider', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.change(screen.getByLabelText('Template'), { target: { value: 'google' } })
+    expect(screen.getByLabelText('Provider ID')).toHaveProperty('value', 'google')
+    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', 'openid email profile')
+    fireEvent.change(screen.getByLabelText('Template'), { target: { value: '' } })
+
+    expect(screen.getByLabelText('Provider type')).toHaveProperty('value', 'social')
+    expect(screen.getByLabelText('Provider ID')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Display name')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', '')
   })
 
   it('renders sign-in settings and security policy tabs', async () => {
@@ -2194,8 +2567,46 @@ const connector = {
   userInfoEndpoint: null,
   jwksEndpoint: null,
   scopes: ['openid', 'email'],
+  providerMetadata: { prompt: 'select_account' },
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const connectorTemplates = {
+  templates: [
+    {
+      providerType: 'social',
+      providerId: 'google',
+      displayName: 'Google',
+      icon: 'google',
+      requiredFields: ['clientId', 'clientSecretBinding'],
+      optionalFields: ['scopes'],
+      defaultScopes: ['openid', 'email', 'profile'],
+      endpoints: {
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+      },
+    },
+    {
+      providerType: 'generic_oauth',
+      providerId: 'generic-oauth',
+      displayName: 'Generic OAuth',
+      icon: 'oauth',
+      requiredFields: ['clientId', 'clientSecretBinding', 'issuer or authorizationEndpoint + tokenEndpoint'],
+      optionalFields: ['scopes'],
+      defaultScopes: ['openid', 'email', 'profile'],
+      endpoints: {
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+      },
+    },
+  ],
 }
 
 const organization = {

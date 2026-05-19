@@ -533,6 +533,19 @@ h1 {
   font-weight: 650;
 }
 
+.providerIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .challengeGrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

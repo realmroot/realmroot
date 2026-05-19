@@ -330,6 +330,7 @@ describe('management routes', () => {
           applications: [],
           pagination: { limit: 1, offset: 0, total: 0, hasMore: false, nextOffset: null },
         }),
+        revokeConsent: vi.fn().mockResolvedValue(undefined),
       }),
     })
 
@@ -354,6 +355,7 @@ describe('management routes', () => {
           applications: [applicationFixture()],
           pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
         }),
+        revokeConsent: vi.fn().mockResolvedValue(undefined),
       }),
     })
 
@@ -379,6 +381,7 @@ describe('management routes', () => {
     const headers = adminHeaders()
 
     const list = await app.request('/api/management/connectors?limit=1&offset=0', { headers })
+    const templates = await app.request('/api/management/connectors/templates', { headers })
     const created = await app.request('/api/management/connectors', {
       method: 'POST',
       headers,
@@ -400,6 +403,7 @@ describe('management routes', () => {
       }),
     })
     const detail = await app.request('/api/management/connectors/connector-1', { headers })
+    const readiness = await app.request('/api/management/connectors/connector-1/readiness', { headers })
     const updated = await app.request('/api/management/connectors/connector-1', {
       method: 'PATCH',
       headers,
@@ -420,9 +424,18 @@ describe('management routes', () => {
         },
       }),
     )
+    expect(templates.status).toBe(200)
+    await expect(templates.json()).resolves.toMatchObject({
+      templates: [expect.objectContaining({ providerId: 'google', icon: 'google' })],
+    })
     expect(created.status).toBe(201)
     await expect(created.json()).resolves.toEqual(managementConnectorResponseSchema.parse(connectorFixture()))
     await expect(detail.json()).resolves.toEqual(managementConnectorResponseSchema.parse(connectorFixture()))
+    await expect(readiness.json()).resolves.toMatchObject({
+      connectorId: 'connector-1',
+      ready: true,
+      checks: [expect.objectContaining({ key: 'clientId', ok: true })],
+    })
     await expect(updated.json()).resolves.toEqual(
       managementConnectorResponseSchema.parse({
         ...connectorFixture(),
@@ -567,6 +580,7 @@ function createConfigzServiceMock() {
           providerType: 'oauth2',
           providerId: 'google',
           displayName: 'Google',
+          icon: 'google',
           authorizationUrl: 'https://auth.example.com/api/auth/sign-in/social?provider=google',
         },
         {
@@ -574,6 +588,7 @@ function createConfigzServiceMock() {
           providerType: 'oauth2',
           providerId: 'github',
           displayName: 'GitHub',
+          icon: 'github',
           authorizationUrl: 'https://auth.example.com/api/auth/sign-in/social?provider=github',
         },
       ],
@@ -651,8 +666,33 @@ function createConnectorServiceMock() {
         nextOffset: null,
       },
     }),
+    listTemplates: vi.fn().mockReturnValue({
+      templates: [
+        {
+          providerType: 'social',
+          providerId: 'google',
+          displayName: 'Google',
+          icon: 'google',
+          requiredFields: ['clientId', 'clientSecretBinding'],
+          optionalFields: ['scopes'],
+          defaultScopes: ['openid', 'email', 'profile'],
+          endpoints: {
+            issuer: null,
+            authorizationEndpoint: null,
+            tokenEndpoint: null,
+            userInfoEndpoint: null,
+            jwksEndpoint: null,
+          },
+        },
+      ],
+    }),
     create: vi.fn().mockResolvedValue(connectorFixture()),
     get: vi.fn().mockResolvedValue(connectorFixture()),
+    readiness: vi.fn().mockResolvedValue({
+      connectorId: 'connector-1',
+      ready: true,
+      checks: [{ key: 'clientId', label: 'Client ID configured', ok: true, message: 'Client ID is configured.' }],
+    }),
     update: vi.fn().mockResolvedValue({ ...connectorFixture(), enabled: false, displayName: 'Google Workspace' }),
     delete: vi.fn().mockResolvedValue(undefined),
   }

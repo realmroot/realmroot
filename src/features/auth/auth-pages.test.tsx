@@ -34,6 +34,7 @@ const configz = {
       providerType: 'social',
       providerId: 'github',
       displayName: 'GitHub',
+      icon: 'github',
     },
   ],
   links: {
@@ -118,6 +119,41 @@ describe('hosted auth pages', () => {
     expect(screen.getByRole('button', { name: 'Magic link' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'OTP' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeTruthy()
+  })
+
+  it('renders social connector icon variants from configz metadata', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(
+      jsonResponse({
+        ...configz,
+        identityProviders: [
+          { slug: 'github', providerType: 'social', providerId: 'github', displayName: 'GitHub', icon: 'github' },
+          { slug: 'google', providerType: 'social', providerId: 'google', displayName: 'Google', icon: 'google' },
+          {
+            slug: 'microsoft',
+            providerType: 'social',
+            providerId: 'microsoft',
+            displayName: 'Microsoft',
+            icon: 'microsoft',
+          },
+          { slug: 'gitlab', providerType: 'social', providerId: 'gitlab', displayName: 'GitLab', icon: 'gitlab' },
+          {
+            slug: 'facebook',
+            providerType: 'social',
+            providerId: 'facebook',
+            displayName: 'Facebook',
+            icon: 'facebook',
+          },
+          { slug: 'apple', providerType: 'social', providerId: 'apple', displayName: 'Apple', icon: 'apple' },
+          { slug: 'custom', providerType: 'social', providerId: 'custom', displayName: 'Custom', icon: 'oauth' },
+        ],
+      }),
+    )
+
+    render(<SignInPage />)
+
+    for (const provider of ['GitHub', 'Google', 'Microsoft', 'GitLab', 'Facebook', 'Apple', 'Custom']) {
+      expect(await screen.findByRole('button', { name: `Continue with ${provider}` })).toBeTruthy()
+    }
   })
 
   it('uses magic link when password auth is disabled', async () => {
@@ -356,6 +392,52 @@ describe('hosted auth pages', () => {
     })
   })
 
+  it('submits username sign-in when the identifier is not an email address', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ token: 'session-token' }))
+    })
+
+    render(<SignInPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email or username'), { target: { value: 'jane' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          url: '/api/auth/sign-in/username',
+          body: { username: 'jane', password: 'password-1', callbackURL: undefined, rememberMe: true },
+        },
+      ])
+    })
+  })
+
+  it('renders no method tabs or social buttons when all sign-in methods are disabled', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(
+      jsonResponse({
+        ...configz,
+        signIn: {
+          ...configz.signIn,
+          passwordEnabled: false,
+          magicLinkEnabled: false,
+          emailOtpEnabled: false,
+        },
+        identityProviders: [],
+      }),
+    )
+
+    render(<SignInPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).toBeNull()
+  })
+
   it('submits magic link sign-in through the native auth endpoint', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -430,6 +512,21 @@ describe('hosted auth pages', () => {
         },
       ])
     })
+  })
+
+  it('keeps the page in place when social sign-in does not return a redirect URL', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: null })
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<SignInPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with GitHub' }))
+
+    await waitFor(() => expect(requests).toEqual([{ url: '/api/auth/sign-in/social', body: null }]))
   })
 
   it('rejects external redirect targets from native auth responses and query params', () => {
@@ -610,6 +707,37 @@ describe('hosted auth pages', () => {
     expect(screen.queryByLabelText('Password')).toBeNull()
   })
 
+  it('omits username from sign-up when username collection is disabled', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') {
+        return Promise.resolve(jsonResponse({ ...configz, signIn: { ...configz.signIn, usernameEnabled: false } }))
+      }
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ user: { id: 'user-1' } }))
+    })
+
+    render(<SignUpPage />)
+
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Jane Stone' } })
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    expect(screen.queryByLabelText('Username')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/sign-up/email',
+        body: {
+          email: 'jane@example.com',
+          name: 'Jane Stone',
+          password: 'password-1',
+        },
+      })
+    })
+  })
+
   it('requests and verifies email with OTP through native auth endpoints', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -686,6 +814,21 @@ describe('hosted auth pages', () => {
     render(<AuthCallbackPage />)
     expect(await screen.findByRole('heading', { name: 'Sign-in complete.' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/admin/onboarding')
+  })
+
+  it('renders callback fallback error and account continuation defaults', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
+
+    window.history.pushState(null, '', '/auth/callback?error=access_denied')
+    render(<AuthCallbackPage />)
+    expect(await screen.findByRole('heading', { name: 'Sign-in could not continue.' })).toBeTruthy()
+    expect(screen.getByText('access_denied')).toBeTruthy()
+
+    cleanup()
+    window.history.pushState(null, '', '/auth/callback')
+    render(<AuthCallbackPage />)
+    expect(await screen.findByRole('heading', { name: 'Sign-in complete.' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/account')
   })
 
   it('accepts callbackURL fields from native auth responses', () => {

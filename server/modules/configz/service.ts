@@ -36,6 +36,7 @@ export interface ConfigzIdentityProvider {
   providerType: string
   providerId: string
   displayName: string
+  icon: string
 }
 
 export interface ConfigzApplication {
@@ -130,6 +131,7 @@ export class ConfigzService {
               providerType: provider.providerType,
               providerId: provider.providerId,
               displayName: provider.displayName,
+              icon: provider.icon,
             }))
           : [],
       links: {

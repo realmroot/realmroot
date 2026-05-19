@@ -49,7 +49,7 @@ describe('createDrizzleConfigzRepository', () => {
       customCss: '--auth-panel-radius: 8px;',
     })
     await expect(repository.listEnabledIdentityProviders()).resolves.toEqual([
-      { slug: 'google', providerType: 'social', providerId: 'google', displayName: 'Google' },
+      { slug: 'google', providerType: 'social', providerId: 'google', displayName: 'Google', icon: 'google' },
     ])
   })
 
@@ -105,6 +105,31 @@ describe('createDrizzleConfigzRepository', () => {
       backgroundColor: '#ffffff',
       customCss: null,
     })
+  })
+
+  it('uses the generic OAuth icon for unknown enabled identity providers', async () => {
+    const repository = createDrizzleConfigzRepository(
+      new FakeDb({
+        identityProviderRows: [
+          {
+            slug: 'custom',
+            providerType: 'generic_oauth',
+            providerId: 'custom-idp',
+            displayName: 'Custom IdP',
+          },
+        ],
+      }) as unknown as Database,
+    )
+
+    await expect(repository.listEnabledIdentityProviders()).resolves.toEqual([
+      {
+        slug: 'custom',
+        providerType: 'generic_oauth',
+        providerId: 'custom-idp',
+        displayName: 'Custom IdP',
+        icon: 'oauth',
+      },
+    ])
   })
 
   it('upserts singleton sign-in settings and preserves metadata copy', async () => {

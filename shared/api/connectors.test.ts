@@ -30,6 +30,18 @@ describe('connector API contracts', () => {
         clientId: 'google-client-id',
       }),
     ).toThrow(/clientSecretBinding is required/)
+
+    expect(
+      createConnectorRequestSchema.parse({
+        providerType: 'social',
+        providerId: 'google',
+        displayName: 'Google',
+        enabled: false,
+      }),
+    ).toMatchObject({
+      providerType: 'social',
+      enabled: false,
+    })
   })
 
   it('requires generic OAuth discovery or explicit endpoints', () => {
@@ -73,6 +85,18 @@ describe('connector API contracts', () => {
         clientSecretBinding: 'BROKEN_CLIENT_SECRET',
       }),
     ).toThrow(/Generic OAuth requires issuer or authorizationEndpoint/)
+
+    expect(() =>
+      createConnectorRequestSchema.parse({
+        providerType: 'generic_oauth',
+        providerId: 'mixed-main',
+        displayName: 'Mixed',
+        clientId: 'mixed-client-id',
+        clientSecretBinding: 'MIXED_CLIENT_SECRET',
+        issuer: 'https://idp.example.com',
+        authorizationEndpoint: 'https://idp.example.com/oauth2/v1/authorize',
+      }),
+    ).toThrow(/either issuer discovery or explicit endpoints/)
 
     expect(() =>
       createConnectorRequestSchema.parse({

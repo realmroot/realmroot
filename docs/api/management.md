@@ -60,7 +60,7 @@ Collection responses include:
 - Users: `/users`, `/users/{id}`, `/users/{id}/linked-accounts`, `/users/{id}/applications`, `/users/{id}/sessions`.
 - User account actions: `POST /users/password-reset-requests`, `PUT /users/{id}/ban`, `DELETE /users/{id}/ban`.
 - Applications: `/applications`, `/applications/{id}`, `/applications/{id}/redirect-uris`, `/applications/{id}/client-secrets`, `POST /applications/{id}/logo`.
-- Connectors: `GET /connectors`, `POST /connectors`, `GET /connectors/{id}`, `PATCH /connectors/{id}`, `DELETE /connectors/{id}`.
+- Connectors: `GET /connectors`, `POST /connectors`, `GET /connectors/templates`, `GET /connectors/{id}`, `GET /connectors/{id}/readiness`, `PATCH /connectors/{id}`, `DELETE /connectors/{id}`.
 
 Application resources are OIDC clients. `POST /applications` returns the created application; confidential clients include `clientSecret` in that creation response only. `GET /applications/{id}` returns client metadata, redirect URIs, allowed grant types, allowed scopes, token endpoint auth method, and discovery endpoint URLs. `PATCH /applications/{id}` updates metadata and lifecycle fields including `disabled`; lifecycle transitions do not use action endpoints. `DELETE /applications/{id}` deletes the application and its provider client.
 
@@ -76,7 +76,9 @@ Client secret endpoints are only for confidential clients. `GET /applications/{i
 
 Connector responses use the same stable connector contract as the admin connector API: provider type/id, display name, enabled flag, OAuth endpoints, client id, secret binding reference, scopes, and provider metadata. Secret values are not returned; `clientSecretBinding` is a reference to deployment-managed secret material.
 
-Connector `providerType` is restricted to `social` and `generic_oauth`, matching the values loaded into Better Auth. Connector creation requires `clientId` and `clientSecretBinding`; generic OAuth creation also requires either `issuer` or `authorizationEndpoint`, and requires `tokenEndpoint` when `issuer` is not provided. Updates can clear nullable configuration fields, but enabled connectors must remain loadable by Better Auth. `providerId` is globally unique because Better Auth uses it as the provider key.
+Connector `providerType` is restricted to `social` and `generic_oauth`, matching the values loaded into Better Auth. Connector templates provide labels, icons, default scopes, required fields, and endpoint hints for admin create flows. Enabled connector creation requires `clientId` and `clientSecretBinding`; disabled draft connectors may omit runtime credentials. Generic OAuth uses either issuer discovery or explicit endpoints; do not mix `issuer` with explicit endpoint URLs, and provide both `authorizationEndpoint` and `tokenEndpoint` when issuer discovery is not used. Updates can clear nullable configuration fields, but enabled connectors must remain loadable by Better Auth. `providerId` is globally unique because Better Auth uses it as the provider key.
+
+`GET /connectors/{id}/readiness` returns a configuration-readiness report for the saved connector. It checks stored configuration and runtime secret binding availability without returning raw secret values or contacting third-party providers.
 - Sign-in settings: `/sign-in-settings`.
 - Readiness: `/readiness`.
 - Organizations: `/organizations`, `/organizations/{id}`, `POST /organizations/{id}/logo`, `/organizations/{id}/members`, `/organizations/{id}/invitations`.

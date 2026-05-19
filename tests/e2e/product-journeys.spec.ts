@@ -26,6 +26,7 @@ type JourneyId = (typeof journeyCoverage.journeys)[number]['id']
 let firstAdminRequired = false
 let adminSetupRequired = false
 let accountSignedIn = true
+let accountApplicationRevoked = false
 let applicationDisabled = false
 let identifierFirstRequired = false
 
@@ -91,6 +92,7 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Password' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'OTP' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
     },
   },
   'oidc-hosted-sign-in-context': {
@@ -349,42 +351,95 @@ const journeyAssertions: Record<
   },
   'totp-flow': {
     suite: 'account center journey',
-    assert: async ({ page }) => {
+    assert: async ({ page, requests }) => {
       await page.goto('/account/security')
       await page.getByLabel('Password').fill('password-1')
       await page.getByRole('button', { name: 'Enroll authenticator app' }).click()
       await expect(page.getByText('Authenticator setup')).toBeVisible()
       await page.getByLabel('Authenticator code').fill('123456')
       await page.getByRole('button', { name: 'Verify code' }).click()
+      await page.getByRole('button', { name: 'Disable MFA' }).click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await page.getByRole('button', { name: 'Disable MFA' }).click()
+      await page.getByRole('button', { name: 'Disable authenticator app' }).click()
+      expect(requests).toContainEqual({
+        method: 'DELETE',
+        path: '/api/account/security/mfa/totp',
+        body: { password: 'password-1' },
+      })
     },
   },
   'passkey-flow': {
     suite: 'account center journey',
-    assert: async ({ page }) => {
+    assert: async ({ page, requests }) => {
       await page.goto('/account/security')
       await page.getByLabel('Passkey name').fill('MacBook Touch ID')
       await page.getByRole('button', { name: 'Add passkey' }).click()
+      await page.getByRole('button', { name: 'Remove' }).click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await page.getByRole('button', { name: 'Remove' }).click()
+      await page.getByRole('button', { name: 'Remove passkey' }).click()
+      expect(requests).toContainEqual({
+        method: 'DELETE',
+        path: '/api/account/security/passkeys/passkey-1',
+        body: null,
+      })
     },
   },
   'linked-account-unlink': {
     suite: 'account center journey',
-    assert: async ({ page }) => {
+    assert: async ({ page, requests }) => {
       await page.goto('/account/linked-accounts')
       await page.getByRole('button', { name: 'Unlink' }).click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await page.getByRole('button', { name: 'Unlink' }).click()
+      await page.getByRole('button', { name: 'Unlink account' }).click()
+      expect(requests).toContainEqual({
+        method: 'DELETE',
+        path: '/api/account/linked-accounts/github',
+        body: null,
+      })
     },
   },
   'session-revocation': {
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
       await page.goto('/account/sessions')
-      await page.getByRole('button', { name: 'Revoke all' }).click()
+      await page.getByRole('button', { name: 'Revoke other sessions' }).click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await page.getByRole('button', { name: 'Revoke other sessions' }).click()
+      await page.getByRole('button', { name: 'Revoke sessions' }).click()
       await page.getByRole('button', { name: 'Revoke', exact: true }).click()
+      await page.getByRole('button', { name: 'Revoke session' }).click()
       expect(requests).toContainEqual({ method: 'DELETE', path: '/api/account/security/sessions', body: null })
       expect(requests).toContainEqual({
         method: 'DELETE',
         path: '/api/account/security/sessions/session-1',
         body: null,
       })
+    },
+  },
+  'authorized-app-revoke': {
+    suite: 'account center journey',
+    assert: async ({ page, requests }) => {
+      accountApplicationRevoked = false
+      await page.goto('/account/authorized-apps')
+      await expect(page.getByText('Customer portal')).toBeVisible()
+      await page.getByRole('button', { name: 'Revoke' }).click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await page.getByRole('button', { name: 'Revoke' }).click()
+      await page.getByRole('button', { name: 'Revoke access' }).click()
+      expect(requests).toContainEqual({
+        method: 'DELETE',
+        path: '/api/account/applications/consent-1',
+        body: null,
+      })
+      await expect(page.getByText('No application consents.')).toBeVisible()
     },
   },
   'sign-out': {
@@ -663,8 +718,8 @@ const journeyAssertions: Record<
       await page.goto('/admin/connectors')
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'New connector' }).click()
+      await page.getByLabel('Template').selectOption('google')
       await page.getByLabel('Display name').fill('Google')
-      await page.getByLabel('Provider ID').fill('google')
       await page.getByLabel('Client ID').fill('google-client')
       await page.getByLabel('Client secret binding').fill('GOOGLE_SECRET')
       await page.getByRole('button', { name: 'Save' }).click()
@@ -677,8 +732,26 @@ const journeyAssertions: Record<
           displayName: 'Google',
           clientId: 'google-client',
           clientSecretBinding: 'GOOGLE_SECRET',
+          scopes: ['openid', 'email', 'profile'],
         },
       })
+      await page.getByLabel('Actions for GitHub').click()
+      await page.getByText('View details').click()
+      await expect(page.getByText('Secret binding available')).toBeVisible()
+      await page.getByLabel('Display name').fill('GitHub Enterprise')
+      await page.getByRole('button', { name: 'Save changes' }).click()
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/management/connectors/connector-1',
+        body: expect.objectContaining({ displayName: 'GitHub Enterprise' }),
+      })
+      await page.getByRole('button', { name: 'Close' }).click()
+      await page.goto('/admin/connectors')
+      await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
+      await page.getByLabel('Actions for GitHub').click()
+      await page.getByText('Delete').click()
+      await page.getByRole('button', { name: 'Delete' }).click()
+      expect(requests).toContainEqual({ method: 'DELETE', path: '/api/management/connectors/connector-1', body: null })
     },
   },
   'admin-create-organization': {
@@ -1108,6 +1181,26 @@ async function responseFor(path: string, method: string, body: unknown): Promise
     if (method === 'POST') return connector
     return { connectors: [connector], pagination }
   }
+  if (path === '/api/management/connectors/templates') return connectorTemplates
+  if (path === '/api/management/connectors/connector-1/readiness') {
+    return {
+      connectorId: 'connector-1',
+      ready: false,
+      checks: [
+        {
+          key: 'clientSecretAvailable',
+          label: 'Secret binding available',
+          ok: false,
+          message: 'Secret binding is not available in the runtime.',
+        },
+      ],
+    }
+  }
+  if (path === '/api/management/connectors/connector-1') {
+    if (method === 'PATCH') return { ...connector, ...(body && typeof body === 'object' ? body : {}) }
+    if (method === 'DELETE') return {}
+    return connector
+  }
   if (path === '/api/management/organizations') {
     if (method === 'POST') return organization
     return { organizations: [organization], pagination }
@@ -1145,11 +1238,17 @@ async function responseFor(path: string, method: string, body: unknown): Promise
   if (path === '/api/account/profile') return { user: profile }
   if (path === '/api/account/avatar') return { asset: uploadedAsset }
   if (path === '/api/account/linked-accounts') return { accounts: [linkedAccount] }
-  if (path === '/api/account/applications') return { applications: [] }
+  if (path === '/api/account/applications') {
+    return { applications: accountApplicationRevoked ? [] : [accountApplicationConsent] }
+  }
+  if (path === '/api/account/applications/consent-1' && method === 'DELETE') {
+    accountApplicationRevoked = true
+    return null
+  }
   if (path === '/api/account/sessions') return { sessions: [session] }
   if (path === '/api/account/security') return { security: securityState }
   if (path === '/api/account/security/mfa/totp-enrollment') return totpEnrollment
-  if (path === '/api/account/security/passkeys') return { passkeys: [] }
+  if (path === '/api/account/security/passkeys') return { passkeys: [passkey] }
   if (path === '/api/account/security/passkeys/registration-options') return passkeyRegistrationOptions
   return { ok: true }
 }
@@ -1196,7 +1295,15 @@ const configz = {
     backgroundColor: '#f7f3ee',
     customCss: null,
   },
-  identityProviders: [],
+  identityProviders: [
+    {
+      slug: 'github',
+      providerType: 'social',
+      providerId: 'github',
+      displayName: 'GitHub',
+      icon: 'github',
+    },
+  ],
   links: {
     termsUri: null,
     privacyUri: null,
@@ -1314,19 +1421,43 @@ const consentResponse = {
 
 const connector = {
   id: 'connector-1',
+  slug: 'github',
   providerId: 'github',
   providerType: 'social',
   displayName: 'GitHub',
   enabled: true,
   clientId: 'github-client',
   clientSecretBinding: 'GITHUB_SECRET',
+  issuer: null,
+  authorizationEndpoint: null,
+  tokenEndpoint: null,
+  userInfoEndpoint: null,
+  jwksEndpoint: null,
   scopes: ['read:user', 'user:email'],
-  iconUrl: null,
-  authorizationUrl: null,
-  tokenUrl: null,
-  userInfoUrl: null,
+  providerMetadata: {},
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const connectorTemplates = {
+  templates: [
+    {
+      providerType: 'social',
+      providerId: 'google',
+      displayName: 'Google',
+      icon: 'google',
+      requiredFields: ['clientId', 'clientSecretBinding'],
+      optionalFields: ['scopes'],
+      defaultScopes: ['openid', 'email', 'profile'],
+      endpoints: {
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+      },
+    },
+  ],
 }
 
 const user = {
@@ -1375,6 +1506,23 @@ const session = {
   userAgent: 'Playwright',
 }
 
+const accountApplicationConsent = {
+  id: 'consent-1',
+  applicationName: 'Customer portal',
+  applicationSlug: 'customer-portal',
+  scopes: ['openid', 'profile'],
+  grantedAt: '2026-01-01T00:00:00.000Z',
+  expiresAt: null,
+}
+
+const passkey = {
+  id: 'passkey-1',
+  name: 'Laptop key',
+  deviceType: 'singleDevice',
+  backedUp: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
+}
+
 const securityPolicy = {
   mfa: { mode: 'optional' },
   passkeys: { enabled: true, rpId: 'localhost', rpName: 'Acme ID', origins: ['http://127.0.0.1:5173'] },
@@ -1383,7 +1531,7 @@ const securityPolicy = {
 
 const securityState = {
   mfa: { enabled: false, factors: [] },
-  passkeys: { enabled: true, count: 0 },
+  passkeys: { enabled: true, count: 1 },
   policy: securityPolicy,
 }
 

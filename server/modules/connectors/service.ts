@@ -1,6 +1,7 @@
 import type { GenericOAuthConfig } from 'better-auth/plugins'
 import type {
   ConnectorProviderType,
+  ConnectorReadinessResponse,
   ConnectorResponse,
   CreateConnectorRequest,
   UpdateConnectorRequest,
@@ -37,6 +38,18 @@ export class ConnectorService {
     const connector = await this.repository.findById(id)
     if (!connector) throw notFound('Connector not found.')
     return toResponse(connector)
+  }
+
+  async readiness(id: string, env: Env): Promise<ConnectorReadinessResponse> {
+    const connector = await this.repository.findById(id)
+    if (!connector) throw notFound('Connector not found.')
+
+    const checks = connectorReadinessChecks(connector, env)
+    return {
+      connectorId: connector.id,
+      ready: checks.every((check) => check.ok),
+      checks,
+    }
   }
 
   async create(input: CreateConnectorRequest) {
@@ -164,12 +177,7 @@ function assertComplete(connector: ConnectorRow) {
   if (!connector.clientSecretBinding) throw badRequest('Enabled connector requires clientSecretBinding.')
   assertSupportedProvider(connector.providerType as ConnectorProviderType, connector.providerId)
   if (connector.providerType === 'social') assertSocialProviderComplete(connector)
-  if (connector.providerType === 'generic_oauth' && !connector.issuer && !connector.authorizationEndpoint) {
-    throw badRequest('Enabled generic OAuth connector requires issuer or authorizationEndpoint.')
-  }
-  if (connector.providerType === 'generic_oauth' && !connector.issuer && !connector.tokenEndpoint) {
-    throw badRequest('Enabled generic OAuth connector requires tokenEndpoint when issuer is not provided.')
-  }
+  if (connector.providerType === 'generic_oauth') assertGenericOAuthComplete(connector)
 }
 
 async function assertProviderAvailable(repository: ConnectorRepository, providerId: string) {
@@ -186,6 +194,79 @@ function assertSocialProviderComplete(connector: ConnectorRow) {
       throw badRequest(`Enabled Cognito connector requires providerMetadata.${field}.`)
     }
   }
+}
+
+function assertGenericOAuthComplete(connector: ConnectorRow) {
+  if (connector.issuer && hasAnyExplicitEndpoint(connector)) {
+    throw badRequest('Enabled generic OAuth connector uses either issuer discovery or explicit endpoints, not both.')
+  }
+  if (!connector.issuer && !connector.authorizationEndpoint) {
+    throw badRequest('Enabled generic OAuth connector requires issuer or authorizationEndpoint.')
+  }
+  if (!connector.issuer && !connector.tokenEndpoint) {
+    throw badRequest('Enabled generic OAuth connector requires tokenEndpoint when issuer is not provided.')
+  }
+}
+
+function connectorReadinessChecks(connector: ConnectorRow, env: Env) {
+  const secretValue = connector.clientSecretBinding ? env[connector.clientSecretBinding] : undefined
+  const secretAvailable = typeof secretValue === 'string' && secretValue.length > 0
+  const checks = [
+    {
+      key: 'enabled',
+      label: 'Connector enabled',
+      ok: connector.enabled,
+      message: connector.enabled ? 'Connector is enabled.' : 'Connector is disabled.',
+    },
+    {
+      key: 'clientId',
+      label: 'Client ID configured',
+      ok: Boolean(connector.clientId),
+      message: connector.clientId ? 'Client ID is configured.' : 'Client ID is missing.',
+    },
+    {
+      key: 'clientSecretBinding',
+      label: 'Secret binding configured',
+      ok: Boolean(connector.clientSecretBinding),
+      message: connector.clientSecretBinding
+        ? 'Secret binding name is configured.'
+        : 'Client secret binding name is missing.',
+    },
+    {
+      key: 'clientSecretAvailable',
+      label: 'Secret binding available',
+      ok: secretAvailable,
+      message:
+        connector.clientSecretBinding && secretAvailable
+          ? 'Secret binding is available in the runtime.'
+          : 'Secret binding is not available in the runtime.',
+    },
+  ]
+
+  if (connector.providerType === 'generic_oauth') {
+    const hasExplicitEndpoint = hasAnyExplicitEndpoint(connector)
+    const requiredEndpointsConfigured = Boolean(connector.authorizationEndpoint && connector.tokenEndpoint)
+    checks.push({
+      key: 'oauthEndpoints',
+      label: 'OAuth endpoints configured',
+      ok: connector.issuer ? !hasExplicitEndpoint : requiredEndpointsConfigured,
+      message: connector.issuer
+        ? hasExplicitEndpoint
+          ? 'Use issuer discovery or explicit endpoints, not both.'
+          : 'Issuer discovery is configured.'
+        : requiredEndpointsConfigured
+          ? 'Explicit authorization and token endpoints are configured.'
+          : 'Configure issuer discovery or explicit authorization and token endpoints.',
+    })
+  }
+
+  return checks
+}
+
+function hasAnyExplicitEndpoint(connector: ConnectorRow): boolean {
+  return Boolean(
+    connector.authorizationEndpoint || connector.tokenEndpoint || connector.userInfoEndpoint || connector.jwksEndpoint,
+  )
 }
 
 function readSecret(env: Env, binding: string | null): string {

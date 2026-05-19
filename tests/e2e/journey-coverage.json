@@ -29,6 +29,7 @@
     { "id": "passkey-flow", "name": "Account center registers a passkey" },
     { "id": "linked-account-unlink", "name": "Account center unlinks a connected account" },
     { "id": "session-revocation", "name": "Account center revokes all and single sessions" },
+    { "id": "authorized-app-revoke", "name": "Account center revokes authorized application access" },
     { "id": "admin-dashboard", "name": "Admin dashboard loads tenant health" },
     { "id": "admin-setup-gate", "name": "Admin routes redirect to setup onboarding when no OIDC client exists" },
     { "id": "admin-onboarding", "name": "Admin onboarding creates the first OIDC client and shows integration details" },

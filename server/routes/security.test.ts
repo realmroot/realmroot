@@ -181,6 +181,52 @@ describe('security routes', () => {
     expect(auth.api.revokeSessions).toHaveBeenCalledWith({ headers: expect.any(Headers) })
   })
 
+  it('revokes authorized application consent for the current account', async () => {
+    const applicationService = {
+      list: vi.fn().mockResolvedValue({ pagination: { total: 1 } }),
+      revokeConsent: vi.fn().mockResolvedValue(undefined),
+    }
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: createSecurityRepositoryMock(),
+      securityPolicy: securityPolicy(),
+      applicationServiceFactory: () => applicationService,
+    })
+
+    const response = await app.request('/api/account/applications/consent-1', {
+      method: 'DELETE',
+      headers: userHeaders(),
+    })
+
+    expect(response.status).toBe(204)
+    expect(applicationService.revokeConsent).toHaveBeenCalledWith('consent-1', 'user-1')
+  })
+
+  it('protects authorized application consent revocation and surfaces missing grants', async () => {
+    const applicationService = {
+      list: vi.fn().mockResolvedValue({ pagination: { total: 1 } }),
+      revokeConsent: vi.fn().mockRejectedValue(notFound('Application consent was not found.')),
+    }
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: createSecurityRepositoryMock(),
+      securityPolicy: securityPolicy(),
+      applicationServiceFactory: () => applicationService,
+    })
+
+    const unauthorized = await app.request('/api/account/applications/consent-1', { method: 'DELETE' })
+    const missing = await app.request('/api/account/applications/consent-1', {
+      method: 'DELETE',
+      headers: userHeaders(),
+    })
+
+    expect(unauthorized.status).toBe(401)
+    expect(missing.status).toBe(404)
+    await expect(missing.json()).resolves.toMatchObject({
+      error: { code: 'not_found', message: 'Application consent was not found.' },
+    })
+  })
+
   it('rejects disabled passkey operations before calling Better Auth passkey APIs', async () => {
     const auth = createAuthMock()
     const policy = securityPolicy({ passkeys: { ...securityPolicy().passkeys, enabled: false } })

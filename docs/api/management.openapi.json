@@ -129,6 +129,32 @@
         }
       }
     },
+    "/connectors/templates": {
+      "get": {
+        "tags": [
+          "Connectors"
+        ],
+        "summary": "List connector provider templates",
+        "responses": {
+          "200": {
+            "description": "Connector templates returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListConnectorTemplatesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/connectors/{id}": {
       "parameters": [
         {
@@ -210,6 +236,40 @@
         "responses": {
           "204": {
             "description": "Connector deleted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/connectors/{id}/readiness": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Id"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Connectors"
+        ],
+        "summary": "Get connector configuration readiness",
+        "responses": {
+          "200": {
+            "description": "Connector readiness returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorReadiness"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1697,6 +1757,161 @@
           }
         }
       },
+      "ConnectorEndpointMetadata": {
+        "type": "object",
+        "required": [
+          "issuer",
+          "authorizationEndpoint",
+          "tokenEndpoint",
+          "userInfoEndpoint",
+          "jwksEndpoint"
+        ],
+        "properties": {
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "authorizationEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "tokenEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "userInfoEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "jwksEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          }
+        }
+      },
+      "ConnectorTemplate": {
+        "type": "object",
+        "required": [
+          "providerType",
+          "providerId",
+          "displayName",
+          "icon",
+          "requiredFields",
+          "optionalFields",
+          "defaultScopes",
+          "endpoints"
+        ],
+        "properties": {
+          "providerType": {
+            "type": "string",
+            "enum": [
+              "social",
+              "generic_oauth"
+            ]
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "requiredFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "optionalFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaultScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "endpoints": {
+            "$ref": "#/components/schemas/ConnectorEndpointMetadata"
+          }
+        }
+      },
+      "ListConnectorTemplatesResponse": {
+        "type": "object",
+        "required": [
+          "templates"
+        ],
+        "properties": {
+          "templates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectorTemplate"
+            }
+          }
+        }
+      },
+      "ConnectorReadiness": {
+        "type": "object",
+        "required": [
+          "connectorId",
+          "ready",
+          "checks"
+        ],
+        "properties": {
+          "connectorId": {
+            "type": "string"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "label",
+                "ok",
+                "message"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
       "ListConnectorsResponse": {
         "type": "object",
         "required": [
@@ -1720,11 +1935,9 @@
         "required": [
           "providerType",
           "providerId",
-          "displayName",
-          "clientId",
-          "clientSecretBinding"
+          "displayName"
         ],
-        "description": "Create uses the shared connector contract. Generic OAuth connectors require either issuer or authorizationEndpoint, and require tokenEndpoint when issuer is omitted.",
+        "description": "Create uses the shared connector contract. Enabled connectors require clientId and clientSecretBinding. Disabled draft connectors may omit runtime credentials. Generic OAuth connectors use either issuer discovery or explicit authorizationEndpoint plus tokenEndpoint.",
         "properties": {
           "slug": {
             "type": "string",

@@ -693,8 +693,10 @@ function createConnectorServiceDouble() {
 
   return {
     list: vi.fn().mockResolvedValue({ connectors: [], pagination: page(0) }),
+    listTemplates: vi.fn().mockReturnValue({ templates: [] }),
     create: vi.fn().mockResolvedValue(connector),
     get: vi.fn().mockResolvedValue(connector),
+    readiness: vi.fn().mockResolvedValue({ connectorId: connector.id, ready: true, checks: [] }),
     update: vi.fn().mockResolvedValue(connector),
     delete: vi.fn().mockResolvedValue(undefined),
   }
