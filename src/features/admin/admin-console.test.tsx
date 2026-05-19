@@ -2023,6 +2023,70 @@ describe('admin console', () => {
     expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
   })
 
+  it('retries authorization detail loading failures', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requests.push(url)
+      if (url === '/api/management/roles/role-1') {
+        return Promise.resolve(jsonResponse({ error: 'Role unavailable.' }, 503))
+      }
+      if (url === '/api/management/api-resources/resource-1') {
+        return Promise.resolve(jsonResponse({ error: 'Resource unavailable.' }, 503))
+      }
+      if (url === '/api/management/roles/role-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [] }))
+      }
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      if (url.endsWith('/scopes')) return Promise.resolve(jsonResponse({ scopes: [], pagination: emptyPagination }))
+      if (url.endsWith('/permissions')) {
+        return Promise.resolve(jsonResponse({ permissions: [], pagination: emptyPagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByText('Role unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/roles/role-1').length).toBe(2))
+
+    unmount()
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+
+    expect(await screen.findByText('Resource unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() =>
+      expect(requests.filter((url) => url === '/api/management/api-resources/resource-1').length).toBe(2),
+    )
+  })
+
+  it('loads role permissions after selecting an API resource on a global role', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/roles/role-1') return Promise.resolve(jsonResponse(role))
+      if (url === '/api/management/roles/role-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [] }))
+      }
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('API resource'), { target: { value: 'resource-1' } })
+
+    expect(await screen.findByText('orders.read')).toBeTruthy()
+  })
+
   it('removes a selected role permission from local assignment state', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
