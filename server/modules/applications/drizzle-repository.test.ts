@@ -5,8 +5,10 @@ import {
   applicationClientMetadata,
   applicationClientSecret,
   applicationConsent,
+  oauthAccessToken,
   oauthClient,
   oauthConsent,
+  oauthRefreshToken,
 } from '../../db/schema'
 import { createDrizzleApplicationRepository } from './drizzle-repository'
 
@@ -412,6 +414,27 @@ describe('createDrizzleApplicationRepository', () => {
         updatedAt: expect.any(Date),
       },
     })
+  })
+
+  it('revokes every active application consent with OAuth consent and token state', async () => {
+    const db = new FakeDb({
+      aggregate: [{ applicationId: 'app-1', clientId: 'client-1' }],
+    })
+    const repository = createDrizzleApplicationRepository(db as unknown as Database)
+
+    await expect(repository.revokeConsent('consent-1', 'user-1')).resolves.toBe(true)
+
+    expect(db.updates).toEqual([
+      { table: applicationConsent, set: { revokedAt: expect.any(Date) } },
+      { table: oauthRefreshToken, set: { revoked: expect.any(Date) } },
+    ])
+    expect(db.deletes).toEqual([{ table: oauthConsent }, { table: oauthAccessToken }])
+  })
+
+  it('returns false when revoking a missing application consent', async () => {
+    const repository = createDrizzleApplicationRepository(new FakeDb() as unknown as Database)
+
+    await expect(repository.revokeConsent('consent-1', 'user-1')).resolves.toBe(false)
   })
 })
 

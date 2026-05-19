@@ -6,8 +6,10 @@ import {
   applicationClientMetadata,
   applicationClientSecret,
   applicationConsent,
+  oauthAccessToken,
   oauthClient,
   oauthConsent,
+  oauthRefreshToken,
 } from '../../db/schema'
 import type { ApplicationAggregate, ApplicationRepository, ConsentRecord } from './service'
 
@@ -203,6 +205,57 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .orderBy(desc(applicationConsent.grantedAt))
         .limit(1)
       return rows[0] ? toConsent(rows[0]) : null
+    },
+
+    async revokeConsent(consentId, userId) {
+      const [row] = await db
+        .select({
+          applicationId: applicationConsent.applicationId,
+          clientId: application.oauthClientId,
+        })
+        .from(applicationConsent)
+        .innerJoin(application, eq(applicationConsent.applicationId, application.id))
+        .where(
+          and(
+            eq(applicationConsent.id, consentId),
+            eq(applicationConsent.userId, userId),
+            isNull(applicationConsent.revokedAt),
+          ),
+        )
+        .limit(1)
+
+      if (!row) {
+        return false
+      }
+
+      const now = new Date()
+      await db.batch([
+        db
+          .update(applicationConsent)
+          .set({ revokedAt: now })
+          .where(
+            and(
+              eq(applicationConsent.applicationId, row.applicationId),
+              eq(applicationConsent.userId, userId),
+              isNull(applicationConsent.revokedAt),
+            ),
+          ),
+        db.delete(oauthConsent).where(and(eq(oauthConsent.clientId, row.clientId), eq(oauthConsent.userId, userId))),
+        db
+          .delete(oauthAccessToken)
+          .where(and(eq(oauthAccessToken.clientId, row.clientId), eq(oauthAccessToken.userId, userId))),
+        db
+          .update(oauthRefreshToken)
+          .set({ revoked: now })
+          .where(
+            and(
+              eq(oauthRefreshToken.clientId, row.clientId),
+              eq(oauthRefreshToken.userId, userId),
+              isNull(oauthRefreshToken.revoked),
+            ),
+          ),
+      ])
+      return true
     },
 
     async createConsent(input) {

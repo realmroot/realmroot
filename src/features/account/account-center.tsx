@@ -3,6 +3,14 @@ import { Fingerprint, KeyRound, Laptop, LinkIcon, LoaderCircle, Mail, ShieldChec
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from 'react'
 import { BrandIdentity, brandingStyle } from '@/components/layout/auth-layout'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Field, TextInput } from '@/components/ui/field'
 import { Status } from '@/components/ui/status'
 import { useConfigz } from '@/features/auth/hooks'
@@ -18,6 +26,7 @@ import {
   listLinkedAccounts,
   listPasskeys,
   requestAccountEmailChange,
+  revokeApplicationConsent,
   revokeOtherSessions,
   revokeSession,
   startTotpEnrollment,
@@ -113,6 +122,7 @@ export function AccountCenter({ section }: { section: AccountSectionId }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<DestructiveConfirmation | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -191,11 +201,18 @@ export function AccountCenter({ section }: { section: AccountSectionId }) {
         {error ? <Status tone="error">{error}</Status> : null}
         {message ? <Status tone="success">{message}</Status> : null}
         {section === 'profile' && data.profile ? <ProfileSection profile={data.profile} mutate={mutate} /> : null}
-        {section === 'security' ? <SecuritySection data={data} mutate={mutate} /> : null}
-        {section === 'linked-accounts' ? <ConnectionsSection accounts={data.linkedAccounts} mutate={mutate} /> : null}
-        {section === 'sessions' ? <SessionsSection sessions={data.sessions} mutate={mutate} /> : null}
-        {section === 'authorized-apps' ? <ApplicationsSection applications={data.applications} /> : null}
+        {section === 'security' ? <SecuritySection confirm={setConfirmation} data={data} mutate={mutate} /> : null}
+        {section === 'linked-accounts' ? (
+          <ConnectionsSection accounts={data.linkedAccounts} confirm={setConfirmation} mutate={mutate} />
+        ) : null}
+        {section === 'sessions' ? (
+          <SessionsSection confirm={setConfirmation} sessions={data.sessions} mutate={mutate} />
+        ) : null}
+        {section === 'authorized-apps' ? (
+          <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
+        ) : null}
       </section>
+      <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
     </main>
   )
 }
@@ -327,7 +344,15 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
   )
 }
 
-function SecuritySection({ data, mutate }: { data: AccountData; mutate: MutationHandler }) {
+function SecuritySection({
+  confirm,
+  data,
+  mutate,
+}: {
+  confirm: ConfirmDestructiveHandler
+  data: AccountData
+  mutate: MutationHandler
+}) {
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [passkeyName, setPasskeyName] = useState('')
@@ -374,7 +399,14 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
         </form>
         <Button
           disabled={mfaRequired}
-          onClick={() => mutate('MFA disabled.', () => disableTotp({ password }))}
+          onClick={() =>
+            confirm({
+              title: 'Disable MFA',
+              description: 'This removes authenticator app protection from your account.',
+              actionLabel: 'Disable authenticator app',
+              onConfirm: () => mutate('MFA disabled.', () => disableTotp({ password })),
+            })
+          }
           type="button"
           variant="danger"
         >
@@ -406,7 +438,14 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
             meta: `${passkey.deviceType}${passkey.backedUp ? ' / backed up' : ''}`,
             action: (
               <Button
-                onClick={() => mutate('Passkey removed.', () => deletePasskey(passkey.id))}
+                onClick={() =>
+                  confirm({
+                    title: 'Remove passkey',
+                    description: 'This passkey will no longer sign in to your account.',
+                    actionLabel: 'Remove passkey',
+                    onConfirm: () => mutate('Passkey removed.', () => deletePasskey(passkey.id)),
+                  })
+                }
                 type="button"
                 variant="ghost"
               >
@@ -420,7 +459,15 @@ function SecuritySection({ data, mutate }: { data: AccountData; mutate: Mutation
   )
 }
 
-function ConnectionsSection({ accounts, mutate }: { accounts: LinkedAccount[]; mutate: MutationHandler }) {
+function ConnectionsSection({
+  accounts,
+  confirm,
+  mutate,
+}: {
+  accounts: LinkedAccount[]
+  confirm: ConfirmDestructiveHandler
+  mutate: MutationHandler
+}) {
   return (
     <section className="settingsPanel">
       <h2>Linked social accounts</h2>
@@ -433,7 +480,13 @@ function ConnectionsSection({ accounts, mutate }: { accounts: LinkedAccount[]; m
           action: (
             <Button
               onClick={() =>
-                mutate('Linked account removed.', () => unlinkAccount(account.providerId, account.accountId))
+                confirm({
+                  title: 'Unlink account',
+                  description: `${account.providerId} will no longer be connected to your account.`,
+                  actionLabel: 'Unlink account',
+                  onConfirm: () =>
+                    mutate('Linked account removed.', () => unlinkAccount(account.providerId, account.accountId)),
+                })
               }
               type="button"
               variant="ghost"
@@ -447,17 +500,32 @@ function ConnectionsSection({ accounts, mutate }: { accounts: LinkedAccount[]; m
   )
 }
 
-function SessionsSection({ sessions, mutate }: { sessions: UserSessionDevice[]; mutate: MutationHandler }) {
+function SessionsSection({
+  confirm,
+  sessions,
+  mutate,
+}: {
+  confirm: ConfirmDestructiveHandler
+  sessions: UserSessionDevice[]
+  mutate: MutationHandler
+}) {
   return (
     <section className="settingsPanel">
       <div className="panelHeader">
         <h2>Sessions and devices</h2>
         <Button
-          onClick={() => mutate('Other sessions revoked.', revokeOtherSessions)}
+          onClick={() =>
+            confirm({
+              title: 'Revoke other sessions',
+              description: 'Every other active session for this account will be signed out.',
+              actionLabel: 'Revoke sessions',
+              onConfirm: () => mutate('Other sessions revoked.', revokeOtherSessions),
+            })
+          }
           type="button"
           variant="secondary"
         >
-          Revoke all
+          Revoke other sessions
         </Button>
       </div>
       <ItemList
@@ -468,7 +536,14 @@ function SessionsSection({ sessions, mutate }: { sessions: UserSessionDevice[]; 
           meta: `${session.ipAddress ?? 'No IP'} / expires ${formatDate(session.expiresAt)}`,
           action: (
             <Button
-              onClick={() => mutate('Session revoked.', () => revokeSession(session.id))}
+              onClick={() =>
+                confirm({
+                  title: 'Revoke session',
+                  description: 'This device session will be signed out.',
+                  actionLabel: 'Revoke session',
+                  onConfirm: () => mutate('Session revoked.', () => revokeSession(session.id)),
+                })
+              }
               type="button"
               variant="ghost"
             >
@@ -481,7 +556,15 @@ function SessionsSection({ sessions, mutate }: { sessions: UserSessionDevice[]; 
   )
 }
 
-function ApplicationsSection({ applications }: { applications: ConsentedApplication[] }) {
+function ApplicationsSection({
+  applications,
+  confirm,
+  mutate,
+}: {
+  applications: ConsentedApplication[]
+  confirm: ConfirmDestructiveHandler
+  mutate: MutationHandler
+}) {
   return (
     <section className="settingsPanel">
       <h2>Consented applications</h2>
@@ -491,6 +574,23 @@ function ApplicationsSection({ applications }: { applications: ConsentedApplicat
           id: application.id,
           title: application.applicationName,
           meta: `${application.scopes.join(', ')} / granted ${formatDate(application.grantedAt)}`,
+          action: (
+            <Button
+              onClick={() =>
+                confirm({
+                  title: 'Revoke application access',
+                  description: `${application.applicationName} will lose access to this account until you approve it again.`,
+                  actionLabel: 'Revoke access',
+                  onConfirm: () =>
+                    mutate('Application access revoked.', () => revokeApplicationConsent(application.id)),
+                })
+              }
+              type="button"
+              variant="ghost"
+            >
+              Revoke
+            </Button>
+          ),
         }))}
       />
     </section>
@@ -498,6 +598,52 @@ function ApplicationsSection({ applications }: { applications: ConsentedApplicat
 }
 
 type MutationHandler = <T>(label: string, operation: () => Promise<T>) => Promise<T | undefined>
+
+type DestructiveConfirmation = {
+  title: string
+  description: string
+  actionLabel: string
+  onConfirm: () => unknown
+}
+
+type ConfirmDestructiveHandler = (confirmation: DestructiveConfirmation) => void
+
+function DestructiveConfirmationDialog({
+  confirmation,
+  onClose,
+}: {
+  confirmation: DestructiveConfirmation | null
+  onClose: () => void
+}) {
+  if (!confirmation) return null
+
+  return (
+    <Dialog open={true}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{confirmation.title}</DialogTitle>
+          <DialogDescription>{confirmation.description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button onClick={onClose} type="button" variant="secondary">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              const confirmed = confirmation
+              onClose()
+              void confirmed.onConfirm()
+            }}
+            type="button"
+            variant="danger"
+          >
+            {confirmation.actionLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 type ListItem = {
   id: string

@@ -61,6 +61,7 @@ export type ManagementConfigzServiceFactory = (c: Context<{ Bindings: ConfigzBin
 
 export type ManagementApplicationServiceFactory = (c: Context<{ Bindings: ApplicationBindings }>) => {
   list: (query: { limit: number; offset: number }) => Promise<{ pagination: { total: number } }>
+  revokeConsent: (consentId: string, userId: string) => Promise<void>
 }
 
 interface ManagementRoutesOptions {

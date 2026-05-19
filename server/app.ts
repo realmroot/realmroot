@@ -154,7 +154,15 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
     if (options.userRepository) {
       const managementApi = auth.api as unknown as ManagementAuthApi
       app.route('/api/admin/users', adminUserRoutes(managementApi, options.userRepository))
-      app.route('/api/account', accountRoutes(managementApi, options.userRepository, options.securityRepository))
+      app.route(
+        '/api/account',
+        accountRoutes(
+          managementApi,
+          options.userRepository,
+          options.securityRepository,
+          options.applicationServiceFactory,
+        ),
+      )
       app.route('/api/account', createAccountAssetRoutes(options.assetServiceFactory))
     }
   }
@@ -219,6 +227,9 @@ type RpcSchema = {
   }
   '/api/account/applications': {
     $get: RpcEndpoint<RpcNoInput, ConsentedApplicationsResponse>
+  }
+  '/api/account/applications/:consentId': {
+    $delete: RpcEndpoint<{ param: { consentId: string } }, EmptyResponse, 204>
   }
   '/api/account/sessions': {
     $get: RpcEndpoint<RpcNoInput, AccountSessionsResponse>
@@ -383,7 +394,15 @@ function mountRpcRoutes(app: Hono, auth: AuthHandler, options: RpcAppOptions) {
   const managementApi = auth.api as unknown as ManagementAuthApi
   return mountCoreApiRoutes(app, auth, options)
     .route('/api/admin/users', adminUserRoutes(managementApi, options.userRepository))
-    .route('/api/account', accountRoutes(managementApi, options.userRepository, options.securityRepository))
+    .route(
+      '/api/account',
+      accountRoutes(
+        managementApi,
+        options.userRepository,
+        options.securityRepository,
+        options.applicationServiceFactory,
+      ),
+    )
     .route('/api/account', createAccountAssetRoutes(options.assetServiceFactory))
     .route(
       '/api/admin/security',

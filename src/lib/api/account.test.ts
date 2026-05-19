@@ -17,6 +17,7 @@ describe('account API client', () => {
     await account.listLinkedAccounts()
     await account.unlinkAccount('google', 'google-account-1')
     await account.listConsentedApplications()
+    await account.revokeApplicationConsent('consent-1')
     await account.listAccountSessions()
     await account.getAccountSecurity()
     await account.startTotpEnrollment({ password: 'password' })
@@ -38,6 +39,7 @@ describe('account API client', () => {
       ['linkedAccounts.get'],
       ['linkedAccounts.delete', { param: { providerId: 'google' }, query: { accountId: 'google-account-1' } }],
       ['applications.get'],
+      ['applicationConsent.delete', { param: { consentId: 'consent-1' } }],
       ['sessions.get'],
       ['security.get'],
       ['totpEnrollment.post', { json: { password: 'password' } }],
@@ -75,7 +77,10 @@ async function loadAccountApi() {
             $get: endpoint('linkedAccounts.get'),
             ':providerId': { $delete: endpoint('linkedAccounts.delete') },
           },
-          applications: { $get: endpoint('applications.get') },
+          applications: {
+            $get: endpoint('applications.get'),
+            ':consentId': { $delete: endpoint('applicationConsent.delete') },
+          },
           sessions: { $get: endpoint('sessions.get') },
           security: {
             $get: endpoint('security.get'),

@@ -163,27 +163,28 @@ describe('account center', () => {
     expect(screen.getByText('Laptop key')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Authenticator code'), { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: 'Verify code' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Disable MFA' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    clickAndConfirm('Disable MFA', 'Disable authenticator app')
+    clickAndConfirm('Remove', 'Remove passkey')
 
     cleanup()
     render(<AccountCenter section="linked-accounts" />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('google')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
+    clickAndConfirm('Unlink', 'Unlink account')
 
     cleanup()
     render(<AccountCenter section="sessions" />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Chrome on macOS')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke all' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    clickAndConfirm('Revoke other sessions', 'Revoke sessions')
+    clickAndConfirm('Revoke', 'Revoke session')
 
     cleanup()
     render(<AccountCenter section="authorized-apps" />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Customer Portal')).toBeTruthy()
     expect(screen.getByText(/openid, email/)).toBeTruthy()
+    clickAndConfirm('Revoke', 'Revoke access')
 
     await waitFor(() => {
       expect(requests).toEqual(
@@ -198,9 +199,23 @@ describe('account center', () => {
           { path: '/api/account/linked-accounts/google?accountId=google-account-1', method: 'DELETE', body: null },
           { path: '/api/account/security/sessions', method: 'DELETE', body: null },
           { path: '/api/account/security/sessions/session-1', method: 'DELETE', body: null },
+          { path: '/api/account/applications/consent-1', method: 'DELETE', body: null },
         ]),
       )
     })
+  })
+
+  it('does not run destructive account mutations when confirmation is canceled', async () => {
+    const requests = mockAccountFetch()
+
+    render(<AccountCenter section="authorized-apps" />)
+
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(requests.some((request) => request.method === 'DELETE')).toBe(false))
   })
 
   it('surfaces load and mutation failures', async () => {
@@ -342,6 +357,12 @@ type RequestRecord = {
   path: string
   method: string
   body: unknown
+}
+
+function clickAndConfirm(triggerName: string, confirmName: string) {
+  fireEvent.click(screen.getByRole('button', { name: triggerName }))
+  const buttons = screen.getAllByRole('button', { name: confirmName })
+  fireEvent.click(buttons.at(-1) as HTMLButtonElement)
 }
 
 function mockAccountFetch() {
