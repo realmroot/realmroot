@@ -461,6 +461,61 @@ describe('admin console', () => {
     })
   })
 
+  it('shows one-time secret material when creating a confidential application', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/applications' && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(
+          jsonResponse(
+            {
+              ...application,
+              clientId: 'server-client',
+              clientType: 'confidential_web',
+              public: false,
+              requirePkce: false,
+              tokenEndpointAuthMethod: 'client_secret_basic',
+              clientSecret: 'fas_created_secret',
+            },
+            201,
+          ),
+        )
+      }
+      if (url === '/api/management/applications') {
+        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ApplicationsPage />)
+
+    expect(await screen.findByText('Customer portal')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New application' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Server app' } })
+    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'server-app' } })
+    fireEvent.change(screen.getByLabelText('Client type'), { target: { value: 'confidential_web' } })
+    fireEvent.change(screen.getByLabelText('Redirect URIs'), {
+      target: { value: 'https://server.example.com/callback' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('fas_created_secret')).toBeTruthy()
+    expect(requests).toEqual([
+      {
+        url: '/api/management/applications',
+        body: {
+          name: 'Server app',
+          slug: 'server-app',
+          clientType: 'confidential_web',
+          redirectUris: ['https://server.example.com/callback'],
+        },
+      },
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByText('fas_created_secret')).toBeNull())
+  })
+
   it('shows client-side validation errors and does not post invalid application input', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -567,6 +622,7 @@ describe('admin console', () => {
     expect(screen.getByText('https://auth.example.com/token')).toBeTruthy()
     expect(screen.getByText('https://auth.example.com/userinfo')).toBeTruthy()
     expect(screen.getByText('https://auth.example.com/jwks')).toBeTruthy()
+    expect(screen.getByText('No client secret is issued for public clients.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Copy client config' }))
     expect(JSON.parse(clipboard.writeText.mock.calls[0]?.[0])).toEqual({
       issuer: 'https://auth.example.com',
@@ -584,6 +640,8 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Disable application' }))
     expect(await screen.findByRole('button', { name: 'Enable application' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Enable application' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete application' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete application' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete application' }).at(-1) as HTMLButtonElement)
 
@@ -669,6 +727,37 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Rotate client secret' }))
 
     expect(await screen.findByText('fas_rotated_secret')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByText('fas_rotated_secret')).toBeNull())
+  })
+
+  it('renders application detail mutation errors at the operation boundary', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/applications/app-1/redirect-uris' && init?.method === 'PUT') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Redirect URI is not allowed.' } }, 400))
+      }
+      if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/admin/applications/app-1')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Redirect URIs'), {
+      target: { value: 'https://bad.example.com/callback' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save redirect URIs' }))
+
+    expect(await screen.findByText('Redirect URI is not allowed.')).toBeTruthy()
   })
 
   it('renders users and displays management API errors from create flow', async () => {
