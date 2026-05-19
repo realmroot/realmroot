@@ -60,7 +60,7 @@ import type {
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { SecurityPolicy } from '@shared/api/security'
-import { ApiRequestError, apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
+import { apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
 
 export const adminQueryKeys = {
   dashboard: ['admin', 'dashboard'] as const,
@@ -361,7 +361,7 @@ export function listRoles() {
 }
 
 export function getRole(id: string): Promise<RoleResponse> {
-  return readManagementJson(`/api/management/roles/${id}`)
+  return readRpcResponse(apiClient.api.management.roles[':id'].$get({ param: { id } }))
 }
 
 export function createRole(input: CreateRoleRequest) {
@@ -373,39 +373,29 @@ export function updateRole(id: string, input: UpdateRoleRequest) {
 }
 
 export function deleteRole(id: string) {
-  return readManagementJson(`/api/management/roles/${id}`, { method: 'DELETE' })
+  return readRpcResponse(apiClient.api.management.roles[':id'].$delete({ param: { id } }))
 }
 
 export function listRolePermissions(id: string): Promise<RolePermissionsResponse> {
-  return readManagementJson(`/api/management/roles/${id}/permissions`)
+  return readRpcResponse(apiClient.api.management.roles[':id'].permissions.$get({ param: { id } }))
 }
 
 export function replaceRolePermissions(id: string, permissionIds: string[]) {
-  return readManagementJson(`/api/management/roles/${id}/permissions`, {
-    method: 'PUT',
-    body: JSON.stringify({ permissionIds }),
-  })
+  return readRpcResponse(
+    apiClient.api.management.roles[':id'].permissions.$put({ param: { id }, json: { permissionIds } }),
+  )
 }
 
 export function assignUserRole(input: AssignRoleRequest) {
-  return readManagementJson('/api/management/user-role-assignments', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+  return readRpcResponse(apiClient.api.management['user-role-assignments'].$post({ json: input }))
 }
 
 export function assignApplicationRole(input: AssignRoleRequest) {
-  return readManagementJson('/api/management/application-role-assignments', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+  return readRpcResponse(apiClient.api.management['application-role-assignments'].$post({ json: input }))
 }
 
 export function assignMemberRole(input: AssignRoleRequest) {
-  return readManagementJson('/api/management/member-role-assignments', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+  return readRpcResponse(apiClient.api.management['member-role-assignments'].$post({ json: input }))
 }
 
 export function listApiResources() {
@@ -413,7 +403,7 @@ export function listApiResources() {
 }
 
 export function getApiResource(id: string): Promise<ApiResourceResponse> {
-  return readManagementJson(`/api/management/api-resources/${id}`)
+  return readRpcResponse(apiClient.api.management['api-resources'][':id'].$get({ param: { id } }))
 }
 
 export function createApiResource(input: CreateApiResourceRequest) {
@@ -425,18 +415,17 @@ export function updateApiResource(id: string, input: UpdateApiResourceRequest) {
 }
 
 export function deleteApiResource(id: string) {
-  return readManagementJson(`/api/management/api-resources/${id}`, { method: 'DELETE' })
+  return readRpcResponse(apiClient.api.management['api-resources'][':id'].$delete({ param: { id } }))
 }
 
 export function listApiScopes(resourceId: string): Promise<ListApiScopesResponse> {
-  return readManagementJson(`/api/management/api-resources/${resourceId}/scopes`)
+  return readRpcResponse(apiClient.api.management['api-resources'][':id'].scopes.$get({ param: { id: resourceId } }))
 }
 
 export function createApiScope(resourceId: string, input: CreateApiScopeRequest): Promise<ApiScopeResponse> {
-  return readManagementJson(`/api/management/api-resources/${resourceId}/scopes`, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+  return readRpcResponse(
+    apiClient.api.management['api-resources'][':id'].scopes.$post({ param: { id: resourceId }, json: input }),
+  )
 }
 
 export function updateApiScope(
@@ -444,28 +433,35 @@ export function updateApiScope(
   scopeId: string,
   input: UpdateApiScopeRequest,
 ): Promise<ApiScopeResponse> {
-  return readManagementJson(`/api/management/api-resources/${resourceId}/scopes/${scopeId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(input),
-  })
+  return readRpcResponse(
+    apiClient.api.management['api-resources'][':id'].scopes[':scopeId'].$patch({
+      param: { id: resourceId, scopeId },
+      json: input,
+    }),
+  )
 }
 
 export function deleteApiScope(resourceId: string, scopeId: string) {
-  return readManagementJson(`/api/management/api-resources/${resourceId}/scopes/${scopeId}`, { method: 'DELETE' })
+  return readRpcResponse(
+    apiClient.api.management['api-resources'][':id'].scopes[':scopeId'].$delete({
+      param: { id: resourceId, scopeId },
+    }),
+  )
 }
 
 export function listApiPermissions(resourceId: string): Promise<ListApiPermissionsResponse> {
-  return readManagementJson(`/api/management/api-resources/${resourceId}/permissions`)
+  return readRpcResponse(
+    apiClient.api.management['api-resources'][':id'].permissions.$get({ param: { id: resourceId } }),
+  )
 }
 
 export function createApiPermission(
   resourceId: string,
   input: CreateApiPermissionRequest,
 ): Promise<ApiPermissionResponse> {
-  return readManagementJson(`/api/management/api-resources/${resourceId}/permissions`, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+  return readRpcResponse(
+    apiClient.api.management['api-resources'][':id'].permissions.$post({ param: { id: resourceId }, json: input }),
+  )
 }
 
 export function updateApiPermission(
@@ -473,16 +469,20 @@ export function updateApiPermission(
   permissionId: string,
   input: UpdateApiPermissionRequest,
 ): Promise<ApiPermissionResponse> {
-  return readManagementJson(`/api/management/api-resources/${resourceId}/permissions/${permissionId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(input),
-  })
+  return readRpcResponse(
+    apiClient.api.management['api-resources'][':id'].permissions[':permissionId'].$patch({
+      param: { id: resourceId, permissionId },
+      json: input,
+    }),
+  )
 }
 
 export function deleteApiPermission(resourceId: string, permissionId: string) {
-  return readManagementJson(`/api/management/api-resources/${resourceId}/permissions/${permissionId}`, {
-    method: 'DELETE',
-  })
+  return readRpcResponse(
+    apiClient.api.management['api-resources'][':id'].permissions[':permissionId'].$delete({
+      param: { id: resourceId, permissionId },
+    }),
+  )
 }
 
 function stringifyQuery(query: Partial<PaginationQuery>): Partial<Record<keyof PaginationQuery, string>> {
@@ -491,29 +491,4 @@ function stringifyQuery(query: Partial<PaginationQuery>): Partial<Record<keyof P
       .filter((entry): entry is [keyof PaginationQuery, number] => entry[1] !== undefined)
       .map(([key, value]) => [key, String(value)]),
   )
-}
-
-async function readManagementJson<T = void>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: init.body ? { 'content-type': 'application/json', ...init.headers } : init.headers,
-  })
-  if (!response.ok) {
-    throw new ApiRequestError(await responseMessage(response), response.status)
-  }
-  if (response.status === 204) return undefined as T
-  return response.json() as Promise<T>
-}
-
-async function responseMessage(response: Pick<Response, 'status' | 'text'>): Promise<string> {
-  const text = await response.text()
-  if (!text) return `Request failed with status ${response.status}.`
-
-  try {
-    const parsed = JSON.parse(text) as { message?: string; error?: string | { message?: string } }
-    if (typeof parsed.error === 'string') return parsed.error
-    return parsed.message ?? parsed.error?.message ?? text
-  } catch {
-    return text
-  }
 }

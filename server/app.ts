@@ -27,16 +27,26 @@ import type {
   UpdateApplicationRequest,
 } from '../shared/api/applications'
 import type {
+  ApiPermissionResponse,
   ApiResourceResponse,
+  ApiScopeResponse,
+  AssignRoleRequest,
+  CreateApiPermissionRequest,
   CreateApiResourceRequest,
+  CreateApiScopeRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
+  ListApiPermissionsResponse,
   ListApiResourcesResponse,
+  ListApiScopesResponse,
   ListOrganizationsResponse,
   ListRolesResponse,
   OrganizationResponse,
+  RolePermissionsResponse,
   RoleResponse,
+  UpdateApiPermissionRequest,
   UpdateApiResourceRequest,
+  UpdateApiScopeRequest,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '../shared/api/authorization'
@@ -388,14 +398,56 @@ type RpcSchema = {
     $post: RpcEndpoint<{ json: CreateRoleRequest }, RoleResponse, 201>
   }
   '/api/management/roles/:id': {
+    $get: RpcEndpoint<{ param: { id: string } }, RoleResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateRoleRequest }, RoleResponse>
+    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
+  }
+  '/api/management/roles/:id/permissions': {
+    $get: RpcEndpoint<{ param: { id: string } }, RolePermissionsResponse>
+    $put: RpcEndpoint<{ param: { id: string }; json: { permissionIds: string[] } }, EmptyResponse, 204>
+  }
+  '/api/management/user-role-assignments': {
+    $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
+  }
+  '/api/management/application-role-assignments': {
+    $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
+  }
+  '/api/management/member-role-assignments': {
+    $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
   }
   '/api/management/api-resources': {
     $get: RpcEndpoint<RpcNoInput, ListApiResourcesResponse>
     $post: RpcEndpoint<{ json: CreateApiResourceRequest }, ApiResourceResponse, 201>
   }
   '/api/management/api-resources/:id': {
+    $get: RpcEndpoint<{ param: { id: string } }, ApiResourceResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateApiResourceRequest }, ApiResourceResponse>
+    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
+  }
+  '/api/management/api-resources/:id/scopes': {
+    $get: RpcEndpoint<
+      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListApiScopesResponse
+    >
+    $post: RpcEndpoint<{ param: { id: string }; json: CreateApiScopeRequest }, ApiScopeResponse, 201>
+  }
+  '/api/management/api-resources/:id/scopes/:scopeId': {
+    $patch: RpcEndpoint<{ param: { id: string; scopeId: string }; json: UpdateApiScopeRequest }, ApiScopeResponse>
+    $delete: RpcEndpoint<{ param: { id: string; scopeId: string } }, EmptyResponse, 204>
+  }
+  '/api/management/api-resources/:id/permissions': {
+    $get: RpcEndpoint<
+      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListApiPermissionsResponse
+    >
+    $post: RpcEndpoint<{ param: { id: string }; json: CreateApiPermissionRequest }, ApiPermissionResponse, 201>
+  }
+  '/api/management/api-resources/:id/permissions/:permissionId': {
+    $patch: RpcEndpoint<
+      { param: { id: string; permissionId: string }; json: UpdateApiPermissionRequest },
+      ApiPermissionResponse
+    >
+    $delete: RpcEndpoint<{ param: { id: string; permissionId: string } }, EmptyResponse, 204>
   }
 }
 
