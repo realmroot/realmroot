@@ -402,9 +402,6 @@
         }
       }
     },
-    "/api-resources/{id}/permissions/{permissionId}": {
-      "$ref": "#/components/pathItems/CrudResource"
-    },
     "/api-resources/{id}/scopes": {
       "get": {
         "tags": [
@@ -597,9 +594,6 @@
           }
         }
       }
-    },
-    "/api-resources/{id}/scopes/{scopeId}": {
-      "$ref": "#/components/pathItems/CrudResource"
     },
     "/application-role-assignments": {
       "$ref": "#/components/pathItems/RoleAssignmentCollection"
@@ -1991,9 +1985,36 @@
           "Roles"
         ],
         "summary": "List permissions assigned to a role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Role permissions returned."
+            "description": "Role permissions returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolePermissionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       },
@@ -6661,6 +6682,20 @@
           },
           "pagination": {
             "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "RolePermissionsResponse": {
+        "type": "object",
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiPermission"
+            }
           }
         }
       },
