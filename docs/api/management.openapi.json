@@ -2377,9 +2377,23 @@
       "Readiness": {
         "type": "object",
         "required": [
+          "required",
+          "recommended",
           "admin"
         ],
         "properties": {
+          "required": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadinessItem"
+            }
+          },
+          "recommended": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadinessItem"
+            }
+          },
           "admin": {
             "type": "object",
             "required": [
@@ -2400,11 +2414,59 @@
                 "items": {
                   "type": "string",
                   "enum": [
-                    "oidc_application"
+                    "oidc_application",
+                    "email_delivery",
+                    "branding_basics",
+                    "sign_in_method",
+                    "security_baseline",
+                    "connector_status"
                   ]
                 }
               }
             }
+          }
+        }
+      },
+      "ReadinessItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "description",
+          "status",
+          "href",
+          "action"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "oidc_application",
+              "email_delivery",
+              "branding_basics",
+              "sign_in_method",
+              "security_baseline",
+              "connector_status"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "action_needed"
+            ]
+          },
+          "href": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
           }
         }
       }

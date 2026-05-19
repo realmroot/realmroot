@@ -13,6 +13,7 @@ import { hostedCustomCssSchema } from '@shared/api/configz'
 import type { ConnectorResponse, ConnectorTemplate } from '@shared/api/connectors'
 import {
   createManagementConnectorRequestSchema,
+  type ManagementReadinessItem,
   type ManagementUserResponse,
   managementCreateUserRequestSchema,
   managementUpdateUserRequestSchema,
@@ -76,6 +77,7 @@ import {
   deleteUser,
   deleteUserPasskey,
   getAdminDashboard,
+  getAdminReadiness,
   getApplication,
   getBrandingSettings,
   getConnector,
@@ -699,6 +701,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
 
 export function AdminOnboardingPage() {
   const queryClient = useQueryClient()
+  const readinessQuery = useQuery({ queryKey: adminQueryKeys.readiness, queryFn: getAdminReadiness })
   const [form, setForm] = useState({
     name: 'Demo application',
     slug: 'demo-application',
@@ -717,11 +720,32 @@ export function AdminOnboardingPage() {
   return (
     <ResourcePage
       title="Admin onboarding"
-      description="Create the first OIDC client, review auth readiness, and copy the standards-based integration details."
-      error={createMutation.error}
-      loading={false}
+      description="Complete required setup gates, then review production recommendations without blocking the console."
+      error={readinessQuery.error ?? createMutation.error}
+      framed={false}
+      loading={readinessQuery.isLoading}
+      onRetry={() => readinessQuery.refetch()}
     >
-      <div className="resourceGrid">
+      <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle>Setup checklist</CardTitle>
+                <CardDescription>
+                  Required items unlock admin routes. Recommended items prepare production.
+                </CardDescription>
+              </div>
+              <Badge variant={readinessQuery.data?.admin?.setupRequired ? 'outline' : 'secondary'}>
+                {readinessQuery.data?.admin?.setupRequired ? 'Action needed' : 'Ready'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <SetupChecklist items={readinessQuery.data?.required ?? []} title="Required" />
+            <SetupChecklist items={readinessQuery.data?.recommended ?? []} title="Recommended" />
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>First OIDC application</CardTitle>
@@ -770,12 +794,12 @@ export function AdminOnboardingPage() {
             </form>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Client integration</CardTitle>
             <CardDescription>Use OIDC discovery with authorization code and PKCE.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="grid gap-3 text-sm">
             <SettingRow
               label="Discovery"
               value={`${window.location.origin}/api/auth/.well-known/openid-configuration`}
@@ -2556,6 +2580,40 @@ function SetupItem({ complete, label, value }: { complete: boolean; label: strin
         <p className="text-sm text-muted-foreground">{value}</p>
       </div>
     </div>
+  )
+}
+
+function SetupChecklist({ items, title }: { items: ManagementReadinessItem[]; title: string }) {
+  return (
+    <section className="grid gap-3">
+      <h2 className="text-sm font-semibold">{title}</h2>
+      <div className="grid gap-3">
+        {items.map((item) => {
+          const complete = item.status === 'complete'
+          return (
+            <div
+              className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border p-3"
+              key={item.id}
+            >
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                {complete ? (
+                  <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+                ) : (
+                  <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{item.label}</p>
+                  <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
+                </div>
+              </div>
+              <a className="uiButton uiButton-ghost" href={item.href}>
+                {item.action}
+              </a>
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

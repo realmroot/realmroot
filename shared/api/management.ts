@@ -123,11 +123,33 @@ export const updateManagementBrandingSettingsRequestSchema = z.object({
   copy: updateManagementSignInSettingsRequestSchema.shape.copy,
 })
 
+export const managementReadinessItemIdSchema = z.enum([
+  'oidc_application',
+  'email_delivery',
+  'branding_basics',
+  'sign_in_method',
+  'security_baseline',
+  'connector_status',
+])
+
+export const managementReadinessItemStatusSchema = z.enum(['complete', 'action_needed'])
+
+export const managementReadinessItemSchema = z.object({
+  id: managementReadinessItemIdSchema,
+  label: z.string(),
+  description: z.string(),
+  status: managementReadinessItemStatusSchema,
+  href: z.string(),
+  action: z.string(),
+})
+
 export const managementReadinessResponseSchema = z.object({
+  required: z.array(managementReadinessItemSchema),
+  recommended: z.array(managementReadinessItemSchema),
   admin: z.object({
     setupRequired: z.boolean(),
     setupHref: z.literal('/admin/onboarding'),
-    missing: z.array(z.enum(['oidc_application'])),
+    missing: z.array(managementReadinessItemIdSchema),
   }),
 })
 
@@ -302,6 +324,7 @@ export type ManagementSignInSettingsResponse = z.infer<typeof managementSignInSe
 export type UpdateManagementSignInSettingsRequest = z.infer<typeof updateManagementSignInSettingsRequestSchema>
 export type ManagementBrandingSettingsResponse = z.infer<typeof managementBrandingSettingsResponseSchema>
 export type UpdateManagementBrandingSettingsRequest = z.infer<typeof updateManagementBrandingSettingsRequestSchema>
+export type ManagementReadinessItem = z.infer<typeof managementReadinessItemSchema>
 export type ManagementReadinessResponse = z.infer<typeof managementReadinessResponseSchema>
 export type ManagementConnectorResponse = z.infer<typeof managementConnectorResponseSchema>
 export type ListManagementConnectorsResponse = z.infer<typeof listManagementConnectorsResponseSchema>

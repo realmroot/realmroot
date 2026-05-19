@@ -455,6 +455,9 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       await page.goto('/admin')
       await expect(page.getByRole('heading', { name: 'Tenant health' })).toBeVisible()
+      await page.goto('/admin/onboarding')
+      await expect(page).toHaveURL(/\/admin$/)
+      await expect(page.getByRole('heading', { name: 'Tenant health' })).toBeVisible()
     },
   },
   'admin-setup-gate': {
@@ -465,6 +468,8 @@ const journeyAssertions: Record<
         await page.goto('/admin/applications')
         await expect(page).toHaveURL(/\/admin\/onboarding$/)
         await expect(page.getByRole('heading', { name: 'Admin onboarding' })).toBeVisible()
+        await expect(page.getByText('Setup checklist')).toBeVisible()
+        await expect(page.getByText('Create an OIDC application')).toBeVisible()
         await expect(page.getByRole('navigation', { name: 'Admin' }).getByText('Onboarding')).toHaveCount(0)
       } finally {
         adminSetupRequired = false
@@ -1167,6 +1172,34 @@ async function responseFor(path: string, method: string, body: unknown): Promise
   }
   if (path === '/api/management/readiness') {
     return {
+      required: [
+        {
+          id: 'oidc_application',
+          label: 'Create an OIDC application',
+          description: 'Register the first client so product routes can complete authorization code flows.',
+          status: adminSetupRequired ? 'action_needed' : 'complete',
+          href: '/admin/onboarding',
+          action: 'Create client',
+        },
+        {
+          id: 'sign_in_method',
+          label: 'Enable a sign-in method',
+          description: 'Keep at least one hosted sign-in method available for users.',
+          status: 'complete',
+          href: '/admin/sign-in',
+          action: 'Review methods',
+        },
+      ],
+      recommended: [
+        {
+          id: 'email_delivery',
+          label: 'Confirm email delivery',
+          description: 'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
+          status: 'complete',
+          href: '/admin/deployment',
+          action: 'Review deployment',
+        },
+      ],
       admin: {
         setupRequired: adminSetupRequired,
         setupHref: '/admin/onboarding',

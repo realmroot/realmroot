@@ -529,6 +529,7 @@ describe('admin console', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
+      if (url.includes('/api/management/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
       if (url === '/api/management/applications' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(application, 201))
@@ -2535,6 +2536,7 @@ describe('admin console', () => {
     })
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
+      if (url.includes('/api/management/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
       if (url === '/api/management/applications' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(application, 201))
@@ -2544,6 +2546,9 @@ describe('admin console', () => {
 
     renderWithQuery(<AdminOnboardingPage />)
 
+    expect(await screen.findByText('Setup checklist')).toBeTruthy()
+    expect(screen.getByText('Create an OIDC application')).toBeTruthy()
+    expect(screen.getByText('Confirm email delivery')).toBeTruthy()
     fireEvent.change(await screen.findByLabelText('Application name'), { target: { value: 'Review app' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'review-app' } })
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
@@ -2828,6 +2833,38 @@ const securityPolicy = {
       cookieCacheSeconds: 60,
     },
   },
+}
+
+const readinessIncomplete = {
+  required: [
+    {
+      id: 'oidc_application',
+      label: 'Create an OIDC application',
+      description: 'Register the first client so product routes can complete authorization code flows.',
+      status: 'action_needed',
+      href: '/admin/onboarding',
+      action: 'Create client',
+    },
+    {
+      id: 'sign_in_method',
+      label: 'Enable a sign-in method',
+      description: 'Keep at least one hosted sign-in method available for users.',
+      status: 'complete',
+      href: '/admin/sign-in',
+      action: 'Review methods',
+    },
+  ],
+  recommended: [
+    {
+      id: 'email_delivery',
+      label: 'Confirm email delivery',
+      description: 'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
+      status: 'action_needed',
+      href: '/admin/deployment',
+      action: 'Review deployment',
+    },
+  ],
+  admin: { setupRequired: true, setupHref: '/admin/onboarding', missing: ['oidc_application'] },
 }
 
 const accountSecurity = {

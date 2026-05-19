@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { assignRoleRequestSchema } from '../../../shared/api/authorization'
 import {
   type ManagementBrandingSettingsResponse,
+  type ManagementReadinessItem,
   type ManagementReadinessResponse,
   type ManagementSignInSettingsResponse,
   managementBrandingSettingsResponseSchema,
@@ -30,6 +31,11 @@ import { adminUserRoutes } from '../admin/users'
 import type { ManagementAuthApi } from '../auth-api'
 import { readJson } from '../validation'
 import { type ConnectorServiceFactory, createManagementConnectorRoutes } from './connectors'
+
+interface ManagementBindings extends AuthorizationBindings, ConfigzBindings, ApplicationBindings {
+  EMAIL?: unknown
+  EMAIL_FROM?: string
+}
 
 interface ManagementConfigz {
   signIn: ManagementSignInSettingsResponse['signIn']
@@ -75,7 +81,7 @@ interface ManagementRoutesOptions {
 }
 
 export function createManagementRoutes(options: ManagementRoutesOptions) {
-  const app = new Hono<{ Bindings: AuthorizationBindings & ConfigzBindings & ApplicationBindings }>()
+  const app = new Hono<{ Bindings: ManagementBindings }>()
 
   app.route('/applications', adminApplicationsRoute)
   app.route('/api-resources', adminApiResourcesRoute)
@@ -165,14 +171,93 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
 
   {
     const applicationServiceFactory = options.applicationServiceFactory ?? createApplicationService
+    const configzServiceFactory = options.configzServiceFactory ?? createConfigzService
 
     app.use('/readiness', requireAdmin())
 
     app.get('/readiness', async (c) => {
-      const applications = await applicationServiceFactory(c).list({ limit: 1, offset: 0 })
-      const missing: ManagementReadinessResponse['admin']['missing'] =
-        applications.pagination.total === 0 ? ['oidc_application'] : []
+      const [applications, config] = await Promise.all([
+        applicationServiceFactory(c).list({ limit: 1, offset: 0 }),
+        configzServiceFactory(c).getConfig(),
+      ])
+      const hasOidcApplication = applications.pagination.total > 0
+      const identityProviderCount =
+        'identityProviders' in config && Array.isArray(config.identityProviders) ? config.identityProviders.length : 0
+      const hasSocialSignInMethod = config.signIn.socialLoginEnabled && identityProviderCount > 0
+      const hasSignInMethod =
+        config.signIn.passwordEnabled ||
+        config.signIn.magicLinkEnabled ||
+        config.signIn.emailOtpEnabled ||
+        hasSocialSignInMethod
+      const emailMethodsEnabled =
+        config.signIn.magicLinkEnabled || config.signIn.emailOtpEnabled || config.signIn.signupEnabled
+      const emailDeliveryReady = !emailMethodsEnabled || (Boolean(c.env?.EMAIL) && Boolean(c.env?.EMAIL_FROM))
+      const brandingReady =
+        config.copy.productName !== 'FlareAuth' ||
+        Boolean(config.branding.logoUrl || config.branding.faviconUrl || config.branding.primaryColor)
+      const securityReady = Boolean(
+        options.securityPolicy?.mfa.mode === 'required' || options.securityPolicy?.passkeys.enabled,
+      )
+      const connectorReady = !config.signIn.socialLoginEnabled || hasSocialSignInMethod
+      const required = [
+        readinessItem({
+          id: 'oidc_application',
+          label: 'Create an OIDC application',
+          description: 'Register the first client so product routes can complete authorization code flows.',
+          complete: hasOidcApplication,
+          href: '/admin/onboarding',
+          action: 'Create client',
+        }),
+        readinessItem({
+          id: 'sign_in_method',
+          label: 'Enable a sign-in method',
+          description: 'Keep at least one hosted sign-in method available for users.',
+          complete: hasSignInMethod,
+          href: '/admin/sign-in',
+          action: 'Review methods',
+        }),
+      ]
+      const recommended = [
+        readinessItem({
+          id: 'email_delivery',
+          label: 'Confirm email delivery',
+          description:
+            'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
+          complete: emailDeliveryReady,
+          href: '/admin/deployment',
+          action: 'Review deployment',
+        }),
+        readinessItem({
+          id: 'branding_basics',
+          label: 'Set branding basics',
+          description: 'Product name, colors, logo, and favicon make hosted auth recognizable to users.',
+          complete: brandingReady,
+          href: '/admin/branding',
+          action: 'Edit branding',
+        }),
+        readinessItem({
+          id: 'security_baseline',
+          label: 'Review security baseline',
+          description: 'MFA or passkeys should be enabled before production rollout.',
+          complete: securityReady,
+          href: '/admin/security',
+          action: 'Review security',
+        }),
+        readinessItem({
+          id: 'connector_status',
+          label: 'Check connector status',
+          description: 'Social sign-in should have at least one enabled connector, or stay disabled until configured.',
+          complete: connectorReady,
+          href: '/admin/connectors',
+          action: 'Review connectors',
+        }),
+      ]
+      const missing = required
+        .filter((item) => item.status === 'action_needed')
+        .map((item) => item.id) satisfies ManagementReadinessResponse['admin']['missing']
       const response = {
+        required,
+        recommended,
         admin: {
           setupRequired: missing.length > 0,
           setupHref: '/admin/onboarding',
@@ -187,6 +272,24 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   app.route('/connectors', createManagementConnectorRoutes(options.connectorServiceFactory))
 
   return app
+}
+
+function readinessItem(input: {
+  id: ManagementReadinessItem['id']
+  label: string
+  description: string
+  complete: boolean
+  href: string
+  action: string
+}): ManagementReadinessItem {
+  return {
+    id: input.id,
+    label: input.label,
+    description: input.description,
+    status: input.complete ? 'complete' : 'action_needed',
+    href: input.href,
+    action: input.action,
+  }
 }
 
 export type ManagementRoutes = ReturnType<typeof createManagementRoutes>

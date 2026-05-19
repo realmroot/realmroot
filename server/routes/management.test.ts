@@ -507,20 +507,39 @@ describe('management routes', () => {
         }),
         revokeConsent: vi.fn().mockResolvedValue(undefined),
       }),
+      configzServiceFactory: createConfigzServiceMock(),
     })
 
     const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
 
     expect(readiness.status).toBe(200)
-    await expect(readiness.json()).resolves.toEqual(
-      managementReadinessResponseSchema.parse({
-        admin: {
-          setupRequired: true,
-          setupHref: '/admin/onboarding',
-          missing: ['oidc_application'],
+    const body = managementReadinessResponseSchema.parse(await readiness.json())
+    expect(body).toMatchObject({
+      required: [
+        {
+          id: 'oidc_application',
+          label: 'Create an OIDC application',
+          description: 'Register the first client so product routes can complete authorization code flows.',
+          status: 'action_needed',
+          href: '/admin/onboarding',
+          action: 'Create client',
         },
-      }),
-    )
+        {
+          id: 'sign_in_method',
+          label: 'Enable a sign-in method',
+          description: 'Keep at least one hosted sign-in method available for users.',
+          status: 'complete',
+          href: '/admin/sign-in',
+          action: 'Review methods',
+        },
+      ],
+      admin: {
+        setupRequired: true,
+        setupHref: '/admin/onboarding',
+        missing: ['oidc_application'],
+      },
+    })
+    expect(body.recommended).toHaveLength(4)
   })
 
   it('reports admin setup complete when an OIDC application exists', async () => {
@@ -532,20 +551,95 @@ describe('management routes', () => {
         }),
         revokeConsent: vi.fn().mockResolvedValue(undefined),
       }),
+      configzServiceFactory: createConfigzServiceMock(),
     })
 
     const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
 
     expect(readiness.status).toBe(200)
-    await expect(readiness.json()).resolves.toEqual(
-      managementReadinessResponseSchema.parse({
-        admin: {
-          setupRequired: false,
-          setupHref: '/admin/onboarding',
-          missing: [],
+    const body = managementReadinessResponseSchema.parse(await readiness.json())
+    expect(body.admin).toEqual({
+      setupRequired: false,
+      setupHref: '/admin/onboarding',
+      missing: [],
+    })
+    expect(body.required.every((item: { status: string }) => item.status === 'complete')).toBe(true)
+  })
+
+  it('does not count social sign-in as ready without a configured provider or connector', async () => {
+    const app = createApp(createAuthMock(), {
+      applicationServiceFactory: () => ({
+        list: vi.fn().mockResolvedValue({
+          applications: [applicationFixture()],
+          pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
+        revokeConsent: vi.fn().mockResolvedValue(undefined),
+      }),
+      configzServiceFactory: createConfigzServiceMock({
+        identityProviders: [],
+        signIn: {
+          passwordEnabled: false,
+          magicLinkEnabled: false,
+          emailOtpEnabled: false,
+          socialLoginEnabled: true,
         },
       }),
-    )
+      connectorServiceFactory: () => ({
+        ...createConnectorServiceMock(),
+        list: vi.fn().mockResolvedValue({
+          connectors: [],
+          pagination: { limit: 1, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        }),
+      }),
+    })
+
+    const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
+
+    expect(readiness.status).toBe(200)
+    const body = managementReadinessResponseSchema.parse(await readiness.json())
+    expect(body.admin).toEqual({
+      setupRequired: true,
+      setupHref: '/admin/onboarding',
+      missing: ['sign_in_method'],
+    })
+    expect(body.required.find((item) => item.id === 'sign_in_method')?.status).toBe('action_needed')
+    expect(body.recommended.find((item) => item.id === 'connector_status')?.status).toBe('action_needed')
+  })
+
+  it('does not count disabled social connectors as ready sign-in methods', async () => {
+    const app = createApp(createAuthMock(), {
+      applicationServiceFactory: () => ({
+        list: vi.fn().mockResolvedValue({
+          applications: [applicationFixture()],
+          pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
+        revokeConsent: vi.fn().mockResolvedValue(undefined),
+      }),
+      configzServiceFactory: createConfigzServiceMock({
+        identityProviders: [],
+        signIn: {
+          passwordEnabled: false,
+          magicLinkEnabled: false,
+          emailOtpEnabled: false,
+          socialLoginEnabled: true,
+        },
+      }),
+      connectorServiceFactory: () => ({
+        ...createConnectorServiceMock(),
+        list: vi.fn().mockResolvedValue({
+          connectors: [{ ...connectorFixture(), enabled: false }],
+          pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
+      }),
+    })
+
+    const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
+
+    expect(readiness.status).toBe(200)
+    const body = managementReadinessResponseSchema.parse(await readiness.json())
+    expect(body.admin.missing).toEqual(['sign_in_method'])
+    expect(body.required.find((item) => item.id === 'sign_in_method')?.status).toBe('action_needed')
+    expect(body.recommended.find((item) => item.id === 'connector_status')?.status).toBe('action_needed')
   })
 
   it('exposes management connector config CRUD with pagination', async () => {
@@ -769,7 +863,20 @@ function createSecurityRepositoryMock(): SecurityRepository {
   }
 }
 
-function createConfigzServiceMock() {
+function createConfigzServiceMock(
+  overrides: {
+    identityProviders?: Array<Record<string, unknown>>
+    signIn?: Partial<{
+      passwordEnabled: boolean
+      signupEnabled: boolean
+      socialLoginEnabled: boolean
+      magicLinkEnabled: boolean
+      emailOtpEnabled: boolean
+      usernameEnabled: boolean
+      identifierFirst: boolean
+    }>
+  } = {},
+) {
   return () => {
     const config = {
       onboarding: {
@@ -855,6 +962,10 @@ function createConfigzServiceMock() {
         sessionExpiresInSeconds: 0,
         passkeysEnabled: false,
       },
+    }
+    config.signIn = { ...config.signIn, ...overrides.signIn }
+    if (overrides.identityProviders) {
+      config.identityProviders = overrides.identityProviders as typeof config.identityProviders
     }
     return {
       getConfig: vi.fn().mockResolvedValue(config),
