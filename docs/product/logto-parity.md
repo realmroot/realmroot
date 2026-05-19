@@ -200,6 +200,34 @@ Admin setup readiness is protected and read from `/api/management/readiness`:
 
 ```json
 {
+  "required": [
+    {
+      "id": "oidc_application",
+      "label": "Create an OIDC application",
+      "description": "Register the first client so product routes can complete authorization code flows.",
+      "status": "action_needed",
+      "href": "/admin/onboarding",
+      "action": "Create client"
+    },
+    {
+      "id": "sign_in_method",
+      "label": "Enable a sign-in method",
+      "description": "Keep at least one hosted sign-in method available for users.",
+      "status": "complete",
+      "href": "/admin/sign-in",
+      "action": "Review methods"
+    }
+  ],
+  "recommended": [
+    {
+      "id": "email_delivery",
+      "label": "Confirm email delivery",
+      "description": "Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.",
+      "status": "action_needed",
+      "href": "/admin/deployment",
+      "action": "Review deployment"
+    }
+  ],
   "admin": {
     "setupRequired": true,
     "setupHref": "/admin/onboarding",
@@ -211,8 +239,9 @@ Admin setup readiness is protected and read from `/api/management/readiness`:
 | State | Condition | Route behavior |
 | --- | --- | --- |
 | Fresh deployment | No admin user exists. | Every non-`/onboarding` product route redirects to `/onboarding`. |
-| First admin locked, setup incomplete | Admin exists, but no OIDC application exists. | `/onboarding` redirects to `/admin/onboarding`; protected `/admin/*` routes redirect to `/admin/onboarding` after admin auth. |
-| Setup complete | Admin exists and at least one OIDC application exists. | `/onboarding` and `/admin/onboarding` redirect to `/admin`; product routes are not trapped. |
+| First admin locked, setup incomplete | Admin exists, but a required readiness item is incomplete. Required items are the first OIDC application and at least one enabled sign-in method. | `/onboarding` redirects to `/admin/onboarding`; protected `/admin/*` routes redirect to `/admin/onboarding` after admin auth. |
+| Recommendations incomplete | Required items are complete, but email delivery, branding, security baseline, or connector status still needs review. | Admin routes are not blocked. `/admin/onboarding` redirects to `/admin`, and the dashboard/setup checklist can still surface recommendations. |
+| Setup complete | All required items are complete. | `/onboarding` and `/admin/onboarding` redirect to `/admin`; product routes are not trapped. |
 
 ## Page Acceptance Matrix
 
@@ -240,7 +269,7 @@ Admin setup readiness is protected and read from `/api/management/readiness`:
 | Roles | Lists and creates roles; detail page manages permissions/scopes and assignments by global, organization, API-resource, or application scope. |
 | API resources | Lists and creates API resources; detail page manages audience/resource indicator, token lifetime, default API flag, scopes, and role assignments. |
 | Deployment | Shows production Cloudflare bindings, issuer, health, migration state, email, queue, R2, cron, and management API readiness. |
-| Setup checklist | Creates the first OIDC client, shows copyable OIDC integration details, and disappears from persistent navigation after setup. |
+| Setup checklist | Shows required and recommended readiness items with status, deep links, and actions; creates the first OIDC client; shows copyable OIDC integration details; disappears from persistent navigation after setup. |
 
 ## E2E Journey Coverage Contract
 
