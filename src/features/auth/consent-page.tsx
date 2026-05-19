@@ -1,5 +1,5 @@
 import type { ConsentRequestResponse } from '@shared/api/applications'
-import { ArrowRight, ShieldCheck, UserRound } from 'lucide-react'
+import { ArrowRight, CircleAlert, ShieldCheck, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button, LinkButton } from '@/components/ui/button'
@@ -51,12 +51,18 @@ export function ConsentPage() {
     }
   }
 
+  const messageState = error !== null || (!loading && !consent)
+  const signInHref = `/sign-in${search}`
+
   return (
     <AuthLayout
+      backHref={messageState ? signInHref : undefined}
       config={config}
       eyebrow="OAuth consent"
+      icon={messageState ? <CircleAlert aria-hidden="true" size={28} /> : undefined}
       title="Review application access."
       description="Approve only the scopes this application should use with your account."
+      variant={messageState ? 'message' : 'form'}
     >
       {loading ? <Status>Loading consent request</Status> : null}
       {error ? <Status tone="error">{error}</Status> : null}

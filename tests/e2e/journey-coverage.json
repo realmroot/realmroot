@@ -15,6 +15,7 @@
     { "id": "sign-up", "name": "Hosted sign-up submits account details" },
     { "id": "password-recovery", "name": "Hosted password recovery requests and completes OTP reset" },
     { "id": "email-verification", "name": "Hosted email verification requests and completes verification" },
+    { "id": "hosted-auth-error-flow", "name": "Hosted auth unknown-session and callback errors show compact recovery UI" },
     { "id": "oauth-consent", "name": "OAuth consent review approves requested scopes" },
     { "id": "oauth-consent-deny", "name": "OAuth consent denial returns safely to the client callback" },
     { "id": "oidc-client-callback", "name": "OIDC client callback lands on a real local callback page" },

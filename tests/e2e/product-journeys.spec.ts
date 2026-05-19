@@ -31,6 +31,7 @@ let applicationDisabled = false
 let adminUserBanned = false
 let identifierFirstRequired = false
 let accountMfaEnabled = false
+let consentSessionAvailable = true
 
 const journeyAssertions: Record<
   JourneyId,
@@ -195,6 +196,30 @@ const journeyAssertions: Record<
       await expect(page.getByText('Verification email sent.')).toBeVisible()
       await page.getByLabel('One-time code').fill('654321')
       await page.getByRole('button', { name: 'Verify email' }).click()
+    },
+  },
+  'hosted-auth-error-flow': {
+    suite: 'public and auth journeys',
+    assert: async ({ page }) => {
+      await page.goto('/auth/callback?error=access_denied&error_description=Denied')
+      await expect(page.getByRole('heading', { name: 'Sign-in could not continue.' })).toBeVisible()
+      await expect(page.getByText('Denied')).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/sign-in')
+
+      consentSessionAvailable = false
+      try {
+        await page.goto(
+          '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&state=state-1',
+        )
+        await expect(page.getByRole('heading', { name: 'Review application access.' })).toBeVisible()
+        await expect(page.getByText('Authentication is required.')).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Back' })).toHaveAttribute(
+          'href',
+          /\/sign-in\?client_id=client-1&redirect_uri=http%3A%2F%2F127\.0\.0\.1%3A5173%2Foidc%2Fcallback&state=state-1/,
+        )
+      } finally {
+        consentSessionAvailable = true
+      }
     },
   },
   'sign-up': {
@@ -1262,7 +1287,9 @@ async function expectNoDocumentHorizontalOverflow(page: Page) {
 async function mockApi(page: Page) {
   const requests: RequestRecord[] = []
   accountSignedIn = true
+  accountApplicationRevoked = false
   accountMfaEnabled = false
+  consentSessionAvailable = true
 
   await page.route('**/*', async (route) => {
     const request = route.request()
@@ -1288,6 +1315,11 @@ async function mockApi(page: Page) {
 
     if (!accountSignedIn && path.startsWith('/api/account/')) {
       await fulfill(route, { error: 'Authentication is required.' }, 401)
+      return
+    }
+
+    if (!consentSessionAvailable && path === '/api/oauth/consent' && method === 'GET') {
+      await fulfill(route, { error: { message: 'Authentication is required.' } }, 401)
       return
     }
 
