@@ -31,6 +31,7 @@ describe('account center', () => {
 
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
     expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('64')
+    expect(document.querySelector('img.assetPreview')?.getAttribute('height')).toBe('64')
   })
 
   it('updates profile, email, and password from the profile section', async () => {
@@ -104,6 +105,7 @@ describe('account center', () => {
 
     expect(await screen.findByText('Authenticator setup')).toBeTruthy()
     expect(screen.getByAltText('Authenticator app QR code').getAttribute('width')).toBe('168')
+    expect(screen.getByAltText('Authenticator app QR code').getAttribute('height')).toBe('168')
     expect(screen.getByText('otpauth://totp/Acme:jane@example.com?secret=ABC123')).toBeTruthy()
     expect(screen.getByText('ABC123')).toBeTruthy()
     expect(requests).toContainEqual({

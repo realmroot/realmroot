@@ -55,6 +55,7 @@ describe('composed UI primitives', () => {
 
     expect(screen.getByText('Card footer')).toBeTruthy()
     expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByRole('dialog').parentElement?.className).toContain('overscroll-contain')
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
     expect(screen.queryByText('Hidden dialog')).toBeNull()
   })
@@ -80,7 +81,10 @@ describe('composed UI primitives', () => {
     )
 
     expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite')
+    expect(screen.getByRole('status').className).toContain('status-info')
     expect(screen.getByRole('alert').hasAttribute('aria-live')).toBe(false)
+    expect(screen.getByRole('alert').className).toContain('status-error')
+    expect(screen.getByRole('table').parentElement?.className).toContain('overflow-x-auto')
     expect(screen.getByRole('table').className).toContain('min-w-[48rem]')
   })
 

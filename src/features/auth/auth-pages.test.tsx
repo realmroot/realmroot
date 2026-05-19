@@ -610,7 +610,9 @@ describe('hosted auth pages', () => {
 
     expect(await screen.findByText('OAuth client application')).toBeTruthy()
     expect(document.querySelector('.applicationSummary img')?.getAttribute('width')).toBe('44')
+    expect(document.querySelector('.applicationSummary img')?.getAttribute('height')).toBe('44')
     expect(document.querySelector('.consentAccount img')?.getAttribute('width')).toBe('40')
+    expect(document.querySelector('.consentAccount img')?.getAttribute('height')).toBe('40')
     expect(screen.getByText('Share your email address and verification state.')).toBeTruthy()
     expect(screen.getByText('Allow refresh tokens for continued access.')).toBeTruthy()
     expect(screen.getByText('Allow this application to request this scope.')).toBeTruthy()

@@ -46,6 +46,8 @@ describe('OidcCallbackRoute', () => {
     render(<OidcStartRoute startAuthorization={async () => undefined} />)
 
     expect(await screen.findByRole('heading', { name: 'Starting client sign-in' })).toBeTruthy()
+    expect(screen.getByText('OIDC client')).toBeTruthy()
+    expect(screen.getByText('Opening the authorization request for the configured callback.')).toBeTruthy()
     await startOidcAuthorization((url) => redirects.push(String(url)))
     const redirect = new URL(redirects[0] ?? '')
     expect(redirect.pathname).toBe('/api/auth/oauth2/authorize')

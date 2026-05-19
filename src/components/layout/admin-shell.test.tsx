@@ -37,6 +37,7 @@ describe('AdminShell', () => {
     expect(screen.getByText('Identity Console')).toBeTruthy()
     expect(screen.getAllByText('Production').length).toBeGreaterThan(0)
     expect(screen.getByText('Dashboard content')).toBeTruthy()
+    expect(screen.getByText('Dashboard content').closest('.min-h-dvh')?.className).toContain('bg-muted/60')
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('bg-primary/10')
     expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).not.toContain('bg-primary/10')
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()

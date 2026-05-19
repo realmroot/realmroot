@@ -2035,6 +2035,10 @@ describe('admin console', () => {
     fireEvent.change(await screen.findByLabelText('Logo URL'), {
       target: { value: 'https://cdn.example.com/northstar-logo.svg' },
     })
+    expect(document.querySelector('img.brandLogo')?.getAttribute('width')).toBe('36')
+    expect(document.querySelector('img.brandLogo')?.getAttribute('height')).toBe('36')
+    expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('64')
+    expect(document.querySelector('img.assetPreview')?.getAttribute('height')).toBe('64')
     fireEvent.change(screen.getByLabelText('Favicon URL'), {
       target: { value: 'https://cdn.example.com/northstar.ico' },
     })
@@ -3102,6 +3106,8 @@ describe('admin console', () => {
     expect(screen.getByText('Confirm email delivery')).toBeTruthy()
     expect(screen.getByDisplayValue('Customer portal')).toBeTruthy()
     expect(screen.getByDisplayValue('customer-portal')).toBeTruthy()
+    expect(screen.getByLabelText('Application name')).toHaveProperty('value', 'Customer portal')
+    expect(screen.getByLabelText('Slug')).toHaveProperty('value', 'customer-portal')
     fireEvent.change(await screen.findByLabelText('Application name'), { target: { value: 'Review app' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'review-app' } })
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
