@@ -201,6 +201,26 @@ describe('admin console', () => {
     expect(window.location.search).toContain('return_to=')
   })
 
+  it('surfaces non-auth Console account guard errors before management requests', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ error: 'Profile unavailable.' }, 503))
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/console/users')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByText('Profile unavailable.')).toBeTruthy()
+    expect(window.location.pathname).toBe('/console/users')
+    expect(requestedUrls).toContain('/api/account/profile')
+    expect(requestedUrls).not.toContain('/api/management/sign-in-settings')
+    expect(requestedUrls).not.toContain('/api/management/readiness')
+  })
+
   it('redirects signed-out account routes to sign-in before rendering account controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
