@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe('account center', () => {
   it('loads profile, security, session, connection, and application sections', async () => {
-    mockAccountFetch()
+    mockAccountFetch({ image: 'https://auth.example.com/api/assets/avatar.png' })
 
     render(<AccountCenterPage />)
 
@@ -30,6 +30,7 @@ describe('account center', () => {
     expect(screen.getByRole('link', { name: 'Authorized apps' }).getAttribute('href')).toBe('/account/authorized-apps')
 
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
+    expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('64')
   })
 
   it('updates profile, email, and password from the profile section', async () => {
@@ -102,6 +103,7 @@ describe('account center', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enroll authenticator app' }))
 
     expect(await screen.findByText('Authenticator setup')).toBeTruthy()
+    expect(screen.getByAltText('Authenticator app QR code').getAttribute('width')).toBe('168')
     expect(screen.getByText('otpauth://totp/Acme:jane@example.com?secret=ABC123')).toBeTruthy()
     expect(screen.getByText('ABC123')).toBeTruthy()
     expect(requests).toContainEqual({
@@ -359,13 +361,17 @@ type RequestRecord = {
   body: unknown
 }
 
+type MockProfile = Omit<ReturnType<typeof profile>, 'image'> & {
+  image: string | null
+}
+
 function clickAndConfirm(triggerName: string, confirmName: string) {
   fireEvent.click(screen.getByRole('button', { name: triggerName }))
   const buttons = screen.getAllByRole('button', { name: confirmName })
   fireEvent.click(buttons.at(-1) as HTMLButtonElement)
 }
 
-function mockAccountFetch() {
+function mockAccountFetch(profileOverrides: Partial<MockProfile> = {}) {
   const requests: RequestRecord[] = []
   vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
     const path = String(input)
@@ -373,7 +379,8 @@ function mockAccountFetch() {
     const body = init?.body instanceof FormData ? '[form-data]' : init?.body ? JSON.parse(String(init.body)) : null
     if (method !== 'GET') requests.push({ path, method, body })
     if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
-    if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
+    if (path === '/api/account/profile')
+      return Promise.resolve(jsonResponse({ user: { ...profile(), ...profileOverrides } }))
     if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts() }))
     if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: applications() }))
     if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: sessions() }))

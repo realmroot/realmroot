@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 
-const oidcStateStorageKey = 'flareauth.demo.oidcState'
-const oidcVerifierStorageKey = 'flareauth.demo.oidcVerifier'
+const oidcStateStorageKey = 'flareauth.oidc.state'
+const oidcVerifierStorageKey = 'flareauth.oidc.verifier'
 
 export function OidcStartRoute({
-  startAuthorization = () => startOidcDemoAuthorization((url) => window.location.assign(url)),
+  startAuthorization = () => startOidcAuthorization((url) => window.location.assign(url)),
 }: {
   startAuthorization?: () => Promise<void>
 }) {
@@ -15,9 +15,9 @@ export function OidcStartRoute({
   return (
     <main className="shell">
       <section className="hero">
-        <p className="eyebrow">OIDC demo</p>
-        <h1>Starting demo client sign-in</h1>
-        <p className="intro">Opening the authorization request for the local callback.</p>
+        <p className="eyebrow">OIDC client</p>
+        <h1>Starting client sign-in</h1>
+        <p className="intro">Opening the authorization request for the configured callback.</p>
       </section>
     </main>
   )
@@ -35,10 +35,10 @@ export function OidcCallbackRoute() {
     <main className="shell">
       <section className="hero">
         <p className="eyebrow">OIDC callback</p>
-        <h1>Demo client callback</h1>
+        <h1>Client callback</h1>
         {valid ? (
           <>
-            <p className="intro">Authorization response validated for local integration testing.</p>
+            <p className="intro">Authorization response validated for this client integration.</p>
             <code>{params.toString()}</code>
           </>
         ) : (
@@ -49,7 +49,7 @@ export function OidcCallbackRoute() {
   )
 }
 
-export async function startOidcDemoAuthorization(redirect: (url: URL) => void) {
+export async function startOidcAuthorization(redirect: (url: URL) => void) {
   const currentUrl = new URL(window.location.href)
   const state = randomUrlToken()
   const verifier = randomUrlToken()

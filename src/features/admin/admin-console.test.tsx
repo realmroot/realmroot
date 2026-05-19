@@ -3100,6 +3100,8 @@ describe('admin console', () => {
     expect(await screen.findByText('Setup checklist')).toBeTruthy()
     expect(screen.getByText('Create an OIDC application')).toBeTruthy()
     expect(screen.getByText('Confirm email delivery')).toBeTruthy()
+    expect(screen.getByDisplayValue('Customer portal')).toBeTruthy()
+    expect(screen.getByDisplayValue('customer-portal')).toBeTruthy()
     fireEvent.change(await screen.findByLabelText('Application name'), { target: { value: 'Review app' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'review-app' } })
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {

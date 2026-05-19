@@ -3,8 +3,8 @@ import { cn } from '@/lib/utils'
 
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-auto">
-      <table className={cn('w-full caption-bottom text-sm', className)} {...props} />
+    <div className="w-full overflow-x-auto">
+      <table className={cn('w-full min-w-[48rem] caption-bottom text-sm', className)} {...props} />
     </div>
   )
 }

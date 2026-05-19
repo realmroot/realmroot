@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OidcCallbackRoute, OidcStartRoute, startOidcDemoAuthorization } from './oidc-callback'
+import { OidcCallbackRoute, OidcStartRoute, startOidcAuthorization } from './oidc-callback'
 
 afterEach(() => {
   cleanup()
@@ -9,19 +9,19 @@ afterEach(() => {
 })
 
 describe('OidcCallbackRoute', () => {
-  it('validates code and state from the local demo callback', () => {
-    window.sessionStorage.setItem('flareauth.demo.oidcState', 'state-1')
+  it('validates code and state from the local OIDC callback', () => {
+    window.sessionStorage.setItem('flareauth.oidc.state', 'state-1')
     window.history.pushState(null, '', '/oidc/callback?code=code-1&state=state-1')
 
     render(<OidcCallbackRoute />)
 
-    expect(screen.getByRole('heading', { name: 'Demo client callback' })).toBeTruthy()
-    expect(screen.getByText('Authorization response validated for local integration testing.')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Client callback' })).toBeTruthy()
+    expect(screen.getByText('Authorization response validated for this client integration.')).toBeTruthy()
     expect(screen.getByText('code=code-1&state=state-1')).toBeTruthy()
   })
 
   it('rejects missing or mismatched callback state', () => {
-    window.sessionStorage.setItem('flareauth.demo.oidcState', 'state-1')
+    window.sessionStorage.setItem('flareauth.oidc.state', 'state-1')
     window.history.pushState(null, '', '/oidc/callback?code=code-1&state=bad-state')
 
     render(<OidcCallbackRoute />)
@@ -29,7 +29,7 @@ describe('OidcCallbackRoute', () => {
     expect(screen.getByText('Authorization response is missing a valid code and state.')).toBeTruthy()
   })
 
-  it('starts the local demo flow by storing state and redirecting to native authorize', async () => {
+  it('starts the local OIDC flow by storing state and redirecting to native authorize', async () => {
     const redirects: string[] = []
     vi.spyOn(window.crypto, 'getRandomValues').mockImplementation((array) => {
       const bytes = array as Uint8Array
@@ -45,16 +45,16 @@ describe('OidcCallbackRoute', () => {
 
     render(<OidcStartRoute startAuthorization={async () => undefined} />)
 
-    expect(await screen.findByRole('heading', { name: 'Starting demo client sign-in' })).toBeTruthy()
-    await startOidcDemoAuthorization((url) => redirects.push(String(url)))
+    expect(await screen.findByRole('heading', { name: 'Starting client sign-in' })).toBeTruthy()
+    await startOidcAuthorization((url) => redirects.push(String(url)))
     const redirect = new URL(redirects[0] ?? '')
     expect(redirect.pathname).toBe('/api/auth/oauth2/authorize')
     expect(redirect.searchParams.get('client_id')).toBe('client-1')
     expect(redirect.searchParams.get('redirect_uri')).toBe('http://localhost:4173/oidc/callback')
     expect(redirect.searchParams.get('scope')).toBe('openid email')
     expect(redirect.searchParams.get('code_challenge_method')).toBe('S256')
-    expect(window.sessionStorage.getItem('flareauth.demo.oidcState')).toBe(redirect.searchParams.get('state'))
-    expect(window.sessionStorage.getItem('flareauth.demo.oidcVerifier')).toBeTruthy()
+    expect(window.sessionStorage.getItem('flareauth.oidc.state')).toBe(redirect.searchParams.get('state'))
+    expect(window.sessionStorage.getItem('flareauth.oidc.verifier')).toBeTruthy()
   })
 
   it('runs the default OIDC start authorization effect', async () => {
@@ -67,8 +67,8 @@ describe('OidcCallbackRoute', () => {
 
     render(<OidcStartRoute />)
 
-    expect(await screen.findByRole('heading', { name: 'Starting demo client sign-in' })).toBeTruthy()
-    await vi.waitFor(() => expect(window.sessionStorage.getItem('flareauth.demo.oidcState')).toBeTruthy())
+    expect(await screen.findByRole('heading', { name: 'Starting client sign-in' })).toBeTruthy()
+    await vi.waitFor(() => expect(window.sessionStorage.getItem('flareauth.oidc.state')).toBeTruthy())
   })
 
   it('builds a PKCE authorization redirect by default', async () => {
@@ -80,14 +80,14 @@ describe('OidcCallbackRoute', () => {
     })
     vi.spyOn(window.crypto.subtle, 'digest').mockResolvedValue(new Uint8Array([2, 3, 4]).buffer)
 
-    await startOidcDemoAuthorization((url) => redirects.push(String(url)))
+    await startOidcAuthorization((url) => redirects.push(String(url)))
 
     const redirect = new URL(redirects[0] ?? '')
     expect(redirect.pathname).toBe('/api/auth/oauth2/authorize')
     expect(redirect.searchParams.get('code_challenge')).toBe('AgME')
     expect(redirect.searchParams.get('code_challenge_method')).toBe('S256')
     expect(redirect.searchParams.get('state')).toBeTruthy()
-    expect(window.sessionStorage.getItem('flareauth.demo.oidcState')).toBeTruthy()
-    expect(window.sessionStorage.getItem('flareauth.demo.oidcVerifier')).toBeTruthy()
+    expect(window.sessionStorage.getItem('flareauth.oidc.state')).toBeTruthy()
+    expect(window.sessionStorage.getItem('flareauth.oidc.verifier')).toBeTruthy()
   })
 })

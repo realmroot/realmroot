@@ -24,6 +24,7 @@
   --input: #d4d4d8;
   color: var(--ink);
   background: #f8fafc;
+  color-scheme: light;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
@@ -71,6 +72,25 @@ button {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary) 72%, white);
+  outline-offset: 2px;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
 }
 
 .shell {
@@ -162,6 +182,7 @@ h1 {
   font-size: 56px;
   line-height: 1.04;
   letter-spacing: 0;
+  text-wrap: balance;
 }
 
 .intro {
@@ -338,6 +359,30 @@ h1 {
   color: var(--ink);
 }
 
+.textInput[type="color"] {
+  min-height: 48px;
+  padding: 6px;
+}
+
+.textInput[type="file"] {
+  min-height: auto;
+  padding: 8px;
+  color: transparent;
+  font-size: 13px;
+}
+
+.textInput[type="file"]::file-selector-button {
+  min-height: 32px;
+  margin-right: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+}
+
 .textArea {
   min-height: 108px;
   resize: vertical;
@@ -357,8 +402,11 @@ h1 {
 }
 
 .assetPreview {
+  display: grid;
+  flex-shrink: 0;
   width: 64px;
   height: 64px;
+  place-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
   object-fit: cover;
@@ -374,6 +422,11 @@ h1 {
   border: 1px solid transparent;
   border-radius: 8px;
   font-weight: 700;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .uiButton:disabled {
@@ -392,10 +445,19 @@ h1 {
   background: var(--brand-primary);
 }
 
+.uiButton-primary:hover {
+  background: color-mix(in srgb, var(--brand-primary) 88%, black);
+}
+
 .uiButton-secondary {
   border-color: var(--line);
   background: #ffffff;
   color: var(--ink);
+}
+
+.uiButton-secondary:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 18%, var(--line));
+  background: #fafafa;
 }
 
 .uiButton-ghost {
@@ -404,10 +466,18 @@ h1 {
   color: var(--brand-primary);
 }
 
+.uiButton-ghost:hover {
+  background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
+}
+
 .uiButton-danger {
   border-color: #fecaca;
   background: #fff1f2;
   color: #be123c;
+}
+
+.uiButton-danger:hover {
+  background: #ffe4e6;
 }
 
 .segmented {
@@ -427,6 +497,10 @@ h1 {
   background: transparent;
   color: #52525b;
   font-weight: 700;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .segmented button.active {
@@ -533,6 +607,11 @@ h1 {
   font-weight: 650;
 }
 
+.socialButton:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 18%, var(--line));
+  background: #fafafa;
+}
+
 .providerIcon {
   display: inline-grid;
   place-items: center;
@@ -601,9 +680,22 @@ h1 {
   font-weight: 700;
   text-decoration: none;
   text-align: left;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
 }
 
 .accountNav a.active {
+  background: #fff1f2;
+  color: var(--brand-primary);
+}
+
+.accountNav a:hover {
+  background: #f4f4f5;
+  color: var(--ink);
+}
+
+.accountNav a.active:hover {
   background: #fff1f2;
   color: var(--brand-primary);
 }
@@ -691,6 +783,10 @@ h1 {
   border-radius: 8px;
 }
 
+.itemRow > div {
+  min-width: 0;
+}
+
 .itemRow h3 {
   margin: 0 0 4px;
   font-size: 15px;
@@ -734,6 +830,7 @@ h1 {
   width: 44px;
   height: 44px;
   border-radius: 8px;
+  object-fit: cover;
 }
 
 .applicationSummary h2 {
@@ -854,10 +951,26 @@ h1 {
     margin-left: 0;
   }
 
+  .assetUploadRow {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
   .segmented,
   .challengeGrid,
   .authLinks,
   .accountNav {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
   }
 }

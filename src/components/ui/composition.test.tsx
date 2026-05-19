@@ -18,6 +18,8 @@ import {
   DropdownMenuTrigger,
 } from './dropdown-menu'
 import { Field, TextInput } from './field'
+import { Status } from './status'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs'
 
 afterEach(() => {
@@ -55,6 +57,31 @@ describe('composed UI primitives', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
     expect(screen.queryByText('Hidden dialog')).toBeNull()
+  })
+
+  it('renders status regions and responsive tables with shared semantics', () => {
+    render(
+      <>
+        <Status>Saved</Status>
+        <Status tone="error">Request failed</Status>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow>
+              <TableCell>Customer portal</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </>,
+    )
+
+    expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite')
+    expect(screen.getByRole('alert').hasAttribute('aria-live')).toBe(false)
+    expect(screen.getByRole('table').className).toContain('min-w-[48rem]')
   })
 
   it('opens dropdown menus and closes them after item selection', () => {

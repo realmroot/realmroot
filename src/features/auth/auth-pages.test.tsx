@@ -595,6 +595,10 @@ describe('hosted auth pages', () => {
               homepageUrl: null,
               iconUrl: 'https://client.example.com/icon.png',
             },
+            user: {
+              ...consentResponse.user,
+              image: 'https://client.example.com/jane.png',
+            },
             requestedScopes: ['email', 'offline_access', 'custom:scope'],
             existingConsent: { id: 'consent-1', scopes: ['email'], grantedAt: '2026-01-02T00:00:00.000Z' },
           }),
@@ -605,6 +609,8 @@ describe('hosted auth pages', () => {
     render(<ConsentPage />)
 
     expect(await screen.findByText('OAuth client application')).toBeTruthy()
+    expect(document.querySelector('.applicationSummary img')?.getAttribute('width')).toBe('44')
+    expect(document.querySelector('.consentAccount img')?.getAttribute('width')).toBe('40')
     expect(screen.getByText('Share your email address and verification state.')).toBeTruthy()
     expect(screen.getByText('Allow refresh tokens for continued access.')).toBeTruthy()
     expect(screen.getByText('Allow this application to request this scope.')).toBeTruthy()

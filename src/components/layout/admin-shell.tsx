@@ -73,7 +73,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const currentGroup = adminNavGroups.find((group) => group.items.some((item) => isActive(pathname, item.href)))
 
   return (
-    <div className="min-h-dvh bg-[#f5f6f8] text-foreground">
+    <div className="min-h-dvh bg-muted/60 text-foreground">
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-border bg-background lg:flex lg:flex-col">
         <ConsoleBrand />
         <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Admin">

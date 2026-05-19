@@ -13,7 +13,7 @@ export function Dialog({ children, open }: DialogProps) {
 
 export function DialogContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4">
+    <div className="fixed inset-0 z-50 grid place-items-center overscroll-contain bg-black/35 p-4">
       <div
         aria-modal="true"
         className={cn(

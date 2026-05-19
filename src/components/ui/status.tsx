@@ -6,5 +6,11 @@ type StatusProps = {
 }
 
 export function Status({ children, tone = 'info' }: StatusProps) {
-  return <div className={`status status-${tone}`}>{children}</div>
+  const liveProps = tone === 'error' ? { role: 'alert' } : { 'aria-live': 'polite' as const, role: 'status' }
+
+  return (
+    <div className={`status status-${tone}`} {...liveProps}>
+      {children}
+    </div>
+  )
 }

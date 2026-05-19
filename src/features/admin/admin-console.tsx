@@ -737,8 +737,8 @@ export function AdminOnboardingPage() {
   const queryClient = useQueryClient()
   const readinessQuery = useQuery({ queryKey: adminQueryKeys.readiness, queryFn: getAdminReadiness })
   const [form, setForm] = useState({
-    name: 'Demo application',
-    slug: 'demo-application',
+    name: 'Customer portal',
+    slug: 'customer-portal',
     redirectUris: `${window.location.origin}/oidc/callback`,
   })
   const createMutation = useAdminMutation({
@@ -2898,7 +2898,7 @@ export function BrandingPage() {
               <div className="brandingPreview" style={previewStyle}>
                 <div className="brand">
                   {form.logoUrl ? (
-                    <img className="brandLogo" src={form.logoUrl} alt="" />
+                    <img className="brandLogo" src={form.logoUrl} alt="" width="36" height="36" />
                   ) : (
                     <span className="brandMark">{form.productName.slice(0, 1).toUpperCase()}</span>
                   )}
@@ -3078,7 +3078,7 @@ function AssetUploadControl({
   return (
     <div className="assetUploadRow">
       {previewUrl ? (
-        <img alt="" className="assetPreview" src={previewUrl} />
+        <img alt="" className="assetPreview" src={previewUrl} width="64" height="64" />
       ) : (
         <div className="assetPreview text-muted-foreground">
           <ImageUp size={18} />

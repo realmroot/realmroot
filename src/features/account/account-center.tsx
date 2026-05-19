@@ -282,7 +282,11 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
       <section className="settingsPanel">
         <h2>Profile</h2>
         <div className="assetUploadRow">
-          {avatarPreview ? <img alt="" className="assetPreview" src={avatarPreview} /> : <UserRound size={42} />}
+          {avatarPreview ? (
+            <img alt="" className="assetPreview" src={avatarPreview} width="64" height="64" />
+          ) : (
+            <UserRound size={42} />
+          )}
           <Field help="PNG, JPEG, or WebP up to 2 MB." label="Avatar image">
             <TextInput
               accept="image/png,image/jpeg,image/webp"
@@ -674,7 +678,9 @@ function TotpEnrollmentDetails({ enrollment }: { enrollment: TotpEnrollmentDispl
   return (
     <div className="setupPanel">
       <h3>Authenticator setup</h3>
-      {enrollment.qrCode ? <img className="setupQr" src={enrollment.qrCode} alt="Authenticator app QR code" /> : null}
+      {enrollment.qrCode ? (
+        <img className="setupQr" src={enrollment.qrCode} alt="Authenticator app QR code" width="168" height="168" />
+      ) : null}
       {enrollment.otpAuthUri ? (
         <p>
           <strong>Enrollment URI</strong>

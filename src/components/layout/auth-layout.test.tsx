@@ -123,7 +123,8 @@ describe('AuthLayout', () => {
 
     expect(screen.getByText('Acme ID')).toBeTruthy()
     expect(screen.getByText('Secure access')).toBeTruthy()
-    expect(container.querySelector('img.brandLogo')).toBeTruthy()
+    expect(container.querySelector('img.brandLogo')?.getAttribute('width')).toBe('36')
+    expect(container.querySelector('img.brandLogo')?.getAttribute('height')).toBe('36')
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
   })
 

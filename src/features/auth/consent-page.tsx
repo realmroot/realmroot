@@ -68,14 +68,22 @@ export function ConsentPage() {
       {consent ? (
         <div className="consentStack">
           <div className="applicationSummary">
-            {consent.application.iconUrl ? <img src={consent.application.iconUrl} alt="" /> : <ShieldCheck size={28} />}
+            {consent.application.iconUrl ? (
+              <img src={consent.application.iconUrl} alt="" width="44" height="44" />
+            ) : (
+              <ShieldCheck size={28} />
+            )}
             <div>
               <h2>{consent.application.name}</h2>
               <p>{consent.application.description ?? consent.application.homepageUrl ?? 'OAuth client application'}</p>
             </div>
           </div>
           <div className="consentAccount">
-            {consent.user.image ? <img src={consent.user.image} alt="" /> : <UserRound size={20} />}
+            {consent.user.image ? (
+              <img src={consent.user.image} alt="" width="40" height="40" />
+            ) : (
+              <UserRound size={20} />
+            )}
             <div>
               <span>Signed in as</span>
               <strong>{consent.user.displayName ?? consent.user.email ?? 'Current account'}</strong>

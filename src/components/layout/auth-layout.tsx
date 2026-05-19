@@ -43,7 +43,7 @@ export function BrandIdentity({ config }: { config: ConfigzConfigResponse | null
   return (
     <a className="brand brandLink" href="/">
       {config?.branding.logoUrl ? (
-        <img className="brandLogo" src={config.branding.logoUrl} alt="" />
+        <img className="brandLogo" src={config.branding.logoUrl} alt="" width="36" height="36" />
       ) : (
         <span className="brandMark">{productName.slice(0, 1).toUpperCase()}</span>
       )}

@@ -245,7 +245,7 @@ const journeyAssertions: Record<
       )
       await expect(page.getByRole('heading', { name: 'Customer portal' })).toBeVisible()
       await page.getByRole('button', { name: 'Approve access' }).click()
-      await expect(page).toHaveURL(/\/oidc\/callback\?code=demo-code&state=state-1/)
+      await expect(page).toHaveURL(/\/oidc\/callback\?code=auth-code&state=state-1/)
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/oauth/consent',
@@ -272,8 +272,8 @@ const journeyAssertions: Record<
       await mockApi(oidcPage)
       try {
         await oidcPage.goto('/oidc/start?client_id=client-1&redirect_uri=http%3A%2F%2Flocalhost%3A4173%2Foidc%2Fcallback')
-        await expect(oidcPage.getByRole('heading', { name: 'Demo client callback' })).toBeVisible()
-        await expect(oidcPage.getByText(/code=demo-code&state=/)).toBeVisible()
+        await expect(oidcPage.getByRole('heading', { name: 'Client callback' })).toBeVisible()
+        await expect(oidcPage.getByText(/code=auth-code&state=/)).toBeVisible()
       } finally {
         await oidcPage.close()
       }
@@ -1046,6 +1046,7 @@ test('admin console desktop and mobile screenshot evidence', async ({ page }, te
     ]) {
       await page.goto(route.path)
       await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
+      await expectNoDocumentHorizontalOverflow(page)
       await page.screenshot({
         fullPage: true,
         path: testInfo.outputPath(`admin-${route.name}-${viewport.name}.png`),
@@ -1064,6 +1065,42 @@ test('admin console desktop and mobile screenshot evidence', async ({ page }, te
   }
 })
 
+test('hosted auth account and branding screenshot evidence', async ({ page }, testInfo) => {
+  await mockApi(page)
+  await mockPasskeys(page)
+
+  for (const viewport of [
+    { name: 'desktop', width: 1440, height: 1000 },
+    { name: 'tablet', width: 768, height: 1024 },
+    { name: 'mobile', width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+
+    for (const route of [
+      { name: 'hosted-sign-in', path: '/sign-in', heading: /Sign in to/ },
+      { name: 'hosted-sign-up', path: '/sign-up', heading: 'Start with your identity.' },
+      { name: 'hosted-recovery', path: '/forgot-password', heading: 'Recover your password.' },
+      {
+        name: 'oauth-consent',
+        path: '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&response_type=code&scope=openid%20profile&state=state-1',
+        heading: 'Review application access.',
+      },
+      { name: 'account-profile', path: '/account/profile', heading: 'Jane Stone' },
+      { name: 'account-security', path: '/account/security', heading: 'MFA' },
+      { name: 'account-authorized-apps', path: '/account/authorized-apps', heading: 'Consented applications' },
+      { name: 'admin-branding', path: '/admin/branding', heading: 'Branding' },
+    ]) {
+      await page.goto(route.path)
+      await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
+      await expectNoDocumentHorizontalOverflow(page)
+      await page.screenshot({
+        fullPage: true,
+        path: testInfo.outputPath(`${route.name}-${viewport.name}.png`),
+      })
+    }
+  }
+})
+
 type JourneyAssertionSuite = (typeof journeyAssertions)[JourneyId]['suite']
 
 async function runJourneySuite(suite: JourneyAssertionSuite, context: JourneyContext) {
@@ -1072,6 +1109,17 @@ async function runJourneySuite(suite: JourneyAssertionSuite, context: JourneyCon
       await test.step(id, () => journey.assert(context))
     }
   }
+}
+
+async function expectNoDocumentHorizontalOverflow(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const root = document.documentElement
+        return root.scrollWidth - root.clientWidth
+      }),
+    )
+    .toBeLessThanOrEqual(1)
 }
 
 async function mockApi(page: Page) {
@@ -1094,7 +1142,7 @@ async function mockApi(page: Page) {
     if (path === '/api/auth/oauth2/authorize') {
       await route.fulfill({
         status: 302,
-        headers: { location: `/oidc/callback?code=demo-code&state=${url.searchParams.get('state') ?? ''}` },
+        headers: { location: `/oidc/callback?code=auth-code&state=${url.searchParams.get('state') ?? ''}` },
       })
       return
     }
