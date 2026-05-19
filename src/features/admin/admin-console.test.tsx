@@ -4,13 +4,16 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRouter, queryClient } from '@/router'
 import {
+  AccountCenterSettingsPage,
   AdminDashboardPage,
   AdminOnboardingPage,
   ApiResourceDetailPage,
   ApiResourcesPage,
   ApplicationsPage,
   BrandingPage,
+  CollectUserProfilePage,
   ConnectorsPage,
+  ContentSettingsPage,
   DeploymentSettingsPage,
   OrganizationsPage,
   RoleDetailPage,
@@ -395,11 +398,11 @@ describe('admin console', () => {
     for (const [path, finalPath, heading] of [
       ['/console', '/console', 'Tenant health'],
       ['/console/applications', '/console/applications', 'Applications'],
-      ['/console/sign-in-experience', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-in experience'],
+      ['/console/sign-in-experience', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
       [
         '/console/sign-in-experience/sign-up-and-sign-in',
         '/console/sign-in-experience/sign-up-and-sign-in',
-        'Sign-in experience',
+        'Sign-up and sign-in',
       ],
       ['/console/sign-in-experience/branding', '/console/sign-in-experience/branding', 'Branding'],
       [
@@ -442,7 +445,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
 
     for (const [path, finalPath, heading] of [
-      ['/admin/sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-in experience'],
+      ['/admin/sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
       ['/admin/branding', '/console/sign-in-experience/branding', 'Branding'],
       ['/admin/connectors', '/console/connectors/passwordless', 'Connectors'],
       ['/admin/security', '/console/security/password-policy', 'Security'],
@@ -472,6 +475,19 @@ describe('admin console', () => {
         '/console/users?search=alice#row-1',
       ),
     )
+  })
+
+  it('navigates between Sign-in and account tabs from the shared tab bar', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
+    window.history.pushState(null, '', '/console/sign-in-experience/sign-up-and-sign-in')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Sign-up and sign-in' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Branding' }))
+
+    expect(await screen.findByRole('heading', { name: 'Branding' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/console/sign-in-experience/branding'))
   })
 
   it('renders authorization detail routes with route params', async () => {
@@ -617,6 +633,33 @@ describe('admin console', () => {
 
     await waitFor(() => {
       expect(requests).toEqual([{ url: '/api/management/applications/app-1', body: { disabled: true } }])
+    })
+  })
+
+  it('toggles third-party application availability from its tab', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    const thirdPartyApplication = { ...application, id: 'app-2', name: 'Partner app', firstParty: false }
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/applications/app-2' && init?.method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse({ ...thirdPartyApplication, disabled: true }))
+      }
+      if (url === '/api/management/applications') {
+        return Promise.resolve(jsonResponse({ applications: [thirdPartyApplication], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ApplicationsPage />)
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Third-party apps' }))
+    expect(await screen.findByText('Partner app')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Partner app'))
+    fireEvent.click(await screen.findByText('Disable'))
+
+    await waitFor(() => {
+      expect(requests).toEqual([{ url: '/api/management/applications/app-2', body: { disabled: true } }])
     })
   })
 
@@ -2056,9 +2099,10 @@ describe('admin console', () => {
 
     const { unmount } = renderWithQuery(<SignInSettingsPage />)
 
-    expect(await screen.findByText('Authentication methods')).toBeTruthy()
+    expect(await screen.findByText('Sign-in methods')).toBeTruthy()
     expect(screen.getByLabelText('Default redirect URI')).toHaveProperty('value', 'https://app.example.com/callback')
     expect(screen.getByLabelText('Support email')).toHaveProperty('value', 'support@example.com')
+    expect(screen.getByRole('switch', { name: 'Passkey sign-in' })).toHaveProperty('disabled', true)
 
     unmount()
     renderWithQuery(<SecurityPage />)
@@ -2085,7 +2129,7 @@ describe('admin console', () => {
     renderWithQuery(<SignInSettingsPage />)
 
     fireEvent.click(await screen.findByRole('switch', { name: 'Password sign-in' }))
-    fireEvent.click(screen.getByRole('switch', { name: 'Self-service sign-up' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Registration' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Social sign-in' }))
     fireEvent.click(await screen.findByRole('switch', { name: 'Identifier-first flow' }))
     fireEvent.change(screen.getByLabelText('Product name'), { target: { value: 'Northstar ID' } })
@@ -2153,6 +2197,53 @@ describe('admin console', () => {
     expect(requests).toEqual([])
   })
 
+  it('renders sign-in save errors from the management boundary', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Sign-in save failed.' } }, 500))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<SignInSettingsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save sign-in settings' }))
+
+    expect(await screen.findByText('Sign-in save failed.')).toBeTruthy()
+  })
+
+  it('renders unavailable sign-in method states from runtime config', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings') {
+        return Promise.resolve(
+          jsonResponse({
+            ...signInSettings,
+            signIn: {
+              ...signInSettings.signIn,
+              passwordEnabled: false,
+              magicLinkEnabled: false,
+              emailOtpEnabled: true,
+              usernameEnabled: false,
+            },
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<SignInSettingsPage />)
+
+    expect(await screen.findByText('Sign-in methods')).toBeTruthy()
+    expect(screen.getByText('Sign-up password requirement').nextSibling?.textContent).toBe('Unavailable')
+    expect(screen.getAllByText('Email').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('Magic link').nextSibling?.textContent).toBe('Unavailable')
+    expect(screen.getByText('Email OTP').nextSibling?.textContent).toBe('Available from runtime')
+    expect(screen.getByText('Forgot-password verification').nextSibling?.textContent).toBe('Email OTP available')
+  })
+
   it('saves branding settings and applies custom CSS to the preview', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -2179,11 +2270,12 @@ describe('admin console', () => {
     })
     fireEvent.change(screen.getByLabelText('Primary color'), { target: { value: '#0f766e' } })
     fireEvent.change(screen.getByLabelText('Background color'), { target: { value: '#f8fafc' } })
+    expect(screen.getByRole('switch', { name: 'Dark mode' })).toHaveProperty('disabled', true)
     fireEvent.change(screen.getByLabelText('Product name'), { target: { value: 'Northstar ID' } })
     fireEvent.change(screen.getByLabelText('Custom CSS'), { target: { value: '--auth-panel-radius: 16px;' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save branding' }))
 
-    expect(screen.getByText('Preview action').closest('.brandingPreview')?.getAttribute('style')).toContain(
+    expect(screen.getByText('Live preview').closest('.brandingPreview')?.getAttribute('style')).toContain(
       '--auth-panel-radius: 16px',
     )
     await waitFor(() =>
@@ -2209,6 +2301,24 @@ describe('admin console', () => {
     )
   })
 
+  it('switches the hosted sign-in preview between desktop and mobile viewports', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<BrandingPage />)
+
+    const preview = (await screen.findByText('Live preview')).closest('.brandingPreview')
+    expect(preview?.className).not.toContain('max-w-80')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Mobile' }))
+
+    expect(screen.getByRole('tab', { name: 'Mobile' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByText('Live preview').closest('.brandingPreview')?.className).toContain('max-w-80')
+  })
+
   it('does not apply unsafe custom CSS to the branding preview', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
@@ -2220,9 +2330,7 @@ describe('admin console', () => {
 
     fireEvent.change(await screen.findByLabelText('Custom CSS'), { target: { value: 'display: none;' } })
 
-    expect(screen.getByText('Preview action').closest('.brandingPreview')?.getAttribute('style')).not.toContain(
-      'display',
-    )
+    expect(screen.getByText('Live preview').closest('.brandingPreview')?.getAttribute('style')).not.toContain('display')
   })
 
   it('renders branding validation errors without sending invalid custom CSS', async () => {
@@ -2246,6 +2354,44 @@ describe('admin console', () => {
       await screen.findByText('Custom CSS only supports declaration-only --auth-* custom properties.'),
     ).toBeTruthy()
     expect(requests).toEqual([])
+  })
+
+  it('renders branding save and upload errors from the management boundary', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings' && init?.method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Branding save failed.' } }, 500))
+      }
+      if (url === '/api/management/branding/logo' && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Logo upload failed.' } }, 500))
+      }
+      if (url === '/api/management/branding/favicon' && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Favicon upload failed.' } }, 500))
+      }
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<BrandingPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save branding' }))
+    expect(await screen.findByText('Branding save failed.')).toBeTruthy()
+
+    unmount()
+    renderWithQuery(<BrandingPage />)
+
+    fireEvent.change(await screen.findByLabelText('Upload branding logo'), {
+      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
+    })
+    expect(await screen.findByText('Logo upload failed.')).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<BrandingPage />)
+
+    fireEvent.change(await screen.findByLabelText('Upload favicon'), {
+      target: { files: [new File(['icon'], 'favicon.png', { type: 'image/png' })] },
+    })
+    expect(await screen.findByText('Favicon upload failed.')).toBeTruthy()
   })
 
   it('uses default branding form values when optional branding settings are absent', async () => {
@@ -2276,6 +2422,148 @@ describe('admin console', () => {
     expect(screen.getByLabelText('Primary color')).toHaveProperty('value', '#b42318')
     expect(screen.getByLabelText('Background color')).toHaveProperty('value', '#f7f3ee')
     expect(screen.getByLabelText('Custom CSS')).toHaveProperty('value', '')
+  })
+
+  it('renders sign-in and account configuration tabs with unsupported settings disabled', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<CollectUserProfilePage />)
+
+    expect(screen.getByRole('tab', { name: 'Collect user profile' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Add field' })).toHaveProperty('disabled', true)
+    expect(screen.getByText(/Field label, field type, and user data key controls/)).toBeTruthy()
+
+    unmount()
+    renderWithQuery(<AccountCenterSettingsPage />)
+
+    expect(screen.getByRole('tab', { name: 'Account Center' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByText('/api/account')).toBeTruthy()
+    expect(screen.getByText('Authorized apps view')).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<ContentSettingsPage />)
+
+    expect((await screen.findByRole('tab', { name: 'Content' })).getAttribute('aria-selected')).toBe('true')
+    expect(await screen.findByLabelText('Language')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Sign-in message')).toHaveProperty('value', 'Sign in to Acme Auth')
+  })
+
+  it('opens account center from the account configuration tab', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+
+    renderWithQuery(<AccountCenterSettingsPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account center' }))
+
+    expect(open).toHaveBeenCalledWith('/account', '_blank', 'noopener')
+  })
+
+  it('saves content settings through the sign-in management boundary', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(signInSettings))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ContentSettingsPage />)
+
+    fireEvent.change(await screen.findByLabelText('Product name'), { target: { value: 'Northstar ID' } })
+    fireEvent.change(screen.getByLabelText('Sign-in message'), { target: { value: 'Welcome to Northstar' } })
+    fireEvent.change(screen.getByLabelText('Sign-up message'), { target: { value: 'Create your Northstar identity.' } })
+    fireEvent.change(screen.getByLabelText('Terms URL'), { target: { value: 'https://northstar.example.com/terms' } })
+    fireEvent.change(screen.getByLabelText('Privacy URL'), {
+      target: { value: 'https://northstar.example.com/privacy' },
+    })
+    fireEvent.change(screen.getByLabelText('Support email'), { target: { value: 'support@northstar.example' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save content' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          url: '/api/management/sign-in-settings',
+          body: {
+            links: {
+              termsUri: 'https://northstar.example.com/terms',
+              privacyUri: 'https://northstar.example.com/privacy',
+              supportEmail: 'support@northstar.example',
+            },
+            copy: {
+              productName: 'Northstar ID',
+              headline: 'Welcome to Northstar',
+              description: 'Create your Northstar identity.',
+            },
+          },
+        },
+      ]),
+    )
+  })
+
+  it('renders content validation errors without sending invalid links', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+        requests.push(url)
+        return Promise.resolve(jsonResponse(signInSettings))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ContentSettingsPage />)
+
+    fireEvent.change(await screen.findByLabelText('Privacy URL'), { target: { value: 'http://example.com/privacy' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save content' }))
+
+    expect(await screen.findByText('URL must use https.')).toBeTruthy()
+    expect(requests).toEqual([])
+  })
+
+  it('renders content save errors from the management boundary', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Content save failed.' } }, 500))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ContentSettingsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save content' }))
+
+    expect(await screen.findByText('Content save failed.')).toBeTruthy()
+  })
+
+  it('uses empty content link defaults when optional links are absent', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings') {
+        return Promise.resolve(
+          jsonResponse({
+            ...signInSettings,
+            links: { termsUri: null, privacyUri: null, supportEmail: null },
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ContentSettingsPage />)
+
+    expect(await screen.findByLabelText('Terms URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Privacy URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Support email')).toHaveProperty('value', '')
   })
 
   it('creates organizations, roles, and API resources from admin dialogs', async () => {
@@ -3079,16 +3367,28 @@ describe('admin console', () => {
         text: 'Google',
       },
       {
+        component: <AdminOnboardingPage />,
+        matches: (url: string) => url === '/api/management/readiness',
+        success: readinessIncomplete,
+        text: 'Setup checklist',
+      },
+      {
         component: <SignInSettingsPage />,
         matches: (url: string) => url === '/api/management/sign-in-settings',
         success: signInSettings,
-        text: 'Authentication methods',
+        text: 'Sign-in methods',
+      },
+      {
+        component: <ContentSettingsPage />,
+        matches: (url: string) => url === '/api/management/sign-in-settings',
+        success: signInSettings,
+        text: 'Language and messages',
       },
       {
         component: <BrandingPage />,
         matches: (url: string) => url === '/api/management/branding-settings',
         success: brandingSettings,
-        text: 'Brand preview',
+        text: 'Hosted sign-in preview',
       },
       {
         component: <SecurityPage />,
@@ -3148,7 +3448,7 @@ describe('admin console', () => {
 
     expect(screen.getByRole('heading', { name: 'Branding' })).toBeTruthy()
     expect(await screen.findByDisplayValue('Acme Auth')).toBeTruthy()
-    expect(screen.getByText('Brand preview')).toBeTruthy()
+    expect(screen.getByText('Hosted sign-in preview')).toBeTruthy()
 
     unmount()
     renderWithQuery(<DeploymentSettingsPage />)

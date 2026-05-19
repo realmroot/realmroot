@@ -1995,18 +1995,46 @@ export function SignInSettingsPage() {
   }
 
   return (
-    <ResourcePage
-      title="Sign-in experience"
-      description="Configure identifiers, authentication method visibility, defaults, legal links, and hosted auth copy."
+    <SignInExperiencePage
+      activeTab="sign-up-and-sign-in"
+      description="Configure identifiers, authentication method visibility, recovery behavior, and hosted auth defaults."
       error={query.error}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
+      title="Sign-up and sign-in"
     >
       {query.data ? (
         <form className="grid gap-4 xl:grid-cols-2" onSubmit={onSubmit}>
           <Card>
             <CardHeader>
-              <CardTitle>Authentication methods</CardTitle>
+              <CardTitle>Sign-up</CardTitle>
+              <CardDescription>
+                Control self-service registration and the identifiers collected by hosted auth.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <SwitchRow
+                checked={form.signupEnabled}
+                label="Registration"
+                onCheckedChange={(signupEnabled) => setForm((value) => ({ ...value, signupEnabled }))}
+              />
+              <SettingRow
+                label="Sign-up identifiers"
+                value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
+              />
+              <SettingRow
+                label="Sign-up password requirement"
+                value={form.passwordEnabled ? 'Password required' : 'Unavailable'}
+              />
+              <UnavailableSetting
+                label="Custom profile collection"
+                value="Configure supported profile fields on the Collect user profile tab."
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Sign-in methods</CardTitle>
               <CardDescription>Control which hosted sign-in options are visible at runtime.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
@@ -2014,11 +2042,6 @@ export function SignInSettingsPage() {
                 checked={form.passwordEnabled}
                 label="Password sign-in"
                 onCheckedChange={(passwordEnabled) => setForm((value) => ({ ...value, passwordEnabled }))}
-              />
-              <SwitchRow
-                checked={form.signupEnabled}
-                label="Self-service sign-up"
-                onCheckedChange={(signupEnabled) => setForm((value) => ({ ...value, signupEnabled }))}
               />
               <SwitchRow
                 checked={form.socialLoginEnabled}
@@ -2031,6 +2054,10 @@ export function SignInSettingsPage() {
                 onCheckedChange={(identifierFirst) => setForm((value) => ({ ...value, identifierFirst }))}
               />
               <SettingRow
+                label="Sign-in identifiers"
+                value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
+              />
+              <SettingRow
                 label="Magic link"
                 value={query.data.signIn.magicLinkEnabled ? 'Available from runtime' : 'Unavailable'}
               />
@@ -2038,12 +2065,60 @@ export function SignInSettingsPage() {
                 label="Email OTP"
                 value={query.data.signIn.emailOtpEnabled ? 'Available from runtime' : 'Unavailable'}
               />
+              <SwitchRow checked={false} disabled label="Passkey sign-in" onCheckedChange={() => undefined} />
+              <UnavailableSetting
+                label="Social provider setup"
+                value="Add enabled identity providers from Connectors before enabling social sign-in."
+              />
             </CardContent>
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Defaults and links</CardTitle>
-              <CardDescription>Safe public links and copy exposed through configz.</CardDescription>
+              <CardTitle>Recovery and redirects</CardTitle>
+              <CardDescription>Public defaults exposed through configz and hosted recovery flows.</CardDescription>
+            </CardHeader>
+            <CardContent className="formStack">
+              <Field label="Default application ID">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, applicationId: event.target.value }))}
+                  value={form.applicationId}
+                />
+              </Field>
+              <Field label="Unknown-session redirect URL">
+                <TextInput
+                  aria-label="Default redirect URI"
+                  onChange={(event) => setForm((value) => ({ ...value, redirectUri: event.target.value }))}
+                  type="url"
+                  value={form.redirectUri}
+                />
+              </Field>
+              <SettingRow
+                label="Forgot-password verification"
+                value={query.data.signIn.emailOtpEnabled ? 'Email OTP available' : 'Email link'}
+              />
+              <UnavailableSetting
+                label="Additional recovery methods"
+                value="No additional verification methods are exposed by the current config model."
+              />
+              {validationError || updateMutation.errorMessage ? (
+                <StatusBadge
+                  active={false}
+                  activeLabel=""
+                  inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
+                />
+              ) : null}
+              <Button disabled={updateMutation.isPending} type="submit">
+                <Save data-icon="inline-start" />
+                Save sign-in settings
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Hosted copy source</CardTitle>
+              <CardDescription>
+                Content is also available on the Content tab and saves through the same management boundary.
+              </CardDescription>
             </CardHeader>
             <CardContent className="formStack">
               <Field label="Product name">
@@ -2067,19 +2142,6 @@ export function SignInSettingsPage() {
                   value={form.description}
                 />
               </Field>
-              <Field label="Default application ID">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, applicationId: event.target.value }))}
-                  value={form.applicationId}
-                />
-              </Field>
-              <Field label="Default redirect URI">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, redirectUri: event.target.value }))}
-                  type="url"
-                  value={form.redirectUri}
-                />
-              </Field>
               <Field label="Terms URL">
                 <TextInput
                   onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
@@ -2101,22 +2163,11 @@ export function SignInSettingsPage() {
                   value={form.supportEmail}
                 />
               </Field>
-              {validationError || updateMutation.errorMessage ? (
-                <StatusBadge
-                  active={false}
-                  activeLabel=""
-                  inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
-                />
-              ) : null}
-              <Button disabled={updateMutation.isPending} type="submit">
-                <Save data-icon="inline-start" />
-                Save sign-in settings
-              </Button>
             </CardContent>
           </Card>
         </form>
       ) : null}
-    </ResourcePage>
+    </SignInExperiencePage>
   )
 }
 
@@ -2887,6 +2938,7 @@ export function ApiResourceDetailPage({ resourceId }: { resourceId: string }) {
 export function BrandingPage() {
   const query = useQuery({ queryKey: adminQueryKeys.branding, queryFn: getBrandingSettings })
   const queryClient = useQueryClient()
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [form, setForm] = useState({
     logoUrl: '',
     faviconUrl: '',
@@ -2967,7 +3019,8 @@ export function BrandingPage() {
   } as CSSProperties
 
   return (
-    <ResourcePage
+    <SignInExperiencePage
+      activeTab="branding"
       title="Branding"
       description="Configure hosted sign-in and Account Center brand assets, colors, and constrained theme variables."
       error={query.error}
@@ -3031,6 +3084,7 @@ export function BrandingPage() {
                   value={form.backgroundColor}
                 />
               </Field>
+              <SwitchRow checked={false} disabled label="Dark mode" onCheckedChange={() => undefined} />
               <Field label="Custom CSS">
                 <TextArea
                   onChange={(event) => setForm((value) => ({ ...value, customCss: event.target.value }))}
@@ -3057,11 +3111,26 @@ export function BrandingPage() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Brand preview</CardTitle>
-              <CardDescription>Preview uses the same public config consumed by hosted auth surfaces.</CardDescription>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle>Hosted sign-in preview</CardTitle>
+                  <CardDescription>
+                    Preview uses the same public config consumed by hosted auth surfaces.
+                  </CardDescription>
+                </div>
+                <Tabs setValue={(value) => setPreviewMode(value as 'desktop' | 'mobile')} value={previewMode}>
+                  <TabsList aria-label="Preview viewport">
+                    <TabsTrigger value="desktop">Desktop</TabsTrigger>
+                    <TabsTrigger value="mobile">Mobile</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="brandingPreview" style={previewStyle}>
+              <div
+                className={cn('brandingPreview', previewMode === 'mobile' && 'mx-auto max-w-80')}
+                style={previewStyle}
+              >
                 <div className="brand">
                   {form.logoUrl ? (
                     <img className="brandLogo" src={form.logoUrl} alt="" width="36" height="36" />
@@ -3077,14 +3146,263 @@ export function BrandingPage() {
                 </div>
                 <Button type="button">
                   <Eye data-icon="inline-start" />
-                  Preview action
+                  Live preview
                 </Button>
               </div>
             </CardContent>
           </Card>
         </form>
       ) : null}
-    </ResourcePage>
+    </SignInExperiencePage>
+  )
+}
+
+export function CollectUserProfilePage() {
+  return (
+    <SignInExperiencePage
+      activeTab="collect-user-profile"
+      description="Review custom profile field collection for hosted sign-up and account completion."
+      title="Collect user profile"
+    >
+      <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Custom profile fields</CardTitle>
+            <CardDescription>
+              Backend support for configurable profile fields is not available in this build.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <EmptyState
+              action={
+                <Button disabled type="button" variant="secondary">
+                  <Plus data-icon="inline-start" />
+                  Add field
+                </Button>
+              }
+              description="Field label, field type, and user data key controls will become available after a management contract exists for profile field persistence."
+              title="No custom fields"
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Supported profile data</CardTitle>
+            <CardDescription>Current hosted auth collects the built-in user profile fields.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <SettingRow label="Email" value="Built in" />
+            <SettingRow label="Name" value="Built in" />
+            <SettingRow label="Username" value="Available when username sign-in is enabled" />
+            <SettingRow label="Avatar" value="Managed from user profile surfaces" />
+          </CardContent>
+        </Card>
+      </div>
+    </SignInExperiencePage>
+  )
+}
+
+export function AccountCenterSettingsPage() {
+  return (
+    <SignInExperiencePage
+      activeTab="account-center"
+      description="Configure the self-service account center exposure and review available account management surfaces."
+      title="Account Center"
+    >
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Account center</CardTitle>
+            <CardDescription>
+              The account API and prebuilt account UI are enabled by the current deployment routes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <SettingRow label="Account API" value="/api/account" />
+            <SettingRow label="Prebuilt UI" value="/account" />
+            <SettingRow label="Profile route" value="/account/profile" />
+            <SettingRow label="Security route" value="/account/security" />
+            <SettingRow label="Sessions route" value="/account/sessions" />
+            <Button onClick={() => window.open('/account', '_blank', 'noopener')} type="button" variant="secondary">
+              <ExternalLink data-icon="inline-start" />
+              Open account center
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Account field permissions</CardTitle>
+            <CardDescription>
+              Permissions reflect the account API surfaces currently available to users.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <SettingRow label="Profile" value="User editable" />
+            <SettingRow label="Email" value="Managed by auth flows" />
+            <SettingRow label="Password" value="Managed by recovery flows" />
+            <SettingRow label="Social accounts" value="Linked account view" />
+            <SettingRow label="MFA" value="Security view" />
+            <SettingRow label="Sessions" value="User revocable" />
+            <SettingRow label="Apps" value="Authorized apps view" />
+          </CardContent>
+        </Card>
+      </div>
+    </SignInExperiencePage>
+  )
+}
+
+export function ContentSettingsPage() {
+  const query = useQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    productName: '',
+    headline: '',
+    description: '',
+    termsUri: '',
+    privacyUri: '',
+    supportEmail: '',
+  })
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const updateMutation = useAdminMutation({
+    mutationFn: updateSignInSettings,
+    onSuccess: () => {
+      setValidationError(null)
+      return queryClient.invalidateQueries({ queryKey: adminQueryKeys.signIn })
+    },
+  })
+
+  useEffect(() => {
+    if (!query.data) return
+    setForm({
+      productName: query.data.copy.productName,
+      headline: query.data.copy.headline,
+      description: query.data.copy.description,
+      termsUri: query.data.links.termsUri ?? '',
+      privacyUri: query.data.links.privacyUri ?? '',
+      supportEmail: query.data.links.supportEmail ?? '',
+    })
+  }, [query.data])
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    const payload = updateManagementSignInSettingsRequestSchema.safeParse({
+      links: {
+        termsUri: nullableString(form.termsUri),
+        privacyUri: nullableString(form.privacyUri),
+        supportEmail: nullableString(form.supportEmail),
+      },
+      copy: {
+        productName: form.productName,
+        headline: form.headline,
+        description: form.description,
+      },
+    })
+    if (!payload.success) {
+      setValidationError(payload.error.issues[0]?.message ?? 'Invalid content settings.')
+      return
+    }
+    setValidationError(null)
+    updateMutation.mutate(payload.data)
+  }
+
+  return (
+    <SignInExperiencePage
+      activeTab="content"
+      description="Manage hosted authentication language, page messages, and legal links."
+      error={query.error}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
+      title="Content"
+    >
+      {query.data ? (
+        <form className="grid gap-4 xl:grid-cols-2" onSubmit={onSubmit}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Language and messages</CardTitle>
+              <CardDescription>These strings are exposed through public hosted auth config.</CardDescription>
+            </CardHeader>
+            <CardContent className="formStack">
+              <Field label="Language">
+                <SelectInput disabled value="en">
+                  <option value="en">English</option>
+                </SelectInput>
+              </Field>
+              <Field label="Product name">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
+                  required
+                  value={form.productName}
+                />
+              </Field>
+              <Field label="Sign-in message">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
+                  required
+                  value={form.headline}
+                />
+              </Field>
+              <Field label="Sign-up message">
+                <TextArea
+                  onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
+                  required
+                  value={form.description}
+                />
+              </Field>
+              <UnavailableSetting
+                label="Password message"
+                value="No separate password message field is exposed by configz."
+              />
+              <UnavailableSetting
+                label="Account message"
+                value="No separate account message field is exposed by configz."
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Links</CardTitle>
+              <CardDescription>
+                Public legal and support links must use safe values accepted by management validation.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="formStack">
+              <Field label="Terms URL">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
+                  type="url"
+                  value={form.termsUri}
+                />
+              </Field>
+              <Field label="Privacy URL">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
+                  type="url"
+                  value={form.privacyUri}
+                />
+              </Field>
+              <Field label="Support email">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
+                  type="email"
+                  value={form.supportEmail}
+                />
+              </Field>
+              {validationError || updateMutation.errorMessage ? (
+                <StatusBadge
+                  active={false}
+                  activeLabel=""
+                  inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
+                />
+              ) : null}
+              <Button disabled={updateMutation.isPending} type="submit">
+                <Save data-icon="inline-start" />
+                Save content
+              </Button>
+            </CardContent>
+          </Card>
+        </form>
+      ) : null}
+    </SignInExperiencePage>
   )
 }
 
@@ -3131,6 +3449,78 @@ export function ConsolePlaceholderPage({
           ))}
         </CardContent>
       </Card>
+    </ResourcePage>
+  )
+}
+
+type SignInExperienceTab = {
+  href: string
+  label: string
+  value: string
+}
+
+const signInExperienceTabs: SignInExperienceTab[] = [
+  { value: 'branding', label: 'Branding', href: '/console/sign-in-experience/branding' },
+  {
+    value: 'sign-up-and-sign-in',
+    label: 'Sign-up and sign-in',
+    href: '/console/sign-in-experience/sign-up-and-sign-in',
+  },
+  {
+    value: 'collect-user-profile',
+    label: 'Collect user profile',
+    href: '/console/sign-in-experience/collect-user-profile',
+  },
+  { value: 'account-center', label: 'Account Center', href: '/console/sign-in-experience/account-center' },
+  { value: 'content', label: 'Content', href: '/console/sign-in-experience/content' },
+]
+
+function SignInExperiencePage({
+  activeTab,
+  children,
+  description,
+  error,
+  loading,
+  onRetry,
+  title,
+}: {
+  activeTab: string
+  children: ReactNode
+  description: string
+  error?: Error | null
+  loading?: boolean
+  onRetry?: () => void
+  title: string
+}) {
+  const navigate = useNavigate()
+
+  return (
+    <ResourcePage
+      description={description}
+      error={error}
+      framed={false}
+      loading={loading}
+      onRetry={onRetry}
+      title={title}
+      toolbar={
+        <Tabs
+          setValue={(value) => {
+            const tab = signInExperienceTabs.find((item) => item.value === value)
+            if (tab) void navigate({ to: tab.href })
+          }}
+          value={activeTab}
+        >
+          <TabsList aria-label="Sign-in and account settings">
+            {signInExperienceTabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      }
+    >
+      {children}
     </ResourcePage>
   )
 }
@@ -3735,17 +4125,36 @@ function MutationError({ error }: { error: unknown }) {
 
 function SwitchRow({
   checked,
+  disabled = false,
   label,
   onCheckedChange,
 }: {
   checked: boolean
+  disabled?: boolean
   label: string
   onCheckedChange: (checked: boolean) => void
 }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
       <span className="text-sm font-medium">{label}</span>
-      <Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch
+        aria-label={label}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={disabled ? undefined : onCheckedChange}
+      />
+    </div>
+  )
+}
+
+function UnavailableSetting({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-dashed border-border bg-muted/25 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium">{label}</span>
+        <Badge variant="outline">Unavailable</Badge>
+      </div>
+      <p className="text-sm text-muted-foreground">{value}</p>
     </div>
   )
 }

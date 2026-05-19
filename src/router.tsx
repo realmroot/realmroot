@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, redirect } from '@tanstack/react-router'
 import { AdminShell } from '@/components/layout/admin-shell'
 import {
+  AccountCenterSettingsPage,
   AdminDashboardPage,
   AdminOnboardingPage,
   ApiResourceDetailPage,
@@ -9,8 +10,10 @@ import {
   ApplicationDetailPage,
   ApplicationsPage,
   BrandingPage,
+  CollectUserProfilePage,
   ConnectorsPage,
   ConsolePlaceholderPage,
+  ContentSettingsPage,
   DeploymentSettingsPage,
   OrganizationsPage,
   RoleDetailPage,
@@ -261,46 +264,19 @@ const consoleSignInBrandingRoute = createRoute({
 const consoleSignInCollectUserProfileRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/sign-in-experience/collect-user-profile',
-  component: () => (
-    <ConsolePlaceholderPage
-      title="Collect user profile"
-      description="Configure the profile fields collected during hosted sign-up and account completion."
-      rows={[
-        ['Profile fields', 'Name, email, username, and avatar policy.'],
-        ['Boundary', 'Validated through the existing hosted auth settings.'],
-      ]}
-    />
-  ),
+  component: CollectUserProfilePage,
 })
 
 const consoleSignInAccountCenterRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/sign-in-experience/account-center',
-  component: () => (
-    <ConsolePlaceholderPage
-      title="Account Center"
-      description="Review the self-service account experience exposed outside Console."
-      rows={[
-        ['Route', '/account'],
-        ['Sections', 'Profile, security, linked accounts, sessions, and authorized apps.'],
-      ]}
-    />
-  ),
+  component: AccountCenterSettingsPage,
 })
 
 const consoleSignInContentRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/sign-in-experience/content',
-  component: () => (
-    <ConsolePlaceholderPage
-      title="Content"
-      description="Manage hosted authentication copy and support links."
-      rows={[
-        ['Copy source', 'Sign-in settings'],
-        ['Links', 'Terms, privacy, and support contact.'],
-      ]}
-    />
-  ),
+  component: ContentSettingsPage,
 })
 
 const consoleMultiFactorAuthRoute = createRoute({
