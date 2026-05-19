@@ -3510,7 +3510,10 @@ function SignInExperiencePage({
           }}
           value={activeTab}
         >
-          <TabsList aria-label="Sign-in and account settings">
+          <TabsList
+            aria-label="Sign-in and account settings"
+            className="flex w-full flex-wrap sm:inline-flex sm:w-auto"
+          >
             {signInExperienceTabs.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value}>
                 {tab.label}

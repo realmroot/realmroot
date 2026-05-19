@@ -518,7 +518,7 @@ const journeyAssertions: Record<
         {
           label: 'Sign-in & account',
           href: '/console/sign-in-experience/sign-up-and-sign-in',
-          heading: 'Sign-in experience',
+          heading: 'Sign-up and sign-in',
         },
         { label: 'Multi-factor auth', href: '/console/mfa', heading: 'Multi-factor auth' },
         { label: 'Connectors', href: '/console/connectors/passwordless', heading: 'Connectors' },
@@ -746,9 +746,9 @@ const journeyAssertions: Record<
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
       await page.goto('/console/sign-in-experience/sign-up-and-sign-in')
-      await expect(page.getByRole('heading', { name: 'Sign-in experience' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Authentication methods' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Defaults and links' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Sign-up and sign-in' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Sign-in methods' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Recovery and redirects' })).toBeVisible()
       await page.getByRole('switch', { name: 'Identifier-first flow' }).click()
       await page.getByLabel('Product name').fill('Northstar ID')
       await page.getByLabel('Headline').fill('Sign in to Northstar')
@@ -789,7 +789,7 @@ const journeyAssertions: Record<
       for (const route of [
         {
           path: '/console/sign-in-experience/sign-up-and-sign-in',
-          heading: 'Sign-in experience',
+          heading: 'Sign-up and sign-in',
         },
         { path: '/console/sign-in-experience/branding', heading: 'Branding' },
         { path: '/console/sign-in-experience/collect-user-profile', heading: 'Collect user profile' },
@@ -955,7 +955,7 @@ const journeyAssertions: Record<
       await page.goto('/console/sign-in-experience/branding')
       const main = page.getByRole('main')
       await expect(page.getByRole('heading', { name: 'Branding' })).toBeVisible()
-      await expect(main.getByText('Brand preview')).toBeVisible()
+      await expect(main.getByText('Hosted sign-in preview')).toBeVisible()
       await page.getByLabel('Upload branding logo').setInputFiles({
         name: 'logo.png',
         mimeType: 'image/png',
