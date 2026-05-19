@@ -1756,6 +1756,102 @@ function UserApplicationsCard({
   )
 }
 
+export function PasswordlessConnectorsPage() {
+  const signInQuery = useQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
+  const readinessQuery = useQuery({ queryKey: adminQueryKeys.readiness, queryFn: getAdminReadiness })
+  const emailReady = readinessQuery.data?.recommended?.some(
+    (item) => item.id === 'email_delivery' && item.status === 'complete',
+  )
+
+  return (
+    <ResourcePage
+      title="Passwordless connectors"
+      description="Review email and SMS delivery connectors for passwordless hosted authentication."
+      error={signInQuery.error ?? readinessQuery.error}
+      framed={false}
+      loading={signInQuery.isLoading || readinessQuery.isLoading}
+      onRetry={() => {
+        signInQuery.refetch()
+        readinessQuery.refetch()
+      }}
+    >
+      <div className="grid gap-4">
+        <div className="inline-flex flex-wrap rounded-lg bg-muted p-1">
+          <a
+            className="inline-flex min-h-9 items-center justify-center rounded-md bg-background px-3 text-sm font-medium text-foreground shadow-sm"
+            href="/console/connectors/passwordless"
+          >
+            Passwordless
+          </a>
+          <a
+            className="inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground"
+            href="/console/connectors/social"
+          >
+            Social
+          </a>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle>Email connector</CardTitle>
+                  <CardDescription>
+                    Email delivery is limited to the configured runtime email service binding.
+                  </CardDescription>
+                </div>
+                <StatusBadge
+                  active={emailReady === true}
+                  activeLabel="Configured"
+                  inactiveLabel={emailReady === false ? 'Unconfigured' : 'Unknown'}
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <SettingRow
+                label="Magic link"
+                value={signInQuery.data?.signIn.magicLinkEnabled ? 'Enabled' : 'Disabled'}
+              />
+              <SettingRow
+                label="Email code"
+                value={signInQuery.data?.signIn.emailOtpEnabled ? 'Enabled' : 'Disabled'}
+              />
+              <SettingRow label="Runtime requirement" value="EMAIL binding and EMAIL_FROM sender must be present." />
+              <Button disabled type="button" variant="secondary">
+                Email setup unavailable locally
+              </Button>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Email delivery is configured through deployment bindings, so Console does not persist provider setup
+                locally.
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle>SMS connector</CardTitle>
+                  <CardDescription>
+                    SMS delivery is visible for planning but has no backend connector yet.
+                  </CardDescription>
+                </div>
+                <StatusBadge active={false} activeLabel="Configured" inactiveLabel="Unconfigured" />
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <SettingRow label="SMS code" value="Unavailable" />
+              <SettingRow label="Backend contract" value="Not available in local runtime" />
+              <Button disabled type="button" variant="secondary">
+                Setup SMS
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </ResourcePage>
+  )
+}
+
 export function ConnectorsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.connectors, queryFn: listConnectors })
   const templatesQuery = useQuery({
@@ -1805,12 +1901,12 @@ export function ConnectorsPage() {
 
   return (
     <ResourcePage
-      title="Connectors"
+      title="Social connectors"
       description="Configure social and generic OAuth providers used by the hosted sign-in settings."
       action={
         <Button onClick={() => setDialogOpen(true)}>
           <Plus data-icon="inline-start" />
-          New connector
+          Add social connector
         </Button>
       }
       auxiliary={
@@ -1826,9 +1922,25 @@ export function ConnectorsPage() {
       error={query.error}
       empty={query.data?.connectors.length === 0}
       emptyDescription="Add social or OAuth identity providers when your sign-in experience needs them."
-      emptyTitle="No connectors yet"
+      emptyTitle="No social connectors yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
+      toolbar={
+        <div className="inline-flex flex-wrap rounded-lg bg-muted p-1">
+          <a
+            className="inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground"
+            href="/console/connectors/passwordless"
+          >
+            Passwordless
+          </a>
+          <a
+            className="inline-flex min-h-9 items-center justify-center rounded-md bg-background px-3 text-sm font-medium text-foreground shadow-sm"
+            href="/console/connectors/social"
+          >
+            Social
+          </a>
+        </div>
+      }
     >
       <Table>
         <TableHeader>
@@ -2171,51 +2283,253 @@ export function SignInSettingsPage() {
   )
 }
 
-export function SecurityPage({ title = 'Security' }: { title?: string }) {
+export function MfaPage() {
   const query = useQuery({ queryKey: adminQueryKeys.security, queryFn: getSecurityPolicy })
-  const [tab, setTab] = useState('mfa')
 
   return (
     <ResourcePage
-      title={title}
-      description="Review MFA, passkey, and session policy surfaced by the management API."
+      title="Multi-factor auth"
+      description="Review tenant MFA factors and deployment policy for hosted account protection."
       error={query.error}
+      framed={false}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
       {query.data ? (
-        <Tabs className="flex flex-col gap-4" setValue={setTab} value={tab}>
-          <TabsList>
-            <TabsTrigger value="mfa">MFA</TabsTrigger>
-            <TabsTrigger value="passkeys">Passkeys</TabsTrigger>
-            <TabsTrigger value="sessions">Sessions</TabsTrigger>
-          </TabsList>
-          <TabsContent value="mfa">
-            <PolicyCard rows={[['Mode', query.data.policy.mfa.mode]]} title="Multi-factor authentication" />
-          </TabsContent>
-          <TabsContent value="passkeys">
-            <PolicyCard
-              rows={[
-                ['Enabled', query.data.policy.passkeys.enabled ? 'Yes' : 'No'],
-                ['RP ID', query.data.policy.passkeys.rpId],
-                ['RP name', query.data.policy.passkeys.rpName],
-                ['Origins', query.data.policy.passkeys.origins.join(', ')],
-              ]}
-              title="Passkeys"
-            />
-          </TabsContent>
-          <TabsContent value="sessions">
-            <PolicyCard
-              rows={[
-                ['Expires in', `${query.data.policy.sessions.expiresInSeconds}s`],
-                ['Update age', `${query.data.policy.sessions.updateAgeSeconds}s`],
-                ['Fresh age', `${query.data.policy.sessions.freshAgeSeconds}s`],
-                ['Cookie cache', `${query.data.policy.sessions.cookieCacheSeconds}s`],
-              ]}
-              title="Session policy"
-            />
-          </TabsContent>
-        </Tabs>
+        <div className="grid gap-4">
+          <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Factors</CardTitle>
+                <CardDescription>Available second factors surfaced by account and deployment support.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2">
+                <FactorStatusCard
+                  detail={`RP ${query.data.policy.passkeys.rpName}; ${
+                    query.data.policy.passkeys.origins.length
+                  } allowed origin${query.data.policy.passkeys.origins.length === 1 ? '' : 's'}.`}
+                  enabled={query.data.policy.passkeys.enabled}
+                  title="Passkeys"
+                />
+                <FactorStatusCard
+                  detail="Authenticator app enrollment is available from the account security flow."
+                  enabled
+                  title="Authenticator app"
+                />
+                <FactorStatusCard
+                  detail="SMS code enrollment is not backed by a connector contract in this runtime."
+                  enabled={false}
+                  title="SMS code"
+                />
+                <FactorStatusCard
+                  detail="Email OTP is delivered through the configured Cloudflare Email Service binding."
+                  enabled
+                  title="Email code"
+                />
+                <FactorStatusCard
+                  detail="Backup code generation is available from the account MFA flow."
+                  enabled
+                  title="Backup codes"
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Policy controls</CardTitle>
+                <CardDescription>MFA enforcement is currently backed by deployment policy.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <Field label="Prompt policy">
+                  <SelectInput aria-label="Prompt policy" disabled value={query.data.policy.mfa.mode}>
+                    <option value="required">Required</option>
+                    <option value="optional">Optional</option>
+                    <option disabled value="none">
+                      No prompt
+                    </option>
+                  </SelectInput>
+                </Field>
+                <SettingRow label="Persisted mode" value={query.data.policy.mfa.mode} />
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Save is disabled because MFA policy is loaded from the local deployment environment. Update the
+                  deployment policy to persist changes.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+          <StickyActionBar>
+            <Button disabled type="button">
+              <Save data-icon="inline-start" />
+              Save changes
+            </Button>
+            <Button disabled type="button" variant="ghost">
+              <Undo2 data-icon="inline-start" />
+              Discard
+            </Button>
+          </StickyActionBar>
+        </div>
+      ) : null}
+    </ResourcePage>
+  )
+}
+
+export function SecurityPasswordPolicyPage() {
+  return (
+    <ResourcePage
+      title="Security"
+      description="Configure password-policy requirements when a persistence contract is available."
+      framed={false}
+    >
+      <SecuritySectionTabs active="password-policy" />
+      <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Password policy</CardTitle>
+            <CardDescription>
+              Password controls are visible here and disabled until backed by policy storage.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <Field label="Minimum length">
+              <TextInput aria-label="Minimum length" disabled placeholder="Unavailable until policy storage exists" />
+            </Field>
+            <div className="grid gap-3">
+              <SettingRow label="Required character types" value="Unavailable until policy storage exists" />
+              <SettingRow label="Compromised-password rejection" value="Unavailable until policy storage exists" />
+              <SettingRow label="Low-security phrase rejection" value="Unavailable until policy storage exists" />
+              <SettingRow label="User-info rejection" value="Unavailable until policy storage exists" />
+            </div>
+            <Field label="Custom words">
+              <TextArea aria-label="Custom words" disabled placeholder="Unavailable until policy storage exists" />
+            </Field>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Persistence</CardTitle>
+            <CardDescription>These controls are not written until a management contract exists.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <SettingRow label="Current backend" value="Password hashing and reset flows" />
+            <SettingRow label="Policy storage" value="Not available in local runtime" />
+          </CardContent>
+        </Card>
+      </div>
+    </ResourcePage>
+  )
+}
+
+export function SecurityCaptchaPage() {
+  return (
+    <ResourcePage
+      title="CAPTCHA"
+      description="Review CAPTCHA provider setup for hosted sign-up, sign-in, and password recovery flows."
+      framed={false}
+    >
+      <SecuritySectionTabs active="captcha" />
+      <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Provider setup</CardTitle>
+            <CardDescription>CAPTCHA provider persistence is not available in this local runtime.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <SwitchRow checked={false} disabled label="Enable CAPTCHA" />
+            <Field label="Provider">
+              <SelectInput aria-label="Provider" disabled value="turnstile">
+                <option value="turnstile">Cloudflare Turnstile</option>
+              </SelectInput>
+            </Field>
+            <Field label="Site key">
+              <TextInput aria-label="Site key" disabled placeholder="Provider setup disabled locally" />
+            </Field>
+            <Button disabled type="button" variant="secondary">
+              Setup provider
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Flow copy</CardTitle>
+            <CardDescription>Copy shown when CAPTCHA is active.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <SettingRow label="Sign-up" value="Complete the verification challenge before creating an account." />
+            <SettingRow label="Sign-in" value="Complete the verification challenge before signing in." />
+            <SettingRow label="Password recovery" value="Complete the verification challenge before recovery email." />
+          </CardContent>
+        </Card>
+      </div>
+    </ResourcePage>
+  )
+}
+
+export function SecurityBlocklistPage() {
+  return (
+    <ResourcePage
+      title="Blocklist"
+      description="Review sign-up blocklist settings for email aliases, addresses, and domains."
+      framed={false}
+    >
+      <SecuritySectionTabs active="blocklist" />
+      <div className="grid gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Email blocklist</CardTitle>
+            <CardDescription>Blocklist persistence is not available in this local runtime.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <SwitchRow checked={false} disabled label="Block email subaddressing" />
+            <Field label="Custom email and domain blocklist" help="One email address or domain per line.">
+              <TextArea
+                aria-label="Custom email and domain blocklist"
+                disabled
+                placeholder={'blocked@example.com\nexample.org'}
+              />
+            </Field>
+          </CardContent>
+        </Card>
+      </div>
+    </ResourcePage>
+  )
+}
+
+export function SecurityGeneralPage() {
+  const query = useQuery({ queryKey: adminQueryKeys.security, queryFn: getSecurityPolicy })
+
+  return (
+    <ResourcePage
+      title="General security"
+      description="Review general protections tied to current deployment security policy."
+      error={query.error}
+      framed={false}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
+    >
+      <SecuritySectionTabs active="general" />
+      {query.data ? (
+        <div className="grid gap-4 xl:grid-cols-3">
+          <PolicyCard
+            rows={[
+              ['MFA enforcement', query.data.policy.mfa.mode],
+              ['Passkeys', query.data.policy.passkeys.enabled ? 'Enabled' : 'Disabled'],
+            ]}
+            title="Protection"
+          />
+          <PolicyCard
+            rows={[
+              ['Session TTL', `${query.data.policy.sessions.expiresInSeconds}s`],
+              ['Fresh age', `${query.data.policy.sessions.freshAgeSeconds}s`],
+            ]}
+            title="Session policy"
+          />
+          <PolicyCard
+            rows={[
+              ['Security headers', 'Managed by Worker middleware'],
+              ['Cookie cache', `${query.data.policy.sessions.cookieCacheSeconds}s`],
+            ]}
+            title="Headers and cookies"
+          />
+        </div>
       ) : null}
     </ResourcePage>
   )
@@ -3407,22 +3721,107 @@ export function ContentSettingsPage() {
 }
 
 export function DeploymentSettingsPage() {
+  const query = useQuery({ queryKey: adminQueryKeys.security, queryFn: getSecurityPolicy })
+  const [keyTab, setKeyTab] = useState('private')
+
   return (
-    <ResourcePage title="OIDC configs" description="Review issuer metadata and management endpoints for this tenant.">
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Runtime endpoints</CardTitle>
-            <CardDescription>Static Console settings tied to the current deployment.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <SettingRow label="Platform" value="Cloudflare Workers" />
-            <SettingRow label="Database" value="D1" />
-            <SettingRow label="Auth issuer" value="/api/auth" />
-            <SettingRow label="Management API" value="/api/management" />
-          </CardContent>
-        </Card>
-      </div>
+    <ResourcePage
+      title="OIDC configs"
+      description="Review issuer metadata, session TTL, and signing-key runtime state for this tenant."
+      error={query.error}
+      framed={false}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
+    >
+      {query.data ? (
+        <div className="grid gap-4">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Runtime endpoints</CardTitle>
+                <CardDescription>Static Console settings tied to the current deployment.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                <SettingRow label="Platform" value="Cloudflare Workers" />
+                <SettingRow label="Database" value="D1" />
+                <SettingRow label="Auth issuer" value="/api/auth" />
+                <SettingRow label="Discovery" value="/api/auth/.well-known/openid-configuration" />
+                <SettingRow label="JWKS URI" value="/api/auth/jwks" />
+                <SettingRow label="Management API" value="/api/management" />
+              </CardContent>
+            </Card>
+            <PolicyCard
+              rows={[
+                ['Session TTL', `${query.data.policy.sessions.expiresInSeconds}s`],
+                ['Update age', `${query.data.policy.sessions.updateAgeSeconds}s`],
+                ['Fresh age', `${query.data.policy.sessions.freshAgeSeconds}s`],
+                ['Cookie cache', `${query.data.policy.sessions.cookieCacheSeconds}s`],
+              ]}
+              title="Session TTL"
+            />
+          </div>
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle>Signing keys</CardTitle>
+                  <CardDescription>Deployment-managed OIDC signing material exposed through JWKS.</CardDescription>
+                </div>
+                <Button disabled type="button" variant="secondary">
+                  <RefreshCw data-icon="inline-start" />
+                  Rotate key
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Key</TableHead>
+                    <TableHead>Use</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Rotation</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>Current deployment key</TableCell>
+                    <TableCell>OIDC JWT signing</TableCell>
+                    <TableCell>
+                      <StatusBadge active activeLabel="Active" inactiveLabel="Inactive" />
+                    </TableCell>
+                    <TableCell>Rotation endpoint is not supported in this runtime.</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <Tabs className="flex flex-col gap-4" setValue={setKeyTab} value={keyTab}>
+                <TabsList>
+                  <TabsTrigger value="private">Private key</TabsTrigger>
+                  <TabsTrigger value="cookie">Cookie key</TabsTrigger>
+                </TabsList>
+                <TabsContent value="private">
+                  <PolicyCard
+                    rows={[
+                      ['Storage', 'AUTH_SECRET deployment binding'],
+                      ['Exposure', 'Private key material is never shown in Console.'],
+                    ]}
+                    title="Private key"
+                  />
+                </TabsContent>
+                <TabsContent value="cookie">
+                  <PolicyCard
+                    rows={[
+                      ['Storage', 'AUTH_SECRET deployment binding'],
+                      ['Cookie cache', `${query.data.policy.sessions.cookieCacheSeconds}s`],
+                    ]}
+                    title="Cookie key"
+                  />
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
     </ResourcePage>
   )
 }
@@ -3894,6 +4293,44 @@ function DashboardListCard({
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function SecuritySectionTabs({ active }: { active: 'password-policy' | 'captcha' | 'blocklist' | 'general' }) {
+  const tabs = [
+    ['password-policy', 'Password policy', '/console/security/password-policy'],
+    ['captcha', 'CAPTCHA', '/console/security/captcha'],
+    ['blocklist', 'Blocklist', '/console/security/blocklist'],
+    ['general', 'General', '/console/security/general'],
+  ] as const
+
+  return (
+    <div className="inline-flex flex-wrap rounded-lg bg-muted p-1">
+      {tabs.map(([value, label, to]) => (
+        <a
+          className={cn(
+            'inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground',
+            active === value && 'bg-background text-foreground shadow-sm',
+          )}
+          href={to}
+          key={value}
+        >
+          {label}
+        </a>
+      ))}
+    </div>
+  )
+}
+
+function FactorStatusCard({ detail, enabled, title }: { detail: string; enabled: boolean; title: string }) {
+  return (
+    <div className="grid gap-2 rounded-md border border-border p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold">{title}</p>
+        <StatusBadge active={enabled} activeLabel="Available" inactiveLabel="Unavailable" />
+      </div>
+      <p className="text-sm leading-6 text-muted-foreground">{detail}</p>
+    </div>
   )
 }
 

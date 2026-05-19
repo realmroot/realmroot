@@ -15,10 +15,15 @@ import {
   ConnectorsPage,
   ContentSettingsPage,
   DeploymentSettingsPage,
+  MfaPage,
   OrganizationsPage,
+  PasswordlessConnectorsPage,
   RoleDetailPage,
   RolesPage,
-  SecurityPage,
+  SecurityBlocklistPage,
+  SecurityCaptchaPage,
+  SecurityGeneralPage,
+  SecurityPasswordPolicyPage,
   SignInSettingsPage,
   UsersPage,
 } from './admin-console'
@@ -414,9 +419,13 @@ describe('admin console', () => {
       ['/console/sign-in-experience/content', '/console/sign-in-experience/content', 'Content'],
       ['/console/security', '/console/security/password-policy', 'Security'],
       ['/console/security/password-policy', '/console/security/password-policy', 'Security'],
+      ['/console/security/captcha', '/console/security/captcha', 'CAPTCHA'],
+      ['/console/security/blocklist', '/console/security/blocklist', 'Blocklist'],
+      ['/console/security/general', '/console/security/general', 'General security'],
       ['/console/mfa', '/console/mfa', 'Multi-factor auth'],
-      ['/console/connectors', '/console/connectors/passwordless', 'Connectors'],
-      ['/console/connectors/passwordless', '/console/connectors/passwordless', 'Connectors'],
+      ['/console/connectors', '/console/connectors/passwordless', 'Passwordless connectors'],
+      ['/console/connectors/passwordless', '/console/connectors/passwordless', 'Passwordless connectors'],
+      ['/console/connectors/social', '/console/connectors/social', 'Social connectors'],
       ['/console/organization-template', '/console/organization-template/organization-roles', 'Organization roles'],
       [
         '/console/organization-template/organization-roles',
@@ -447,7 +456,7 @@ describe('admin console', () => {
     for (const [path, finalPath, heading] of [
       ['/admin/sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
       ['/admin/branding', '/console/sign-in-experience/branding', 'Branding'],
-      ['/admin/connectors', '/console/connectors/passwordless', 'Connectors'],
+      ['/admin/connectors', '/console/connectors/passwordless', 'Passwordless connectors'],
       ['/admin/security', '/console/security/password-policy', 'Security'],
       ['/admin/deployment', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
       ['/admin/applications/app-1', '/console/applications/app-1', 'Customer portal'],
@@ -1664,7 +1673,7 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Toggle Google'))
-    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'GitHub' } })
     fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'github' } })
     fireEvent.change(screen.getByLabelText('Provider type'), { target: { value: 'generic_oauth' } })
@@ -1904,7 +1913,7 @@ describe('admin console', () => {
     renderWithQuery(<ConnectorsPage />)
 
     expect(await screen.findByText('Generic OAuth')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
     fireEvent.change(screen.getByLabelText('Template'), { target: { value: 'generic-oauth' } })
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
     fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
@@ -2055,7 +2064,7 @@ describe('admin console', () => {
     renderWithQuery(<ConnectorsPage />)
 
     expect(await screen.findByText('Google')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'GitHub' } })
     fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
 
@@ -2076,7 +2085,7 @@ describe('admin console', () => {
     renderWithQuery(<ConnectorsPage />)
 
     expect(await screen.findByText('Google')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
     fireEvent.change(screen.getByLabelText('Template'), { target: { value: 'google' } })
     expect(screen.getByLabelText('Provider ID')).toHaveProperty('value', 'google')
     expect(screen.getByLabelText('Scopes')).toHaveProperty('value', 'openid email profile')
@@ -2088,7 +2097,7 @@ describe('admin console', () => {
     expect(screen.getByLabelText('Scopes')).toHaveProperty('value', '')
   })
 
-  it('renders sign-in settings and security policy tabs', async () => {
+  it('renders sign-in settings and security policy surfaces', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
@@ -2105,13 +2114,60 @@ describe('admin console', () => {
     expect(screen.getByRole('switch', { name: 'Passkey sign-in' })).toHaveProperty('disabled', true)
 
     unmount()
-    renderWithQuery(<SecurityPage />)
+    renderWithQuery(<MfaPage />)
 
-    expect(await screen.findByText('Multi-factor authentication')).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Passkeys' }))
-    expect(screen.getByText('auth.example.com')).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
-    expect(screen.getByText('3600s')).toBeTruthy()
+    expect(await screen.findByText('Factors')).toBeTruthy()
+    expect(screen.getByText('Passkeys')).toBeTruthy()
+    expect(screen.getByText('Authenticator app')).toBeTruthy()
+    expect(screen.getByText('SMS code')).toBeTruthy()
+    expect(screen.getByLabelText('Prompt policy')).toHaveProperty('value', 'required')
+    expect(screen.getByLabelText('Prompt policy')).toHaveProperty('disabled', true)
+
+    cleanup()
+    renderWithQuery(<SecurityGeneralPage />)
+    expect(await screen.findByText('3600s')).toBeTruthy()
+  })
+
+  it('renders independent MFA, security, passwordless connector, and OIDC settings surfaces', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') return Promise.resolve(jsonResponse(readinessIncomplete))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<MfaPage />)
+    expect(await screen.findByText('Backup codes')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true)
+
+    cleanup()
+    renderWithQuery(<SecurityPasswordPolicyPage />)
+    expect(screen.getByLabelText('Minimum length')).toHaveProperty('disabled', true)
+    expect(screen.getByText('Compromised-password rejection')).toBeTruthy()
+    expect(screen.getByText('Required character types')).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<SecurityCaptchaPage />)
+    expect(screen.getByText('Cloudflare Turnstile')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Setup provider' })).toHaveProperty('disabled', true)
+
+    cleanup()
+    renderWithQuery(<SecurityBlocklistPage />)
+    expect(screen.getByText('Block email subaddressing')).toBeTruthy()
+    expect(screen.getByLabelText('Custom email and domain blocklist')).toHaveProperty('disabled', true)
+
+    cleanup()
+    renderWithQuery(<PasswordlessConnectorsPage />)
+    expect(
+      await screen.findByText('Email delivery is limited to the configured runtime email service binding.'),
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Setup SMS' })).toHaveProperty('disabled', true)
+
+    cleanup()
+    renderWithQuery(<DeploymentSettingsPage />)
+    expect(await screen.findByText('Signing keys')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Rotate key' })).toHaveProperty('disabled', true)
   })
 
   it('saves sign-in settings through the management boundary', async () => {
@@ -3236,9 +3292,9 @@ describe('admin console', () => {
     expect(await screen.findByLabelText('Product name')).toHaveProperty('value', 'Acme Auth')
 
     cleanup()
-    renderWithQuery(<SecurityPage />)
-    fireEvent.click(await screen.findByRole('tab', { name: 'Passkeys' }))
-    expect(screen.getByText('No')).toBeTruthy()
+    renderWithQuery(<MfaPage />)
+    expect(await screen.findByText('Passkeys')).toBeTruthy()
+    expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
 
     cleanup()
     renderWithQuery(<OrganizationsPage />)
@@ -3287,9 +3343,9 @@ describe('admin console', () => {
 
     cleanup()
     renderWithQuery(<ConnectorsPage />)
-    expect(await screen.findByText('No connectors yet')).toBeTruthy()
+    expect(await screen.findByText('No social connectors yet')).toBeTruthy()
     expect(screen.queryByRole('table')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
     expect(await screen.findByRole('heading', { name: 'Create connector' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('heading', { name: 'Create connector' })).toBeNull()
@@ -3391,10 +3447,10 @@ describe('admin console', () => {
         text: 'Hosted sign-in preview',
       },
       {
-        component: <SecurityPage />,
+        component: <MfaPage />,
         matches: (url: string) => url === '/api/management/security/policy',
         success: securityPolicy,
-        text: 'Multi-factor authentication',
+        text: 'Factors',
       },
       {
         component: <OrganizationsPage />,
@@ -3442,6 +3498,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return Promise.resolve(jsonResponse({}))
     })
     const { unmount } = renderWithQuery(<BrandingPage />)
@@ -3454,7 +3511,7 @@ describe('admin console', () => {
     renderWithQuery(<DeploymentSettingsPage />)
 
     expect(screen.getByRole('heading', { name: 'OIDC configs' })).toBeTruthy()
-    expect(screen.getByText('Cloudflare Workers')).toBeTruthy()
+    expect(await screen.findByText('Cloudflare Workers')).toBeTruthy()
     expect(screen.getByText('/api/management')).toBeTruthy()
   })
 

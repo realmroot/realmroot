@@ -521,7 +521,7 @@ const journeyAssertions: Record<
           heading: 'Sign-up and sign-in',
         },
         { label: 'Multi-factor auth', href: '/console/mfa', heading: 'Multi-factor auth' },
-        { label: 'Connectors', href: '/console/connectors/passwordless', heading: 'Connectors' },
+        { label: 'Connectors', href: '/console/connectors/passwordless', heading: 'Passwordless connectors' },
         { label: 'Security', href: '/console/security/password-policy', heading: 'Security' },
         { label: 'API resources', href: '/console/api-resources', heading: 'API resources' },
         { label: 'Roles', href: '/console/roles', heading: 'Roles' },
@@ -735,7 +735,19 @@ const journeyAssertions: Record<
     suite: 'admin management journeys',
     assert: async ({ page }) => {
       await page.goto('/console/connectors/passwordless')
-      await expect(page.getByRole('heading', { name: 'Connectors' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Passwordless connectors' })).toBeVisible()
+      await expect(page.getByText('Email connector')).toBeVisible()
+      await expect(page.getByText('Email delivery is limited to the configured runtime email service binding.')).toBeVisible()
+      await expect(page.getByText('SMS connector')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Email setup unavailable locally' })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Setup SMS' })).toBeDisabled()
+    },
+  },
+  'admin-social-connector-inventory': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/console/connectors/social')
+      await expect(page.getByRole('heading', { name: 'Social connectors' })).toBeVisible()
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await expect(page.getByRole('cell', { name: 'github', exact: true })).toBeVisible()
       await expect(page.getByText('read:user, user:email')).toBeVisible()
@@ -805,20 +817,37 @@ const journeyAssertions: Record<
   'admin-security-policy': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
+      await page.goto('/console/mfa')
+      await expect(page.getByRole('heading', { name: 'Multi-factor auth' })).toBeVisible()
+      await expect(page.getByText('Passkeys', { exact: true })).toBeVisible()
+      await expect(page.getByText('Authenticator app', { exact: true })).toBeVisible()
+      await expect(page.getByText('SMS code', { exact: true })).toBeVisible()
+      await expect(page.getByText('Email code', { exact: true })).toBeVisible()
+      await expect(page.getByText('Backup codes', { exact: true })).toBeVisible()
+      await expect(page.getByLabel('Prompt policy')).toHaveValue('optional')
+      await expect(page.getByLabel('Prompt policy')).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+
       await page.goto('/console/security/password-policy')
       await expect(page.getByRole('heading', { name: 'Security' })).toBeVisible()
-      await expect(page.getByText('Multi-factor authentication')).toBeVisible()
-      await expect(page.getByText('Mode')).toBeVisible()
-      await expect(page.getByText('optional')).toBeVisible()
-      await page.getByRole('tab', { name: 'Passkeys' }).click()
-      await expect(page.getByText('RP ID')).toBeVisible()
-      await expect(page.getByText('localhost')).toBeVisible()
-      await expect(page.getByText('RP name')).toBeVisible()
-      await expect(page.getByText('Acme ID')).toBeVisible()
-      await expect(page.getByText('Origins')).toBeVisible()
-      await page.getByRole('tab', { name: 'Sessions' }).click()
-      await expect(page.getByRole('heading', { name: 'Session policy' })).toBeVisible()
-      await expect(page.getByText('Expires in')).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Password policy' })).toBeVisible()
+      await expect(page.getByLabel('Minimum length')).toBeDisabled()
+      await expect(page.getByText('Required character types')).toBeVisible()
+      await expect(page.getByText('Compromised-password rejection')).toBeVisible()
+
+      await page.goto('/console/security/captcha')
+      await expect(page.getByRole('heading', { name: 'CAPTCHA' })).toBeVisible()
+      await expect(page.getByLabel('Provider')).toHaveValue('turnstile')
+      await expect(page.getByRole('button', { name: 'Setup provider' })).toBeDisabled()
+
+      await page.goto('/console/security/blocklist')
+      await expect(page.getByRole('heading', { name: 'Blocklist', exact: true })).toBeVisible()
+      await expect(page.getByText('Block email subaddressing')).toBeVisible()
+      await expect(page.getByLabel('Custom email and domain blocklist')).toBeDisabled()
+
+      await page.goto('/console/security/general')
+      await expect(page.getByRole('heading', { name: 'General security' })).toBeVisible()
+      await expect(page.getByText('MFA enforcement')).toBeVisible()
       await expect(page.getByText('3600s')).toBeVisible()
       await expect(page.getByText('Fresh age')).toBeVisible()
       await expect(page.getByText('Cookie cache')).toBeVisible()
@@ -827,9 +856,9 @@ const journeyAssertions: Record<
   'admin-create-connector': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
-      await page.goto('/console/connectors/passwordless')
+      await page.goto('/console/connectors/social')
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
-      await page.getByRole('button', { name: 'New connector' }).click()
+      await page.getByRole('button', { name: 'Add social connector' }).click()
       await page.getByLabel('Template').selectOption('google')
       await page.getByLabel('Display name').fill('Google')
       await page.getByLabel('Client ID').fill('google-client')
@@ -858,7 +887,7 @@ const journeyAssertions: Record<
         body: expect.objectContaining({ displayName: 'GitHub Enterprise' }),
       })
       await page.getByRole('button', { name: 'Close' }).click()
-      await page.goto('/console/connectors/passwordless')
+      await page.goto('/console/connectors/social')
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await page.getByLabel('Actions for GitHub').click()
       await page.getByText('Delete').click()
@@ -1009,16 +1038,25 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       await page.goto('/console/tenant-settings/oidc-configs')
       const main = page.getByRole('main')
-    await expect(page.getByRole('heading', { name: 'OIDC configs' })).toBeVisible()
-      await expect(main.getByText('Runtime')).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'OIDC configs' })).toBeVisible()
+      await expect(main.getByRole('heading', { name: 'Runtime endpoints' })).toBeVisible()
       await expect(main.getByText('Platform')).toBeVisible()
       await expect(main.getByText('Cloudflare Workers')).toBeVisible()
       await expect(main.getByText('Database')).toBeVisible()
       await expect(main.getByText('D1')).toBeVisible()
       await expect(main.getByText('Auth issuer')).toBeVisible()
-      await expect(main.getByText('/api/auth')).toBeVisible()
+      await expect(main.getByText('/api/auth', { exact: true })).toBeVisible()
+      await expect(main.getByText('Discovery')).toBeVisible()
+      await expect(main.getByText('/api/auth/.well-known/openid-configuration')).toBeVisible()
+      await expect(main.getByText('JWKS URI')).toBeVisible()
+      await expect(main.getByText('/api/auth/jwks')).toBeVisible()
       await expect(main.getByText('Management API')).toBeVisible()
       await expect(main.getByText('/api/management')).toBeVisible()
+      await expect(main.getByRole('heading', { name: 'Session TTL' })).toBeVisible()
+      await expect(main.getByText('3600s')).toBeVisible()
+      await expect(main.getByRole('heading', { name: 'Signing keys' })).toBeVisible()
+      await expect(main.getByText('OIDC JWT signing')).toBeVisible()
+      await expect(main.getByRole('button', { name: 'Rotate key' })).toBeDisabled()
     },
   },
 }

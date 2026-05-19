@@ -15,10 +15,15 @@ import {
   ConsolePlaceholderPage,
   ContentSettingsPage,
   DeploymentSettingsPage,
+  MfaPage,
   OrganizationsPage,
+  PasswordlessConnectorsPage,
   RoleDetailPage,
   RolesPage,
-  SecurityPage,
+  SecurityBlocklistPage,
+  SecurityCaptchaPage,
+  SecurityGeneralPage,
+  SecurityPasswordPolicyPage,
   SignInSettingsPage,
   UserDetailPage,
   UsersPage,
@@ -238,6 +243,12 @@ const consoleConnectorsIndexRoute = createRoute({
 const consoleConnectorsPasswordlessRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/connectors/passwordless',
+  component: PasswordlessConnectorsPage,
+})
+
+const consoleConnectorsSocialRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/connectors/social',
   component: ConnectorsPage,
 })
 
@@ -282,7 +293,7 @@ const consoleSignInContentRoute = createRoute({
 const consoleMultiFactorAuthRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/mfa',
-  component: () => <SecurityPage title="Multi-factor auth" />,
+  component: MfaPage,
 })
 
 const consoleSecurityIndexRoute = createRoute({
@@ -296,7 +307,25 @@ const consoleSecurityIndexRoute = createRoute({
 const consoleSecurityPasswordPolicyRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/security/password-policy',
-  component: SecurityPage,
+  component: SecurityPasswordPolicyPage,
+})
+
+const consoleSecurityCaptchaRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/security/captcha',
+  component: SecurityCaptchaPage,
+})
+
+const consoleSecurityBlocklistRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/security/blocklist',
+  component: SecurityBlocklistPage,
+})
+
+const consoleSecurityGeneralRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/security/general',
+  component: SecurityGeneralPage,
 })
 
 const consoleOrganizationsRoute = createRoute({
@@ -545,6 +574,7 @@ const routeTree = rootRoute.addChildren([
     consoleUserDetailRoute,
     consoleConnectorsIndexRoute,
     consoleConnectorsPasswordlessRoute,
+    consoleConnectorsSocialRoute,
     consoleSignInExperienceIndexRoute,
     consoleSignInSignUpAndSignInRoute,
     consoleSignInBrandingRoute,
@@ -554,6 +584,9 @@ const routeTree = rootRoute.addChildren([
     consoleMultiFactorAuthRoute,
     consoleSecurityIndexRoute,
     consoleSecurityPasswordPolicyRoute,
+    consoleSecurityCaptchaRoute,
+    consoleSecurityBlocklistRoute,
+    consoleSecurityGeneralRoute,
     consoleOrganizationsRoute,
     consoleRolesRoute,
     consoleRoleDetailRoute,
