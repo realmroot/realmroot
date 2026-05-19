@@ -25,7 +25,7 @@ export function TableHead({ className, ...props }: ThHTMLAttributes<HTMLTableCel
   return (
     <th
       className={cn(
-        'h-10 px-3 text-left align-middle text-xs font-semibold uppercase text-muted-foreground',
+        'h-11 px-4 text-left align-middle text-xs font-semibold uppercase text-muted-foreground',
         className,
       )}
       {...props}
@@ -34,5 +34,5 @@ export function TableHead({ className, ...props }: ThHTMLAttributes<HTMLTableCel
 }
 
 export function TableCell({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn('px-3 py-2.5 align-middle', className)} {...props} />
+  return <td className={cn('h-[52px] px-4 py-2 align-middle', className)} {...props} />
 }

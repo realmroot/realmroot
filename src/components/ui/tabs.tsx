@@ -22,7 +22,7 @@ export function Tabs({ value, setValue, ...props }: TabsProps) {
 }
 
 export function TabsList({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('inline-flex rounded-lg bg-muted p-1', className)} role="tablist" {...props} />
+  return <div className={cn('inline-flex h-9 rounded-md bg-muted p-0.5', className)} role="tablist" {...props} />
 }
 
 type TabsTriggerProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -39,7 +39,7 @@ export function TabsTrigger({ className, value, ...props }: TabsTriggerProps) {
       aria-controls={panelId}
       aria-selected={active}
       className={cn(
-        'inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground',
+        'inline-flex h-8 items-center justify-center rounded-sm px-3 text-sm font-medium text-muted-foreground',
         active && 'bg-background text-foreground shadow-sm',
         className,
       )}

@@ -23,7 +23,7 @@ export function DropdownMenuTrigger({ className, ...props }: ButtonHTMLAttribute
   return (
     <button
       className={cn(
-        'inline-flex min-h-9 items-center justify-center rounded-md border border-border px-3 text-sm font-medium',
+        'inline-flex min-h-8 items-center justify-center rounded-md border border-border px-2.5 text-sm font-medium',
         className,
       )}
       onClick={() => menu.setOpen(!menu.open)}
@@ -56,7 +56,7 @@ export function DropdownMenuItem({ className, ...props }: ButtonHTMLAttributes<H
   const menu = useDropdownMenu()
   return (
     <button
-      className={cn('flex min-h-9 w-full items-center rounded-sm px-2 text-left text-sm hover:bg-muted', className)}
+      className={cn('flex min-h-8 w-full items-center rounded-sm px-2 text-left text-sm hover:bg-muted', className)}
       onClick={(event) => {
         props.onClick?.(event)
         menu.setOpen(false)

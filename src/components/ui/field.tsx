@@ -9,6 +9,7 @@ import {
   type TextareaHTMLAttributes,
   useId,
 } from 'react'
+import { cn } from '@/lib/utils'
 
 type FieldProps = {
   label: string
@@ -34,13 +35,13 @@ export function Field({ label, children, help }: FieldProps) {
 }
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className="textInput" {...props} />
+  return <input {...props} className={cn('textInput', props.className)} />
 }
 
 export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className="textInput textArea" {...props} />
+  return <textarea {...props} className={cn('textInput textArea', props.className)} />
 }
 
 export function SelectInput(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className="textInput" {...props} />
+  return <select {...props} className={cn('textInput', props.className)} />
 }

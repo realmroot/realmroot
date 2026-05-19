@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Button, LinkButton } from './button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card'
 import {
   Dialog,
@@ -27,6 +28,26 @@ afterEach(() => {
 })
 
 describe('composed UI primitives', () => {
+  it('applies compact button size classes across button and link variants', () => {
+    render(
+      <>
+        <Button>Default action</Button>
+        <Button size="sm" variant="secondary">
+          Small action
+        </Button>
+        <Button aria-label="Icon action" size="icon" />
+        <LinkButton href="/settings" size="sm" variant="ghost">
+          Link action
+        </LinkButton>
+      </>,
+    )
+
+    expect(screen.getByRole('button', { name: 'Default action' }).className).toContain('uiButton-default')
+    expect(screen.getByRole('button', { name: 'Small action' }).className).toContain('uiButton-sm')
+    expect(screen.getByRole('button', { name: 'Icon action' }).className).toContain('uiButton-icon')
+    expect(screen.getByRole('link', { name: 'Link action' }).className).toContain('uiButton-sm')
+  })
+
   it('renders card and dialog subcomponents with supplied content', () => {
     render(
       <>
@@ -54,8 +75,10 @@ describe('composed UI primitives', () => {
     )
 
     expect(screen.getByText('Card footer')).toBeTruthy()
+    expect(screen.getByText('Card title').parentElement?.className).toContain('p-5')
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByRole('dialog').parentElement?.className).toContain('overscroll-contain')
+    expect(screen.getByText('Dialog title').parentElement?.className).toContain('p-5')
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
     expect(screen.queryByText('Hidden dialog')).toBeNull()
   })
@@ -86,6 +109,8 @@ describe('composed UI primitives', () => {
     expect(screen.getByRole('alert').className).toContain('status-error')
     expect(screen.getByRole('table').parentElement?.className).toContain('overflow-x-auto')
     expect(screen.getByRole('table').className).toContain('min-w-[48rem]')
+    expect(screen.getByRole('columnheader', { name: 'Name' }).className).toContain('h-11')
+    expect(screen.getByRole('cell', { name: 'Customer portal' }).className).toContain('h-[52px]')
   })
 
   it('opens dropdown menus and closes them after item selection', () => {
@@ -103,6 +128,8 @@ describe('composed UI primitives', () => {
     expect(screen.queryByRole('menu')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
     expect(screen.getByRole('menu')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Actions' }).className).toContain('min-h-8')
+    expect(screen.getByRole('menuitem', { name: 'Archive' }).className).toContain('min-h-8')
     fireEvent.click(screen.getByRole('menuitem', { name: 'Archive' }))
     expect(screen.queryByRole('menu')).toBeNull()
   })
@@ -130,6 +157,7 @@ describe('composed UI primitives', () => {
     )
 
     expect(screen.getByLabelText('Named field').id).toBe('custom-id')
+    expect(screen.getByLabelText('Named field').className).toContain('textInput')
     expect(screen.getByText('Shown to reviewers')).toBeTruthy()
     expect(screen.getByText('Plain content')).toBeTruthy()
   })
@@ -163,6 +191,8 @@ describe('composed UI primitives', () => {
     const securityTab = screen.getByRole('tab', { name: 'Security' })
     const panel = screen.getByRole('tabpanel')
     expect(panel.textContent).toBe('Profile panel')
+    expect(profileTab.parentElement?.className).toContain('h-9')
+    expect(profileTab.className).toContain('h-8')
     expect(profileTab.getAttribute('aria-controls')).toBe(panel.id)
     expect(panel.getAttribute('aria-labelledby')).toBe(profileTab.id)
     expect(screen.queryByText('Security panel')).toBeNull()
