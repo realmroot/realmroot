@@ -27,6 +27,25 @@ describe('onboarding API client', () => {
     } satisfies Partial<ApiRequestError>)
   })
 
+  it('prefers structured RPC error messages when present', async () => {
+    await expect(
+      readRpcResponse(Promise.resolve(jsonResponse({ message: 'Top-level message' }, 422)) as never),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: 'Top-level message',
+    } satisfies Partial<ApiRequestError>)
+    await expect(
+      readRpcResponse(Promise.resolve(jsonResponse({ error: { message: 'Nested message' } }, 423)) as never),
+    ).rejects.toMatchObject({
+      status: 423,
+      message: 'Nested message',
+    } satisfies Partial<ApiRequestError>)
+    await expect(readRpcResponse(Promise.resolve(jsonResponse({ error: {} }, 424)) as never)).rejects.toMatchObject({
+      status: 424,
+      message: '{"error":{}}',
+    } satisfies Partial<ApiRequestError>)
+  })
+
   it('surfaces onboarding status boundary errors', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse({ error: { message: 'Unavailable' } }, 503))
 

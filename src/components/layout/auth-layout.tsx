@@ -39,7 +39,7 @@ export function AuthLayout({ children, config, eyebrow, title, description }: Au
 }
 
 export function BrandIdentity({ config }: { config: ConfigzConfigResponse | null }) {
-  const productName = config?.copy.productName ?? 'FlareAuth'
+  const productName = config?.copy?.productName ?? 'FlareAuth'
   return (
     <a className="brand brandLink" href="/">
       {config?.branding.logoUrl ? (

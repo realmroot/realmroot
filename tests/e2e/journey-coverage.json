@@ -37,6 +37,7 @@
     { "id": "admin-application-inventory", "name": "Admin applications page lists OIDC clients and status controls" },
     { "id": "admin-create-user", "name": "Admin users page creates a user" },
     { "id": "admin-user-inventory", "name": "Admin users page supports user search and status inventory" },
+    { "id": "admin-user-detail", "name": "Admin user detail updates profile, resets password, and revokes sessions" },
     { "id": "admin-create-application", "name": "Admin applications page creates an OIDC client" },
     { "id": "admin-application-detail", "name": "Admin applications detail edits lifecycle, redirect URIs, integration details, and confidential secret rotation" },
     { "id": "admin-create-connector", "name": "Admin connectors page creates a connector" },

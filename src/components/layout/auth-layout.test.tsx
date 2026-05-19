@@ -1,7 +1,7 @@
 import type { ConfigzConfigResponse } from '@shared/api/configz'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AuthLayout, brandingStyle } from './auth-layout'
+import { AuthLayout, BrandIdentity, brandingStyle } from './auth-layout'
 
 const config: ConfigzConfigResponse = {
   onboarding: { required: false, href: '/onboarding' },
@@ -90,6 +90,9 @@ describe('AuthLayout', () => {
     expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe(
       'https://cdn.example.com/favicon.ico',
     )
+    expect(screen.getByText('Acme ID')).toBeTruthy()
+    expect(screen.getByText('Hosted sign-in')).toBeTruthy()
+    expect(screen.getByText('Form')).toBeTruthy()
   })
 
   it('returns default brand style when config is not loaded', () => {
@@ -97,5 +100,41 @@ describe('AuthLayout', () => {
       '--brand-primary': '#b42318',
       '--brand-background': '#f7f3ee',
     })
+  })
+
+  it('renders fallback branding when config copy is unavailable', () => {
+    render(<BrandIdentity config={{ branding: { logoUrl: null } } as never} />)
+
+    expect(screen.getByText('FlareAuth')).toBeTruthy()
+    expect(screen.getByText('F')).toBeTruthy()
+  })
+
+  it('renders configured logo branding and optional eyebrow', () => {
+    const { container } = render(
+      <AuthLayout
+        config={{ ...config, branding: { ...config.branding, logoUrl: 'https://cdn.example.com/logo.png' } }}
+        description="Hosted identity"
+        eyebrow="Secure access"
+        title="Sign in"
+      >
+        <button type="button">Continue</button>
+      </AuthLayout>,
+    )
+
+    expect(screen.getByText('Acme ID')).toBeTruthy()
+    expect(screen.getByText('Secure access')).toBeTruthy()
+    expect(container.querySelector('img.brandLogo')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
+  })
+
+  it('omits the eyebrow when one is not provided', () => {
+    render(
+      <AuthLayout config={null} description="Hosted identity" title="Sign in">
+        <span>Form slot</span>
+      </AuthLayout>,
+    )
+
+    expect(screen.queryByText('Secure access')).toBeNull()
+    expect(screen.getByText('Form slot')).toBeTruthy()
   })
 })

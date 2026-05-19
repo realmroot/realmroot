@@ -76,4 +76,33 @@ describe('App', () => {
 
     expect(await screen.findByText('API status: unavailable')).toBeTruthy()
   })
+
+  it('ignores async landing-page responses after unmount', async () => {
+    const status = deferred<{ ok: true; service: string }>()
+    const config = deferred<{ onboarding: { required: boolean; href: string } }>()
+    vi.mocked(getPlatformStatus).mockReturnValue(status.promise)
+    vi.mocked(getConfigz).mockReturnValue(config.promise as never)
+
+    const view = render(<App />)
+    view.unmount()
+
+    await status.resolve({ ok: true, service: 'flareauth' })
+    await config.resolve({ onboarding: { required: true, href: '/onboarding' } })
+
+    expect(view.container.textContent).toBe('')
+  })
 })
+
+function deferred<T>() {
+  let resolvePromise!: (value: T) => void
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve
+  })
+  return {
+    promise,
+    async resolve(value: T) {
+      resolvePromise(value)
+      await promise
+    },
+  }
+}

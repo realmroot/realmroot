@@ -12,6 +12,7 @@ import {
 } from '../../../../shared/api/users'
 import { badRequest } from '../../../lib/errors'
 import { requireAdmin } from '../../../middleware/admin'
+import type { SecurityRepository } from '../../../modules/security/repository'
 import type { UserRepository } from '../../../modules/users/repository'
 import type { ManagementAuthApi } from '../../auth-api'
 import { toBoundaryError } from '../../auth-api'
@@ -19,6 +20,7 @@ import { readJson, readQuery } from '../../validation'
 
 interface AdminUserRoutesOptions {
   normalizeListResponse?: boolean
+  securityRepository?: SecurityRepository
 }
 
 export function adminUserRoutes(
@@ -104,13 +106,22 @@ export function adminUserRoutes(
   app.post('/password-reset', requestPasswordReset)
   app.post('/password-reset-requests', requestPasswordReset)
 
-  app.get('/:id', async (c) => {
-    try {
-      const user = await authApi.getUser({ query: { id: c.req.param('id') }, headers: c.req.raw.headers })
+  app.get('/:id', async (c) => c.json({ user: await users.getUser(c.req.param('id')) }))
 
-      return c.json({
-        user,
-      })
+  app.post('/:id/password-reset-requests', async (c) => {
+    const body = await readJson(c, adminPasswordResetSchema.pick({ redirectTo: true }))
+    const user = await users.getUser(c.req.param('id'))
+
+    try {
+      return c.json(
+        await authApi.requestPasswordReset({
+          body: {
+            email: user.email,
+            redirectTo: body.redirectTo,
+          },
+          headers: c.req.raw.headers,
+        }),
+      )
     } catch (error) {
       throw toBoundaryError(error)
     }
@@ -125,6 +136,25 @@ export function adminUserRoutes(
     const page = await users.listConsentedApplications(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ applications: page.items, pagination: paginationMetadata(page) })
   })
+
+  if (options.securityRepository) {
+    app.get('/:id/security', async (c) =>
+      c.json({ security: await options.securityRepository!.getSecurityState(c.req.param('id')) }),
+    )
+
+    app.get('/:id/passkeys', async (c) => {
+      const page = await options.securityRepository!.listPasskeys(
+        c.req.param('id'),
+        readQuery(c, paginationQuerySchema),
+      )
+      return c.json({ passkeys: page.items, pagination: paginationMetadata(page) })
+    })
+
+    app.delete('/:id/passkeys/:passkeyId', async (c) => {
+      await options.securityRepository!.deletePasskey(c.req.param('id'), c.req.param('passkeyId'))
+      return c.body(null, 204)
+    })
+  }
 
   app.patch('/:id', async (c) => {
     const body = await readJson(c, adminUpdateUserSchema)
