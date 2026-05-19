@@ -2479,6 +2479,11 @@ function ConnectorDetailDialog({
   const [form, setForm] = useState<FormState>(() => connectorToForm(connector))
   const [validationError, setValidationError] = useState<string | null>(null)
 
+  useEffect(() => {
+    setForm(connectorToForm(connector))
+    setValidationError(null)
+  }, [connector])
+
   if (!connector) {
     return (
       <Dialog open={open}>

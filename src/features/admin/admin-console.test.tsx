@@ -1113,6 +1113,34 @@ describe('admin console', () => {
     expect(requests).toEqual([])
   })
 
+  it('shows connector delete pending and error states', async () => {
+    let resolveDelete: (response: Response) => void = () => {}
+    const deleteResponse = new Promise<Response>((resolve) => {
+      resolveDelete = resolve
+    })
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1' && method === 'DELETE') return deleteResponse
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByRole('button', { name: 'Deleting...' })).toHaveProperty('disabled', true)
+    resolveDelete(jsonResponse({ error: { message: 'Delete failed.' } }, 503))
+
+    expect(await screen.findByText('Delete failed.')).toBeTruthy()
+  })
+
   it('covers connector draft creation, metadata validation, and generic OAuth ready details', async () => {
     const genericConnector = {
       ...connector,
@@ -1197,6 +1225,101 @@ describe('admin console', () => {
     expect(screen.getByText('Client ID configured')).toBeTruthy()
   })
 
+  it('saves connector detail edits with blank optional fields', async () => {
+    const incompleteConnector = {
+      ...connector,
+      clientId: null,
+      clientSecretBinding: null,
+      issuer: null,
+      scopes: [],
+      providerMetadata: {},
+    }
+    let resolvePatch: (response: Response) => void = () => {}
+    const patchResponse = new Promise<Response>((resolve) => {
+      resolvePatch = resolve
+    })
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1/readiness') {
+        return Promise.resolve(jsonResponse({ connectorId: 'connector-1', ready: false, checks: [] }))
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'GET') {
+        return Promise.resolve(jsonResponse(incompleteConnector))
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init?.body)) })
+        return patchResponse
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [incompleteConnector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('View details'))
+    expect(await screen.findByText('Needs attention')).toBeTruthy()
+    expect(screen.getByLabelText('Client ID')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Client secret binding')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Issuer')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', '')
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByRole('button', { name: 'Saving...' })).toHaveProperty('disabled', true)
+    resolvePatch(jsonResponse({ ...incompleteConnector, displayName: 'Google Draft' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          url: '/api/management/connectors/connector-1',
+          body: expect.objectContaining({
+            authorizationEndpoint: null,
+            clientId: null,
+            clientSecretBinding: null,
+            displayName: 'Google Draft',
+            issuer: null,
+            jwksEndpoint: null,
+            scopes: [],
+            tokenEndpoint: null,
+            userInfoEndpoint: null,
+          }),
+        },
+      ])
+    })
+  })
+
+  it('shows connector detail load errors while configuration is unavailable', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1/readiness') {
+        return Promise.resolve(jsonResponse({ connectorId: 'connector-1', ready: false, checks: [] }))
+      }
+      if (url === '/api/management/connectors/connector-1') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Connector detail unavailable.' } }, 503))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('View details'))
+
+    expect(await screen.findByRole('heading', { name: 'Connector details' })).toBeTruthy()
+    expect(await screen.findByText('Connector detail unavailable.')).toBeTruthy()
+  })
+
   it('shows client-side validation errors for connector creation', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -1220,6 +1343,31 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
     expect(requests).toEqual([])
+  })
+
+  it('resets connector template defaults when returning to a custom provider', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.change(screen.getByLabelText('Template'), { target: { value: 'google' } })
+    expect(screen.getByLabelText('Provider ID')).toHaveProperty('value', 'google')
+    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', 'openid email profile')
+    fireEvent.change(screen.getByLabelText('Template'), { target: { value: '' } })
+
+    expect(screen.getByLabelText('Provider type')).toHaveProperty('value', 'social')
+    expect(screen.getByLabelText('Provider ID')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Display name')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', '')
   })
 
   it('renders sign-in settings and security policy tabs', async () => {
