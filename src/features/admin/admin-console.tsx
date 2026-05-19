@@ -840,10 +840,22 @@ function ApplicationsTableContent({
   onToggleDisabled: (application: ApplicationResponse) => void
 }) {
   if (!applications.length && hasApplications) {
-    return <EmptyState description={emptyDescription} title={emptyTitle} />
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Application name</TableHead>
+            <TableHead>App ID</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableEmptyRow colSpan={4} description={emptyDescription} title={emptyTitle} />
+        </TableBody>
+      </Table>
+    )
   }
-
-  if (!applications.length) return null
 
   return (
     <Table>
@@ -856,48 +868,60 @@ function ApplicationsTableContent({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {applications.map((application) => (
-          <TableRow key={application.id}>
-            <TableCell>
-              <a className="font-medium hover:underline" href={`/console/applications/${application.id}`}>
-                {application.name}
-              </a>
-              <div className="text-xs text-muted-foreground">{application.slug}</div>
-              <div className="mt-2">
-                <AssetUploadControl
-                  accept="image/png,image/jpeg,image/webp"
-                  label={`Upload logo for ${application.name}`}
-                  onFile={(file) => onLogoFile(application.id, file)}
-                  previewUrl={application.iconUrl}
-                />
-              </div>
-            </TableCell>
-            <TableCell>
-              <code className="text-xs">{application.clientId}</code>
-            </TableCell>
-            <TableCell>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{clientTypeLabel(application.clientType)}</Badge>
-                <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">{application.allowedGrantTypes.join(', ')}</div>
-            </TableCell>
-            <TableCell className="text-right">
-              <DropdownMenu>
-                <DropdownMenuTrigger aria-label={`Actions for ${application.name}`}>
-                  <MoreHorizontal data-icon="inline-start" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={() => onToggleDisabled(application)}>
-                      {application.disabled ? 'Enable' : 'Disable'}
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </TableCell>
-          </TableRow>
-        ))}
+        {applications.length ? (
+          applications.map((application) => (
+            <TableRow key={application.id}>
+              <TableCell>
+                <a className="font-medium hover:underline" href={`/console/applications/${application.id}`}>
+                  {application.name}
+                </a>
+                <div className="text-xs text-muted-foreground">{application.slug}</div>
+                <div className="mt-2">
+                  <AssetUploadControl
+                    accept="image/png,image/jpeg,image/webp"
+                    label={`Upload logo for ${application.name}`}
+                    onFile={(file) => onLogoFile(application.id, file)}
+                    previewUrl={application.iconUrl}
+                  />
+                </div>
+              </TableCell>
+              <TableCell>
+                <code className="text-xs">{application.clientId}</code>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{clientTypeLabel(application.clientType)}</Badge>
+                  <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">{application.allowedGrantTypes.join(', ')}</div>
+              </TableCell>
+              <TableCell className="text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger aria-label={`Actions for ${application.name}`}>
+                    <MoreHorizontal data-icon="inline-start" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem onClick={() => onToggleDisabled(application)}>
+                        {application.disabled ? 'Enable' : 'Disable'}
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+            </TableRow>
+          ))
+        ) : (
+          <TableEmptyRow
+            colSpan={4}
+            description={
+              hasApplications
+                ? emptyDescription
+                : 'Create your first OIDC client to connect an application to hosted authentication.'
+            }
+            title={hasApplications ? emptyTitle : 'No applications yet'}
+          />
+        )}
       </TableBody>
     </Table>
   )
@@ -1151,53 +1175,67 @@ export function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {query.data?.users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>
-                  <a className="font-medium hover:underline" href={`/console/users/${user.id}`}>
-                    {userDisplayName(user)}
-                  </a>
-                  <div className="text-xs text-muted-foreground">{user.id}</div>
-                </TableCell>
-                <TableCell>{formatRole(user.role)}</TableCell>
-                <TableCell>
-                  <div>{user.email ?? 'Unknown'}</div>
-                  <div className="text-xs text-muted-foreground">{user.emailVerified ? 'Verified' : 'Unverified'}</div>
-                </TableCell>
-                <TableCell>{formatDate(user.createdAt)}</TableCell>
-                <TableCell>
-                  <StatusBadge active={!user.banned} activeLabel="Active" inactiveLabel="Banned" />
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger aria-label={`Actions for ${user.email ?? user.id}`}>
-                      <MoreHorizontal data-icon="inline-start" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuGroup>
-                        {user.email ? (
-                          <DropdownMenuItem onClick={() => requestPasswordReset(user.email ?? '')}>
-                            Send password reset
+            {query.data?.users.length ? (
+              query.data.users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>
+                    <a className="font-medium hover:underline" href={`/console/users/${user.id}`}>
+                      {userDisplayName(user)}
+                    </a>
+                    <div className="text-xs text-muted-foreground">{user.id}</div>
+                  </TableCell>
+                  <TableCell>{formatRole(user.role)}</TableCell>
+                  <TableCell>
+                    <div>{user.email ?? 'Unknown'}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {user.emailVerified ? 'Verified' : 'Unverified'}
+                    </div>
+                  </TableCell>
+                  <TableCell>{formatDate(user.createdAt)}</TableCell>
+                  <TableCell>
+                    <StatusBadge active={!user.banned} activeLabel="Active" inactiveLabel="Banned" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger aria-label={`Actions for ${user.email ?? user.id}`}>
+                        <MoreHorizontal data-icon="inline-start" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuGroup>
+                          {user.email ? (
+                            <DropdownMenuItem onClick={() => requestPasswordReset(user.email ?? '')}>
+                              Send password reset
+                            </DropdownMenuItem>
+                          ) : null}
+                          <DropdownMenuItem
+                            onClick={() =>
+                              updateUser(user.id, { role: user.role === 'admin' ? 'user' : 'admin' }).then(() =>
+                                queryClient.invalidateQueries({ queryKey: adminQueryKeys.users }),
+                              )
+                            }
+                          >
+                            Toggle admin role
                           </DropdownMenuItem>
-                        ) : null}
-                        <DropdownMenuItem
-                          onClick={() =>
-                            updateUser(user.id, { role: user.role === 'admin' ? 'user' : 'admin' }).then(() =>
-                              queryClient.invalidateQueries({ queryKey: adminQueryKeys.users }),
-                            )
-                          }
-                        >
-                          Toggle admin role
-                        </DropdownMenuItem>
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableEmptyRow
+                colSpan={6}
+                description={
+                  search
+                    ? 'No users match the current search.'
+                    : 'Create a user to verify sign-in and account-center behavior.'
+                }
+                title={search ? 'No users found' : 'No users yet'}
+              />
+            )}
           </TableBody>
         </Table>
-        {query.data ? (
+        {query.data && query.data.users.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 text-sm text-muted-foreground">
             <span>
               Showing {query.data.pagination.offset + 1}-
@@ -1959,45 +1997,53 @@ export function ConnectorsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {query.data?.connectors.map((connector) => (
-            <TableRow key={connector.id}>
-              <TableCell>
-                <div className="font-medium">{connector.displayName}</div>
-                <div className="text-xs text-muted-foreground">{connector.slug}</div>
-              </TableCell>
-              <TableCell>{connector.providerId}</TableCell>
-              <TableCell>{connector.scopes.join(', ') || 'Default'}</TableCell>
-              <TableCell>
-                <StatusBadge active={connector.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-              </TableCell>
-              <TableCell>{connector.clientSecretBinding ? 'Binding configured' : 'Needs binding'}</TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-2">
-                  <Switch
-                    aria-label={`Toggle ${connector.displayName}`}
-                    checked={connector.enabled}
-                    onCheckedChange={(enabled) => updateMutation.mutate({ id: connector.id, input: { enabled } })}
-                  />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger aria-label={`Actions for ${connector.displayName}`}>
-                      <MoreHorizontal data-icon="inline-start" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuGroup>
-                        <DropdownMenuItem onClick={() => setSelectedConnectorId(connector.id)}>
-                          View details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setDeleteTarget(connector)}>
-                          <Trash2 data-icon="inline-start" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
+          {query.data?.connectors.length ? (
+            query.data.connectors.map((connector) => (
+              <TableRow key={connector.id}>
+                <TableCell>
+                  <div className="font-medium">{connector.displayName}</div>
+                  <div className="text-xs text-muted-foreground">{connector.slug}</div>
+                </TableCell>
+                <TableCell>{connector.providerId}</TableCell>
+                <TableCell>{connector.scopes.join(', ') || 'Default'}</TableCell>
+                <TableCell>
+                  <StatusBadge active={connector.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                </TableCell>
+                <TableCell>{connector.clientSecretBinding ? 'Binding configured' : 'Needs binding'}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <Switch
+                      aria-label={`Toggle ${connector.displayName}`}
+                      checked={connector.enabled}
+                      onCheckedChange={(enabled) => updateMutation.mutate({ id: connector.id, input: { enabled } })}
+                    />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger aria-label={`Actions for ${connector.displayName}`}>
+                        <MoreHorizontal data-icon="inline-start" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuGroup>
+                          <DropdownMenuItem onClick={() => setSelectedConnectorId(connector.id)}>
+                            View details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setDeleteTarget(connector)}>
+                            <Trash2 data-icon="inline-start" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableEmptyRow
+              colSpan={6}
+              description="Add social or OAuth identity providers when your sign-in experience needs them."
+              title="No social connectors yet"
+            />
+          )}
         </TableBody>
       </Table>
       <ConnectorDetailDialog
@@ -2598,28 +2644,36 @@ export function OrganizationsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {query.data?.organizations.map((organization) => (
-            <TableRow key={organization.id}>
-              <TableCell>
-                <a className="font-medium hover:underline" href={`/console/organizations/${organization.id}`}>
-                  {organization.name}
-                </a>
-                <div className="text-xs text-muted-foreground">{organization.slug}</div>
-              </TableCell>
-              <TableCell>{organization.displayName ?? 'Not set'}</TableCell>
-              <TableCell>
-                <AssetUploadControl
-                  accept="image/png,image/jpeg,image/webp"
-                  label={`Upload logo for ${organization.name}`}
-                  onFile={(file) => logoMutation.mutate({ id: organization.id, file })}
-                  previewUrl={organization.logo}
-                />
-              </TableCell>
-              <TableCell>
-                <StatusBadge active={!organization.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-              </TableCell>
-            </TableRow>
-          ))}
+          {query.data?.organizations.length ? (
+            query.data.organizations.map((organization) => (
+              <TableRow key={organization.id}>
+                <TableCell>
+                  <a className="font-medium hover:underline" href={`/console/organizations/${organization.id}`}>
+                    {organization.name}
+                  </a>
+                  <div className="text-xs text-muted-foreground">{organization.slug}</div>
+                </TableCell>
+                <TableCell>{organization.displayName ?? 'Not set'}</TableCell>
+                <TableCell>
+                  <AssetUploadControl
+                    accept="image/png,image/jpeg,image/webp"
+                    label={`Upload logo for ${organization.name}`}
+                    onFile={(file) => logoMutation.mutate({ id: organization.id, file })}
+                    previewUrl={organization.logo}
+                  />
+                </TableCell>
+                <TableCell>
+                  <StatusBadge active={!organization.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableEmptyRow
+              colSpan={4}
+              description="Create organizations when authorization needs tenant-owned groups."
+              title="No organizations yet"
+            />
+          )}
         </TableBody>
       </Table>
       {logoMutation.errorMessage ? <p className="p-4 text-sm text-destructive">{logoMutation.errorMessage}</p> : null}
@@ -2765,20 +2819,28 @@ export function RolesPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {query.data?.roles.map((role) => (
-            <TableRow key={role.id}>
-              <TableCell>
-                <a className="font-medium hover:underline" href={`/console/roles/${role.id}`}>
-                  {role.name}
-                </a>
-                <div className="text-xs text-muted-foreground">{role.key}</div>
-              </TableCell>
-              <TableCell>{role.resourceId ?? role.organizationId ?? role.applicationId ?? 'Global'}</TableCell>
-              <TableCell>
-                <StatusBadge active={role.system} activeLabel="System" inactiveLabel="Custom" />
-              </TableCell>
-            </TableRow>
-          ))}
+          {query.data?.roles.length ? (
+            query.data.roles.map((role) => (
+              <TableRow key={role.id}>
+                <TableCell>
+                  <a className="font-medium hover:underline" href={`/console/roles/${role.id}`}>
+                    {role.name}
+                  </a>
+                  <div className="text-xs text-muted-foreground">{role.key}</div>
+                </TableCell>
+                <TableCell>{role.resourceId ?? role.organizationId ?? role.applicationId ?? 'Global'}</TableCell>
+                <TableCell>
+                  <StatusBadge active={role.system} activeLabel="System" inactiveLabel="Custom" />
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableEmptyRow
+              colSpan={3}
+              description="Create roles to model tenant, organization, application, or API permissions."
+              title="No roles yet"
+            />
+          )}
         </TableBody>
       </Table>
     </ResourcePage>
@@ -3085,20 +3147,28 @@ export function ApiResourcesPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {query.data?.resources.map((resource) => (
-            <TableRow key={resource.id}>
-              <TableCell>
-                <a className="font-medium hover:underline" href={`/console/api-resources/${resource.id}`}>
-                  {resource.name}
-                </a>
-                <div className="text-xs text-muted-foreground">{resource.identifier}</div>
-              </TableCell>
-              <TableCell>{resource.audience}</TableCell>
-              <TableCell>
-                <StatusBadge active={resource.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-              </TableCell>
-            </TableRow>
-          ))}
+          {query.data?.resources.length ? (
+            query.data.resources.map((resource) => (
+              <TableRow key={resource.id}>
+                <TableCell>
+                  <a className="font-medium hover:underline" href={`/console/api-resources/${resource.id}`}>
+                    {resource.name}
+                  </a>
+                  <div className="text-xs text-muted-foreground">{resource.identifier}</div>
+                </TableCell>
+                <TableCell>{resource.audience}</TableCell>
+                <TableCell>
+                  <StatusBadge active={resource.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableEmptyRow
+              colSpan={3}
+              description="Register APIs before issuing access tokens for protected resources."
+              title="No API resources yet"
+            />
+          )}
         </TableBody>
       </Table>
     </ResourcePage>
@@ -4114,15 +4184,26 @@ export function WebhooksPage() {
         <Card>
           <CardHeader>
             <CardTitle>Endpoints</CardTitle>
-            <CardDescription>
-              No webhook backend is registered, so this table is intentionally local-only.
-            </CardDescription>
+            <CardDescription>Endpoint rows appear here after webhook delivery storage exists.</CardDescription>
           </CardHeader>
           <CardContent>
-            <EmptyState
-              description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
-              title="Webhook delivery unavailable"
-            />
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Endpoint</TableHead>
+                  <TableHead>Events</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableEmptyRow
+                  colSpan={4}
+                  description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
+                  title="Webhook delivery unavailable"
+                />
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>
@@ -4452,7 +4533,7 @@ function ResourcePage({
   return (
     <>
       <PageHeader
-        action={empty ? undefined : action}
+        action={action}
         breadcrumb={['Console', title]}
         description={description}
         eyebrow="Console"
@@ -4461,14 +4542,13 @@ function ResourcePage({
       {toolbar ? <div>{toolbar}</div> : null}
       {loading ? <LoadingState label={`Loading ${title.toLowerCase()}`} /> : null}
       {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
-      {!loading && !error && empty ? (
+      {!loading && !error && empty && !framed ? (
         <EmptyState
-          action={action}
           description={emptyDescription ?? `Create a ${title.toLowerCase()} item to populate this page.`}
           title={emptyTitle ?? `No ${title.toLowerCase()} yet`}
         />
       ) : null}
-      {!loading && !error && !empty && framed ? (
+      {!loading && !error && framed ? (
         <Card>
           <CardContent className="p-0">{children}</CardContent>
         </Card>
@@ -4490,6 +4570,19 @@ function ObjectHeader({ badge, id, title }: { badge: string; id: string; title: 
         <p className="text-xl font-semibold leading-tight tracking-normal">{title}</p>
       </div>
     </div>
+  )
+}
+
+function TableEmptyRow({ colSpan, description, title }: { colSpan: number; description: string; title: string }) {
+  return (
+    <TableRow className="hover:bg-transparent">
+      <TableCell colSpan={colSpan}>
+        <div className="flex min-h-32 flex-col items-center justify-center gap-2 px-4 py-8 text-center">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <p className="max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
+        </div>
+      </TableCell>
+    </TableRow>
   )
 }
 

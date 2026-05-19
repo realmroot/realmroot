@@ -1137,22 +1137,50 @@ test('admin management journeys', async ({ page }) => {
 test('admin console desktop and mobile screenshot evidence', async ({ page }, testInfo) => {
   await mockApi(page)
 
+  const consoleRoutes = [
+    { name: 'dashboard', path: '/console', heading: 'Tenant health' },
+    { name: 'applications', path: '/console/applications', heading: 'Applications' },
+    {
+      name: 'sign-in-experience',
+      path: '/console/sign-in-experience/sign-up-and-sign-in',
+      heading: 'Sign-up and sign-in',
+    },
+    { name: 'mfa', path: '/console/mfa', heading: 'Multi-factor auth' },
+    { name: 'connectors', path: '/console/connectors/passwordless', heading: 'Passwordless connectors' },
+    { name: 'security', path: '/console/security/password-policy', heading: 'Security' },
+    { name: 'api-resources', path: '/console/api-resources', heading: 'API resources' },
+    { name: 'roles', path: '/console/roles', heading: 'Roles' },
+    {
+      name: 'organization-template',
+      path: '/console/organization-template/organization-roles',
+      heading: 'Organization template',
+    },
+    { name: 'organizations', path: '/console/organizations', heading: 'Organizations' },
+    { name: 'users', path: '/console/users', heading: 'Users' },
+    { name: 'custom-jwt', path: '/console/customize-jwt', heading: 'Custom JWT' },
+    { name: 'webhooks', path: '/console/webhooks', heading: 'Webhooks' },
+    { name: 'audit-logs', path: '/console/audit-logs', heading: 'Audit logs' },
+    { name: 'tenant-settings', path: '/console/tenant-settings/oidc-configs', heading: 'OIDC configs' },
+  ]
+
+  await page.setViewportSize({ width: 1280, height: 720 })
+  for (const route of consoleRoutes) {
+    await page.goto(route.path)
+    await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible()
+    await expectNoDocumentHorizontalOverflow(page)
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath(`admin-${route.name}-1280x720.png`),
+    })
+  }
+
   for (const viewport of [
     { name: 'desktop', width: 1440, height: 1000 },
     { name: 'mobile', width: 390, height: 844 },
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
 
-    for (const route of [
-      { name: 'dashboard', path: '/console', heading: 'Tenant health' },
-      { name: 'applications', path: '/console/applications', heading: 'Applications' },
-      {
-        name: 'sign-in-experience',
-        path: '/console/sign-in-experience/sign-up-and-sign-in',
-        heading: 'Sign-up and sign-in',
-      },
-      { name: 'security', path: '/console/security/password-policy', heading: 'Security' },
-    ]) {
+    for (const route of consoleRoutes.slice(0, 4)) {
       await page.goto(route.path)
       await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
       await expectNoDocumentHorizontalOverflow(page)
