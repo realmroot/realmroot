@@ -372,6 +372,45 @@ const journeyAssertions: Record<
       }
     },
   },
+  'admin-route-backed-navigation': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/admin')
+      const adminNav = page.getByRole('navigation', { name: 'Admin' })
+      await expect(adminNav.getByText('Onboarding')).toHaveCount(0)
+
+      for (const item of [
+        { label: 'Dashboard', href: '/admin', heading: 'Tenant health' },
+        { label: 'Applications', href: '/admin/applications', heading: 'Applications' },
+        { label: 'Users', href: '/admin/users', heading: 'Users' },
+        { label: 'Connectors', href: '/admin/connectors', heading: 'Connectors' },
+        { label: 'Sign-in settings', href: '/admin/sign-in', heading: 'Sign-in settings' },
+        { label: 'Security', href: '/admin/security', heading: 'Security' },
+        { label: 'Organizations', href: '/admin/organizations', heading: 'Organizations' },
+        { label: 'Roles', href: '/admin/roles', heading: 'Roles' },
+        { label: 'API resources', href: '/admin/api-resources', heading: 'API resources' },
+        { label: 'Branding', href: '/admin/branding', heading: 'Branding' },
+        { label: 'Deployment', href: '/admin/deployment', heading: 'Deployment' },
+      ]) {
+        const link = adminNav.getByRole('link', { name: item.label })
+        await expect(link).toHaveAttribute('href', item.href)
+        await link.click()
+        await expect(page).toHaveURL(new RegExp(`${item.href.replace('/', '\\/')}$`))
+        await expect(page.getByRole('heading', { name: item.heading })).toBeVisible()
+      }
+    },
+  },
+  'admin-application-inventory': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/admin/applications')
+      await expect(page.getByRole('heading', { name: 'Applications' })).toBeVisible()
+      await expect(page.getByText('Customer portal')).toBeVisible()
+      await expect(page.getByText('client-1')).toBeVisible()
+      await expect(page.getByText('authorization_code')).toBeVisible()
+      await expect(page.getByLabel('Actions for Customer portal')).toBeVisible()
+    },
+  },
   'admin-create-user': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
@@ -386,6 +425,17 @@ const journeyAssertions: Record<
         path: '/api/management/users',
         body: { email: 'new@example.com', displayName: 'New User' },
       })
+    },
+  },
+  'admin-user-inventory': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/admin/users')
+      await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible()
+      await page.getByLabel('Search users').fill('jane')
+      await expect(page.getByText('Jane Stone')).toBeVisible()
+      await expect(page.getByRole('cell', { name: 'admin' })).toBeVisible()
+      await expect(page.getByLabel('Actions for jane@example.com')).toBeVisible()
     },
   },
   'admin-create-application': {
@@ -408,6 +458,57 @@ const journeyAssertions: Record<
           redirectUris: ['http://localhost:4173/oidc/callback'],
         },
       })
+    },
+  },
+  'admin-connector-inventory': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/admin/connectors')
+      await expect(page.getByRole('heading', { name: 'Connectors' })).toBeVisible()
+      await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
+      await expect(page.getByRole('cell', { name: 'github', exact: true })).toBeVisible()
+      await expect(page.getByText('read:user, user:email')).toBeVisible()
+      await expect(page.getByLabel('Toggle GitHub')).toBeVisible()
+    },
+  },
+  'admin-sign-in-settings': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/admin/sign-in')
+      await expect(page.getByRole('heading', { name: 'Sign-in settings' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Authentication methods' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Defaults and links' })).toBeVisible()
+      await expect(page.getByText('password enabled')).toBeVisible()
+      await expect(page.getByText('social login enabled')).toBeVisible()
+      await expect(page.getByText('magic link enabled')).toBeVisible()
+      await expect(page.getByText('email otp enabled')).toBeVisible()
+      await expect(page.getByText('Default application')).toBeVisible()
+      await expect(page.getByText('Default redirect URI')).toBeVisible()
+      await expect(page.getByText('Terms')).toBeVisible()
+      await expect(page.getByText('Privacy')).toBeVisible()
+      await expect(page.getByText('Support email')).toBeVisible()
+    },
+  },
+  'admin-security-policy': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/admin/security')
+      await expect(page.getByRole('heading', { name: 'Security' })).toBeVisible()
+      await expect(page.getByText('Multi-factor authentication')).toBeVisible()
+      await expect(page.getByText('Mode')).toBeVisible()
+      await expect(page.getByText('optional')).toBeVisible()
+      await page.getByRole('tab', { name: 'Passkeys' }).click()
+      await expect(page.getByText('RP ID')).toBeVisible()
+      await expect(page.getByText('localhost')).toBeVisible()
+      await expect(page.getByText('RP name')).toBeVisible()
+      await expect(page.getByText('Acme ID')).toBeVisible()
+      await expect(page.getByText('Origins')).toBeVisible()
+      await page.getByRole('tab', { name: 'Sessions' }).click()
+      await expect(page.getByRole('heading', { name: 'Session policy' })).toBeVisible()
+      await expect(page.getByText('Expires in')).toBeVisible()
+      await expect(page.getByText('3600s')).toBeVisible()
+      await expect(page.getByText('Fresh age')).toBeVisible()
+      await expect(page.getByText('Cookie cache')).toBeVisible()
     },
   },
   'admin-create-connector': {
@@ -464,6 +565,53 @@ const journeyAssertions: Record<
       await page.getByLabel('Name').fill('Orders API')
       await page.getByLabel('Audience').fill('https://api.example.com/orders')
       await page.getByRole('button', { name: 'Save' }).click()
+    },
+  },
+  'admin-authorization-inventory': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/admin/organizations')
+      await expect(page.getByRole('heading', { name: 'Organizations' })).toBeVisible()
+      await expect(page.getByText('Acme Inc.')).toBeVisible()
+      await page.goto('/admin/roles')
+      await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible()
+      await expect(page.getByRole('row').filter({ hasText: 'Support' }).filter({ hasText: 'support' })).toBeVisible()
+      await page.goto('/admin/api-resources')
+      await expect(page.getByRole('heading', { name: 'API resources' })).toBeVisible()
+      await expect(page.getByText('Orders API')).toBeVisible()
+      await expect(page.getByText('https://api.example.com/orders')).toBeVisible()
+    },
+  },
+  'admin-branding-settings': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/admin/branding')
+      const main = page.getByRole('main')
+      await expect(page.getByRole('heading', { name: 'Branding' })).toBeVisible()
+      await expect(main.getByText('Brand preview')).toBeVisible()
+      await expect(main.getByText('Product name')).toBeVisible()
+      await expect(main.getByText('FlareAuth')).toBeVisible()
+      await expect(main.getByText('Primary color')).toBeVisible()
+      await expect(main.getByText('var(--brand-primary)')).toBeVisible()
+      await expect(main.getByText('Custom CSS')).toBeVisible()
+      await expect(main.getByText('Configured through configz service')).toBeVisible()
+    },
+  },
+  'admin-deployment-settings': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      await page.goto('/admin/deployment')
+      const main = page.getByRole('main')
+      await expect(page.getByRole('heading', { name: 'Deployment' })).toBeVisible()
+      await expect(main.getByText('Runtime')).toBeVisible()
+      await expect(main.getByText('Platform')).toBeVisible()
+      await expect(main.getByText('Cloudflare Workers')).toBeVisible()
+      await expect(main.getByText('Database')).toBeVisible()
+      await expect(main.getByText('D1')).toBeVisible()
+      await expect(main.getByText('Auth issuer')).toBeVisible()
+      await expect(main.getByText('/api/auth')).toBeVisible()
+      await expect(main.getByText('Management API')).toBeVisible()
+      await expect(main.getByText('/api/management')).toBeVisible()
     },
   },
 }

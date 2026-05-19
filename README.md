@@ -96,3 +96,4 @@ Frontend runtime state is read from `/api/configz`. Hosted auth actions use Bett
 - [Cloudflare deployment](docs/deploy/cloudflare.md)
 - [Fresh deployment setup](docs/deploy/setup.md)
 - [Review environment acceptance](docs/deploy/acceptance.md)
+- [Logto parity product acceptance map](docs/product/logto-parity.md)
