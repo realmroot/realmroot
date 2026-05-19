@@ -1,12 +1,12 @@
-# Logto Parity Product Spec
+# Product Acceptance Spec
 
 This document is the executable product map for FlareAuth 1.0. It defines the
 route inventory, domain model, settings surface, product acceptance matrix, and
-review evidence needed to ship a Logto-like Cloudflare-native identity provider.
+review evidence needed to ship a complete Cloudflare-native identity provider.
 
 ## Reference Baseline
 
-FlareAuth follows the Logto product model instead of a demo-page model:
+FlareAuth follows a full identity-provider product model instead of a demo-page model:
 
 - Hosted auth is a centralized OIDC interaction. Client apps redirect to the
   identity provider, users complete the hosted sign-in experience, and the
@@ -18,28 +18,6 @@ FlareAuth follows the Logto product model instead of a demo-page model:
   resources, and Deployment configuration.
 - Onboarding is a system-readiness gate. It is not a normal Console resource and
   must not appear as a persistent sidebar item.
-
-Official Logto references used for parity:
-
-- Logto introduction and product surfaces: https://docs.logto.io/introduction
-- Sign-up and sign-in hosted flow: https://docs.logto.io/end-user-flows/sign-up-and-sign-in
-- Sign-in experience model: https://docs.logto.io/concepts/sign-in-experience
-- Authentication parameters: https://docs.logto.io/end-user-flows/authentication-parameters
-- Account Center UI: https://docs.logto.io/end-user-flows/account-settings/by-account-center-ui
-- Account API: https://docs.logto.io/end-user-flows/account-settings/by-account-api
-- Application data structure: https://docs.logto.io/integrate-logto/application-data-structure
-- Connectors and OIDC social connector: https://docs.logto.io/connectors/connector-data-structure and
-  https://docs.logto.io/integrations/oidc
-- Branding and customization: https://docs.logto.io/customization and
-  https://docs.logto.io/customization/match-your-brand
-- Security and MFA/passkeys: https://docs.logto.io/security,
-  https://docs.logto.io/end-user-flows/mfa, and
-  https://docs.logto.io/end-user-flows/sign-up-and-sign-in/passkey-sign-in
-- User management: https://docs.logto.io/user-management/manage-users
-- Organizations: https://docs.logto.io/organizations and
-  https://docs.logto.io/organizations/organization-management
-- Authorization and RBAC/API resources: https://docs.logto.io/authorization and
-  https://docs.logto.io/authorization/role-based-access-control
 
 ## Scope
 
@@ -63,7 +41,7 @@ Official Logto references used for parity:
 
 ### Explicitly Deferred
 
-Only these Logto-like capabilities are excluded from FlareAuth 1.0:
+Only these enterprise capabilities are excluded from FlareAuth 1.0:
 
 - Enterprise SSO connectors, including SAML and enterprise OIDC SSO.
 - Team self-service administration distinct from tenant Organizations.

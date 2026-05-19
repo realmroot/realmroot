@@ -3,9 +3,9 @@
 Use this path for preview and production review.
 
 The full product acceptance contract lives in
-[`docs/product/logto-parity.md`](../product/logto-parity.md). Reviewers should
+[`docs/product/product-acceptance.md`](../product/product-acceptance.md). Reviewers should
 use that route map, page acceptance matrix, E2E journey map, and evidence
-checklist for Logto parity validation.
+checklist for product validation.
 
 ## Preview
 
@@ -25,7 +25,7 @@ npm run db:migrate:staging
 9. Exercise the public sign-in flow from `/sign-in`.
 10. Visit the Account Center, Applications, Connectors, Sign-in settings,
     Branding, Security, Organizations, Roles, API resources, and Deployment
-    pages listed in the Logto parity map.
+    pages listed in the product acceptance map.
 11. Capture screenshots or Playwright traces for the required surfaces and
     include `/api/health`, `/api/configz`, `/api/management/readiness`, OIDC
     discovery, E2E coverage, and code coverage evidence in the PR.
@@ -37,7 +37,7 @@ npm run db:migrate:staging
 2. Run `npm run deploy:prod`.
 3. Run first-admin onboarding only for a fresh production database.
 4. Repeat the preview journey on the production custom domain.
-5. Confirm the production validation still satisfies the Logto parity
+5. Confirm the production validation still satisfies the product acceptance
    production-ready definition: no demo-only pages, no dead dummy domains, no
    local tab-only product navigation, protected surfaces gated correctly, 100%
    declared E2E journey coverage, and at least 90% automated code coverage.

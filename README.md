@@ -108,4 +108,4 @@ product apps can register FlareAuth as a generic OAuth/OIDC provider. See
 - [Cloudflare deployment](docs/deploy/cloudflare.md)
 - [Fresh deployment setup](docs/deploy/setup.md)
 - [Review environment acceptance](docs/deploy/acceptance.md)
-- [Logto parity product acceptance map](docs/product/logto-parity.md)
+- [Product acceptance map](docs/product/product-acceptance.md)
