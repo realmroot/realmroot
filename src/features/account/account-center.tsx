@@ -23,6 +23,7 @@ import {
   startTotpEnrollment,
   unlinkAccount,
   updateAccountProfile,
+  uploadAccountAvatar,
   verifyPasskeyRegistration,
   verifyTotp,
 } from '@/lib/api/account'
@@ -211,9 +212,18 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
   const [displayName, setDisplayName] = useState(profile.displayName)
   const [username, setUsername] = useState(profile.username ?? '')
   const [avatarAssetId, setAvatarAssetId] = useState(profile.avatarAssetId ?? '')
+  const [avatarPreview, setAvatarPreview] = useState(profile.image ?? '')
   const [email, setEmail] = useState(profile.email)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
+
+  useEffect(() => {
+    setDisplayName(profile.displayName)
+    setUsername(profile.username ?? '')
+    setAvatarAssetId(profile.avatarAssetId ?? '')
+    setAvatarPreview(profile.image ?? '')
+    setEmail(profile.email)
+  }, [profile])
 
   function saveProfile(event: FormEvent) {
     event.preventDefault()
@@ -240,19 +250,36 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
     )
   }
 
+  function uploadAvatar(file: File | undefined) {
+    if (!file) return
+    return mutate('Avatar uploaded.', async () => {
+      const response = await uploadAccountAvatar(file)
+      setAvatarAssetId(response.asset.id)
+      setAvatarPreview(response.asset.publicUrl)
+      return response
+    })
+  }
+
   return (
     <div className="accountGrid">
       <section className="settingsPanel">
         <h2>Profile</h2>
+        <div className="assetUploadRow">
+          {avatarPreview ? <img alt="" className="assetPreview" src={avatarPreview} /> : <UserRound size={42} />}
+          <Field help="PNG, JPEG, or WebP up to 2 MB." label="Avatar image">
+            <TextInput
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(event) => uploadAvatar(event.currentTarget.files?.[0])}
+              type="file"
+            />
+          </Field>
+        </div>
         <form className="formStack" onSubmit={saveProfile}>
           <Field label="Display name">
             <TextInput onChange={(event) => setDisplayName(event.target.value)} required value={displayName} />
           </Field>
           <Field label="Username">
             <TextInput onChange={(event) => setUsername(event.target.value)} value={username} />
-          </Field>
-          <Field label="Avatar asset ID">
-            <TextInput onChange={(event) => setAvatarAssetId(event.target.value)} value={avatarAssetId} />
           </Field>
           <Button type="submit">Save profile</Button>
         </form>

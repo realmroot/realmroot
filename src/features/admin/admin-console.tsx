@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  ImageUp,
   ListChecks,
   MoreHorizontal,
   Plus,
@@ -84,6 +85,10 @@ import {
   updateApplication,
   updateConnector,
   updateUser,
+  uploadApplicationLogo,
+  uploadBrandingFavicon,
+  uploadBrandingLogo,
+  uploadOrganizationLogo,
 } from '@/lib/api/management'
 import { cn } from '@/lib/utils'
 
@@ -302,6 +307,10 @@ export function ApplicationsPage() {
       ])
     },
   })
+  const logoMutation = useAdminMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => uploadApplicationLogo(id, file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+  })
 
   return (
     <ResourcePage
@@ -343,6 +352,7 @@ export function ApplicationsPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Client</TableHead>
+              <TableHead>Logo</TableHead>
               <TableHead>Grants</TableHead>
               <TableHead>Scopes</TableHead>
               <TableHead>Status</TableHead>
@@ -361,6 +371,14 @@ export function ApplicationsPage() {
                 <TableCell>
                   <div>{application.clientId}</div>
                   <div className="text-xs text-muted-foreground">{application.clientType}</div>
+                </TableCell>
+                <TableCell>
+                  <AssetUploadControl
+                    accept="image/png,image/jpeg,image/webp"
+                    label={`Upload logo for ${application.name}`}
+                    onFile={(file) => logoMutation.mutate({ id: application.id, file })}
+                    previewUrl={application.iconUrl}
+                  />
                 </TableCell>
                 <TableCell>{application.allowedGrantTypes.join(', ')}</TableCell>
                 <TableCell>{application.allowedScopes.join(' ')}</TableCell>
@@ -392,6 +410,7 @@ export function ApplicationsPage() {
           </TableBody>
         </Table>
       ) : null}
+      {logoMutation.errorMessage ? <p className="p-4 text-sm text-destructive">{logoMutation.errorMessage}</p> : null}
     </ResourcePage>
   )
 }
@@ -441,6 +460,14 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
       ])
       await navigate({ to: '/admin/applications' })
     },
+  })
+  const logoMutation = useAdminMutation({
+    mutationFn: (file: File) => uploadApplicationLogo(applicationId, file),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.applications, applicationId] }),
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+      ]),
   })
 
   const application = query.data
@@ -512,6 +539,25 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
                 </Button>
               </div>
               <MutationError error={updateMutation.error ?? deleteMutation.error} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Logo</CardTitle>
+              <CardDescription>Image shown in application and consent surfaces.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <AssetUploadControl
+                accept="image/png,image/jpeg,image/webp"
+                label={`Upload logo for ${application.name}`}
+                onFile={(file) => logoMutation.mutate(file)}
+                previewUrl={application.iconUrl}
+              />
+              <MutationError error={logoMutation.error} />
+              {logoMutation.errorMessage ? (
+                <p className="text-sm text-destructive">{logoMutation.errorMessage}</p>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -1120,6 +1166,10 @@ export function OrganizationsPage() {
       return queryClient.invalidateQueries({ queryKey: adminQueryKeys.organizations })
     },
   })
+  const logoMutation = useAdminMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => uploadOrganizationLogo(id, file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.organizations }),
+  })
 
   return (
     <ResourcePage
@@ -1158,6 +1208,7 @@ export function OrganizationsPage() {
           <TableRow>
             <TableHead>Organization</TableHead>
             <TableHead>Display name</TableHead>
+            <TableHead>Logo</TableHead>
             <TableHead>Status</TableHead>
           </TableRow>
         </TableHeader>
@@ -1170,12 +1221,21 @@ export function OrganizationsPage() {
               </TableCell>
               <TableCell>{organization.displayName ?? 'Not set'}</TableCell>
               <TableCell>
+                <AssetUploadControl
+                  accept="image/png,image/jpeg,image/webp"
+                  label={`Upload logo for ${organization.name}`}
+                  onFile={(file) => logoMutation.mutate({ id: organization.id, file })}
+                  previewUrl={organization.logo}
+                />
+              </TableCell>
+              <TableCell>
                 <StatusBadge active={!organization.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      {logoMutation.errorMessage ? <p className="p-4 text-sm text-destructive">{logoMutation.errorMessage}</p> : null}
     </ResourcePage>
   )
 }
@@ -1324,18 +1384,51 @@ export function ApiResourcesPage() {
 }
 
 export function BrandingPage() {
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [faviconPreview, setFaviconPreview] = useState<string | null>(null)
+  const logoMutation = useAdminMutation({
+    mutationFn: uploadBrandingLogo,
+    onSuccess: (response) => {
+      setLogoPreview(response.asset.publicUrl)
+      return Promise.resolve()
+    },
+  })
+  const faviconMutation = useAdminMutation({
+    mutationFn: uploadBrandingFavicon,
+    onSuccess: (response) => {
+      setFaviconPreview(response.asset.publicUrl)
+      return Promise.resolve()
+    },
+  })
+
   return (
     <ResourcePage title="Branding" description="Hosted sign-in branding preview and deployment-owned theme settings.">
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Brand preview</CardTitle>
-            <CardDescription>Visual controls are deployment settings in this version.</CardDescription>
+            <CardDescription>Upload deployment-owned logos and favicons for hosted pages.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <SettingRow label="Product name" value="FlareAuth" />
             <SettingRow label="Primary color" value="var(--brand-primary)" />
             <SettingRow label="Custom CSS" value="Configured through configz service" />
+            <AssetUploadControl
+              accept="image/png,image/jpeg,image/webp"
+              label="Upload branding logo"
+              onFile={(file) => logoMutation.mutate(file)}
+              previewUrl={logoPreview}
+            />
+            <AssetUploadControl
+              accept="image/png,image/webp,image/x-icon,image/vnd.microsoft.icon"
+              label="Upload favicon"
+              onFile={(file) => faviconMutation.mutate(file)}
+              previewUrl={faviconPreview}
+            />
+            {logoMutation.errorMessage ? <p className="text-sm text-destructive">{logoMutation.errorMessage}</p> : null}
+            {faviconMutation.errorMessage ? (
+              <p className="text-sm text-destructive">{faviconMutation.errorMessage}</p>
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -1364,6 +1457,42 @@ export function DeploymentSettingsPage() {
         </Card>
       </div>
     </ResourcePage>
+  )
+}
+
+function AssetUploadControl({
+  accept,
+  label,
+  onFile,
+  previewUrl,
+}: {
+  accept: string
+  label: string
+  onFile: (file: File) => void
+  previewUrl: string | null
+}) {
+  return (
+    <div className="assetUploadRow">
+      {previewUrl ? (
+        <img alt="" className="assetPreview" src={previewUrl} />
+      ) : (
+        <div className="assetPreview text-muted-foreground">
+          <ImageUp size={18} />
+        </div>
+      )}
+      <Field label={label}>
+        <TextInput
+          accept={accept}
+          aria-label={label}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0]
+            if (file) onFile(file)
+            event.currentTarget.value = ''
+          }}
+          type="file"
+        />
+      </Field>
+    </div>
   )
 }
 

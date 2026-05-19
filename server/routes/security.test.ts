@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SecurityPolicy } from '../../shared/api/security'
 import { createApp } from '../app'
+import { notFound } from '../lib/errors'
+import type { AssetService } from '../modules/assets/service'
 import type { SecurityRepository } from '../modules/security/repository'
 import type { UserRepository } from '../modules/users/repository'
 
@@ -246,9 +248,14 @@ describe('security routes', () => {
       userRepository: createUserRepositoryMock(),
       securityRepository: security,
       securityPolicy: policy,
+      assetServiceFactory: () =>
+        ({
+          getObject: vi.fn().mockRejectedValue(notFound('Asset was not found.')),
+        }) as unknown as AssetService,
     })
 
     const protectedResponse = await app.request('/api/account/profile', { headers: userHeaders() })
+    const assetResponse = await app.request('/api/assets/asset-1', { headers: userHeaders() })
     const enrollmentResponse = await app.request('/api/account/security/mfa/totp-enrollment', {
       method: 'POST',
       headers: userHeaders(),
@@ -262,6 +269,7 @@ describe('security routes', () => {
         message: 'MFA enrollment is required for this deployment.',
       },
     })
+    expect(assetResponse.status).toBe(404)
     expect(enrollmentResponse.status).toBe(201)
   })
 

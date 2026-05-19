@@ -59,7 +59,7 @@ Collection responses include:
 
 - Users: `/users`, `/users/{id}`, `/users/{id}/linked-accounts`, `/users/{id}/applications`, `/users/{id}/sessions`.
 - User account actions: `POST /users/password-reset-requests`, `PUT /users/{id}/ban`, `DELETE /users/{id}/ban`.
-- Applications: `/applications`, `/applications/{id}`, `/applications/{id}/redirect-uris`, `/applications/{id}/client-secrets`.
+- Applications: `/applications`, `/applications/{id}`, `/applications/{id}/redirect-uris`, `/applications/{id}/client-secrets`, `POST /applications/{id}/logo`.
 - Connectors: `GET /connectors`, `POST /connectors`, `GET /connectors/templates`, `GET /connectors/{id}`, `GET /connectors/{id}/readiness`, `PATCH /connectors/{id}`, `DELETE /connectors/{id}`.
 
 Application resources are OIDC clients. `POST /applications` returns the created application; confidential clients include `clientSecret` in that creation response only. `GET /applications/{id}` returns client metadata, redirect URIs, allowed grant types, allowed scopes, token endpoint auth method, and discovery endpoint URLs. `PATCH /applications/{id}` updates metadata and lifecycle fields including `disabled`; lifecycle transitions do not use action endpoints. `DELETE /applications/{id}` deletes the application and its provider client.
@@ -81,13 +81,25 @@ Connector `providerType` is restricted to `social` and `generic_oauth`, matching
 `GET /connectors/{id}/readiness` returns a configuration-readiness report for the saved connector. It checks stored configuration and runtime secret binding availability without returning raw secret values or contacting third-party providers.
 - Sign-in settings: `/sign-in-settings`.
 - Readiness: `/readiness`.
-- Organizations: `/organizations`, `/organizations/{id}`, `/organizations/{id}/members`, `/organizations/{id}/invitations`.
+- Organizations: `/organizations`, `/organizations/{id}`, `POST /organizations/{id}/logo`, `/organizations/{id}/members`, `/organizations/{id}/invitations`.
+- Branding assets: `POST /branding/logo`, `POST /branding/favicon`.
 - Roles: `/roles`, `/roles/{id}`, `/roles/{id}/permissions`.
 - Role assignments: `/user-role-assignments`, `/application-role-assignments`, `/member-role-assignments`.
 - API resources and scopes: `/api-resources`, `/api-resources/{id}`, `/api-resources/{id}/scopes`, `/api-resources/{id}/permissions`.
 - Security administration: `/security/policy`, `/security/users/{id}`, `/security/users/{id}/passkeys`, `/security/users/{id}/passkeys/{passkeyId}`, `/security/users/{id}/sessions`, `/security/users/{id}/sessions/{sessionId}`.
 
 Security administrators can delete a user passkey with `DELETE /security/users/{id}/passkeys/{passkeyId}`, revoke all user sessions with `DELETE /security/users/{id}/sessions`, and revoke one user session with `DELETE /security/users/{id}/sessions/{sessionId}`.
+
+## Asset Uploads
+
+Asset uploads use `multipart/form-data` with a single `file` field. Application, organization, and branding uploads require an administrator session. Successful uploads return the asset metadata and assign the uploaded asset to the target resource.
+
+Supported files:
+
+- Application, organization, and branding logos: PNG, JPEG, or WebP up to 2 MB.
+- Favicons: PNG, WebP, ICO, or Microsoft icon up to 512 KB.
+
+Uploaded assets are returned with a same-origin public URL at `/api/assets/{assetId}`. The Worker serves that URL from the private R2 bucket with immutable cache headers.
 
 ## Readiness
 

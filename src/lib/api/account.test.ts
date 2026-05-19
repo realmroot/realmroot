@@ -11,6 +11,7 @@ describe('account API client', () => {
 
     await account.getAccountProfile()
     await account.updateAccountProfile({ displayName: 'Jane Doe' })
+    await account.uploadAccountAvatar(new File(['avatar'], 'avatar.png'))
     await account.requestAccountEmailChange({ email: 'new@example.com' })
     await account.changeAccountPassword({ currentPassword: 'old-password', newPassword: 'new-password' })
     await account.listLinkedAccounts()
@@ -31,6 +32,7 @@ describe('account API client', () => {
     expect(calls).toEqual([
       ['profile.get'],
       ['profile.patch', { json: { displayName: 'Jane Doe' } }],
+      ['upload', '/api/account/avatar', expect.any(File)],
       ['emailChange.post', { json: { email: 'new@example.com' } }],
       ['passwordChange.post', { json: { currentPassword: 'old-password', newPassword: 'new-password' } }],
       ['linkedAccounts.get'],
@@ -52,7 +54,7 @@ describe('account API client', () => {
 })
 
 async function loadAccountApi() {
-  const calls: Array<[string, unknown?]> = []
+  const calls: Array<[string, ...unknown[]]> = []
   const endpoint = (key: string) =>
     vi.fn((input?: unknown) => {
       calls.push(input === undefined ? [key] : [key, input])
@@ -97,6 +99,10 @@ async function loadAccountApi() {
       },
     },
     readRpcResponse: (response: unknown) => response,
+    uploadApiFile: (path: string, file: File) => {
+      calls.push(['upload', path, file])
+      return Promise.resolve({ asset: { id: 'asset-1' } })
+    },
   }))
 
   return {

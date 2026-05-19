@@ -323,6 +323,22 @@ h1 {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 18%, transparent);
 }
 
+.assetUploadRow {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.assetPreview {
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  object-fit: cover;
+}
+
 .uiButton {
   display: inline-flex;
   align-items: center;
@@ -419,6 +435,41 @@ h1 {
 .status-warning {
   background: #fffaeb;
   color: #b54708;
+}
+
+.identitySummary,
+.consentAccount {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.identitySummary span,
+.consentAccount span,
+.consentAccount small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.identitySummary strong,
+.consentAccount strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.identitySummary button {
+  min-height: 36px;
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--brand-primary);
+  font-weight: 700;
 }
 
 .socialGrid,
@@ -638,6 +689,22 @@ h1 {
   align-items: flex-start;
 }
 
+.consentAccount {
+  margin-bottom: 0;
+}
+
+.consentAccount img {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.consentAccount div {
+  display: grid;
+  min-width: 0;
+}
+
 .applicationSummary img {
   width: 44px;
   height: 44px;
@@ -739,6 +806,7 @@ h1 {
   .accountHeader,
   .panelHeader,
   .buttonRow,
+  .identitySummary,
   .itemRow {
     align-items: stretch;
     flex-direction: column;
@@ -755,6 +823,10 @@ h1 {
   .intro,
   .authBrandPanel p:not(.eyebrow) {
     font-size: 18px;
+  }
+
+  .identitySummary button {
+    margin-left: 0;
   }
 
   .segmented,

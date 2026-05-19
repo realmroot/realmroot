@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiRequestError } from './index'
-import { createOnboardingAdmin, getOnboardingStatus, readRpcResponse } from './index'
+import { createOnboardingAdmin, getOnboardingStatus, readRpcResponse, uploadApiFile } from './index'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -50,6 +50,26 @@ describe('onboarding API client', () => {
     ).rejects.toMatchObject({
       status: 409,
       message: 'Already initialized',
+    } satisfies Partial<ApiRequestError>)
+  })
+
+  it('uploads multipart API files and surfaces upload errors', async () => {
+    const responses = [
+      jsonResponse({ asset: { id: 'asset-1', publicUrl: '/api/assets/asset-1' } }, 201),
+      jsonResponse({ error: { message: 'Unsupported file type.' } }, 400),
+    ]
+    const fetch = vi.spyOn(window, 'fetch').mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await expect(uploadApiFile('/api/account/avatar', new File(['avatar'], 'avatar.png'))).resolves.toEqual({
+      asset: { id: 'asset-1', publicUrl: '/api/assets/asset-1' },
+    })
+    expect(fetch).toHaveBeenCalledWith('/api/account/avatar', {
+      method: 'POST',
+      body: expect.any(FormData),
+    })
+    await expect(uploadApiFile('/api/account/avatar', new File(['svg'], 'avatar.svg'))).rejects.toMatchObject({
+      status: 400,
+      message: 'Unsupported file type.',
     } satisfies Partial<ApiRequestError>)
   })
 })

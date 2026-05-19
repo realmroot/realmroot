@@ -39,5 +39,10 @@ export function requireDeploymentMfa(policy: SecurityPolicy, security: SecurityR
 }
 
 function isMfaExemptPath(path: string): boolean {
-  return path.startsWith('/api/auth/') || path === '/api/health' || mfaEnrollmentPaths.has(path)
+  return (
+    path.startsWith('/api/auth/') ||
+    path.startsWith('/api/assets/') ||
+    path === '/api/health' ||
+    mfaEnrollmentPaths.has(path)
+  )
 }

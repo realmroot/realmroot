@@ -1,8 +1,8 @@
 import type { ConsentRequestResponse } from '@shared/api/applications'
-import { ShieldCheck } from 'lucide-react'
+import { ArrowRight, ShieldCheck, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
-import { Button } from '@/components/ui/button'
+import { Button, LinkButton } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
 import { createConsent, getConsentRequest } from '@/lib/api'
 import { useConfigz } from './hooks'
@@ -14,7 +14,6 @@ export function ConsentPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const search = window.location.search
-  const authorizeUrl = `/api/auth/oauth2/authorize${search}`
 
   useEffect(() => {
     let active = true
@@ -45,7 +44,7 @@ export function ConsentPage() {
         clientId: consent.application.clientId,
         scopes: consent.requestedScopes,
       })
-      window.location.assign(authorizeUrl)
+      window.location.assign(consent.redirects.approveUrl)
     } catch (approveError) {
       setError(approveError instanceof Error ? approveError.message : 'Unable to approve consent.')
       setSubmitting(false)
@@ -61,6 +60,11 @@ export function ConsentPage() {
     >
       {loading ? <Status>Loading consent request</Status> : null}
       {error ? <Status tone="error">{error}</Status> : null}
+      {!loading && !error && !consent ? (
+        <Status tone="warning">
+          This consent request is no longer available. Start sign-in again from the application.
+        </Status>
+      ) : null}
       {consent ? (
         <div className="consentStack">
           <div className="applicationSummary">
@@ -68,6 +72,16 @@ export function ConsentPage() {
             <div>
               <h2>{consent.application.name}</h2>
               <p>{consent.application.description ?? consent.application.homepageUrl ?? 'OAuth client application'}</p>
+            </div>
+          </div>
+          <div className="consentAccount">
+            {consent.user.image ? <img src={consent.user.image} alt="" /> : <UserRound size={20} />}
+            <div>
+              <span>Signed in as</span>
+              <strong>{consent.user.displayName ?? consent.user.email ?? 'Current account'}</strong>
+              {consent.user.email && consent.user.email !== consent.user.displayName ? (
+                <small>{consent.user.email}</small>
+              ) : null}
             </div>
           </div>
           <ul className="scopeList" aria-label="Requested scopes">
@@ -83,11 +97,12 @@ export function ConsentPage() {
           ) : null}
           <div className="buttonRow">
             <Button disabled={submitting} onClick={approve} type="button">
+              <ArrowRight size={18} />
               Approve access
             </Button>
-            <Button onClick={() => window.history.back()} type="button" variant="secondary">
-              Cancel
-            </Button>
+            <LinkButton href={consent.redirects.denyUrl} variant="secondary">
+              Deny
+            </LinkButton>
           </div>
         </div>
       ) : null}

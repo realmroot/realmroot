@@ -347,8 +347,18 @@ describe('ApplicationService', () => {
         redirectUri: 'https://spa.example.com/callback',
         scope: 'openid profile',
         state: 'state-1',
+        authorizationParams: {
+          client_id: created.clientId,
+          redirect_uri: 'https://spa.example.com/callback',
+          response_type: 'code',
+          scope: 'openid profile',
+          state: 'state-1',
+          code_challenge: 'challenge-1',
+          code_challenge_method: 'S256',
+          nonce: 'nonce-1',
+        },
       },
-      'user-1',
+      { id: 'user-1', email: 'jane@example.com', name: 'Jane Stone', image: 'https://auth.example.com/avatar.png' },
     )
 
     expect(consent).toMatchObject({
@@ -361,6 +371,16 @@ describe('ApplicationService', () => {
         id: created.id,
         clientId: created.clientId,
       },
+      user: {
+        email: 'jane@example.com',
+        displayName: 'Jane Stone',
+        image: 'https://auth.example.com/avatar.png',
+      },
+      redirects: {
+        approveUrl: `/api/auth/oauth2/authorize?client_id=${created.clientId}&redirect_uri=https%3A%2F%2Fspa.example.com%2Fcallback&response_type=code&scope=openid+profile&state=state-1&code_challenge=challenge-1&code_challenge_method=S256&nonce=nonce-1`,
+        denyUrl:
+          'https://spa.example.com/callback?error=access_denied&error_description=The+user+denied+the+authorization+request.&state=state-1',
+      },
     })
     expect(consent.application).not.toHaveProperty('secretMetadata')
     await expect(
@@ -370,7 +390,7 @@ describe('ApplicationService', () => {
           redirectUri: 'https://evil.example.com/callback',
           scope: 'openid',
         },
-        'user-1',
+        { id: 'user-1' },
       ),
     ).rejects.toMatchObject({ status: 400, message: 'redirect_uri is not registered for this client.' })
     await expect(
@@ -396,7 +416,7 @@ describe('ApplicationService', () => {
           clientId: created.clientId,
           redirectUri: 'https://spa.example.com/callback',
         },
-        'user-1',
+        { id: 'user-1' },
       ),
     ).resolves.toMatchObject({
       requestedScopes: ['openid'],
@@ -412,7 +432,7 @@ describe('ApplicationService', () => {
           clientId: created.clientId,
           redirectUri: 'https://spa.example.com/callback',
         },
-        'user-1',
+        { id: 'user-1' },
       ),
     ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
     await expect(
@@ -424,7 +444,7 @@ describe('ApplicationService', () => {
           clientId: 'missing-client',
           redirectUri: 'https://spa.example.com/callback',
         },
-        'user-1',
+        { id: 'user-1' },
       ),
     ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
   })
