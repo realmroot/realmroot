@@ -126,6 +126,57 @@ describe('admin console', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/onboarding'))
   })
 
+  it('redirects representative fresh deployment product routes to first-admin onboarding', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz')
+        return Promise.resolve(jsonResponse({ ...configz, onboarding: { required: true, href: '/onboarding' } }))
+      if (url === '/api/onboarding/status') return Promise.resolve(jsonResponse({ required: true }))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    for (const path of [
+      '/',
+      '/sign-in',
+      '/sign-up',
+      '/account',
+      '/account/security',
+      '/admin',
+      '/admin/applications',
+    ]) {
+      window.history.pushState(null, '', path)
+      render(<AppRouter />)
+
+      expect(await screen.findByRole('heading', { name: 'Create the first admin.' })).toBeTruthy()
+      await waitFor(() => expect(window.location.pathname).toBe('/onboarding'))
+
+      cleanup()
+      queryClient.clear()
+    }
+  })
+
+  it('redirects stale first-admin onboarding visits to admin setup', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({
+            admin: { setupRequired: true, setupHref: '/admin/onboarding', missing: ['oidc_application'] },
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/onboarding')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin onboarding' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/admin/onboarding'))
+  })
+
   it('redirects account root to the profile route', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(accountRouteFetch)
     window.history.pushState(null, '', '/account')
@@ -134,6 +185,27 @@ describe('admin console', () => {
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/account/profile'))
+  })
+
+  it('renders every account product section from a direct route', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(accountRouteFetch)
+
+    for (const [path, heading] of [
+      ['/account/profile', 'Jane Stone'],
+      ['/account/security', 'MFA'],
+      ['/account/linked-accounts', 'Linked social accounts'],
+      ['/account/sessions', 'Sessions and devices'],
+      ['/account/authorized-apps', 'Consented applications'],
+    ] as const) {
+      window.history.pushState(null, '', path)
+      render(<AppRouter />)
+
+      expect(await screen.findByRole('heading', { name: heading })).toBeTruthy()
+      expect(window.location.pathname).toBe(path)
+
+      cleanup()
+      queryClient.clear()
+    }
   })
 
   it('redirects protected admin routes to admin onboarding while setup is incomplete', async () => {
@@ -190,6 +262,22 @@ describe('admin console', () => {
 
     expect(await screen.findByRole('heading', { name: 'Tenant health' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/admin'))
+  })
+
+  it('surfaces non-auth admin readiness errors instead of converting them to sign-in redirects', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') return Promise.resolve(jsonResponse({ error: 'Readiness failed.' }, 500))
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/admin/applications')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByText('Readiness failed.')).toBeTruthy()
+    expect(window.location.pathname).toBe('/admin/applications')
   })
 
   it('renders application rows and posts validated create input', async () => {
