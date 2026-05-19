@@ -417,6 +417,41 @@ describe('hosted auth pages', () => {
     expect(password.type).toBe('password')
   })
 
+  it('sets autocomplete attributes on hosted password forms', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<SignInPage />)
+
+    expect((await screen.findByLabelText('Email or username')).getAttribute('autocomplete')).toBe('username')
+    expect(screen.getByLabelText('Password').getAttribute('autocomplete')).toBe('current-password')
+
+    cleanup()
+    render(<SignUpPage />)
+
+    expect((await screen.findByLabelText('Username')).getAttribute('autocomplete')).toBe('username')
+    expect(screen.getByLabelText('Password').getAttribute('autocomplete')).toBe('new-password')
+
+    cleanup()
+    window.history.pushState(null, '', '/forgot-password?token=reset-token')
+    render(<ForgotPasswordPage />)
+
+    expect((await screen.findByLabelText('New password')).getAttribute('autocomplete')).toBe('new-password')
+
+    cleanup()
+    window.history.pushState(null, '', '/forgot-password')
+    render(<ForgotPasswordPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'OTP code' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send reset code' }))
+
+    expect((await screen.findByLabelText('New password')).getAttribute('autocomplete')).toBe('new-password')
+  })
+
   it('submits username sign-in when the identifier is not an email address', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

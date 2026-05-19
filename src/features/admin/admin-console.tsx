@@ -1832,20 +1832,7 @@ export function PasswordlessConnectorsPage() {
       }}
     >
       <div className="grid gap-4">
-        <div className="inline-flex flex-wrap rounded-lg bg-muted p-1">
-          <a
-            className="inline-flex min-h-9 items-center justify-center rounded-md bg-background px-3 text-sm font-medium text-foreground shadow-sm"
-            href="/console/connectors/passwordless"
-          >
-            Passwordless
-          </a>
-          <a
-            className="inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground"
-            href="/console/connectors/social"
-          >
-            Social
-          </a>
-        </div>
+        <ConnectorSectionTabs active="passwordless" />
         <div className="grid gap-4 xl:grid-cols-2">
           <Card>
             <CardHeader>
@@ -1990,20 +1977,7 @@ export function ConnectorsPage() {
       onRetry={() => query.refetch()}
       toolbar={
         <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <div className="inline-flex flex-wrap rounded-lg bg-muted p-1">
-            <a
-              className="inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground"
-              href="/console/connectors/passwordless"
-            >
-              Passwordless
-            </a>
-            <a
-              className="inline-flex min-h-9 items-center justify-center rounded-md bg-background px-3 text-sm font-medium text-foreground shadow-sm"
-              href="/console/connectors/social"
-            >
-              Social
-            </a>
-          </div>
+          <ConnectorSectionTabs active="social" />
           <TextInput
             aria-label="Search social connectors"
             onChange={(event) => setSearch(event.target.value)}
@@ -2302,10 +2276,6 @@ export function SignInSettingsPage() {
                   inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
                 />
               ) : null}
-              <Button disabled={updateMutation.isPending} type="submit">
-                <Save data-icon="inline-start" />
-                Save sign-in settings
-              </Button>
             </CardContent>
           </Card>
           <Card>
@@ -2360,6 +2330,38 @@ export function SignInSettingsPage() {
               </Field>
             </CardContent>
           </Card>
+          <div className="xl:col-span-2">
+            <ConsoleActionBar>
+              <Button disabled={updateMutation.isPending} type="submit">
+                <Save data-icon="inline-start" />
+                Save sign-in settings
+              </Button>
+              <Button
+                onClick={() => {
+                  setForm({
+                    passwordEnabled: query.data.signIn.passwordEnabled,
+                    signupEnabled: query.data.signIn.signupEnabled,
+                    socialLoginEnabled: query.data.signIn.socialLoginEnabled,
+                    identifierFirst: query.data.signIn.identifierFirst,
+                    applicationId: query.data.defaults.applicationId ?? '',
+                    redirectUri: query.data.defaults.redirectUri ?? '',
+                    termsUri: query.data.links.termsUri ?? '',
+                    privacyUri: query.data.links.privacyUri ?? '',
+                    supportEmail: query.data.links.supportEmail ?? '',
+                    productName: query.data.copy.productName,
+                    headline: query.data.copy.headline,
+                    description: query.data.copy.description,
+                  })
+                  setValidationError(null)
+                }}
+                type="button"
+                variant="ghost"
+              >
+                <Undo2 data-icon="inline-start" />
+                Discard
+              </Button>
+            </ConsoleActionBar>
+          </div>
         </form>
       ) : null}
     </SignInExperiencePage>
@@ -3705,10 +3707,6 @@ export function BrandingPage() {
                     faviconMutation.errorMessage}
                 </div>
               ) : null}
-              <Button disabled={updateMutation.isPending} type="submit">
-                <Save data-icon="inline-start" />
-                Save branding
-              </Button>
             </CardContent>
           </Card>
           <Card>
@@ -3753,6 +3751,34 @@ export function BrandingPage() {
               </div>
             </CardContent>
           </Card>
+          <div className="xl:col-span-2">
+            <ConsoleActionBar>
+              <Button disabled={updateMutation.isPending} type="submit">
+                <Save data-icon="inline-start" />
+                Save branding
+              </Button>
+              <Button
+                onClick={() => {
+                  setForm({
+                    logoUrl: query.data.branding.logoUrl ?? '',
+                    faviconUrl: query.data.branding.faviconUrl ?? '',
+                    primaryColor: query.data.branding.primaryColor ?? '#b42318',
+                    backgroundColor: query.data.branding.backgroundColor ?? '#f7f3ee',
+                    customCss: query.data.branding.customCss ?? '',
+                    productName: query.data.copy.productName,
+                    headline: query.data.copy.headline,
+                    description: query.data.copy.description,
+                  })
+                  setValidationError(null)
+                }}
+                type="button"
+                variant="ghost"
+              >
+                <Undo2 data-icon="inline-start" />
+                Discard
+              </Button>
+            </ConsoleActionBar>
+          </div>
         </form>
       ) : null}
     </SignInExperiencePage>
@@ -3996,12 +4022,34 @@ export function ContentSettingsPage() {
                   inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
                 />
               ) : null}
+            </CardContent>
+          </Card>
+          <div className="xl:col-span-2">
+            <ConsoleActionBar>
               <Button disabled={updateMutation.isPending} type="submit">
                 <Save data-icon="inline-start" />
                 Save content
               </Button>
-            </CardContent>
-          </Card>
+              <Button
+                onClick={() => {
+                  setForm({
+                    productName: query.data.copy.productName,
+                    headline: query.data.copy.headline,
+                    description: query.data.copy.description,
+                    termsUri: query.data.links.termsUri ?? '',
+                    privacyUri: query.data.links.privacyUri ?? '',
+                    supportEmail: query.data.links.supportEmail ?? '',
+                  })
+                  setValidationError(null)
+                }}
+                type="button"
+                variant="ghost"
+              >
+                <Undo2 data-icon="inline-start" />
+                Discard
+              </Button>
+            </ConsoleActionBar>
+          </div>
         </form>
       ) : null}
     </SignInExperiencePage>
@@ -4779,17 +4827,47 @@ function DashboardListCard({
 }
 
 function SecuritySectionTabs({ active }: { active: 'password-policy' | 'captcha' | 'blocklist' | 'general' }) {
-  const tabs = [
-    ['password-policy', 'Password policy', '/console/security/password-policy'],
-    ['captcha', 'CAPTCHA', '/console/security/captcha'],
-    ['blocklist', 'Blocklist', '/console/security/blocklist'],
-    ['general', 'General', '/console/security/general'],
-  ] as const
-
   return (
-    <div className="inline-flex flex-wrap rounded-lg bg-muted p-1">
+    <RoutedSettingsTabs
+      active={active}
+      ariaLabel="Security settings"
+      tabs={[
+        ['password-policy', 'Password policy', '/console/security/password-policy'],
+        ['captcha', 'CAPTCHA', '/console/security/captcha'],
+        ['blocklist', 'Blocklist', '/console/security/blocklist'],
+        ['general', 'General', '/console/security/general'],
+      ]}
+    />
+  )
+}
+
+function ConnectorSectionTabs({ active }: { active: 'passwordless' | 'social' }) {
+  return (
+    <RoutedSettingsTabs
+      active={active}
+      ariaLabel="Connector settings"
+      tabs={[
+        ['passwordless', 'Passwordless', '/console/connectors/passwordless'],
+        ['social', 'Social', '/console/connectors/social'],
+      ]}
+    />
+  )
+}
+
+function RoutedSettingsTabs<TValue extends string>({
+  active,
+  ariaLabel,
+  tabs,
+}: {
+  active: TValue
+  ariaLabel: string
+  tabs: ReadonlyArray<readonly [TValue, string, string]>
+}) {
+  return (
+    <nav aria-label={ariaLabel} className="inline-flex flex-wrap rounded-lg bg-muted p-1">
       {tabs.map(([value, label, to]) => (
         <a
+          aria-current={active === value ? 'page' : undefined}
           className={cn(
             'inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground',
             active === value && 'bg-background text-foreground shadow-sm',
@@ -4800,7 +4878,7 @@ function SecuritySectionTabs({ active }: { active: 'password-policy' | 'captcha'
           {label}
         </a>
       ))}
-    </div>
+    </nav>
   )
 }
 
@@ -5240,7 +5318,7 @@ function CreateUserDialog({
           <TextInput onChange={(event) => setValue(setForm, 'displayName', event.target.value)} required />
         </Field>
         <Field label="Username">
-          <TextInput onChange={(event) => setValue(setForm, 'username', event.target.value)} />
+          <TextInput autoComplete="username" onChange={(event) => setValue(setForm, 'username', event.target.value)} />
         </Field>
         <Field label="Initial password">
           <TextInput

@@ -48,6 +48,7 @@
     { "id": "admin-social-connector-inventory", "name": "Admin social connectors page lists provider settings and availability" },
     { "id": "admin-sign-in-settings", "name": "Admin updates sign-in settings, legal links, and hosted auth copy" },
     { "id": "admin-sign-in-experience-routes", "name": "Admin sign-in experience tabs use canonical Console routes" },
+    { "id": "admin-content-settings", "name": "Admin content tab saves hosted auth copy and legal links" },
     { "id": "admin-security-policy", "name": "Admin MFA and security pages show policy, CAPTCHA, blocklist, and general settings" },
     { "id": "admin-create-organization", "name": "Admin organizations page creates an organization" },
     { "id": "admin-create-role", "name": "Admin roles page creates a role" },

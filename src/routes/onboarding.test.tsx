@@ -29,7 +29,9 @@ describe('OnboardingRoute', () => {
       target: { value: 'Admin User' },
     })
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'admin@example.com' } })
+    expect(screen.getByLabelText('Username').getAttribute('autocomplete')).toBe('username')
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'admin' } })
+    expect(screen.getByLabelText('Password').getAttribute('autocomplete')).toBe('new-password')
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create first admin' }))
 

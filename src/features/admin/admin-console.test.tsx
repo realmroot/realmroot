@@ -350,21 +350,26 @@ describe('admin console', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/account'))
   })
 
-  it('renders every account product section from a direct route', async () => {
+  it('redirects legacy account section routes to the flat account page', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(accountRouteFetch)
 
-    for (const [path, heading] of [
-      ['/account/profile', 'Jane Stone'],
-      ['/account/security', 'MFA'],
-      ['/account/linked-accounts', 'Linked social accounts'],
-      ['/account/sessions', 'Sessions and devices'],
-      ['/account/authorized-apps', 'Authorized apps'],
+    for (const path of [
+      '/account/profile',
+      '/account/security',
+      '/account/linked-accounts',
+      '/account/sessions',
+      '/account/authorized-apps',
     ] as const) {
       window.history.pushState(null, '', path)
       render(<AppRouter />)
 
-      expect((await screen.findAllByRole('heading', { name: heading })).length).toBeGreaterThan(0)
-      expect(window.location.pathname).toBe('/account')
+      expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+      await waitFor(() => expect(window.location.pathname).toBe('/account'))
+      expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
+      expect(screen.getByRole('heading', { name: 'MFA' })).toBeTruthy()
+      expect(screen.getByRole('heading', { name: 'Linked social accounts' })).toBeTruthy()
+      expect(screen.getByRole('heading', { name: 'Sessions and devices' })).toBeTruthy()
+      expect(screen.getByRole('heading', { name: 'Authorized apps' })).toBeTruthy()
 
       cleanup()
       queryClient.clear()
@@ -481,6 +486,29 @@ describe('admin console', () => {
 
       cleanup()
       queryClient.clear()
+    }
+  })
+
+  it('navigates sign-in experience tabs through routable tab links', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
+    window.history.pushState(null, '', '/console/sign-in-experience/sign-up-and-sign-in')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Sign-up and sign-in' })).toBeTruthy()
+
+    for (const [label, path, heading] of [
+      ['Branding', '/console/sign-in-experience/branding', 'Branding'],
+      ['Collect user profile', '/console/sign-in-experience/collect-user-profile', 'Collect user profile'],
+      ['Account Center', '/console/sign-in-experience/account-center', 'Account Center'],
+      ['Content', '/console/sign-in-experience/content', 'Content'],
+      ['Sign-up and sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
+    ] as const) {
+      fireEvent.click(screen.getByRole('tab', { name: label }))
+
+      await waitFor(() => expect(window.location.pathname).toBe(path))
+      expect((await screen.findAllByRole('heading', { name: heading })).length).toBeGreaterThan(0)
+      expect(screen.getByRole('tab', { name: label }).getAttribute('aria-selected')).toBe('true')
     }
   })
 
@@ -1107,7 +1135,9 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New user' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'sam@example.com' } })
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Sam Doe' } })
+    expect(screen.getByLabelText('Username').getAttribute('autocomplete')).toBe('username')
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'sam' } })
+    expect(screen.getByLabelText('Initial password').getAttribute('autocomplete')).toBe('new-password')
     fireEvent.change(screen.getByLabelText('Initial password'), { target: { value: 'correct horse battery staple' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -2313,6 +2343,60 @@ describe('admin console', () => {
     )
   })
 
+  it('discards sign-in settings edits back to loaded management values', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+        requests.push(url)
+        return Promise.resolve(jsonResponse(signInSettings))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<SignInSettingsPage />)
+
+    const productName = (await screen.findByLabelText('Product name')) as HTMLInputElement
+    fireEvent.change(productName, { target: { value: 'Changed product' } })
+    fireEvent.change(screen.getByLabelText('Privacy URL'), { target: { value: 'http://example.com/privacy' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(productName.value).toBe('Acme Auth')
+    expect(screen.getByLabelText('Privacy URL')).toHaveProperty('value', 'https://example.com/privacy')
+    expect(requests).toEqual([])
+  })
+
+  it('discards sign-in settings optional fields back to empty defaults', async () => {
+    const settings = {
+      ...signInSettings,
+      defaults: { applicationId: null, redirectUri: null },
+      links: { termsUri: null, privacyUri: null, supportEmail: null },
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(settings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<SignInSettingsPage />)
+
+    const redirectUri = (await screen.findByLabelText('Default redirect URI')) as HTMLInputElement
+    fireEvent.change(redirectUri, { target: { value: 'https://changed.example.com/callback' } })
+    fireEvent.change(screen.getByLabelText('Terms URL'), { target: { value: 'https://changed.example.com/terms' } })
+    fireEvent.change(screen.getByLabelText('Privacy URL'), {
+      target: { value: 'https://changed.example.com/privacy' },
+    })
+    fireEvent.change(screen.getByLabelText('Support email'), { target: { value: 'changed@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(redirectUri.value).toBe('')
+    expect(screen.getByLabelText('Default application ID')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Terms URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Privacy URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Support email')).toHaveProperty('value', '')
+  })
+
   it('renders sign-in validation errors without sending invalid public URLs', async () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -2438,6 +2522,30 @@ describe('admin console', () => {
     )
   })
 
+  it('discards branding edits back to loaded branding values', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings' && init?.method === 'PATCH') {
+        requests.push(url)
+        return Promise.resolve(jsonResponse(brandingSettings))
+      }
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<BrandingPage />)
+
+    const logoUrl = (await screen.findByLabelText('Logo URL')) as HTMLInputElement
+    fireEvent.change(logoUrl, { target: { value: 'https://cdn.example.com/changed.svg' } })
+    fireEvent.change(screen.getByLabelText('Custom CSS'), { target: { value: 'display: none;' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(logoUrl.value).toBe('https://cdn.example.com/logo.svg')
+    expect(screen.getByLabelText('Custom CSS')).toHaveProperty('value', '--auth-panel-radius: 8px;')
+    expect(requests).toEqual([])
+  })
+
   it('switches the hosted sign-in preview between desktop and mobile viewports', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
@@ -2559,6 +2667,20 @@ describe('admin console', () => {
     expect(screen.getByLabelText('Primary color')).toHaveProperty('value', '#b42318')
     expect(screen.getByLabelText('Background color')).toHaveProperty('value', '#f7f3ee')
     expect(screen.getByLabelText('Custom CSS')).toHaveProperty('value', '')
+    fireEvent.change(screen.getByLabelText('Logo URL'), { target: { value: 'https://cdn.example.com/changed.svg' } })
+    fireEvent.change(screen.getByLabelText('Favicon URL'), {
+      target: { value: 'https://cdn.example.com/changed.ico' },
+    })
+    fireEvent.change(screen.getByLabelText('Primary color'), { target: { value: '#0f766e' } })
+    fireEvent.change(screen.getByLabelText('Background color'), { target: { value: '#f8fafc' } })
+    fireEvent.change(screen.getByLabelText('Custom CSS'), { target: { value: '--auth-panel-radius: 16px;' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(screen.getByLabelText('Logo URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Favicon URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Primary color')).toHaveProperty('value', '#b42318')
+    expect(screen.getByLabelText('Background color')).toHaveProperty('value', '#f7f3ee')
+    expect(screen.getByLabelText('Custom CSS')).toHaveProperty('value', '')
   })
 
   it('renders sign-in and account configuration tabs with unsupported settings disabled', async () => {
@@ -2644,6 +2766,30 @@ describe('admin console', () => {
     )
   })
 
+  it('discards content edits back to loaded hosted auth copy', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+        requests.push(url)
+        return Promise.resolve(jsonResponse(signInSettings))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ContentSettingsPage />)
+
+    const productName = (await screen.findByLabelText('Product name')) as HTMLInputElement
+    fireEvent.change(productName, { target: { value: 'Changed product' } })
+    fireEvent.change(screen.getByLabelText('Support email'), { target: { value: 'changed@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(productName.value).toBe('Acme Auth')
+    expect(screen.getByLabelText('Support email')).toHaveProperty('value', 'support@example.com')
+    expect(requests).toEqual([])
+  })
+
   it('renders content validation errors without sending invalid links', async () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -2699,6 +2845,16 @@ describe('admin console', () => {
     renderWithQuery(<ContentSettingsPage />)
 
     expect(await screen.findByLabelText('Terms URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Privacy URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Support email')).toHaveProperty('value', '')
+    fireEvent.change(screen.getByLabelText('Terms URL'), { target: { value: 'https://changed.example.com/terms' } })
+    fireEvent.change(screen.getByLabelText('Privacy URL'), {
+      target: { value: 'https://changed.example.com/privacy' },
+    })
+    fireEvent.change(screen.getByLabelText('Support email'), { target: { value: 'changed@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(screen.getByLabelText('Terms URL')).toHaveProperty('value', '')
     expect(screen.getByLabelText('Privacy URL')).toHaveProperty('value', '')
     expect(screen.getByLabelText('Support email')).toHaveProperty('value', '')
   })

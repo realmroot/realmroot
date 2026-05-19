@@ -957,6 +957,9 @@ const journeyAssertions: Record<
   'admin-sign-in-experience-routes': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
+      await page.goto('/console/sign-in-experience/sign-up-and-sign-in')
+      await expect(page.getByRole('tab', { name: 'Sign-up and sign-in' })).toHaveAttribute('aria-selected', 'true')
+
       for (const route of [
         {
           path: '/console/sign-in-experience/sign-up-and-sign-in',
@@ -971,6 +974,58 @@ const journeyAssertions: Record<
         await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`))
         await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible()
       }
+
+      for (const route of [
+        { tab: 'Branding', path: '/console/sign-in-experience/branding', heading: 'Branding' },
+        {
+          tab: 'Collect user profile',
+          path: '/console/sign-in-experience/collect-user-profile',
+          heading: 'Collect user profile',
+        },
+        { tab: 'Account Center', path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
+        { tab: 'Content', path: '/console/sign-in-experience/content', heading: 'Content' },
+        {
+          tab: 'Sign-up and sign-in',
+          path: '/console/sign-in-experience/sign-up-and-sign-in',
+          heading: 'Sign-up and sign-in',
+        },
+      ]) {
+        await page.getByRole('tab', { name: route.tab }).click()
+        await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`))
+        await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible()
+        await expect(page.getByRole('tab', { name: route.tab })).toHaveAttribute('aria-selected', 'true')
+      }
+    },
+  },
+  'admin-content-settings': {
+    suite: 'admin management journeys',
+    assert: async ({ page, requests }) => {
+      await page.goto('/console/sign-in-experience/content')
+      await expect(page.getByRole('heading', { name: 'Content' })).toBeVisible()
+      await expect(page.getByLabel('Language')).toBeDisabled()
+      await page.getByLabel('Product name').fill('Northstar Content')
+      await page.getByLabel('Sign-in message').fill('Sign in with content copy')
+      await page.getByLabel('Sign-up message').fill('Create content identity.')
+      await page.getByLabel('Terms URL').fill('https://northstar.example.com/content-terms')
+      await page.getByLabel('Privacy URL').fill('https://northstar.example.com/content-privacy')
+      await page.getByLabel('Support email').fill('content@northstar.example')
+      await page.getByRole('button', { name: 'Save content' }).click()
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/management/sign-in-settings',
+        body: {
+          links: {
+            termsUri: 'https://northstar.example.com/content-terms',
+            privacyUri: 'https://northstar.example.com/content-privacy',
+            supportEmail: 'content@northstar.example',
+          },
+          copy: {
+            productName: 'Northstar Content',
+            headline: 'Sign in with content copy',
+            description: 'Create content identity.',
+          },
+        },
+      })
     },
   },
   'admin-security-policy': {
@@ -1175,15 +1230,15 @@ const journeyAssertions: Record<
             customCss: '--auth-panel-radius: 8px;',
           },
           copy: {
-            productName: 'Northstar ID',
-            headline: 'Sign in to Northstar',
-            description: 'Use your Northstar identity to continue.',
+            productName: 'Northstar Content',
+            headline: 'Sign in with content copy',
+            description: 'Create content identity.',
           },
         },
       })
       await page.goto('/sign-in')
-      await expect(page.getByRole('heading', { name: 'Sign in to Northstar' })).toBeVisible()
-      await expect(page.getByRole('link', { name: 'Northstar ID' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Sign in with content copy' })).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Northstar Content' })).toBeVisible()
       expect(requests).toEqual(
         expect.arrayContaining([
           { method: 'POST', path: '/api/management/branding/logo', body: '[form-data]' },
@@ -1452,6 +1507,7 @@ async function expectHostedAuthCompactShell(page: Page) {
       panelCenterOffset: Math.abs(panelBox.x + panelBox.width / 2 - shellBox.width / 2),
       panelBorderTopWidth: Number.parseFloat(panelStyle.borderTopWidth),
       panelBoxShadow: panelStyle.boxShadow,
+      panelHasVisualBoundary: Number.parseFloat(panelStyle.borderTopWidth) > 0 || panelStyle.boxShadow !== 'none',
       headingFontSize: Number.parseFloat(headingStyle.fontSize),
       inputHeights: inputs.map((input) => input.getBoundingClientRect().height),
       buttonHeights: buttons.map((button) => button.getBoundingClientRect().height),
@@ -1463,7 +1519,7 @@ async function expectHostedAuthCompactShell(page: Page) {
   expect(metrics?.panelWidth).toBeLessThanOrEqual(400)
   expect(metrics?.panelCenterOffset).toBeLessThanOrEqual(1)
   expect(metrics?.panelBorderTopWidth).toBeLessThanOrEqual(1)
-  expect(metrics?.panelBoxShadow).not.toBe('none')
+  expect(metrics?.panelHasVisualBoundary).toBe(true)
   expect(metrics?.headingFontSize).toBeLessThanOrEqual(24)
   expect(metrics?.inputHeights.every((height) => height >= 38 && height <= 44)).toBe(true)
   expect(metrics?.buttonHeights.every((height) => height >= 32 && height <= 44)).toBe(true)

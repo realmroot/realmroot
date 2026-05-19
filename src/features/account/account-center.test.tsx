@@ -194,6 +194,10 @@ describe('account center', () => {
     render(<AccountCenter />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
+    expect(document.querySelector('input[autocomplete="username"][type="text"][hidden]')).toHaveProperty(
+      'value',
+      'jane@example.com',
+    )
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enroll authenticator app' }))
 
