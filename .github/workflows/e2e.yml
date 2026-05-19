@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   journeys:
-    name: Browser journeys
+    name: Browser E2E
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

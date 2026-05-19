@@ -42,8 +42,27 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Build
+        run: npm run build
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Coverage
-        run: npm run test:coverage
+        run: npm test -- --coverage
 
       - name: Upload coverage
         uses: codecov/codecov-action@v6
@@ -51,6 +70,3 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: true
           use_oidc: true
-
-      - name: Build
-        run: npm run build

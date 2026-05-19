@@ -23,6 +23,44 @@ type JourneyContext = {
 
 type JourneyId = (typeof journeyCoverage.journeys)[number]['id']
 
+const accountSections = [
+  'Profile',
+  'Avatar',
+  'Email',
+  'Password',
+  'MFA',
+  'Passkeys',
+  'Linked social accounts',
+  'Sessions and devices',
+  'Authorized apps',
+] as const
+
+const consoleRoutes = [
+  { name: 'dashboard', path: '/console', heading: 'Tenant health' },
+  { name: 'applications', path: '/console/applications', heading: 'Applications' },
+  {
+    name: 'sign-in-experience',
+    path: '/console/sign-in-experience/sign-up-and-sign-in',
+    heading: 'Sign-up and sign-in',
+  },
+  { name: 'mfa', path: '/console/mfa', heading: 'Multi-factor auth' },
+  { name: 'connectors', path: '/console/connectors/passwordless', heading: 'Passwordless connectors' },
+  { name: 'security', path: '/console/security/password-policy', heading: 'Security' },
+  { name: 'api-resources', path: '/console/api-resources', heading: 'API resources' },
+  { name: 'roles', path: '/console/roles', heading: 'Roles' },
+  {
+    name: 'organization-template',
+    path: '/console/organization-template/organization-roles',
+    heading: 'Organization roles',
+  },
+  { name: 'organizations', path: '/console/organizations', heading: 'Organizations' },
+  { name: 'users', path: '/console/users', heading: 'Users' },
+  { name: 'custom-jwt', path: '/console/customize-jwt', heading: 'Custom JWT' },
+  { name: 'webhooks', path: '/console/webhooks', heading: 'Webhooks' },
+  { name: 'audit-logs', path: '/console/audit-logs', heading: 'Audit logs' },
+  { name: 'tenant-settings', path: '/console/tenant-settings/oidc-configs', heading: 'OIDC configs' },
+] as const
+
 let firstAdminRequired = false
 let adminSetupRequired = false
 let accountSignedIn = true
@@ -311,15 +349,7 @@ const journeyAssertions: Record<
       await page.goto('/account')
       await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
       await expect(page).toHaveURL(/\/account$/)
-      await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Avatar' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Email' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Password' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'MFA' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Passkeys' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Linked social accounts' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Sessions and devices' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Authorized apps' })).toBeVisible()
+      await expectAccountSinglePageSections(page)
       await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
     },
   },
@@ -336,8 +366,7 @@ const journeyAssertions: Record<
         await page.goto(path)
         await expect(page).toHaveURL(/\/account$/)
         await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
-        await expect(page.getByRole('heading', { name: 'MFA' })).toBeVisible()
-        await expect(page.getByRole('heading', { name: 'Authorized apps' })).toBeVisible()
+        await expectAccountSinglePageSections(page)
       }
     },
   },
@@ -1168,36 +1197,11 @@ test('admin management journeys', async ({ page }) => {
 test('admin console desktop and mobile screenshot evidence', async ({ page }, testInfo) => {
   await mockApi(page)
 
-  const consoleRoutes = [
-    { name: 'dashboard', path: '/console', heading: 'Tenant health' },
-    { name: 'applications', path: '/console/applications', heading: 'Applications' },
-    {
-      name: 'sign-in-experience',
-      path: '/console/sign-in-experience/sign-up-and-sign-in',
-      heading: 'Sign-up and sign-in',
-    },
-    { name: 'mfa', path: '/console/mfa', heading: 'Multi-factor auth' },
-    { name: 'connectors', path: '/console/connectors/passwordless', heading: 'Passwordless connectors' },
-    { name: 'security', path: '/console/security/password-policy', heading: 'Security' },
-    { name: 'api-resources', path: '/console/api-resources', heading: 'API resources' },
-    { name: 'roles', path: '/console/roles', heading: 'Roles' },
-    {
-      name: 'organization-template',
-      path: '/console/organization-template/organization-roles',
-      heading: 'Organization template',
-    },
-    { name: 'organizations', path: '/console/organizations', heading: 'Organizations' },
-    { name: 'users', path: '/console/users', heading: 'Users' },
-    { name: 'custom-jwt', path: '/console/customize-jwt', heading: 'Custom JWT' },
-    { name: 'webhooks', path: '/console/webhooks', heading: 'Webhooks' },
-    { name: 'audit-logs', path: '/console/audit-logs', heading: 'Audit logs' },
-    { name: 'tenant-settings', path: '/console/tenant-settings/oidc-configs', heading: 'OIDC configs' },
-  ]
-
   await page.setViewportSize({ width: 1280, height: 720 })
   for (const route of consoleRoutes) {
     await page.goto(route.path)
     await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible()
+    await expectConsoleDesktopDensity(page)
     await expectNoDocumentHorizontalOverflow(page)
     await page.screenshot({
       fullPage: true,
@@ -1214,6 +1218,7 @@ test('admin console desktop and mobile screenshot evidence', async ({ page }, te
     for (const route of consoleRoutes.slice(0, 4)) {
       await page.goto(route.path)
       await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
+      if (viewport.name === 'desktop') await expectConsoleDesktopDensity(page)
       await expectNoDocumentHorizontalOverflow(page)
       await page.screenshot({
         fullPage: true,
@@ -1249,6 +1254,12 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
       { name: 'hosted-sign-up', path: '/sign-up', heading: 'Start with your identity.' },
       { name: 'hosted-recovery', path: '/forgot-password', heading: 'Recover your password.' },
       {
+        name: 'hosted-callback-error',
+        path: '/auth/callback?error=access_denied&error_description=Denied',
+        heading: 'Sign-in could not continue.',
+        compactAuth: true,
+      },
+      {
         name: 'oauth-consent',
         path: '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&response_type=code&scope=openid%20profile&state=state-1',
         heading: 'Review application access.',
@@ -1260,11 +1271,37 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
     ]) {
       await page.goto(route.path)
       await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
+      if (route.path.startsWith('/account')) await expectAccountSinglePageSections(page)
+      if (
+        route.path === '/sign-in' ||
+        route.path === '/sign-up' ||
+        route.path === '/forgot-password' ||
+        'compactAuth' in route
+      ) {
+        await expectHostedAuthCompactShell(page)
+      }
       await expectNoDocumentHorizontalOverflow(page)
       await page.screenshot({
         fullPage: true,
         path: testInfo.outputPath(`${route.name}-${viewport.name}.png`),
       })
+    }
+
+    consentSessionAvailable = false
+    try {
+      await page.goto(
+        '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&state=state-1',
+      )
+      await expect(page.getByRole('heading', { name: 'Review application access.' })).toBeVisible()
+      await expect(page.getByText('Authentication is required.')).toBeVisible()
+      await expectHostedAuthCompactShell(page)
+      await expectNoDocumentHorizontalOverflow(page)
+      await page.screenshot({
+        fullPage: true,
+        path: testInfo.outputPath(`oauth-consent-auth-required-${viewport.name}.png`),
+      })
+    } finally {
+      consentSessionAvailable = true
     }
   }
 })
@@ -1288,6 +1325,92 @@ async function expectNoDocumentHorizontalOverflow(page: Page) {
       }),
     )
     .toBeLessThanOrEqual(1)
+}
+
+async function expectConsoleDesktopDensity(page: Page) {
+  const metrics = await page.evaluate(() => {
+    const header = document.querySelector('header')
+    const aside = document.querySelector('aside')
+    const main = document.querySelector('main')
+    const navRows = Array.from(document.querySelectorAll('nav[aria-label="Console"] a'))
+    const content = main?.firstElementChild
+    if (!header || !aside || !main || !content || navRows.length === 0) return null
+
+    const headerBox = header.getBoundingClientRect()
+    const asideBox = aside.getBoundingClientRect()
+    const mainBox = main.getBoundingClientRect()
+    const contentBox = content.getBoundingClientRect()
+    const navRowHeights = navRows.map((row) => row.getBoundingClientRect().height)
+
+    return {
+      topbarHeight: headerBox.height,
+      sidebarWidth: asideBox.width,
+      navRowHeights,
+      mainStartX: mainBox.x,
+      mainStartY: mainBox.y,
+      contentStartX: contentBox.x,
+      contentStartY: contentBox.y,
+      contentInlineOffset: contentBox.x - mainBox.x,
+    }
+  })
+
+  expect(metrics).not.toBeNull()
+  expect(metrics?.topbarHeight).toBeLessThanOrEqual(65)
+  expect(metrics?.sidebarWidth).toBeLessThanOrEqual(256)
+  expect(metrics?.navRowHeights.every((height) => height <= 36)).toBe(true)
+  expect(metrics?.mainStartX).toBeLessThanOrEqual(256)
+  expect(metrics?.mainStartY).toBeLessThanOrEqual(65)
+  expect(metrics?.contentStartX).toBeLessThanOrEqual(380)
+  expect(metrics?.contentInlineOffset).toBeLessThanOrEqual(124)
+  expect(metrics?.contentStartY).toBeLessThanOrEqual(97)
+}
+
+async function expectHostedAuthCompactShell(page: Page) {
+  const metrics = await page.evaluate(() => {
+    const shell = document.querySelector('.authShell')
+    const panel = document.querySelector('.authPanel')
+    const heading = document.querySelector('.authBrandPanel h1')
+    const inputs = Array.from(document.querySelectorAll('.authPanel input'))
+    const buttons = Array.from(document.querySelectorAll('.authPanel button, .authPanel .uiButton'))
+    if (!shell || !panel || !heading) return null
+
+    const shellBox = shell.getBoundingClientRect()
+    const panelBox = panel.getBoundingClientRect()
+    const panelStyle = window.getComputedStyle(panel)
+    const headingStyle = window.getComputedStyle(heading)
+
+    return {
+      panelWidth: panelBox.width,
+      panelCenterOffset: Math.abs(panelBox.x + panelBox.width / 2 - shellBox.width / 2),
+      panelBorderTopWidth: Number.parseFloat(panelStyle.borderTopWidth),
+      panelBoxShadow: panelStyle.boxShadow,
+      headingFontSize: Number.parseFloat(headingStyle.fontSize),
+      inputHeights: inputs.map((input) => input.getBoundingClientRect().height),
+      buttonHeights: buttons.map((button) => button.getBoundingClientRect().height),
+      heroCount: shell.querySelectorAll('.hero').length,
+    }
+  })
+
+  expect(metrics).not.toBeNull()
+  expect(metrics?.panelWidth).toBeLessThanOrEqual(400)
+  expect(metrics?.panelCenterOffset).toBeLessThanOrEqual(1)
+  expect(metrics?.panelBorderTopWidth).toBe(0)
+  expect(metrics?.panelBoxShadow).toBe('none')
+  expect(metrics?.headingFontSize).toBeLessThanOrEqual(24)
+  expect(metrics?.inputHeights.every((height) => height >= 40 && height <= 44)).toBe(true)
+  expect(metrics?.buttonHeights.every((height) => height >= 32 && height <= 44)).toBe(true)
+  expect(metrics?.heroCount).toBe(0)
+}
+
+async function expectAccountSinglePageSections(page: Page) {
+  await expect(page).toHaveURL(/\/account$/)
+  await expect(page.getByRole('navigation', { name: 'Account center' })).toHaveCount(0)
+
+  for (const section of accountSections) {
+    await expect(page.getByRole('heading', { name: section })).toBeVisible()
+  }
+
+  await expect(page.locator('.accountSectionStack > .settingsPanel')).toHaveCount(accountSections.length)
 }
 
 async function mockApi(page: Page) {
