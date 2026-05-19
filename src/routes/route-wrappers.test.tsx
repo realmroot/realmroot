@@ -8,6 +8,7 @@ import { OAuthConsentRoute } from './oauth/consent'
 import { SignUpRoute } from './sign-up'
 
 vi.mock('@/features/account/account-center', () => ({
+  AccountCenter: () => <div>Account center route</div>,
   AccountCenterPage: () => <div>Account center route</div>,
 }))
 

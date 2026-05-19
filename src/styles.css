@@ -499,7 +499,7 @@ h1 {
   margin-top: 32px;
 }
 
-.accountNav button {
+.accountNav a {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -510,10 +510,11 @@ h1 {
   background: transparent;
   color: #52525b;
   font-weight: 700;
+  text-decoration: none;
   text-align: left;
 }
 
-.accountNav button.active {
+.accountNav a.active {
   background: #fff1f2;
   color: var(--brand-primary);
 }

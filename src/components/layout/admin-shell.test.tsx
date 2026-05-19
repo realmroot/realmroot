@@ -28,6 +28,7 @@ describe('AdminShell', () => {
     expect(screen.getByText('Dashboard content')).toBeTruthy()
     expect(screen.getByRole('link', { name: /Dashboard/ }).className).toContain('bg-muted')
     expect(screen.getByRole('link', { name: /Applications/ }).className).not.toContain('bg-muted')
+    expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
   })
 
   it('marks nested admin navigation sections active', () => {

@@ -16,180 +16,78 @@
     }
   ],
   "paths": {
-    "/users": {
-      "get": {
-        "tags": ["Users"],
-        "summary": "List users",
-        "parameters": [
-          { "$ref": "#/components/parameters/Limit" },
-          { "$ref": "#/components/parameters/Offset" },
-          {
-            "name": "search",
-            "in": "query",
-            "schema": { "type": "string", "minLength": 1 }
-          },
-          {
-            "name": "searchField",
-            "in": "query",
-            "schema": { "type": "string", "enum": ["email", "name"] }
-          },
-          {
-            "name": "role",
-            "in": "query",
-            "schema": { "type": "string", "minLength": 1 }
-          },
-          {
-            "name": "banned",
-            "in": "query",
-            "schema": { "type": "boolean" }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Users returned.",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ListUsersResponse" }
-              }
-            }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
-        }
-      },
-      "post": {
-        "tags": ["Users"],
-        "summary": "Create a user",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateUserRequest" }
-            }
-          }
-        },
-        "responses": {
-          "201": { "description": "User created." },
-          "400": { "$ref": "#/components/responses/BadRequest" }
-        }
-      }
+    "/api-resources": {
+      "$ref": "#/components/pathItems/CrudCollection"
     },
-    "/users/{id}": {
-      "parameters": [{ "$ref": "#/components/parameters/Id" }],
-      "get": {
-        "tags": ["Users"],
-        "summary": "Get a user",
-        "responses": {
-          "200": { "description": "User returned." },
-          "404": { "$ref": "#/components/responses/NotFound" }
-        }
-      },
-      "patch": {
-        "tags": ["Users"],
-        "summary": "Update a user",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateUserRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "User updated." },
-          "400": { "$ref": "#/components/responses/BadRequest" }
-        }
-      },
-      "delete": {
-        "tags": ["Users"],
-        "summary": "Delete a user",
-        "responses": {
-          "200": { "description": "User deleted." },
-          "404": { "$ref": "#/components/responses/NotFound" }
-        }
-      }
+    "/api-resources/{id}": {
+      "$ref": "#/components/pathItems/CrudResource"
     },
-    "/users/password-reset-requests": {
-      "post": {
-        "tags": ["Users"],
-        "summary": "Create a password reset request for a user email",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/PasswordResetRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "Password reset request accepted." },
-          "400": { "$ref": "#/components/responses/BadRequest" }
-        }
-      }
+    "/api-resources/{id}/permissions": {
+      "$ref": "#/components/pathItems/PaginatedMutableCollection"
     },
-    "/users/{id}/ban": {
-      "parameters": [{ "$ref": "#/components/parameters/Id" }],
-      "put": {
-        "tags": ["Users"],
-        "summary": "Ban a user",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/BanUserRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "User banned." },
-          "400": { "$ref": "#/components/responses/BadRequest" }
-        }
-      },
-      "delete": {
-        "tags": ["Users"],
-        "summary": "Remove a user ban",
-        "responses": {
-          "200": { "description": "User ban removed." },
-          "404": { "$ref": "#/components/responses/NotFound" }
-        }
-      }
+    "/api-resources/{id}/scopes": {
+      "$ref": "#/components/pathItems/PaginatedMutableCollection"
     },
-    "/users/{id}/linked-accounts": { "$ref": "#/components/pathItems/PaginatedCollection" },
-    "/users/{id}/applications": { "$ref": "#/components/pathItems/PaginatedCollection" },
-    "/users/{id}/sessions": { "$ref": "#/components/pathItems/PaginatedCollection" },
-    "/applications": { "$ref": "#/components/pathItems/CrudCollection" },
-    "/applications/{id}": { "$ref": "#/components/pathItems/CrudResource" },
-    "/applications/{id}/redirect-uris": { "$ref": "#/components/pathItems/PaginatedMutableCollection" },
-    "/applications/{id}/client-secrets": { "$ref": "#/components/pathItems/PaginatedMutableCollection" },
+    "/application-role-assignments": {
+      "$ref": "#/components/pathItems/RoleAssignmentCollection"
+    },
+    "/applications": {
+      "$ref": "#/components/pathItems/CrudCollection"
+    },
+    "/applications/{id}": {
+      "$ref": "#/components/pathItems/CrudResource"
+    },
+    "/applications/{id}/client-secrets": {
+      "$ref": "#/components/pathItems/PaginatedMutableCollection"
+    },
+    "/applications/{id}/redirect-uris": {
+      "$ref": "#/components/pathItems/PaginatedMutableCollection"
+    },
     "/connectors": {
       "get": {
-        "tags": ["Connectors"],
+        "tags": [
+          "Connectors"
+        ],
         "summary": "List identity provider connectors",
         "parameters": [
-          { "$ref": "#/components/parameters/Limit" },
-          { "$ref": "#/components/parameters/Offset" }
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
         ],
         "responses": {
           "200": {
             "description": "Connectors returned.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ListConnectorsResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ListConnectorsResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
         }
       },
       "post": {
-        "tags": ["Connectors"],
+        "tags": [
+          "Connectors"
+        ],
         "summary": "Create an identity provider connector",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateConnectorRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/CreateConnectorRequest"
+              }
             }
           }
         },
@@ -198,43 +96,69 @@
             "description": "Connector created.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Connector" }
+                "schema": {
+                  "$ref": "#/components/schemas/Connector"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
         }
       }
     },
     "/connectors/{id}": {
-      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Id"
+        }
+      ],
       "get": {
-        "tags": ["Connectors"],
+        "tags": [
+          "Connectors"
+        ],
         "summary": "Get an identity provider connector",
         "responses": {
           "200": {
             "description": "Connector returned.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Connector" }
+                "schema": {
+                  "$ref": "#/components/schemas/Connector"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       },
       "patch": {
-        "tags": ["Connectors"],
+        "tags": [
+          "Connectors"
+        ],
         "summary": "Update an identity provider connector",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateConnectorRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConnectorRequest"
+              }
             }
           }
         },
@@ -243,147 +167,503 @@
             "description": "Connector updated.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Connector" }
+                "schema": {
+                  "$ref": "#/components/schemas/Connector"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       },
       "delete": {
-        "tags": ["Connectors"],
+        "tags": [
+          "Connectors"
+        ],
         "summary": "Delete an identity provider connector",
         "responses": {
-          "204": { "description": "Connector deleted." },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "204": {
+            "description": "Connector deleted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/member-role-assignments": {
+      "$ref": "#/components/pathItems/RoleAssignmentCollection"
+    },
+    "/organizations": {
+      "$ref": "#/components/pathItems/CrudCollection"
+    },
+    "/organizations/{id}": {
+      "$ref": "#/components/pathItems/CrudResource"
+    },
+    "/organizations/{id}/invitations": {
+      "$ref": "#/components/pathItems/PaginatedMutableCollection"
+    },
+    "/organizations/{id}/members": {
+      "$ref": "#/components/pathItems/PaginatedMutableCollection"
+    },
+    "/readiness": {
+      "get": {
+        "tags": [
+          "Readiness"
+        ],
+        "summary": "Get Console setup readiness",
+        "responses": {
+          "200": {
+            "description": "Readiness state returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/roles": {
+      "$ref": "#/components/pathItems/CrudCollection"
+    },
+    "/roles/{id}": {
+      "$ref": "#/components/pathItems/CrudResource"
+    },
+    "/roles/{id}/permissions": {
+      "put": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "Replace role permissions",
+        "responses": {
+          "204": {
+            "description": "Role permissions replaced."
+          }
+        }
+      }
+    },
+    "/security/policy": {
+      "get": {
+        "tags": [
+          "Security"
+        ],
+        "summary": "Get deployment security policy",
+        "responses": {
+          "200": {
+            "description": "Security policy returned."
+          }
+        }
+      }
+    },
+    "/security/users/{id}": {
+      "get": {
+        "tags": [
+          "Security"
+        ],
+        "summary": "Get a user's security state",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Security state returned."
+          }
+        }
+      }
+    },
+    "/security/users/{id}/passkeys": {
+      "$ref": "#/components/pathItems/PaginatedCollection"
+    },
+    "/security/users/{id}/passkeys/{passkeyId}": {
+      "delete": {
+        "tags": [
+          "Security"
+        ],
+        "summary": "Delete a user's passkey",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "name": "passkeyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Passkey deleted."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/security/users/{id}/sessions": {
+      "get": {
+        "tags": [
+          "Security"
+        ],
+        "summary": "List a user's sessions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sessions returned."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Security"
+        ],
+        "summary": "Revoke all sessions for a user",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User sessions revoked."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/security/users/{id}/sessions/{sessionId}": {
+      "delete": {
+        "tags": [
+          "Security"
+        ],
+        "summary": "Revoke one user session",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User session revoked."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       }
     },
     "/sign-in-settings": {
       "get": {
-        "tags": ["SignInSettings"],
+        "tags": [
+          "SignInSettings"
+        ],
         "summary": "Get sign-in settings",
         "responses": {
           "200": {
             "description": "Sign-in settings returned.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SignInSettings" }
+                "schema": {
+                  "$ref": "#/components/schemas/SignInSettings"
+                }
               }
             }
           }
         }
       }
     },
-    "/organizations": { "$ref": "#/components/pathItems/CrudCollection" },
-    "/organizations/{id}": { "$ref": "#/components/pathItems/CrudResource" },
-    "/organizations/{id}/members": { "$ref": "#/components/pathItems/PaginatedMutableCollection" },
-    "/organizations/{id}/invitations": { "$ref": "#/components/pathItems/PaginatedMutableCollection" },
-    "/roles": { "$ref": "#/components/pathItems/CrudCollection" },
-    "/roles/{id}": { "$ref": "#/components/pathItems/CrudResource" },
-    "/roles/{id}/permissions": {
-      "put": {
-        "tags": ["Roles"],
-        "summary": "Replace role permissions",
-        "responses": {
-          "204": { "description": "Role permissions replaced." }
-        }
-      }
+    "/user-role-assignments": {
+      "$ref": "#/components/pathItems/RoleAssignmentCollection"
     },
-    "/user-role-assignments": { "$ref": "#/components/pathItems/RoleAssignmentCollection" },
-    "/application-role-assignments": { "$ref": "#/components/pathItems/RoleAssignmentCollection" },
-    "/member-role-assignments": { "$ref": "#/components/pathItems/RoleAssignmentCollection" },
-    "/api-resources": { "$ref": "#/components/pathItems/CrudCollection" },
-    "/api-resources/{id}": { "$ref": "#/components/pathItems/CrudResource" },
-    "/api-resources/{id}/scopes": { "$ref": "#/components/pathItems/PaginatedMutableCollection" },
-    "/api-resources/{id}/permissions": { "$ref": "#/components/pathItems/PaginatedMutableCollection" },
-    "/security/policy": {
+    "/users": {
       "get": {
-        "tags": ["Security"],
-        "summary": "Get deployment security policy",
-        "responses": {
-          "200": { "description": "Security policy returned." }
-        }
-      }
-    },
-    "/security/users/{id}": {
-      "get": {
-        "tags": ["Security"],
-        "summary": "Get a user's security state",
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
-        "responses": {
-          "200": { "description": "Security state returned." }
-        }
-      }
-    },
-    "/security/users/{id}/passkeys": { "$ref": "#/components/pathItems/PaginatedCollection" },
-    "/security/users/{id}/passkeys/{passkeyId}": {
-      "delete": {
-        "tags": ["Security"],
-        "summary": "Delete a user's passkey",
+        "tags": [
+          "Users"
+        ],
+        "summary": "List users",
         "parameters": [
-          { "$ref": "#/components/parameters/Id" },
           {
-            "name": "passkeyId",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string", "minLength": 1 }
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "searchField",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "email",
+                "name"
+              ]
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "banned",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
-          "200": { "description": "Passkey deleted." },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "200": {
+            "description": "Users returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUsersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Create a user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
         }
       }
     },
-    "/security/users/{id}/sessions": {
-      "get": {
-        "tags": ["Security"],
-        "summary": "List a user's sessions",
-        "parameters": [
-          { "$ref": "#/components/parameters/Id" },
-          { "$ref": "#/components/parameters/Limit" },
-          { "$ref": "#/components/parameters/Offset" }
+    "/users/password-reset-requests": {
+      "post": {
+        "tags": [
+          "Users"
         ],
+        "summary": "Create a password reset request for a user email",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          }
+        },
         "responses": {
-          "200": { "description": "Sessions returned." },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
+          "200": {
+            "description": "Password reset request accepted."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Id"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get a user",
+        "responses": {
+          "200": {
+            "description": "User returned."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update a user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User updated."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
         }
       },
       "delete": {
-        "tags": ["Security"],
-        "summary": "Revoke all sessions for a user",
-        "parameters": [{ "$ref": "#/components/parameters/Id" }],
+        "tags": [
+          "Users"
+        ],
+        "summary": "Delete a user",
         "responses": {
-          "200": { "description": "User sessions revoked." },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "200": {
+            "description": "User deleted."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       }
     },
-    "/security/users/{id}/sessions/{sessionId}": {
-      "delete": {
-        "tags": ["Security"],
-        "summary": "Revoke one user session",
-        "parameters": [
-          { "$ref": "#/components/parameters/Id" },
-          {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string", "minLength": 1 }
-          }
+    "/users/{id}/applications": {
+      "$ref": "#/components/pathItems/PaginatedCollection"
+    },
+    "/users/{id}/ban": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Id"
+        }
+      ],
+      "put": {
+        "tags": [
+          "Users"
         ],
+        "summary": "Ban a user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BanUserRequest"
+              }
+            }
+          }
+        },
         "responses": {
-          "200": { "description": "User session revoked." },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "200": {
+            "description": "User banned."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Remove a user ban",
+        "responses": {
+          "200": {
+            "description": "User ban removed."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       }
+    },
+    "/users/{id}/linked-accounts": {
+      "$ref": "#/components/pathItems/PaginatedCollection"
+    },
+    "/users/{id}/sessions": {
+      "$ref": "#/components/pathItems/PaginatedCollection"
     }
   },
   "components": {
@@ -400,17 +680,29 @@
         "name": "id",
         "in": "path",
         "required": true,
-        "schema": { "type": "string", "minLength": 1 }
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
       },
       "Limit": {
         "name": "limit",
         "in": "query",
-        "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
       },
       "Offset": {
         "name": "offset",
         "in": "query",
-        "schema": { "type": "integer", "minimum": 0, "default": 0 }
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        }
       }
     },
     "responses": {
@@ -418,7 +710,9 @@
         "description": "Invalid request.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
           }
         }
       },
@@ -426,7 +720,9 @@
         "description": "Authentication is required.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
           }
         }
       },
@@ -434,7 +730,9 @@
         "description": "Admin access is required.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
           }
         }
       },
@@ -442,7 +740,9 @@
         "description": "Resource not found.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
           }
         }
       }
@@ -451,81 +751,147 @@
       "PaginatedCollection": {
         "get": {
           "parameters": [
-            { "$ref": "#/components/parameters/Limit" },
-            { "$ref": "#/components/parameters/Offset" }
+            {
+              "$ref": "#/components/parameters/Limit"
+            },
+            {
+              "$ref": "#/components/parameters/Offset"
+            }
           ],
           "responses": {
-            "200": { "description": "Collection returned." },
-            "401": { "$ref": "#/components/responses/Unauthorized" },
-            "403": { "$ref": "#/components/responses/Forbidden" }
+            "200": {
+              "description": "Collection returned."
+            },
+            "401": {
+              "$ref": "#/components/responses/Unauthorized"
+            },
+            "403": {
+              "$ref": "#/components/responses/Forbidden"
+            }
           }
         }
       },
       "PaginatedMutableCollection": {
         "get": {
           "parameters": [
-            { "$ref": "#/components/parameters/Limit" },
-            { "$ref": "#/components/parameters/Offset" }
+            {
+              "$ref": "#/components/parameters/Limit"
+            },
+            {
+              "$ref": "#/components/parameters/Offset"
+            }
           ],
-          "responses": { "200": { "description": "Collection returned." } }
+          "responses": {
+            "200": {
+              "description": "Collection returned."
+            }
+          }
         },
         "post": {
           "responses": {
-            "201": { "description": "Resource created." },
-            "400": { "$ref": "#/components/responses/BadRequest" }
+            "201": {
+              "description": "Resource created."
+            },
+            "400": {
+              "$ref": "#/components/responses/BadRequest"
+            }
           }
         }
       },
       "CrudCollection": {
         "get": {
           "parameters": [
-            { "$ref": "#/components/parameters/Limit" },
-            { "$ref": "#/components/parameters/Offset" }
+            {
+              "$ref": "#/components/parameters/Limit"
+            },
+            {
+              "$ref": "#/components/parameters/Offset"
+            }
           ],
-          "responses": { "200": { "description": "Collection returned." } }
+          "responses": {
+            "200": {
+              "description": "Collection returned."
+            }
+          }
         },
         "post": {
           "responses": {
-            "201": { "description": "Resource created." },
-            "400": { "$ref": "#/components/responses/BadRequest" }
+            "201": {
+              "description": "Resource created."
+            },
+            "400": {
+              "$ref": "#/components/responses/BadRequest"
+            }
           }
         }
       },
       "CrudResource": {
         "get": {
-          "parameters": [{ "$ref": "#/components/parameters/Id" }],
-          "responses": { "200": { "description": "Resource returned." } }
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/Id"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Resource returned."
+            }
+          }
         },
         "patch": {
-          "parameters": [{ "$ref": "#/components/parameters/Id" }],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/Id"
+            }
+          ],
           "responses": {
-            "200": { "description": "Resource updated." },
-            "400": { "$ref": "#/components/responses/BadRequest" }
+            "200": {
+              "description": "Resource updated."
+            },
+            "400": {
+              "$ref": "#/components/responses/BadRequest"
+            }
           }
         },
         "delete": {
-          "parameters": [{ "$ref": "#/components/parameters/Id" }],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/Id"
+            }
+          ],
           "responses": {
-            "204": { "description": "Resource deleted." },
-            "404": { "$ref": "#/components/responses/NotFound" }
+            "204": {
+              "description": "Resource deleted."
+            },
+            "404": {
+              "$ref": "#/components/responses/NotFound"
+            }
           }
         }
       },
       "RoleAssignmentCollection": {
         "post": {
-          "tags": ["RoleAssignments"],
+          "tags": [
+            "RoleAssignments"
+          ],
           "summary": "Create or replace a role assignment",
           "requestBody": {
             "required": true,
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RoleAssignmentRequest" }
+                "schema": {
+                  "$ref": "#/components/schemas/RoleAssignmentRequest"
+                }
               }
             }
           },
           "responses": {
-            "204": { "description": "Role assignment applied." },
-            "400": { "$ref": "#/components/responses/BadRequest" }
+            "204": {
+              "description": "Role assignment applied."
+            },
+            "400": {
+              "$ref": "#/components/responses/BadRequest"
+            }
           }
         }
       }
@@ -533,31 +899,69 @@
     "schemas": {
       "ErrorResponse": {
         "type": "object",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "object",
-            "required": ["code", "message"],
+            "required": [
+              "code",
+              "message"
+            ],
             "properties": {
               "code": {
                 "type": "string",
-                "enum": ["bad_request", "unauthorized", "forbidden", "not_found", "internal_error"]
+                "enum": [
+                  "bad_request",
+                  "unauthorized",
+                  "forbidden",
+                  "not_found",
+                  "internal_error"
+                ]
               },
-              "message": { "type": "string" },
-              "requestId": { "type": "string" }
+              "message": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              }
             }
           }
         }
       },
       "Pagination": {
         "type": "object",
-        "required": ["limit", "offset", "total", "hasMore", "nextOffset"],
+        "required": [
+          "limit",
+          "offset",
+          "total",
+          "hasMore",
+          "nextOffset"
+        ],
         "properties": {
-          "limit": { "type": "integer", "minimum": 1 },
-          "offset": { "type": "integer", "minimum": 0 },
-          "total": { "type": "integer", "minimum": 0 },
-          "hasMore": { "type": "boolean" },
-          "nextOffset": { "type": ["integer", "null"], "minimum": 0 }
+          "limit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextOffset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
         }
       },
       "Connector": {
@@ -582,129 +986,377 @@
           "updatedAt"
         ],
         "properties": {
-          "id": { "type": "string" },
-          "slug": { "type": "string" },
-          "providerType": { "type": "string", "enum": ["social", "generic_oauth"] },
-          "providerId": { "type": "string" },
-          "displayName": { "type": "string" },
-          "enabled": { "type": "boolean" },
-          "clientId": { "type": ["string", "null"] },
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "providerType": {
+            "type": "string",
+            "enum": [
+              "social",
+              "generic_oauth"
+            ]
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "clientId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "clientSecretBinding": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Reference to deployment-managed secret material; never the secret value."
           },
-          "issuer": { "type": ["string", "null"], "format": "uri" },
-          "authorizationEndpoint": { "type": ["string", "null"], "format": "uri" },
-          "tokenEndpoint": { "type": ["string", "null"], "format": "uri" },
-          "userInfoEndpoint": { "type": ["string", "null"], "format": "uri" },
-          "jwksEndpoint": { "type": ["string", "null"], "format": "uri" },
-          "scopes": { "type": "array", "items": { "type": "string" } },
-          "providerMetadata": { "type": "object", "additionalProperties": true },
-          "createdAt": { "type": "string", "format": "date-time" },
-          "updatedAt": { "type": "string", "format": "date-time" }
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "authorizationEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "tokenEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "userInfoEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "jwksEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "providerMetadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "ListConnectorsResponse": {
         "type": "object",
-        "required": ["connectors", "pagination"],
+        "required": [
+          "connectors",
+          "pagination"
+        ],
         "properties": {
           "connectors": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/Connector" }
+            "items": {
+              "$ref": "#/components/schemas/Connector"
+            }
           },
-          "pagination": { "$ref": "#/components/schemas/Pagination" }
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
         }
       },
       "CreateConnectorRequest": {
         "type": "object",
-        "required": ["providerType", "providerId", "displayName", "clientId", "clientSecretBinding"],
+        "required": [
+          "providerType",
+          "providerId",
+          "displayName",
+          "clientId",
+          "clientSecretBinding"
+        ],
         "description": "Create uses the shared connector contract. Generic OAuth connectors require either issuer or authorizationEndpoint, and require tokenEndpoint when issuer is omitted.",
         "properties": {
-          "slug": { "type": "string", "minLength": 3, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-          "providerType": { "type": "string", "enum": ["social", "generic_oauth"] },
-          "providerId": { "type": "string", "minLength": 1 },
-          "displayName": { "type": "string", "minLength": 1 },
-          "enabled": { "type": "boolean" },
-          "clientId": { "type": "string", "minLength": 1 },
+          "slug": {
+            "type": "string",
+            "minLength": 3,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "providerType": {
+            "type": "string",
+            "enum": [
+              "social",
+              "generic_oauth"
+            ]
+          },
+          "providerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "clientId": {
+            "type": "string",
+            "minLength": 1
+          },
           "clientSecretBinding": {
             "type": "string",
             "minLength": 1,
             "description": "Reference to deployment-managed secret material; never the secret value."
           },
-          "issuer": { "type": "string", "format": "uri" },
-          "authorizationEndpoint": { "type": "string", "format": "uri" },
-          "tokenEndpoint": { "type": "string", "format": "uri" },
-          "userInfoEndpoint": { "type": "string", "format": "uri" },
-          "jwksEndpoint": { "type": "string", "format": "uri" },
-          "scopes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-          "providerMetadata": { "type": "object", "additionalProperties": true }
+          "issuer": {
+            "type": "string",
+            "format": "uri"
+          },
+          "authorizationEndpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "tokenEndpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "userInfoEndpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "jwksEndpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "providerMetadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
         }
       },
       "UpdateConnectorRequest": {
         "type": "object",
         "properties": {
-          "slug": { "type": "string", "minLength": 3, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-          "displayName": { "type": "string", "minLength": 1 },
-          "enabled": { "type": "boolean" },
-          "clientId": { "type": ["string", "null"], "minLength": 1 },
+          "slug": {
+            "type": "string",
+            "minLength": 3,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "clientId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
           "clientSecretBinding": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1,
             "description": "Reference to deployment-managed secret material; never the secret value."
           },
-          "issuer": { "type": ["string", "null"], "format": "uri" },
-          "authorizationEndpoint": { "type": ["string", "null"], "format": "uri" },
-          "tokenEndpoint": { "type": ["string", "null"], "format": "uri" },
-          "userInfoEndpoint": { "type": ["string", "null"], "format": "uri" },
-          "jwksEndpoint": { "type": ["string", "null"], "format": "uri" },
-          "scopes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-          "providerMetadata": { "type": "object", "additionalProperties": true }
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "authorizationEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "tokenEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "userInfoEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "jwksEndpoint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "providerMetadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
         }
       },
       "User": {
         "type": "object",
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "properties": {
-          "id": { "type": "string" },
-          "email": { "type": "string", "format": "email" },
-          "name": { "type": "string" },
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
           "role": {
             "oneOf": [
-              { "type": "string" },
-              { "type": "array", "items": { "type": "string" } },
-              { "type": "null" }
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
             ]
           },
-          "banned": { "type": ["boolean", "null"] },
-          "createdAt": { "type": "string" },
-          "updatedAt": { "type": "string" }
+          "banned": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
         },
         "additionalProperties": true
       },
       "ListUsersResponse": {
         "type": "object",
-        "required": ["users", "pagination"],
+        "required": [
+          "users",
+          "pagination"
+        ],
         "properties": {
           "users": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/User" }
+            "items": {
+              "$ref": "#/components/schemas/User"
+            }
           },
-          "pagination": { "$ref": "#/components/schemas/Pagination" }
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
         }
       },
       "CreateUserRequest": {
         "type": "object",
-        "required": ["email", "displayName"],
+        "required": [
+          "email",
+          "displayName"
+        ],
         "properties": {
-          "email": { "type": "string", "format": "email" },
-          "password": { "type": "string", "minLength": 8 },
-          "displayName": { "type": "string", "minLength": 1 },
-          "username": { "type": "string", "minLength": 3, "maxLength": 64 },
-          "avatarAssetId": { "type": ["string", "null"] },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64
+          },
+          "avatarAssetId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "role": {
             "oneOf": [
-              { "type": "string", "minLength": 1 },
-              { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              }
             ]
           }
         }
@@ -712,15 +1364,45 @@
       "UpdateUserRequest": {
         "type": "object",
         "properties": {
-          "email": { "type": "string", "format": "email" },
-          "emailVerified": { "type": "boolean" },
-          "displayName": { "type": "string", "minLength": 1 },
-          "username": { "type": ["string", "null"], "minLength": 3, "maxLength": 64 },
-          "avatarAssetId": { "type": ["string", "null"] },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 3,
+            "maxLength": 64
+          },
+          "avatarAssetId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "role": {
             "oneOf": [
-              { "type": "string", "minLength": 1 },
-              { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              }
             ]
           }
         }
@@ -728,31 +1410,66 @@
       "BanUserRequest": {
         "type": "object",
         "properties": {
-          "reason": { "type": "string", "minLength": 1 },
-          "expiresInSeconds": { "type": "integer", "minimum": 1 }
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expiresInSeconds": {
+            "type": "integer",
+            "minimum": 1
+          }
         }
       },
       "PasswordResetRequest": {
         "type": "object",
-        "required": ["email"],
+        "required": [
+          "email"
+        ],
         "properties": {
-          "email": { "type": "string", "format": "email" },
-          "redirectTo": { "type": "string", "format": "uri" }
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "redirectTo": {
+            "type": "string",
+            "format": "uri"
+          }
         }
       },
       "RoleAssignmentRequest": {
         "type": "object",
-        "required": ["roleId", "subjectId"],
+        "required": [
+          "roleId",
+          "subjectId"
+        ],
         "properties": {
-          "roleId": { "type": "string", "minLength": 1 },
-          "subjectId": { "type": "string", "minLength": 1 },
-          "tokenClaims": { "type": "object" },
-          "expiresAt": { "type": ["string", "null"], "format": "date-time" }
+          "roleId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subjectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tokenClaims": {
+            "type": "object"
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
         }
       },
       "SignInSettings": {
         "type": "object",
-        "required": ["signIn", "defaults", "links"],
+        "required": [
+          "signIn",
+          "defaults",
+          "links"
+        ],
         "properties": {
           "signIn": {
             "type": "object",
@@ -766,30 +1483,110 @@
               "identifierFirst"
             ],
             "properties": {
-              "passwordEnabled": { "type": "boolean" },
-              "signupEnabled": { "type": "boolean" },
-              "socialLoginEnabled": { "type": "boolean" },
-              "magicLinkEnabled": { "type": "boolean" },
-              "emailOtpEnabled": { "type": "boolean" },
-              "usernameEnabled": { "type": "boolean" },
-              "identifierFirst": { "type": "boolean" }
+              "passwordEnabled": {
+                "type": "boolean"
+              },
+              "signupEnabled": {
+                "type": "boolean"
+              },
+              "socialLoginEnabled": {
+                "type": "boolean"
+              },
+              "magicLinkEnabled": {
+                "type": "boolean"
+              },
+              "emailOtpEnabled": {
+                "type": "boolean"
+              },
+              "usernameEnabled": {
+                "type": "boolean"
+              },
+              "identifierFirst": {
+                "type": "boolean"
+              }
             }
           },
           "defaults": {
             "type": "object",
-            "required": ["applicationId", "redirectUri"],
+            "required": [
+              "applicationId",
+              "redirectUri"
+            ],
             "properties": {
-              "applicationId": { "type": ["string", "null"] },
-              "redirectUri": { "type": ["string", "null"] }
+              "applicationId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "redirectUri": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
             }
           },
           "links": {
             "type": "object",
-            "required": ["termsUri", "privacyUri", "supportEmail"],
+            "required": [
+              "termsUri",
+              "privacyUri",
+              "supportEmail"
+            ],
             "properties": {
-              "termsUri": { "type": ["string", "null"] },
-              "privacyUri": { "type": ["string", "null"] },
-              "supportEmail": { "type": ["string", "null"] }
+              "termsUri": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "privacyUri": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "supportEmail": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "Readiness": {
+        "type": "object",
+        "required": [
+          "admin"
+        ],
+        "properties": {
+          "admin": {
+            "type": "object",
+            "required": [
+              "setupRequired",
+              "setupHref",
+              "missing"
+            ],
+            "properties": {
+              "setupRequired": {
+                "type": "boolean"
+              },
+              "setupHref": {
+                "type": "string",
+                "const": "/admin/onboarding"
+              },
+              "missing": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "oidc_application"
+                  ]
+                }
+              }
             }
           }
         }

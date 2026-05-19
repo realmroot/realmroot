@@ -66,6 +66,7 @@ Connector responses use the same stable connector contract as the admin connecto
 
 Connector `providerType` is restricted to `social` and `generic_oauth`, matching the values loaded into Better Auth. Connector creation requires `clientId` and `clientSecretBinding`; generic OAuth creation also requires either `issuer` or `authorizationEndpoint`, and requires `tokenEndpoint` when `issuer` is not provided. Updates can clear nullable configuration fields, but enabled connectors must remain loadable by Better Auth. `providerId` is globally unique because Better Auth uses it as the provider key.
 - Sign-in settings: `/sign-in-settings`.
+- Readiness: `/readiness`.
 - Organizations: `/organizations`, `/organizations/{id}`, `/organizations/{id}/members`, `/organizations/{id}/invitations`.
 - Roles: `/roles`, `/roles/{id}`, `/roles/{id}/permissions`.
 - Role assignments: `/user-role-assignments`, `/application-role-assignments`, `/member-role-assignments`.
@@ -73,5 +74,21 @@ Connector `providerType` is restricted to `social` and `generic_oauth`, matching
 - Security administration: `/security/policy`, `/security/users/{id}`, `/security/users/{id}/passkeys`, `/security/users/{id}/passkeys/{passkeyId}`, `/security/users/{id}/sessions`, `/security/users/{id}/sessions/{sessionId}`.
 
 Security administrators can delete a user passkey with `DELETE /security/users/{id}/passkeys/{passkeyId}`, revoke all user sessions with `DELETE /security/users/{id}/sessions`, and revoke one user session with `DELETE /security/users/{id}/sessions/{sessionId}`.
+
+## Readiness
+
+`GET /readiness` returns protected Console setup state. The admin route guard uses this response to decide whether `/admin/*` should continue to the requested product route or redirect to `/admin/onboarding`.
+
+```json
+{
+  "admin": {
+    "setupRequired": true,
+    "setupHref": "/admin/onboarding",
+    "missing": ["oidc_application"]
+  }
+}
+```
+
+`missing` currently contains `oidc_application` when no OIDC client exists. Future readiness checks should add explicit enum values rather than overloading this field with display copy.
 
 The maintained OpenAPI contract lives in [management.openapi.json](./management.openapi.json).

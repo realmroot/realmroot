@@ -20,6 +20,7 @@ import type {
   ListManagementConnectorsResponse,
   ListManagementUsersResponse,
   ManagementCreateUserRequest,
+  ManagementReadinessResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
   ManagementUserListQuery,
@@ -38,6 +39,7 @@ export const adminQueryKeys = {
   organizations: ['admin', 'organizations'] as const,
   roles: ['admin', 'roles'] as const,
   apiResources: ['admin', 'api-resources'] as const,
+  readiness: ['admin', 'readiness'] as const,
 }
 
 export type AdminDashboard = {
@@ -134,6 +136,10 @@ export function updateConnector(id: string, input: UpdateManagementConnectorRequ
 
 export function getSignInSettings() {
   return readRpcResponse(apiClient.api.management['sign-in-settings'].$get())
+}
+
+export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
+  return readRpcResponse(apiClient.api.management.readiness.$get())
 }
 
 export function getSecurityPolicy() {

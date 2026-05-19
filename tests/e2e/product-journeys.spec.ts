@@ -22,6 +22,9 @@ type JourneyContext = {
 
 type JourneyId = (typeof journeyCoverage.journeys)[number]['id']
 
+let firstAdminRequired = false
+let adminSetupRequired = false
+
 const journeyAssertions: Record<
   JourneyId,
   {
@@ -41,22 +44,40 @@ const journeyAssertions: Record<
       await expect(page.getByText('API status: online')).toBeVisible()
     },
   },
+  'first-admin-gate': {
+    suite: 'public and auth journeys',
+    assert: async ({ page }) => {
+      firstAdminRequired = true
+      try {
+        await page.goto('/account/security')
+        await expect(page).toHaveURL(/\/onboarding$/)
+        await expect(page.getByRole('heading', { name: 'Create the first admin.' })).toBeVisible()
+      } finally {
+        firstAdminRequired = false
+      }
+    },
+  },
   'public-onboarding': {
     suite: 'public and auth journeys',
     assert: async ({ page, requests }) => {
-      await page.goto('/onboarding')
-      await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Admin User')
-      await page.getByLabel('Email').fill('admin@example.com')
-      await page.getByLabel('Username').fill('admin')
-      await page.getByLabel('Password').fill('password-1')
-      await page.getByRole('button', { name: 'Create first admin' }).click()
-      await expect(page.getByText('First admin created.')).toBeVisible()
-      await expect(page.getByLabel('Password')).toHaveCount(0)
-      expect(requests).toContainEqual({
-        method: 'POST',
-        path: '/api/onboarding/admin-users',
-        body: { email: 'admin@example.com', name: 'Admin User', password: 'password-1', username: 'admin' },
-      })
+      firstAdminRequired = true
+      try {
+        await page.goto('/onboarding')
+        await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Admin User')
+        await page.getByLabel('Email').fill('admin@example.com')
+        await page.getByLabel('Username').fill('admin')
+        await page.getByLabel('Password').fill('password-1')
+        await page.getByRole('button', { name: 'Create first admin' }).click()
+        await expect(page.getByText('First admin created.')).toBeVisible()
+        await expect(page.getByLabel('Password')).toHaveCount(0)
+        expect(requests).toContainEqual({
+          method: 'POST',
+          path: '/api/onboarding/admin-users',
+          body: { email: 'admin@example.com', name: 'Admin User', password: 'password-1', username: 'admin' },
+        })
+      } finally {
+        firstAdminRequired = false
+      }
     },
   },
   'public-sign-in': {
@@ -75,7 +96,7 @@ const journeyAssertions: Record<
       await page.getByLabel('Email or username').fill('jane@example.com')
       await page.getByLabel('Password').fill('password-1')
       await page.getByRole('button', { name: 'Sign in' }).click()
-      await expect(page).toHaveURL(/\/account$/)
+      await expect(page).toHaveURL(/\/account\/profile$/)
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/auth/sign-in/email',
@@ -180,6 +201,23 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       await page.goto('/account')
       await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
+      await expect(page).toHaveURL(/\/account\/profile$/)
+    },
+  },
+  'account-deep-links': {
+    suite: 'account center journey',
+    assert: async ({ page }) => {
+      await page.goto('/account/security')
+      await expect(page.getByRole('heading', { name: 'MFA' })).toBeVisible()
+      await page.getByRole('link', { name: 'Linked accounts' }).click()
+      await expect(page).toHaveURL(/\/account\/linked-accounts$/)
+      await expect(page.getByRole('heading', { name: 'Linked social accounts' })).toBeVisible()
+      await page.getByRole('link', { name: 'Sessions' }).click()
+      await expect(page).toHaveURL(/\/account\/sessions$/)
+      await expect(page.getByRole('heading', { name: 'Sessions and devices' })).toBeVisible()
+      await page.getByRole('link', { name: 'Authorized apps' }).click()
+      await expect(page).toHaveURL(/\/account\/authorized-apps$/)
+      await expect(page.getByRole('heading', { name: 'Consented applications' })).toBeVisible()
     },
   },
   'profile-update': {
@@ -215,8 +253,7 @@ const journeyAssertions: Record<
   'totp-flow': {
     suite: 'account center journey',
     assert: async ({ page }) => {
-      await page.goto('/account')
-      await page.getByRole('button', { name: 'Security' }).click()
+      await page.goto('/account/security')
       await page.getByLabel('Password').fill('password-1')
       await page.getByRole('button', { name: 'Enroll authenticator app' }).click()
       await expect(page.getByText('Authenticator setup')).toBeVisible()
@@ -227,8 +264,7 @@ const journeyAssertions: Record<
   'passkey-flow': {
     suite: 'account center journey',
     assert: async ({ page }) => {
-      await page.goto('/account')
-      await page.getByRole('button', { name: 'Security' }).click()
+      await page.goto('/account/security')
       await page.getByLabel('Passkey name').fill('MacBook Touch ID')
       await page.getByRole('button', { name: 'Add passkey' }).click()
     },
@@ -236,16 +272,14 @@ const journeyAssertions: Record<
   'linked-account-unlink': {
     suite: 'account center journey',
     assert: async ({ page }) => {
-      await page.goto('/account')
-      await page.getByRole('button', { name: 'Linked accounts' }).click()
+      await page.goto('/account/linked-accounts')
       await page.getByRole('button', { name: 'Unlink' }).click()
     },
   },
   'session-revocation': {
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
-      await page.goto('/account')
-      await page.getByRole('button', { name: 'Sessions' }).click()
+      await page.goto('/account/sessions')
       await page.getByRole('button', { name: 'Revoke all' }).click()
       await page.getByRole('button', { name: 'Revoke', exact: true }).click()
       expect(requests).toContainEqual({ method: 'DELETE', path: '/api/account/security/sessions', body: null })
@@ -270,27 +304,46 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Tenant health' })).toBeVisible()
     },
   },
+  'admin-setup-gate': {
+    suite: 'admin management journeys',
+    assert: async ({ page }) => {
+      adminSetupRequired = true
+      try {
+        await page.goto('/admin/applications')
+        await expect(page).toHaveURL(/\/admin\/onboarding$/)
+        await expect(page.getByRole('heading', { name: 'Admin onboarding' })).toBeVisible()
+        await expect(page.getByRole('navigation', { name: 'Admin' }).getByText('Onboarding')).toHaveCount(0)
+      } finally {
+        adminSetupRequired = false
+      }
+    },
+  },
   'admin-onboarding': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
-      await page.goto('/admin/onboarding')
-      await expect(page.getByRole('heading', { name: 'Admin onboarding' })).toBeVisible()
-      await page.getByLabel('Application name').fill('Review client')
-      await page.getByLabel('Slug').fill('review-client')
-      await page.getByLabel('Redirect URIs').fill('http://localhost:4173/oidc/callback')
-      await page.getByRole('button', { name: 'Create OIDC client' }).click()
-      await expect(page.getByText('Client ID')).toBeVisible()
-      await expect(page.getByText('http://localhost:4173/oidc/callback').nth(1)).toBeVisible()
-      expect(requests).toContainEqual({
-        method: 'POST',
-        path: '/api/management/applications',
-        body: {
-          name: 'Review client',
-          slug: 'review-client',
-          clientType: 'public_spa',
-          redirectUris: ['http://localhost:4173/oidc/callback'],
-        },
-      })
+      adminSetupRequired = true
+      try {
+        await page.goto('/admin/onboarding')
+        await expect(page.getByRole('heading', { name: 'Admin onboarding' })).toBeVisible()
+        await page.getByLabel('Application name').fill('Review client')
+        await page.getByLabel('Slug').fill('review-client')
+        await page.getByLabel('Redirect URIs').fill('http://localhost:4173/oidc/callback')
+        await page.getByRole('button', { name: 'Create OIDC client' }).click()
+        await expect(page.getByText('Client ID')).toBeVisible()
+        await expect(page.getByText('http://localhost:4173/oidc/callback').nth(1)).toBeVisible()
+        expect(requests).toContainEqual({
+          method: 'POST',
+          path: '/api/management/applications',
+          body: {
+            name: 'Review client',
+            slug: 'review-client',
+            clientType: 'public_spa',
+            redirectUris: ['http://localhost:4173/oidc/callback'],
+          },
+        })
+      } finally {
+        adminSetupRequired = false
+      }
     },
   },
   'admin-create-user': {
@@ -506,8 +559,10 @@ async function responseFor(path: string, method: string): Promise<unknown> {
     const response = await createApp(createAuthMock()).request('/api/health', { method })
     return response.json()
   }
-  if (path === '/api/configz') return configz
-  if (path === '/api/onboarding/status') return { required: true }
+  if (path === '/api/configz') {
+    return { ...configz, onboarding: { required: firstAdminRequired, href: '/onboarding' } }
+  }
+  if (path === '/api/onboarding/status') return { required: firstAdminRequired }
   if (path === '/api/onboarding/admin-users') {
     return {
       user: { id: 'user-admin', email: 'admin@example.com', role: 'admin' },
@@ -520,6 +575,15 @@ async function responseFor(path: string, method: string): Promise<unknown> {
       signIn: configz.signIn,
       defaults: configz.defaults,
       links: configz.links,
+    }
+  }
+  if (path === '/api/management/readiness') {
+    return {
+      admin: {
+        setupRequired: adminSetupRequired,
+        setupHref: '/admin/onboarding',
+        missing: adminSetupRequired ? ['oidc_application'] : [],
+      },
     }
   }
   if (path === '/api/management/security/policy') return { policy: securityPolicy }

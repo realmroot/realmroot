@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { Fingerprint, KeyRound, Laptop, LinkIcon, LoaderCircle, Mail, ShieldCheck, UserRound } from 'lucide-react'
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from 'react'
 import { BrandIdentity } from '@/components/layout/auth-layout'
@@ -100,8 +101,13 @@ const emptyAccountData: AccountData = {
 }
 
 export function AccountCenterPage() {
+  return <AccountCenter section="profile" />
+}
+
+export type AccountSectionId = (typeof accountSections)[number]['id']
+
+export function AccountCenter({ section }: { section: AccountSectionId }) {
   const { data: config } = useConfigz()
-  const [active, setActive] = useState('profile')
   const [data, setData] = useState(emptyAccountData)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -157,16 +163,11 @@ export function AccountCenterPage() {
       <aside className="accountSidebar">
         <BrandIdentity config={config} />
         <nav className="accountNav" aria-label="Account center">
-          {accountSections.map((section) => (
-            <button
-              className={active === section.id ? 'active' : ''}
-              key={section.id}
-              onClick={() => setActive(section.id)}
-              type="button"
-            >
-              <section.icon size={18} />
-              {section.label}
-            </button>
+          {accountSections.map((item) => (
+            <Link className={section === item.id ? 'active' : ''} key={item.id} to={item.href}>
+              <item.icon size={18} />
+              {item.label}
+            </Link>
           ))}
         </nav>
       </aside>
@@ -188,23 +189,23 @@ export function AccountCenterPage() {
         ) : null}
         {error ? <Status tone="error">{error}</Status> : null}
         {message ? <Status tone="success">{message}</Status> : null}
-        {active === 'profile' && data.profile ? <ProfileSection profile={data.profile} mutate={mutate} /> : null}
-        {active === 'security' ? <SecuritySection data={data} mutate={mutate} /> : null}
-        {active === 'connections' ? <ConnectionsSection accounts={data.linkedAccounts} mutate={mutate} /> : null}
-        {active === 'sessions' ? <SessionsSection sessions={data.sessions} mutate={mutate} /> : null}
-        {active === 'apps' ? <ApplicationsSection applications={data.applications} /> : null}
+        {section === 'profile' && data.profile ? <ProfileSection profile={data.profile} mutate={mutate} /> : null}
+        {section === 'security' ? <SecuritySection data={data} mutate={mutate} /> : null}
+        {section === 'linked-accounts' ? <ConnectionsSection accounts={data.linkedAccounts} mutate={mutate} /> : null}
+        {section === 'sessions' ? <SessionsSection sessions={data.sessions} mutate={mutate} /> : null}
+        {section === 'authorized-apps' ? <ApplicationsSection applications={data.applications} /> : null}
       </section>
     </main>
   )
 }
 
 const accountSections = [
-  { id: 'profile', label: 'Profile', icon: UserRound },
-  { id: 'security', label: 'Security', icon: ShieldCheck },
-  { id: 'connections', label: 'Linked accounts', icon: LinkIcon },
-  { id: 'sessions', label: 'Sessions', icon: Laptop },
-  { id: 'apps', label: 'Consented apps', icon: BadgeIcon },
-]
+  { id: 'profile', href: '/account/profile', label: 'Profile', icon: UserRound },
+  { id: 'security', href: '/account/security', label: 'Security', icon: ShieldCheck },
+  { id: 'linked-accounts', href: '/account/linked-accounts', label: 'Linked accounts', icon: LinkIcon },
+  { id: 'sessions', href: '/account/sessions', label: 'Sessions', icon: Laptop },
+  { id: 'authorized-apps', href: '/account/authorized-apps', label: 'Authorized apps', icon: BadgeIcon },
+] as const
 
 function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: MutationHandler }) {
   const [displayName, setDisplayName] = useState(profile.displayName)

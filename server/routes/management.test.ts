@@ -3,6 +3,7 @@ import {
   listManagementConnectorsResponseSchema,
   managementCollectionRoutes,
   managementConnectorResponseSchema,
+  managementReadinessResponseSchema,
 } from '../../shared/api/management'
 import { createApp } from '../app'
 import type { UserRepository } from '../modules/users/repository'
@@ -173,6 +174,54 @@ describe('management routes', () => {
         supportEmail: 'support@example.com',
       },
     })
+  })
+
+  it('exposes admin setup readiness through the management boundary', async () => {
+    const app = createApp(createAuthMock(), {
+      applicationServiceFactory: () => ({
+        list: vi.fn().mockResolvedValue({
+          applications: [],
+          pagination: { limit: 1, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        }),
+      }),
+    })
+
+    const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
+
+    expect(readiness.status).toBe(200)
+    await expect(readiness.json()).resolves.toEqual(
+      managementReadinessResponseSchema.parse({
+        admin: {
+          setupRequired: true,
+          setupHref: '/admin/onboarding',
+          missing: ['oidc_application'],
+        },
+      }),
+    )
+  })
+
+  it('reports admin setup complete when an OIDC application exists', async () => {
+    const app = createApp(createAuthMock(), {
+      applicationServiceFactory: () => ({
+        list: vi.fn().mockResolvedValue({
+          applications: [applicationFixture()],
+          pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
+      }),
+    })
+
+    const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
+
+    expect(readiness.status).toBe(200)
+    await expect(readiness.json()).resolves.toEqual(
+      managementReadinessResponseSchema.parse({
+        admin: {
+          setupRequired: false,
+          setupHref: '/admin/onboarding',
+          missing: [],
+        },
+      }),
+    )
   })
 
   it('exposes management connector config CRUD with pagination', async () => {
@@ -468,6 +517,18 @@ function connectorFixture() {
     providerMetadata: { prompt: 'select_account' },
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function applicationFixture() {
+  return {
+    id: 'app-1',
+    slug: 'customer-portal',
+    name: 'Customer portal',
+    clientId: 'client-1',
+    clientType: 'public_spa',
+    redirectUris: ['https://app.example.com/callback'],
+    disabled: false,
   }
 }
 

@@ -49,6 +49,14 @@ export const managementSignInSettingsResponseSchema = z.object({
   }),
 })
 
+export const managementReadinessResponseSchema = z.object({
+  admin: z.object({
+    setupRequired: z.boolean(),
+    setupHref: z.literal('/admin/onboarding'),
+    missing: z.array(z.enum(['oidc_application'])),
+  }),
+})
+
 export const managementConnectorResponseSchema = connectorResponseSchema
 export const listManagementConnectorsResponseSchema = listConnectorsResponseSchema
 export const createManagementConnectorRequestSchema = createConnectorRequestSchema
@@ -82,6 +90,7 @@ export const managementResourceSchemas = {
   apiScopes: apiScopeResponseSchema,
   roles: roleResponseSchema,
   signInSettings: managementSignInSettingsResponseSchema,
+  readiness: managementReadinessResponseSchema,
   connectors: managementConnectorResponseSchema,
 } as const
 
@@ -121,6 +130,7 @@ export type ManagementUpdateUserRequest = z.infer<typeof managementUpdateUserReq
 export type ManagementBanUserRequest = z.infer<typeof managementBanUserRequestSchema>
 export type ManagementPasswordResetRequest = z.infer<typeof managementPasswordResetRequestSchema>
 export type ManagementSignInSettingsResponse = z.infer<typeof managementSignInSettingsResponseSchema>
+export type ManagementReadinessResponse = z.infer<typeof managementReadinessResponseSchema>
 export type ManagementConnectorResponse = z.infer<typeof managementConnectorResponseSchema>
 export type ListManagementConnectorsResponse = z.infer<typeof listManagementConnectorsResponseSchema>
 export type CreateManagementConnectorRequest = z.infer<typeof createManagementConnectorRequestSchema>

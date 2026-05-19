@@ -15,8 +15,8 @@ import {
   SignInSettingsPage,
   UsersPage,
 } from '@/features/admin/admin-console'
-import { ApiRequestError } from '@/lib/api'
-import { adminQueryKeys, getSignInSettings } from '@/lib/api/management'
+import { ApiRequestError, getConfigz } from '@/lib/api'
+import { adminQueryKeys, getAdminReadiness, getSignInSettings } from '@/lib/api/management'
 import { AccountRoute } from '@/routes/account'
 import { App } from '@/routes/app'
 import { AuthCallbackRoute } from '@/routes/auth-callback'
@@ -31,6 +31,15 @@ import { SignUpRoute } from '@/routes/sign-up'
 export const queryClient = new QueryClient()
 
 const rootRoute = createRootRoute({
+  beforeLoad: async ({ location }) => {
+    const config = await queryClient.fetchQuery({ queryKey: ['configz'], queryFn: getConfigz })
+    if (config.onboarding.required && location.pathname !== '/onboarding') {
+      throw redirect({ to: '/onboarding' })
+    }
+    if (!config.onboarding.required && location.pathname === '/onboarding') {
+      throw redirect({ to: '/admin/onboarding' })
+    }
+  },
   component: () => <Outlet />,
 })
 
@@ -97,7 +106,45 @@ const oidcStartRoute = createRoute({
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account',
-  component: AccountRoute,
+  component: () => <Outlet />,
+})
+
+const accountIndexRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: '/',
+  beforeLoad: () => {
+    throw redirect({ to: '/account/profile' })
+  },
+})
+
+const accountProfileRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: '/profile',
+  component: () => <AccountRoute section="profile" />,
+})
+
+const accountSecurityRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: '/security',
+  component: () => <AccountRoute section="security" />,
+})
+
+const accountLinkedAccountsRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: '/linked-accounts',
+  component: () => <AccountRoute section="linked-accounts" />,
+})
+
+const accountSessionsRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: '/sessions',
+  component: () => <AccountRoute section="sessions" />,
+})
+
+const accountAuthorizedAppsRoute = createRoute({
+  getParentRoute: () => accountRoute,
+  path: '/authorized-apps',
+  component: () => <AccountRoute section="authorized-apps" />,
 })
 
 const adminRoute = createRoute({
@@ -106,7 +153,15 @@ const adminRoute = createRoute({
   beforeLoad: async ({ location }) => {
     try {
       await queryClient.fetchQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
+      const readiness = await queryClient.fetchQuery({
+        queryKey: adminQueryKeys.readiness,
+        queryFn: getAdminReadiness,
+      })
+      if (readiness.admin.setupRequired && location.pathname !== readiness.admin.setupHref) {
+        throw redirect({ to: '/admin/onboarding' })
+      }
     } catch (error) {
+      if (isRedirect(error)) throw error
       if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
         throw redirect({ to: '/sign-in', search: { return_to: location.href } })
       }
@@ -189,6 +244,15 @@ const adminDeploymentRoute = createRoute({
 const adminOnboardingRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/onboarding',
+  beforeLoad: async () => {
+    const readiness = await queryClient.fetchQuery({
+      queryKey: adminQueryKeys.readiness,
+      queryFn: getAdminReadiness,
+    })
+    if (!readiness.admin.setupRequired) {
+      throw redirect({ to: '/admin' })
+    }
+  },
   component: AdminOnboardingPage,
 })
 
@@ -203,7 +267,14 @@ const routeTree = rootRoute.addChildren([
   emailVerificationRoute,
   authCallbackRoute,
   oauthConsentRoute,
-  accountRoute,
+  accountRoute.addChildren([
+    accountIndexRoute,
+    accountProfileRoute,
+    accountSecurityRoute,
+    accountLinkedAccountsRoute,
+    accountSessionsRoute,
+    accountAuthorizedAppsRoute,
+  ]),
   adminRoute.addChildren([
     adminIndexRoute,
     adminApplicationsRoute,
@@ -221,6 +292,10 @@ const routeTree = rootRoute.addChildren([
 ])
 
 export const router = createRouter({ routeTree })
+
+function isRedirect(error: unknown) {
+  return typeof error === 'object' && error !== null && 'headers' in error && 'status' in error
+}
 
 export function AppRouter() {
   return (

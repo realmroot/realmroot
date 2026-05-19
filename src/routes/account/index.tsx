@@ -1,5 +1,5 @@
-import { AccountCenterPage } from '@/features/account/account-center'
+import { AccountCenter, type AccountSectionId } from '@/features/account/account-center'
 
-export function AccountRoute() {
-  return <AccountCenterPage />
+export function AccountRoute({ section = 'profile' }: { section?: AccountSectionId }) {
+  return <AccountCenter section={section} />
 }

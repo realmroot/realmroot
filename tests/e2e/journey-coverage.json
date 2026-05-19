@@ -3,6 +3,7 @@
   "honoRpcSmokeJourneys": ["platform-status"],
   "journeys": [
     { "id": "platform-status", "name": "Public home page shows API platform status" },
+    { "id": "first-admin-gate", "name": "Fresh deployment product routes redirect to first-admin onboarding" },
     { "id": "public-onboarding", "name": "Fresh deployment onboarding creates first admin" },
     { "id": "public-sign-in", "name": "Hosted sign-in renders enabled methods" },
     { "id": "password-sign-in", "name": "Hosted password sign-in submits credentials" },
@@ -14,6 +15,7 @@
     { "id": "oauth-consent", "name": "OAuth consent review approves requested scopes" },
     { "id": "oidc-client-callback", "name": "OIDC client callback lands on a real local callback page" },
     { "id": "account-center", "name": "Account center loads profile, security, sessions, connections, and apps" },
+    { "id": "account-deep-links", "name": "Account center sections have stable deep-link routes" },
     { "id": "sign-out", "name": "Account center signs out" },
     { "id": "profile-update", "name": "Account center updates profile" },
     { "id": "email-update", "name": "Account center requests email change" },
@@ -23,6 +25,7 @@
     { "id": "linked-account-unlink", "name": "Account center unlinks a connected account" },
     { "id": "session-revocation", "name": "Account center revokes all and single sessions" },
     { "id": "admin-dashboard", "name": "Admin dashboard loads tenant health" },
+    { "id": "admin-setup-gate", "name": "Admin routes redirect to setup onboarding when no OIDC client exists" },
     { "id": "admin-onboarding", "name": "Admin onboarding creates the first OIDC client and shows integration details" },
     { "id": "admin-create-user", "name": "Admin users page creates a user" },
     { "id": "admin-create-application", "name": "Admin applications page creates an OIDC client" },

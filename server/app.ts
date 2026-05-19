@@ -41,6 +41,7 @@ import type {
   ListManagementUsersResponse,
   ManagementConnectorResponse,
   ManagementCreateUserRequest,
+  ManagementReadinessResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
   ManagementUserListQuery,
@@ -75,7 +76,11 @@ import { adminSecurityRoutes } from './routes/admin/security'
 import { adminUserRoutes } from './routes/admin/users'
 import type { ManagementAuthApi } from './routes/auth-api'
 import { type ConfigzServiceFactory, createConfigzRoutes } from './routes/configz'
-import { createManagementRoutes, type ManagementConfigzServiceFactory } from './routes/management'
+import {
+  createManagementRoutes,
+  type ManagementApplicationServiceFactory,
+  type ManagementConfigzServiceFactory,
+} from './routes/management'
 import type { ConnectorServiceFactory } from './routes/management/connectors'
 import { oauthConsentRoute } from './routes/oauth/consent'
 import { onboardingRoutes } from './routes/onboarding'
@@ -94,6 +99,7 @@ export interface AppOptions {
   onboardingRepository?: OnboardingRepository
   securityPolicy?: SecurityPolicy
   configzServiceFactory?: ConfigzServiceFactory & ManagementConfigzServiceFactory
+  applicationServiceFactory?: ManagementApplicationServiceFactory
   connectorServiceFactory?: ConnectorServiceFactory
 }
 
@@ -256,6 +262,9 @@ type RpcSchema = {
   '/api/management/sign-in-settings': {
     $get: RpcEndpoint<RpcNoInput, ManagementSignInSettingsResponse>
   }
+  '/api/management/readiness': {
+    $get: RpcEndpoint<RpcNoInput, ManagementReadinessResponse>
+  }
   '/api/management/security/policy': {
     $get: RpcEndpoint<RpcNoInput, { policy: SecurityPolicy }>
   }
@@ -309,6 +318,7 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
         securityRepository: options.securityRepository,
         securityPolicy: options.securityPolicy,
         configzServiceFactory: options.configzServiceFactory,
+        applicationServiceFactory: options.applicationServiceFactory,
         connectorServiceFactory: options.connectorServiceFactory,
       }),
     )

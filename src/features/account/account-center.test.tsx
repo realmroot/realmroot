@@ -1,6 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AccountCenterPage } from './account-center'
+import { AccountCenter, AccountCenterPage } from './account-center'
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, className, to }: { children: ReactNode; className?: string; to: string }) => (
+    <a className={className} href={to}>
+      {children}
+    </a>
+  ),
+}))
 
 afterEach(() => {
   cleanup()
@@ -14,11 +23,11 @@ describe('account center', () => {
     render(<AccountCenterPage />)
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Profile' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Security' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Linked accounts' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Sessions' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Consented apps' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Profile' }).getAttribute('href')).toBe('/account/profile')
+    expect(screen.getByRole('link', { name: 'Security' }).getAttribute('href')).toBe('/account/security')
+    expect(screen.getByRole('link', { name: 'Linked accounts' }).getAttribute('href')).toBe('/account/linked-accounts')
+    expect(screen.getByRole('link', { name: 'Sessions' }).getAttribute('href')).toBe('/account/sessions')
+    expect(screen.getByRole('link', { name: 'Authorized apps' }).getAttribute('href')).toBe('/account/authorized-apps')
 
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
   })
@@ -68,9 +77,9 @@ describe('account center', () => {
   it('shows TOTP enrollment setup data before verification', async () => {
     const requests = mockAccountFetch()
 
-    render(<AccountCenterPage />)
+    render(<AccountCenter section="security" />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Security' }))
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enroll authenticator app' }))
 
@@ -93,9 +102,9 @@ describe('account center', () => {
       },
     })
 
-    render(<AccountCenterPage />)
+    render(<AccountCenter section="security" />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Security' }))
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     fireEvent.change(screen.getByLabelText('Passkey name'), { target: { value: 'MacBook Touch ID' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add passkey' }))
 
@@ -130,25 +139,31 @@ describe('account center', () => {
   it('manages MFA verification, linked accounts, sessions, passkeys, and application consent display', async () => {
     const requests = mockAccountFetch()
 
-    render(<AccountCenterPage />)
+    render(<AccountCenter section="security" />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Security' }))
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Laptop key')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Authenticator code'), { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: 'Verify code' }))
     fireEvent.click(screen.getByRole('button', { name: 'Disable MFA' }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Linked accounts' }))
+    cleanup()
+    render(<AccountCenter section="linked-accounts" />)
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('google')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sessions' }))
+    cleanup()
+    render(<AccountCenter section="sessions" />)
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Chrome on macOS')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Revoke all' }))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Consented apps' }))
+    cleanup()
+    render(<AccountCenter section="authorized-apps" />)
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Customer Portal')).toBeTruthy()
     expect(screen.getByText(/openid, email/)).toBeTruthy()
 
@@ -261,11 +276,13 @@ describe('account center', () => {
       },
     })
 
-    render(<AccountCenterPage />)
+    render(<AccountCenter section="profile" />)
 
     expect(await screen.findByText('Verification required')).toBeTruthy()
     await waitFor(() => expect((screen.getByLabelText('Username') as HTMLInputElement).value).toBe(''))
-    fireEvent.click(screen.getByRole('button', { name: 'Security' }))
+    cleanup()
+    render(<AccountCenter section="security" />)
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Enabled')).toBeTruthy()
     expect(screen.getByText('Unnamed passkey')).toBeTruthy()
     expect(screen.getByText('singleDevice')).toBeTruthy()
@@ -287,12 +304,18 @@ describe('account center', () => {
       )
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sessions' }))
+    cleanup()
+    render(<AccountCenter section="sessions" />)
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText(/Unknown device/)).toBeTruthy()
     expect(screen.getByText(/No IP/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Linked accounts' }))
+    cleanup()
+    render(<AccountCenter section="linked-accounts" />)
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('No linked social accounts.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Consented apps' }))
+    cleanup()
+    render(<AccountCenter section="authorized-apps" />)
+    await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('No application consents.')).toBeTruthy()
   })
 })

@@ -8,7 +8,6 @@ import {
   KeyRound,
   LockKeyhole,
   Palette,
-  Rocket,
   ShieldCheck,
   UsersRound,
 } from 'lucide-react'
@@ -17,7 +16,6 @@ import { cn } from '@/lib/utils'
 
 const adminNavItems = [
   { href: '/admin', label: 'Dashboard', icon: Gauge },
-  { href: '/admin/onboarding', label: 'Onboarding', icon: Rocket },
   { href: '/admin/applications', label: 'Applications', icon: AppWindow },
   { href: '/admin/users', label: 'Users', icon: UsersRound },
   { href: '/admin/connectors', label: 'Connectors', icon: Cable },

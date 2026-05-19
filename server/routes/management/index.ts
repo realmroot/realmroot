@@ -2,12 +2,15 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { assignRoleRequestSchema } from '../../../shared/api/authorization'
 import {
+  type ManagementReadinessResponse,
   type ManagementSignInSettingsResponse,
+  managementReadinessResponseSchema,
   managementSignInSettingsResponseSchema,
 } from '../../../shared/api/management'
 import type { SecurityPolicy } from '../../../shared/api/security'
 import { requireAdmin } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
+import { type ApplicationBindings, createApplicationService } from '../../modules/applications/context'
 import { type AuthorizationBindings, createAuthorizationService } from '../../modules/authorization/context'
 import { type ConfigzBindings, createConfigzService } from '../../modules/configz/context'
 import type { SecurityRepository } from '../../modules/security/repository'
@@ -32,17 +35,22 @@ export type ManagementConfigzServiceFactory = (c: Context<{ Bindings: ConfigzBin
   getConfig: () => Promise<ManagementConfigz>
 }
 
+export type ManagementApplicationServiceFactory = (c: Context<{ Bindings: ApplicationBindings }>) => {
+  list: (query: { limit: number; offset: number }) => Promise<{ pagination: { total: number } }>
+}
+
 interface ManagementRoutesOptions {
   authApi: ManagementAuthApi
   userRepository?: UserRepository
   securityRepository?: SecurityRepository
   securityPolicy?: SecurityPolicy
   configzServiceFactory?: ManagementConfigzServiceFactory
+  applicationServiceFactory?: ManagementApplicationServiceFactory
   connectorServiceFactory?: ConnectorServiceFactory
 }
 
 export function createManagementRoutes(options: ManagementRoutesOptions) {
-  const app = new Hono<{ Bindings: AuthorizationBindings & ConfigzBindings }>()
+  const app = new Hono<{ Bindings: AuthorizationBindings & ConfigzBindings & ApplicationBindings }>()
 
   app.route('/applications', adminApplicationsRoute)
   app.route('/api-resources', adminApiResourcesRoute)
@@ -92,6 +100,27 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
       } satisfies ManagementSignInSettingsResponse
 
       return c.json(managementSignInSettingsResponseSchema.parse(response))
+    })
+  }
+
+  {
+    const applicationServiceFactory = options.applicationServiceFactory ?? createApplicationService
+
+    app.use('/readiness', requireAdmin())
+
+    app.get('/readiness', async (c) => {
+      const applications = await applicationServiceFactory(c).list({ limit: 1, offset: 0 })
+      const missing: ManagementReadinessResponse['admin']['missing'] =
+        applications.pagination.total === 0 ? ['oidc_application'] : []
+      const response = {
+        admin: {
+          setupRequired: missing.length > 0,
+          setupHref: '/admin/onboarding',
+          missing,
+        },
+      } satisfies ManagementReadinessResponse
+
+      return c.json(managementReadinessResponseSchema.parse(response))
     })
   }
 

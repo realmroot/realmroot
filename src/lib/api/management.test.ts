@@ -26,6 +26,7 @@ describe('management API client', () => {
     })
     await management.updateConnector('connector-1', { enabled: false })
     await management.getSignInSettings()
+    await management.getAdminReadiness()
     await management.getSecurityPolicy()
     await management.listOrganizations()
     await management.createOrganization({ slug: 'acme', name: 'Acme' })
@@ -64,6 +65,7 @@ describe('management API client', () => {
       ],
       ['connectors.patch', { param: { id: 'connector-1' }, json: { enabled: false } }],
       ['signIn.get'],
+      ['readiness.get'],
       ['security.get'],
       ['organizations.get'],
       ['organizations.post', { json: { slug: 'acme', name: 'Acme' } }],
@@ -131,6 +133,7 @@ async function loadManagementApi() {
             ':id': { $patch: endpoint('connectors.patch') },
           },
           'sign-in-settings': { $get: endpoint('signIn.get') },
+          readiness: { $get: endpoint('readiness.get') },
           security: { policy: { $get: endpoint('security.get') } },
           organizations: {
             $get: endpoint('organizations.get'),
