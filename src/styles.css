@@ -738,6 +738,64 @@ h1 {
   gap: 10px;
 }
 
+.consoleToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.consoleToolbar .textInput {
+  width: min(100%, 320px);
+}
+
+.consoleDetailStack {
+  display: grid;
+  gap: 16px;
+}
+
+.consoleBackLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.consoleBackLink:hover {
+  color: var(--ink);
+}
+
+.objectHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.stickyActionBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 8px -16px -16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
 .setupPanel {
   display: grid;
   gap: 10px;

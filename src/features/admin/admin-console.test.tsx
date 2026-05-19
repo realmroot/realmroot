@@ -58,6 +58,11 @@ describe('admin console', () => {
     renderWithQuery(<AdminDashboardPage />)
 
     expect(await screen.findByRole('heading', { name: 'Tenant health' })).toBeTruthy()
+    expect(screen.getByText('Total users')).toBeTruthy()
+    expect(screen.getByText('New users')).toBeTruthy()
+    expect(screen.getByText('Active users')).toBeTruthy()
+    expect(screen.getByText('Monthly active')).toBeTruthy()
+    expect(screen.getAllByText('Pending')).toHaveLength(3)
     expect(screen.getByText('Setup progress')).toBeTruthy()
     expect(screen.getByText('OIDC endpoints')).toBeTruthy()
     expect(screen.getByText('Health signals')).toBeTruthy()
@@ -548,6 +553,14 @@ describe('admin console', () => {
     renderWithQuery(<ApplicationsPage />)
 
     expect(await screen.findByText('Customer portal')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'My apps' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: 'Third-party apps' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Application name' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'App ID' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Type' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search applications'), { target: { value: 'missing' } })
+    expect(await screen.findByText('No applications found')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search applications'), { target: { value: 'Customer' } })
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Admin console' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'admin-console' } })
@@ -565,11 +578,16 @@ describe('admin console', () => {
             name: 'Admin console',
             slug: 'admin-console',
             clientType: 'confidential_web',
+            firstParty: true,
             redirectUris: ['https://app.example.com/callback'],
           },
         },
       ])
     })
+
+    fireEvent.change(screen.getByLabelText('Search applications'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('tab', { name: 'Third-party apps' }))
+    expect(await screen.findByText('No applications in this tab')).toBeTruthy()
   })
 
   it('closes the application dialog and toggles application availability', async () => {
@@ -649,6 +667,7 @@ describe('admin console', () => {
           name: 'Server app',
           slug: 'server-app',
           clientType: 'confidential_web',
+          firstParty: true,
           redirectUris: ['https://server.example.com/callback'],
         },
       },
@@ -764,11 +783,28 @@ describe('admin console', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Settings' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Branding' })).toBeTruthy()
+    expect(screen.getByLabelText('Application name')).toHaveProperty('value', 'Customer portal')
+    expect(screen.getByLabelText('Post sign-out redirect URIs')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('CORS origins')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Custom data JSON')).toHaveProperty('disabled', true)
     expect(screen.getByText('https://auth.example.com/authorize')).toBeTruthy()
     expect(screen.getByText('https://auth.example.com/token')).toBeTruthy()
     expect(screen.getByText('https://auth.example.com/userinfo')).toBeTruthy()
     expect(screen.getByText('https://auth.example.com/jwks')).toBeTruthy()
     expect(screen.getByText('No client secret is issued for public clients.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Application name'), {
+      target: { value: 'Customer portal updated' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/applications/app-1',
+        method: 'PATCH',
+        body: { name: 'Customer portal updated', description: null },
+      })
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Copy client config' }))
     expect(JSON.parse(clipboard.writeText.mock.calls[0]?.[0])).toEqual({
       issuer: 'https://auth.example.com',
@@ -783,9 +819,13 @@ describe('admin console', () => {
       target: { value: 'https://new.example.com/callback' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save redirect URIs' }))
-    fireEvent.change(screen.getByLabelText('Upload logo for Customer portal'), {
+    fireEvent.click(screen.getByRole('tab', { name: 'Branding' }))
+    expect(screen.getByText('Display name')).toBeTruthy()
+    expect(screen.getByText('Homepage URL')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Upload logo for Customer portal updated'), {
       target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
     })
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }))
     fireEvent.click(screen.getByRole('button', { name: 'Disable application' }))
     expect(await screen.findByRole('button', { name: 'Enable application' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Enable application' }))
@@ -796,6 +836,11 @@ describe('admin console', () => {
 
     await waitFor(() => {
       expect(requests).toEqual([
+        {
+          url: '/api/management/applications/app-1',
+          method: 'PATCH',
+          body: { name: 'Customer portal updated', description: null },
+        },
         {
           url: '/api/management/applications/app-1/redirect-uris',
           method: 'PUT',
@@ -929,6 +974,11 @@ describe('admin console', () => {
     renderWithQuery(<UsersPage />)
 
     expect(await screen.findByText('jane@example.com')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'User' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Role' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Email' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Created' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New user' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Jane Doe' } })
@@ -2257,6 +2307,10 @@ describe('admin console', () => {
     const { unmount } = renderWithQuery(<OrganizationsPage />)
 
     expect(await screen.findByText('Acme')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Organization' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Display name' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Logo' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New organization' }))
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'northwind' } })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Northwind' } })
@@ -2267,6 +2321,9 @@ describe('admin console', () => {
     unmount()
     renderWithQuery(<RolesPage />)
     expect(await screen.findByText('Admin')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Role' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Scope' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'System' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New role' }))
     fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'auditor' } })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Auditor' } })
@@ -2278,6 +2335,9 @@ describe('admin console', () => {
     unmount()
     renderWithQuery(<ApiResourcesPage />)
     expect(await screen.findByText('Management API')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Resource' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Audience' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New resource' }))
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'billing-api' } })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Billing API' } })
@@ -3208,6 +3268,7 @@ describe('admin console', () => {
             name: 'Review app',
             slug: 'review-app',
             clientType: 'public_spa',
+            firstParty: true,
             redirectUris: ['http://localhost:4173/oidc/callback'],
           },
         },

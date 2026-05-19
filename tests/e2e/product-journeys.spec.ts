@@ -496,6 +496,7 @@ const journeyAssertions: Record<
             name: 'Review client',
             slug: 'review-client',
             clientType: 'public_spa',
+            firstParty: true,
             redirectUris: ['http://localhost:4173/oidc/callback'],
           },
         })
@@ -666,12 +667,13 @@ const journeyAssertions: Record<
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/management/applications',
-        body: {
-          name: 'Admin console',
-          slug: 'admin-console',
-          clientType: 'public_spa',
-          redirectUris: ['http://localhost:4173/oidc/callback'],
-        },
+          body: {
+            name: 'Admin console',
+            slug: 'admin-console',
+            clientType: 'public_spa',
+            firstParty: true,
+            redirectUris: ['http://localhost:4173/oidc/callback'],
+          },
       })
     },
   },
@@ -686,12 +688,14 @@ const journeyAssertions: Record<
       await expect(page.getByText('https://auth.example.com/api/auth/oauth2/authorize')).toBeVisible()
       await expect(page.getByText('https://auth.example.com/api/auth/oauth2/token')).toBeVisible()
       await expect(page.getByText('openid profile')).toBeVisible()
+      await page.getByRole('tab', { name: 'Branding' }).click()
       await page.getByLabel('Upload logo for Customer portal').setInputFiles({
         name: 'logo.png',
         mimeType: 'image/png',
         buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       })
-      await page.getByLabel('Redirect URIs').fill('https://new.example.com/callback')
+      await page.getByRole('tab', { name: 'Settings' }).click()
+      await page.getByRole('textbox', { name: 'Redirect URIs', exact: true }).fill('https://new.example.com/callback')
       await page.getByRole('button', { name: 'Save redirect URIs' }).click()
       await page.getByRole('button', { name: 'Disable application' }).click()
       await page.getByRole('button', { name: 'Enable application' }).click()

@@ -2,7 +2,7 @@ import {
   type ApplicationResponse,
   createApplicationRequestSchema,
   replaceRedirectUrisRequestSchema,
-  type updateApplicationRequestSchema,
+  updateApplicationRequestSchema,
 } from '@shared/api/applications'
 import {
   type assignRoleRequestSchema,
@@ -46,6 +46,7 @@ import {
   Server,
   ShieldCheck,
   Trash2,
+  Undo2,
 } from 'lucide-react'
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import type { z } from 'zod'
@@ -170,29 +171,27 @@ export function AdminDashboardPage() {
         breadcrumb={['Overview']}
         eyebrow="Dashboard"
         title="Tenant health"
-        description="Track setup readiness, identity activity, security posture, and standards-based integration metadata."
+        description="Track identity volume, setup readiness, activity signals, and standards-based integration metadata."
       />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          detail="OIDC clients ready for authorization code flows."
-          label="Applications"
-          value={dashboard.applications.pagination.total}
-        />
-        <MetricCard
           detail="Tenant identities available to hosted auth."
-          label="Users"
+          label="Total users"
           value={dashboard.users.pagination.total}
         />
         <MetricCard
-          detail="Organizations represented in authorization policy."
-          label="Organizations"
-          value={dashboard.organizations.pagination.total}
+          detail="Users created in the last 24 hours. Activity API pending."
+          label="New users"
+          pending
+          value="--"
         />
         <MetricCard
-          detail="Role definitions across tenant resources."
-          label="Roles"
-          value={dashboard.roles.pagination.total}
+          detail="Daily and weekly active users. Activity API pending."
+          label="Active users"
+          pending
+          value="DAU -- / WAU --"
         />
+        <MetricCard detail="Monthly active users. Activity API pending." label="Monthly active" pending value="--" />
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <Card>
@@ -352,6 +351,8 @@ export function ApplicationsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.applications, queryFn: listApplications })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [selectedTab, setSelectedTab] = useState<'my-apps' | 'third-party'>('my-apps')
+  const [search, setSearch] = useState('')
   const [createdSecret, setCreatedSecret] = useState<{ clientId: string; clientSecret: string } | null>(null)
   const createMutation = useAdminMutation({
     mutationFn: createApplication,
@@ -369,6 +370,16 @@ export function ApplicationsPage() {
   const logoMutation = useAdminMutation({
     mutationFn: ({ id, file }: { id: string; file: File }) => uploadApplicationLogo(id, file),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+  })
+  const applications = query.data?.applications ?? []
+  const visibleApplications = applications.filter((application) => {
+    const matchesTab = selectedTab === 'my-apps' ? application.firstParty : !application.firstParty
+    const matchesSearch =
+      search.trim().length === 0 ||
+      [application.name, application.clientId, application.slug].some((value) =>
+        value.toLowerCase().includes(search.trim().toLowerCase()),
+      )
+    return matchesTab && matchesSearch
   })
 
   return (
@@ -399,76 +410,62 @@ export function ApplicationsPage() {
         </>
       }
       error={query.error}
-      empty={query.data?.applications.length === 0}
+      empty={applications.length === 0}
       emptyDescription="Create your first OIDC client to connect an application to hosted authentication."
       emptyTitle="No applications yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
-      {query.data?.applications.length ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Client</TableHead>
-              <TableHead>Logo</TableHead>
-              <TableHead>Grants</TableHead>
-              <TableHead>Scopes</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {query.data.applications.map((application) => (
-              <TableRow key={application.id}>
-                <TableCell>
-                  <a className="font-medium hover:underline" href={`/console/applications/${application.id}`}>
-                    {application.name}
-                  </a>
-                  <div className="text-xs text-muted-foreground">{application.slug}</div>
-                </TableCell>
-                <TableCell>
-                  <div>{application.clientId}</div>
-                  <div className="text-xs text-muted-foreground">{application.clientType}</div>
-                </TableCell>
-                <TableCell>
-                  <AssetUploadControl
-                    accept="image/png,image/jpeg,image/webp"
-                    label={`Upload logo for ${application.name}`}
-                    onFile={(file) => logoMutation.mutate({ id: application.id, file })}
-                    previewUrl={application.iconUrl}
-                  />
-                </TableCell>
-                <TableCell>{application.allowedGrantTypes.join(', ')}</TableCell>
-                <TableCell>{application.allowedScopes.join(' ')}</TableCell>
-                <TableCell>
-                  <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger aria-label={`Actions for ${application.name}`}>
-                      <MoreHorizontal data-icon="inline-start" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuGroup>
-                        <DropdownMenuItem
-                          onClick={() =>
-                            updateApplication(application.id, { disabled: !application.disabled }).then(() =>
-                              queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
-                            )
-                          }
-                        >
-                          {application.disabled ? 'Enable' : 'Disable'}
-                        </DropdownMenuItem>
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ) : null}
+      <Tabs setValue={(value) => setSelectedTab(value as 'my-apps' | 'third-party')} value={selectedTab}>
+        <div className="consoleToolbar border-b border-border p-4">
+          <TabsList aria-label="Application lists">
+            <TabsTrigger value="my-apps">My apps</TabsTrigger>
+            <TabsTrigger value="third-party">Third-party apps</TabsTrigger>
+          </TabsList>
+          <TextInput
+            aria-label="Search applications"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search applications"
+            value={search}
+          />
+        </div>
+        <TabsContent value="my-apps">
+          <ApplicationsTableContent
+            applications={visibleApplications}
+            emptyDescription={
+              search
+                ? 'No applications match the current search in this tab.'
+                : 'Applications created by external publishers will appear here when available.'
+            }
+            emptyTitle={search ? 'No applications found' : 'No applications in this tab'}
+            hasApplications={applications.length > 0}
+            onLogoFile={(id, file) => logoMutation.mutate({ id, file })}
+            onToggleDisabled={(application) =>
+              updateApplication(application.id, { disabled: !application.disabled }).then(() =>
+                queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+              )
+            }
+          />
+        </TabsContent>
+        <TabsContent value="third-party">
+          <ApplicationsTableContent
+            applications={visibleApplications}
+            emptyDescription={
+              search
+                ? 'No applications match the current search in this tab.'
+                : 'Applications created by external publishers will appear here when available.'
+            }
+            emptyTitle={search ? 'No applications found' : 'No applications in this tab'}
+            hasApplications={applications.length > 0}
+            onLogoFile={(id, file) => logoMutation.mutate({ id, file })}
+            onToggleDisabled={(application) =>
+              updateApplication(application.id, { disabled: !application.disabled }).then(() =>
+                queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+              )
+            }
+          />
+        </TabsContent>
+      </Tabs>
       {logoMutation.errorMessage ? <p className="p-4 text-sm text-destructive">{logoMutation.errorMessage}</p> : null}
     </ResourcePage>
   )
@@ -479,6 +476,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
   const navigate = useNavigate()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [rotatedSecret, setRotatedSecret] = useState<string | null>(null)
+  const [selectedTab, setSelectedTab] = useState<'settings' | 'branding'>('settings')
   const query = useQuery({
     queryKey: [...adminQueryKeys.applications, applicationId],
     queryFn: () => getApplication(applicationId),
@@ -536,183 +534,271 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
       title={application?.name ?? 'Application'}
       description="Review client configuration, manage redirect URIs, rotate confidential secrets, and copy standard OIDC integration details."
       framed={false}
-      action={
-        <Link className="uiButton uiButton-secondary" to="/console/applications">
-          Back to applications
-        </Link>
-      }
       error={query.error}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
       {application ? (
-        <div className="grid gap-4 p-4 xl:grid-cols-[1fr_1fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle>Client configuration</CardTitle>
-              <CardDescription>Use these values with any standards-compliant OIDC SDK.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <SettingRow label="Client ID" value={application.clientId} />
-              <SettingRow label="Client type" value={clientTypeLabel(application.clientType)} />
-              <SettingRow label="Auth method" value={application.tokenEndpointAuthMethod} />
-              <SettingRow label="PKCE" value={application.requirePkce ? 'Required' : 'Optional'} />
-              <SettingRow label="Discovery" value={`${application.oidc.issuer}/.well-known/openid-configuration`} />
-              <SettingRow label="Issuer" value={application.oidc.issuer} />
-              <CopyButton label="Copy client config" value={clientConfig(application, rotatedSecret)} />
-            </CardContent>
-          </Card>
+        <div className="consoleDetailStack">
+          <Link className="consoleBackLink" to="/console/applications">
+            <Undo2 data-icon="inline-start" />
+            Back to applications
+          </Link>
+          <ObjectHeader
+            badge={clientTypeLabel(application.clientType)}
+            id={application.clientId}
+            title={application.name}
+          />
+          <Tabs setValue={(value) => setSelectedTab(value as 'settings' | 'branding')} value={selectedTab}>
+            <TabsList aria-label="Application detail sections">
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+              <TabsTrigger value="branding">Branding</TabsTrigger>
+            </TabsList>
+            <TabsContent className="mt-4" value="settings">
+              <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>General settings</CardTitle>
+                    <CardDescription>Required display metadata and client classification.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form
+                      className="formStack"
+                      key={`${application.id}-${application.updatedAt}`}
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        const form = new FormData(event.currentTarget)
+                        updateMutation.mutate(
+                          parseForm(updateApplicationRequestSchema, {
+                            name: form.get('name'),
+                            description: nullableString(String(form.get('description') ?? '')),
+                          }),
+                        )
+                      }}
+                    >
+                      <Field label="Application name">
+                        <TextInput defaultValue={application.name} name="name" required />
+                      </Field>
+                      <Field label="Description">
+                        <TextArea defaultValue={application.description ?? ''} name="description" rows={3} />
+                      </Field>
+                      <SettingRow label="App ID" value={application.clientId} />
+                      <SettingRow label="Type" value={clientTypeLabel(application.clientType)} />
+                      <SettingRow label="Status" value={application.disabled ? 'Disabled' : 'Enabled'} />
+                      <StickyActionBar>
+                        <Button disabled={updateMutation.isPending} type="submit">
+                          <Save data-icon="inline-start" />
+                          Save changes
+                        </Button>
+                        <Button disabled={updateMutation.isPending} type="reset" variant="secondary">
+                          Discard
+                        </Button>
+                      </StickyActionBar>
+                      <MutationError error={updateMutation.error} />
+                    </form>
+                  </CardContent>
+                </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Lifecycle</CardTitle>
-              <CardDescription>
-                Disable clients before deleting them when integrations are still active.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <SettingRow label="Status" value={application.disabled ? 'Disabled' : 'Enabled'} />
-              <SettingRow label="Reason" value={application.disabledReason ?? 'Not set'} />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  disabled={updateMutation.isPending}
-                  onClick={() =>
-                    updateMutation.mutate({
-                      disabled: !application.disabled,
-                      disabledReason: application.disabled ? null : 'Disabled from Console',
-                    })
-                  }
-                  type="button"
-                  variant="secondary"
-                >
-                  {application.disabled ? 'Enable application' : 'Disable application'}
-                </Button>
-                <Button
-                  disabled={deleteMutation.isPending}
-                  onClick={() => setDeleteDialogOpen(true)}
-                  type="button"
-                  variant="danger"
-                >
-                  <Trash2 data-icon="inline-start" />
-                  Delete application
-                </Button>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Redirects and origins</CardTitle>
+                    <CardDescription>
+                      Callbacks backed by the current API plus pending integration surfaces.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form
+                      className="formStack"
+                      key={application.updatedAt}
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        const form = new FormData(event.currentTarget)
+                        redirectMutation.mutate(
+                          parseForm(replaceRedirectUrisRequestSchema, {
+                            redirectUris: String(form.get('redirectUris') ?? '')
+                              .split('\n')
+                              .filter(Boolean),
+                          }),
+                        )
+                      }}
+                    >
+                      <Field label="Redirect URIs" help="One URI per line.">
+                        <TextArea
+                          defaultValue={application.redirectUris.join('\n')}
+                          name="redirectUris"
+                          required
+                          rows={5}
+                        />
+                      </Field>
+                      <Field label="Post sign-out redirect URIs" help="Pending API support.">
+                        <TextArea disabled placeholder="No sign-out redirects configured" rows={3} />
+                      </Field>
+                      <Field label="CORS origins" help="Pending API support.">
+                        <TextArea disabled placeholder="No CORS origins configured" rows={3} />
+                      </Field>
+                      <StickyActionBar>
+                        <Button disabled={redirectMutation.isPending} type="submit">
+                          Save redirect URIs
+                        </Button>
+                        <Button disabled={redirectMutation.isPending} type="reset" variant="secondary">
+                          Discard
+                        </Button>
+                      </StickyActionBar>
+                      <MutationError error={redirectMutation.error} />
+                    </form>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Endpoints and credentials</CardTitle>
+                    <CardDescription>Use these values with any standards-compliant OIDC SDK.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3">
+                    <SettingRow label="Auth method" value={application.tokenEndpointAuthMethod} />
+                    <SettingRow label="PKCE" value={application.requirePkce ? 'Required' : 'Optional'} />
+                    <SettingRow label="Issuer" value={application.oidc.issuer} />
+                    <SettingRow
+                      label="Discovery"
+                      value={`${application.oidc.issuer}/.well-known/openid-configuration`}
+                    />
+                    <SettingRow label="Authorization endpoint" value={application.oidc.authorizationEndpoint} />
+                    <SettingRow label="Token endpoint" value={application.oidc.tokenEndpoint} />
+                    <SettingRow label="UserInfo endpoint" value={application.oidc.userInfoEndpoint} />
+                    <SettingRow label="JWKS URI" value={application.oidc.jwksUri} />
+                    <CopyButton label="Copy client config" value={clientConfig(application, rotatedSecret)} />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Client secrets</CardTitle>
+                    <CardDescription>
+                      Raw secrets are only shown once immediately after creation or rotation.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3">
+                    {application.public ? (
+                      <SettingRow label="Secret behavior" value="No client secret is issued for public clients." />
+                    ) : (
+                      <>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Version</TableHead>
+                              <TableHead>Prefix</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Created</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {secretsQuery.data?.secrets.map((secret) => (
+                              <TableRow key={secret.id}>
+                                <TableCell>{secret.version}</TableCell>
+                                <TableCell>{secret.prefix ?? 'Hidden'}</TableCell>
+                                <TableCell>{secret.status}</TableCell>
+                                <TableCell>{formatDate(secret.createdAt)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        <Button
+                          disabled={rotateMutation.isPending}
+                          onClick={() => rotateMutation.mutate()}
+                          type="button"
+                        >
+                          Rotate client secret
+                        </Button>
+                        <MutationError error={secretsQuery.error ?? rotateMutation.error} />
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Advanced options</CardTitle>
+                    <CardDescription>
+                      Current grant data plus pending non-destructive configuration controls.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3">
+                    <SettingRow label="Grant types" value={application.allowedGrantTypes.join(', ')} />
+                    <SettingRow label="Scopes" value={application.allowedScopes.join(' ')} />
+                    <SettingRow
+                      label="Refresh tokens"
+                      value={application.allowedScopes.includes('offline_access') ? 'Allowed by scope' : 'Not enabled'}
+                    />
+                    <SettingRow label="Backchannel logout" value="Pending API support" />
+                    <SettingRow label="Token exchange" value="Pending API support" />
+                    <SettingRow label="Concurrent device limit" value="Pending API support" />
+                    <Field label="Custom data JSON" help="Pending API support.">
+                      <TextArea disabled placeholder="{}" rows={4} />
+                    </Field>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Lifecycle</CardTitle>
+                    <CardDescription>
+                      Disable clients before deleting them when integrations are still active.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3">
+                    <SettingRow label="Reason" value={application.disabledReason ?? 'Not set'} />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        disabled={updateMutation.isPending}
+                        onClick={() =>
+                          updateMutation.mutate({
+                            disabled: !application.disabled,
+                            disabledReason: application.disabled ? null : 'Disabled from Console',
+                          })
+                        }
+                        type="button"
+                        variant="secondary"
+                      >
+                        {application.disabled ? 'Enable application' : 'Disable application'}
+                      </Button>
+                      <Button
+                        disabled={deleteMutation.isPending}
+                        onClick={() => setDeleteDialogOpen(true)}
+                        type="button"
+                        variant="danger"
+                      >
+                        <Trash2 data-icon="inline-start" />
+                        Delete application
+                      </Button>
+                    </div>
+                    <MutationError error={updateMutation.error ?? deleteMutation.error} />
+                  </CardContent>
+                </Card>
               </div>
-              <MutationError error={updateMutation.error ?? deleteMutation.error} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Logo</CardTitle>
-              <CardDescription>Image shown in application and consent surfaces.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <AssetUploadControl
-                accept="image/png,image/jpeg,image/webp"
-                label={`Upload logo for ${application.name}`}
-                onFile={(file) => logoMutation.mutate(file)}
-                previewUrl={application.iconUrl}
-              />
-              <MutationError error={logoMutation.error} />
-              {logoMutation.errorMessage ? (
-                <p className="text-sm text-destructive">{logoMutation.errorMessage}</p>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Redirect URIs</CardTitle>
-              <CardDescription>Authorization code callbacks registered for this client.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form
-                className="formStack"
-                key={application.updatedAt}
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  const form = new FormData(event.currentTarget)
-                  redirectMutation.mutate(
-                    parseForm(replaceRedirectUrisRequestSchema, {
-                      redirectUris: String(form.get('redirectUris') ?? '')
-                        .split('\n')
-                        .filter(Boolean),
-                    }),
-                  )
-                }}
-              >
-                <Field label="Redirect URIs" help="One URI per line.">
-                  <TextArea defaultValue={application.redirectUris.join('\n')} name="redirectUris" required rows={5} />
-                </Field>
-                <Button disabled={redirectMutation.isPending} type="submit">
-                  Save redirect URIs
-                </Button>
-                <MutationError error={redirectMutation.error} />
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Grants and scopes</CardTitle>
-              <CardDescription>Allowed OAuth grants and OIDC scopes exposed to client SDKs.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <SettingRow label="Grant types" value={application.allowedGrantTypes.join(', ')} />
-              <SettingRow label="Scopes" value={application.allowedScopes.join(' ')} />
-              <SettingRow label="Authorization endpoint" value={application.oidc.authorizationEndpoint} />
-              <SettingRow label="Token endpoint" value={application.oidc.tokenEndpoint} />
-              <SettingRow label="UserInfo endpoint" value={application.oidc.userInfoEndpoint} />
-              <SettingRow label="JWKS URI" value={application.oidc.jwksUri} />
-            </CardContent>
-          </Card>
-
-          {application.public ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Client secrets</CardTitle>
-                <CardDescription>Public clients use PKCE and do not have a client secret.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SettingRow label="Secret behavior" value="No client secret is issued for public clients." />
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Client secrets</CardTitle>
-                <CardDescription>
-                  Raw secrets are only shown once immediately after creation or rotation.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Version</TableHead>
-                      <TableHead>Prefix</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {secretsQuery.data?.secrets.map((secret) => (
-                      <TableRow key={secret.id}>
-                        <TableCell>{secret.version}</TableCell>
-                        <TableCell>{secret.prefix ?? 'Hidden'}</TableCell>
-                        <TableCell>{secret.status}</TableCell>
-                        <TableCell>{formatDate(secret.createdAt)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <Button disabled={rotateMutation.isPending} onClick={() => rotateMutation.mutate()} type="button">
-                  Rotate client secret
-                </Button>
-                <MutationError error={secretsQuery.error ?? rotateMutation.error} />
-              </CardContent>
-            </Card>
-          )}
+            </TabsContent>
+            <TabsContent className="mt-4" value="branding">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Application branding</CardTitle>
+                  <CardDescription>Logo and display values shown in application and consent surfaces.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  <AssetUploadControl
+                    accept="image/png,image/jpeg,image/webp"
+                    label={`Upload logo for ${application.name}`}
+                    onFile={(file) => logoMutation.mutate(file)}
+                    previewUrl={application.iconUrl}
+                  />
+                  <SettingRow label="Display name" value={application.name} />
+                  <SettingRow label="Homepage URL" value={application.homepageUrl ?? 'Not set'} />
+                  <MutationError error={logoMutation.error} />
+                  {logoMutation.errorMessage ? (
+                    <p className="text-sm text-destructive">{logoMutation.errorMessage}</p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       ) : null}
       <SecretDisclosureDialog
@@ -730,6 +816,85 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
         pending={deleteMutation.isPending}
       />
     </ResourcePage>
+  )
+}
+
+function ApplicationsTableContent({
+  applications,
+  emptyDescription,
+  emptyTitle,
+  hasApplications,
+  onLogoFile,
+  onToggleDisabled,
+}: {
+  applications: ApplicationResponse[]
+  emptyDescription: string
+  emptyTitle: string
+  hasApplications: boolean
+  onLogoFile: (id: string, file: File) => void
+  onToggleDisabled: (application: ApplicationResponse) => void
+}) {
+  if (!applications.length && hasApplications) {
+    return <EmptyState description={emptyDescription} title={emptyTitle} />
+  }
+
+  if (!applications.length) return null
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Application name</TableHead>
+          <TableHead>App ID</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {applications.map((application) => (
+          <TableRow key={application.id}>
+            <TableCell>
+              <a className="font-medium hover:underline" href={`/console/applications/${application.id}`}>
+                {application.name}
+              </a>
+              <div className="text-xs text-muted-foreground">{application.slug}</div>
+              <div className="mt-2">
+                <AssetUploadControl
+                  accept="image/png,image/jpeg,image/webp"
+                  label={`Upload logo for ${application.name}`}
+                  onFile={(file) => onLogoFile(application.id, file)}
+                  previewUrl={application.iconUrl}
+                />
+              </div>
+            </TableCell>
+            <TableCell>
+              <code className="text-xs">{application.clientId}</code>
+            </TableCell>
+            <TableCell>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{clientTypeLabel(application.clientType)}</Badge>
+                <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">{application.allowedGrantTypes.join(', ')}</div>
+            </TableCell>
+            <TableCell className="text-right">
+              <DropdownMenu>
+                <DropdownMenuTrigger aria-label={`Actions for ${application.name}`}>
+                  <MoreHorizontal data-icon="inline-start" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => onToggleDisabled(application)}>
+                      {application.disabled ? 'Enable' : 'Disable'}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   )
 }
 
@@ -795,6 +960,7 @@ export function AdminOnboardingPage() {
                     name: form.name,
                     slug: form.slug,
                     clientType: 'public_spa',
+                    firstParty: true,
                     redirectUris: form.redirectUris.split('\n').filter(Boolean),
                   }),
                 )
@@ -3161,7 +3327,7 @@ function ResourcePage({
         eyebrow="Console"
         title={title}
       />
-      {toolbar ? <div className="max-w-sm">{toolbar}</div> : null}
+      {toolbar ? <div>{toolbar}</div> : null}
       {loading ? <LoadingState label={`Loading ${title.toLowerCase()}`} /> : null}
       {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
       {!loading && !error && empty ? (
@@ -3180,6 +3346,24 @@ function ResourcePage({
       {auxiliary}
     </>
   )
+}
+
+function ObjectHeader({ badge, id, title }: { badge: string; id: string; title: string }) {
+  return (
+    <div className="objectHeader">
+      <div className="min-w-0">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{badge}</Badge>
+          <code className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{id}</code>
+        </div>
+        <p className="text-xl font-semibold leading-tight tracking-normal">{title}</p>
+      </div>
+    </div>
+  )
+}
+
+function StickyActionBar({ children }: { children: ReactNode }) {
+  return <div className="stickyActionBar">{children}</div>
 }
 
 function PageHeader({
@@ -3217,11 +3401,24 @@ function PageHeader({
   )
 }
 
-function MetricCard({ detail, label, value }: { detail: string; label: string; value: number }) {
+function MetricCard({
+  detail,
+  label,
+  pending,
+  value,
+}: {
+  detail: string
+  label: string
+  pending?: boolean
+  value: number | string
+}) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardDescription>{label}</CardDescription>
+        <div className="flex items-center justify-between gap-2">
+          <CardDescription>{label}</CardDescription>
+          {pending ? <Badge variant="outline">Pending</Badge> : null}
+        </div>
         <CardTitle className="text-2xl">{value}</CardTitle>
         <p className="text-xs leading-5 text-muted-foreground">{detail}</p>
       </CardHeader>
@@ -3663,6 +3860,7 @@ function CreateApplicationDialog({
               parseForm(createApplicationRequestSchema, {
                 ...form,
                 clientType: form.clientType || 'public_spa',
+                firstParty: true,
                 redirectUris: form.redirectUris?.split('\n').filter(Boolean) ?? [],
               }),
             )

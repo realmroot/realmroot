@@ -159,9 +159,16 @@ describe('composed UI primitives', () => {
       </Tabs>,
     )
 
-    expect(screen.getByRole('tabpanel').textContent).toBe('Profile panel')
+    const profileTab = screen.getByRole('tab', { name: 'Profile' })
+    const securityTab = screen.getByRole('tab', { name: 'Security' })
+    const panel = screen.getByRole('tabpanel')
+    expect(panel.textContent).toBe('Profile panel')
+    expect(profileTab.getAttribute('aria-controls')).toBe(panel.id)
+    expect(panel.getAttribute('aria-labelledby')).toBe(profileTab.id)
     expect(screen.queryByText('Security panel')).toBeNull()
-    fireEvent.click(screen.getByRole('tab', { name: 'Security' }))
+    fireEvent.keyDown(profileTab, { key: 'ArrowRight' })
+    expect(setValue).toHaveBeenCalledWith('security')
+    fireEvent.click(securityTab)
     expect(setValue).toHaveBeenCalledWith('security')
     expect(() => render(<TabsTrigger value="orphan">Orphan</TabsTrigger>)).toThrow(
       'Tabs components must be rendered inside Tabs.',
