@@ -27,12 +27,15 @@ import type {
   CreateManagementConnectorRequest,
   ListManagementConnectorsResponse,
   ListManagementUsersResponse,
+  ManagementBrandingSettingsResponse,
   ManagementCreateUserRequest,
   ManagementReadinessResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
   ManagementUserListQuery,
+  UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
+  UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { SecurityPolicy } from '@shared/api/security'
 import { apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
@@ -43,6 +46,7 @@ export const adminQueryKeys = {
   users: ['admin', 'users'] as const,
   connectors: ['admin', 'connectors'] as const,
   signIn: ['admin', 'sign-in-settings'] as const,
+  branding: ['admin', 'branding-settings'] as const,
   security: ['admin', 'security-policy'] as const,
   organizations: ['admin', 'organizations'] as const,
   roles: ['admin', 'roles'] as const,
@@ -190,6 +194,18 @@ export function updateConnector(id: string, input: UpdateManagementConnectorRequ
 
 export function getSignInSettings() {
   return readRpcResponse(apiClient.api.management['sign-in-settings'].$get())
+}
+
+export function updateSignInSettings(input: UpdateManagementSignInSettingsRequest) {
+  return readRpcResponse(apiClient.api.management['sign-in-settings'].$patch({ json: input }))
+}
+
+export function getBrandingSettings(): Promise<ManagementBrandingSettingsResponse> {
+  return readRpcResponse(apiClient.api.management['branding-settings'].$get())
+}
+
+export function updateBrandingSettings(input: UpdateManagementBrandingSettingsRequest) {
+  return readRpcResponse(apiClient.api.management['branding-settings'].$patch({ json: input }))
 }
 
 export function getAdminReadiness(): Promise<ManagementReadinessResponse> {

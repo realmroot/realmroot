@@ -33,6 +33,9 @@ describe('management API client', () => {
     })
     await management.updateConnector('connector-1', { enabled: false })
     await management.getSignInSettings()
+    await management.updateSignInSettings({ signIn: { identifierFirst: true } })
+    await management.getBrandingSettings()
+    await management.updateBrandingSettings({ branding: { primaryColor: '#2563eb' } })
     await management.getAdminReadiness()
     await management.getSecurityPolicy()
     await management.listOrganizations()
@@ -82,6 +85,9 @@ describe('management API client', () => {
       ],
       ['connectors.patch', { param: { id: 'connector-1' }, json: { enabled: false } }],
       ['signIn.get'],
+      ['signIn.patch', { json: { signIn: { identifierFirst: true } } }],
+      ['branding.get'],
+      ['branding.patch', { json: { branding: { primaryColor: '#2563eb' } } }],
       ['readiness.get'],
       ['security.get'],
       ['organizations.get'],
@@ -164,7 +170,8 @@ async function loadManagementApi() {
             $post: endpoint('connectors.post'),
             ':id': { $patch: endpoint('connectors.patch') },
           },
-          'sign-in-settings': { $get: endpoint('signIn.get') },
+          'sign-in-settings': { $get: endpoint('signIn.get'), $patch: endpoint('signIn.patch') },
+          'branding-settings': { $get: endpoint('branding.get'), $patch: endpoint('branding.patch') },
           readiness: { $get: endpoint('readiness.get') },
           security: { policy: { $get: endpoint('security.get') } },
           organizations: {

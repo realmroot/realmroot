@@ -173,7 +173,154 @@ describe('management routes', () => {
         privacyUri: null,
         supportEmail: 'support@example.com',
       },
+      copy: {
+        productName: 'FlareAuth',
+        headline: 'Sign in',
+        description: 'Continue.',
+      },
     })
+  })
+
+  it('updates managed sign-in and branding settings with validated runtime-safe CSS', async () => {
+    const service = createConfigzServiceMock()()
+    const app = createApp(createAuthMock(), {
+      configzServiceFactory: () => service,
+    })
+    const headers = adminHeaders()
+
+    const signIn = await app.request('/api/management/sign-in-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        signIn: { passwordEnabled: false, identifierFirst: true },
+        links: { supportEmail: 'help@example.com' },
+        copy: { productName: 'Acme ID' },
+      }),
+    })
+    const branding = await app.request('/api/management/branding-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        branding: {
+          logoUrl: 'https://cdn.example.com/logo.svg',
+          faviconUrl: 'https://cdn.example.com/favicon.ico',
+          primaryColor: '#2563eb',
+          backgroundColor: '#ffffff',
+          customCss: '--auth-panel-radius: 8px;',
+        },
+      }),
+    })
+    const invalidCss = await app.request('/api/management/branding-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ branding: { customCss: '.authPanel { background: red; }' } }),
+    })
+
+    expect(signIn.status).toBe(200)
+    expect(branding.status).toBe(200)
+    expect(invalidCss.status).toBe(400)
+    expect(service.updateManagementSignInSettings).toHaveBeenCalledWith({
+      signIn: { passwordEnabled: false, identifierFirst: true },
+      links: { supportEmail: 'help@example.com' },
+      copy: { productName: 'Acme ID' },
+    })
+    expect(service.updateManagementBrandingSettings).toHaveBeenCalledWith({
+      branding: {
+        logoUrl: 'https://cdn.example.com/logo.svg',
+        faviconUrl: 'https://cdn.example.com/favicon.ico',
+        primaryColor: '#2563eb',
+        backgroundColor: '#ffffff',
+        customCss: '--auth-panel-radius: 8px;',
+      },
+    })
+  })
+
+  it('exposes managed branding settings', async () => {
+    const app = createApp(createAuthMock(), {
+      configzServiceFactory: createConfigzServiceMock(),
+    })
+
+    const settings = await app.request('/api/management/branding-settings', { headers: adminHeaders() })
+
+    expect(settings.status).toBe(200)
+    await expect(settings.json()).resolves.toEqual({
+      branding: {
+        logoUrl: null,
+        faviconUrl: null,
+        primaryColor: null,
+        backgroundColor: null,
+        customCss: null,
+      },
+      copy: {
+        productName: 'FlareAuth',
+        headline: 'Sign in',
+        description: 'Continue.',
+      },
+    })
+  })
+
+  it('uses management-specific configz readers when available', async () => {
+    const app = createApp(createAuthMock(), {
+      configzServiceFactory: () => ({
+        getConfig: async () => {
+          throw new Error('getConfig should not be called')
+        },
+        getManagementSignInSettings: async () => ({
+          signIn: {
+            passwordEnabled: true,
+            signupEnabled: true,
+            socialLoginEnabled: true,
+            magicLinkEnabled: true,
+            emailOtpEnabled: true,
+            usernameEnabled: true,
+            identifierFirst: false,
+          },
+          defaults: { applicationId: null, redirectUri: null },
+          links: { termsUri: null, privacyUri: null, supportEmail: null },
+          copy: { productName: 'Dedicated ID', headline: 'Sign in', description: 'Continue.' },
+        }),
+        getManagementBrandingSettings: async () => ({
+          branding: {
+            logoUrl: null,
+            faviconUrl: null,
+            primaryColor: '#2563eb',
+            backgroundColor: '#ffffff',
+            customCss: null,
+          },
+          copy: { productName: 'Dedicated ID', headline: 'Sign in', description: 'Continue.' },
+        }),
+      }),
+    })
+    const headers = adminHeaders()
+    const signIn = await app.request('/api/management/sign-in-settings', { headers })
+    const branding = await app.request('/api/management/branding-settings', { headers })
+
+    await expect(signIn.json()).resolves.toMatchObject({ copy: { productName: 'Dedicated ID' } })
+    await expect(branding.json()).resolves.toMatchObject({ branding: { primaryColor: '#2563eb' } })
+  })
+
+  it('normalizes management setting PATCH responses when the service is read-only', async () => {
+    const service = createConfigzServiceMock()()
+    const app = createApp(createAuthMock(), {
+      configzServiceFactory: () => ({ getConfig: service.getConfig }),
+    })
+    const headers = adminHeaders()
+
+    const signIn = await app.request('/api/management/sign-in-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ signIn: { identifierFirst: true } }),
+    })
+    const branding = await app.request('/api/management/branding-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ branding: { primaryColor: '#2563eb' } }),
+    })
+
+    expect(signIn.status).toBe(200)
+    expect(branding.status).toBe(200)
+    await expect(signIn.json()).resolves.toMatchObject({ copy: { productName: 'FlareAuth' } })
+    await expect(branding.json()).resolves.toMatchObject({ branding: { primaryColor: null } })
   })
 
   it('exposes admin setup readiness through the management boundary', async () => {
@@ -392,8 +539,8 @@ function createUserRepositoryMock(): UserRepository {
 }
 
 function createConfigzServiceMock() {
-  return () => ({
-    getConfig: async () => ({
+  return () => {
+    const config = {
       onboarding: {
         required: false,
         href: '/onboarding',
@@ -475,8 +622,21 @@ function createConfigzServiceMock() {
         sessionExpiresInSeconds: 0,
         passkeysEnabled: false,
       },
-    }),
-  })
+    }
+    return {
+      getConfig: vi.fn().mockResolvedValue(config),
+      updateManagementSignInSettings: vi.fn().mockResolvedValue({
+        signIn: config.signIn,
+        defaults: config.defaults,
+        links: config.links,
+        copy: config.copy,
+      }),
+      updateManagementBrandingSettings: vi.fn().mockResolvedValue({
+        branding: config.branding,
+        copy: config.copy,
+      }),
+    }
+  }
 }
 
 function createConnectorServiceMock() {

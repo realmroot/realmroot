@@ -716,6 +716,8 @@ export const brandingSetting = sqliteTable(
     organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
     logoAssetId: text('logo_asset_id').references(() => uploadedAsset.id, { onDelete: 'set null' }),
     faviconAssetId: text('favicon_asset_id').references(() => uploadedAsset.id, { onDelete: 'set null' }),
+    logoUrl: text('logo_url'),
+    faviconUrl: text('favicon_url'),
     primaryColor: text('primary_color'),
     backgroundColor: text('background_color'),
     customCss: text('custom_css'),

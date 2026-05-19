@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { Fingerprint, KeyRound, Laptop, LinkIcon, LoaderCircle, Mail, ShieldCheck, UserRound } from 'lucide-react'
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from 'react'
-import { BrandIdentity } from '@/components/layout/auth-layout'
+import { BrandIdentity, brandingStyle } from '@/components/layout/auth-layout'
 import { Button } from '@/components/ui/button'
 import { Field, TextInput } from '@/components/ui/field'
 import { Status } from '@/components/ui/status'
@@ -160,7 +160,7 @@ export function AccountCenter({ section }: { section: AccountSectionId }) {
   }
 
   return (
-    <main className="accountShell">
+    <main className="accountShell" style={brandingStyle(config)}>
       <aside className="accountSidebar">
         <BrandIdentity config={config} />
         <nav className="accountNav" aria-label="Account center">

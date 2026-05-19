@@ -40,13 +40,13 @@
     { "id": "admin-application-detail", "name": "Admin applications detail edits lifecycle, redirect URIs, integration details, and confidential secret rotation" },
     { "id": "admin-create-connector", "name": "Admin connectors page creates a connector" },
     { "id": "admin-connector-inventory", "name": "Admin connectors page lists provider settings and availability" },
-    { "id": "admin-sign-in-settings", "name": "Admin sign-in experience page shows methods, defaults, and legal links" },
+    { "id": "admin-sign-in-settings", "name": "Admin updates sign-in settings, legal links, and hosted auth copy" },
     { "id": "admin-security-policy", "name": "Admin security page shows MFA, passkey, and session policy" },
     { "id": "admin-create-organization", "name": "Admin organizations page creates an organization" },
     { "id": "admin-create-role", "name": "Admin roles page creates a role" },
     { "id": "admin-create-api-resource", "name": "Admin API resources page creates an API resource" },
     { "id": "admin-authorization-inventory", "name": "Admin authorization pages list organizations, roles, and API resources" },
-    { "id": "admin-branding-settings", "name": "Admin branding page shows hosted UI branding settings" },
+    { "id": "admin-branding-settings", "name": "Admin updates branding settings and hosted auth renders them" },
     { "id": "admin-deployment-settings", "name": "Admin deployment page shows Cloudflare runtime settings" }
   ],
   "waivers": []

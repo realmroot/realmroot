@@ -596,20 +596,43 @@ const journeyAssertions: Record<
   },
   'admin-sign-in-settings': {
     suite: 'admin management journeys',
-    assert: async ({ page }) => {
+    assert: async ({ page, requests }) => {
       await page.goto('/admin/sign-in')
       await expect(page.getByRole('heading', { name: 'Sign-in experience' })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Authentication methods' })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Defaults and links' })).toBeVisible()
-      await expect(page.getByText('password enabled')).toBeVisible()
-      await expect(page.getByText('social login enabled')).toBeVisible()
-      await expect(page.getByText('magic link enabled')).toBeVisible()
-      await expect(page.getByText('email otp enabled')).toBeVisible()
-      await expect(page.getByText('Default application')).toBeVisible()
-      await expect(page.getByText('Default redirect URI')).toBeVisible()
-      await expect(page.getByText('Terms')).toBeVisible()
-      await expect(page.getByText('Privacy')).toBeVisible()
-      await expect(page.getByText('Support email')).toBeVisible()
+      await page.getByRole('switch', { name: 'Identifier-first flow' }).click()
+      await page.getByLabel('Product name').fill('Northstar ID')
+      await page.getByLabel('Headline').fill('Sign in to Northstar')
+      await page.getByLabel('Description').fill('Use your Northstar identity to continue.')
+      await page.getByLabel('Support email').fill('support@northstar.example')
+      await page.getByRole('button', { name: 'Save sign-in settings' }).click()
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/management/sign-in-settings',
+        body: {
+          signIn: {
+            passwordEnabled: true,
+            signupEnabled: true,
+            socialLoginEnabled: true,
+            identifierFirst: true,
+          },
+          defaults: {
+            applicationId: null,
+            redirectUri: null,
+          },
+          links: {
+            termsUri: null,
+            privacyUri: null,
+            supportEmail: 'support@northstar.example',
+          },
+          copy: {
+            productName: 'Northstar ID',
+            headline: 'Sign in to Northstar',
+            description: 'Use your Northstar identity to continue.',
+          },
+        },
+      })
     },
   },
   'admin-security-policy': {
@@ -722,12 +745,6 @@ const journeyAssertions: Record<
       const main = page.getByRole('main')
       await expect(page.getByRole('heading', { name: 'Branding' })).toBeVisible()
       await expect(main.getByText('Brand preview')).toBeVisible()
-      await expect(main.getByText('Product name')).toBeVisible()
-      await expect(main.getByText('FlareAuth')).toBeVisible()
-      await expect(main.getByText('Primary color')).toBeVisible()
-      await expect(main.getByText('var(--brand-primary)')).toBeVisible()
-      await expect(main.getByText('Custom CSS')).toBeVisible()
-      await expect(main.getByText('Configured through configz service')).toBeVisible()
       await page.getByLabel('Upload branding logo').setInputFiles({
         name: 'logo.png',
         mimeType: 'image/png',
@@ -741,6 +758,33 @@ const journeyAssertions: Record<
       await expect
         .poll(() => requests.map((request) => request.path))
         .toEqual(expect.arrayContaining(['/api/management/branding/logo', '/api/management/branding/favicon']))
+      await page.getByLabel('Logo URL').fill('https://cdn.example.com/northstar-logo.svg')
+      await page.getByLabel('Favicon URL').fill('https://cdn.example.com/northstar.ico')
+      await page.getByLabel('Primary color').fill('#2563eb')
+      await page.getByLabel('Background color').fill('#ffffff')
+      await page.getByLabel('Custom CSS').fill('--auth-panel-radius: 8px;')
+      await page.getByRole('button', { name: 'Save branding' }).click()
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/management/branding-settings',
+        body: {
+          branding: {
+            logoUrl: 'https://cdn.example.com/northstar-logo.svg',
+            faviconUrl: 'https://cdn.example.com/northstar.ico',
+            primaryColor: '#2563eb',
+            backgroundColor: '#ffffff',
+            customCss: '--auth-panel-radius: 8px;',
+          },
+          copy: {
+            productName: 'Northstar ID',
+            headline: 'Sign in to Northstar',
+            description: 'Use your Northstar identity to continue.',
+          },
+        },
+      })
+      await page.goto('/sign-in')
+      await expect(page.getByRole('heading', { name: 'Sign in to Northstar' })).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Northstar ID' })).toBeVisible()
       expect(requests).toEqual(
         expect.arrayContaining([
           { method: 'POST', path: '/api/management/branding/logo', body: '[form-data]' },
@@ -947,10 +991,34 @@ async function responseFor(path: string, method: string, body: unknown): Promise
   }
   if (path === '/api/oauth/consent' && method === 'GET') return consentResponse
   if (path === '/api/management/sign-in-settings') {
+    if (method === 'PATCH') {
+      const input = body as {
+        signIn?: Partial<typeof configz.signIn>
+        defaults?: Partial<typeof configz.defaults>
+        links?: Partial<typeof configz.links>
+        copy?: Partial<typeof configz.copy>
+      }
+      Object.assign(configz.signIn, input.signIn)
+      Object.assign(configz.defaults, input.defaults)
+      Object.assign(configz.links, input.links)
+      Object.assign(configz.copy, input.copy)
+    }
     return {
       signIn: configz.signIn,
       defaults: configz.defaults,
       links: configz.links,
+      copy: configz.copy,
+    }
+  }
+  if (path === '/api/management/branding-settings') {
+    if (method === 'PATCH') {
+      const input = body as { branding?: Partial<typeof configz.branding>; copy?: Partial<typeof configz.copy> }
+      Object.assign(configz.branding, input.branding)
+      Object.assign(configz.copy, input.copy)
+    }
+    return {
+      branding: configz.branding,
+      copy: configz.copy,
     }
   }
   if (path === '/api/management/readiness') {

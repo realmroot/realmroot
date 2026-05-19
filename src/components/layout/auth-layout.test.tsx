@@ -1,0 +1,101 @@
+import type { ConfigzConfigResponse } from '@shared/api/configz'
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
+import { AuthLayout, brandingStyle } from './auth-layout'
+
+const config: ConfigzConfigResponse = {
+  onboarding: { required: false, href: '/onboarding' },
+  signIn: {
+    passwordEnabled: true,
+    signupEnabled: true,
+    socialLoginEnabled: true,
+    magicLinkEnabled: true,
+    emailOtpEnabled: true,
+    usernameEnabled: true,
+    identifierFirst: false,
+  },
+  branding: {
+    logoUrl: 'https://cdn.example.com/logo.svg',
+    faviconUrl: 'https://cdn.example.com/favicon.ico',
+    primaryColor: '#2563eb',
+    backgroundColor: '#ffffff',
+    customCss: '--auth-panel-radius: 12px;',
+  },
+  identityProviders: [],
+  links: {
+    termsUri: null,
+    privacyUri: null,
+    supportEmail: null,
+  },
+  copy: {
+    productName: 'Acme ID',
+    headline: 'Sign in to Acme',
+    description: 'Continue securely.',
+  },
+  defaults: {
+    applicationId: null,
+    redirectUri: null,
+  },
+  auth: {
+    basePath: '/api/auth',
+    signInEmailPath: '/api/auth/sign-in/email',
+    signInUsernamePath: '/api/auth/sign-in/username',
+    signUpEmailPath: '/api/auth/sign-up/email',
+    signOutPath: '/api/auth/sign-out',
+    requestPasswordResetPath: '/api/auth/request-password-reset',
+    resetPasswordPath: '/api/auth/reset-password',
+    sendVerificationEmailPath: '/api/auth/send-verification-email',
+    verifyEmailPath: '/api/auth/verify-email',
+    magicLinkPath: '/api/auth/sign-in/magic-link',
+    emailOtpPath: '/api/auth/email-otp/send-verification-otp',
+    emailOtpSignInPath: '/api/auth/sign-in/email-otp',
+    emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
+    emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
+    emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
+  },
+  oidc: {
+    issuer: 'https://auth.example.com/api/auth',
+    discoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+    authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
+    tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+    jwksUri: 'https://auth.example.com/api/auth/jwks',
+    userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+    endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+  },
+  security: {
+    mfaRequired: false,
+    sessionExpiresInSeconds: 3600,
+    passkeysEnabled: true,
+  },
+}
+
+afterEach(() => {
+  cleanup()
+  document.querySelectorAll('link[rel="icon"]').forEach((link) => {
+    link.remove()
+  })
+})
+
+describe('AuthLayout', () => {
+  it('applies branding, constrained custom properties, and favicon', () => {
+    render(
+      <AuthLayout config={config} description="Description" eyebrow="Hosted sign-in" title="Welcome">
+        Form
+      </AuthLayout>,
+    )
+
+    const shell = screen.getByRole('main')
+    expect(shell.getAttribute('style')).toContain('--brand-primary: #2563eb')
+    expect(shell.getAttribute('style')).toContain('--auth-panel-radius: 12px')
+    expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe(
+      'https://cdn.example.com/favicon.ico',
+    )
+  })
+
+  it('returns default brand style when config is not loaded', () => {
+    expect(brandingStyle(null)).toMatchObject({
+      '--brand-primary': '#b42318',
+      '--brand-background': '#f7f3ee',
+    })
+  })
+})

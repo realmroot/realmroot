@@ -1,4 +1,10 @@
-import type { ConfigzConfigResponse } from '../../../shared/api/configz'
+import { type ConfigzConfigResponse, hostedCustomCssSchema } from '../../../shared/api/configz'
+import type {
+  ManagementBrandingSettingsResponse,
+  ManagementSignInSettingsResponse,
+  UpdateManagementBrandingSettingsRequest,
+  UpdateManagementSignInSettingsRequest,
+} from '../../../shared/api/management'
 import type { SecurityPolicy } from '../../../shared/api/security'
 import type { OnboardingRepository } from '../onboarding/repository'
 
@@ -17,7 +23,9 @@ export interface ConfigzSettings {
 
 export interface ConfigzBranding {
   logoUrl: string | null
+  logoAssetUrl: string | null
   faviconUrl: string | null
+  faviconAssetUrl: string | null
   primaryColor: string | null
   backgroundColor: string | null
   customCss: string | null
@@ -41,6 +49,25 @@ export interface ConfigzRepository {
   getSettings(): Promise<ConfigzSettings | null>
   getBranding(applicationId: string | null): Promise<ConfigzBranding | null>
   listEnabledIdentityProviders(): Promise<ConfigzIdentityProvider[]>
+  updateSettings(input: UpdateConfigzSettingsInput): Promise<void>
+  updateBranding(input: UpdateConfigzBrandingInput): Promise<void>
+}
+
+export type UpdateConfigzSettingsInput = {
+  passwordEnabled?: boolean
+  signupEnabled?: boolean
+  socialLoginEnabled?: boolean
+  identifierFirst?: boolean
+  defaultApplicationId?: string | null
+  defaultRedirectUri?: string | null
+  termsUri?: string | null
+  privacyUri?: string | null
+  supportEmail?: string | null
+  copy?: Partial<ConfigzConfigResponse['copy']>
+}
+
+export type UpdateConfigzBrandingInput = Partial<ConfigzBranding> & {
+  copy?: Partial<ConfigzConfigResponse['copy']>
 }
 
 export interface ConfigzServiceOptions {
@@ -87,13 +114,15 @@ export class ConfigzService {
         usernameEnabled: this.options.usernameEnabled,
         identifierFirst: settings?.identifierFirst ?? false,
       },
-      branding: branding ?? {
-        logoUrl: null,
-        faviconUrl: null,
-        primaryColor: null,
-        backgroundColor: null,
-        customCss: null,
-      },
+      branding: branding
+        ? toPublicBranding(branding)
+        : {
+            logoUrl: null,
+            faviconUrl: null,
+            primaryColor: null,
+            backgroundColor: null,
+            customCss: null,
+          },
       identityProviders:
         (settings?.socialLoginEnabled ?? true)
           ? identityProviders.map((provider) => ({
@@ -146,6 +175,71 @@ export class ConfigzService {
       },
     }
   }
+
+  async getManagementSignInSettings(): Promise<ManagementSignInSettingsResponse> {
+    const config = await this.getConfig()
+    return {
+      signIn: config.signIn,
+      defaults: config.defaults,
+      links: config.links,
+      copy: config.copy,
+    }
+  }
+
+  async updateManagementSignInSettings(
+    input: UpdateManagementSignInSettingsRequest,
+  ): Promise<ManagementSignInSettingsResponse> {
+    await this.repository.updateSettings({
+      ...input.signIn,
+      defaultApplicationId: input.defaults?.applicationId,
+      defaultRedirectUri: input.defaults?.redirectUri,
+      termsUri: input.links?.termsUri,
+      privacyUri: input.links?.privacyUri,
+      supportEmail: input.links?.supportEmail,
+      copy: input.copy,
+    })
+
+    return this.getManagementSignInSettings()
+  }
+
+  async getManagementBrandingSettings(): Promise<ManagementBrandingSettingsResponse> {
+    const config = await this.getConfig()
+    return {
+      branding: config.branding,
+      copy: config.copy,
+    }
+  }
+
+  async updateManagementBrandingSettings(
+    input: UpdateManagementBrandingSettingsRequest,
+  ): Promise<ManagementBrandingSettingsResponse> {
+    await this.repository.updateBranding({
+      ...input.branding,
+      copy: input.copy,
+    })
+
+    return this.getManagementBrandingSettings()
+  }
+}
+
+function toPublicBranding(branding: ConfigzBranding): ConfigzConfigResponse['branding'] {
+  return {
+    logoUrl: branding.logoUrl ?? branding.logoAssetUrl,
+    faviconUrl: branding.faviconUrl ?? branding.faviconAssetUrl,
+    primaryColor: safeHexColor(branding.primaryColor),
+    backgroundColor: safeHexColor(branding.backgroundColor),
+    customCss: safeCustomCss(branding.customCss),
+  }
+}
+
+function safeHexColor(color: string | null) {
+  return color && /^#[0-9a-fA-F]{6}$/.test(color) ? color : null
+}
+
+function safeCustomCss(customCss: string | null) {
+  if (customCss === null) return null
+  const result = hostedCustomCssSchema.safeParse(customCss)
+  return result.success ? result.data : null
 }
 
 function readCopy(metadata: Record<string, unknown> | null | undefined) {

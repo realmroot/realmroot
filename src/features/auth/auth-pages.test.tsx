@@ -139,6 +139,26 @@ describe('hosted auth pages', () => {
     expect(screen.queryByLabelText('Password')).toBeNull()
   })
 
+  it('falls back to OTP when password and magic link auth are disabled', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(
+      jsonResponse({
+        ...configz,
+        signIn: {
+          ...configz.signIn,
+          passwordEnabled: false,
+          magicLinkEnabled: false,
+          emailOtpEnabled: true,
+        },
+      }),
+    )
+
+    render(<SignInPage />)
+
+    expect(await screen.findByRole('button', { name: 'Send code' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Magic link' })).toBeNull()
+  })
+
   it('starts with an identifier step when identifier-first sign-in is enabled', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(
       jsonResponse({
@@ -530,6 +550,30 @@ describe('hosted auth pages', () => {
       expect(requests).toContainEqual({
         url: '/api/auth/email-otp/reset-password',
         body: { email: 'jane@example.com', otp: '123456', password: 'new-password' },
+      })
+    })
+  })
+
+  it('requests password reset email links through native auth', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ success: true }))
+    })
+
+    render(<ForgotPasswordPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'OTP code' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Email link' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send reset email' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/request-password-reset',
+        body: { email: 'jane@example.com', redirectTo: 'http://localhost:3000/forgot-password' },
       })
     })
   })

@@ -103,10 +103,12 @@ describe('ConfigzService', () => {
         },
         branding: {
           logoUrl: 'https://cdn.example.com/logo.png',
+          logoAssetUrl: null,
           faviconUrl: 'https://cdn.example.com/favicon.ico',
+          faviconAssetUrl: null,
           primaryColor: '#2563eb',
           backgroundColor: '#ffffff',
-          customCss: '.brand { color: #2563eb; }',
+          customCss: '--auth-panel-radius: 8px;',
         },
         identityProviders: [
           {
@@ -223,6 +225,147 @@ describe('ConfigzService', () => {
       },
     })
   })
+
+  it('updates management sign-in settings and returns the normalized resource', async () => {
+    const updates: unknown[] = []
+    const service = new ConfigzService(
+      createRepository({
+        settings: {
+          ...defaultSettings(),
+          metadata: {
+            copy: {
+              productName: 'Existing ID',
+              headline: 'Existing headline',
+              description: 'Existing description.',
+            },
+          },
+        },
+        updateSettings: async (input) => {
+          updates.push(input)
+        },
+      }),
+      defaultOptions(),
+    )
+
+    const response = await service.updateManagementSignInSettings({
+      signIn: { passwordEnabled: false, identifierFirst: true },
+      defaults: { redirectUri: 'https://app.example.com/callback' },
+      links: { supportEmail: 'support@example.com' },
+      copy: { productName: 'Acme ID' },
+    })
+
+    expect(updates).toEqual([
+      {
+        passwordEnabled: false,
+        identifierFirst: true,
+        defaultApplicationId: undefined,
+        defaultRedirectUri: 'https://app.example.com/callback',
+        termsUri: undefined,
+        privacyUri: undefined,
+        supportEmail: 'support@example.com',
+        copy: { productName: 'Acme ID' },
+      },
+    ])
+    expect(response).toMatchObject({
+      signIn: { passwordEnabled: true },
+      copy: {
+        productName: 'Existing ID',
+        headline: 'Existing headline',
+        description: 'Existing description.',
+      },
+    })
+  })
+
+  it('updates management branding settings and returns public branding', async () => {
+    const updates: unknown[] = []
+    const service = new ConfigzService(
+      createRepository({
+        branding: {
+          logoUrl: null,
+          logoAssetUrl: 'https://cdn.example.com/logo-asset.svg',
+          faviconUrl: null,
+          faviconAssetUrl: 'https://cdn.example.com/favicon-asset.ico',
+          primaryColor: '#b42318',
+          backgroundColor: '#f7f3ee',
+          customCss: null,
+        },
+        updateBranding: async (input) => {
+          updates.push(input)
+        },
+      }),
+      defaultOptions(),
+    )
+
+    const response = await service.updateManagementBrandingSettings({
+      branding: {
+        logoUrl: 'https://cdn.example.com/logo.svg',
+        customCss: '--auth-panel-radius: 8px;',
+      },
+      copy: { headline: 'Welcome' },
+    })
+
+    expect(updates).toEqual([
+      {
+        logoUrl: 'https://cdn.example.com/logo.svg',
+        customCss: '--auth-panel-radius: 8px;',
+        copy: { headline: 'Welcome' },
+      },
+    ])
+    expect(response).toMatchObject({
+      branding: {
+        logoUrl: 'https://cdn.example.com/logo-asset.svg',
+        faviconUrl: 'https://cdn.example.com/favicon-asset.ico',
+      },
+      copy: { productName: 'FlareAuth' },
+    })
+  })
+
+  it('drops unsafe legacy custom CSS from public runtime branding', async () => {
+    const service = new ConfigzService(
+      createRepository({
+        branding: {
+          logoUrl: null,
+          logoAssetUrl: null,
+          faviconUrl: null,
+          faviconAssetUrl: null,
+          primaryColor: '#b42318',
+          backgroundColor: '#f7f3ee',
+          customCss: '.authPanel { display: none; }',
+        },
+      }),
+      defaultOptions(),
+    )
+
+    await expect(service.getConfig()).resolves.toMatchObject({
+      branding: {
+        customCss: null,
+      },
+    })
+  })
+
+  it('drops invalid legacy color values from public runtime branding', async () => {
+    const service = new ConfigzService(
+      createRepository({
+        branding: {
+          logoUrl: null,
+          logoAssetUrl: null,
+          faviconUrl: null,
+          faviconAssetUrl: null,
+          primaryColor: 'red',
+          backgroundColor: 'var(--color)',
+          customCss: null,
+        },
+      }),
+      defaultOptions(),
+    )
+
+    await expect(service.getConfig()).resolves.toMatchObject({
+      branding: {
+        primaryColor: null,
+        backgroundColor: null,
+      },
+    })
+  })
 })
 
 function defaultOptions() {
@@ -254,6 +397,8 @@ function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository 
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => overrides.branding ?? null,
     listEnabledIdentityProviders: async () => overrides.identityProviders ?? [],
+    updateSettings: overrides.updateSettings ?? (async () => undefined),
+    updateBranding: overrides.updateBranding ?? (async () => undefined),
   }
 }
 
@@ -261,4 +406,6 @@ type MockData = {
   settings: NonNullable<Awaited<ReturnType<ConfigzRepository['getSettings']>>>
   branding: NonNullable<Awaited<ReturnType<ConfigzRepository['getBranding']>>>
   identityProviders: Awaited<ReturnType<ConfigzRepository['listEnabledIdentityProviders']>>
+  updateSettings: ConfigzRepository['updateSettings']
+  updateBranding: ConfigzRepository['updateBranding']
 }

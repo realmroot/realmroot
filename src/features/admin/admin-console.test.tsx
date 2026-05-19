@@ -47,6 +47,7 @@ describe('admin console', () => {
         return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
       }
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return Promise.resolve(jsonResponse({}))
     })
@@ -273,6 +274,7 @@ describe('admin console', () => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
           jsonResponse({
@@ -326,6 +328,7 @@ describe('admin console', () => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
           jsonResponse({
@@ -349,6 +352,7 @@ describe('admin console', () => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
@@ -382,6 +386,7 @@ describe('admin console', () => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') return Promise.resolve(jsonResponse({ error: 'Readiness failed.' }, 500))
       return Promise.resolve(jsonResponse({}))
     })
@@ -996,6 +1001,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return Promise.resolve(jsonResponse({}))
     })
@@ -1003,8 +1009,8 @@ describe('admin console', () => {
     const { unmount } = renderWithQuery(<SignInSettingsPage />)
 
     expect(await screen.findByText('Authentication methods')).toBeTruthy()
-    expect(screen.getByText('Default redirect URI')).toBeTruthy()
-    expect(screen.getByText('support@example.com')).toBeTruthy()
+    expect(screen.getByLabelText('Default redirect URI')).toHaveProperty('value', 'https://app.example.com/callback')
+    expect(screen.getByLabelText('Support email')).toHaveProperty('value', 'support@example.com')
 
     unmount()
     renderWithQuery(<SecurityPage />)
@@ -1014,6 +1020,210 @@ describe('admin console', () => {
     expect(screen.getByText('auth.example.com')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
     expect(screen.getByText('3600s')).toBeTruthy()
+  })
+
+  it('saves sign-in settings through the management boundary', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(signInSettings))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<SignInSettingsPage />)
+
+    fireEvent.click(await screen.findByRole('switch', { name: 'Password sign-in' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Self-service sign-up' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Social sign-in' }))
+    fireEvent.click(await screen.findByRole('switch', { name: 'Identifier-first flow' }))
+    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: 'Northstar ID' } })
+    fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Sign in to Northstar' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Continue to Northstar.' } })
+    fireEvent.change(screen.getByLabelText('Default application ID'), { target: { value: 'app-northstar' } })
+    fireEvent.change(screen.getByLabelText('Default redirect URI'), {
+      target: { value: 'https://northstar.example.com/callback' },
+    })
+    fireEvent.change(screen.getByLabelText('Privacy URL'), {
+      target: { value: 'https://northstar.example.com/privacy' },
+    })
+    fireEvent.change(screen.getByLabelText('Support email'), { target: { value: 'support@northstar.example' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save sign-in settings' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          url: '/api/management/sign-in-settings',
+          body: {
+            signIn: {
+              passwordEnabled: false,
+              signupEnabled: false,
+              socialLoginEnabled: false,
+              identifierFirst: true,
+            },
+            defaults: {
+              applicationId: 'app-northstar',
+              redirectUri: 'https://northstar.example.com/callback',
+            },
+            links: {
+              termsUri: 'https://example.com/terms',
+              privacyUri: 'https://northstar.example.com/privacy',
+              supportEmail: 'support@northstar.example',
+            },
+            copy: {
+              productName: 'Northstar ID',
+              headline: 'Sign in to Northstar',
+              description: 'Continue to Northstar.',
+            },
+          },
+        },
+      ]),
+    )
+  })
+
+  it('renders sign-in validation errors without sending invalid public URLs', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+        requests.push(url)
+        return Promise.resolve(jsonResponse(signInSettings))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<SignInSettingsPage />)
+
+    fireEvent.change(await screen.findByLabelText('Terms URL'), { target: { value: 'http://example.com/terms' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save sign-in settings' }))
+
+    expect(await screen.findByText('URL must use https.')).toBeTruthy()
+    expect(requests).toEqual([])
+  })
+
+  it('saves branding settings and applies custom CSS to the preview', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings' && init?.method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(brandingSettings))
+      }
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<BrandingPage />)
+
+    fireEvent.change(await screen.findByLabelText('Logo URL'), {
+      target: { value: 'https://cdn.example.com/northstar-logo.svg' },
+    })
+    fireEvent.change(screen.getByLabelText('Favicon URL'), {
+      target: { value: 'https://cdn.example.com/northstar.ico' },
+    })
+    fireEvent.change(screen.getByLabelText('Primary color'), { target: { value: '#0f766e' } })
+    fireEvent.change(screen.getByLabelText('Background color'), { target: { value: '#f8fafc' } })
+    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: 'Northstar ID' } })
+    fireEvent.change(screen.getByLabelText('Custom CSS'), { target: { value: '--auth-panel-radius: 16px;' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save branding' }))
+
+    expect(screen.getByText('Preview action').closest('.brandingPreview')?.getAttribute('style')).toContain(
+      '--auth-panel-radius: 16px',
+    )
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          url: '/api/management/branding-settings',
+          body: {
+            branding: {
+              logoUrl: 'https://cdn.example.com/northstar-logo.svg',
+              faviconUrl: 'https://cdn.example.com/northstar.ico',
+              primaryColor: '#0f766e',
+              backgroundColor: '#f8fafc',
+              customCss: '--auth-panel-radius: 16px;',
+            },
+            copy: {
+              productName: 'Northstar ID',
+              headline: 'Sign in to Acme Auth',
+              description: 'Continue with your Acme identity.',
+            },
+          },
+        },
+      ]),
+    )
+  })
+
+  it('does not apply unsafe custom CSS to the branding preview', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<BrandingPage />)
+
+    fireEvent.change(await screen.findByLabelText('Custom CSS'), { target: { value: 'display: none;' } })
+
+    expect(screen.getByText('Preview action').closest('.brandingPreview')?.getAttribute('style')).not.toContain(
+      'display',
+    )
+  })
+
+  it('renders branding validation errors without sending invalid custom CSS', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings' && init?.method === 'PATCH') {
+        requests.push(url)
+        return Promise.resolve(jsonResponse(brandingSettings))
+      }
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<BrandingPage />)
+
+    fireEvent.change(await screen.findByLabelText('Custom CSS'), { target: { value: 'display: none;' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save branding' }))
+
+    expect(
+      await screen.findByText('Custom CSS only supports declaration-only --auth-* custom properties.'),
+    ).toBeTruthy()
+    expect(requests).toEqual([])
+  })
+
+  it('uses default branding form values when optional branding settings are absent', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings') {
+        return Promise.resolve(
+          jsonResponse({
+            branding: {
+              logoUrl: null,
+              faviconUrl: null,
+              primaryColor: null,
+              backgroundColor: null,
+              customCss: null,
+            },
+            copy: brandingSettings.copy,
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<BrandingPage />)
+
+    expect(await screen.findByDisplayValue('Acme Auth')).toBeTruthy()
+    expect(screen.getByLabelText('Logo URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Favicon URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Primary color')).toHaveProperty('value', '#b42318')
+    expect(screen.getByLabelText('Background color')).toHaveProperty('value', '#f7f3ee')
+    expect(screen.getByLabelText('Custom CSS')).toHaveProperty('value', '')
   })
 
   it('creates organizations, roles, and API resources from admin dialogs', async () => {
@@ -1150,6 +1360,7 @@ describe('admin console', () => {
         return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
       }
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(unsetSignInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(passkeysDisabled))
       return Promise.resolve(jsonResponse({}))
     })
@@ -1180,7 +1391,7 @@ describe('admin console', () => {
 
     cleanup()
     renderWithQuery(<SignInSettingsPage />)
-    expect(await screen.findAllByText('Not set')).toHaveLength(5)
+    expect(await screen.findByLabelText('Product name')).toHaveProperty('value', 'Acme Auth')
 
     cleanup()
     renderWithQuery(<SecurityPage />)
@@ -1320,6 +1531,12 @@ describe('admin console', () => {
         text: 'Authentication methods',
       },
       {
+        component: <BrandingPage />,
+        matches: (url: string) => url === '/api/management/branding-settings',
+        success: brandingSettings,
+        text: 'Brand preview',
+      },
+      {
         component: <SecurityPage />,
         matches: (url: string) => url === '/api/management/security/policy',
         success: securityPolicy,
@@ -1367,11 +1584,17 @@ describe('admin console', () => {
     }
   })
 
-  it('renders static branding and deployment settings pages', () => {
+  it('renders editable branding and deployment settings pages', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
     const { unmount } = renderWithQuery(<BrandingPage />)
 
     expect(screen.getByRole('heading', { name: 'Branding' })).toBeTruthy()
-    expect(screen.getByText('FlareAuth')).toBeTruthy()
+    expect(await screen.findByDisplayValue('Acme Auth')).toBeTruthy()
+    expect(screen.getByText('Brand preview')).toBeTruthy()
 
     unmount()
     renderWithQuery(<DeploymentSettingsPage />)
@@ -1404,6 +1627,7 @@ describe('admin console', () => {
       if (url === '/api/management/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
@@ -1431,7 +1655,7 @@ describe('admin console', () => {
 
     cleanup()
     renderWithQuery(<BrandingPage />)
-    fireEvent.change(screen.getByLabelText('Upload branding logo'), {
+    fireEvent.change(await screen.findByLabelText('Upload branding logo'), {
       target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
     })
     fireEvent.change(screen.getByLabelText('Upload favicon'), {
@@ -1663,11 +1887,12 @@ const apiResource = {
 const signInSettings = {
   signIn: {
     passwordEnabled: true,
+    signupEnabled: true,
     magicLinkEnabled: true,
     emailOtpEnabled: false,
-    passkeyEnabled: false,
     socialLoginEnabled: true,
-    signupEnabled: true,
+    usernameEnabled: true,
+    identifierFirst: false,
   },
   defaults: {
     applicationId: 'app-1',
@@ -1678,6 +1903,22 @@ const signInSettings = {
     privacyUri: 'https://example.com/privacy',
     supportEmail: 'support@example.com',
   },
+  copy: {
+    productName: 'Acme Auth',
+    headline: 'Sign in to Acme Auth',
+    description: 'Continue with your Acme identity.',
+  },
+}
+
+const brandingSettings = {
+  branding: {
+    logoUrl: 'https://cdn.example.com/logo.svg',
+    faviconUrl: 'https://cdn.example.com/favicon.ico',
+    primaryColor: '#2563eb',
+    backgroundColor: '#ffffff',
+    customCss: '--auth-panel-radius: 8px;',
+  },
+  copy: signInSettings.copy,
 }
 
 const securityPolicy = {

@@ -45,6 +45,7 @@ import type {
   CreateManagementConnectorRequest,
   ListManagementConnectorsResponse,
   ListManagementUsersResponse,
+  ManagementBrandingSettingsResponse,
   ManagementConnectorResponse,
   ManagementCreateUserRequest,
   ManagementReadinessResponse,
@@ -52,7 +53,9 @@ import type {
   ManagementUpdateUserRequest,
   ManagementUserListQuery,
   ManagementUserResponse,
+  UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
+  UpdateManagementSignInSettingsRequest,
 } from '../shared/api/management'
 import type {
   PasskeysResponse,
@@ -291,6 +294,11 @@ type RpcSchema = {
   }
   '/api/management/sign-in-settings': {
     $get: RpcEndpoint<RpcNoInput, ManagementSignInSettingsResponse>
+    $patch: RpcEndpoint<{ json: UpdateManagementSignInSettingsRequest }, ManagementSignInSettingsResponse>
+  }
+  '/api/management/branding-settings': {
+    $get: RpcEndpoint<RpcNoInput, ManagementBrandingSettingsResponse>
+    $patch: RpcEndpoint<{ json: UpdateManagementBrandingSettingsRequest }, ManagementBrandingSettingsResponse>
   }
   '/api/management/readiness': {
     $get: RpcEndpoint<RpcNoInput, ManagementReadinessResponse>

@@ -9,7 +9,13 @@ import {
   createOrganizationRequestSchema,
   createRoleRequestSchema,
 } from '@shared/api/authorization'
-import { createManagementConnectorRequestSchema, managementCreateUserRequestSchema } from '@shared/api/management'
+import { hostedCustomCssSchema } from '@shared/api/configz'
+import {
+  createManagementConnectorRequestSchema,
+  managementCreateUserRequestSchema,
+  updateManagementBrandingSettingsRequestSchema,
+  updateManagementSignInSettingsRequestSchema,
+} from '@shared/api/management'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
@@ -17,16 +23,18 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  Eye,
   ImageUp,
   ListChecks,
   MoreHorizontal,
   Plus,
   RefreshCw,
+  Save,
   Server,
   ShieldCheck,
   Trash2,
 } from 'lucide-react'
-import { type FormEvent, type ReactNode, useState } from 'react'
+import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import type { z } from 'zod'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -61,6 +69,7 @@ import {
   deleteApplication,
   getAdminDashboard,
   getApplication,
+  getBrandingSettings,
   getSecurityPolicy,
   getSignInSettings,
   listApiResources,
@@ -74,7 +83,9 @@ import {
   requestPasswordReset,
   rotateApplicationClientSecret,
   updateApplication,
+  updateBrandingSettings,
   updateConnector,
+  updateSignInSettings,
   updateUser,
   uploadApplicationLogo,
   uploadBrandingFavicon,
@@ -974,42 +985,203 @@ export function ConnectorsPage() {
 
 export function SignInSettingsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    passwordEnabled: true,
+    signupEnabled: true,
+    socialLoginEnabled: true,
+    identifierFirst: false,
+    applicationId: '',
+    redirectUri: '',
+    termsUri: '',
+    privacyUri: '',
+    supportEmail: '',
+    productName: '',
+    headline: '',
+    description: '',
+  })
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const updateMutation = useAdminMutation({
+    mutationFn: updateSignInSettings,
+    onSuccess: () => {
+      setValidationError(null)
+      return queryClient.invalidateQueries({ queryKey: adminQueryKeys.signIn })
+    },
+  })
+
+  useEffect(() => {
+    if (!query.data) return
+    setForm({
+      passwordEnabled: query.data.signIn.passwordEnabled,
+      signupEnabled: query.data.signIn.signupEnabled,
+      socialLoginEnabled: query.data.signIn.socialLoginEnabled,
+      identifierFirst: query.data.signIn.identifierFirst,
+      applicationId: query.data.defaults.applicationId ?? '',
+      redirectUri: query.data.defaults.redirectUri ?? '',
+      termsUri: query.data.links.termsUri ?? '',
+      privacyUri: query.data.links.privacyUri ?? '',
+      supportEmail: query.data.links.supportEmail ?? '',
+      productName: query.data.copy.productName,
+      headline: query.data.copy.headline,
+      description: query.data.copy.description,
+    })
+  }, [query.data])
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    const payload = updateManagementSignInSettingsRequestSchema.safeParse(
+      removeBlankValues({
+        signIn: {
+          passwordEnabled: form.passwordEnabled,
+          signupEnabled: form.signupEnabled,
+          socialLoginEnabled: form.socialLoginEnabled,
+          identifierFirst: form.identifierFirst,
+        },
+        defaults: {
+          applicationId: nullableString(form.applicationId),
+          redirectUri: nullableString(form.redirectUri),
+        },
+        links: {
+          termsUri: nullableString(form.termsUri),
+          privacyUri: nullableString(form.privacyUri),
+          supportEmail: nullableString(form.supportEmail),
+        },
+        copy: {
+          productName: form.productName,
+          headline: form.headline,
+          description: form.description,
+        },
+      }),
+    )
+    if (!payload.success) {
+      setValidationError(payload.error.issues[0]?.message ?? 'Invalid sign-in settings.')
+      return
+    }
+    setValidationError(null)
+    updateMutation.mutate(payload.data)
+  }
 
   return (
     <ResourcePage
       title="Sign-in experience"
-      description="Review enabled identifiers, authentication methods, and hosted auth links."
+      description="Configure identifiers, authentication method visibility, defaults, legal links, and hosted auth copy."
       error={query.error}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
       {query.data ? (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <form className="grid gap-4 xl:grid-cols-2" onSubmit={onSubmit}>
           <Card>
             <CardHeader>
               <CardTitle>Authentication methods</CardTitle>
-              <CardDescription>These settings are served by the management API.</CardDescription>
+              <CardDescription>Control which hosted sign-in options are visible at runtime.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
-              {Object.entries(query.data.signIn).map(([key, value]) => (
-                <SettingRow key={key} label={humanize(key)} value={value ? 'Enabled' : 'Disabled'} />
-              ))}
+              <SwitchRow
+                checked={form.passwordEnabled}
+                label="Password sign-in"
+                onCheckedChange={(passwordEnabled) => setForm((value) => ({ ...value, passwordEnabled }))}
+              />
+              <SwitchRow
+                checked={form.signupEnabled}
+                label="Self-service sign-up"
+                onCheckedChange={(signupEnabled) => setForm((value) => ({ ...value, signupEnabled }))}
+              />
+              <SwitchRow
+                checked={form.socialLoginEnabled}
+                label="Social sign-in"
+                onCheckedChange={(socialLoginEnabled) => setForm((value) => ({ ...value, socialLoginEnabled }))}
+              />
+              <SwitchRow
+                checked={form.identifierFirst}
+                label="Identifier-first flow"
+                onCheckedChange={(identifierFirst) => setForm((value) => ({ ...value, identifierFirst }))}
+              />
+              <SettingRow
+                label="Magic link"
+                value={query.data.signIn.magicLinkEnabled ? 'Available from runtime' : 'Unavailable'}
+              />
+              <SettingRow
+                label="Email OTP"
+                value={query.data.signIn.emailOtpEnabled ? 'Available from runtime' : 'Unavailable'}
+              />
             </CardContent>
           </Card>
           <Card>
             <CardHeader>
               <CardTitle>Defaults and links</CardTitle>
-              <CardDescription>Hosted auth destinations and support references.</CardDescription>
+              <CardDescription>Safe public links and copy exposed through configz.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-3">
-              <SettingRow label="Default application" value={query.data.defaults.applicationId ?? 'Not set'} />
-              <SettingRow label="Default redirect URI" value={query.data.defaults.redirectUri ?? 'Not set'} />
-              <SettingRow label="Terms" value={query.data.links.termsUri ?? 'Not set'} />
-              <SettingRow label="Privacy" value={query.data.links.privacyUri ?? 'Not set'} />
-              <SettingRow label="Support email" value={query.data.links.supportEmail ?? 'Not set'} />
+            <CardContent className="formStack">
+              <Field label="Product name">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
+                  required
+                  value={form.productName}
+                />
+              </Field>
+              <Field label="Headline">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
+                  required
+                  value={form.headline}
+                />
+              </Field>
+              <Field label="Description">
+                <TextArea
+                  onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
+                  required
+                  value={form.description}
+                />
+              </Field>
+              <Field label="Default application ID">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, applicationId: event.target.value }))}
+                  value={form.applicationId}
+                />
+              </Field>
+              <Field label="Default redirect URI">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, redirectUri: event.target.value }))}
+                  type="url"
+                  value={form.redirectUri}
+                />
+              </Field>
+              <Field label="Terms URL">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
+                  type="url"
+                  value={form.termsUri}
+                />
+              </Field>
+              <Field label="Privacy URL">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
+                  type="url"
+                  value={form.privacyUri}
+                />
+              </Field>
+              <Field label="Support email">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
+                  type="email"
+                  value={form.supportEmail}
+                />
+              </Field>
+              {validationError || updateMutation.errorMessage ? (
+                <StatusBadge
+                  active={false}
+                  activeLabel=""
+                  inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
+                />
+              ) : null}
+              <Button disabled={updateMutation.isPending} type="submit">
+                <Save data-icon="inline-start" />
+                Save sign-in settings
+              </Button>
             </CardContent>
           </Card>
-        </div>
+        </form>
       ) : null}
     </ResourcePage>
   )
@@ -1294,54 +1466,205 @@ export function ApiResourcesPage() {
 }
 
 export function BrandingPage() {
-  const [logoPreview, setLogoPreview] = useState<string | null>(null)
-  const [faviconPreview, setFaviconPreview] = useState<string | null>(null)
+  const query = useQuery({ queryKey: adminQueryKeys.branding, queryFn: getBrandingSettings })
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    logoUrl: '',
+    faviconUrl: '',
+    primaryColor: '#b42318',
+    backgroundColor: '#f7f3ee',
+    customCss: '',
+    productName: '',
+    headline: '',
+    description: '',
+  })
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const updateMutation = useAdminMutation({
+    mutationFn: updateBrandingSettings,
+    onSuccess: () => {
+      setValidationError(null)
+      return queryClient.invalidateQueries({ queryKey: adminQueryKeys.branding })
+    },
+  })
   const logoMutation = useAdminMutation({
     mutationFn: uploadBrandingLogo,
     onSuccess: (response) => {
-      setLogoPreview(response.asset.publicUrl)
+      setForm((value) => ({ ...value, logoUrl: response.asset.publicUrl }))
       return Promise.resolve()
     },
   })
   const faviconMutation = useAdminMutation({
     mutationFn: uploadBrandingFavicon,
     onSuccess: (response) => {
-      setFaviconPreview(response.asset.publicUrl)
+      setForm((value) => ({ ...value, faviconUrl: response.asset.publicUrl }))
       return Promise.resolve()
     },
   })
 
+  useEffect(() => {
+    if (!query.data) return
+    setForm({
+      logoUrl: query.data.branding.logoUrl ?? '',
+      faviconUrl: query.data.branding.faviconUrl ?? '',
+      primaryColor: query.data.branding.primaryColor ?? '#b42318',
+      backgroundColor: query.data.branding.backgroundColor ?? '#f7f3ee',
+      customCss: query.data.branding.customCss ?? '',
+      productName: query.data.copy.productName,
+      headline: query.data.copy.headline,
+      description: query.data.copy.description,
+    })
+  }, [query.data])
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    const payload = updateManagementBrandingSettingsRequestSchema.safeParse(
+      removeBlankValues({
+        branding: {
+          logoUrl: nullableString(form.logoUrl),
+          faviconUrl: nullableString(form.faviconUrl),
+          primaryColor: nullableString(form.primaryColor),
+          backgroundColor: nullableString(form.backgroundColor),
+          customCss: nullableString(form.customCss),
+        },
+        copy: {
+          productName: form.productName,
+          headline: form.headline,
+          description: form.description,
+        },
+      }),
+    )
+    if (!payload.success) {
+      setValidationError(payload.error.issues[0]?.message ?? 'Invalid branding settings.')
+      return
+    }
+    setValidationError(null)
+    updateMutation.mutate(payload.data)
+  }
+
+  const previewStyle = {
+    '--brand-primary': form.primaryColor,
+    '--brand-background': form.backgroundColor,
+    ...customCssProperties(form.customCss),
+  } as CSSProperties
+
   return (
-    <ResourcePage title="Branding" description="Hosted sign-in branding preview and deployment-owned theme settings.">
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Brand preview</CardTitle>
-            <CardDescription>Upload deployment-owned logos and favicons for hosted pages.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <SettingRow label="Product name" value="FlareAuth" />
-            <SettingRow label="Primary color" value="var(--brand-primary)" />
-            <SettingRow label="Custom CSS" value="Configured through configz service" />
-            <AssetUploadControl
-              accept="image/png,image/jpeg,image/webp"
-              label="Upload branding logo"
-              onFile={(file) => logoMutation.mutate(file)}
-              previewUrl={logoPreview}
-            />
-            <AssetUploadControl
-              accept="image/png,image/webp,image/x-icon,image/vnd.microsoft.icon"
-              label="Upload favicon"
-              onFile={(file) => faviconMutation.mutate(file)}
-              previewUrl={faviconPreview}
-            />
-            {logoMutation.errorMessage ? <p className="text-sm text-destructive">{logoMutation.errorMessage}</p> : null}
-            {faviconMutation.errorMessage ? (
-              <p className="text-sm text-destructive">{faviconMutation.errorMessage}</p>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+    <ResourcePage
+      title="Branding"
+      description="Configure hosted sign-in and Account Center brand assets, colors, and constrained theme variables."
+      error={query.error}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
+    >
+      {query.data ? (
+        <form className="grid gap-4 xl:grid-cols-2" onSubmit={onSubmit}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Brand settings</CardTitle>
+              <CardDescription>
+                External asset URLs must use HTTPS. Custom CSS accepts --auth-* declarations only.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="formStack">
+              <Field label="Product name">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
+                  required
+                  value={form.productName}
+                />
+              </Field>
+              <Field label="Logo URL">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, logoUrl: event.target.value }))}
+                  type="url"
+                  value={form.logoUrl}
+                />
+              </Field>
+              <AssetUploadControl
+                accept="image/png,image/jpeg,image/webp"
+                label="Upload branding logo"
+                onFile={(file) => logoMutation.mutate(file)}
+                previewUrl={form.logoUrl || null}
+              />
+              <Field label="Favicon URL">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, faviconUrl: event.target.value }))}
+                  type="url"
+                  value={form.faviconUrl}
+                />
+              </Field>
+              <AssetUploadControl
+                accept="image/png,image/webp,image/x-icon,image/vnd.microsoft.icon"
+                label="Upload favicon"
+                onFile={(file) => faviconMutation.mutate(file)}
+                previewUrl={form.faviconUrl || null}
+              />
+              <Field label="Primary color">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, primaryColor: event.target.value }))}
+                  type="color"
+                  value={form.primaryColor}
+                />
+              </Field>
+              <Field label="Background color">
+                <TextInput
+                  onChange={(event) => setForm((value) => ({ ...value, backgroundColor: event.target.value }))}
+                  type="color"
+                  value={form.backgroundColor}
+                />
+              </Field>
+              <Field label="Custom CSS">
+                <TextArea
+                  onChange={(event) => setForm((value) => ({ ...value, customCss: event.target.value }))}
+                  placeholder="--auth-panel-radius: 8px;"
+                  value={form.customCss}
+                />
+              </Field>
+              {validationError ||
+              updateMutation.errorMessage ||
+              logoMutation.errorMessage ||
+              faviconMutation.errorMessage ? (
+                <div className="text-sm text-destructive">
+                  {validationError ??
+                    updateMutation.errorMessage ??
+                    logoMutation.errorMessage ??
+                    faviconMutation.errorMessage}
+                </div>
+              ) : null}
+              <Button disabled={updateMutation.isPending} type="submit">
+                <Save data-icon="inline-start" />
+                Save branding
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Brand preview</CardTitle>
+              <CardDescription>Preview uses the same public config consumed by hosted auth surfaces.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="brandingPreview" style={previewStyle}>
+                <div className="brand">
+                  {form.logoUrl ? (
+                    <img className="brandLogo" src={form.logoUrl} alt="" />
+                  ) : (
+                    <span className="brandMark">{form.productName.slice(0, 1).toUpperCase()}</span>
+                  )}
+                  <span>{form.productName}</span>
+                </div>
+                <div>
+                  <p className="eyebrow">Hosted sign-in</p>
+                  <h2>{form.headline}</h2>
+                  <p>{form.description}</p>
+                </div>
+                <Button type="button">
+                  <Eye data-icon="inline-start" />
+                  Preview action
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </form>
+      ) : null}
     </ResourcePage>
   )
 }
@@ -1696,6 +2019,23 @@ function MutationError({ error }: { error: unknown }) {
   return (
     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
       {error instanceof Error ? error.message : 'Request failed.'}
+    </div>
+  )
+}
+
+function SwitchRow({
+  checked,
+  label,
+  onCheckedChange,
+}: {
+  checked: boolean
+  label: string
+  onCheckedChange: (checked: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+      <span className="text-sm font-medium">{label}</span>
+      <Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   )
 }
@@ -2070,6 +2410,27 @@ function removeBlankValues(input: unknown): unknown {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== ''))
 }
 
+function nullableString(value: string) {
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
+function customCssProperties(css: string): CSSProperties {
+  const result = hostedCustomCssSchema.safeParse(css)
+  if (!result.success) return {}
+
+  return Object.fromEntries(
+    result.data
+      .split(';')
+      .map((declaration) => declaration.trim())
+      .filter(Boolean)
+      .map((declaration) => {
+        const separator = declaration.indexOf(':')
+        return [declaration.slice(0, separator).trim(), declaration.slice(separator + 1).trim()]
+      }),
+  ) as CSSProperties
+}
+
 function setValue(setForm: (next: (form: FormState) => FormState) => void, key: string, value: string) {
   setForm((form) => ({ ...form, [key]: value }))
 }
@@ -2101,8 +2462,4 @@ function useAdminMutation<TInput, TOutput>({
 function formatDate(value: string | Date | undefined) {
   if (!value) return 'Unknown'
   return new Date(value).toLocaleDateString()
-}
-
-function humanize(value: string) {
-  return value.replace(/[A-Z]/g, (match) => ` ${match.toLowerCase()}`)
 }

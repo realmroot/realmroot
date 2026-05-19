@@ -1,6 +1,13 @@
 import { z } from 'zod'
 
 const nullableUrlSchema = z.string().nullable()
+const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/)
+
+export const hostedCustomCssSchema = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine(isHostedCustomCss, 'Custom CSS only supports declaration-only --auth-* custom properties.')
 
 export const configzMethodSchema = z.object({
   passwordEnabled: z.boolean(),
@@ -15,9 +22,9 @@ export const configzMethodSchema = z.object({
 export const configzBrandingSchema = z.object({
   logoUrl: nullableUrlSchema,
   faviconUrl: nullableUrlSchema,
-  primaryColor: z.string().nullable(),
-  backgroundColor: z.string().nullable(),
-  customCss: z.string().nullable(),
+  primaryColor: hexColorSchema.nullable(),
+  backgroundColor: hexColorSchema.nullable(),
+  customCss: hostedCustomCssSchema.nullable(),
 })
 
 export const configzIdentityProviderSchema = z.object({
@@ -83,3 +90,15 @@ export const configzConfigResponseSchema = z.object({
 })
 
 export type ConfigzConfigResponse = z.infer<typeof configzConfigResponseSchema>
+
+function isHostedCustomCss(value: string) {
+  if (!value) return true
+  if (/[{}<>@]/.test(value)) return false
+  if (/(url\s*\(|expression\s*\(|javascript:|import)/i.test(value)) return false
+
+  return value
+    .split(';')
+    .map((declaration) => declaration.trim())
+    .filter(Boolean)
+    .every((declaration) => /^--auth-[a-z0-9-]+\s*:\s*[-#.,%()'" a-zA-Z0-9]+$/.test(declaration))
+}
