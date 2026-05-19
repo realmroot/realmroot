@@ -2065,7 +2065,7 @@ export function SignInSettingsPage() {
                 label="Email OTP"
                 value={query.data.signIn.emailOtpEnabled ? 'Available from runtime' : 'Unavailable'}
               />
-              <SwitchRow checked={false} disabled label="Passkey sign-in" onCheckedChange={() => undefined} />
+              <SwitchRow checked={false} disabled label="Passkey sign-in" />
               <UnavailableSetting
                 label="Social provider setup"
                 value="Add enabled identity providers from Connectors before enabling social sign-in."
@@ -3084,7 +3084,7 @@ export function BrandingPage() {
                   value={form.backgroundColor}
                 />
               </Field>
-              <SwitchRow checked={false} disabled label="Dark mode" onCheckedChange={() => undefined} />
+              <SwitchRow checked={false} disabled label="Dark mode" />
               <Field label="Custom CSS">
                 <TextArea
                   onChange={(event) => setForm((value) => ({ ...value, customCss: event.target.value }))}
@@ -3298,7 +3298,7 @@ export function ContentSettingsPage() {
       },
     })
     if (!payload.success) {
-      setValidationError(payload.error.issues[0]?.message ?? 'Invalid content settings.')
+      setValidationError(payload.error.issues[0]!.message)
       return
     }
     setValidationError(null)
@@ -3505,8 +3505,8 @@ function SignInExperiencePage({
       toolbar={
         <Tabs
           setValue={(value) => {
-            const tab = signInExperienceTabs.find((item) => item.value === value)
-            if (tab) void navigate({ to: tab.href })
+            const tab = signInExperienceTabs.find((item) => item.value === value)!
+            void navigate({ to: tab.href })
           }}
           value={activeTab}
         >
@@ -4135,7 +4135,7 @@ function SwitchRow({
   checked: boolean
   disabled?: boolean
   label: string
-  onCheckedChange: (checked: boolean) => void
+  onCheckedChange?: (checked: boolean) => void
 }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
