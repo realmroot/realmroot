@@ -52,7 +52,7 @@ export class ConnectorService {
     }
   }
 
-  async create(input: CreateConnectorRequest) {
+  async create(input: CreateConnectorRequest, env?: object) {
     assertSupportedProvider(input.providerType, input.providerId)
     await assertProviderAvailable(this.repository, input.providerId)
     const now = new Date()
@@ -77,12 +77,13 @@ export class ConnectorService {
       updatedAt: now,
     }
     assertComplete(candidate)
+    assertRuntimeSecretAvailable(candidate, env)
     const connector = await this.repository.create(candidate)
     assertComplete(connector)
     return toResponse(connector)
   }
 
-  async update(id: string, input: UpdateConnectorRequest) {
+  async update(id: string, input: UpdateConnectorRequest, env?: object) {
     const current = await this.repository.findById(id)
     if (!current) throw notFound('Connector not found.')
 
@@ -92,6 +93,7 @@ export class ConnectorService {
       updatedAt: new Date(),
     }
     assertComplete(candidate)
+    assertRuntimeSecretAvailable(candidate, env)
 
     const updated = await this.repository.update(id, {
       ...input,
@@ -116,11 +118,10 @@ export async function loadAuthConnectorConfig(repository: ConnectorRepository, e
   const trustedProviders: string[] = []
 
   for (const connector of connectors) {
-    assertSupportedProvider(connector.providerType as ConnectorProviderType, connector.providerId)
-    assertComplete(connector)
     const clientId = connector.clientId
-    if (!clientId) throw badRequest('Enabled connector requires clientId.')
+    if (!canLoadAuthConnector(connector, env) || !clientId) continue
     const clientSecret = readSecret(env, connector.clientSecretBinding)
+    if (!clientSecret) continue
     trustedProviders.push(connector.providerId)
 
     if (connector.providerType === 'social') {
@@ -160,6 +161,7 @@ export async function loadAuthConnectorConfig(repository: ConnectorRepository, e
         updatedAt: connector.updatedAt.toISOString(),
         enabled: connector.enabled,
         secretBinding: connector.clientSecretBinding,
+        secretAvailable: hasRuntimeSecret(env, connector.clientSecretBinding),
       })),
     ),
   }
@@ -208,9 +210,43 @@ function assertGenericOAuthComplete(connector: ConnectorRow) {
   }
 }
 
+function canLoadAuthConnector(connector: ConnectorRow, env: Env) {
+  if (connector.providerType !== 'social' && connector.providerType !== 'generic_oauth') return false
+  const providerType = connector.providerType
+  if (!isSupportedProvider(providerType, connector.providerId)) return false
+  if (!connector.clientId || !connector.clientSecretBinding || !hasRuntimeSecret(env, connector.clientSecretBinding)) {
+    return false
+  }
+  if (providerType === 'social') return canLoadSocialProvider(connector)
+  return canLoadGenericOAuth(connector)
+}
+
+function canLoadSocialProvider(connector: ConnectorRow) {
+  if (connector.providerId !== 'cognito') return true
+
+  const metadata = connector.providerMetadata ?? {}
+  return ['domain', 'region', 'userPoolId'].every(
+    (field) => typeof metadata[field] === 'string' && metadata[field].length > 0,
+  )
+}
+
+function canLoadGenericOAuth(connector: ConnectorRow) {
+  if (connector.issuer && hasAnyExplicitEndpoint(connector)) return false
+  if (!connector.issuer && !connector.authorizationEndpoint) return false
+  return Boolean(connector.issuer || connector.tokenEndpoint)
+}
+
+function assertRuntimeSecretAvailable(connector: ConnectorRow, env: object | undefined) {
+  if (!env || !connector.enabled) return
+  if (!hasRuntimeSecret(env, connector.clientSecretBinding)) {
+    throw badRequest(
+      `OAuth connector secret binding is not available in this runtime: ${connector.clientSecretBinding}.`,
+    )
+  }
+}
+
 function connectorReadinessChecks(connector: ConnectorRow, env: Env) {
-  const secretValue = connector.clientSecretBinding ? env[connector.clientSecretBinding] : undefined
-  const secretAvailable = typeof secretValue === 'string' && secretValue.length > 0
+  const secretAvailable = hasRuntimeSecret(env, connector.clientSecretBinding)
   const checks = [
     {
       key: 'enabled',
@@ -269,13 +305,16 @@ function hasAnyExplicitEndpoint(connector: ConnectorRow): boolean {
   )
 }
 
-function readSecret(env: Env, binding: string | null): string {
+function readSecret(env: Env, binding: string | null): string | null {
   if (!binding) throw badRequest('Enabled connector requires clientSecretBinding.')
   const value = env[binding]
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`OAuth connector secret binding is not configured: ${binding}`)
-  }
-  return value
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function hasRuntimeSecret(env: object, binding: string | null): boolean {
+  if (!binding) return false
+  const value = (env as Record<string, unknown>)[binding]
+  return typeof value === 'string' && value.length > 0
 }
 
 function toResponse(row: ConnectorRow): ConnectorResponse {

@@ -15,10 +15,10 @@ import { readJson, readQuery } from '../validation'
 export interface ManagementConnectorService {
   list(page: { limit: number; offset: number }): Promise<unknown>
   listTemplates(): unknown
-  create(input: unknown): Promise<unknown>
+  create(input: unknown, env: ConnectorBindings): Promise<unknown>
   get(id: string): Promise<unknown>
   readiness(id: string, env: ConnectorBindings): Promise<unknown>
-  update(id: string, input: unknown): Promise<unknown>
+  update(id: string, input: unknown, env: ConnectorBindings): Promise<unknown>
   delete(id: string): Promise<void>
 }
 
@@ -42,7 +42,7 @@ export function createManagementConnectorRoutes(
   )
 
   app.post('/', async (c) => {
-    const connector = await createService(c).create(await readJson(c, createManagementConnectorRequestSchema))
+    const connector = await createService(c).create(await readJson(c, createManagementConnectorRequestSchema), c.env)
     return c.json(managementConnectorResponseSchema.parse(connector), 201)
   })
 
@@ -58,6 +58,7 @@ export function createManagementConnectorRoutes(
     const connector = await createService(c).update(
       c.req.param('id'),
       await readJson(c, updateManagementConnectorRequestSchema),
+      c.env,
     )
     return c.json(managementConnectorResponseSchema.parse(connector))
   })

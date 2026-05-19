@@ -134,14 +134,17 @@ describe('admin resource routes', () => {
 
     expect(connectorService.listTemplates).toHaveBeenCalled()
     expect(connectorService.list).toHaveBeenCalledWith({ limit: 10, offset: 0 })
-    expect(connectorService.create).toHaveBeenCalledWith({
-      providerId: 'github',
-      providerType: 'social',
-      displayName: 'GitHub',
-      clientId: 'client-id',
-      clientSecretBinding: 'GITHUB_SECRET',
-    })
-    expect(connectorService.update).toHaveBeenCalledWith('connector-1', { enabled: false })
+    expect(connectorService.create).toHaveBeenCalledWith(
+      {
+        providerId: 'github',
+        providerType: 'social',
+        displayName: 'GitHub',
+        clientId: 'client-id',
+        clientSecretBinding: 'GITHUB_SECRET',
+      },
+      undefined,
+    )
+    expect(connectorService.update).toHaveBeenCalledWith('connector-1', { enabled: false }, undefined)
     expect(connectorService.delete).toHaveBeenCalledWith('connector-1')
   })
 })

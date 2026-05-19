@@ -8,6 +8,7 @@ import {
 } from '../../shared/api/management'
 import type { SecurityPolicy } from '../../shared/api/security'
 import { createApp } from '../app'
+import { badRequest } from '../lib/errors'
 import type { SecurityRepository } from '../modules/security/repository'
 import type { UserRepository } from '../modules/users/repository'
 
@@ -758,9 +759,68 @@ describe('management routes', () => {
         clientSecretBinding: 'secret://google',
         scopes: ['openid', 'email', 'profile'],
       }),
+      undefined,
     )
-    expect(connectors.update).toHaveBeenCalledWith('connector-1', { enabled: false, displayName: 'Google Workspace' })
+    expect(connectors.update).toHaveBeenCalledWith(
+      'connector-1',
+      { enabled: false, displayName: 'Google Workspace' },
+      undefined,
+    )
     expect(connectors.delete).toHaveBeenCalledWith('connector-1')
+  })
+
+  it('surfaces unavailable connector secret bindings without breaking connector reads', async () => {
+    const connectors = createConnectorServiceMock()
+    connectors.create.mockRejectedValue(
+      badRequest('OAuth connector secret binding is not available in this runtime: REVIEW_CLIENT_SECRET.'),
+    )
+    connectors.update.mockRejectedValue(
+      badRequest('OAuth connector secret binding is not available in this runtime: REVIEW_CLIENT_SECRET.'),
+    )
+    const app = createApp(createAuthMock(), {
+      connectorServiceFactory: () => connectors,
+    })
+    const headers = adminHeaders()
+
+    const created = await app.request('/api/management/connectors', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        providerType: 'social',
+        providerId: 'github',
+        displayName: 'GitHub',
+        enabled: true,
+        clientId: 'review-client-id',
+        clientSecretBinding: 'REVIEW_CLIENT_SECRET',
+      }),
+    })
+    const updated = await app.request('/api/management/connectors/connector-1', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        enabled: true,
+        clientSecretBinding: 'REVIEW_CLIENT_SECRET',
+      }),
+    })
+    const list = await app.request('/api/management/connectors?limit=1&offset=0', { headers })
+    const templates = await app.request('/api/management/connectors/templates', { headers })
+
+    expect(created.status).toBe(400)
+    await expect(created.json()).resolves.toMatchObject({
+      error: {
+        code: 'bad_request',
+        message: 'OAuth connector secret binding is not available in this runtime: REVIEW_CLIENT_SECRET.',
+      },
+    })
+    expect(updated.status).toBe(400)
+    await expect(updated.json()).resolves.toMatchObject({
+      error: {
+        code: 'bad_request',
+        message: 'OAuth connector secret binding is not available in this runtime: REVIEW_CLIENT_SECRET.',
+      },
+    })
+    expect(list.status).toBe(200)
+    expect(templates.status).toBe(200)
   })
 
   it('rejects unsupported connector provider types at the request boundary', async () => {

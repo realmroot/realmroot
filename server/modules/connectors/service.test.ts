@@ -72,15 +72,84 @@ describe('ConnectorService', () => {
     ])
   })
 
-  it('fails fast when an enabled connector references a missing Cloudflare secret binding', async () => {
+  it('omits enabled auth connectors when their runtime secret binding is unavailable', async () => {
+    const config = await loadAuthConnectorConfig(
+      createRepository({
+        enabled: [
+          connector({ providerId: 'github', clientSecretBinding: 'GITHUB_CLIENT_SECRET' }),
+          connector({ providerId: 'google', clientSecretBinding: 'GOOGLE_CLIENT_SECRET' }),
+        ],
+      }),
+      { GOOGLE_CLIENT_SECRET: 'google-secret' } as unknown as Env,
+    )
+
+    expect(config.trustedProviders).toEqual(['google'])
+    expect(config.socialProviders).toHaveProperty('google')
+    expect(config.socialProviders).not.toHaveProperty('github')
+    expect(JSON.parse(config.cacheKey)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ secretBinding: 'GITHUB_CLIENT_SECRET', secretAvailable: false }),
+        expect.objectContaining({ secretBinding: 'GOOGLE_CLIENT_SECRET', secretAvailable: true }),
+      ]),
+    )
+  })
+
+  it('rejects enabled connector writes when the runtime secret binding is unavailable', async () => {
+    const repository = createRepository()
+    const service = new ConnectorService(repository)
+
     await expect(
-      loadAuthConnectorConfig(
-        createRepository({
-          enabled: [connector({ providerId: 'github', clientSecretBinding: 'GITHUB_CLIENT_SECRET' })],
-        }),
+      service.create(
+        {
+          providerType: 'social',
+          providerId: 'github',
+          displayName: 'GitHub',
+          clientId: 'review-client-id',
+          clientSecretBinding: 'REVIEW_CLIENT_SECRET',
+        },
         {} as Env,
       ),
-    ).rejects.toThrow('OAuth connector secret binding is not configured: GITHUB_CLIENT_SECRET')
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'OAuth connector secret binding is not available in this runtime: REVIEW_CLIENT_SECRET.',
+    })
+    expect(repository.create).not.toHaveBeenCalled()
+  })
+
+  it('allows disabling a connector whose runtime secret binding is unavailable', async () => {
+    const current = connector({
+      id: 'idp_github',
+      providerId: 'github',
+      clientSecretBinding: 'REVIEW_CLIENT_SECRET',
+    })
+    const repository = createRepository({ byId: current, updateResult: { ...current, enabled: false } })
+    const service = new ConnectorService(repository)
+
+    await expect(service.update('idp_github', { enabled: false }, {} as Env)).resolves.toMatchObject({
+      id: 'idp_github',
+      enabled: false,
+    })
+    expect(repository.update).toHaveBeenCalledWith('idp_github', {
+      enabled: false,
+      updatedAt: expect.any(Date),
+    })
+  })
+
+  it('rejects enabling a connector when its runtime secret binding is unavailable', async () => {
+    const current = connector({
+      id: 'idp_github',
+      providerId: 'github',
+      enabled: false,
+      clientSecretBinding: 'REVIEW_CLIENT_SECRET',
+    })
+    const repository = createRepository({ byId: current })
+    const service = new ConnectorService(repository)
+
+    await expect(service.update('idp_github', { enabled: true }, {})).rejects.toMatchObject({
+      status: 400,
+      message: 'OAuth connector secret binding is not available in this runtime: REVIEW_CLIENT_SECRET.',
+    })
+    expect(repository.update).not.toHaveBeenCalled()
   })
 
   it('rejects duplicate provider configuration before inserting', async () => {
@@ -177,7 +246,7 @@ describe('ConnectorService', () => {
     expect(repository.update).not.toHaveBeenCalled()
   })
 
-  it('requires Cognito social metadata before auth config generation', async () => {
+  it('omits Cognito social connectors missing required metadata from auth config', async () => {
     await expect(
       loadAuthConnectorConfig(
         createRepository({
@@ -192,10 +261,7 @@ describe('ConnectorService', () => {
         }),
         { COGNITO_CLIENT_SECRET: 'secret' } as unknown as Env,
       ),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Enabled Cognito connector requires providerMetadata.userPoolId.',
-    })
+    ).resolves.toMatchObject({ trustedProviders: [], socialProviders: {} })
   })
 
   it('accepts disabled incomplete connectors and generic OAuth endpoint configuration', async () => {
@@ -368,7 +434,7 @@ describe('ConnectorService', () => {
     })
   })
 
-  it('rejects unsupported, incomplete, and empty-secret enabled connector configurations', async () => {
+  it('omits unsupported, incomplete, and unavailable enabled connector rows from auth config', async () => {
     const service = new ConnectorService(createRepository())
 
     await expect(
@@ -384,18 +450,22 @@ describe('ConnectorService', () => {
       loadAuthConnectorConfig(createRepository({ enabled: [connector({ clientId: null })] }), {
         GOOGLE_CLIENT_SECRET: 'google-secret',
       } as unknown as Env),
-    ).rejects.toMatchObject({ status: 400, message: 'Enabled connector requires clientId.' })
+    ).resolves.toMatchObject({ trustedProviders: [] })
     await expect(
       loadAuthConnectorConfig(createRepository({ enabled: [connector({ clientSecretBinding: null })] }), {
         GOOGLE_CLIENT_SECRET: 'google-secret',
       } as unknown as Env),
-    ).rejects.toMatchObject({ status: 400, message: 'Enabled connector requires clientSecretBinding.' })
+    ).resolves.toMatchObject({ trustedProviders: [] })
     await expect(
       loadAuthConnectorConfig(
         createRepository({ enabled: [connector({ clientSecretBinding: 'GOOGLE_CLIENT_SECRET' })] }),
         { GOOGLE_CLIENT_SECRET: '' } as unknown as Env,
       ),
-    ).rejects.toThrow('OAuth connector secret binding is not configured: GOOGLE_CLIENT_SECRET')
+    ).resolves.toMatchObject({
+      trustedProviders: [],
+      socialProviders: {},
+      genericOAuthProviders: [],
+    })
     await expect(
       loadAuthConnectorConfig(
         createRepository({
@@ -412,10 +482,7 @@ describe('ConnectorService', () => {
         }),
         { GENERIC_CLIENT_SECRET: 'generic-secret' } as unknown as Env,
       ),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Enabled generic OAuth connector requires tokenEndpoint when issuer is not provided.',
-    })
+    ).resolves.toMatchObject({ genericOAuthProviders: [] })
     await expect(
       loadAuthConnectorConfig(
         createRepository({
@@ -432,10 +499,32 @@ describe('ConnectorService', () => {
         }),
         { GENERIC_CLIENT_SECRET: 'generic-secret' } as unknown as Env,
       ),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Enabled generic OAuth connector requires issuer or authorizationEndpoint.',
-    })
+    ).resolves.toMatchObject({ genericOAuthProviders: [] })
+    await expect(
+      loadAuthConnectorConfig(
+        createRepository({
+          enabled: [
+            connector({
+              providerType: 'social',
+              providerId: 'cognito',
+              clientSecretBinding: 'COGNITO_CLIENT_SECRET',
+              providerMetadata: { domain: 'auth.example.com', region: 'us-east-1' },
+            }),
+            connector({
+              providerType: 'social',
+              providerId: 'unsupported',
+              clientSecretBinding: 'UNSUPPORTED_SECRET',
+            }),
+            connector({
+              providerType: 'saml',
+              providerId: 'google',
+              clientSecretBinding: 'SAML_SECRET',
+            } as Partial<ConnectorRow>),
+          ],
+        }),
+        { COGNITO_CLIENT_SECRET: 'secret', UNSUPPORTED_SECRET: 'secret', SAML_SECRET: 'secret' } as unknown as Env,
+      ),
+    ).resolves.toMatchObject({ trustedProviders: [] })
     await expect(
       service.create({
         providerType: 'generic_oauth',
