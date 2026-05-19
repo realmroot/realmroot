@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccountCenter, AccountCenterPage } from './account-center'
@@ -44,21 +45,33 @@ describe('account center', () => {
   })
 
   it('updates profile, email, and password from the profile section', async () => {
+    const user = userEvent.setup()
     const requests = mockAccountFetch()
 
     render(<AccountCenterPage />)
 
-    fireEvent.change(await screen.findByLabelText('Display name'), { target: { value: 'Jane Updated' } })
-    fireEvent.change(screen.getByLabelText('Username'), { target: { value: '' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
-    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Change email' }))
+    const displayNameInput = (await screen.findByLabelText('Display name')) as HTMLInputElement
+    await waitFor(() => expect(displayNameInput.value).toBe('Jane Stone'))
+    await user.clear(displayNameInput)
+    await user.type(displayNameInput, 'Jane Updated')
+    expect(displayNameInput.value).toBe('Jane Updated')
+
+    const usernameInput = screen.getByLabelText('Username') as HTMLInputElement
+    await user.clear(usernameInput)
+    expect(usernameInput.value).toBe('')
+    await user.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    const emailInput = screen.getByLabelText('Email') as HTMLInputElement
+    await user.clear(emailInput)
+    await user.type(emailInput, 'new@example.com')
+    expect(emailInput.value).toBe('new@example.com')
+    await user.click(screen.getByRole('button', { name: 'Change email' }))
     expect(document.querySelector('input[autocomplete="username"]')).toHaveProperty('value', 'jane@example.com')
     expect(screen.getByLabelText('Current password').getAttribute('autocomplete')).toBe('current-password')
     expect(screen.getByLabelText('New password').getAttribute('autocomplete')).toBe('new-password')
-    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'old-password' } })
-    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Change password' }))
+    await user.type(screen.getByLabelText('Current password'), 'old-password')
+    await user.type(screen.getByLabelText('New password'), 'new-password')
+    await user.click(screen.getByRole('button', { name: 'Change password' }))
 
     await waitFor(() => {
       expect(requests).toEqual(
