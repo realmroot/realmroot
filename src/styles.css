@@ -253,8 +253,10 @@ h1 {
 
 .authShell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 480px);
-  gap: 32px;
+  grid-template-columns: minmax(0, 520px);
+  justify-content: center;
+  align-content: center;
+  gap: 24px;
   min-height: 100dvh;
   padding: 32px;
   background:
@@ -265,28 +267,32 @@ h1 {
 .authBrandPanel {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 24px;
   min-width: 0;
-  padding: 16px 0 32px;
+  padding: 0;
+  text-align: center;
 }
 
 .authBrandPanel h1 {
-  max-width: 720px;
+  max-width: 520px;
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .authBrandPanel p:not(.eyebrow) {
-  max-width: 620px;
+  max-width: 520px;
+  margin-right: auto;
+  margin-left: auto;
   color: #52525b;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.7;
 }
 
 .authPanel {
   align-self: center;
   width: 100%;
-  padding: 28px;
-  box-shadow: 0 24px 70px rgb(15 23 42 / 8%);
-  border-radius: var(--auth-panel-radius, 8px);
+  padding: 0;
 }
 
 .brandingPreview {
@@ -391,6 +397,34 @@ h1 {
 .textInput:focus {
   border-color: var(--brand-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 18%, transparent);
+}
+
+.passwordField {
+  position: relative;
+}
+
+.passwordField .textInput {
+  padding-right: 46px;
+}
+
+.passwordField button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.passwordField button:hover {
+  background: #f4f4f5;
+  color: var(--ink);
 }
 
 .assetUploadRow {
@@ -639,70 +673,42 @@ h1 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.authLinks a {
+.authLinks a,
+.authLinks button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
   color: var(--brand-primary);
+  font: inherit;
   font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+}
+
+.authPoweredBy {
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 .accountShell {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
   min-height: 100dvh;
+  padding: 32px;
   background: var(--soft);
 }
 
-.accountSidebar {
-  position: sticky;
-  top: 0;
-  align-self: start;
-  min-height: 100dvh;
-  padding: 24px;
-  border-right: 1px solid var(--line);
-  background: #ffffff;
-}
-
-.accountNav {
+.accountChrome {
   display: grid;
-  gap: 6px;
-  margin-top: 32px;
-}
-
-.accountNav a {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #52525b;
-  font-weight: 700;
-  text-decoration: none;
-  text-align: left;
-  transition:
-    background-color 150ms ease,
-    color 150ms ease;
-}
-
-.accountNav a.active {
-  background: #fff1f2;
-  color: var(--brand-primary);
-}
-
-.accountNav a:hover {
-  background: #f4f4f5;
-  color: var(--ink);
-}
-
-.accountNav a.active:hover {
-  background: #fff1f2;
-  color: var(--brand-primary);
+  gap: 28px;
+  max-width: 1120px;
+  margin: 0 auto;
 }
 
 .accountContent {
   min-width: 0;
-  padding: 32px;
 }
 
 .accountHeader,
@@ -721,6 +727,11 @@ h1 {
 .accountGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.accountSectionStack {
+  display: grid;
   gap: 18px;
 }
 
@@ -955,19 +966,7 @@ h1 {
     padding: 20px;
   }
 
-  .accountSidebar {
-    position: static;
-    min-height: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .accountNav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 20px;
-  }
-
-  .accountContent {
+  .accountShell {
     padding: 20px;
   }
 

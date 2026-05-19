@@ -23,11 +23,12 @@ describe('account center', () => {
     render(<AccountCenterPage />)
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Profile' }).getAttribute('href')).toBe('/account/profile')
-    expect(screen.getByRole('link', { name: 'Security' }).getAttribute('href')).toBe('/account/security')
-    expect(screen.getByRole('link', { name: 'Linked accounts' }).getAttribute('href')).toBe('/account/linked-accounts')
-    expect(screen.getByRole('link', { name: 'Sessions' }).getAttribute('href')).toBe('/account/sessions')
-    expect(screen.getByRole('link', { name: 'Authorized apps' }).getAttribute('href')).toBe('/account/authorized-apps')
+    expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Profile' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'MFA' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Linked social accounts' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sessions and devices' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Consented applications' })).toBeTruthy()
 
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
     expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('64')
@@ -97,6 +98,23 @@ describe('account center', () => {
     })
   })
 
+  it('signs out from the top-level account page', async () => {
+    const requests = mockAccountFetch()
+
+    render(<AccountCenterPage />)
+
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        path: '/api/auth/sign-out',
+        method: 'POST',
+        body: {},
+      })
+    })
+  })
+
   it('shows TOTP enrollment setup data before verification', async () => {
     const requests = mockAccountFetch()
 
@@ -161,6 +179,72 @@ describe('account center', () => {
     expect(navigator.credentials.create).toHaveBeenCalled()
   })
 
+  it('surfaces unsupported and canceled passkey registration errors', async () => {
+    mockAccountFetch()
+    Object.defineProperty(window.navigator, 'credentials', {
+      configurable: true,
+      value: {},
+    })
+
+    render(<AccountCenter section="security" />)
+
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    fireEvent.click(screen.getByRole('button', { name: 'Add passkey' }))
+    expect(await screen.findByText('Passkey registration is not supported by this browser.')).toBeTruthy()
+
+    cleanup()
+    vi.restoreAllMocks()
+    mockAccountFetch()
+    Object.defineProperty(window.navigator, 'credentials', {
+      configurable: true,
+      value: {
+        create: vi.fn().mockResolvedValue(null),
+      },
+    })
+
+    render(<AccountCenter section="security" />)
+
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    fireEvent.click(screen.getByRole('button', { name: 'Add passkey' }))
+    expect(await screen.findByText('Passkey registration was cancelled.')).toBeTruthy()
+  })
+
+  it('surfaces invalid passkey registration options', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const path = String(input)
+      if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
+      if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
+      if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts() }))
+      if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: applications() }))
+      if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: sessions() }))
+      if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security: security() }))
+      if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: passkeys() }))
+      if (path === '/api/account/security/passkeys/registration-options') {
+        return Promise.resolve(
+          jsonResponse({
+            rp: { name: 'Acme ID', id: 'localhost' },
+            user: { id: 'BAUG', name: 'jane@example.com', displayName: 'Jane Stone' },
+            pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+    Object.defineProperty(window.navigator, 'credentials', {
+      configurable: true,
+      value: {
+        create: vi.fn(),
+      },
+    })
+
+    render(<AccountCenter section="security" />)
+
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    fireEvent.click(screen.getByRole('button', { name: 'Add passkey' }))
+    expect(await screen.findByText('Passkey registration option challenge is required.')).toBeTruthy()
+    expect(navigator.credentials.create).not.toHaveBeenCalled()
+  })
+
   it('manages MFA verification, linked accounts, sessions, passkeys, and application consent display', async () => {
     const requests = mockAccountFetch()
 
@@ -191,7 +275,7 @@ describe('account center', () => {
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Customer Portal')).toBeTruthy()
     expect(screen.getByText(/openid, email/)).toBeTruthy()
-    clickAndConfirm('Revoke', 'Revoke access')
+    clickAndConfirm('Revoke', 'Revoke access', 1)
 
     await waitFor(() => {
       expect(requests).toEqual(
@@ -218,7 +302,7 @@ describe('account center', () => {
     render(<AccountCenter section="authorized-apps" />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' })[1] as HTMLButtonElement)
     expect(screen.getByRole('dialog')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
@@ -370,8 +454,8 @@ type MockProfile = Omit<ReturnType<typeof profile>, 'image'> & {
   image: string | null
 }
 
-function clickAndConfirm(triggerName: string, confirmName: string) {
-  fireEvent.click(screen.getByRole('button', { name: triggerName }))
+function clickAndConfirm(triggerName: string, confirmName: string, index = 0) {
+  fireEvent.click(screen.getAllByRole('button', { name: triggerName })[index] as HTMLButtonElement)
   const buttons = screen.getAllByRole('button', { name: confirmName })
   fireEvent.click(buttons.at(-1) as HTMLButtonElement)
 }

@@ -9,14 +9,17 @@ import {
   ApiResourcesPage,
   ApplicationDetailPage,
   ApplicationsPage,
+  AuditLogsPage,
   BrandingPage,
   CollectUserProfilePage,
   ConnectorsPage,
-  ConsolePlaceholderPage,
   ContentSettingsPage,
+  CustomizeJwtPage,
   DeploymentSettingsPage,
   MfaPage,
+  OrganizationDetailPage,
   OrganizationsPage,
+  OrganizationTemplatePage,
   PasswordlessConnectorsPage,
   RoleDetailPage,
   RolesPage,
@@ -27,6 +30,7 @@ import {
   SignInSettingsPage,
   UserDetailPage,
   UsersPage,
+  WebhooksPage,
 } from '@/features/admin/admin-console'
 import { ApiRequestError, getConfigz } from '@/lib/api'
 import { getAccountProfile } from '@/lib/api/account'
@@ -136,39 +140,47 @@ const accountRoute = createRoute({
 const accountIndexRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/',
-  beforeLoad: () => {
-    throw redirect({ to: '/account/profile' })
-  },
+  component: AccountRoute,
 })
 
 const accountProfileRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/profile',
-  component: () => <AccountRoute section="profile" />,
+  beforeLoad: () => {
+    throw redirect({ to: '/account' })
+  },
 })
 
 const accountSecurityRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/security',
-  component: () => <AccountRoute section="security" />,
+  beforeLoad: () => {
+    throw redirect({ to: '/account' })
+  },
 })
 
 const accountLinkedAccountsRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/linked-accounts',
-  component: () => <AccountRoute section="linked-accounts" />,
+  beforeLoad: () => {
+    throw redirect({ to: '/account' })
+  },
 })
 
 const accountSessionsRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/sessions',
-  component: () => <AccountRoute section="sessions" />,
+  beforeLoad: () => {
+    throw redirect({ to: '/account' })
+  },
 })
 
 const accountAuthorizedAppsRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/authorized-apps',
-  component: () => <AccountRoute section="authorized-apps" />,
+  beforeLoad: () => {
+    throw redirect({ to: '/account' })
+  },
 })
 
 const consoleRoute = createRoute({
@@ -334,6 +346,15 @@ const consoleOrganizationsRoute = createRoute({
   component: OrganizationsPage,
 })
 
+const consoleOrganizationDetailRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/organizations/{$organizationId}',
+  component: () => {
+    const params = consoleOrganizationDetailRoute.useParams()
+    return <OrganizationDetailPage organizationId={params.organizationId} />
+  },
+})
+
 const consoleRolesRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/roles',
@@ -375,61 +396,25 @@ const consoleOrganizationTemplateIndexRoute = createRoute({
 const consoleOrganizationTemplateRolesRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/organization-template/organization-roles',
-  component: () => (
-    <ConsolePlaceholderPage
-      title="Organization roles"
-      description="Define the role model applied when new organizations are provisioned."
-      rows={[
-        ['Scope', 'Organization template'],
-        ['Contract', 'Uses the existing role and organization management boundaries.'],
-      ]}
-    />
-  ),
+  component: OrganizationTemplatePage,
 })
 
 const consoleCustomJwtRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/customize-jwt',
-  component: () => (
-    <ConsolePlaceholderPage
-      title="Custom JWT"
-      description="Review the token customization surface for tenant-issued credentials."
-      rows={[
-        ['Issuer', '/api/auth'],
-        ['Claims source', 'Configured through tenant authorization policy.'],
-      ]}
-    />
-  ),
+  component: CustomizeJwtPage,
 })
 
 const consoleWebhooksRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/webhooks',
-  component: () => (
-    <ConsolePlaceholderPage
-      title="Webhooks"
-      description="Manage event delivery endpoints for tenant identity activity."
-      rows={[
-        ['Events', 'User, organization, application, and security activity.'],
-        ['Delivery', 'Runtime webhook dispatch uses the management boundary.'],
-      ]}
-    />
-  ),
+  component: WebhooksPage,
 })
 
 const consoleAuditLogsRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/audit-logs',
-  component: () => (
-    <ConsolePlaceholderPage
-      title="Audit logs"
-      description="Inspect administrative and authentication activity retained by the tenant."
-      rows={[
-        ['Coverage', 'Console actions and auth events'],
-        ['Retention', 'Configured by deployment policy.'],
-      ]}
-    />
-  ),
+  component: AuditLogsPage,
 })
 
 const consoleTenantSettingsIndexRoute = createRoute({
@@ -588,6 +573,7 @@ const routeTree = rootRoute.addChildren([
     consoleSecurityBlocklistRoute,
     consoleSecurityGeneralRoute,
     consoleOrganizationsRoute,
+    consoleOrganizationDetailRoute,
     consoleRolesRoute,
     consoleRoleDetailRoute,
     consoleApiResourcesRoute,

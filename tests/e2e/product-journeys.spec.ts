@@ -30,6 +30,7 @@ let accountApplicationRevoked = false
 let applicationDisabled = false
 let adminUserBanned = false
 let identifierFirstRequired = false
+let accountMfaEnabled = false
 
 const journeyAssertions: Record<
   JourneyId,
@@ -72,10 +73,10 @@ const journeyAssertions: Record<
         await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Admin User')
         await page.getByLabel('Email').fill('admin@example.com')
         await page.getByLabel('Username').fill('admin')
-        await page.getByLabel('Password').fill('password-1')
+        await page.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
         await page.getByRole('button', { name: 'Create first admin' }).click()
         await expect(page.getByText('First admin created.')).toBeVisible()
-        await expect(page.getByLabel('Password')).toHaveCount(0)
+        await expect(page.getByRole('textbox', { name: 'Password', exact: true })).toHaveCount(0)
         expect(requests).toContainEqual({
           method: 'POST',
           path: '/api/onboarding/admin-users',
@@ -91,7 +92,7 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       await page.goto('/sign-in')
       await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Password' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Password', exact: true })).toBeVisible()
       await expect(page.getByRole('button', { name: 'OTP' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
     },
@@ -162,9 +163,9 @@ const journeyAssertions: Record<
     assert: async ({ page, requests }) => {
       await page.goto('/sign-in')
       await page.getByLabel('Email or username').fill('jane@example.com')
-      await page.getByLabel('Password').fill('password-1')
+      await page.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
       await page.getByRole('button', { name: 'Sign in' }).click()
-      await expect(page).toHaveURL(/\/account\/profile$/)
+      await expect(page).toHaveURL(/\/account$/)
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/auth/sign-in/email',
@@ -181,7 +182,7 @@ const journeyAssertions: Record<
       await page.getByRole('button', { name: 'Send reset code' }).click()
       await expect(page.getByText('Password reset code sent.')).toBeVisible()
       await page.getByLabel('One-time code').fill('123456')
-      await page.getByLabel('New password').fill('new-password')
+      await page.getByRole('textbox', { name: 'New password', exact: true }).fill('new-password')
       await page.getByRole('button', { name: 'Reset password' }).click()
     },
   },
@@ -203,7 +204,7 @@ const journeyAssertions: Record<
       await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Jane Stone')
       await page.getByLabel('Email').fill('jane@example.com')
       await page.getByLabel('Username').fill('jane')
-      await page.getByLabel('Password').fill('password-1')
+      await page.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
       await page.getByRole('button', { name: 'Create account' }).click()
       expect(requests).toContainEqual({
         method: 'POST',
@@ -284,23 +285,29 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       await page.goto('/account')
       await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
-      await expect(page).toHaveURL(/\/account\/profile$/)
+      await expect(page).toHaveURL(/\/account$/)
+      await expect(page.getByRole('heading', { name: 'MFA' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Linked social accounts' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Sessions and devices' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Consented applications' })).toBeVisible()
     },
   },
   'account-deep-links': {
     suite: 'account center journey',
     assert: async ({ page }) => {
-      await page.goto('/account/security')
-      await expect(page.getByRole('heading', { name: 'MFA' })).toBeVisible()
-      await page.getByRole('link', { name: 'Linked accounts' }).click()
-      await expect(page).toHaveURL(/\/account\/linked-accounts$/)
-      await expect(page.getByRole('heading', { name: 'Linked social accounts' })).toBeVisible()
-      await page.getByRole('link', { name: 'Sessions' }).click()
-      await expect(page).toHaveURL(/\/account\/sessions$/)
-      await expect(page.getByRole('heading', { name: 'Sessions and devices' })).toBeVisible()
-      await page.getByRole('link', { name: 'Authorized apps' }).click()
-      await expect(page).toHaveURL(/\/account\/authorized-apps$/)
-      await expect(page.getByRole('heading', { name: 'Consented applications' })).toBeVisible()
+      for (const path of [
+        '/account/profile',
+        '/account/security',
+        '/account/linked-accounts',
+        '/account/sessions',
+        '/account/authorized-apps',
+      ]) {
+        await page.goto(path)
+        await expect(page).toHaveURL(/\/account$/)
+        await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'MFA' })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Consented applications' })).toBeVisible()
+      }
     },
   },
   'profile-update': {
@@ -325,7 +332,7 @@ const journeyAssertions: Record<
         mimeType: 'image/png',
         buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       })
-      await expect(page.locator('img.assetPreview[src="/api/assets/asset-1"]')).toBeVisible()
+      await expect(page.locator('section', { has: page.getByRole('heading', { name: 'Profile' }) }).locator('img')).toBeVisible()
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/account/avatar',
@@ -345,8 +352,8 @@ const journeyAssertions: Record<
     suite: 'account center journey',
     assert: async ({ page }) => {
       await page.goto('/account')
-      await page.getByLabel('Current password').fill('password-1')
-      await page.getByLabel('New password').fill('new-password')
+      await page.getByRole('textbox', { name: 'Current password', exact: true }).fill('password-1')
+      await page.getByRole('textbox', { name: 'New password', exact: true }).fill('new-password')
       await page.getByRole('button', { name: 'Change password' }).click()
     },
   },
@@ -354,11 +361,14 @@ const journeyAssertions: Record<
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
       await page.goto('/account/security')
-      await page.getByLabel('Password').fill('password-1')
+      const mfaSection = page.locator('.settingsPanel', { has: page.getByRole('heading', { name: 'MFA' }) })
+      await mfaSection.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
       await page.getByRole('button', { name: 'Enroll authenticator app' }).click()
       await expect(page.getByText('Authenticator setup')).toBeVisible()
       await page.getByLabel('Authenticator code').fill('123456')
       await page.getByRole('button', { name: 'Verify code' }).click()
+      await expect(mfaSection.getByText('Enabled')).toBeVisible()
+      await mfaSection.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
       await page.getByRole('button', { name: 'Disable MFA' }).click()
       await expect(page.getByRole('dialog')).toBeVisible()
       await page.getByRole('button', { name: 'Cancel' }).click()
@@ -414,7 +424,10 @@ const journeyAssertions: Record<
       await page.getByRole('button', { name: 'Cancel' }).click()
       await page.getByRole('button', { name: 'Revoke other sessions' }).click()
       await page.getByRole('button', { name: 'Revoke sessions' }).click()
-      await page.getByRole('button', { name: 'Revoke', exact: true }).click()
+      await page
+        .locator('.settingsPanel', { has: page.getByRole('heading', { name: 'Sessions and devices' }) })
+        .getByRole('button', { name: 'Revoke', exact: true })
+        .click()
       await page.getByRole('button', { name: 'Revoke session' }).click()
       expect(requests).toContainEqual({ method: 'DELETE', path: '/api/account/security/sessions', body: null })
       expect(requests).toContainEqual({
@@ -430,10 +443,16 @@ const journeyAssertions: Record<
       accountApplicationRevoked = false
       await page.goto('/account/authorized-apps')
       await expect(page.getByText('Customer portal')).toBeVisible()
-      await page.getByRole('button', { name: 'Revoke' }).click()
+      await page
+        .locator('.settingsPanel', { has: page.getByRole('heading', { name: 'Consented applications' }) })
+        .getByRole('button', { name: 'Revoke' })
+        .click()
       await expect(page.getByRole('dialog')).toBeVisible()
       await page.getByRole('button', { name: 'Cancel' }).click()
-      await page.getByRole('button', { name: 'Revoke' }).click()
+      await page
+        .locator('.settingsPanel', { has: page.getByRole('heading', { name: 'Consented applications' }) })
+        .getByRole('button', { name: 'Revoke' })
+        .click()
       await page.getByRole('button', { name: 'Revoke access' }).click()
       expect(requests).toContainEqual({
         method: 'DELETE',
@@ -1198,6 +1217,7 @@ async function expectNoDocumentHorizontalOverflow(page: Page) {
 
 async function mockApi(page: Page) {
   const requests: RequestRecord[] = []
+  accountMfaEnabled = false
 
   await page.route('**/*', async (route) => {
     const request = route.request()
@@ -1533,8 +1553,23 @@ async function responseFor(path: string, method: string, body: unknown): Promise
     return null
   }
   if (path === '/api/account/sessions') return { sessions: [session] }
-  if (path === '/api/account/security') return { security: securityState }
+  if (path === '/api/account/security') {
+    return {
+      security: {
+        ...securityState,
+        mfa: accountMfaEnabled ? { enabled: true, factors: [{ id: 'totp-1', type: 'totp', verified: true }] } : securityState.mfa,
+      },
+    }
+  }
   if (path === '/api/account/security/mfa/totp-enrollment') return totpEnrollment
+  if (path === '/api/account/security/mfa/totp-verification') {
+    accountMfaEnabled = true
+    return { verified: true }
+  }
+  if (path === '/api/account/security/mfa/totp' && method === 'DELETE') {
+    accountMfaEnabled = false
+    return null
+  }
   if (path === '/api/account/security/passkeys') return { passkeys: [passkey] }
   if (path === '/api/account/security/passkeys/registration-options') return passkeyRegistrationOptions
   return { ok: true }

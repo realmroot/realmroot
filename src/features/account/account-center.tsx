@@ -1,5 +1,4 @@
-import { Link } from '@tanstack/react-router'
-import { Fingerprint, KeyRound, Laptop, LinkIcon, LoaderCircle, Mail, ShieldCheck, UserRound } from 'lucide-react'
+import { Fingerprint, KeyRound, LoaderCircle, Mail, UserRound } from 'lucide-react'
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from 'react'
 import { BrandIdentity, brandingStyle } from '@/components/layout/auth-layout'
 import { Button } from '@/components/ui/button'
@@ -111,12 +110,12 @@ const emptyAccountData: AccountData = {
 }
 
 export function AccountCenterPage() {
-  return <AccountCenter section="profile" />
+  return <AccountCenter />
 }
 
-export type AccountSectionId = (typeof accountSections)[number]['id']
+export type AccountSectionId = 'profile' | 'security' | 'linked-accounts' | 'sessions' | 'authorized-apps'
 
-export function AccountCenter({ section }: { section: AccountSectionId }) {
+export function AccountCenter({ section: _section }: { section?: AccountSectionId } = {}) {
   const { data: config } = useConfigz()
   const [data, setData] = useState(emptyAccountData)
   const [loading, setLoading] = useState(true)
@@ -155,13 +154,17 @@ export function AccountCenter({ section }: { section: AccountSectionId }) {
     void reload()
   }, [reload])
 
-  async function mutate<T>(label: string, operation: () => Promise<T>): Promise<T | undefined> {
+  async function mutate<T>(
+    label: string,
+    operation: () => Promise<T>,
+    options: { reload?: boolean } = {},
+  ): Promise<T | undefined> {
     setMessage(null)
     setError(null)
     try {
       const result = await operation()
       setMessage(label)
-      await reload()
+      if (options.reload !== false) await reload()
       return result
     } catch (mutationError) {
       setError(mutationError instanceof Error ? mutationError.message : 'Account update failed.')
@@ -171,59 +174,41 @@ export function AccountCenter({ section }: { section: AccountSectionId }) {
 
   return (
     <main className="accountShell" style={brandingStyle(config)}>
-      <aside className="accountSidebar">
+      <div className="accountChrome">
         <BrandIdentity config={config} />
-        <nav className="accountNav" aria-label="Account center">
-          {accountSections.map((item) => (
-            <Link className={section === item.id ? 'active' : ''} key={item.id} to={item.href}>
-              <item.icon size={18} />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      </aside>
-      <section className="accountContent">
-        <div className="accountHeader">
-          <div>
-            <p className="eyebrow">Account center</p>
-            <h1>{data.profile?.displayName ?? 'Your account'}</h1>
+        <section className="accountContent">
+          <div className="accountHeader">
+            <div>
+              <p className="eyebrow">Profile</p>
+              <h1>{data.profile?.displayName ?? 'Your account'}</h1>
+            </div>
+            <Button onClick={() => mutate('Signed out.', signOut)} variant="secondary">
+              Sign out
+            </Button>
           </div>
-          <Button onClick={() => mutate('Signed out.', signOut)} variant="secondary">
-            Sign out
-          </Button>
-        </div>
-        {loading ? (
-          <Status>
-            <LoaderCircle className="spin" size={18} />
-            Loading account
-          </Status>
-        ) : null}
-        {error ? <Status tone="error">{error}</Status> : null}
-        {message ? <Status tone="success">{message}</Status> : null}
-        {section === 'profile' && data.profile ? <ProfileSection profile={data.profile} mutate={mutate} /> : null}
-        {section === 'security' ? <SecuritySection confirm={setConfirmation} data={data} mutate={mutate} /> : null}
-        {section === 'linked-accounts' ? (
-          <ConnectionsSection accounts={data.linkedAccounts} confirm={setConfirmation} mutate={mutate} />
-        ) : null}
-        {section === 'sessions' ? (
-          <SessionsSection confirm={setConfirmation} sessions={data.sessions} mutate={mutate} />
-        ) : null}
-        {section === 'authorized-apps' ? (
-          <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
-        ) : null}
-      </section>
+          {loading ? (
+            <Status>
+              <LoaderCircle className="spin" size={18} />
+              Loading account
+            </Status>
+          ) : null}
+          {error ? <Status tone="error">{error}</Status> : null}
+          {message ? <Status tone="success">{message}</Status> : null}
+          {!loading && data.profile ? (
+            <div className="accountSectionStack">
+              <ProfileSection profile={data.profile} mutate={mutate} />
+              <SecuritySection confirm={setConfirmation} data={data} mutate={mutate} />
+              <ConnectionsSection accounts={data.linkedAccounts} confirm={setConfirmation} mutate={mutate} />
+              <SessionsSection confirm={setConfirmation} sessions={data.sessions} mutate={mutate} />
+              <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
+            </div>
+          ) : null}
+        </section>
+      </div>
       <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
     </main>
   )
 }
-
-const accountSections = [
-  { id: 'profile', href: '/account/profile', label: 'Profile', icon: UserRound },
-  { id: 'security', href: '/account/security', label: 'Security', icon: ShieldCheck },
-  { id: 'linked-accounts', href: '/account/linked-accounts', label: 'Linked accounts', icon: LinkIcon },
-  { id: 'sessions', href: '/account/sessions', label: 'Sessions', icon: Laptop },
-  { id: 'authorized-apps', href: '/account/authorized-apps', label: 'Authorized apps', icon: BadgeIcon },
-] as const
 
 function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: MutationHandler }) {
   const [displayName, setDisplayName] = useState(profile.displayName)
@@ -269,10 +254,11 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
 
   function uploadAvatar(file: File | undefined) {
     if (!file) return
-    return mutate('Avatar uploaded.', async () => {
-      const response = await uploadAccountAvatar(file)
-      setAvatarAssetId(response.asset.id)
-      setAvatarPreview(response.asset.publicUrl)
+    return mutate('Avatar uploaded.', () => uploadAccountAvatar(file), { reload: false }).then((response) => {
+      if (response) {
+        setAvatarAssetId(response.asset.id)
+        setAvatarPreview(response.asset.publicUrl)
+      }
       return response
     })
   }
@@ -375,11 +361,15 @@ function SecuritySection({
           className="formStack"
           onSubmit={(event) => {
             event.preventDefault()
-            return mutate('TOTP enrollment started.', async () => {
-              const enrollment = await startTotpEnrollment({ password })
-              setTotpEnrollment(readTotpEnrollment(enrollment))
-              return enrollment
-            })
+            return mutate(
+              'TOTP enrollment started.',
+              async () => {
+                const enrollment = await startTotpEnrollment({ password })
+                setTotpEnrollment(readTotpEnrollment(enrollment))
+                return enrollment
+              },
+              { reload: false },
+            )
           }}
         >
           <Field label="Password">
@@ -604,7 +594,11 @@ function ApplicationsSection({
   )
 }
 
-type MutationHandler = <T>(label: string, operation: () => Promise<T>) => Promise<T | undefined>
+type MutationHandler = <T>(
+  label: string,
+  operation: () => Promise<T>,
+  options?: { reload?: boolean },
+) => Promise<T | undefined>
 
 type DestructiveConfirmation = {
   title: string
@@ -817,8 +811,4 @@ function readRequiredString(value: unknown, field: string) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value))
-}
-
-function BadgeIcon({ size = 18 }: { size?: number }) {
-  return <ShieldCheck size={size} />
 }

@@ -19,7 +19,7 @@
     { "id": "oauth-consent-deny", "name": "OAuth consent denial returns safely to the client callback" },
     { "id": "oidc-client-callback", "name": "OIDC client callback lands on a real local callback page" },
     { "id": "account-center", "name": "Account center loads profile, security, sessions, connections, and apps" },
-    { "id": "account-deep-links", "name": "Account center sections have stable deep-link routes" },
+    { "id": "account-deep-links", "name": "Legacy account section routes resolve to the top-level account page" },
     { "id": "sign-out", "name": "Account center signs out" },
     { "id": "profile-update", "name": "Account center updates profile" },
     { "id": "profile-avatar-upload", "name": "Account center uploads an avatar" },

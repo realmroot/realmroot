@@ -392,6 +392,23 @@ describe('hosted auth pages', () => {
     })
   })
 
+  it('toggles hosted password visibility controls', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<SignInPage />)
+
+    const password = (await screen.findByLabelText('Password')) as HTMLInputElement
+    expect(password.type).toBe('password')
+    fireEvent.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(password.type).toBe('text')
+    fireEvent.click(screen.getByRole('button', { name: 'Hide password' }))
+    expect(password.type).toBe('password')
+  })
+
   it('submits username sign-in when the identifier is not an email address', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -657,6 +674,29 @@ describe('hosted auth pages', () => {
         body: { email: 'jane@example.com', otp: '123456', password: 'new-password' },
       })
     })
+  })
+
+  it('returns from OTP password reset to recovery method selection', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      return Promise.resolve(jsonResponse({ success: true }))
+    })
+
+    render(<ForgotPasswordPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'OTP code' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send reset code' }))
+
+    expect(await screen.findByLabelText('One-time code')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('One-time code'), { target: { value: '123456' } })
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Change recovery method' }))
+
+    expect(screen.queryByLabelText('One-time code')).toBeNull()
+    expect(screen.queryByLabelText('New password')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send reset code' })).toBeTruthy()
   })
 
   it('requests password reset email links through native auth', async () => {

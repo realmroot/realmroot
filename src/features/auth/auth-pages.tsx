@@ -1,5 +1,16 @@
-import { ArrowLeft, ArrowRight, Fingerprint, KeyRound, LinkIcon, LoaderCircle, Mail, ShieldCheck } from 'lucide-react'
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Fingerprint,
+  KeyRound,
+  LinkIcon,
+  LoaderCircle,
+  Mail,
+  ShieldCheck,
+} from 'lucide-react'
+import { type ComponentProps, type FormEvent, useEffect, useMemo, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button, LinkButton } from '@/components/ui/button'
 import { Field, TextInput } from '@/components/ui/field'
@@ -180,11 +191,10 @@ export function SignInPage() {
             </Field>
           ) : null}
           <Field label="Password">
-            <TextInput
+            <PasswordInput
               autoComplete="current-password"
               onChange={(event) => setPassword(event.target.value)}
               required
-              type="password"
               value={password}
             />
           </Field>
@@ -316,12 +326,11 @@ export function SignUpPage() {
             </Field>
           ) : null}
           <Field label="Password" help="Use at least 8 characters.">
-            <TextInput
+            <PasswordInput
               autoComplete="new-password"
               minLength={8}
               onChange={(event) => setPassword(event.target.value)}
               required
-              type="password"
               value={password}
             />
           </Field>
@@ -433,12 +442,11 @@ export function ForgotPasswordPage() {
         ) : null}
         {token || otpRequested ? (
           <Field label="New password">
-            <TextInput
+            <PasswordInput
               autoComplete="new-password"
               minLength={8}
               onChange={(event) => setPassword(event.target.value)}
               required
-              type="password"
               value={password}
             />
           </Field>
@@ -453,6 +461,19 @@ export function ForgotPasswordPage() {
       </form>
       <SubmitStatus state={submit} />
       <div className="authLinks">
+        {otpRequested && !token ? (
+          <button
+            onClick={() => {
+              setOtpRequested(false)
+              setOtp('')
+              setPassword('')
+            }}
+            type="button"
+          >
+            <ArrowLeft size={16} />
+            Change recovery method
+          </button>
+        ) : null}
         <a href="/sign-in">Back to sign in</a>
       </div>
     </AuthLayout>
@@ -718,6 +739,22 @@ function SubmitStatus({ state }: { state: SubmitState }) {
   if (state.error) return <Status tone="error">{state.error}</Status>
   if (state.message) return <Status tone="success">{state.message}</Status>
   return null
+}
+
+function PasswordInput(props: Omit<ComponentProps<typeof TextInput>, 'type'>) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div className="passwordField">
+      <TextInput {...props} type={visible ? 'text' : 'password'} />
+      <button
+        aria-label={visible ? 'Hide password' : 'Show password'}
+        onClick={() => setVisible((value) => !value)}
+        type="button"
+      >
+        {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+    </div>
+  )
 }
 
 async function submitRequest(setSubmit: (state: SubmitState) => void, operation: () => Promise<string>) {

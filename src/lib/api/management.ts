@@ -336,6 +336,10 @@ export function listOrganizations() {
   return readRpcResponse(apiClient.api.management.organizations.$get())
 }
 
+export function getOrganization(id: string): Promise<OrganizationResponse> {
+  return readRpcResponse(apiClient.api.management.organizations[':id'].$get({ param: { id } }))
+}
+
 export function createOrganization(input: CreateOrganizationRequest) {
   return readRpcResponse(apiClient.api.management.organizations.$post({ json: input }))
 }

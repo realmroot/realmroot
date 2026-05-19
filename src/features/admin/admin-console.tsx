@@ -15,6 +15,7 @@ import {
   updateApiPermissionRequestSchema,
   updateApiResourceRequestSchema,
   updateApiScopeRequestSchema,
+  updateOrganizationRequestSchema,
   updateRoleRequestSchema,
 } from '@shared/api/authorization'
 import { hostedCustomCssSchema } from '@shared/api/configz'
@@ -101,6 +102,7 @@ import {
   getBrandingSettings,
   getConnector,
   getConnectorReadiness,
+  getOrganization,
   getRole,
   getSecurityPolicy,
   getSignInSettings,
@@ -135,6 +137,7 @@ import {
   updateApplication,
   updateBrandingSettings,
   updateConnector,
+  updateOrganization,
   updateRole,
   updateSignInSettings,
   updateUser,
@@ -151,6 +154,8 @@ const emptyForm: FormState = {}
 const tokenClaimsObjectSchema = tokenClaimsSchema.optional()
 const optionalAuthorizationFieldNames = new Set([
   'description',
+  'disabledReason',
+  'displayName',
   'tokenClaimName',
   'tokenClaimValue',
   'tokenClaimsNamespace',
@@ -2596,7 +2601,9 @@ export function OrganizationsPage() {
           {query.data?.organizations.map((organization) => (
             <TableRow key={organization.id}>
               <TableCell>
-                <div className="font-medium">{organization.name}</div>
+                <a className="font-medium hover:underline" href={`/console/organizations/${organization.id}`}>
+                  {organization.name}
+                </a>
                 <div className="text-xs text-muted-foreground">{organization.slug}</div>
               </TableCell>
               <TableCell>{organization.displayName ?? 'Not set'}</TableCell>
@@ -2616,6 +2623,95 @@ export function OrganizationsPage() {
         </TableBody>
       </Table>
       {logoMutation.errorMessage ? <p className="p-4 text-sm text-destructive">{logoMutation.errorMessage}</p> : null}
+    </ResourcePage>
+  )
+}
+
+export function OrganizationDetailPage({ organizationId }: { organizationId: string }) {
+  const queryClient = useQueryClient()
+  const query = useQuery({
+    queryKey: [...adminQueryKeys.organizations, organizationId],
+    queryFn: () => getOrganization(organizationId),
+  })
+  const organization = query.data
+  const updateMutation = useMutation({
+    mutationFn: (input: z.infer<typeof updateOrganizationRequestSchema>) => updateOrganization(organizationId, input),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([...adminQueryKeys.organizations, organizationId], updated)
+      return queryClient.invalidateQueries({ queryKey: adminQueryKeys.organizations })
+    },
+  })
+
+  return (
+    <ResourcePage
+      title={organization?.name ?? 'Organization'}
+      description="Review and update the organization record exposed by the existing authorization model."
+      framed={false}
+      action={
+        <a className="uiButton uiButton-secondary" href="/console/organizations">
+          Back to organizations
+        </a>
+      }
+      error={query.error}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
+    >
+      {organization ? (
+        <div className="grid gap-4 p-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>General</CardTitle>
+              <CardDescription>
+                Team collaboration and invitation management are outside this console surface.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AuthorizationForm
+                buttonLabel="Save organization"
+                defaults={{
+                  slug: organization.slug,
+                  name: organization.name,
+                  displayName: organization.displayName ?? '',
+                  disabledReason: organization.disabledReason ?? '',
+                }}
+                error={updateMutation.error}
+                fields={[
+                  ['slug', 'Slug'],
+                  ['name', 'Name'],
+                  ['displayName', 'Display name'],
+                  ['disabledReason', 'Disabled reason'],
+                ]}
+                onSubmit={(form) =>
+                  updateMutation.mutate(
+                    parseForm(updateOrganizationRequestSchema, {
+                      ...form,
+                      displayName: nullableString(form.displayName ?? ''),
+                      disabledReason: nullableString(form.disabledReason ?? ''),
+                    }),
+                  )
+                }
+                pending={updateMutation.isPending}
+              />
+              <div className="mt-4">
+                <StatusBadge active={!organization.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Authorization model</CardTitle>
+              <CardDescription>Only persisted organization identity fields are editable here.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <SettingRow label="Organization ID" value={organization.id} />
+              <SettingRow label="Role assignment scope" value="Use organization-scoped roles from Console roles." />
+              <SettingRow label="Members and invitations" value="Not exposed in this product surface." />
+              <SettingRow label="Created" value={formatDate(organization.createdAt)} />
+              <SettingRow label="Updated" value={formatDate(organization.updatedAt)} />
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
     </ResourcePage>
   )
 }
@@ -3849,6 +3945,249 @@ export function ConsolePlaceholderPage({
         </CardContent>
       </Card>
     </ResourcePage>
+  )
+}
+
+export function OrganizationTemplatePage() {
+  const [tab, setTab] = useState('roles')
+  const [roleSearch, setRoleSearch] = useState('')
+  const rolesQuery = useQuery({ queryKey: adminQueryKeys.roles, queryFn: listRoles })
+  const organizationRoles = rolesQuery.data?.roles.filter(
+    (role) =>
+      (role.organizationId || (!role.applicationId && !role.resourceId)) &&
+      [role.name, role.key, role.description ?? ''].some((value) =>
+        value.toLowerCase().includes(roleSearch.trim().toLowerCase()),
+      ),
+  )
+
+  return (
+    <ResourcePage
+      title="Organization template"
+      description="Configure authorization templates used by organizations. Team management is not part of this surface."
+      framed={false}
+      error={rolesQuery.error}
+      loading={rolesQuery.isLoading}
+      onRetry={() => rolesQuery.refetch()}
+    >
+      <Tabs className="grid gap-4" setValue={setTab} value={tab}>
+        <TabsList aria-label="Organization template sections">
+          <TabsTrigger value="roles">Organization roles</TabsTrigger>
+          <TabsTrigger value="permissions">Organization permissions</TabsTrigger>
+        </TabsList>
+        <TabsContent value="roles">
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization roles</CardTitle>
+              <CardDescription>Create and search organization role definitions through the roles API.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <TextInput
+                  aria-label="Search organization roles"
+                  onChange={(event) => setRoleSearch(event.target.value)}
+                  placeholder="Search roles"
+                  value={roleSearch}
+                />
+                <a className="uiButton uiButton-primary" href="/console/roles">
+                  <Plus data-icon="inline-start" />
+                  Create role
+                </a>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Scope</TableHead>
+                    <TableHead>Token claim</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {organizationRoles?.map((role) => (
+                    <TableRow key={role.id}>
+                      <TableCell>
+                        <a className="font-medium hover:underline" href={`/console/roles/${role.id}`}>
+                          {role.name}
+                        </a>
+                        <div className="text-xs text-muted-foreground">{role.key}</div>
+                      </TableCell>
+                      <TableCell>{role.organizationId ? 'Organization' : 'Global template'}</TableCell>
+                      <TableCell>{role.tokenClaimName ?? 'Default authorization claims'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="permissions">
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization permissions</CardTitle>
+              <CardDescription>
+                Permissions are managed on API resources and attached to organization roles.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EmptyState
+                action={
+                  <a className="uiButton uiButton-secondary" href="/console/api-resources">
+                    API resources
+                  </a>
+                }
+                description="Create resource permissions, then attach them to organization-scoped roles from the role detail page."
+                title="Permission templates use API resources"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </ResourcePage>
+  )
+}
+
+export function CustomizeJwtPage() {
+  return (
+    <ResourcePage
+      title="Custom JWT"
+      description="Review token claim controls backed by the current authorization model."
+      framed={false}
+    >
+      <div className="grid gap-4 xl:grid-cols-3">
+        <TokenCustomizationCard
+          title="Access token"
+          rows={[
+            ['Audience', 'API resource audience is emitted for matching protected APIs.'],
+            ['Roles and permissions', 'Configured through role assignments and API resource permissions.'],
+            ['Custom claims', 'Use role assignment token claims and API resource claim namespaces.'],
+          ]}
+        />
+        <TokenCustomizationCard
+          title="Machine-to-machine token"
+          rows={[
+            ['Application roles', 'Application role assignments are supported.'],
+            ['Custom claims', 'Use assignment token claims for trusted application subjects.'],
+            ['Interactive user fields', 'Unavailable because this token has no user session.'],
+          ]}
+        />
+        <TokenCustomizationCard
+          title="ID token"
+          rows={[
+            ['Profile claims', 'Built-in auth profile claims are issued by the auth provider.'],
+            ['Scope toggles', 'API scopes can opt into ID token inclusion where configured.'],
+            ['Arbitrary claim editor', 'Unavailable until a dedicated ID token customization API exists.'],
+          ]}
+        />
+      </div>
+    </ResourcePage>
+  )
+}
+
+export function WebhooksPage() {
+  return (
+    <ResourcePage
+      title="Webhooks"
+      description="Prepare event endpoint configuration. Delivery workers and persistence are not available in this build."
+      framed={false}
+    >
+      <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Create endpoint</CardTitle>
+            <CardDescription>Endpoint creation is disabled until webhook delivery storage exists.</CardDescription>
+          </CardHeader>
+          <CardContent className="formStack">
+            <Field label="Endpoint URL">
+              <TextInput disabled placeholder="https://example.com/webhooks/auth" type="url" />
+            </Field>
+            <Field label="Events">
+              <TextInput disabled placeholder="user.created, session.revoked" />
+            </Field>
+            <Field label="Signing secret">
+              <TextInput disabled placeholder="Generated when endpoint creation is supported" />
+            </Field>
+            <Button disabled type="button" variant="secondary">
+              <Plus data-icon="inline-start" />
+              Create endpoint
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Endpoints</CardTitle>
+            <CardDescription>
+              No webhook backend is registered, so this table is intentionally local-only.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <EmptyState
+              description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
+              title="Webhook delivery unavailable"
+            />
+          </CardContent>
+        </Card>
+      </div>
+    </ResourcePage>
+  )
+}
+
+export function AuditLogsPage() {
+  return (
+    <ResourcePage
+      title="Audit logs"
+      description="Inspect available activity signals without claiming enterprise audit immutability."
+      framed={false}
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle>Activity</CardTitle>
+          <CardDescription>Audit log persistence is not exposed by the management API in this build.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-4">
+            <TextInput aria-label="Search audit logs" disabled placeholder="Search events" />
+            <TextInput aria-label="Actor" disabled placeholder="Actor" />
+            <TextInput aria-label="Resource" disabled placeholder="Resource" />
+            <TextInput aria-label="Date" disabled type="date" />
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>Actor</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Resource</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={4}>
+                  <EmptyState
+                    description="No audit log API is available yet. Existing operational tables remain available from their Console modules."
+                    title="No audit events to display"
+                  />
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </ResourcePage>
+  )
+}
+
+function TokenCustomizationCard({ rows, title }: { rows: Array<[string, string]>; title: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>Claim controls reflect the persisted authorization contract.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {rows.map(([label, value]) => (
+          <SettingRow key={label} label={label} value={value} />
+        ))}
+      </CardContent>
+    </Card>
   )
 }
 

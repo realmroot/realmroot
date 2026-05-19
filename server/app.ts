@@ -391,6 +391,7 @@ type RpcSchema = {
     $post: RpcEndpoint<{ json: CreateOrganizationRequest }, OrganizationResponse, 201>
   }
   '/api/management/organizations/:id': {
+    $get: RpcEndpoint<{ param: { id: string } }, OrganizationResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateOrganizationRequest }, OrganizationResponse>
   }
   '/api/management/roles': {

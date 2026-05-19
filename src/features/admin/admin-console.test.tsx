@@ -13,10 +13,13 @@ import {
   BrandingPage,
   CollectUserProfilePage,
   ConnectorsPage,
+  ConsolePlaceholderPage,
   ContentSettingsPage,
   DeploymentSettingsPage,
   MfaPage,
+  OrganizationDetailPage,
   OrganizationsPage,
+  OrganizationTemplatePage,
   PasswordlessConnectorsPage,
   RoleDetailPage,
   RolesPage,
@@ -308,14 +311,14 @@ describe('admin console', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/console/onboarding'))
   })
 
-  it('redirects account root to the profile route', async () => {
+  it('renders account root as the profile page', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(accountRouteFetch)
     window.history.pushState(null, '', '/account')
 
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
-    await waitFor(() => expect(window.location.pathname).toBe('/account/profile'))
+    await waitFor(() => expect(window.location.pathname).toBe('/account'))
   })
 
   it('renders every account product section from a direct route', async () => {
@@ -332,7 +335,7 @@ describe('admin console', () => {
       render(<AppRouter />)
 
       expect((await screen.findAllByRole('heading', { name: heading })).length).toBeGreaterThan(0)
-      expect(window.location.pathname).toBe(path)
+      expect(window.location.pathname).toBe('/account')
 
       cleanup()
       queryClient.clear()
@@ -526,6 +529,7 @@ describe('admin console', () => {
       if (url === '/api/management/api-resources/resource-1/permissions') {
         return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
       }
+      if (url === '/api/management/organizations/org-1') return Promise.resolve(jsonResponse(organization))
       return Promise.resolve(jsonResponse({}))
     })
 
@@ -542,6 +546,14 @@ describe('admin console', () => {
 
     expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
     expect(window.location.pathname).toBe('/console/api-resources/resource-1')
+
+    cleanup()
+    queryClient.clear()
+    window.history.pushState(null, '', '/console/organizations/org-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/console/organizations/org-1')
   })
 
   it('surfaces non-auth admin readiness errors instead of converting them to sign-in redirects', async () => {
@@ -2749,6 +2761,108 @@ describe('admin console', () => {
     })
   })
 
+  it('renders and updates organization detail records', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/organizations/org-1' && init?.method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse({ ...organization, ...JSON.parse(String(init.body)) }))
+      }
+      if (url === '/api/management/organizations/org-1') return Promise.resolve(jsonResponse(organization))
+      if (url === '/api/management/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
+    expect(screen.getByText('Organization ID')).toBeTruthy()
+    expect(screen.getByText('Members and invitations')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Acme Updated' } })
+    fireEvent.change(screen.getByLabelText('Disabled reason'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save organization' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/organizations/org-1',
+        body: {
+          slug: 'acme',
+          name: 'Acme',
+          displayName: 'Acme Updated',
+          disabledReason: null,
+        },
+      })
+    })
+  })
+
+  it('searches organization template roles and opens permission guidance', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/roles') {
+        return Promise.resolve(
+          jsonResponse({
+            roles: [
+              {
+                ...role,
+                id: 'role-billing',
+                key: 'billing-manager',
+                name: 'Billing manager',
+                description: 'Controls invoices',
+                organizationId: 'org-1',
+                tokenClaimName: 'billing_roles',
+              },
+              {
+                ...role,
+                id: 'role-member',
+                key: 'member',
+                name: 'Member',
+                description: 'Default organization membership',
+              },
+            ],
+            pagination,
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<OrganizationTemplatePage />)
+
+    expect(await screen.findByRole('heading', { name: 'Organization roles' })).toBeTruthy()
+    expect(screen.getByText('Billing manager')).toBeTruthy()
+    expect(screen.getByText('Member')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search organization roles'), { target: { value: 'billing' } })
+    expect(screen.getByText('Billing manager')).toBeTruthy()
+    expect(screen.queryByText('Member')).toBeNull()
+    expect(screen.getByText('Organization')).toBeTruthy()
+    expect(screen.getByText('billing_roles')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Organization permissions' }))
+    expect(screen.getByText('Permission templates use API resources')).toBeTruthy()
+  })
+
+  it('renders console placeholder rows', () => {
+    render(
+      <ConsolePlaceholderPage
+        title="Placeholder module"
+        description="Placeholder description"
+        rows={[
+          ['Support', 'Unavailable in this plan'],
+          ['Status', 'Configuration only'],
+        ]}
+      />,
+    )
+
+    expect(screen.getAllByRole('heading', { name: 'Placeholder module' })).toHaveLength(2)
+    expect(screen.getByText('Support')).toBeTruthy()
+    expect(screen.getByText('Unavailable in this plan')).toBeTruthy()
+    expect(screen.getByText('Status')).toBeTruthy()
+    expect(screen.getByText('Configuration only')).toBeTruthy()
+  })
+
   it('shows client-side validation errors for simple create dialogs', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -3733,6 +3847,7 @@ function consoleRouteFetch(input: RequestInfo | URL) {
   if (url === '/api/management/organizations') {
     return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
   }
+  if (url === '/api/management/organizations/org-1') return Promise.resolve(jsonResponse(organization))
   if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
   if (url === '/api/management/api-resources') {
     return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))

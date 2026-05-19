@@ -33,6 +33,7 @@ export function AuthLayout({ children, config, eyebrow, title, description }: Au
       </section>
       <section className="authPanel" aria-label={title}>
         {children}
+        <p className="authPoweredBy">Powered by {config?.copy?.productName ?? 'FlareAuth'}</p>
       </section>
     </main>
   )
