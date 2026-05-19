@@ -498,12 +498,12 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 12px;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 11px;
   border: 1px solid transparent;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   transition:
     border-color 150ms ease,
@@ -514,15 +514,15 @@ h1 {
 
 .uiButton-sm,
 .uiButton-icon {
-  min-height: 32px;
+  min-height: 30px;
 }
 
 .uiButton-sm {
-  padding: 0 10px;
+  padding: 0 9px;
 }
 
 .uiButton-icon {
-  width: 32px;
+  width: 30px;
   padding: 0;
 }
 
@@ -826,20 +826,17 @@ h1 {
 }
 
 .consoleToolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
   gap: 12px;
 }
 
 .consoleToolbar .textInput {
   width: min(100%, 320px);
+  min-height: 36px;
+  padding-block: 7px;
 }
 
 .consoleDetailStack {
-  display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .consoleBackLink {
@@ -877,7 +874,7 @@ h1 {
   justify-content: flex-end;
   gap: 8px;
   margin: 8px -16px -16px;
-  padding: 12px 16px;
+  padding: 10px 16px;
   border-top: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(8px);
