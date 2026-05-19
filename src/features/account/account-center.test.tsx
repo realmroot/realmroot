@@ -3,16 +3,20 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccountCenter, AccountCenterPage } from './account-center'
 
+const navigateMock = vi.hoisted(() => vi.fn())
+
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, className, to }: { children: ReactNode; className?: string; to: string }) => (
     <a className={className} href={to}>
       {children}
     </a>
   ),
+  useNavigate: () => navigateMock,
 }))
 
 afterEach(() => {
   cleanup()
+  navigateMock.mockReset()
   vi.restoreAllMocks()
 })
 
@@ -98,12 +102,16 @@ describe('account center', () => {
     })
   })
 
-  it('signs out from the top-level account page', async () => {
+  it('signs out from the top-level account page without reloading protected account data', async () => {
     const requests = mockAccountFetch()
 
     render(<AccountCenterPage />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
+    const accountGetCount = vi.mocked(window.fetch).mock.calls.filter(([input, init]) => {
+      const path = String(input)
+      return (init?.method ?? 'GET') === 'GET' && path.startsWith('/api/account/')
+    }).length
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
 
     await waitFor(() => {
@@ -113,6 +121,17 @@ describe('account center', () => {
         body: {},
       })
     })
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith({ to: '/sign-in' })
+      expect(screen.queryByRole('heading', { name: 'Jane Stone' })).toBeNull()
+      expect(screen.queryByRole('heading', { name: 'MFA' })).toBeNull()
+    })
+    expect(
+      vi.mocked(window.fetch).mock.calls.filter(([input, init]) => {
+        const path = String(input)
+        return (init?.method ?? 'GET') === 'GET' && path.startsWith('/api/account/')
+      }),
+    ).toHaveLength(accountGetCount)
   })
 
   it('shows TOTP enrollment setup data before verification', async () => {

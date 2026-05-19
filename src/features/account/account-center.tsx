@@ -1,3 +1,4 @@
+import { useNavigate } from '@tanstack/react-router'
 import { Fingerprint, KeyRound, LoaderCircle, Mail, UserRound } from 'lucide-react'
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from 'react'
 import { BrandIdentity, brandingStyle } from '@/components/layout/auth-layout'
@@ -116,6 +117,7 @@ export function AccountCenterPage() {
 export type AccountSectionId = 'profile' | 'security' | 'linked-accounts' | 'sessions' | 'authorized-apps'
 
 export function AccountCenter({ section: _section }: { section?: AccountSectionId } = {}) {
+  const navigate = useNavigate()
   const { data: config } = useConfigz()
   const [data, setData] = useState(emptyAccountData)
   const [loading, setLoading] = useState(true)
@@ -172,6 +174,21 @@ export function AccountCenter({ section: _section }: { section?: AccountSectionI
     }
   }
 
+  async function signOutFromAccount() {
+    setMessage(null)
+    setError(null)
+    try {
+      await signOut()
+      setData(emptyAccountData)
+      setLoading(false)
+      setConfirmation(null)
+      setMessage('Signed out.')
+      await navigate({ to: '/sign-in' })
+    } catch (mutationError) {
+      setError(mutationError instanceof Error ? mutationError.message : 'Account update failed.')
+    }
+  }
+
   return (
     <main className="accountShell" style={brandingStyle(config)}>
       <div className="accountChrome">
@@ -182,7 +199,7 @@ export function AccountCenter({ section: _section }: { section?: AccountSectionI
               <p className="eyebrow">Profile</p>
               <h1>{data.profile?.displayName ?? 'Your account'}</h1>
             </div>
-            <Button onClick={() => mutate('Signed out.', signOut)} variant="secondary">
+            <Button onClick={() => void signOutFromAccount()} variant="secondary">
               Sign out
             </Button>
           </div>

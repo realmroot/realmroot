@@ -465,8 +465,20 @@ const journeyAssertions: Record<
   'sign-out': {
     suite: 'account center journey',
     assert: async ({ page }) => {
+      const accountUnauthorizedResponses: string[] = []
+      page.on('response', (response) => {
+        const path = new URL(response.url()).pathname
+        if (path.startsWith('/api/account/') && response.status() === 401) accountUnauthorizedResponses.push(path)
+      })
+
       await page.goto('/account')
+      await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
       await page.getByRole('button', { name: 'Sign out' }).click()
+      await expect(page).toHaveURL(/\/sign-in$/)
+      await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Jane Stone' })).toHaveCount(0)
+      await expect(page.getByRole('heading', { name: 'MFA' })).toHaveCount(0)
+      expect(accountUnauthorizedResponses).toEqual([])
     },
   },
   'admin-dashboard': {
@@ -1217,6 +1229,7 @@ async function expectNoDocumentHorizontalOverflow(page: Page) {
 
 async function mockApi(page: Page) {
   const requests: RequestRecord[] = []
+  accountSignedIn = true
   accountMfaEnabled = false
 
   await page.route('**/*', async (route) => {
@@ -1307,6 +1320,10 @@ async function responseFor(path: string, method: string, body: unknown): Promise
     }
   }
   if (path === '/api/oauth/consent' && method === 'GET') return consentResponse
+  if (path === '/api/auth/sign-out' && method === 'POST') {
+    accountSignedIn = false
+    return {}
+  }
   if (path === '/api/management/sign-in-settings') {
     if (method === 'PATCH') {
       const input = body as {
