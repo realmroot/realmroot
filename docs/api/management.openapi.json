@@ -40,8 +40,17 @@
     "/applications/{id}/client-secrets": {
       "$ref": "#/components/pathItems/ClientSecretCollection"
     },
+    "/applications/{id}/logo": {
+      "$ref": "#/components/pathItems/AssetUpload"
+    },
     "/applications/{id}/redirect-uris": {
       "$ref": "#/components/pathItems/RedirectUriCollection"
+    },
+    "/branding/favicon": {
+      "$ref": "#/components/pathItems/AssetUpload"
+    },
+    "/branding/logo": {
+      "$ref": "#/components/pathItems/AssetUpload"
     },
     "/connectors": {
       "get": {
@@ -216,6 +225,9 @@
     },
     "/organizations/{id}": {
       "$ref": "#/components/pathItems/CrudResource"
+    },
+    "/organizations/{id}/logo": {
+      "$ref": "#/components/pathItems/AssetUpload"
     },
     "/organizations/{id}/invitations": {
       "$ref": "#/components/pathItems/PaginatedMutableCollection"
@@ -748,6 +760,57 @@
       }
     },
     "pathItems": {
+      "AssetUpload": {
+        "post": {
+          "tags": [
+            "Assets"
+          ],
+          "summary": "Upload and assign an asset",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "multipart/form-data": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "file"
+                  ],
+                  "properties": {
+                    "file": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Asset uploaded and assigned.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/UploadedAssetResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "$ref": "#/components/responses/BadRequest"
+            },
+            "401": {
+              "$ref": "#/components/responses/Unauthorized"
+            },
+            "403": {
+              "$ref": "#/components/responses/Forbidden"
+            },
+            "404": {
+              "$ref": "#/components/responses/NotFound"
+            }
+          }
+        }
+      },
       "PaginatedCollection": {
         "get": {
           "parameters": [
@@ -1061,6 +1124,60 @@
               },
               "requestId": {
                 "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "UploadedAssetResponse": {
+        "type": "object",
+        "required": [
+          "asset"
+        ],
+        "properties": {
+          "asset": {
+            "type": "object",
+            "required": [
+              "id",
+              "purpose",
+              "publicUrl",
+              "contentType",
+              "byteSize",
+              "checksumSha256",
+              "createdAt"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "purpose": {
+                "type": "string",
+                "enum": [
+                  "avatar",
+                  "application_logo",
+                  "organization_logo",
+                  "branding_logo",
+                  "favicon"
+                ]
+              },
+              "publicUrl": {
+                "type": "string"
+              },
+              "contentType": {
+                "type": "string"
+              },
+              "byteSize": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "checksumSha256": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
               }
             }
           }

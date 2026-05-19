@@ -1,5 +1,5 @@
 import type { SQL } from 'drizzle-orm'
-import { eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { brandingSetting, identityProviderConnector, signInExperience, uploadedAsset } from '../../db/schema'
 import type { ConfigzIdentityProvider, ConfigzRepository, ConfigzSettings } from './service'
@@ -17,7 +17,7 @@ export function createDrizzleConfigzRepository(db: Database): ConfigzRepository 
         : null
       if (applicationBranding) return applicationBranding
 
-      return findBranding(db, isNull(brandingSetting.applicationId))
+      return findBranding(db, and(isNull(brandingSetting.applicationId), isNull(brandingSetting.organizationId))!)
     },
 
     async listEnabledIdentityProviders() {

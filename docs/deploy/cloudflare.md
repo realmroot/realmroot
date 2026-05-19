@@ -56,7 +56,11 @@ The `allowed_sender_addresses` value must match a verified address for the produ
 
 ## Storage
 
-The `ASSET_BUCKET` R2 binding is reserved for uploaded avatars, organization logos, application logos, branding logos, and favicons. The current UI stores asset references by ID; upload endpoints must write objects to R2, create `uploaded_asset` rows with purpose, storage key, content type, size, checksum, and optional public URL, then store the asset ID on the user, organization, application, or branding setting.
+The `ASSET_BUCKET` R2 binding stores uploaded avatars, organization logos, application logos, branding logos, and favicons. Upload endpoints write objects to R2, create `uploaded_asset` rows with purpose, storage key, content type, byte size, SHA-256 checksum, and public URL, then store the asset ID on the user, organization, application, or branding setting.
+
+Uploaded assets are served through the Worker at `/api/assets/{assetId}`. This keeps R2 buckets private while still giving hosted UI and OAuth metadata stable same-origin public URLs. Do not expose the R2 bucket directly unless a future deployment intentionally moves asset delivery behind a public custom domain.
+
+SVG uploads are intentionally rejected because asset URLs are served from the auth origin.
 
 Keep staging and production buckets separate to avoid leaking preview assets into production.
 

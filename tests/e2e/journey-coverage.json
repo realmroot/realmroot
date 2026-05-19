@@ -22,6 +22,7 @@
     { "id": "account-deep-links", "name": "Account center sections have stable deep-link routes" },
     { "id": "sign-out", "name": "Account center signs out" },
     { "id": "profile-update", "name": "Account center updates profile" },
+    { "id": "profile-avatar-upload", "name": "Account center uploads an avatar" },
     { "id": "email-update", "name": "Account center requests email change" },
     { "id": "password-update", "name": "Account center changes password" },
     { "id": "totp-flow", "name": "Account center starts and verifies TOTP enrollment" },

@@ -80,6 +80,12 @@ import { adminOrganizationsRoute } from './routes/admin/organizations'
 import { adminRolesRoute } from './routes/admin/roles'
 import { adminSecurityRoutes } from './routes/admin/security'
 import { adminUserRoutes } from './routes/admin/users'
+import {
+  type AssetServiceFactory,
+  createAccountAssetRoutes,
+  createAssetRoutes,
+  createManagementAssetRoutes,
+} from './routes/assets'
 import type { ManagementAuthApi } from './routes/auth-api'
 import { type ConfigzServiceFactory, createConfigzRoutes } from './routes/configz'
 import {
@@ -107,6 +113,7 @@ export interface AppOptions {
   configzServiceFactory?: ConfigzServiceFactory & ManagementConfigzServiceFactory
   applicationServiceFactory?: ManagementApplicationServiceFactory
   connectorServiceFactory?: ConnectorServiceFactory
+  assetServiceFactory?: AssetServiceFactory
 }
 
 interface RpcAppOptions extends AppOptions {
@@ -144,6 +151,7 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
       const managementApi = auth.api as unknown as ManagementAuthApi
       app.route('/api/admin/users', adminUserRoutes(managementApi, options.userRepository))
       app.route('/api/account', accountRoutes(managementApi, options.userRepository, options.securityRepository))
+      app.route('/api/account', createAccountAssetRoutes(options.assetServiceFactory))
     }
   }
 
@@ -332,6 +340,8 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
       '/api/configz',
       createConfigzRoutes(options.configzServiceFactory, options.onboardingRepository, options.securityPolicy),
     )
+    .route('/api/assets', createAssetRoutes(options.assetServiceFactory))
+    .route('/api/management', createManagementAssetRoutes(options.assetServiceFactory))
     .route(
       '/api/management',
       createManagementRoutes({
@@ -357,6 +367,7 @@ function mountRpcRoutes(app: Hono, auth: AuthHandler, options: RpcAppOptions) {
   return mountCoreApiRoutes(app, auth, options)
     .route('/api/admin/users', adminUserRoutes(managementApi, options.userRepository))
     .route('/api/account', accountRoutes(managementApi, options.userRepository, options.securityRepository))
+    .route('/api/account', createAccountAssetRoutes(options.assetServiceFactory))
     .route(
       '/api/admin/security',
       adminSecurityRoutes(managementApi, options.userRepository, options.securityRepository, options.securityPolicy),

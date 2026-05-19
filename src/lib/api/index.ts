@@ -1,4 +1,5 @@
 import type { HostedConsentApprovalRequest } from '@shared/api/applications'
+import type { UploadedAssetResponse } from '@shared/api/assets'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import { type ClientResponse, hc } from 'hono/client'
 import type { AppType } from '../../../server/app'
@@ -91,6 +92,20 @@ export async function createOnboardingAdmin(input: OnboardingAdminRequest) {
     user: { id: string; email: string; role: string | null }
     onboarding: { locked: true }
   }>
+}
+
+export async function uploadApiFile(path: string, file: File): Promise<UploadedAssetResponse> {
+  const body = new FormData()
+  body.set('file', file)
+
+  const response = await fetch(path, {
+    method: 'POST',
+    body,
+  })
+  if (!response.ok) {
+    throw new ApiRequestError(await responseMessage(response), response.status)
+  }
+  return response.json() as Promise<UploadedAssetResponse>
 }
 
 function query(search: string): Record<string, string> {

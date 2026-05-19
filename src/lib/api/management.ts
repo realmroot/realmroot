@@ -11,6 +11,7 @@ import type {
   RotateClientSecretResponse,
   UpdateApplicationRequest,
 } from '@shared/api/applications'
+import type { UploadedAssetResponse } from '@shared/api/assets'
 import type {
   ApiResourceResponse,
   CreateApiResourceRequest,
@@ -34,7 +35,7 @@ import type {
   UpdateManagementConnectorRequest,
 } from '@shared/api/management'
 import type { SecurityPolicy } from '@shared/api/security'
-import { apiClient, readRpcResponse } from '@/lib/api'
+import { apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
 
 export const adminQueryKeys = {
   dashboard: ['admin', 'dashboard'] as const,
@@ -151,6 +152,10 @@ export function rotateApplicationClientSecret(id: string): Promise<RotateClientS
   return readRpcResponse(apiClient.api.management.applications[':id']['client-secrets'].$post({ param: { id } }))
 }
 
+export function uploadApplicationLogo(id: string, file: File): Promise<UploadedAssetResponse> {
+  return uploadApiFile(`/api/management/applications/${id}/logo`, file)
+}
+
 export function listUsers(query: Partial<ManagementUserListQuery> = {}) {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
@@ -205,6 +210,18 @@ export function createOrganization(input: CreateOrganizationRequest) {
 
 export function updateOrganization(id: string, input: UpdateOrganizationRequest) {
   return readRpcResponse(apiClient.api.management.organizations[':id'].$patch({ param: { id }, json: input }))
+}
+
+export function uploadOrganizationLogo(id: string, file: File): Promise<UploadedAssetResponse> {
+  return uploadApiFile(`/api/management/organizations/${id}/logo`, file)
+}
+
+export function uploadBrandingLogo(file: File): Promise<UploadedAssetResponse> {
+  return uploadApiFile('/api/management/branding/logo', file)
+}
+
+export function uploadBrandingFavicon(file: File): Promise<UploadedAssetResponse> {
+  return uploadApiFile('/api/management/branding/favicon', file)
 }
 
 export function listRoles() {

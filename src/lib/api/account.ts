@@ -9,7 +9,7 @@ import type {
   SecurityTotpEnrollmentInput,
   SecurityTotpVerificationInput,
 } from '@shared/api/security'
-import { apiClient, readRpcResponse } from '@/lib/api'
+import { apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
 
 export function getAccountProfile() {
   return readRpcResponse(apiClient.api.account.profile.$get())
@@ -17,6 +17,10 @@ export function getAccountProfile() {
 
 export function updateAccountProfile(input: AccountProfileUpdateInput) {
   return readRpcResponse(apiClient.api.account.profile.$patch({ json: input }))
+}
+
+export function uploadAccountAvatar(file: File) {
+  return uploadApiFile('/api/account/avatar', file)
 }
 
 export function requestAccountEmailChange(input: AccountEmailChangeInput) {

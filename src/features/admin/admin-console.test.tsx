@@ -32,6 +32,9 @@ describe('admin console', () => {
       if (url === '/api/management/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
+      if (url === '/api/management/applications/app-1') {
+        return Promise.resolve(jsonResponse(application))
+      }
       if (url.startsWith('/api/management/users')) return Promise.resolve(jsonResponse({ users: [user], pagination }))
       if (url === '/api/management/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
@@ -1378,6 +1381,74 @@ describe('admin console', () => {
     expect(screen.getByText('/api/management')).toBeTruthy()
   })
 
+  it('uploads application, organization, branding, and favicon assets', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/onboarding/status') return Promise.resolve(jsonResponse({ required: false }))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+        )
+      }
+      if (init?.method === 'POST') {
+        requests.push({
+          url,
+          method: init.method,
+          body: init.body instanceof FormData ? '[form-data]' : init.body,
+        })
+        return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
+      }
+      if (url === '/api/management/applications') {
+        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+      }
+      if (url === '/api/management/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ApplicationsPage />)
+    fireEvent.change(await screen.findByLabelText('Upload logo for Customer portal'), {
+      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
+    })
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/applications/app-1/logo',
+        method: 'POST',
+        body: '[form-data]',
+      })
+    })
+
+    cleanup()
+    renderWithQuery(<OrganizationsPage />)
+    fireEvent.change(await screen.findByLabelText('Upload logo for Acme'), {
+      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
+    })
+
+    cleanup()
+    renderWithQuery(<BrandingPage />)
+    fireEvent.change(screen.getByLabelText('Upload branding logo'), {
+      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
+    })
+    fireEvent.change(screen.getByLabelText('Upload favicon'), {
+      target: { files: [new File(['icon'], 'favicon.png', { type: 'image/png' })] },
+    })
+
+    await waitFor(() => {
+      expect(requests).toEqual(
+        expect.arrayContaining([
+          { url: '/api/management/organizations/org-1/logo', method: 'POST', body: '[form-data]' },
+          { url: '/api/management/branding/logo', method: 'POST', body: '[form-data]' },
+          { url: '/api/management/branding/favicon', method: 'POST', body: '[form-data]' },
+        ]),
+      )
+    })
+  })
+
   it('creates the first OIDC client from admin onboarding and copies integration details', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
@@ -1547,10 +1618,22 @@ const organization = {
   slug: 'acme',
   name: 'Acme',
   displayName: 'Acme Inc.',
+  logo: null,
   metadata: null,
   disabled: false,
+  disabledReason: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const uploadedAsset = {
+  id: 'asset-1',
+  purpose: 'application_logo',
+  publicUrl: 'https://auth.example.com/api/assets/asset-1',
+  contentType: 'image/png',
+  byteSize: 6,
+  checksumSha256: 'checksum-1',
+  createdAt: '2026-01-01T00:00:00.000Z',
 }
 
 const role = {

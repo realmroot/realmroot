@@ -39,7 +39,6 @@ describe('account center', () => {
 
     fireEvent.change(await screen.findByLabelText('Display name'), { target: { value: 'Jane Updated' } })
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('Avatar asset ID'), { target: { value: 'asset-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Change email' }))
@@ -53,7 +52,7 @@ describe('account center', () => {
           {
             path: '/api/account/profile',
             method: 'PATCH',
-            body: { displayName: 'Jane Updated', username: null, avatarAssetId: 'asset-1' },
+            body: { displayName: 'Jane Updated', username: null, avatarAssetId: null },
           },
           {
             path: '/api/account/email/change',
@@ -71,6 +70,25 @@ describe('account center', () => {
           },
         ]),
       )
+    })
+  })
+
+  it('uploads an avatar from the profile section', async () => {
+    const requests = mockAccountFetch()
+
+    render(<AccountCenterPage />)
+
+    const avatarInput = (await screen.findByLabelText('Avatar image')) as HTMLInputElement
+    fireEvent.change(avatarInput, {
+      target: { files: [new File(['avatar'], 'avatar.png', { type: 'image/png' })] },
+    })
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        path: '/api/account/avatar',
+        method: 'POST',
+        body: '[form-data]',
+      })
     })
   })
 
@@ -331,7 +349,7 @@ function mockAccountFetch() {
   vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
     const path = String(input)
     const method = init?.method ?? 'GET'
-    const body = init?.body ? JSON.parse(String(init.body)) : null
+    const body = init?.body instanceof FormData ? '[form-data]' : init?.body ? JSON.parse(String(init.body)) : null
     if (method !== 'GET') requests.push({ path, method, body })
     if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
     if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
@@ -357,6 +375,22 @@ function mockAccountFetch() {
           user: { id: 'BAUG', name: 'jane@example.com', displayName: 'Jane Stone' },
           pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
         }),
+      )
+    }
+    if (path === '/api/account/avatar') {
+      return Promise.resolve(
+        jsonResponse(
+          {
+            asset: {
+              id: 'asset-1',
+              publicUrl: 'https://auth.example.com/api/assets/asset-1',
+              contentType: 'image/png',
+              byteSize: 6,
+              checksumSha256: 'checksum-1',
+            },
+          },
+          201,
+        ),
       )
     }
     return Promise.resolve(jsonResponse({ ok: true }))

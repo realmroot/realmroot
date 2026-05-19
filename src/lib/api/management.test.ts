@@ -18,6 +18,7 @@ describe('management API client', () => {
     await management.replaceApplicationRedirectUris('app-1', { redirectUris: ['https://app.example.com/callback'] })
     await management.listApplicationClientSecrets('app-1', { limit: 5 })
     await management.rotateApplicationClientSecret('app-1')
+    await management.uploadApplicationLogo('app-1', new File(['logo'], 'logo.png'))
     await management.listUsers({ search: 'jane', limit: 50, offset: undefined })
     await management.createUser({ email: 'jane@example.com', displayName: 'Jane Doe' })
     await management.updateUser('user-1', { role: 'admin' })
@@ -37,6 +38,9 @@ describe('management API client', () => {
     await management.listOrganizations()
     await management.createOrganization({ slug: 'acme', name: 'Acme' })
     await management.updateOrganization('org-1', { disabled: true })
+    await management.uploadOrganizationLogo('org-1', new File(['logo'], 'logo.png'))
+    await management.uploadBrandingLogo(new File(['logo'], 'logo.png'))
+    await management.uploadBrandingFavicon(new File(['icon'], 'favicon.png'))
     await management.listRoles()
     await management.createRole({ key: 'admin', name: 'Admin' })
     await management.updateRole('role-1', { description: 'Tenant admin' })
@@ -58,6 +62,7 @@ describe('management API client', () => {
       ['redirectUris.put', { param: { id: 'app-1' }, json: { redirectUris: ['https://app.example.com/callback'] } }],
       ['clientSecrets.get', { param: { id: 'app-1' }, query: { limit: '5' } }],
       ['clientSecrets.post', { param: { id: 'app-1' } }],
+      ['upload', '/api/management/applications/app-1/logo', expect.any(File)],
       ['users.get', { query: { search: 'jane', limit: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
       ['users.patch', { param: { id: 'user-1' }, json: { role: 'admin' } }],
@@ -82,6 +87,9 @@ describe('management API client', () => {
       ['organizations.get'],
       ['organizations.post', { json: { slug: 'acme', name: 'Acme' } }],
       ['organizations.patch', { param: { id: 'org-1' }, json: { disabled: true } }],
+      ['upload', '/api/management/organizations/org-1/logo', expect.any(File)],
+      ['upload', '/api/management/branding/logo', expect.any(File)],
+      ['upload', '/api/management/branding/favicon', expect.any(File)],
       ['roles.get'],
       ['roles.post', { json: { key: 'admin', name: 'Admin' } }],
       ['roles.patch', { param: { id: 'role-1' }, json: { description: 'Tenant admin' } }],
@@ -117,7 +125,7 @@ describe('management API client', () => {
 })
 
 async function loadManagementApi() {
-  const calls: Array<[string, unknown?]> = []
+  const calls: Array<[string, unknown?, unknown?]> = []
   const endpoint = (key: string) =>
     vi.fn((input?: unknown) => {
       calls.push(input === undefined ? [key] : [key, input])
@@ -178,6 +186,10 @@ async function loadManagementApi() {
       },
     },
     readRpcResponse: (response: unknown) => response,
+    uploadApiFile: (path: string, file: File) => {
+      calls.push(['upload', path, file])
+      return Promise.resolve({ asset: { publicUrl: `/uploaded/${file.name}` } })
+    },
   }))
 
   return {

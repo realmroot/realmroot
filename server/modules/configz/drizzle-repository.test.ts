@@ -55,6 +55,47 @@ describe('createDrizzleConfigzRepository', () => {
     await expect(repository.getSettings()).resolves.toBeNull()
     await expect(repository.getBranding(null)).resolves.toBeNull()
   })
+
+  it('does not use organization-scoped branding as deployment fallback', async () => {
+    const repository = createDrizzleConfigzRepository(
+      new FakeDb({
+        brandingRows: [
+          {
+            branding: {
+              applicationId: null,
+              organizationId: 'org-1',
+              logoAssetId: 'asset-org',
+              faviconAssetId: null,
+              primaryColor: '#b91c1c',
+              backgroundColor: '#fef2f2',
+              customCss: null,
+            },
+            logo: 'https://cdn.example.com/org-logo.png',
+          },
+          {
+            branding: {
+              applicationId: null,
+              organizationId: null,
+              logoAssetId: 'asset-default',
+              faviconAssetId: null,
+              primaryColor: '#111827',
+              backgroundColor: '#ffffff',
+              customCss: null,
+            },
+            logo: 'https://cdn.example.com/default-logo.png',
+          },
+        ],
+      }) as unknown as Database,
+    )
+
+    await expect(repository.getBranding('missing-app')).resolves.toEqual({
+      logoUrl: 'https://cdn.example.com/default-logo.png',
+      faviconUrl: null,
+      primaryColor: '#111827',
+      backgroundColor: '#ffffff',
+      customCss: null,
+    })
+  })
 })
 
 class FakeDb {
@@ -114,13 +155,42 @@ class FakeSelect {
 
   private result() {
     if (this.table === signInExperience) return this.rows.settingsRows ?? []
-    if (this.table === brandingSetting && this.joined) return this.rows.brandingRows ?? []
+    if (this.table === brandingSetting && this.joined) {
+      const appRows = (this.rows.brandingRows ?? []).filter((row) => isApplicationBrandingRow(row))
+      return appRows.length > 0 ? appRows : (this.rows.brandingRows ?? []).filter((row) => isDefaultBrandingRow(row))
+    }
     if (this.table === uploadedAsset && this.fields && typeof this.fields === 'object' && 'publicUrl' in this.fields) {
       return this.rows.faviconRows ?? []
     }
     if (this.table === identityProviderConnector) return this.rows.identityProviderRows ?? []
     return []
   }
+}
+
+function isApplicationBrandingRow(row: unknown) {
+  return (
+    typeof row === 'object' &&
+    row !== null &&
+    'branding' in row &&
+    typeof row.branding === 'object' &&
+    row.branding !== null &&
+    'applicationId' in row.branding &&
+    row.branding.applicationId !== null
+  )
+}
+
+function isDefaultBrandingRow(row: unknown) {
+  return (
+    typeof row === 'object' &&
+    row !== null &&
+    'branding' in row &&
+    typeof row.branding === 'object' &&
+    row.branding !== null &&
+    'applicationId' in row.branding &&
+    row.branding.applicationId === null &&
+    'organizationId' in row.branding &&
+    row.branding.organizationId === null
+  )
 }
 
 function settingsRow() {
