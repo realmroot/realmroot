@@ -14,6 +14,9 @@ describe('badge', () => {
     )
 
     expect(screen.getByText('Default').className).toContain('bg-primary')
+    expect(screen.getByText('Default').className).toContain('min-h-6')
+    expect(screen.getByText('Default').className).toContain('px-2')
+    expect(screen.getByText('Default').className).toContain('text-xs')
     expect(screen.getByText('Secondary').className).toContain('bg-secondary')
     expect(screen.getByText('Outline').className).toContain('border-border')
     expect(screen.getByText('Destructive').className).toContain('bg-destructive')

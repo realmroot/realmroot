@@ -22,7 +22,7 @@ export function Tabs({ value, setValue, ...props }: TabsProps) {
 }
 
 export function TabsList({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('inline-flex rounded-lg bg-muted p-1', className)} role="tablist" {...props} />
+  return <div className={cn('inline-flex rounded-md bg-muted p-0.5', className)} role="tablist" {...props} />
 }
 
 type TabsTriggerProps = ButtonHTMLAttributes<HTMLButtonElement> & {

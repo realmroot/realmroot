@@ -27,6 +27,10 @@ describe('account center', () => {
     render(<AccountCenterPage />)
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Jane Stone' }).closest('main')?.className).toBe('accountShell')
+    expect(document.querySelector('.accountChrome')).toBeTruthy()
+    expect(document.querySelector('.accountContent')).toBeTruthy()
+    expect(document.querySelector('.accountSectionStack')).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'MFA' })).toBeTruthy()
@@ -140,6 +144,7 @@ describe('account center', () => {
     render(<AccountCenter section="security" />)
 
     await screen.findByRole('heading', { name: 'Jane Stone' })
+    expect(screen.getByLabelText('Authenticator code').closest('form')?.className).toContain('compactForm')
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enroll authenticator app' }))
 

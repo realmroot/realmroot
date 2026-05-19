@@ -591,6 +591,8 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Customer portal')).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'My apps' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: 'My apps' }).className).toContain('min-h-9')
+    expect(screen.getByRole('tab', { name: 'My apps' }).className).toContain('bg-background')
     expect(screen.getByRole('tab', { name: 'Third-party apps' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Application name' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'App ID' })).toBeTruthy()
@@ -2546,7 +2548,11 @@ describe('admin console', () => {
     renderWithQuery(<AccountCenterSettingsPage />)
 
     expect(screen.getByRole('tab', { name: 'Account Center' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: 'Account Center' }).className).toContain('min-h-9')
+    expect(screen.getByRole('tab', { name: 'Account Center' }).className).toContain('bg-background')
     expect(screen.getByText('/api/account')).toBeTruthy()
+    expect(screen.getByText('/api/account').closest('.rounded-md')?.className).toContain('border')
+    expect(screen.getByText('/api/account').closest('.rounded-md')?.className).toContain('p-3')
     expect(screen.getByText('Authorized apps view')).toBeTruthy()
 
     cleanup()

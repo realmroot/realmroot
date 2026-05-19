@@ -28,7 +28,7 @@ export function DialogContent({ className, ...props }: HTMLAttributes<HTMLDivEle
 }
 
 export function DialogHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex flex-col gap-1.5 border-b border-border p-4', className)} {...props} />
+  return <div className={cn('flex flex-col gap-1.5 border-b border-border p-5', className)} {...props} />
 }
 
 export function DialogTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
@@ -40,7 +40,7 @@ export function DialogDescription({ className, ...props }: HTMLAttributes<HTMLPa
 }
 
 export function DialogFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex justify-end gap-2 border-t border-border p-4', className)} {...props} />
+  return <div className={cn('flex justify-end gap-2 border-t border-border p-5', className)} {...props} />
 }
 
 export function DialogClose(props: ButtonHTMLAttributes<HTMLButtonElement>) {
