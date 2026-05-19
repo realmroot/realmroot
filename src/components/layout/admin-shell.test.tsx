@@ -59,5 +59,9 @@ describe('AdminShell', () => {
     expect(screen.getByRole('navigation', { name: 'Admin mobile' })).toBeTruthy()
     expect(screen.getAllByRole('link', { name: /Sign-in experience/ }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
+
+    fireEvent.click(screen.getAllByRole('link', { name: /Applications/ }).at(-1)!)
+
+    expect(screen.queryByRole('navigation', { name: 'Admin mobile' })).toBeNull()
   })
 })

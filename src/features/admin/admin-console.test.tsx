@@ -62,6 +62,64 @@ describe('admin console', () => {
     expect(screen.getByText('Password sign-in')).toBeTruthy()
   })
 
+  it('runs dashboard OIDC actions and renders setup gaps', async () => {
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
+    const open = vi.fn()
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: clipboard,
+    })
+    vi.spyOn(window, 'open').mockImplementation(open)
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/applications') {
+        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/roles')
+        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/security/policy') {
+        return Promise.resolve(
+          jsonResponse({
+            policy: {
+              ...securityPolicy.policy,
+              mfa: { mode: 'optional' },
+              passkeys: { ...securityPolicy.policy.passkeys, enabled: false },
+            },
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<AdminDashboardPage />)
+
+    expect(await screen.findByText('Action needed')).toBeTruthy()
+    expect(screen.getByText('Required before app sign-in')).toBeTruthy()
+    expect(screen.getByText('Password sign-in still works')).toBeTruthy()
+    expect(screen.getByText('MFA optional; passkeys disabled')).toBeTruthy()
+    expect(screen.getByText('0 users')).toBeTruthy()
+    expect(screen.getByText('Create an application to start routing sign-in requests.')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discovery' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy issuer' }))
+
+    expect(open).toHaveBeenCalledWith('/api/auth/.well-known/openid-configuration', '_blank', 'noopener')
+    expect(clipboard.writeText).toHaveBeenCalledWith('http://localhost:3000/api/auth')
+  })
+
   it('renders dashboard load errors with retry action', async () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
@@ -352,6 +410,7 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Admin console' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'admin-console' } })
+    fireEvent.change(screen.getByLabelText('Client type'), { target: { value: 'confidential_web' } })
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://app.example.com/callback' },
     })
@@ -364,11 +423,41 @@ describe('admin console', () => {
           body: {
             name: 'Admin console',
             slug: 'admin-console',
-            clientType: 'public_spa',
+            clientType: 'confidential_web',
             redirectUris: ['https://app.example.com/callback'],
           },
         },
       ])
+    })
+  })
+
+  it('closes the application dialog and toggles application availability', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/applications/app-1' && init?.method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse({ ...application, disabled: true }))
+      }
+      if (url === '/api/management/applications') {
+        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ApplicationsPage />)
+
+    expect(await screen.findByText('Customer portal')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New application' }))
+    expect(await screen.findByRole('heading', { name: 'Create application' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: 'Create application' })).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('Actions for Customer portal'))
+    fireEvent.click(await screen.findByText('Disable'))
+
+    await waitFor(() => {
+      expect(requests).toEqual([{ url: '/api/management/applications/app-1', body: { disabled: true } }])
     })
   })
 
@@ -454,6 +543,83 @@ describe('admin console', () => {
     expect(await screen.findByText('Email already exists.')).toBeTruthy()
   })
 
+  it('creates users with optional credentials and toggles admin role', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/users' && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(user, 201))
+      }
+      if (url === '/api/management/users/user-1' && init?.method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse({ ...user, role: 'user' }))
+      }
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<UsersPage />)
+
+    expect(await screen.findByText('jane@example.com')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New user' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'sam@example.com' } })
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Sam Doe' } })
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'sam' } })
+    fireEvent.change(screen.getByLabelText('Initial password'), { target: { value: 'correct horse battery staple' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          url: '/api/management/users',
+          body: {
+            email: 'sam@example.com',
+            displayName: 'Sam Doe',
+            username: 'sam',
+            password: 'correct horse battery staple',
+          },
+        },
+      ])
+    })
+    expect(screen.queryByRole('heading', { name: 'Create user' })).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('Actions for jane@example.com'))
+    fireEvent.click(await screen.findByText('Toggle admin role'))
+
+    await waitFor(() => {
+      expect(requests.at(-1)).toEqual({ url: '/api/management/users/user-1', body: { role: 'user' } })
+    })
+  })
+
+  it('shows client-side validation errors for user creation', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/users' && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(user, 201))
+      }
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<UsersPage />)
+
+    expect(await screen.findByText('jane@example.com')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New user' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'not-email' } })
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Sam Doe' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
+
+    expect(await screen.findByText('Invalid email address')).toBeTruthy()
+    expect(requests).toEqual([])
+  })
+
   it('renders fallback mutation errors for non-Error rejections', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -532,6 +698,7 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'GitHub' } })
     fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'github' } })
+    fireEvent.change(screen.getByLabelText('Provider type'), { target: { value: 'generic_oauth' } })
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-id' } })
     fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GITHUB_SECRET' } })
     fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://github.com/login/oauth' } })
@@ -546,7 +713,7 @@ describe('admin console', () => {
           body: {
             displayName: 'GitHub',
             providerId: 'github',
-            providerType: 'social',
+            providerType: 'generic_oauth',
             clientId: 'client-id',
             clientSecretBinding: 'GITHUB_SECRET',
             issuer: 'https://github.com/login/oauth',
@@ -555,6 +722,31 @@ describe('admin console', () => {
         },
       ])
     })
+  })
+
+  it('shows client-side validation errors for connector creation', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/connectors' && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(connector, 201))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'GitHub' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
+
+    expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
+    expect(requests).toEqual([])
   })
 
   it('renders sign-in settings and security policy tabs', async () => {
@@ -655,6 +847,29 @@ describe('admin console', () => {
         },
       ])
     })
+  })
+
+  it('shows client-side validation errors for simple create dialogs', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/roles' && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(role, 201))
+      }
+      if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<RolesPage />)
+
+    expect(await screen.findByText('Admin')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New role' }))
+    fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'auditor' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
+
+    expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
+    expect(requests).toEqual([])
   })
 
   it('renders admin variants for empty, disabled, and unset states', async () => {
@@ -762,6 +977,8 @@ describe('admin console', () => {
     expect(screen.queryByRole('table')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     expect(await screen.findByRole('heading', { name: 'Create application' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: 'Create application' })).toBeNull()
 
     unmount()
     renderWithQuery(<UsersPage />)
@@ -769,6 +986,8 @@ describe('admin console', () => {
     expect(screen.queryByRole('table')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'New user' }))
     expect(await screen.findByRole('heading', { name: 'Create user' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: 'Create user' })).toBeNull()
 
     cleanup()
     renderWithQuery(<ConnectorsPage />)
@@ -776,6 +995,8 @@ describe('admin console', () => {
     expect(screen.queryByRole('table')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
     expect(await screen.findByRole('heading', { name: 'Create connector' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: 'Create connector' })).toBeNull()
 
     cleanup()
     renderWithQuery(<OrganizationsPage />)
@@ -783,6 +1004,8 @@ describe('admin console', () => {
     expect(screen.queryByRole('table')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'New organization' }))
     expect(await screen.findByRole('heading', { name: 'Create organization' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: 'Create organization' })).toBeNull()
 
     cleanup()
     renderWithQuery(<RolesPage />)
@@ -790,6 +1013,8 @@ describe('admin console', () => {
     expect(screen.queryByRole('table')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'New role' }))
     expect(await screen.findByRole('heading', { name: 'Create role' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: 'Create role' })).toBeNull()
 
     cleanup()
     renderWithQuery(<ApiResourcesPage />)
@@ -797,6 +1022,8 @@ describe('admin console', () => {
     expect(screen.queryByRole('table')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'New resource' }))
     expect(await screen.findByRole('heading', { name: 'Create API resource' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: 'Create API resource' })).toBeNull()
   })
 
   it('renders collection loading and query error states', async () => {
@@ -825,7 +1052,76 @@ describe('admin console', () => {
     renderWithQuery(<UsersPage />)
     expect(await screen.findByText('Users unavailable.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(screen.queryByRole('table')).toBeNull()
+  })
+
+  it('retries admin resource page errors', async () => {
+    for (const scenario of [
+      {
+        component: <ApplicationsPage />,
+        matches: (url: string) => url === '/api/management/applications',
+        success: { applications: [application], pagination },
+        text: 'Customer portal',
+      },
+      {
+        component: <ConnectorsPage />,
+        matches: (url: string) => url === '/api/management/connectors',
+        success: { connectors: [connector], pagination },
+        text: 'Google',
+      },
+      {
+        component: <SignInSettingsPage />,
+        matches: (url: string) => url === '/api/management/sign-in-settings',
+        success: signInSettings,
+        text: 'Authentication methods',
+      },
+      {
+        component: <SecurityPage />,
+        matches: (url: string) => url === '/api/management/security/policy',
+        success: securityPolicy,
+        text: 'Multi-factor authentication',
+      },
+      {
+        component: <OrganizationsPage />,
+        matches: (url: string) => url === '/api/management/organizations',
+        success: { organizations: [organization], pagination },
+        text: 'Acme',
+      },
+      {
+        component: <RolesPage />,
+        matches: (url: string) => url === '/api/management/roles',
+        success: { roles: [role], pagination },
+        text: 'Admin',
+      },
+      {
+        component: <ApiResourcesPage />,
+        matches: (url: string) => url === '/api/management/api-resources',
+        success: { resources: [apiResource], pagination },
+        text: 'Management API',
+      },
+    ]) {
+      let attempts = 0
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = String(input)
+        if (scenario.matches(url)) {
+          attempts += 1
+          return attempts === 1
+            ? Promise.resolve(jsonResponse({ error: { message: 'Temporary unavailable.' } }, 503))
+            : Promise.resolve(jsonResponse(scenario.success))
+        }
+        return Promise.resolve(jsonResponse({}))
+      })
+
+      renderWithQuery(scenario.component)
+
+      expect(await screen.findByText('Temporary unavailable.')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+      expect(await screen.findByText(scenario.text)).toBeTruthy()
+
+      cleanup()
+      vi.restoreAllMocks()
+    }
   })
 
   it('renders static branding and deployment settings pages', () => {
