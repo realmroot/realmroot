@@ -209,9 +209,26 @@ const consoleApplicationsRoute = createRoute({
 const consoleApplicationDetailRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/applications/{$applicationId}',
+  beforeLoad: ({ params }) => {
+    throw redirect({ href: `/console/applications/${params.applicationId}/settings` })
+  },
+})
+
+const consoleApplicationDetailSettingsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/applications/{$applicationId}/settings',
   component: () => {
-    const params = consoleApplicationDetailRoute.useParams()
-    return <ApplicationDetailPage applicationId={params.applicationId} />
+    const params = consoleApplicationDetailSettingsRoute.useParams()
+    return <ApplicationDetailPage applicationId={params.applicationId} section="settings" />
+  },
+})
+
+const consoleApplicationDetailBrandingRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/applications/{$applicationId}/branding',
+  component: () => {
+    const params = consoleApplicationDetailBrandingRoute.useParams()
+    return <ApplicationDetailPage applicationId={params.applicationId} section="branding" />
   },
 })
 
@@ -224,9 +241,62 @@ const consoleUsersRoute = createRoute({
 const consoleUserDetailRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/users/{$userId}',
+  beforeLoad: ({ params }) => {
+    throw redirect({ href: `/console/users/${params.userId}/profile` })
+  },
+})
+
+const consoleUserDetailProfileRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/users/{$userId}/profile',
   component: () => {
-    const params = consoleUserDetailRoute.useParams()
-    return <UserDetailPage userId={params.userId} />
+    const params = consoleUserDetailProfileRoute.useParams()
+    return <UserDetailPage userId={params.userId} section="profile" />
+  },
+})
+
+const consoleUserDetailSecurityRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/users/{$userId}/security',
+  component: () => {
+    const params = consoleUserDetailSecurityRoute.useParams()
+    return <UserDetailPage userId={params.userId} section="security" />
+  },
+})
+
+const consoleUserDetailSessionsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/users/{$userId}/sessions',
+  component: () => {
+    const params = consoleUserDetailSessionsRoute.useParams()
+    return <UserDetailPage userId={params.userId} section="sessions" />
+  },
+})
+
+const consoleUserDetailLinkedAccountsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/users/{$userId}/linked-accounts',
+  component: () => {
+    const params = consoleUserDetailLinkedAccountsRoute.useParams()
+    return <UserDetailPage userId={params.userId} section="linked-accounts" />
+  },
+})
+
+const consoleUserDetailApplicationsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/users/{$userId}/applications',
+  component: () => {
+    const params = consoleUserDetailApplicationsRoute.useParams()
+    return <UserDetailPage userId={params.userId} section="applications" />
+  },
+})
+
+const consoleUserDetailOperationsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/users/{$userId}/operations',
+  component: () => {
+    const params = consoleUserDetailOperationsRoute.useParams()
+    return <UserDetailPage userId={params.userId} section="operations" />
   },
 })
 
@@ -335,9 +405,26 @@ const consoleOrganizationsRoute = createRoute({
 const consoleOrganizationDetailRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/organizations/{$organizationId}',
+  beforeLoad: ({ params }) => {
+    throw redirect({ href: `/console/organizations/${params.organizationId}/settings` })
+  },
+})
+
+const consoleOrganizationDetailSettingsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/organizations/{$organizationId}/settings',
   component: () => {
-    const params = consoleOrganizationDetailRoute.useParams()
-    return <OrganizationDetailPage organizationId={params.organizationId} />
+    const params = consoleOrganizationDetailSettingsRoute.useParams()
+    return <OrganizationDetailPage organizationId={params.organizationId} section="settings" />
+  },
+})
+
+const consoleOrganizationDetailAuthorizationRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/organizations/{$organizationId}/authorization',
+  component: () => {
+    const params = consoleOrganizationDetailAuthorizationRoute.useParams()
+    return <OrganizationDetailPage organizationId={params.organizationId} section="authorization" />
   },
 })
 
@@ -350,9 +437,35 @@ const consoleRolesRoute = createRoute({
 const consoleRoleDetailRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/roles/{$roleId}',
+  beforeLoad: ({ params }) => {
+    throw redirect({ href: `/console/roles/${params.roleId}/settings` })
+  },
+})
+
+const consoleRoleDetailSettingsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/roles/{$roleId}/settings',
   component: () => {
-    const params = consoleRoleDetailRoute.useParams()
-    return <RoleDetailPage roleId={params.roleId} />
+    const params = consoleRoleDetailSettingsRoute.useParams()
+    return <RoleDetailPage roleId={params.roleId} section="settings" />
+  },
+})
+
+const consoleRoleDetailPermissionsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/roles/{$roleId}/permissions',
+  component: () => {
+    const params = consoleRoleDetailPermissionsRoute.useParams()
+    return <RoleDetailPage roleId={params.roleId} section="permissions" />
+  },
+})
+
+const consoleRoleDetailAssignmentsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/roles/{$roleId}/assignments',
+  component: () => {
+    const params = consoleRoleDetailAssignmentsRoute.useParams()
+    return <RoleDetailPage roleId={params.roleId} section="assignments" />
   },
 })
 
@@ -365,9 +478,35 @@ const consoleApiResourcesRoute = createRoute({
 const consoleApiResourceDetailRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/api-resources/{$resourceId}',
+  beforeLoad: ({ params }) => {
+    throw redirect({ href: `/console/api-resources/${params.resourceId}/settings` })
+  },
+})
+
+const consoleApiResourceDetailSettingsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/api-resources/{$resourceId}/settings',
   component: () => {
-    const params = consoleApiResourceDetailRoute.useParams()
-    return <ApiResourceDetailPage resourceId={params.resourceId} />
+    const params = consoleApiResourceDetailSettingsRoute.useParams()
+    return <ApiResourceDetailPage resourceId={params.resourceId} section="settings" />
+  },
+})
+
+const consoleApiResourceDetailScopesRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/api-resources/{$resourceId}/scopes',
+  component: () => {
+    const params = consoleApiResourceDetailScopesRoute.useParams()
+    return <ApiResourceDetailPage resourceId={params.resourceId} section="scopes" />
+  },
+})
+
+const consoleApiResourceDetailPermissionsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/api-resources/{$resourceId}/permissions',
+  component: () => {
+    const params = consoleApiResourceDetailPermissionsRoute.useParams()
+    return <ApiResourceDetailPage resourceId={params.resourceId} section="permissions" />
   },
 })
 
@@ -382,7 +521,13 @@ const consoleOrganizationTemplateIndexRoute = createRoute({
 const consoleOrganizationTemplateRolesRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/organization-template/organization-roles',
-  component: OrganizationTemplatePage,
+  component: () => <OrganizationTemplatePage section="organization-roles" />,
+})
+
+const consoleOrganizationTemplatePermissionsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/organization-template/organization-permissions',
+  component: () => <OrganizationTemplatePage section="organization-permissions" />,
 })
 
 const consoleCustomJwtRoute = createRoute({
@@ -394,7 +539,21 @@ const consoleCustomJwtRoute = createRoute({
 const consoleWebhooksRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/webhooks',
-  component: WebhooksPage,
+  beforeLoad: () => {
+    throw redirect({ href: '/console/webhooks/endpoints' })
+  },
+})
+
+const consoleWebhooksEndpointsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/webhooks/endpoints',
+  component: () => <WebhooksPage section="endpoints" />,
+})
+
+const consoleWebhooksRequestsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/webhooks/requests',
+  component: () => <WebhooksPage section="requests" />,
 })
 
 const consoleAuditLogsRoute = createRoute({
@@ -435,7 +594,6 @@ const adminCompatibilityRoute = createRoute({
   beforeLoad: ({ location }) => {
     throw redirect({ href: consoleHrefForAdminLocation(location) })
   },
-  component: () => null,
 })
 
 const adminCompatibilityIndexRoute = createRoute({
@@ -541,8 +699,16 @@ const routeTree = rootRoute.addChildren([
     consoleIndexRoute,
     consoleApplicationsRoute,
     consoleApplicationDetailRoute,
+    consoleApplicationDetailSettingsRoute,
+    consoleApplicationDetailBrandingRoute,
     consoleUsersRoute,
     consoleUserDetailRoute,
+    consoleUserDetailProfileRoute,
+    consoleUserDetailSecurityRoute,
+    consoleUserDetailSessionsRoute,
+    consoleUserDetailLinkedAccountsRoute,
+    consoleUserDetailApplicationsRoute,
+    consoleUserDetailOperationsRoute,
     consoleConnectorsIndexRoute,
     consoleConnectorsPasswordlessRoute,
     consoleConnectorsSocialRoute,
@@ -560,14 +726,25 @@ const routeTree = rootRoute.addChildren([
     consoleSecurityGeneralRoute,
     consoleOrganizationsRoute,
     consoleOrganizationDetailRoute,
+    consoleOrganizationDetailSettingsRoute,
+    consoleOrganizationDetailAuthorizationRoute,
     consoleRolesRoute,
     consoleRoleDetailRoute,
+    consoleRoleDetailSettingsRoute,
+    consoleRoleDetailPermissionsRoute,
+    consoleRoleDetailAssignmentsRoute,
     consoleApiResourcesRoute,
     consoleApiResourceDetailRoute,
+    consoleApiResourceDetailSettingsRoute,
+    consoleApiResourceDetailScopesRoute,
+    consoleApiResourceDetailPermissionsRoute,
     consoleOrganizationTemplateIndexRoute,
     consoleOrganizationTemplateRolesRoute,
+    consoleOrganizationTemplatePermissionsRoute,
     consoleCustomJwtRoute,
     consoleWebhooksRoute,
+    consoleWebhooksEndpointsRoute,
+    consoleWebhooksRequestsRoute,
     consoleAuditLogsRoute,
     consoleTenantSettingsIndexRoute,
     consoleTenantSettingsOidcRoute,

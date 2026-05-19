@@ -95,7 +95,7 @@ const adminNavGroups: ConsoleNavGroup[] = [
     label: 'Developer',
     items: [
       { href: '/console/customize-jwt', label: 'Custom JWT', icon: Code2 },
-      { href: '/console/webhooks', label: 'Webhooks', icon: BellRing },
+      { href: '/console/webhooks/endpoints', label: 'Webhooks', icon: BellRing },
       { href: '/console/audit-logs', label: 'Audit logs', icon: FileClock },
     ],
   },

@@ -31,7 +31,7 @@ import {
   updateManagementSignInSettingsRequestSchema,
 } from '@shared/api/management'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import {
   AlertCircle,
   CheckCircle2,
@@ -49,7 +49,7 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react'
-import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useState } from 'react'
+import { type CSSProperties, createElement, type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import type { z } from 'zod'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -164,6 +164,15 @@ const optionalAuthorizationFieldNames = new Set([
   'tokenClaimValue',
   'tokenClaimsNamespace',
 ])
+
+type DetailTab = { value: string; label: string }
+type ApplicationDetailSection = 'settings' | 'branding'
+type UserDetailSection = 'profile' | 'security' | 'sessions' | 'linked-accounts' | 'applications' | 'operations'
+type OrganizationDetailSection = 'settings' | 'authorization'
+type RoleDetailSection = 'settings' | 'permissions' | 'assignments'
+type ApiResourceDetailSection = 'settings' | 'scopes' | 'permissions'
+type OrganizationTemplateSection = 'organization-roles' | 'organization-permissions'
+type WebhooksSection = 'endpoints' | 'requests'
 
 export function AdminDashboardPage() {
   const query = useQuery({ queryKey: adminQueryKeys.dashboard, queryFn: getAdminDashboard })
@@ -489,12 +498,19 @@ export function ApplicationsPage() {
   )
 }
 
-export function ApplicationDetailPage({ applicationId }: { applicationId: string }) {
+export function ApplicationDetailPage({
+  applicationId,
+  section = 'settings',
+}: {
+  applicationId: string
+  section?: ApplicationDetailSection
+}) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [rotatedSecret, setRotatedSecret] = useState<string | null>(null)
-  const [selectedTab, setSelectedTab] = useState<'settings' | 'branding'>('settings')
+  const [selectedTab, setSelectedTab] = useState<ApplicationDetailSection>(section)
+  useEffect(() => setSelectedTab(section), [section])
   const query = useQuery({
     queryKey: [...adminQueryKeys.applications, applicationId],
     queryFn: () => getApplication(applicationId),
@@ -558,16 +574,23 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
     >
       {application ? (
         <ConsoleDetailStack>
-          <Link className="consoleBackLink" to="/console/applications">
+          <a className="consoleBackLink" href="/console/applications">
             <Undo2 data-icon="inline-start" />
             Back to applications
-          </Link>
+          </a>
           <ObjectHeader
             badge={clientTypeLabel(application.clientType)}
             id={application.clientId}
             title={application.name}
           />
-          <Tabs setValue={(value) => setSelectedTab(value as 'settings' | 'branding')} value={selectedTab}>
+          <Tabs
+            setValue={(value) => {
+              const next = value as ApplicationDetailSection
+              setSelectedTab(next)
+              navigateConsoleTab(navigate, `/console/applications/${applicationId}/${next}`)
+            }}
+            value={selectedTab}
+          >
             <TabsList aria-label="Application detail sections">
               <TabsTrigger value="settings">Settings</TabsTrigger>
               <TabsTrigger value="branding">Branding</TabsTrigger>
@@ -1280,9 +1303,10 @@ export function UsersPage() {
   )
 }
 
-export function UserDetailPage({ userId }: { userId: string }) {
+export function UserDetailPage({ userId, section = 'profile' }: { userId: string; section?: UserDetailSection }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const [selectedTab, setSelectedTab] = useState<UserDetailSection>(section)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [banDialogOpen, setBanDialogOpen] = useState(false)
   const [revokeAllDialogOpen, setRevokeAllDialogOpen] = useState(false)
@@ -1355,6 +1379,8 @@ export function UserDetailPage({ userId }: { userId: string }) {
     onSuccess: () => Promise.all([passkeysQuery.refetch(), securityQuery.refetch()]),
   })
 
+  useEffect(() => setSelectedTab(section), [section])
+
   const user = userQuery.data?.user
 
   return (
@@ -1362,91 +1388,117 @@ export function UserDetailPage({ userId }: { userId: string }) {
       title={user ? userDisplayName(user) : 'User'}
       description="Inspect profile, access state, linked accounts, MFA, passkeys, sessions, and account operations."
       framed={false}
-      action={
-        <Link className="uiButton uiButton-secondary" to="/console/users">
-          Back to users
-        </Link>
-      }
       error={userQuery.error}
       loading={userQuery.isLoading}
       onRetry={() => userQuery.refetch()}
     >
       {user ? (
-        <div className="grid gap-4 p-4 xl:grid-cols-[1fr_1fr]">
-          <UserProfileCard
-            error={updateMutation.error}
-            pending={updateMutation.isPending}
-            user={user}
-            onSubmit={updateMutation.mutate}
+        <div className="consoleDetailStack">
+          <a className="consoleBackLink" href="/console/users">
+            <Undo2 data-icon="inline-start" />
+            Back to users
+          </a>
+          <ObjectHeader
+            badge={user.banned ? 'Banned' : 'Active'}
+            id={user.email ?? user.id}
+            title={userDisplayName(user)}
           />
-          <Card>
-            <CardHeader>
-              <CardTitle>Account operations</CardTitle>
-              <CardDescription>Use confirmations for destructive or security-sensitive actions.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <SettingRow label="Status" value={user.banned ? 'Banned' : 'Active'} />
-              <SettingRow label="Ban reason" value={user.banReason ?? 'Not set'} />
-              <SettingRow label="Ban expires" value={formatDate(user.banExpires ?? undefined)} />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  disabled={resetMutation.isPending}
-                  onClick={() => resetMutation.mutate()}
-                  type="button"
-                  variant="secondary"
-                >
-                  Send password reset
-                </Button>
-                {user.banned ? (
-                  <Button
-                    disabled={unbanMutation.isPending}
-                    onClick={() => unbanMutation.mutate()}
-                    type="button"
-                    variant="secondary"
-                  >
-                    Unban user
-                  </Button>
-                ) : (
-                  <Button onClick={() => setBanDialogOpen(true)} type="button" variant="danger">
-                    Ban user
-                  </Button>
-                )}
-                <Button onClick={() => setDeleteDialogOpen(true)} type="button" variant="danger">
-                  <Trash2 data-icon="inline-start" />
-                  Delete user
-                </Button>
-              </div>
-              <MutationError
-                error={resetMutation.error ?? banMutation.error ?? unbanMutation.error ?? deleteMutation.error}
+          <DetailTabs
+            label="User detail sections"
+            onChange={(value) => {
+              const next = value as UserDetailSection
+              setSelectedTab(next)
+              navigateConsoleTab(navigate, `/console/users/${userId}/${next}`)
+            }}
+            tabs={userDetailTabs()}
+            value={selectedTab}
+          />
+          <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+            {selectedTab === 'profile' ? (
+              <UserProfileCard
+                error={updateMutation.error}
+                pending={updateMutation.isPending}
+                user={user}
+                onSubmit={updateMutation.mutate}
               />
-              {resetMutation.isSuccess ? (
-                <p className="text-sm text-muted-foreground">Password reset requested.</p>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <UserSecurityCard
-            error={securityQuery.error ?? passkeysQuery.error ?? deletePasskeyMutation.error}
-            passkeys={passkeysQuery.data?.passkeys ?? []}
-            security={securityQuery.data?.security}
-            onDeletePasskey={setPasskeyToDelete}
-          />
-          <UserSessionsCard
-            error={sessionsQuery.error ?? revokeAllMutation.error ?? revokeSessionMutation.error}
-            onRevokeAll={() => setRevokeAllDialogOpen(true)}
-            onRevokeSession={setSessionToRevoke}
-            pending={revokeAllMutation.isPending || revokeSessionMutation.isPending}
-            sessions={sessionsQuery.data?.sessions ?? []}
-          />
-          <UserLinkedAccountsCard
-            accounts={linkedAccountsQuery.data?.accounts ?? []}
-            error={linkedAccountsQuery.error}
-          />
-          <UserApplicationsCard
-            applications={applicationsQuery.data?.applications ?? []}
-            error={applicationsQuery.error}
-          />
-
+            ) : null}
+            {selectedTab === 'operations' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Account operations</CardTitle>
+                  <CardDescription>Use confirmations for destructive or security-sensitive actions.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  <SettingRow label="Status" value={user.banned ? 'Banned' : 'Active'} />
+                  <SettingRow label="Ban reason" value={user.banReason ?? 'Not set'} />
+                  <SettingRow label="Ban expires" value={formatDate(user.banExpires ?? undefined)} />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      disabled={resetMutation.isPending}
+                      onClick={() => resetMutation.mutate()}
+                      type="button"
+                      variant="secondary"
+                    >
+                      Send password reset
+                    </Button>
+                    {user.banned ? (
+                      <Button
+                        disabled={unbanMutation.isPending}
+                        onClick={() => unbanMutation.mutate()}
+                        type="button"
+                        variant="secondary"
+                      >
+                        Unban user
+                      </Button>
+                    ) : (
+                      <Button onClick={() => setBanDialogOpen(true)} type="button" variant="danger">
+                        Ban user
+                      </Button>
+                    )}
+                    <Button onClick={() => setDeleteDialogOpen(true)} type="button" variant="danger">
+                      <Trash2 data-icon="inline-start" />
+                      Delete user
+                    </Button>
+                  </div>
+                  <MutationError
+                    error={resetMutation.error ?? banMutation.error ?? unbanMutation.error ?? deleteMutation.error}
+                  />
+                  {resetMutation.isSuccess ? (
+                    <p className="text-sm text-muted-foreground">Password reset requested.</p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ) : null}
+            {selectedTab === 'security' ? (
+              <UserSecurityCard
+                error={securityQuery.error ?? passkeysQuery.error ?? deletePasskeyMutation.error}
+                passkeys={passkeysQuery.data?.passkeys ?? []}
+                security={securityQuery.data?.security}
+                onDeletePasskey={setPasskeyToDelete}
+              />
+            ) : null}
+            {selectedTab === 'sessions' ? (
+              <UserSessionsCard
+                error={sessionsQuery.error ?? revokeAllMutation.error ?? revokeSessionMutation.error}
+                onRevokeAll={() => setRevokeAllDialogOpen(true)}
+                onRevokeSession={setSessionToRevoke}
+                pending={revokeAllMutation.isPending || revokeSessionMutation.isPending}
+                sessions={sessionsQuery.data?.sessions ?? []}
+              />
+            ) : null}
+            {selectedTab === 'linked-accounts' ? (
+              <UserLinkedAccountsCard
+                accounts={linkedAccountsQuery.data?.accounts ?? []}
+                error={linkedAccountsQuery.error}
+              />
+            ) : null}
+            {selectedTab === 'applications' ? (
+              <UserApplicationsCard
+                applications={applicationsQuery.data?.applications ?? []}
+                error={applicationsQuery.error}
+              />
+            ) : null}
+          </div>
           <BanUserDialog
             error={banMutation.error}
             onClose={() => setBanDialogOpen(false)}
@@ -1539,15 +1591,17 @@ function UserProfileCard({
           noValidate={true}
           onSubmit={(event) => {
             event.preventDefault()
+            const submittedForm = new FormData(event.currentTarget)
+            const submittedRole = String(submittedForm.get('role') ?? '')
             try {
               setValidationError(null)
               onSubmit(
                 parseForm(managementUpdateUserRequestSchema, {
-                  email: form.email,
-                  displayName: form.displayName,
-                  username: form.username || null,
-                  ...(form.role ? { role: form.role } : {}),
-                  emailVerified: form.emailVerified === 'true',
+                  email: submittedForm.get('email'),
+                  displayName: submittedForm.get('displayName'),
+                  username: nullableString(submittedForm.get('username') as string),
+                  ...(submittedRole ? { role: submittedRole } : {}),
+                  emailVerified: submittedForm.get('emailVerified') === 'true',
                 }),
               )
             } catch (submitError) {
@@ -1556,24 +1610,18 @@ function UserProfileCard({
           }}
         >
           <Field label="Email">
-            <TextInput
-              onChange={(event) => setValue(setForm, 'email', event.target.value)}
-              type="email"
-              value={form.email}
-            />
+            <TextInput defaultValue={form.email} name="email" type="email" />
           </Field>
           <Field label="Display name">
-            <TextInput
-              onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
-              value={form.displayName}
-            />
+            <TextInput defaultValue={form.displayName} name="displayName" />
           </Field>
           <Field label="Username">
-            <TextInput onChange={(event) => setValue(setForm, 'username', event.target.value)} value={form.username} />
+            <TextInput defaultValue={form.username} name="username" />
           </Field>
           <Field label="Role">
             <SelectInput
               disabled={Array.isArray(user.role)}
+              name="role"
               onChange={(event) => setValue(setForm, 'role', event.target.value)}
               value={form.role}
             >
@@ -1584,6 +1632,7 @@ function UserProfileCard({
           </Field>
           <Field label="Email verification">
             <SelectInput
+              name="emailVerified"
               onChange={(event) => setValue(setForm, 'emailVerified', event.target.value)}
               value={form.emailVerified}
             >
@@ -2737,8 +2786,16 @@ export function OrganizationsPage() {
   )
 }
 
-export function OrganizationDetailPage({ organizationId }: { organizationId: string }) {
+export function OrganizationDetailPage({
+  organizationId,
+  section = 'settings',
+}: {
+  organizationId: string
+  section?: OrganizationDetailSection
+}) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [selectedTab, setSelectedTab] = useState<OrganizationDetailSection>(section)
   const query = useQuery({
     queryKey: [...adminQueryKeys.organizations, organizationId],
     queryFn: () => getOrganization(organizationId),
@@ -2751,75 +2808,96 @@ export function OrganizationDetailPage({ organizationId }: { organizationId: str
       return queryClient.invalidateQueries({ queryKey: adminQueryKeys.organizations })
     },
   })
+  useEffect(() => setSelectedTab(section), [section])
 
   return (
     <ResourcePage
       title={organization?.name ?? 'Organization'}
       description="Review and update the organization record exposed by the existing authorization model."
       framed={false}
-      action={
-        <a className="uiButton uiButton-secondary" href="/console/organizations">
-          Back to organizations
-        </a>
-      }
       error={query.error}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
       {organization ? (
-        <div className="grid gap-4 p-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>General</CardTitle>
-              <CardDescription>
-                Team collaboration and invitation management are outside this console surface.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AuthorizationForm
-                buttonLabel="Save organization"
-                defaults={{
-                  slug: organization.slug,
-                  name: organization.name,
-                  displayName: organization.displayName ?? '',
-                  disabledReason: organization.disabledReason ?? '',
-                }}
-                error={updateMutation.error}
-                fields={[
-                  ['slug', 'Slug'],
-                  ['name', 'Name'],
-                  ['displayName', 'Display name'],
-                  ['disabledReason', 'Disabled reason'],
-                ]}
-                onSubmit={(form) =>
-                  updateMutation.mutate(
-                    parseForm(updateOrganizationRequestSchema, {
-                      ...form,
-                      displayName: nullableString(form.displayName ?? ''),
-                      disabledReason: nullableString(form.disabledReason ?? ''),
-                    }),
-                  )
-                }
-                pending={updateMutation.isPending}
-              />
-              <div className="mt-4">
-                <StatusBadge active={!organization.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Authorization model</CardTitle>
-              <CardDescription>Only persisted organization identity fields are editable here.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <SettingRow label="Organization ID" value={organization.id} />
-              <SettingRow label="Role assignment scope" value="Use organization-scoped roles from Console roles." />
-              <SettingRow label="Members and invitations" value="Not exposed in this product surface." />
-              <SettingRow label="Created" value={formatDate(organization.createdAt)} />
-              <SettingRow label="Updated" value={formatDate(organization.updatedAt)} />
-            </CardContent>
-          </Card>
+        <div className="consoleDetailStack">
+          <a className="consoleBackLink" href="/console/organizations">
+            <Undo2 data-icon="inline-start" />
+            Back to organizations
+          </a>
+          <ObjectHeader
+            badge={organization.disabled ? 'Disabled' : 'Enabled'}
+            id={organization.slug}
+            title={organization.name}
+          />
+          <DetailTabs
+            label="Organization detail sections"
+            onChange={(value) => {
+              const next = value as OrganizationDetailSection
+              setSelectedTab(next)
+              navigateConsoleTab(navigate, `/console/organizations/${organizationId}/${next}`)
+            }}
+            tabs={organizationDetailTabs()}
+            value={selectedTab}
+          />
+          <div className="grid gap-4 xl:grid-cols-2">
+            {selectedTab === 'settings' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>General</CardTitle>
+                  <CardDescription>
+                    Team collaboration and invitation management are outside this console surface.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AuthorizationForm
+                    buttonLabel="Save organization"
+                    defaults={{
+                      slug: organization.slug,
+                      name: organization.name,
+                      displayName: organization.displayName ?? '',
+                      disabledReason: organization.disabledReason ?? '',
+                    }}
+                    error={updateMutation.error}
+                    fields={[
+                      ['slug', 'Slug'],
+                      ['name', 'Name'],
+                      ['displayName', 'Display name'],
+                      ['disabledReason', 'Disabled reason'],
+                    ]}
+                    onSubmit={(form) =>
+                      updateMutation.mutate(
+                        parseForm(updateOrganizationRequestSchema, {
+                          ...form,
+                          displayName: nullableString(form.displayName ?? ''),
+                          disabledReason: nullableString(form.disabledReason ?? ''),
+                        }),
+                      )
+                    }
+                    pending={updateMutation.isPending}
+                  />
+                  <div className="mt-4">
+                    <StatusBadge active={!organization.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+            {selectedTab === 'authorization' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Authorization model</CardTitle>
+                  <CardDescription>Only persisted organization identity fields are editable here.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  <SettingRow label="Organization ID" value={organization.id} />
+                  <SettingRow label="Role assignment scope" value="Use organization-scoped roles from Console roles." />
+                  <SettingRow label="Members and invitations" value="Not exposed in this product surface." />
+                  <SettingRow label="Created" value={formatDate(organization.createdAt)} />
+                  <SettingRow label="Updated" value={formatDate(organization.updatedAt)} />
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </ResourcePage>
@@ -2949,9 +3027,10 @@ export function RolesPage() {
   )
 }
 
-export function RoleDetailPage({ roleId }: { roleId: string }) {
+export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: string; section?: RoleDetailSection }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const [selectedTab, setSelectedTab] = useState<RoleDetailSection>(section)
   const [assignment, setAssignment] = useState({ type: 'user', subjectId: '', tokenClaims: '' })
   const [assignmentValidationError, setAssignmentValidationError] = useState<string | null>(null)
   const [selectedResourceId, setSelectedResourceId] = useState('')
@@ -2978,6 +3057,8 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
       setSelectedPermissionIds(rolePermissionsQuery.data.permissions.map((permission) => permission.id))
     }
   }, [rolePermissionsQuery.data])
+
+  useEffect(() => setSelectedTab(section), [section])
 
   const updateMutation = useMutation({
     mutationFn: (input: z.infer<typeof updateRoleRequestSchema>) => updateRole(roleId, input),
@@ -3013,182 +3094,201 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
       title={role?.name ?? 'Role'}
       description="Manage role metadata, API permissions, and user, application, or organization member assignments."
       framed={false}
-      action={
-        <a className="uiButton uiButton-secondary" href="/console/roles">
-          Back to roles
-        </a>
-      }
       error={roleQuery.error}
       loading={roleQuery.isLoading}
       onRetry={() => roleQuery.refetch()}
     >
       {role ? (
-        <div className="grid gap-4 p-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Role settings</CardTitle>
-              <CardDescription>
-                Scope fields are immutable after creation; update display metadata here.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AuthorizationForm
-                buttonLabel="Save role"
-                defaults={{
-                  key: role.key,
-                  name: role.name,
-                  description: role.description ?? '',
-                  tokenClaimName: role.tokenClaimName ?? '',
-                  tokenClaimValue: role.tokenClaimValue ?? '',
-                }}
-                error={updateMutation.error}
-                fields={[
-                  ['key', 'Key'],
-                  ['name', 'Name'],
-                  ['description', 'Description'],
-                  ['tokenClaimName', 'Token claim name'],
-                  ['tokenClaimValue', 'Token claim value'],
-                ]}
-                onSubmit={(form) => updateMutation.mutate(parseForm(updateRoleRequestSchema, form))}
-                pending={updateMutation.isPending}
-              />
-              <div className="mt-4 flex flex-wrap gap-2">
-                <StatusBadge active={role.system} activeLabel="System role" inactiveLabel="Custom role" />
-                <Button
-                  disabled={role.system || deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate()}
-                  type="button"
-                  variant="danger"
-                >
-                  <Trash2 data-icon="inline-start" />
-                  Delete role
-                </Button>
-              </div>
-              <MutationError error={deleteMutation.error} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Permission assignment</CardTitle>
-              <CardDescription>
-                Select permissions from one API resource and replace the role permission set.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <Field label="API resource">
-                <SelectInput onChange={(event) => setSelectedResourceId(event.target.value)} value={selectedResourceId}>
-                  <option value="">Select resource</option>
-                  {resourcesQuery.data?.resources.map((resource) => (
-                    <option key={resource.id} value={resource.id}>
-                      {resource.name}
-                    </option>
-                  ))}
-                </SelectInput>
-              </Field>
-              <div className="grid gap-2">
-                {permissionsQuery.data?.permissions.map((permission) => (
-                  <label
-                    className="flex items-start gap-2 rounded-md border border-border p-3 text-sm"
-                    key={permission.id}
-                  >
-                    <input
-                      checked={selectedPermissionIdSet.has(permission.id)}
-                      disabled={permissionMutation.isPending}
-                      onChange={(event) => {
-                        const next = new Set(selectedPermissionIds)
-                        if (event.target.checked) next.add(permission.id)
-                        else next.delete(permission.id)
-                        setSelectedPermissionIds([...next])
-                      }}
-                      type="checkbox"
-                    />
-                    <span>
-                      <span className="font-medium">{permission.key}</span>
-                      <span className="block text-muted-foreground">{permission.description ?? 'No description'}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              <Button
-                disabled={permissionMutation.isPending || selectedResourceId.length === 0}
-                onClick={() => permissionMutation.mutate(selectedPermissionIds)}
-                type="button"
-              >
-                <Save data-icon="inline-start" />
-                Save permissions
-              </Button>
-              <MutationError error={permissionMutation.error} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Assignments</CardTitle>
-              <CardDescription>
-                Assign this role to a user, an application, or an organization member record.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form
-                className="formStack"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  try {
-                    setAssignmentValidationError(null)
-                    assignmentMutation.mutate({
-                      type: assignment.type,
-                      roleId,
-                      subjectId: assignment.subjectId,
-                      tokenClaims: parseTokenClaims(assignment.tokenClaims),
-                    })
-                  } catch (submitError) {
-                    setAssignmentValidationError(
-                      submitError instanceof Error ? submitError.message : 'Invalid token claims JSON.',
-                    )
-                  }
-                }}
-              >
-                <Field label="Subject type">
-                  <SelectInput
-                    onChange={(event) => setAssignment((value) => ({ ...value, type: event.target.value }))}
-                    value={assignment.type}
-                  >
-                    <option value="user">User</option>
-                    <option value="application">Application</option>
-                    <option value="member">Organization member</option>
-                  </SelectInput>
-                </Field>
-                <Field label="Subject ID">
-                  <TextInput
-                    onChange={(event) => setAssignment((value) => ({ ...value, subjectId: event.target.value }))}
-                    required
-                    value={assignment.subjectId}
+        <div className="consoleDetailStack">
+          <a className="consoleBackLink" href="/console/roles">
+            <Undo2 data-icon="inline-start" />
+            Back to roles
+          </a>
+          <ObjectHeader badge={role.system ? 'System role' : 'Custom role'} id={role.key} title={role.name} />
+          <DetailTabs
+            label="Role detail sections"
+            onChange={(value) => {
+              const next = value as RoleDetailSection
+              setSelectedTab(next)
+              navigateConsoleTab(navigate, `/console/roles/${roleId}/${next}`)
+            }}
+            tabs={roleDetailTabs()}
+            value={selectedTab}
+          />
+          <div className="grid gap-4 xl:grid-cols-2">
+            {selectedTab === 'settings' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Role settings</CardTitle>
+                  <CardDescription>
+                    Scope fields are immutable after creation; update display metadata here.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AuthorizationForm
+                    buttonLabel="Save role"
+                    defaults={{
+                      key: role.key,
+                      name: role.name,
+                      description: role.description ?? '',
+                      tokenClaimName: role.tokenClaimName ?? '',
+                      tokenClaimValue: role.tokenClaimValue ?? '',
+                    }}
+                    error={updateMutation.error}
+                    fields={[
+                      ['key', 'Key'],
+                      ['name', 'Name'],
+                      ['description', 'Description'],
+                      ['tokenClaimName', 'Token claim name'],
+                      ['tokenClaimValue', 'Token claim value'],
+                    ]}
+                    onSubmit={(form) => updateMutation.mutate(parseForm(updateRoleRequestSchema, form))}
+                    pending={updateMutation.isPending}
                   />
-                </Field>
-                <Field label="Token claims JSON">
-                  <TextArea
-                    onChange={(event) => setAssignment((value) => ({ ...value, tokenClaims: event.target.value }))}
-                    placeholder='{"tier":"gold"}'
-                    value={assignment.tokenClaims}
-                  />
-                </Field>
-                <Button disabled={assignmentMutation.isPending} type="submit">
-                  <Save data-icon="inline-start" />
-                  Assign role
-                </Button>
-                {assignmentMutation.isSuccess ? (
-                  <p className="text-sm text-muted-foreground">Assignment saved.</p>
-                ) : null}
-                {assignmentValidationError ? (
-                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                    {assignmentValidationError}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <StatusBadge active={role.system} activeLabel="System role" inactiveLabel="Custom role" />
+                    <Button
+                      disabled={role.system || deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate()}
+                      type="button"
+                      variant="danger"
+                    >
+                      <Trash2 data-icon="inline-start" />
+                      Delete role
+                    </Button>
                   </div>
-                ) : null}
-                <MutationError error={assignmentMutation.error} />
-              </form>
-            </CardContent>
-          </Card>
+                  <MutationError error={deleteMutation.error} />
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {selectedTab === 'permissions' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Permission assignment</CardTitle>
+                  <CardDescription>
+                    Select permissions from one API resource and replace the role permission set.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  <Field label="API resource">
+                    <SelectInput
+                      onChange={(event) => setSelectedResourceId(event.target.value)}
+                      value={selectedResourceId}
+                    >
+                      <option value="">Select resource</option>
+                      {resourcesQuery.data?.resources.map((resource) => (
+                        <option key={resource.id} value={resource.id}>
+                          {resource.name}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </Field>
+                  <div className="grid gap-2">
+                    {permissionsQuery.data?.permissions.map((permission) => (
+                      <label
+                        className="flex items-start gap-2 rounded-md border border-border p-3 text-sm"
+                        key={permission.id}
+                      >
+                        <input
+                          checked={selectedPermissionIdSet.has(permission.id)}
+                          disabled={permissionMutation.isPending}
+                          onChange={(event) => {
+                            const next = new Set(selectedPermissionIds)
+                            if (event.target.checked) next.add(permission.id)
+                            else next.delete(permission.id)
+                            setSelectedPermissionIds([...next])
+                          }}
+                          type="checkbox"
+                        />
+                        <span>
+                          <span className="font-medium">{permission.key}</span>
+                          <span className="block text-muted-foreground">
+                            {permission.description ?? 'No description'}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <Button
+                    disabled={permissionMutation.isPending || selectedResourceId.length === 0}
+                    onClick={() => permissionMutation.mutate(selectedPermissionIds)}
+                    type="button"
+                  >
+                    <Save data-icon="inline-start" />
+                    Save permissions
+                  </Button>
+                  <MutationError error={permissionMutation.error} />
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {selectedTab === 'assignments' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Assignments</CardTitle>
+                  <CardDescription>
+                    Assign this role to a user, an application, or an organization member record.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    className="formStack"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      const submittedForm = new FormData(event.currentTarget)
+                      try {
+                        setAssignmentValidationError(null)
+                        assignmentMutation.mutate({
+                          type: submittedForm.get('type') as string,
+                          roleId,
+                          subjectId: submittedForm.get('subjectId') as string,
+                          tokenClaims: parseTokenClaims(submittedForm.get('tokenClaims') as string),
+                        })
+                      } catch (submitError) {
+                        setAssignmentValidationError((submitError as Error).message)
+                      }
+                    }}
+                  >
+                    <Field label="Subject type">
+                      <SelectInput
+                        name="type"
+                        onChange={(event) => setAssignment((value) => ({ ...value, type: event.target.value }))}
+                        value={assignment.type}
+                      >
+                        <option value="user">User</option>
+                        <option value="application">Application</option>
+                        <option value="member">Organization member</option>
+                      </SelectInput>
+                    </Field>
+                    <Field label="Subject ID">
+                      <TextInput defaultValue={assignment.subjectId} name="subjectId" required />
+                    </Field>
+                    <Field label="Token claims JSON">
+                      <TextArea
+                        defaultValue={assignment.tokenClaims}
+                        name="tokenClaims"
+                        placeholder='{"tier":"gold"}'
+                      />
+                    </Field>
+                    <Button disabled={assignmentMutation.isPending} type="submit">
+                      <Save data-icon="inline-start" />
+                      Assign role
+                    </Button>
+                    {assignmentMutation.isSuccess ? (
+                      <p className="text-sm text-muted-foreground">Assignment saved.</p>
+                    ) : null}
+                    {assignmentValidationError ? (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                        {assignmentValidationError}
+                      </div>
+                    ) : null}
+                    <MutationError error={assignmentMutation.error} />
+                  </form>
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </ResourcePage>
@@ -3299,9 +3399,16 @@ export function ApiResourcesPage() {
   )
 }
 
-export function ApiResourceDetailPage({ resourceId }: { resourceId: string }) {
+export function ApiResourceDetailPage({
+  resourceId,
+  section = 'settings',
+}: {
+  resourceId: string
+  section?: ApiResourceDetailSection
+}) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const [selectedTab, setSelectedTab] = useState<ApiResourceDetailSection>(section)
   const resourceQuery = useQuery({
     queryKey: [...adminQueryKeys.apiResources, resourceId],
     queryFn: () => getApiResource(resourceId),
@@ -3363,176 +3470,204 @@ export function ApiResourceDetailPage({ resourceId }: { resourceId: string }) {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.apiResources, resourceId, 'permissions'] }),
   })
+  useEffect(() => setSelectedTab(section), [section])
 
   return (
     <ResourcePage
       title={resource?.name ?? 'API resource'}
       description="Manage the protected API audience, OAuth scopes, and permission keys used by RBAC roles."
       framed={false}
-      action={
-        <a className="uiButton uiButton-secondary" href="/console/api-resources">
-          Back to API resources
-        </a>
-      }
       error={resourceQuery.error}
       loading={resourceQuery.isLoading}
       onRetry={() => resourceQuery.refetch()}
     >
       {resource ? (
-        <div className="grid gap-4 p-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Resource settings</CardTitle>
-              <CardDescription>
-                Audience is emitted into authorization claims for matching OAuth resource requests.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AuthorizationForm
-                buttonLabel="Save resource"
-                defaults={{
-                  identifier: resource.identifier,
-                  name: resource.name,
-                  audience: resource.audience,
-                  description: resource.description ?? '',
-                  tokenClaimsNamespace: resource.tokenClaimsNamespace ?? '',
-                }}
-                error={updateMutation.error}
-                fields={[
-                  ['identifier', 'Identifier'],
-                  ['name', 'Name'],
-                  ['audience', 'Audience'],
-                  ['description', 'Description'],
-                  ['tokenClaimsNamespace', 'Token claims namespace'],
-                ]}
-                onSubmit={(form) =>
-                  updateMutation.mutate(
-                    parseForm(updateApiResourceRequestSchema, {
-                      ...form,
-                      tokenClaimsNamespace: nullableString(form.tokenClaimsNamespace ?? ''),
-                    }),
-                  )
-                }
-                pending={updateMutation.isPending}
-              />
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  disabled={updateMutation.isPending}
-                  onClick={() => updateMutation.mutate({ enabled: !resource.enabled })}
-                  type="button"
-                  variant="secondary"
-                >
-                  {resource.enabled ? 'Disable' : 'Enable'}
-                </Button>
-                <Button
-                  disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate()}
-                  type="button"
-                  variant="danger"
-                >
-                  <Trash2 data-icon="inline-start" />
-                  Delete resource
-                </Button>
-              </div>
-              <MutationError error={deleteMutation.error} />
-            </CardContent>
-          </Card>
+        <div className="consoleDetailStack">
+          <a className="consoleBackLink" href="/console/api-resources">
+            <Undo2 data-icon="inline-start" />
+            Back to API resources
+          </a>
+          <ObjectHeader
+            badge={resource.enabled ? 'Enabled' : 'Disabled'}
+            id={resource.identifier}
+            title={resource.name}
+          />
+          <DetailTabs
+            label="API resource detail sections"
+            onChange={(value) => {
+              const next = value as ApiResourceDetailSection
+              setSelectedTab(next)
+              navigateConsoleTab(navigate, `/console/api-resources/${resourceId}/${next}`)
+            }}
+            tabs={apiResourceDetailTabs()}
+            value={selectedTab}
+          />
+          <div className="grid gap-4 xl:grid-cols-2">
+            {selectedTab === 'settings' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Resource settings</CardTitle>
+                  <CardDescription>
+                    Audience is emitted into authorization claims for matching OAuth resource requests.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AuthorizationForm
+                    buttonLabel="Save resource"
+                    defaults={{
+                      identifier: resource.identifier,
+                      name: resource.name,
+                      audience: resource.audience,
+                      description: resource.description ?? '',
+                      tokenClaimsNamespace: resource.tokenClaimsNamespace ?? '',
+                    }}
+                    error={updateMutation.error}
+                    fields={[
+                      ['identifier', 'Identifier'],
+                      ['name', 'Name'],
+                      ['audience', 'Audience'],
+                      ['description', 'Description'],
+                      ['tokenClaimsNamespace', 'Token claims namespace'],
+                    ]}
+                    onSubmit={(form) =>
+                      updateMutation.mutate(
+                        parseForm(updateApiResourceRequestSchema, {
+                          ...form,
+                          tokenClaimsNamespace: nullableString(form.tokenClaimsNamespace ?? ''),
+                        }),
+                      )
+                    }
+                    pending={updateMutation.isPending}
+                  />
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      disabled={updateMutation.isPending}
+                      onClick={() => updateMutation.mutate({ enabled: !resource.enabled })}
+                      type="button"
+                      variant="secondary"
+                    >
+                      {resource.enabled ? 'Disable' : 'Enable'}
+                    </Button>
+                    <Button
+                      disabled={deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate()}
+                      type="button"
+                      variant="danger"
+                    >
+                      <Trash2 data-icon="inline-start" />
+                      Delete resource
+                    </Button>
+                  </div>
+                  <MutationError error={deleteMutation.error} />
+                </CardContent>
+              </Card>
+            ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Scopes</CardTitle>
-              <CardDescription>
-                Scopes become OAuth scope strings and can also drive token claim inclusion.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <AuthorizationForm
-                buttonLabel="Create scope"
-                defaults={{ value: '', description: '', tokenClaimName: '' }}
-                error={createScopeMutation.error}
-                fields={[
-                  ['value', 'Value'],
-                  ['description', 'Description'],
-                  ['tokenClaimName', 'Token claim name'],
-                ]}
-                onSubmit={(form) => createScopeMutation.mutate(parseForm(createApiScopeRequestSchema, form))}
-                pending={createScopeMutation.isPending}
-              />
-              <AuthorizationRows
-                empty="No scopes yet."
-                rows={scopesQuery.data?.scopes.map((scope) => ({
-                  id: scope.id,
-                  title: scope.value,
-                  detail: scope.description ?? 'No description',
-                  defaults: {
-                    value: scope.value,
-                    description: scope.description ?? '',
-                    tokenClaimName: scope.tokenClaimName ?? '',
-                  },
-                  fields: [
-                    ['value', 'Value'],
-                    ['description', 'Description'],
-                    ['tokenClaimName', 'Token claim name'],
-                  ],
-                  onDelete: () => deleteScopeMutation.mutate(scope.id),
-                  onEdit: (form) =>
-                    updateScopeMutation.mutate({ id: scope.id, input: parseForm(updateApiScopeRequestSchema, form) }),
-                }))}
-              />
-              <MutationError error={updateScopeMutation.error ?? deleteScopeMutation.error} />
-            </CardContent>
-          </Card>
+            {selectedTab === 'scopes' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Scopes</CardTitle>
+                  <CardDescription>
+                    Scopes become OAuth scope strings and can also drive token claim inclusion.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                  <AuthorizationForm
+                    buttonLabel="Create scope"
+                    defaults={{ value: '', description: '', tokenClaimName: '' }}
+                    error={createScopeMutation.error}
+                    fields={[
+                      ['value', 'Value'],
+                      ['description', 'Description'],
+                      ['tokenClaimName', 'Token claim name'],
+                    ]}
+                    onSubmit={(form) => createScopeMutation.mutate(parseForm(createApiScopeRequestSchema, form))}
+                    pending={createScopeMutation.isPending}
+                  />
+                  <AuthorizationRows
+                    empty="No scopes yet."
+                    rows={scopesQuery.data?.scopes.map((scope) => ({
+                      id: scope.id,
+                      title: scope.value,
+                      detail: scope.description ?? 'No description',
+                      defaults: {
+                        value: scope.value,
+                        description: scope.description ?? '',
+                        tokenClaimName: scope.tokenClaimName ?? '',
+                      },
+                      fields: [
+                        ['value', 'Value'],
+                        ['description', 'Description'],
+                        ['tokenClaimName', 'Token claim name'],
+                      ],
+                      onDelete: () => deleteScopeMutation.mutate(scope.id),
+                      onEdit: (form) =>
+                        updateScopeMutation.mutate({
+                          id: scope.id,
+                          input: parseForm(updateApiScopeRequestSchema, form),
+                        }),
+                    }))}
+                  />
+                  <MutationError error={updateScopeMutation.error ?? deleteScopeMutation.error} />
+                </CardContent>
+              </Card>
+            ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Permissions</CardTitle>
-              <CardDescription>
-                Permissions are assigned to roles and emitted through authorization claims.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <AuthorizationForm
-                buttonLabel="Create permission"
-                defaults={{ key: '', description: '', tokenClaimValue: '', scopeId: '' }}
-                error={createPermissionMutation.error}
-                fields={[
-                  ['key', 'Key'],
-                  ['description', 'Description'],
-                  ['scopeId', 'Scope ID'],
-                  ['tokenClaimValue', 'Token claim value'],
-                ]}
-                onSubmit={(form) => createPermissionMutation.mutate(parseForm(createApiPermissionRequestSchema, form))}
-                pending={createPermissionMutation.isPending}
-              />
-              <AuthorizationRows
-                empty="No permissions yet."
-                rows={permissionsQuery.data?.permissions.map((permission) => ({
-                  id: permission.id,
-                  title: permission.key,
-                  detail: permission.description ?? permission.scopeId ?? 'No description',
-                  defaults: {
-                    key: permission.key,
-                    description: permission.description ?? '',
-                    scopeId: permission.scopeId ?? '',
-                    tokenClaimValue: permission.tokenClaimValue ?? '',
-                  },
-                  fields: [
-                    ['key', 'Key'],
-                    ['description', 'Description'],
-                    ['scopeId', 'Scope ID'],
-                    ['tokenClaimValue', 'Token claim value'],
-                  ],
-                  onDelete: () => deletePermissionMutation.mutate(permission.id),
-                  onEdit: (form) =>
-                    updatePermissionMutation.mutate({
+            {selectedTab === 'permissions' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Permissions</CardTitle>
+                  <CardDescription>
+                    Permissions are assigned to roles and emitted through authorization claims.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                  <AuthorizationForm
+                    buttonLabel="Create permission"
+                    defaults={{ key: '', description: '', tokenClaimValue: '', scopeId: '' }}
+                    error={createPermissionMutation.error}
+                    fields={[
+                      ['key', 'Key'],
+                      ['description', 'Description'],
+                      ['scopeId', 'Scope ID'],
+                      ['tokenClaimValue', 'Token claim value'],
+                    ]}
+                    onSubmit={(form) =>
+                      createPermissionMutation.mutate(parseForm(createApiPermissionRequestSchema, form))
+                    }
+                    pending={createPermissionMutation.isPending}
+                  />
+                  <AuthorizationRows
+                    empty="No permissions yet."
+                    rows={permissionsQuery.data?.permissions.map((permission) => ({
                       id: permission.id,
-                      input: parseForm(updateApiPermissionRequestSchema, form),
-                    }),
-                }))}
-              />
-              <MutationError error={updatePermissionMutation.error ?? deletePermissionMutation.error} />
-            </CardContent>
-          </Card>
+                      title: permission.key,
+                      detail: permission.description ?? permission.scopeId ?? 'No description',
+                      defaults: {
+                        key: permission.key,
+                        description: permission.description ?? '',
+                        scopeId: permission.scopeId ?? '',
+                        tokenClaimValue: permission.tokenClaimValue ?? '',
+                      },
+                      fields: [
+                        ['key', 'Key'],
+                        ['description', 'Description'],
+                        ['scopeId', 'Scope ID'],
+                        ['tokenClaimValue', 'Token claim value'],
+                      ],
+                      onDelete: () => deletePermissionMutation.mutate(permission.id),
+                      onEdit: (form) =>
+                        updatePermissionMutation.mutate({
+                          id: permission.id,
+                          input: parseForm(updateApiPermissionRequestSchema, form),
+                        }),
+                    }))}
+                  />
+                  <MutationError error={updatePermissionMutation.error ?? deletePermissionMutation.error} />
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </ResourcePage>
@@ -4191,8 +4326,13 @@ export function ConsolePlaceholderPage({
   )
 }
 
-export function OrganizationTemplatePage() {
-  const [tab, setTab] = useState('roles')
+export function OrganizationTemplatePage({
+  section = 'organization-roles',
+}: {
+  section?: OrganizationTemplateSection
+}) {
+  const navigate = useNavigate()
+  const [tab, setTab] = useState<OrganizationTemplateSection>(section)
   const [roleSearch, setRoleSearch] = useState('')
   const rolesQuery = useQuery({ queryKey: adminQueryKeys.roles, queryFn: listRoles })
   const organizationRoles = rolesQuery.data?.roles.filter(
@@ -4202,6 +4342,7 @@ export function OrganizationTemplatePage() {
         value.toLowerCase().includes(roleSearch.trim().toLowerCase()),
       ),
   )
+  useEffect(() => setTab(section), [section])
 
   return (
     <ResourcePage
@@ -4212,12 +4353,20 @@ export function OrganizationTemplatePage() {
       loading={rolesQuery.isLoading}
       onRetry={() => rolesQuery.refetch()}
     >
-      <Tabs className="grid gap-4" setValue={setTab} value={tab}>
+      <Tabs
+        className="grid gap-4"
+        setValue={(value) => {
+          const next = value as OrganizationTemplateSection
+          setTab(next)
+          navigateConsoleTab(navigate, `/console/organization-template/${next}`)
+        }}
+        value={tab}
+      >
         <TabsList aria-label="Organization template sections">
-          <TabsTrigger value="roles">Organization roles</TabsTrigger>
-          <TabsTrigger value="permissions">Organization permissions</TabsTrigger>
+          <TabsTrigger value="organization-roles">Organization roles</TabsTrigger>
+          <TabsTrigger value="organization-permissions">Organization permissions</TabsTrigger>
         </TabsList>
-        <TabsContent value="roles">
+        <TabsContent value="organization-roles">
           <Card>
             <CardHeader>
               <CardTitle>Organization roles</CardTitle>
@@ -4262,7 +4411,7 @@ export function OrganizationTemplatePage() {
             </CardContent>
           </Card>
         </TabsContent>
-        <TabsContent value="permissions">
+        <TabsContent value="organization-permissions">
           <Card>
             <CardHeader>
               <CardTitle>Organization permissions</CardTitle>
@@ -4326,11 +4475,16 @@ export function CustomizeJwtPage() {
   )
 }
 
-export function WebhooksPage() {
+export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSection }) {
+  const navigate = useNavigate()
+  const [selectedTab, setSelectedTab] = useState<WebhooksSection>(section)
+  useEffect(() => setSelectedTab(section), [section])
+
   return (
     <ResourcePage
       title="Webhooks"
       description="Prepare event endpoint configuration. Delivery workers and persistence are not available in this build."
+      framed={false}
       action={
         <Button disabled type="button">
           <Plus data-icon="inline-start" />
@@ -4349,23 +4503,95 @@ export function WebhooksPage() {
         </div>
       }
     >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Endpoint</TableHead>
-            <TableHead>Events</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Last delivery</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableEmptyRow
-            colSpan={4}
-            description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
-            title="Webhook delivery unavailable"
-          />
-        </TableBody>
-      </Table>
+      <div className="consoleDetailStack">
+        <DetailTabs
+          label="Webhook sections"
+          onChange={(value) => {
+            const next = value as WebhooksSection
+            setSelectedTab(next)
+            navigateConsoleTab(navigate, `/console/webhooks/${next}`)
+          }}
+          tabs={webhooksTabs()}
+          value={selectedTab}
+        />
+        {selectedTab === 'endpoints' ? (
+          <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Create endpoint</CardTitle>
+                <CardDescription>Endpoint creation is disabled until webhook delivery storage exists.</CardDescription>
+              </CardHeader>
+              <CardContent className="formStack">
+                <Field label="Endpoint URL">
+                  <TextInput disabled placeholder="https://example.com/webhooks/auth" type="url" />
+                </Field>
+                <Field label="Events">
+                  <TextInput disabled placeholder="user.created, session.revoked" />
+                </Field>
+                <Field label="Signing secret">
+                  <TextInput disabled placeholder="Generated when endpoint creation is supported" />
+                </Field>
+                <Button disabled type="button" variant="secondary">
+                  <Plus data-icon="inline-start" />
+                  Create endpoint
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Endpoints</CardTitle>
+                <CardDescription>Endpoint rows appear here after webhook delivery storage exists.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Endpoint</TableHead>
+                      <TableHead>Events</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableEmptyRow
+                      colSpan={4}
+                      description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
+                      title="Webhook delivery unavailable"
+                    />
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
+        {selectedTab === 'requests' ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent requests</CardTitle>
+              <CardDescription>Delivery request persistence is not available in this build.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Request</TableHead>
+                    <TableHead>Endpoint</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableEmptyRow
+                    colSpan={4}
+                    description="Webhook request views will show signed delivery attempts after endpoint persistence and dispatch workers exist."
+                    title="No webhook requests"
+                  />
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
     </ResourcePage>
   )
 }
@@ -4516,7 +4742,6 @@ function AuthorizationForm({
   onSubmit: (form: FormState) => void
   pending: boolean
 }) {
-  const [form, setForm] = useState(defaults)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   return (
@@ -4524,9 +4749,10 @@ function AuthorizationForm({
       className="formStack"
       onSubmit={(event) => {
         event.preventDefault()
+        const submittedForm = new FormData(event.currentTarget)
         try {
           setValidationError(null)
-          onSubmit(form)
+          onSubmit(Object.fromEntries(fields.map(([name]) => [name, String(submittedForm.get(name) ?? '')])))
         } catch (submitError) {
           setValidationError(submitError instanceof Error ? submitError.message : 'Invalid form input.')
         }
@@ -4535,9 +4761,9 @@ function AuthorizationForm({
       {fields.map(([name, label]) => (
         <Field key={name} label={label}>
           <TextInput
-            onChange={(event) => setValue(setForm, name, event.target.value)}
+            defaultValue={defaults[name] ?? ''}
+            name={name}
             required={!optionalAuthorizationFieldNames.has(name) && !name.endsWith('Id')}
-            value={form[name] ?? ''}
           />
         </Field>
       ))}
@@ -4716,6 +4942,9 @@ function ResourcePage({
 function ObjectHeader({ badge, id, title }: { badge: string; id: string; title: string }) {
   return (
     <div className="objectHeader">
+      <div className="objectAvatar" aria-hidden="true">
+        {title.slice(0, 1).toUpperCase()}
+      </div>
       <div className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge variant="outline">{badge}</Badge>
@@ -4725,6 +4954,71 @@ function ObjectHeader({ badge, id, title }: { badge: string; id: string; title: 
       </div>
     </div>
   )
+}
+
+function DetailTabs({
+  label,
+  onChange,
+  tabs,
+  value,
+}: {
+  label: string
+  onChange: (value: string) => void
+  tabs: DetailTab[]
+  value: string
+}) {
+  return (
+    <Tabs setValue={onChange} value={value}>
+      <TabsList aria-label={label} className="flex w-full flex-wrap sm:inline-flex sm:w-auto">
+        {tabs.map((tab) => createElement(TabsTrigger, { key: tab.value, value: tab.value }, tab.label))}
+      </TabsList>
+    </Tabs>
+  )
+}
+
+function navigateConsoleTab(navigate: ReturnType<typeof useNavigate>, href: string) {
+  if (window.location.pathname.startsWith('/console/')) void navigate({ to: href })
+}
+
+function userDetailTabs(): DetailTab[] {
+  return [
+    { value: 'profile', label: 'Profile' },
+    { value: 'security', label: 'Security' },
+    { value: 'sessions', label: 'Sessions' },
+    { value: 'linked-accounts', label: 'Linked accounts' },
+    { value: 'applications', label: 'Applications' },
+    { value: 'operations', label: 'Operations' },
+  ]
+}
+
+function organizationDetailTabs(): DetailTab[] {
+  return [
+    { value: 'settings', label: 'Settings' },
+    { value: 'authorization', label: 'Authorization' },
+  ]
+}
+
+function roleDetailTabs(): DetailTab[] {
+  return [
+    { value: 'settings', label: 'Settings' },
+    { value: 'permissions', label: 'Permissions' },
+    { value: 'assignments', label: 'Assignments' },
+  ]
+}
+
+function apiResourceDetailTabs(): DetailTab[] {
+  return [
+    { value: 'settings', label: 'Settings' },
+    { value: 'scopes', label: 'Scopes' },
+    { value: 'permissions', label: 'Permissions' },
+  ]
+}
+
+function webhooksTabs(): DetailTab[] {
+  return [
+    { value: 'endpoints', label: 'Endpoints' },
+    { value: 'requests', label: 'Requests' },
+  ]
 }
 
 function MetricCard({

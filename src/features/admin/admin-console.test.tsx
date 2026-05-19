@@ -9,6 +9,7 @@ import {
   AdminOnboardingPage,
   ApiResourceDetailPage,
   ApiResourcesPage,
+  ApplicationDetailPage,
   ApplicationsPage,
   AuditLogsPage,
   BrandingPage,
@@ -58,7 +59,7 @@ describe('admin console', () => {
       if (url === '/api/management/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
-      if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url.startsWith('/api/management/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/management/api-resources') {
         return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
       }
@@ -472,7 +473,9 @@ describe('admin console', () => {
         'Organization roles',
       ],
       ['/console/customize-jwt', '/console/customize-jwt', 'Custom JWT'],
-      ['/console/webhooks', '/console/webhooks', 'Webhooks'],
+      ['/console/webhooks', '/console/webhooks/endpoints', 'Webhooks'],
+      ['/console/webhooks/endpoints', '/console/webhooks/endpoints', 'Webhooks'],
+      ['/console/webhooks/requests', '/console/webhooks/requests', 'Webhooks'],
       ['/console/audit-logs', '/console/audit-logs', 'Audit logs'],
       ['/console/tenant-settings', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
       ['/console/tenant-settings/oidc-configs', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
@@ -521,7 +524,7 @@ describe('admin console', () => {
       ['/admin/connectors', '/console/connectors/passwordless', 'Passwordless connectors'],
       ['/admin/security', '/console/security/password-policy', 'Security'],
       ['/admin/deployment', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
-      ['/admin/applications/app-1', '/console/applications/app-1', 'Customer portal'],
+      ['/admin/applications/app-1', '/console/applications/app-1/settings', 'Customer portal'],
     ] as const) {
       window.history.pushState(null, '', path)
       render(<AppRouter />)
@@ -572,12 +575,35 @@ describe('admin console', () => {
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
+      if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
+      if (url === '/api/management/applications/app-1/client-secrets') {
+        return Promise.resolve(jsonResponse({ secrets: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/users/user-1') {
+        return Promise.resolve(jsonResponse({ user: { ...profile, role: 'admin', banned: false } }))
+      }
+      if (url.startsWith('/api/management/users/user-1/sessions')) {
+        return Promise.resolve(jsonResponse({ sessions: [adminSession], pagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+        return Promise.resolve(jsonResponse({ accounts: [linkedAccount], pagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/applications')) {
+        return Promise.resolve(jsonResponse({ applications: [userApplication], pagination }))
+      }
+      if (url === '/api/management/users/user-1/security') {
+        return Promise.resolve(jsonResponse({ security: adminSecurity }))
+      }
+      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+        return Promise.resolve(jsonResponse({ passkeys: [adminPasskey], pagination }))
+      }
       if (url === '/api/management/roles/role-1') {
         return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
       }
       if (url === '/api/management/roles/role-1/permissions') {
         return Promise.resolve(jsonResponse({ permissions: [apiPermission] }))
       }
+      if (url.startsWith('/api/management/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/management/api-resources') {
         return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
       }
@@ -596,7 +622,7 @@ describe('admin console', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/console/roles/role-1')
+    expect(window.location.pathname).toBe('/console/roles/role-1/settings')
 
     cleanup()
     queryClient.clear()
@@ -604,7 +630,7 @@ describe('admin console', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/console/api-resources/resource-1')
+    expect(window.location.pathname).toBe('/console/api-resources/resource-1/settings')
 
     cleanup()
     queryClient.clear()
@@ -612,7 +638,114 @@ describe('admin console', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/console/organizations/org-1')
+    expect(window.location.pathname).toBe('/console/organizations/org-1/settings')
+
+    for (const scenario of [
+      {
+        path: '/console/applications/app-1/branding',
+        heading: 'Customer portal',
+        tab: 'Branding',
+        text: 'Application branding',
+        nextTab: 'Settings',
+        nextPath: '/console/applications/app-1/settings',
+        nextText: 'General settings',
+      },
+      {
+        path: '/console/users/user-1/security',
+        heading: 'Jane Stone',
+        tab: 'Security',
+        text: 'MFA and passkeys',
+        nextTab: 'Sessions',
+        nextPath: '/console/users/user-1/sessions',
+        nextText: 'Sessions',
+      },
+      {
+        path: '/console/users/user-1/applications',
+        heading: 'Jane Stone',
+        tab: 'Applications',
+        text: 'Authorized applications',
+        nextTab: 'Linked accounts',
+        nextPath: '/console/users/user-1/linked-accounts',
+        nextText: 'Linked accounts',
+      },
+      {
+        path: '/console/organizations/org-1/authorization',
+        heading: 'Acme',
+        tab: 'Authorization',
+        text: 'Authorization model',
+        nextTab: 'Settings',
+        nextPath: '/console/organizations/org-1/settings',
+        nextText: 'General',
+      },
+      {
+        path: '/console/roles/role-1/permissions',
+        heading: 'Admin',
+        tab: 'Permissions',
+        text: 'Permission assignment',
+        nextTab: 'Assignments',
+        nextPath: '/console/roles/role-1/assignments',
+        nextText: 'Assign role',
+      },
+      {
+        path: '/console/roles/role-1/assignments',
+        heading: 'Admin',
+        tab: 'Assignments',
+        text: 'Assignments',
+        nextTab: 'Settings',
+        nextPath: '/console/roles/role-1/settings',
+        nextText: 'Role settings',
+      },
+      {
+        path: '/console/api-resources/resource-1/scopes',
+        heading: 'Management API',
+        tab: 'Scopes',
+        text: 'Create scope',
+        nextTab: 'Permissions',
+        nextPath: '/console/api-resources/resource-1/permissions',
+        nextText: 'Create permission',
+      },
+      {
+        path: '/console/api-resources/resource-1/permissions',
+        heading: 'Management API',
+        tab: 'Permissions',
+        text: 'Create permission',
+        nextTab: 'Settings',
+        nextPath: '/console/api-resources/resource-1/settings',
+        nextText: 'Resource settings',
+      },
+      {
+        path: '/console/organization-template/organization-permissions',
+        heading: 'Organization template',
+        tab: 'Organization permissions',
+        text: 'Permission templates use API resources',
+        nextTab: 'Organization roles',
+        nextPath: '/console/organization-template/organization-roles',
+        nextText: 'Admin',
+      },
+      {
+        path: '/console/webhooks/requests',
+        heading: 'Webhooks',
+        tab: 'Requests',
+        text: 'No webhook requests',
+        nextTab: 'Endpoints',
+        nextPath: '/console/webhooks/endpoints',
+        nextText: 'Webhook delivery unavailable',
+      },
+    ] as const) {
+      cleanup()
+      queryClient.clear()
+      window.history.pushState(null, '', scenario.path)
+      render(<AppRouter />)
+
+      expect(await screen.findByRole('heading', { name: scenario.heading })).toBeTruthy()
+      expect((await screen.findByRole('tab', { name: scenario.tab })).getAttribute('aria-selected')).toBe('true')
+      expect((await screen.findAllByText(scenario.text)).length).toBeGreaterThan(0)
+      expect(window.location.pathname).toBe(scenario.path)
+
+      fireEvent.click(screen.getByRole('tab', { name: scenario.nextTab }))
+      await waitFor(() => expect(window.location.pathname).toBe(scenario.nextPath))
+      expect((await screen.findAllByText(scenario.nextText)).length).toBeGreaterThan(0)
+    }
   })
 
   it('surfaces non-auth admin readiness errors instead of converting them to sign-in redirects', async () => {
@@ -860,6 +993,35 @@ describe('admin console', () => {
     resolveCreate(jsonResponse(application, 201))
   })
 
+  it('uploads third-party application logos through the applications list', async () => {
+    const requests: Array<{ url: string; body: string }> = []
+    const thirdPartyApplication = { ...application, id: 'app-2', firstParty: false, name: 'Partner app' }
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/applications/app-2/logo' && init?.method === 'POST') {
+        requests.push({ url, body: init.body instanceof FormData ? '[form-data]' : String(init.body) })
+        return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
+      }
+      if (url === '/api/management/applications') {
+        return Promise.resolve(jsonResponse({ applications: [application, thirdPartyApplication], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ApplicationsPage />)
+
+    expect(await screen.findByText('Customer portal')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Third-party apps' }))
+    expect(await screen.findByText('Partner app')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Upload logo for Partner app'), {
+      target: { files: [new File(['logo'], 'partner.png', { type: 'image/png' })] },
+    })
+
+    await waitFor(() =>
+      expect(requests).toEqual([{ url: '/api/management/applications/app-2/logo', body: '[form-data]' }]),
+    )
+  })
+
   it('renders application detail lifecycle, redirect URI, and integration controls', async () => {
     const requests: Array<{ url: string; body: unknown; method: string }> = []
     const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
@@ -1052,6 +1214,40 @@ describe('admin console', () => {
     expect(await screen.findByText('fas_rotated_secret')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByText('fas_rotated_secret')).toBeNull())
+  })
+
+  it('retries application detail loading failures', async () => {
+    const requests: string[] = []
+    let detailAttempts = 0
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requests.push(url)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/applications/app-1') {
+        detailAttempts += 1
+        if (detailAttempts === 1) {
+          return Promise.resolve(jsonResponse({ error: { message: 'Application unavailable.' } }, 503))
+        }
+        return Promise.resolve(jsonResponse(application))
+      }
+      if (url === '/api/management/applications/app-1/client-secrets') {
+        return Promise.resolve(jsonResponse({ secrets: [], pagination: emptyPagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" />)
+
+    expect(await screen.findByText('Application unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
+    expect(requests.filter((url) => url === '/api/management/applications/app-1')).toHaveLength(2)
   })
 
   it('renders application detail mutation errors at the operation boundary', async () => {
@@ -1369,7 +1565,11 @@ describe('admin console', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/console/users/user-1/profile')
+    expect(screen.getByRole('tab', { name: 'Profile' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.click(screen.getByRole('tab', { name: 'Security' }))
     expect(screen.getByText('MFA and passkeys')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
     expect(await screen.findByRole('button', { name: 'Send password reset' })).toBeTruthy()
     expect(fetches.map((entry) => entry.url)).toEqual(
       expect.arrayContaining([
@@ -1382,22 +1582,27 @@ describe('admin console', () => {
       ]),
     )
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Profile' }))
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Jane Q. Stone' } })
     fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'user' } })
     fireEvent.change(screen.getByLabelText('Email verification'), { target: { value: 'false' } })
     fireEvent.submit(screen.getByRole('button', { name: 'Save profile' }).closest('form')!)
     await waitFor(() => expect(requests).toHaveLength(1))
+    fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
     fireEvent.click(screen.getByRole('button', { name: 'Send password reset' }))
     await waitFor(() => expect(requests).toHaveLength(2))
+    fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
     fireEvent.click(screen.getByRole('button', { name: /^Revoke$/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke session' }))
     await waitFor(() => expect(requests).toHaveLength(3))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke all' }))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke sessions' }))
     await waitFor(() => expect(requests).toHaveLength(4))
+    fireEvent.click(screen.getByRole('tab', { name: 'Security' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete passkey' }))
     await waitFor(() => expect(requests).toHaveLength(5))
+    fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'abuse' } })
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' }).at(-1)!)
@@ -1501,7 +1706,9 @@ describe('admin console', () => {
     window.history.pushState(null, '', '/console/users/user-1')
     render(<AppRouter />)
 
-    expect(await screen.findByText('abuse')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
+    expect(screen.getByText('abuse')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Unban user' }))
     await waitFor(() =>
       expect(requests).toContainEqual({ method: 'DELETE', url: '/api/management/users/user-1/ban', body: null }),
@@ -1562,12 +1769,15 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke all' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: /^Revoke$/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Security' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
@@ -1645,13 +1855,16 @@ describe('admin console', () => {
 
     expect(await screen.findByRole('heading', { name: 'user-1' })).toBeTruthy()
     expect(screen.getByText('Multiple roles: admin, support')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save profile' }).closest('form')?.noValidate).toBe(true)
+    fireEvent.click(screen.getByRole('tab', { name: 'Security' }))
     expect(screen.getAllByText('Disabled')).toHaveLength(2)
     expect(screen.getByText('sms')).toBeTruthy()
     expect(screen.getByText('passkey-1')).toBeTruthy()
     expect(screen.getByText(/not backed up/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
     expect(screen.getByText(/Unknown IP/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Save profile' }).closest('form')?.noValidate).toBe(true)
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' }).at(-1)!)
     await waitFor(() => {
@@ -2967,8 +3180,7 @@ describe('admin console', () => {
     renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
 
     expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
-    expect(screen.getByText('Organization ID')).toBeTruthy()
-    expect(screen.getByText('Members and invitations')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected')).toBe('true')
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Acme Updated' } })
     fireEvent.change(screen.getByLabelText('Disabled reason'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save organization' }))
@@ -2984,6 +3196,9 @@ describe('admin console', () => {
         },
       })
     })
+    fireEvent.click(screen.getByRole('tab', { name: 'Authorization' }))
+    expect(screen.getByText('Organization ID')).toBeTruthy()
+    expect(screen.getByText('Members and invitations')).toBeTruthy()
   })
 
   it('searches organization template roles and opens permission guidance', async () => {
@@ -3146,6 +3361,7 @@ describe('admin console', () => {
         body: { enabled: false },
       }),
     )
+    fireEvent.click(screen.getByRole('tab', { name: 'Scopes' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), { target: { value: 'orders:write' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create scope' }))
     await waitFor(() =>
@@ -3155,6 +3371,7 @@ describe('admin console', () => {
         body: { value: 'orders:write' },
       }),
     )
+    fireEvent.click(screen.getByRole('tab', { name: 'Permissions' }))
     fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'orders.write' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create permission' }))
     await waitFor(() =>
@@ -3164,6 +3381,7 @@ describe('admin console', () => {
         body: { key: 'orders.write' },
       }),
     )
+    fireEvent.click(screen.getByRole('tab', { name: 'Scopes' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]!)
     fireEvent.click(screen.getAllByRole('button', { name: 'Save' }).at(-1)!)
     await waitFor(() =>
@@ -3181,6 +3399,7 @@ describe('admin console', () => {
         body: null,
       }),
     )
+    fireEvent.click(screen.getByRole('tab', { name: 'Permissions' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Edit' }).at(-1)!)
     fireEvent.click(screen.getAllByRole('button', { name: 'Save' }).at(-1)!)
     await waitFor(() =>
@@ -3205,7 +3424,7 @@ describe('admin console', () => {
     )
 
     unmount()
-    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+    renderWithQuery(<RoleDetailPage roleId="role-1" section="permissions" />)
 
     expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
     await waitFor(() => expect(screen.getByText('orders.read')).toBeTruthy())
@@ -3218,6 +3437,7 @@ describe('admin console', () => {
         body: { permissionIds: ['permission-1'] },
       }),
     )
+    fireEvent.click(screen.getByRole('tab', { name: 'Assignments' }))
     fireEvent.change(screen.getByLabelText('Subject ID'), { target: { value: 'user-1' } })
     fireEvent.change(screen.getByLabelText('Token claims JSON'), { target: { value: 'not-json' } })
     fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
@@ -3415,14 +3635,17 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+    const { unmount } = renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="scopes" />)
 
     expect(await screen.findByText('No scopes yet.')).toBeTruthy()
-    expect(screen.getByText('No permissions yet.')).toBeTruthy()
 
     fireEvent.submit(screen.getByRole('button', { name: 'Create scope' }).closest('form')!)
 
     expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
+    unmount()
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="permissions" />)
+
+    expect(await screen.findByText('No permissions yet.')).toBeTruthy()
   })
 
   it('retries authorization detail loading failures', async () => {
@@ -3465,6 +3688,32 @@ describe('admin console', () => {
     )
   })
 
+  it('retries organization and organization-template detail loading failures', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requests.push(url)
+      if (url === '/api/management/organizations/org-1') {
+        return Promise.resolve(jsonResponse({ error: 'Organization unavailable.' }, 503))
+      }
+      if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ error: 'Roles unavailable.' }, 503))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
+
+    expect(await screen.findByText('Organization unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/organizations/org-1').length).toBe(2))
+
+    unmount()
+    renderWithQuery(<OrganizationTemplatePage />)
+
+    expect(await screen.findByText('Roles unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/roles').length).toBe(2))
+  })
+
   it('loads role permissions after selecting an API resource on a global role', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
@@ -3481,7 +3730,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+    renderWithQuery(<RoleDetailPage roleId="role-1" section="permissions" />)
 
     expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('API resource'), { target: { value: 'resource-1' } })
@@ -3511,7 +3760,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+    renderWithQuery(<RoleDetailPage roleId="role-1" section="permissions" />)
 
     expect(await screen.findByText('orders.read')).toBeTruthy()
     fireEvent.click(screen.getByRole('checkbox'))
@@ -3547,7 +3796,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+    renderWithQuery(<RoleDetailPage roleId="role-1" section="permissions" />)
 
     expect(await screen.findByRole('checkbox')).toHaveProperty('checked', true)
     fireEvent.click(screen.getByRole('checkbox'))
@@ -3775,7 +4024,7 @@ describe('admin console', () => {
 
       expect(await screen.findByRole('heading', { name: page.heading })).toBeTruthy()
       expect(await screen.findByLabelText(page.searchLabel)).toBeTruthy()
-      if (page.action) expect(screen.getByRole('button', { name: page.action })).toBeTruthy()
+      if (page.action) expect(screen.getAllByRole('button', { name: page.action }).length).toBeGreaterThan(0)
 
       cleanup()
       queryClient.clear()

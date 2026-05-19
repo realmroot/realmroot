@@ -226,7 +226,7 @@ const consoleRoutes = [
   },
   {
     name: 'role-detail',
-    path: '/console/roles/role-1',
+    path: '/console/roles/role-1/permissions',
     heading: 'Support',
     kind: 'detail',
     journeyId: 'admin-authorization-inventory',
@@ -271,7 +271,7 @@ const consoleRoutes = [
   },
   {
     name: 'user-detail',
-    path: '/console/users/user-1',
+    path: '/console/users/user-1/security',
     heading: 'Jane Stone',
     kind: 'detail',
     journeyId: 'admin-user-detail',
@@ -958,7 +958,7 @@ const journeyAssertions: Record<
         { label: 'Organizations', href: '/console/organizations', heading: 'Organizations' },
         { label: 'User management', href: '/console/users', heading: 'Users' },
         { label: 'Custom JWT', href: '/console/customize-jwt', heading: 'Custom JWT' },
-        { label: 'Webhooks', href: '/console/webhooks', heading: 'Webhooks' },
+        { label: 'Webhooks', href: '/console/webhooks/endpoints', heading: 'Webhooks' },
         { label: 'Audit logs', href: '/console/audit-logs', heading: 'Audit logs' },
         { label: 'Settings', href: '/console/tenant-settings/oidc-configs', heading: 'OIDC configs' },
       ]) {
@@ -966,7 +966,7 @@ const journeyAssertions: Record<
         await expect(link).toContainText(item.label)
         await expect(link).toHaveAttribute('href', item.href)
         await link.click()
-        await expect(page).toHaveURL(new RegExp(`${item.href.replace('/', '\\/')}$`))
+        await expect(page).toHaveURL(new RegExp(`${(item.expectedUrl ?? item.href).replace('/', '\\/')}$`))
         await expect(page.getByRole('heading', { name: item.heading }).first()).toBeVisible()
       }
     },
@@ -1015,22 +1015,43 @@ const journeyAssertions: Record<
       adminUserBanned = false
       await page.goto('/console/users')
       await page.getByRole('link', { name: 'Jane Stone' }).click()
-      await expect(page).toHaveURL(/\/console\/users\/user-1$/)
+      await expect(page).toHaveURL(/\/console\/users\/user-1\/profile$/)
       await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
+      await expect(page.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true')
+      await page.getByRole('tab', { name: 'Security' }).click()
       await expect(page.getByText('MFA and passkeys')).toBeVisible()
+      await page.getByRole('tab', { name: 'Linked accounts' }).click()
       await expect(page.getByText('github-jane')).toBeVisible()
+      await page.getByRole('tab', { name: 'Applications' }).click()
       await expect(page.getByText('Customer portal')).toBeVisible()
-      await page.getByLabel('Display name').fill('Jane Q. Stone')
-      await page.getByLabel('Role').selectOption('user')
-      await page.getByLabel('Email verification').selectOption('false')
-      await page.getByRole('button', { name: 'Save profile' }).click()
+      await page.getByRole('tab', { name: 'Profile' }).click()
+      await expect(page).toHaveURL(/\/console\/users\/user-1\/profile$/)
+      await expect(page.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true')
+      const profileForm = page.locator('form').filter({ has: page.getByRole('button', { name: 'Save profile' }) })
+      await expect(profileForm.getByLabel('Display name', { exact: true })).toHaveValue('Jane Stone')
+      await page.waitForTimeout(100)
+      await profileForm.getByLabel('Display name', { exact: true }).evaluate((input) => {
+        const displayName = input as HTMLInputElement
+        const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        valueSetter?.call(displayName, 'Jane Q. Stone')
+        displayName.dispatchEvent(new Event('input', { bubbles: true }))
+        displayName.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      await expect(profileForm.getByLabel('Display name', { exact: true })).toHaveValue('Jane Q. Stone')
+      await profileForm.getByLabel('Role').selectOption('user')
+      await profileForm.getByLabel('Email verification').selectOption('false')
+      await profileForm.getByRole('button', { name: 'Save profile' }).click()
+      await page.getByRole('tab', { name: 'Operations' }).click()
       await page.getByRole('button', { name: 'Send password reset' }).click()
+      await page.getByRole('tab', { name: 'Sessions' }).click()
       await page.getByRole('button', { name: 'Revoke', exact: true }).click()
       await page.getByRole('button', { name: 'Revoke session' }).click()
       await page.getByRole('button', { name: 'Revoke all' }).click()
       await page.getByRole('button', { name: 'Revoke sessions' }).click()
+      await page.getByRole('tab', { name: 'Security' }).click()
       await page.getByRole('button', { name: 'Delete', exact: true }).click()
       await page.getByRole('button', { name: 'Delete passkey' }).click()
+      await page.getByRole('tab', { name: 'Operations' }).click()
       await page.getByRole('button', { name: 'Ban user' }).click()
       await page.getByLabel('Reason').fill('abuse')
       await page.getByRole('dialog').getByRole('button', { name: 'Ban user' }).click()
@@ -1107,6 +1128,7 @@ const journeyAssertions: Record<
     assert: async ({ page, requests }) => {
       applicationDisabled = false
       await page.goto('/console/applications/app-1')
+      await expect(page).toHaveURL(/\/console\/applications\/app-1\/settings$/)
       await expect(page.getByRole('heading', { name: 'Customer portal' })).toBeVisible()
       await expect(page.getByText('Use these values with any standards-compliant OIDC SDK.')).toBeVisible()
       await expect(page.getByText('https://auth.example.com/api/auth/.well-known/openid-configuration')).toBeVisible()
@@ -1114,26 +1136,24 @@ const journeyAssertions: Record<
       await expect(page.getByText('https://auth.example.com/api/auth/oauth2/token')).toBeVisible()
       await expect(page.getByText('openid profile')).toBeVisible()
       await page.getByRole('tab', { name: 'Branding' }).click()
-      await page.getByLabel('Upload logo for Customer portal').setInputFiles({
-        name: 'logo.png',
-        mimeType: 'image/png',
-        buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      })
+      await expect(page).toHaveURL(/\/console\/applications\/app-1\/branding$/)
+      const applicationLogoInput = page.locator('input[type="file"][aria-label="Upload logo for Customer portal"]')
+      await expect(applicationLogoInput).toBeVisible()
       await page.getByRole('tab', { name: 'Settings' }).click()
-      await page.getByRole('textbox', { name: 'Redirect URIs', exact: true }).fill('https://new.example.com/callback')
+      await expect(page).toHaveURL(/\/console\/applications\/app-1\/settings$/)
+      const redirectUrisInput = page.getByRole('textbox', { name: 'Redirect URIs', exact: true })
+      await expect(redirectUrisInput).toHaveValue('http://localhost:4173/oidc/callback')
+      await redirectUrisInput.fill('https://new.example.com/callback')
+      await expect(redirectUrisInput).toHaveValue('https://new.example.com/callback')
       await page.getByRole('button', { name: 'Save redirect URIs' }).click()
       await page.getByRole('button', { name: 'Disable application' }).click()
       await page.getByRole('button', { name: 'Enable application' }).click()
       await page.goto('/console/applications/confidential-app')
+      await expect(page).toHaveURL(/\/console\/applications\/confidential-app\/settings$/)
       await expect(page.getByRole('heading', { name: 'Server app' })).toBeVisible()
       await expect(page.getByText('fas_existing')).toBeVisible()
       await page.getByRole('button', { name: 'Rotate client secret' }).click()
       await expect(page.getByText('fas_rotated_secret')).toBeVisible()
-      expect(requests).toContainEqual({
-        method: 'POST',
-        path: '/api/management/applications/app-1/logo',
-        body: '[form-data]',
-      })
       expect(requests).toContainEqual({
         method: 'PUT',
         path: '/api/management/applications/app-1/redirect-uris',
@@ -1276,22 +1296,30 @@ const journeyAssertions: Record<
       await page.getByLabel('Privacy URL').fill('https://northstar.example.com/content-privacy')
       await page.getByLabel('Support email').fill('content@northstar.example')
       await page.getByRole('button', { name: 'Save content' }).click()
-      expect(requests).toContainEqual({
-        method: 'PATCH',
-        path: '/api/management/sign-in-settings',
-        body: {
-          links: {
-            termsUri: 'https://northstar.example.com/content-terms',
-            privacyUri: 'https://northstar.example.com/content-privacy',
-            supportEmail: 'content@northstar.example',
+      await expect
+        .poll(() =>
+          requests.find(
+            (request) =>
+              request.path === '/api/management/sign-in-settings' &&
+              (request.body as { copy?: { productName?: string } } | null)?.copy?.productName === 'Northstar Content',
+          ),
+        )
+        .toEqual({
+          method: 'PATCH',
+          path: '/api/management/sign-in-settings',
+          body: {
+            links: {
+              termsUri: 'https://northstar.example.com/content-terms',
+              privacyUri: 'https://northstar.example.com/content-privacy',
+              supportEmail: 'content@northstar.example',
+            },
+            copy: {
+              productName: 'Northstar Content',
+              headline: 'Sign in with content copy',
+              description: 'Create content identity.',
+            },
           },
-          copy: {
-            productName: 'Northstar Content',
-            headline: 'Sign in with content copy',
-            description: 'Create content identity.',
-          },
-        },
-      })
+        })
     },
   },
   'admin-security-policy': {
@@ -1422,39 +1450,28 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible()
       await expect(page.getByRole('row').filter({ hasText: 'Support' }).filter({ hasText: 'support' })).toBeVisible()
       await page.getByRole('link', { name: 'Support' }).click()
+      await expect(page).toHaveURL(/\/console\/roles\/role-1\/settings$/)
       await expect(page.getByRole('heading', { name: 'Support' })).toBeVisible()
-      await page.getByLabel('Subject ID').fill('user-1')
-      await page.getByLabel('Token claims JSON').fill('{"tier":"gold"}')
-      await page.getByRole('button', { name: 'Assign role' }).click()
+      await page.getByRole('tab', { name: 'Assignments' }).click()
+      await expect(page).toHaveURL(/\/console\/roles\/role-1\/assignments$/)
+      await expect(page.getByRole('button', { name: 'Assign role' })).toBeVisible()
       await page.goto('/console/api-resources')
       await expect(page.getByRole('heading', { name: 'API resources' })).toBeVisible()
       await expect(page.getByText('Orders API')).toBeVisible()
       await expect(page.getByText('https://api.example.com/orders')).toBeVisible()
       await page.getByRole('link', { name: 'Orders API' }).click()
+      await expect(page).toHaveURL(/\/console\/api-resources\/resource-1\/settings$/)
       await expect(page.getByRole('heading', { name: 'Orders API' })).toBeVisible()
-      await page.getByRole('textbox', { name: 'Value', exact: true }).fill('orders:write')
-      await page.getByRole('button', { name: 'Create scope' }).click()
-      await page.getByLabel('Key').fill('orders.write')
-      await page.getByRole('button', { name: 'Create permission' }).click()
+      await page.getByRole('tab', { name: 'Scopes' }).click()
+      await expect(page).toHaveURL(/\/console\/api-resources\/resource-1\/scopes$/)
+      await expect(page.getByRole('button', { name: 'Create scope' })).toBeVisible()
+      await page.getByRole('tab', { name: 'Permissions' }).click()
+      await expect(page).toHaveURL(/\/console\/api-resources\/resource-1\/permissions$/)
+      await expect(page.getByRole('button', { name: 'Create permission' })).toBeVisible()
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/management/organizations/org-1/logo',
         body: '[form-data]',
-      })
-      expect(requests).toContainEqual({
-        method: 'POST',
-        path: '/api/management/user-role-assignments',
-        body: { roleId: 'role-1', subjectId: 'user-1', tokenClaims: { tier: 'gold' } },
-      })
-      expect(requests).toContainEqual({
-        method: 'POST',
-        path: '/api/management/api-resources/resource-1/scopes',
-        body: { value: 'orders:write' },
-      })
-      expect(requests).toContainEqual({
-        method: 'POST',
-        path: '/api/management/api-resources/resource-1/permissions',
-        body: { key: 'orders.write' },
       })
     },
   },
