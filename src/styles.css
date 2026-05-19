@@ -169,20 +169,26 @@ textarea {
   text-transform: uppercase;
 }
 
-h1,
+.shell h1,
 h2,
 h3,
 p {
   overflow-wrap: anywhere;
 }
 
-h1 {
+.shell h1 {
   max-width: 760px;
   margin: 0;
   font-size: 56px;
   line-height: 1.04;
   letter-spacing: 0;
   text-wrap: balance;
+}
+
+main:not(.shell):not(.authShell) h1 {
+  font-size: 20px;
+  line-height: 1.4;
+  letter-spacing: 0;
 }
 
 .intro {
@@ -1075,7 +1081,7 @@ h1 {
     margin: 64px auto 32px;
   }
 
-  h1 {
+  .shell h1 {
     font-size: 40px;
   }
 

@@ -34,30 +34,296 @@ const accountSections = [
   'Authorized apps',
 ] as const
 
+const hostedAuthRoutes = [
+  { name: 'hosted-sign-in', path: '/sign-in', heading: /Sign in to/ },
+  { name: 'hosted-sign-up', path: '/sign-up', heading: 'Start with your identity.' },
+  { name: 'hosted-recovery', path: '/forgot-password', heading: 'Recover your password.' },
+  { name: 'hosted-email-verification', path: '/email-verification', heading: 'Verify your email.' },
+  {
+    name: 'hosted-callback-error',
+    path: '/auth/callback?error=access_denied&error_description=Denied',
+    heading: 'Sign-in could not continue.',
+    compactAuth: true,
+  },
+  {
+    name: 'oauth-consent',
+    path: '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&response_type=code&scope=openid%20profile&state=state-1',
+    heading: 'Review application access.',
+  },
+] as const
+
+const accountRoutes = [
+  { name: 'account-home', path: '/account', heading: 'Jane Stone' },
+  { name: 'account-profile', path: '/account/profile', heading: 'Jane Stone' },
+  { name: 'account-security', path: '/account/security', heading: 'MFA' },
+  { name: 'account-linked-accounts', path: '/account/linked-accounts', heading: 'Linked social accounts' },
+  { name: 'account-sessions', path: '/account/sessions', heading: 'Sessions and devices' },
+  { name: 'account-authorized-apps', path: '/account/authorized-apps', heading: 'Authorized apps' },
+] as const
+
 const consoleRoutes = [
-  { name: 'dashboard', path: '/console', heading: 'Tenant health' },
-  { name: 'applications', path: '/console/applications', heading: 'Applications' },
+  {
+    name: 'dashboard',
+    path: '/console',
+    heading: 'Tenant health',
+    kind: 'shell',
+    journeyId: 'admin-dashboard',
+    sentinel: 'Setup progress',
+    activeNav: 'Dashboard',
+  },
+  {
+    name: 'applications',
+    path: '/console/applications',
+    heading: 'Applications',
+    kind: 'list',
+    journeyId: 'admin-application-inventory',
+    sentinel: 'client-1',
+    activeNav: 'Applications',
+  },
+  {
+    name: 'application-detail',
+    path: '/console/applications/app-1',
+    heading: 'Customer portal',
+    kind: 'detail',
+    journeyId: 'admin-application-detail',
+    sentinel: 'Use these values with any standards-compliant OIDC SDK.',
+    activeNav: 'Applications',
+  },
   {
     name: 'sign-in-experience',
     path: '/console/sign-in-experience/sign-up-and-sign-in',
     heading: 'Sign-up and sign-in',
+    kind: 'settings',
+    journeyId: 'admin-sign-in-settings',
+    sentinel: 'Sign-in methods',
+    activeNav: 'Sign-in & account',
   },
-  { name: 'mfa', path: '/console/mfa', heading: 'Multi-factor auth' },
-  { name: 'connectors', path: '/console/connectors/passwordless', heading: 'Passwordless connectors' },
-  { name: 'security', path: '/console/security/password-policy', heading: 'Security' },
-  { name: 'api-resources', path: '/console/api-resources', heading: 'API resources' },
-  { name: 'roles', path: '/console/roles', heading: 'Roles' },
+  {
+    name: 'branding',
+    path: '/console/sign-in-experience/branding',
+    heading: 'Branding',
+    kind: 'settings',
+    journeyId: 'admin-branding-settings',
+    sentinel: 'Hosted sign-in preview',
+    activeNav: 'Sign-in & account',
+  },
+  {
+    name: 'collect-profile',
+    path: '/console/sign-in-experience/collect-user-profile',
+    heading: 'Collect user profile',
+    kind: 'settings',
+    journeyId: 'admin-sign-in-experience-routes',
+    sentinel: 'Custom profile fields',
+    activeNav: 'Sign-in & account',
+  },
+  {
+    name: 'account-center-settings',
+    path: '/console/sign-in-experience/account-center',
+    heading: 'Account Center',
+    kind: 'settings',
+    journeyId: 'admin-sign-in-experience-routes',
+    sentinel: 'Account field permissions',
+    activeNav: 'Sign-in & account',
+  },
+  {
+    name: 'content-settings',
+    path: '/console/sign-in-experience/content',
+    heading: 'Content',
+    kind: 'settings',
+    journeyId: 'admin-sign-in-experience-routes',
+    sentinel: 'Language and messages',
+    activeNav: 'Sign-in & account',
+  },
+  {
+    name: 'mfa',
+    path: '/console/mfa',
+    heading: 'Multi-factor auth',
+    kind: 'settings',
+    journeyId: 'admin-security-policy',
+    sentinel: 'Policy controls',
+    activeNav: 'Multi-factor auth',
+  },
+  {
+    name: 'connectors',
+    path: '/console/connectors/passwordless',
+    heading: 'Passwordless connectors',
+    kind: 'list',
+    journeyId: 'admin-connector-inventory',
+    sentinel: 'Email connector',
+    activeNav: 'Connectors',
+  },
+  {
+    name: 'social-connectors',
+    path: '/console/connectors/social',
+    heading: 'Social connectors',
+    kind: 'list',
+    journeyId: 'admin-social-connector-inventory',
+    sentinel: 'GitHub',
+    activeNav: 'Connectors',
+  },
+  {
+    name: 'security',
+    path: '/console/security/password-policy',
+    heading: 'Security',
+    kind: 'settings',
+    journeyId: 'admin-security-policy',
+    sentinel: 'Password policy',
+    activeNav: 'Security',
+  },
+  {
+    name: 'security-captcha',
+    path: '/console/security/captcha',
+    heading: 'CAPTCHA',
+    kind: 'settings',
+    journeyId: 'admin-security-policy',
+    sentinel: 'Provider setup',
+    activeNav: 'Security',
+  },
+  {
+    name: 'security-blocklist',
+    path: '/console/security/blocklist',
+    heading: 'Blocklist',
+    kind: 'settings',
+    journeyId: 'admin-security-policy',
+    sentinel: 'Email blocklist',
+    activeNav: 'Security',
+  },
+  {
+    name: 'security-general',
+    path: '/console/security/general',
+    heading: 'General security',
+    kind: 'settings',
+    journeyId: 'admin-security-policy',
+    sentinel: 'MFA enforcement',
+    activeNav: 'Security',
+  },
+  {
+    name: 'api-resources',
+    path: '/console/api-resources',
+    heading: 'API resources',
+    kind: 'list',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'Orders API',
+    activeNav: 'API resources',
+  },
+  {
+    name: 'api-resource-detail',
+    path: '/console/api-resources/resource-1',
+    heading: 'Orders API',
+    kind: 'detail',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'Scopes',
+    activeNav: 'API resources',
+  },
+  {
+    name: 'roles',
+    path: '/console/roles',
+    heading: 'Roles',
+    kind: 'list',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'support',
+    activeNav: 'Roles',
+  },
+  {
+    name: 'role-detail',
+    path: '/console/roles/role-1',
+    heading: 'Support',
+    kind: 'detail',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'Permission assignment',
+    activeNav: 'Roles',
+  },
   {
     name: 'organization-template',
     path: '/console/organization-template/organization-roles',
-    heading: 'Organization roles',
+    heading: 'Organization template',
+    kind: 'settings',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'Organization permissions',
+    activeNav: 'Organization template',
   },
-  { name: 'organizations', path: '/console/organizations', heading: 'Organizations' },
-  { name: 'users', path: '/console/users', heading: 'Users' },
-  { name: 'custom-jwt', path: '/console/customize-jwt', heading: 'Custom JWT' },
-  { name: 'webhooks', path: '/console/webhooks', heading: 'Webhooks' },
-  { name: 'audit-logs', path: '/console/audit-logs', heading: 'Audit logs' },
-  { name: 'tenant-settings', path: '/console/tenant-settings/oidc-configs', heading: 'OIDC configs' },
+  {
+    name: 'organizations',
+    path: '/console/organizations',
+    heading: 'Organizations',
+    kind: 'list',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'Acme Inc.',
+    activeNav: 'Organizations',
+  },
+  {
+    name: 'organization-detail',
+    path: '/console/organizations/org-1',
+    heading: 'Acme',
+    kind: 'detail',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'Authorization model',
+    activeNav: 'Organizations',
+  },
+  {
+    name: 'users',
+    path: '/console/users',
+    heading: 'Users',
+    kind: 'list',
+    journeyId: 'admin-user-inventory',
+    sentinel: 'jane@example.com',
+    activeNav: 'User management',
+  },
+  {
+    name: 'user-detail',
+    path: '/console/users/user-1',
+    heading: 'Jane Stone',
+    kind: 'detail',
+    journeyId: 'admin-user-detail',
+    sentinel: 'MFA and passkeys',
+    activeNav: 'User management',
+  },
+  {
+    name: 'custom-jwt',
+    path: '/console/customize-jwt',
+    heading: 'Custom JWT',
+    kind: 'settings',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'Access token',
+    activeNav: 'Custom JWT',
+  },
+  {
+    name: 'webhooks',
+    path: '/console/webhooks',
+    heading: 'Webhooks',
+    kind: 'settings',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'Webhook delivery unavailable',
+    activeNav: 'Webhooks',
+  },
+  {
+    name: 'audit-logs',
+    path: '/console/audit-logs',
+    heading: 'Audit logs',
+    kind: 'list',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'No audit events to display',
+    activeNav: 'Audit logs',
+  },
+  {
+    name: 'tenant-settings',
+    path: '/console/tenant-settings/oidc-configs',
+    heading: 'OIDC configs',
+    kind: 'settings',
+    journeyId: 'admin-deployment-settings',
+    sentinel: 'Runtime endpoints',
+    activeNav: 'Settings',
+  },
+  {
+    name: 'console-onboarding',
+    path: '/console/onboarding',
+    heading: 'Console setup',
+    kind: 'settings',
+    journeyId: 'admin-onboarding',
+    sentinel: 'First OIDC application',
+    activeNav: null,
+    setupRequired: true,
+  },
 ] as const
 
 let firstAdminRequired = false
@@ -1278,6 +1544,7 @@ const journeyAssertions: Record<
 test('declares browser E2E journey coverage above target', () => {
   const declaredIds = journeyCoverage.journeys.map((journey) => journey.id)
   const coveredIds = Object.keys(journeyAssertions)
+  const visualJourneyIds = consoleRoutes.map((route) => route.journeyId)
   const uniqueDeclaredIds = new Set(declaredIds)
   const uniqueCoveredIds = new Set(coveredIds)
   const covered = uniqueCoveredIds.size
@@ -1294,6 +1561,8 @@ test('declares browser E2E journey coverage above target', () => {
   expect(journeyCoverage.waivers).toEqual([])
   expect(ratio).toBeGreaterThanOrEqual(journeyCoverage.target)
   expect(journeyCoverage.honoRpcSmokeJourneys).toEqual(['platform-status'])
+  expect(new Set(consoleRoutes.map((route) => route.path)).size).toBe(consoleRoutes.length)
+  expect(visualJourneyIds.every((id) => uniqueDeclaredIds.has(id))).toBe(true)
 })
 
 test('public and auth journeys', async ({ page }) => {
@@ -1318,17 +1587,21 @@ test('admin management journeys', async ({ page }) => {
 })
 
 test('admin console desktop and mobile screenshot evidence', async ({ page }, testInfo) => {
+  test.setTimeout(90_000)
+
   await mockApi(page)
 
   await page.setViewportSize({ width: 1280, height: 720 })
   for (const route of consoleRoutes) {
-    await page.goto(route.path)
-    await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible()
-    await expectConsoleDesktopDensity(page)
-    await expectNoDocumentHorizontalOverflow(page)
-    await page.screenshot({
-      fullPage: true,
-      path: testInfo.outputPath(`admin-${route.name}-1280x720.png`),
+    await test.step(`desktop 1280 ${route.name}`, async () => {
+      await gotoConsoleVisualRoute(page, route)
+      await expectConsoleRouteContent(page, route)
+      await expectConsoleDesktopDensity(page, route.kind, route.heading)
+      await expectNoDocumentHorizontalOverflow(page)
+      await page.screenshot({
+        fullPage: true,
+        path: testInfo.outputPath(`admin-${route.name}-1280x720.png`),
+      })
     })
   }
 
@@ -1338,30 +1611,38 @@ test('admin console desktop and mobile screenshot evidence', async ({ page }, te
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
 
-    for (const route of consoleRoutes.slice(0, 4)) {
-      await page.goto(route.path)
-      await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
-      if (viewport.name === 'desktop') await expectConsoleDesktopDensity(page)
-      await expectNoDocumentHorizontalOverflow(page)
-      await page.screenshot({
-        fullPage: true,
-        path: testInfo.outputPath(`admin-${route.name}-${viewport.name}.png`),
-      })
-      if (viewport.name === 'mobile' && route.name === 'dashboard') {
-        await page.getByRole('button', { name: 'Open console navigation' }).click()
-        await expect(page.getByRole('navigation', { name: 'Console mobile' })).toBeVisible()
-        await expect(page.getByRole('link', { name: /Sign-in & account/ })).toBeVisible()
+    for (const route of consoleRoutes) {
+      await test.step(`${viewport.name} ${route.name}`, async () => {
+        await gotoConsoleVisualRoute(page, route)
+        await expectConsoleRouteContent(page, route)
+        if (viewport.name === 'desktop') {
+          await expectConsoleDesktopDensity(page, route.kind, route.heading)
+        } else {
+          await expectConsoleMobileDensity(page)
+        }
+        await expectNoDocumentHorizontalOverflow(page)
         await page.screenshot({
           fullPage: true,
-          path: testInfo.outputPath('admin-dashboard-mobile-navigation.png'),
+          path: testInfo.outputPath(`admin-${route.name}-${viewport.name}.png`),
         })
-        await page.getByRole('button', { name: 'Close console navigation' }).click()
-      }
+        if (viewport.name === 'mobile' && route.name === 'dashboard') {
+          await page.getByRole('button', { name: 'Open console navigation' }).click()
+          await expect(page.getByRole('navigation', { name: 'Console mobile' })).toBeVisible()
+          await expect(page.getByRole('link', { name: /Sign-in & account/ })).toBeVisible()
+          await page.screenshot({
+            fullPage: true,
+            path: testInfo.outputPath('admin-dashboard-mobile-navigation.png'),
+          })
+          await page.getByRole('button', { name: 'Close console navigation' }).click()
+        }
+      })
     }
   }
 })
 
 test('hosted auth account and branding screenshot evidence', async ({ page }, testInfo) => {
+  test.setTimeout(60_000)
+
   await mockApi(page)
   await mockPasskeys(page)
 
@@ -1372,41 +1653,32 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
 
-    for (const route of [
-      { name: 'hosted-sign-in', path: '/sign-in', heading: /Sign in to/ },
-      { name: 'hosted-sign-up', path: '/sign-up', heading: 'Start with your identity.' },
-      { name: 'hosted-recovery', path: '/forgot-password', heading: 'Recover your password.' },
-      {
-        name: 'hosted-callback-error',
-        path: '/auth/callback?error=access_denied&error_description=Denied',
-        heading: 'Sign-in could not continue.',
-        compactAuth: true,
-      },
-      {
-        name: 'oauth-consent',
-        path: '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&response_type=code&scope=openid%20profile&state=state-1',
-        heading: 'Review application access.',
-      },
-      { name: 'account-profile', path: '/account/profile', heading: 'Jane Stone' },
-      { name: 'account-security', path: '/account/security', heading: 'MFA' },
-      { name: 'account-authorized-apps', path: '/account/authorized-apps', heading: 'Authorized apps' },
-      { name: 'admin-branding', path: '/console/sign-in-experience/branding', heading: 'Branding' },
-    ]) {
-      await page.goto(route.path)
-      await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
-      if (route.path.startsWith('/account')) await expectAccountSinglePageSections(page)
-      if (
-        route.path === '/sign-in' ||
-        route.path === '/sign-up' ||
-        route.path === '/forgot-password' ||
-        'compactAuth' in route
-      ) {
-        await expectHostedAuthCompactShell(page)
-      }
-      await expectNoDocumentHorizontalOverflow(page)
-      await page.screenshot({
-        fullPage: true,
-        path: testInfo.outputPath(`${route.name}-${viewport.name}.png`),
+    for (const route of [...hostedAuthRoutes, ...accountRoutes]) {
+      await test.step(`${viewport.name} ${route.name}`, async () => {
+        await page.goto(route.path)
+        await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
+        if (route.path.startsWith('/account')) await expectAccountSinglePageSections(page)
+        if (
+          route.path === '/sign-in' ||
+          route.path === '/sign-up' ||
+          route.path === '/forgot-password' ||
+          'compactAuth' in route
+        ) {
+          await expectHostedAuthCompactShell(page)
+        }
+        await expectInitialViewportDensity(
+          page,
+          route.path.startsWith('/account')
+            ? 'account'
+            : route.path.startsWith('/oauth') || 'compactAuth' in route
+              ? 'message'
+              : 'hosted',
+        )
+        await expectNoDocumentHorizontalOverflow(page)
+        await page.screenshot({
+          fullPage: true,
+          path: testInfo.outputPath(`${route.name}-${viewport.name}.png`),
+        })
       })
     }
 
@@ -1430,11 +1702,35 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
 })
 
 type JourneyAssertionSuite = (typeof journeyAssertions)[JourneyId]['suite']
+type ConsoleVisualRoute = (typeof consoleRoutes)[number]
+type ConsolePageKind = ConsoleVisualRoute['kind']
 
 async function runJourneySuite(suite: JourneyAssertionSuite, context: JourneyContext) {
   for (const [id, journey] of Object.entries(journeyAssertions)) {
     if (journey.suite === suite) {
       await test.step(id, () => journey.assert(context))
+    }
+  }
+}
+
+async function gotoConsoleVisualRoute(page: Page, route: ConsoleVisualRoute) {
+  const setupRequired = 'setupRequired' in route && route.setupRequired
+  adminSetupRequired = setupRequired
+  await page.goto(route.path)
+  await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`))
+}
+
+async function expectConsoleRouteContent(page: Page, route: ConsoleVisualRoute) {
+  const main = page.getByRole('main')
+  await expect(main.getByRole('heading', { name: route.heading, level: 1 })).toBeVisible()
+  await expect(main.getByText(route.sentinel, { exact: false }).first()).toBeVisible()
+  await expect(main.getByRole('heading', { level: 1 })).toHaveCount(1)
+  if (route.path !== '/console') await expect(main.getByText('Setup progress')).toHaveCount(0)
+
+  if (route.activeNav) {
+    const consoleNav = page.getByRole('navigation', { name: 'Console' })
+    if ((await consoleNav.count()) > 0) {
+      await expect(consoleNav.getByRole('link', { name: route.activeNav })).toHaveClass(/bg-primary\/10/)
     }
   }
 }
@@ -1450,20 +1746,41 @@ async function expectNoDocumentHorizontalOverflow(page: Page) {
     .toBeLessThanOrEqual(1)
 }
 
-async function expectConsoleDesktopDensity(page: Page) {
-  const metrics = await page.evaluate(() => {
+async function expectConsoleDesktopDensity(page: Page, kind: ConsolePageKind, heading: string) {
+  const metrics = await page.evaluate((expectedHeading) => {
     const header = document.querySelector('header')
     const aside = document.querySelector('aside')
-    const main = document.querySelector('main')
+    const main = Array.from(document.querySelectorAll('main')).find(
+      (element) =>
+        !element.classList.contains('shell') &&
+        !element.classList.contains('authShell') &&
+        element.querySelector('h1')?.textContent?.trim() === expectedHeading &&
+        element.getBoundingClientRect().height > 0,
+    )
     const navRows = Array.from(document.querySelectorAll('nav[aria-label="Console"] a'))
     const content = main?.firstElementChild
+    const pageHeading = main?.querySelector('h1')
+    const firstPanel = main?.querySelector('[data-ui="card"], .consoleToolbar, .objectHeader')
+    const firstTable = main?.querySelector('table')
+    const firstAction = main?.querySelector('button, a[href], input, select, textarea')
+    const controls = Array.from(
+      main?.querySelectorAll('button, a.uiButton, input:not([type="file"]):not([type="color"]), select') ?? [],
+    )
+    const nestedCards = main?.querySelectorAll('[data-ui="card"] [data-ui="card"]').length ?? 0
     if (!header || !aside || !main || !content || navRows.length === 0) return null
 
     const headerBox = header.getBoundingClientRect()
     const asideBox = aside.getBoundingClientRect()
     const mainBox = main.getBoundingClientRect()
     const contentBox = content.getBoundingClientRect()
+    const pageHeadingBox = pageHeading?.getBoundingClientRect()
+    const firstPanelBox = firstPanel?.getBoundingClientRect()
+    const firstTableBox = firstTable?.getBoundingClientRect()
+    const firstActionBox = firstAction?.getBoundingClientRect()
+    const viewportHeight = window.innerHeight
     const navRowHeights = navRows.map((row) => row.getBoundingClientRect().height)
+    const controlHeights = controls.map((control) => control.getBoundingClientRect().height)
+    const pageHeadingStyle = pageHeading ? window.getComputedStyle(pageHeading) : null
 
     return {
       topbarHeight: headerBox.height,
@@ -1471,59 +1788,148 @@ async function expectConsoleDesktopDensity(page: Page) {
       navRowHeights,
       mainStartX: mainBox.x,
       mainStartY: mainBox.y,
+      mainWidth: mainBox.width,
       contentStartX: contentBox.x,
       contentStartY: contentBox.y,
+      contentWidth: contentBox.width,
       contentInlineOffset: contentBox.x - mainBox.x,
+      contentBlockCount: content.children.length,
+      firstPanelHeight: firstPanelBox?.height ?? 0,
+      firstPanelTop: firstPanelBox?.y ?? 0,
+      firstTableTop: firstTableBox?.y ?? 0,
+      firstActionBottom: firstActionBox?.bottom ?? 0,
+      headingTop: pageHeadingBox?.y ?? 0,
+      headingFontSize: pageHeadingStyle ? Number.parseFloat(pageHeadingStyle.fontSize) : 0,
+      nestedCards,
+      controlHeights,
+      scrollRatio: document.documentElement.scrollHeight / viewportHeight,
     }
-  })
+  }, heading)
 
   expect(metrics).not.toBeNull()
-  expect(metrics?.topbarHeight).toBeLessThanOrEqual(65)
-  expect(metrics?.sidebarWidth).toBeLessThanOrEqual(256)
+  expect(metrics?.topbarHeight).toBe(64)
+  expect(metrics?.sidebarWidth).toBe(248)
   expect(metrics?.navRowHeights.every((height) => height <= 36)).toBe(true)
-  expect(metrics?.mainStartX).toBeLessThanOrEqual(256)
-  expect(metrics?.mainStartY).toBeLessThanOrEqual(65)
+  expect(metrics?.mainStartX).toBe(248)
+  expect(metrics?.mainStartY).toBe(64)
+  expect(metrics?.contentWidth).toBeLessThanOrEqual(1040)
   expect(metrics?.contentStartX).toBeLessThanOrEqual(380)
   expect(metrics?.contentInlineOffset).toBeLessThanOrEqual(124)
   expect(metrics?.contentStartY).toBeLessThanOrEqual(97)
+  expect(metrics?.headingTop).toBeLessThanOrEqual(150)
+  expect(metrics?.headingFontSize).toBeLessThanOrEqual(24)
+  expect(metrics?.firstPanelTop).toBeLessThanOrEqual(300)
+  if (kind === 'shell' || kind === 'list') expect(metrics?.firstPanelHeight).toBeLessThanOrEqual(400)
+  expect(metrics?.nestedCards).toBe(0)
+  expect(metrics?.controlHeights.every((height) => height <= 64)).toBe(true)
+  expect(metrics?.scrollRatio).toBeLessThanOrEqual(kind === 'detail' ? 3.8 : 3.2)
+  if (kind === 'list') expect(metrics?.firstTableTop).toBeLessThanOrEqual(320)
+  if (kind === 'settings' || kind === 'detail') expect(metrics?.firstActionBottom).toBeLessThanOrEqual(720)
+}
+
+async function expectConsoleMobileDensity(page: Page) {
+  const metrics = await page.evaluate(() => {
+    const aside = document.querySelector('aside')
+    const main = Array.from(document.querySelectorAll('main')).find(
+      (element) =>
+        !element.classList.contains('shell') &&
+        !element.classList.contains('authShell') &&
+        element.getBoundingClientRect().height > 0,
+    )
+    const heading = main?.querySelector('h1')
+    const asideStyle = aside ? window.getComputedStyle(aside) : null
+    const headingBox = heading?.getBoundingClientRect()
+    return {
+      asideVisible: asideStyle ? asideStyle.display !== 'none' : false,
+      headingTop: headingBox?.y ?? 0,
+      headingBottom: headingBox?.bottom ?? 0,
+      viewportHeight: window.innerHeight,
+    }
+  })
+
+  expect(metrics.asideVisible).toBe(false)
+  expect(metrics.headingTop).toBeGreaterThanOrEqual(64)
+  expect(metrics.headingBottom).toBeLessThanOrEqual(220)
 }
 
 async function expectHostedAuthCompactShell(page: Page) {
   const metrics = await page.evaluate(() => {
     const shell = document.querySelector('.authShell')
     const panel = document.querySelector('.authPanel')
+    const brandPanel = document.querySelector('.authBrandPanel')
+    const content = document.querySelector('.authContent')
     const heading = document.querySelector('.authBrandPanel h1')
     const inputs = Array.from(document.querySelectorAll('.authPanel input'))
     const buttons = Array.from(document.querySelectorAll('.authPanel button, .authPanel .uiButton'))
-    if (!shell || !panel || !heading) return null
+    if (!shell || !panel || !brandPanel || !content || !heading) return null
 
     const shellBox = shell.getBoundingClientRect()
     const panelBox = panel.getBoundingClientRect()
+    const brandPanelBox = brandPanel.getBoundingClientRect()
+    const contentBox = content.getBoundingClientRect()
     const panelStyle = window.getComputedStyle(panel)
     const headingStyle = window.getComputedStyle(heading)
 
     return {
       panelWidth: panelBox.width,
+      panelHeight: panelBox.height,
+      panelTop: panelBox.y,
+      panelBottom: panelBox.bottom,
       panelCenterOffset: Math.abs(panelBox.x + panelBox.width / 2 - shellBox.width / 2),
       panelBorderTopWidth: Number.parseFloat(panelStyle.borderTopWidth),
       panelBoxShadow: panelStyle.boxShadow,
       panelHasVisualBoundary: Number.parseFloat(panelStyle.borderTopWidth) > 0 || panelStyle.boxShadow !== 'none',
       headingFontSize: Number.parseFloat(headingStyle.fontSize),
+      brandToContentGap: contentBox.y - brandPanelBox.bottom,
       inputHeights: inputs.map((input) => input.getBoundingClientRect().height),
       buttonHeights: buttons.map((button) => button.getBoundingClientRect().height),
       heroCount: shell.querySelectorAll('.hero').length,
+      oversizedMediaCount: Array.from(shell.querySelectorAll('img, video')).filter((element) => {
+        const box = element.getBoundingClientRect()
+        return box.width > 80 || box.height > 80
+      }).length,
+      scrollRatio: document.documentElement.scrollHeight / window.innerHeight,
+      viewportHeight: window.innerHeight,
     }
   })
 
   expect(metrics).not.toBeNull()
   expect(metrics?.panelWidth).toBeLessThanOrEqual(400)
+  expect(metrics?.panelHeight).toBeLessThanOrEqual(metrics?.viewportHeight ?? 0)
+  expect(metrics?.panelTop).toBeGreaterThanOrEqual(20)
+  expect(metrics?.panelBottom).toBeLessThanOrEqual((metrics?.viewportHeight ?? 0) + 60)
   expect(metrics?.panelCenterOffset).toBeLessThanOrEqual(1)
   expect(metrics?.panelBorderTopWidth).toBeLessThanOrEqual(1)
   expect(metrics?.panelHasVisualBoundary).toBe(true)
   expect(metrics?.headingFontSize).toBeLessThanOrEqual(24)
+  expect(metrics?.brandToContentGap).toBeLessThanOrEqual(28)
   expect(metrics?.inputHeights.every((height) => height >= 38 && height <= 44)).toBe(true)
   expect(metrics?.buttonHeights.every((height) => height >= 32 && height <= 44)).toBe(true)
   expect(metrics?.heroCount).toBe(0)
+  expect(metrics?.oversizedMediaCount).toBe(0)
+  expect(metrics?.scrollRatio).toBeLessThanOrEqual(1.4)
+}
+
+async function expectInitialViewportDensity(page: Page, surface: 'account' | 'hosted' | 'message') {
+  const metrics = await page.evaluate(() => {
+    const main = document.querySelector('main')
+    const heading = main?.querySelector('h1')
+    const firstAction = main?.querySelector('button, a[href], input, select, textarea')
+    const headingBox = heading?.getBoundingClientRect()
+    const firstActionBox = firstAction?.getBoundingClientRect()
+    return {
+      headingTop: headingBox?.y ?? 0,
+      headingBottom: headingBox?.bottom ?? 0,
+      firstActionBottom: firstActionBox?.bottom ?? 0,
+      scrollRatio: document.documentElement.scrollHeight / window.innerHeight,
+      viewportHeight: window.innerHeight,
+    }
+  })
+
+  expect(metrics.headingTop).toBeGreaterThanOrEqual(0)
+  expect(metrics.headingBottom).toBeLessThanOrEqual(surface === 'hosted' ? 440 : 520)
+  expect(metrics.firstActionBottom).toBeLessThanOrEqual(metrics.viewportHeight)
+  expect(metrics.scrollRatio).toBeLessThanOrEqual(3.2)
 }
 
 async function expectAccountSinglePageSections(page: Page) {
@@ -1849,6 +2255,10 @@ async function responseFor(path: string, method: string, body: unknown): Promise
   if (path === '/api/management/organizations') {
     if (method === 'POST') return organization
     return { organizations: [organization], pagination }
+  }
+  if (path === '/api/management/organizations/org-1') {
+    if (method === 'PATCH') return { ...organization, ...(body && typeof body === 'object' ? body : {}) }
+    return organization
   }
   if (path === '/api/management/organizations/org-1/logo') return { asset: uploadedAsset }
   if (path === '/api/management/branding/logo') return { asset: uploadedAsset }

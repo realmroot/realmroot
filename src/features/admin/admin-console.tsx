@@ -3809,6 +3809,7 @@ export function CollectUserProfilePage() {
                 </Button>
               }
               description="Field label, field type, and user data key controls will become available after a management contract exists for profile field persistence."
+              framed={false}
               title="No custom fields"
             />
           </CardContent>
@@ -4137,6 +4138,7 @@ export function DeploymentSettingsPage() {
                 </TabsList>
                 <TabsContent value="private">
                   <PolicyCard
+                    framed={false}
                     rows={[
                       ['Storage', 'AUTH_SECRET deployment binding'],
                       ['Exposure', 'Private key material is never shown in Console.'],
@@ -4146,6 +4148,7 @@ export function DeploymentSettingsPage() {
                 </TabsContent>
                 <TabsContent value="cookie">
                   <PolicyCard
+                    framed={false}
                     rows={[
                       ['Storage', 'AUTH_SECRET deployment binding'],
                       ['Cookie cache', `${query.data.policy.sessions.cookieCacheSeconds}s`],
@@ -4275,6 +4278,7 @@ export function OrganizationTemplatePage() {
                   </a>
                 }
                 description="Create resource permissions, then attach them to organization-scoped roles from the role detail page."
+                framed={false}
                 title="Permission templates use API resources"
               />
             </CardContent>
@@ -4918,9 +4922,17 @@ function HealthRow({ icon, label, value }: { icon: ReactNode; label: string; val
   )
 }
 
-function PolicyCard({ rows, title }: { rows: Array<[string, string]>; title: string }) {
-  return (
-    <Card>
+function PolicyCard({
+  framed = true,
+  rows,
+  title,
+}: {
+  framed?: boolean
+  rows: Array<[string, string]>
+  title: string
+}) {
+  const content = (
+    <>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
@@ -4929,8 +4941,12 @@ function PolicyCard({ rows, title }: { rows: Array<[string, string]>; title: str
           <SettingRow key={label} label={label} value={value} />
         ))}
       </CardContent>
-    </Card>
+    </>
   )
+
+  if (!framed) return <div>{content}</div>
+
+  return <Card>{content}</Card>
 }
 
 function CopyButton({ label, value }: { label: string; value: string }) {
