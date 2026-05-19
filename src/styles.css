@@ -265,6 +265,31 @@ h1 {
   width: 100%;
   padding: 28px;
   box-shadow: 0 24px 70px rgb(15 23 42 / 8%);
+  border-radius: var(--auth-panel-radius, 8px);
+}
+
+.brandingPreview {
+  display: grid;
+  gap: 24px;
+  min-height: 360px;
+  padding: 28px;
+  border-radius: var(--auth-panel-radius, 8px);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand-background) 82%, white), #ffffff 68%),
+    var(--brand-background);
+}
+
+.brandingPreview h2 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.brandingPreview p:not(.eyebrow) {
+  max-width: 30rem;
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 .authCardHeader h2,

@@ -2,10 +2,16 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { assignRoleRequestSchema } from '../../../shared/api/authorization'
 import {
+  type ManagementBrandingSettingsResponse,
   type ManagementReadinessResponse,
   type ManagementSignInSettingsResponse,
+  managementBrandingSettingsResponseSchema,
   managementReadinessResponseSchema,
   managementSignInSettingsResponseSchema,
+  type UpdateManagementBrandingSettingsRequest,
+  type UpdateManagementSignInSettingsRequest,
+  updateManagementBrandingSettingsRequestSchema,
+  updateManagementSignInSettingsRequestSchema,
 } from '../../../shared/api/management'
 import type { SecurityPolicy } from '../../../shared/api/security'
 import { requireAdmin } from '../../middleware/admin'
@@ -29,10 +35,28 @@ interface ManagementConfigz {
   signIn: ManagementSignInSettingsResponse['signIn']
   defaults: ManagementSignInSettingsResponse['defaults']
   links: ManagementSignInSettingsResponse['links']
+  copy: ManagementSignInSettingsResponse['copy']
+  branding: ManagementBrandingSettingsResponse['branding']
+  getManagementSignInSettings?: () => Promise<ManagementSignInSettingsResponse>
+  updateManagementSignInSettings?: (
+    input: UpdateManagementSignInSettingsRequest,
+  ) => Promise<ManagementSignInSettingsResponse>
+  getManagementBrandingSettings?: () => Promise<ManagementBrandingSettingsResponse>
+  updateManagementBrandingSettings?: (
+    input: UpdateManagementBrandingSettingsRequest,
+  ) => Promise<ManagementBrandingSettingsResponse>
 }
 
 export type ManagementConfigzServiceFactory = (c: Context<{ Bindings: ConfigzBindings }>) => {
   getConfig: () => Promise<ManagementConfigz>
+  getManagementSignInSettings?: () => Promise<ManagementSignInSettingsResponse>
+  updateManagementSignInSettings?: (
+    input: UpdateManagementSignInSettingsRequest,
+  ) => Promise<ManagementSignInSettingsResponse>
+  getManagementBrandingSettings?: () => Promise<ManagementBrandingSettingsResponse>
+  updateManagementBrandingSettings?: (
+    input: UpdateManagementBrandingSettingsRequest,
+  ) => Promise<ManagementBrandingSettingsResponse>
 }
 
 export type ManagementApplicationServiceFactory = (c: Context<{ Bindings: ApplicationBindings }>) => {
@@ -92,14 +116,43 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
     app.use('/sign-in-settings', requireAdmin())
 
     app.get('/sign-in-settings', async (c) => {
-      const config = await configzServiceFactory(c).getConfig()
-      const response = {
-        signIn: config.signIn,
-        defaults: config.defaults,
-        links: config.links,
-      } satisfies ManagementSignInSettingsResponse
+      const service = configzServiceFactory(c)
+      const response = service.getManagementSignInSettings
+        ? await service.getManagementSignInSettings()
+        : await managementSignInSettingsFromConfig(await service.getConfig())
 
       return c.json(managementSignInSettingsResponseSchema.parse(response))
+    })
+
+    app.patch('/sign-in-settings', async (c) => {
+      const input = await readJson(c, updateManagementSignInSettingsRequestSchema)
+      const service = configzServiceFactory(c)
+      const response = service.updateManagementSignInSettings
+        ? await service.updateManagementSignInSettings(input)
+        : await managementSignInSettingsFromConfig(await service.getConfig())
+
+      return c.json(managementSignInSettingsResponseSchema.parse(response))
+    })
+
+    app.use('/branding-settings', requireAdmin())
+
+    app.get('/branding-settings', async (c) => {
+      const service = configzServiceFactory(c)
+      const response = service.getManagementBrandingSettings
+        ? await service.getManagementBrandingSettings()
+        : await managementBrandingSettingsFromConfig(await service.getConfig())
+
+      return c.json(managementBrandingSettingsResponseSchema.parse(response))
+    })
+
+    app.patch('/branding-settings', async (c) => {
+      const input = await readJson(c, updateManagementBrandingSettingsRequestSchema)
+      const service = configzServiceFactory(c)
+      const response = service.updateManagementBrandingSettings
+        ? await service.updateManagementBrandingSettings(input)
+        : await managementBrandingSettingsFromConfig(await service.getConfig())
+
+      return c.json(managementBrandingSettingsResponseSchema.parse(response))
     })
   }
 
@@ -130,3 +183,23 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
 }
 
 export type ManagementRoutes = ReturnType<typeof createManagementRoutes>
+
+async function managementSignInSettingsFromConfig(
+  config: Awaited<ReturnType<ReturnType<ManagementConfigzServiceFactory>['getConfig']>>,
+): Promise<ManagementSignInSettingsResponse> {
+  return {
+    signIn: config.signIn,
+    defaults: config.defaults,
+    links: config.links,
+    copy: config.copy,
+  }
+}
+
+async function managementBrandingSettingsFromConfig(
+  config: Awaited<ReturnType<ReturnType<ManagementConfigzServiceFactory>['getConfig']>>,
+): Promise<ManagementBrandingSettingsResponse> {
+  return {
+    branding: config.branding,
+    copy: config.copy,
+  }
+}

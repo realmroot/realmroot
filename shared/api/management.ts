@@ -11,7 +11,7 @@ import {
   paginationQuerySchema,
   roleResponseSchema,
 } from './authorization'
-import { configzMethodSchema } from './configz'
+import { configzBrandingSchema, configzMethodSchema, hostedCustomCssSchema } from './configz'
 import {
   connectorResponseSchema,
   createConnectorRequestSchema,
@@ -47,6 +47,80 @@ export const managementSignInSettingsResponseSchema = z.object({
     privacyUri: z.string().nullable(),
     supportEmail: z.string().nullable(),
   }),
+  copy: z.object({
+    productName: z.string(),
+    headline: z.string(),
+    description: z.string(),
+  }),
+})
+
+const nullableHttpsUrlSchema = z
+  .string()
+  .trim()
+  .url()
+  .refine((value) => value.startsWith('https://'), 'URL must use https.')
+  .nullable()
+
+const nullableEmailSchema = z.email().nullable()
+
+export const updateManagementSignInSettingsRequestSchema = z.object({
+  signIn: configzMethodSchema
+    .pick({
+      passwordEnabled: true,
+      signupEnabled: true,
+      socialLoginEnabled: true,
+      identifierFirst: true,
+    })
+    .partial()
+    .optional(),
+  defaults: z
+    .object({
+      applicationId: z.string().trim().min(1).nullable(),
+      redirectUri: nullableHttpsUrlSchema,
+    })
+    .partial()
+    .optional(),
+  links: z
+    .object({
+      termsUri: nullableHttpsUrlSchema,
+      privacyUri: nullableHttpsUrlSchema,
+      supportEmail: nullableEmailSchema,
+    })
+    .partial()
+    .optional(),
+  copy: z
+    .object({
+      productName: z.string().trim().min(1).max(80),
+      headline: z.string().trim().min(1).max(120),
+      description: z.string().trim().min(1).max(240),
+    })
+    .partial()
+    .optional(),
+})
+
+export const managementBrandingSettingsResponseSchema = z.object({
+  branding: configzBrandingSchema,
+  copy: managementSignInSettingsResponseSchema.shape.copy,
+})
+
+export const updateManagementBrandingSettingsRequestSchema = z.object({
+  branding: z
+    .object({
+      logoUrl: nullableHttpsUrlSchema,
+      faviconUrl: nullableHttpsUrlSchema,
+      primaryColor: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/)
+        .nullable(),
+      backgroundColor: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/)
+        .nullable(),
+      customCss: hostedCustomCssSchema.nullable(),
+    })
+    .partial()
+    .optional(),
+  copy: updateManagementSignInSettingsRequestSchema.shape.copy,
 })
 
 export const managementReadinessResponseSchema = z.object({
@@ -90,6 +164,7 @@ export const managementResourceSchemas = {
   apiScopes: apiScopeResponseSchema,
   roles: roleResponseSchema,
   signInSettings: managementSignInSettingsResponseSchema,
+  brandingSettings: managementBrandingSettingsResponseSchema,
   readiness: managementReadinessResponseSchema,
   connectors: managementConnectorResponseSchema,
 } as const
@@ -130,6 +205,9 @@ export type ManagementUpdateUserRequest = z.infer<typeof managementUpdateUserReq
 export type ManagementBanUserRequest = z.infer<typeof managementBanUserRequestSchema>
 export type ManagementPasswordResetRequest = z.infer<typeof managementPasswordResetRequestSchema>
 export type ManagementSignInSettingsResponse = z.infer<typeof managementSignInSettingsResponseSchema>
+export type UpdateManagementSignInSettingsRequest = z.infer<typeof updateManagementSignInSettingsRequestSchema>
+export type ManagementBrandingSettingsResponse = z.infer<typeof managementBrandingSettingsResponseSchema>
+export type UpdateManagementBrandingSettingsRequest = z.infer<typeof updateManagementBrandingSettingsRequestSchema>
 export type ManagementReadinessResponse = z.infer<typeof managementReadinessResponseSchema>
 export type ManagementConnectorResponse = z.infer<typeof managementConnectorResponseSchema>
 export type ListManagementConnectorsResponse = z.infer<typeof listManagementConnectorsResponseSchema>
