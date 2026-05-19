@@ -12,7 +12,9 @@ describe('ConnectorService', () => {
         expect.objectContaining({
           providerType: 'social',
           providerId: 'google',
+          icon: 'google',
           requiredFields: ['clientId', 'clientSecretBinding'],
+          endpoints: expect.objectContaining({ issuer: null }),
         }),
         expect.objectContaining({
           providerType: 'generic_oauth',
@@ -232,6 +234,55 @@ describe('ConnectorService', () => {
     ])
   })
 
+  it('reports configuration readiness without exposing secret values', async () => {
+    const connectorRow = connector({ id: 'idp_google', providerId: 'google', clientSecretBinding: 'GOOGLE_SECRET' })
+    const service = new ConnectorService(createRepository({ byId: connectorRow }))
+
+    await expect(
+      service.readiness('idp_google', { GOOGLE_SECRET: 'resolved-secret' } as unknown as Env),
+    ).resolves.toEqual({
+      connectorId: 'idp_google',
+      ready: true,
+      checks: expect.arrayContaining([expect.objectContaining({ key: 'clientSecretAvailable', ok: true })]),
+    })
+    await expect(service.readiness('idp_google', {} as Env)).resolves.toMatchObject({
+      connectorId: 'idp_google',
+      ready: false,
+      checks: expect.arrayContaining([expect.objectContaining({ key: 'clientSecretAvailable', ok: false })]),
+    })
+    await expect(service.readiness('idp_google', { GOOGLE_SECRET: '' } as unknown as Env)).resolves.toMatchObject({
+      connectorId: 'idp_google',
+      ready: false,
+      checks: expect.arrayContaining([expect.objectContaining({ key: 'clientSecretAvailable', ok: false })]),
+    })
+  })
+
+  it('reports generic OAuth issuer mixed with explicit optional endpoints as not ready', async () => {
+    const connectorRow = connector({
+      id: 'idp_generic',
+      providerType: 'generic_oauth',
+      providerId: 'generic-oauth',
+      clientSecretBinding: 'GENERIC_SECRET',
+      issuer: 'https://idp.example.com',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+    })
+    const service = new ConnectorService(createRepository({ byId: connectorRow }))
+
+    await expect(
+      service.readiness('idp_generic', { GENERIC_SECRET: 'resolved-secret' } as unknown as Env),
+    ).resolves.toEqual({
+      connectorId: 'idp_generic',
+      ready: false,
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'oauthEndpoints',
+          ok: false,
+          message: 'Use issuer discovery or explicit endpoints, not both.',
+        }),
+      ]),
+    })
+  })
+
   it('rejects unsupported, incomplete, and empty-secret enabled connector configurations', async () => {
     const service = new ConnectorService(createRepository())
 
@@ -274,6 +325,20 @@ describe('ConnectorService', () => {
     ).rejects.toMatchObject({
       status: 400,
       message: 'Enabled generic OAuth connector requires tokenEndpoint when issuer is not provided.',
+    })
+    await expect(
+      service.create({
+        providerType: 'generic_oauth',
+        providerId: 'mixed',
+        displayName: 'Mixed',
+        clientId: 'mixed-client',
+        clientSecretBinding: 'MIXED_SECRET',
+        issuer: 'https://idp.example.com',
+        authorizationEndpoint: 'https://idp.example.com/authorize',
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Enabled generic OAuth connector uses either issuer discovery or explicit endpoints, not both.',
     })
   })
 })

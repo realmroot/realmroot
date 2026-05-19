@@ -30,7 +30,11 @@ describe('management API client', () => {
       clientId: 'google-client',
       clientSecretBinding: 'GOOGLE_SECRET',
     })
+    await management.listConnectorTemplates()
+    await management.getConnector('connector-1')
     await management.updateConnector('connector-1', { enabled: false })
+    await management.getConnectorReadiness('connector-1')
+    await management.deleteConnector('connector-1')
     await management.getSignInSettings()
     await management.getAdminReadiness()
     await management.getSecurityPolicy()
@@ -75,7 +79,11 @@ describe('management API client', () => {
           },
         },
       ],
+      ['connectorTemplates.get'],
+      ['connector.get', { param: { id: 'connector-1' } }],
       ['connectors.patch', { param: { id: 'connector-1' }, json: { enabled: false } }],
+      ['connectorReadiness.get', { param: { id: 'connector-1' } }],
+      ['connectors.delete', { param: { id: 'connector-1' } }],
       ['signIn.get'],
       ['readiness.get'],
       ['security.get'],
@@ -154,7 +162,13 @@ async function loadManagementApi() {
           connectors: {
             $get: endpoint('connectors.get'),
             $post: endpoint('connectors.post'),
-            ':id': { $patch: endpoint('connectors.patch') },
+            templates: { $get: endpoint('connectorTemplates.get') },
+            ':id': {
+              $get: endpoint('connector.get'),
+              $patch: endpoint('connectors.patch'),
+              $delete: endpoint('connectors.delete'),
+              readiness: { $get: endpoint('connectorReadiness.get') },
+            },
           },
           'sign-in-settings': { $get: endpoint('signIn.get') },
           readiness: { $get: endpoint('readiness.get') },

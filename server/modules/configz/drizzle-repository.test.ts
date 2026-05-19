@@ -45,7 +45,7 @@ describe('createDrizzleConfigzRepository', () => {
       customCss: '.brand{}',
     })
     await expect(repository.listEnabledIdentityProviders()).resolves.toEqual([
-      { slug: 'google', providerType: 'social', providerId: 'google', displayName: 'Google' },
+      { slug: 'google', providerType: 'social', providerId: 'google', displayName: 'Google', icon: 'google' },
     ])
   })
 

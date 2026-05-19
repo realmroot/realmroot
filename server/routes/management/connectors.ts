@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { connectorReadinessResponseSchema, listConnectorTemplatesResponseSchema } from '../../../shared/api/connectors'
 import {
   createManagementConnectorRequestSchema,
   listManagementConnectorsResponseSchema,
@@ -13,8 +14,10 @@ import { readJson, readQuery } from '../validation'
 
 export interface ManagementConnectorService {
   list(page: { limit: number; offset: number }): Promise<unknown>
+  listTemplates(): unknown
   create(input: unknown): Promise<unknown>
   get(id: string): Promise<unknown>
+  readiness(id: string, env: ConnectorBindings): Promise<unknown>
   update(id: string, input: unknown): Promise<unknown>
   delete(id: string): Promise<void>
 }
@@ -27,6 +30,10 @@ export function createManagementConnectorRoutes(
   const app = new Hono<{ Bindings: ConnectorBindings }>()
 
   app.use('*', requireAdmin())
+
+  app.get('/templates', async (c) =>
+    c.json(listConnectorTemplatesResponseSchema.parse(createService(c).listTemplates())),
+  )
 
   app.get('/', async (c) =>
     c.json(
@@ -41,6 +48,10 @@ export function createManagementConnectorRoutes(
 
   app.get('/:id', async (c) =>
     c.json(managementConnectorResponseSchema.parse(await createService(c).get(c.req.param('id')))),
+  )
+
+  app.get('/:id/readiness', async (c) =>
+    c.json(connectorReadinessResponseSchema.parse(await createService(c).readiness(c.req.param('id'), c.env))),
   )
 
   app.patch('/:id', async (c) => {

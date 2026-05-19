@@ -41,6 +41,7 @@ import type {
   UpdateRoleRequest,
 } from '../shared/api/authorization'
 import type { ConfigzConfigResponse } from '../shared/api/configz'
+import type { ConnectorReadinessResponse, ListConnectorTemplatesResponse } from '../shared/api/connectors'
 import type {
   CreateManagementConnectorRequest,
   ListManagementConnectorsResponse,
@@ -278,8 +279,16 @@ type RpcSchema = {
     $get: RpcEndpoint<RpcNoInput, ListManagementConnectorsResponse>
     $post: RpcEndpoint<{ json: CreateManagementConnectorRequest }, ManagementConnectorResponse, 201>
   }
+  '/api/management/connectors/templates': {
+    $get: RpcEndpoint<RpcNoInput, ListConnectorTemplatesResponse>
+  }
   '/api/management/connectors/:id': {
+    $get: RpcEndpoint<{ param: { id: string } }, ManagementConnectorResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateManagementConnectorRequest }, ManagementConnectorResponse>
+    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
+  }
+  '/api/management/connectors/:id/readiness': {
+    $get: RpcEndpoint<{ param: { id: string } }, ConnectorReadinessResponse>
   }
   '/api/management/sign-in-settings': {
     $get: RpcEndpoint<RpcNoInput, ManagementSignInSettingsResponse>

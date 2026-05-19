@@ -921,6 +921,9 @@ describe('admin console', () => {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(connector, 201))
       }
+      if (url === '/api/management/connectors/templates') {
+        return Promise.resolve(jsonResponse(connectorTemplates))
+      }
       if (url === '/api/management/connectors/connector-1') {
         requests.push({ url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ ...connector, enabled: false }))
@@ -962,6 +965,151 @@ describe('admin console', () => {
         },
       ])
     })
+  })
+
+  it('shows connector details, saves edits, displays readiness, and deletes connectors', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1/readiness') {
+        return Promise.resolve(
+          jsonResponse({
+            connectorId: 'connector-1',
+            ready: false,
+            checks: [
+              {
+                key: 'clientSecretAvailable',
+                label: 'Secret binding available',
+                ok: false,
+                message: 'Secret binding is not available in the runtime.',
+              },
+            ],
+          }),
+        )
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'GET') {
+        return Promise.resolve(jsonResponse(connector))
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'PATCH') {
+        requests.push({ url, method, body: JSON.parse(String(init?.body)) })
+        return Promise.resolve(jsonResponse({ ...connector, displayName: 'Google Workspace' }))
+      }
+      if (url === '/api/management/connectors/connector-1' && method === 'DELETE') {
+        requests.push({ url, method, body: null })
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('View details'))
+    expect(await screen.findByText('Secret binding available')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Workspace' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/connectors/connector-1',
+        method: 'PATCH',
+        body: expect.objectContaining({ displayName: 'Google Workspace' }),
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    cleanup()
+    renderWithQuery(<ConnectorsPage />)
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/connectors/connector-1',
+        method: 'DELETE',
+        body: null,
+      })
+    })
+  })
+
+  it('covers connector draft creation, metadata validation, and generic OAuth ready details', async () => {
+    const genericConnector = {
+      ...connector,
+      id: 'connector-generic',
+      slug: 'generic-oauth',
+      providerId: 'generic-oauth',
+      providerType: 'generic_oauth',
+      displayName: 'Generic OAuth',
+      enabled: false,
+      clientId: null,
+      clientSecretBinding: null,
+      issuer: null,
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      scopes: [],
+      providerMetadata: {},
+    }
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors' && method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init?.body)) })
+        return Promise.resolve(jsonResponse(genericConnector, 201))
+      }
+      if (url === '/api/management/connectors/connector-generic/readiness') {
+        return Promise.resolve(
+          jsonResponse({
+            connectorId: 'connector-generic',
+            ready: true,
+            checks: [{ key: 'clientId', label: 'Client ID configured', ok: true, message: 'Client ID is configured.' }],
+          }),
+        )
+      }
+      if (url === '/api/management/connectors/connector-generic') return Promise.resolve(jsonResponse(genericConnector))
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [genericConnector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Generic OAuth')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    fireEvent.change(screen.getByLabelText('Template'), { target: { value: 'generic-oauth' } })
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Provider metadata must be a JSON object.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"pkce":true}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/connectors',
+        body: expect.objectContaining({
+          enabled: false,
+          providerId: 'generic-oauth',
+          providerMetadata: { pkce: true },
+        }),
+      })
+    })
+
+    fireEvent.click(screen.getByLabelText('Actions for Generic OAuth'))
+    fireEvent.click(await screen.findByText('View details'))
+    expect(await screen.findByText('Ready')).toBeTruthy()
+    expect(screen.getByText(/generic OAuth connector configuration/)).toBeTruthy()
+    expect(screen.getByText('Client ID configured')).toBeTruthy()
   })
 
   it('shows client-side validation errors for connector creation', async () => {
@@ -1538,8 +1686,46 @@ const connector = {
   userInfoEndpoint: null,
   jwksEndpoint: null,
   scopes: ['openid', 'email'],
+  providerMetadata: { prompt: 'select_account' },
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const connectorTemplates = {
+  templates: [
+    {
+      providerType: 'social',
+      providerId: 'google',
+      displayName: 'Google',
+      icon: 'google',
+      requiredFields: ['clientId', 'clientSecretBinding'],
+      optionalFields: ['scopes'],
+      defaultScopes: ['openid', 'email', 'profile'],
+      endpoints: {
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+      },
+    },
+    {
+      providerType: 'generic_oauth',
+      providerId: 'generic-oauth',
+      displayName: 'Generic OAuth',
+      icon: 'oauth',
+      requiredFields: ['clientId', 'clientSecretBinding', 'issuer or authorizationEndpoint + tokenEndpoint'],
+      optionalFields: ['scopes'],
+      defaultScopes: ['openid', 'email', 'profile'],
+      endpoints: {
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+      },
+    },
+  ],
 }
 
 const organization = {

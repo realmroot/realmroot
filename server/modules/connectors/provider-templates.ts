@@ -42,9 +42,17 @@ const socialTemplates = socialProviderIds.map((providerId) => ({
   providerType: 'social' as const,
   providerId,
   displayName: displayName(providerId),
+  icon: providerIcon(providerId),
   requiredFields: requiredSocialFields(providerId),
   optionalFields: optionalSocialFields(providerId).map((field) => `providerMetadata.${field}`),
   defaultScopes: defaultScopes(providerId),
+  endpoints: {
+    issuer: null,
+    authorizationEndpoint: null,
+    tokenEndpoint: null,
+    userInfoEndpoint: null,
+    jwksEndpoint: null,
+  },
 }))
 
 export const connectorTemplates: ConnectorTemplate[] = [
@@ -53,6 +61,7 @@ export const connectorTemplates: ConnectorTemplate[] = [
     providerType: 'generic_oauth',
     providerId: 'generic-oauth',
     displayName: 'Generic OAuth',
+    icon: 'oauth',
     requiredFields: ['clientId', 'clientSecretBinding', 'issuer or authorizationEndpoint + tokenEndpoint'],
     optionalFields: [
       'scopes',
@@ -69,6 +78,13 @@ export const connectorTemplates: ConnectorTemplate[] = [
       'providerMetadata.overrideUserInfo',
     ],
     defaultScopes: ['openid', 'email', 'profile'],
+    endpoints: {
+      issuer: null,
+      authorizationEndpoint: null,
+      tokenEndpoint: null,
+      userInfoEndpoint: null,
+      jwksEndpoint: null,
+    },
   },
 ]
 
@@ -118,4 +134,17 @@ function defaultScopes(providerId: string) {
   if (providerId === 'discord') return ['identify', 'email']
   if (providerId === 'slack') return ['openid', 'email', 'profile']
   return ['openid', 'email', 'profile']
+}
+
+function providerIcon(providerId: string) {
+  if (providerId === 'github') return 'github'
+  if (providerId === 'gitlab') return 'gitlab'
+  if (providerId === 'google') return 'google'
+  if (providerId === 'microsoft') return 'microsoft'
+  if (providerId === 'facebook') return 'facebook'
+  if (providerId === 'apple') return 'apple'
+  if (providerId === 'discord') return 'discord'
+  if (providerId === 'slack') return 'slack'
+  if (providerId === 'linkedin') return 'linkedin'
+  return 'oauth'
 }

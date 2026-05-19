@@ -142,8 +142,8 @@ FlareAuth 1.0 is production ready only when all of these are true:
 | `/admin/applications/:id` | Application detail for redirect URIs, post sign-out URIs, CORS origins, grants, scopes, PKCE, client auth method, secrets, and disable state. | Admin session and setup gate. |
 | `/admin/users` | User list, search, create flow, status, password reset, and admin-role controls. | Admin session and setup gate. |
 | `/admin/users/:id` | User detail for profile, identifiers, sessions, roles, organizations, linked accounts, MFA/passkeys, and administrative flags. | Admin session and setup gate. |
-| `/admin/connectors` | Connector list, create flow, enable/disable controls, and provider settings. | Admin session and setup gate. |
-| `/admin/connectors/:id` | Connector detail for provider type, client ID, secret binding, scopes, endpoints, enabled state, and sign-in availability. | Admin session and setup gate. |
+| `/admin/connectors` | Connector list, provider-template create flow, detail/edit dialog, enable/disable controls, readiness checks, and delete flow. | Admin session and setup gate. |
+| `/admin/connectors/:id` | Connector detail for provider type, client ID, secret binding, scopes, endpoints, enabled state, readiness, and sign-in availability. | Admin session and setup gate. |
 | `/admin/sign-in` | Sign-in experience settings, enabled methods, default app/redirect, and legal/support links. | Admin session and setup gate. |
 | `/admin/branding` | Hosted UI product name, logo, favicon, colors, custom CSS, preview, and deployment-owned branding state. | Admin session and setup gate. |
 | `/admin/security` | MFA mode, passkey relying-party config, allowed origins, session lifetime, fresh-age, cookie cache, and password policy readiness. | Admin session and setup gate. |
@@ -231,7 +231,7 @@ Admin setup readiness is protected and read from `/api/management/readiness`:
 | Account Center authorized apps | Lists consented applications and supports grant revocation. |
 | Admin dashboard | Shows tenant health, resource counts, recent applications, readiness, and security/sign-in summary. |
 | Applications list/detail | Lists applications, creates clients, toggles disabled state, and detail page exposes redirect URI, post sign-out URI, CORS, grant, scope, PKCE, secret, and metadata controls. |
-| Connectors list/detail | Lists connectors, creates OAuth/OIDC social providers, toggles enabled state, and detail page exposes provider endpoints, scopes, client ID, secret binding, and sign-in availability. |
+| Connectors list/detail | Lists connectors, creates OAuth/OIDC social providers from templates, edits and deletes connector records, toggles enabled state, and detail view exposes provider endpoints, scopes, client ID, secret binding reference, readiness, and sign-in availability without exposing secret values. |
 | Users list/detail | Supports search, create user, password reset, admin-role toggle, and detail page exposes profile, identifiers, sessions, linked accounts, roles, organizations, MFA/passkeys, and ban/admin state. |
 | Sign-in experience | Shows and persists enabled identifiers/methods, social login, default application/redirect, legal/support links, and hosted copy. |
 | Branding | Shows brand preview and persists product name, logos, favicon, colors, background, and custom CSS. |

@@ -89,6 +89,7 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Password' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'OTP' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
     },
   },
   'signed-out-account-redirect': {
@@ -560,8 +561,8 @@ const journeyAssertions: Record<
       await page.goto('/admin/connectors')
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'New connector' }).click()
+      await page.getByLabel('Template').selectOption('google')
       await page.getByLabel('Display name').fill('Google')
-      await page.getByLabel('Provider ID').fill('google')
       await page.getByLabel('Client ID').fill('google-client')
       await page.getByLabel('Client secret binding').fill('GOOGLE_SECRET')
       await page.getByRole('button', { name: 'Save' }).click()
@@ -574,8 +575,26 @@ const journeyAssertions: Record<
           displayName: 'Google',
           clientId: 'google-client',
           clientSecretBinding: 'GOOGLE_SECRET',
+          scopes: ['openid', 'email', 'profile'],
         },
       })
+      await page.getByLabel('Actions for GitHub').click()
+      await page.getByText('View details').click()
+      await expect(page.getByText('Secret binding available')).toBeVisible()
+      await page.getByLabel('Display name').fill('GitHub Enterprise')
+      await page.getByRole('button', { name: 'Save changes' }).click()
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/management/connectors/connector-1',
+        body: expect.objectContaining({ displayName: 'GitHub Enterprise' }),
+      })
+      await page.getByRole('button', { name: 'Close' }).click()
+      await page.goto('/admin/connectors')
+      await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
+      await page.getByLabel('Actions for GitHub').click()
+      await page.getByText('Delete').click()
+      await page.getByRole('button', { name: 'Delete' }).click()
+      expect(requests).toContainEqual({ method: 'DELETE', path: '/api/management/connectors/connector-1', body: null })
     },
   },
   'admin-create-organization': {
@@ -894,6 +913,26 @@ async function responseFor(path: string, method: string, body: unknown): Promise
     if (method === 'POST') return connector
     return { connectors: [connector], pagination }
   }
+  if (path === '/api/management/connectors/templates') return connectorTemplates
+  if (path === '/api/management/connectors/connector-1/readiness') {
+    return {
+      connectorId: 'connector-1',
+      ready: false,
+      checks: [
+        {
+          key: 'clientSecretAvailable',
+          label: 'Secret binding available',
+          ok: false,
+          message: 'Secret binding is not available in the runtime.',
+        },
+      ],
+    }
+  }
+  if (path === '/api/management/connectors/connector-1') {
+    if (method === 'PATCH') return { ...connector, ...(body && typeof body === 'object' ? body : {}) }
+    if (method === 'DELETE') return {}
+    return connector
+  }
   if (path === '/api/management/organizations') {
     if (method === 'POST') return organization
     return { organizations: [organization], pagination }
@@ -959,7 +998,15 @@ const configz = {
     backgroundColor: '#f7f3ee',
     customCss: null,
   },
-  identityProviders: [],
+  identityProviders: [
+    {
+      slug: 'github',
+      providerType: 'social',
+      providerId: 'github',
+      displayName: 'GitHub',
+      icon: 'github',
+    },
+  ],
   links: {
     termsUri: null,
     privacyUri: null,
@@ -1067,19 +1114,43 @@ const consentResponse = {
 
 const connector = {
   id: 'connector-1',
+  slug: 'github',
   providerId: 'github',
   providerType: 'social',
   displayName: 'GitHub',
   enabled: true,
   clientId: 'github-client',
   clientSecretBinding: 'GITHUB_SECRET',
+  issuer: null,
+  authorizationEndpoint: null,
+  tokenEndpoint: null,
+  userInfoEndpoint: null,
+  jwksEndpoint: null,
   scopes: ['read:user', 'user:email'],
-  iconUrl: null,
-  authorizationUrl: null,
-  tokenUrl: null,
-  userInfoUrl: null,
+  providerMetadata: {},
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const connectorTemplates = {
+  templates: [
+    {
+      providerType: 'social',
+      providerId: 'google',
+      displayName: 'Google',
+      icon: 'google',
+      requiredFields: ['clientId', 'clientSecretBinding'],
+      optionalFields: ['scopes'],
+      defaultScopes: ['openid', 'email', 'profile'],
+      endpoints: {
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+      },
+    },
+  ],
 }
 
 const user = {

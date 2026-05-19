@@ -9,7 +9,12 @@ import {
   createOrganizationRequestSchema,
   createRoleRequestSchema,
 } from '@shared/api/authorization'
-import { createManagementConnectorRequestSchema, managementCreateUserRequestSchema } from '@shared/api/management'
+import type { ConnectorResponse, ConnectorTemplate } from '@shared/api/connectors'
+import {
+  createManagementConnectorRequestSchema,
+  managementCreateUserRequestSchema,
+  updateManagementConnectorRequestSchema,
+} from '@shared/api/management'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
@@ -58,14 +63,18 @@ import {
   createRole,
   createUser,
   deleteApplication,
+  deleteConnector,
   getAdminDashboard,
   getApplication,
+  getConnector,
+  getConnectorReadiness,
   getSecurityPolicy,
   getSignInSettings,
   listApiResources,
   listApplicationClientSecrets,
   listApplications,
   listConnectors,
+  listConnectorTemplates,
   listOrganizations,
   listRoles,
   listUsers,
@@ -849,12 +858,47 @@ export function UsersPage() {
 
 export function ConnectorsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.connectors, queryFn: listConnectors })
+  const templatesQuery = useQuery({
+    queryKey: [...adminQueryKeys.connectors, 'templates'],
+    queryFn: listConnectorTemplates,
+  })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [selectedConnectorId, setSelectedConnectorId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ConnectorResponse | null>(null)
   const createMutation = useAdminMutation({
     mutationFn: createConnector,
     onSuccess: () => {
       setDialogOpen(false)
+      return queryClient.invalidateQueries({ queryKey: adminQueryKeys.connectors })
+    },
+  })
+  const detailQuery = useQuery({
+    queryKey: [...adminQueryKeys.connectors, selectedConnectorId],
+    queryFn: () => getConnector(selectedConnectorId ?? ''),
+    enabled: selectedConnectorId !== null,
+  })
+  const readinessQuery = useQuery({
+    queryKey: [...adminQueryKeys.connectors, selectedConnectorId, 'readiness'],
+    queryFn: () => getConnectorReadiness(selectedConnectorId ?? ''),
+    enabled: selectedConnectorId !== null,
+  })
+  const updateMutation = useAdminMutation({
+    mutationFn: ({ id, input }: { id: string; input: z.infer<typeof updateManagementConnectorRequestSchema> }) =>
+      updateConnector(id, input),
+    onSuccess: (connector) => {
+      queryClient.setQueryData([...adminQueryKeys.connectors, connector.id], connector)
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.connectors }),
+        queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.connectors, connector.id, 'readiness'] }),
+      ])
+    },
+  })
+  const deleteMutation = useAdminMutation({
+    mutationFn: deleteConnector,
+    onSuccess: () => {
+      setDeleteTarget(null)
+      setSelectedConnectorId(null)
       return queryClient.invalidateQueries({ queryKey: adminQueryKeys.connectors })
     },
   })
@@ -876,6 +920,7 @@ export function ConnectorsPage() {
           onSubmit={createMutation.mutate}
           open={dialogOpen}
           pending={createMutation.isPending}
+          templates={templatesQuery.data?.templates ?? []}
         />
       }
       error={query.error}
@@ -892,6 +937,7 @@ export function ConnectorsPage() {
             <TableHead>Provider</TableHead>
             <TableHead>Scopes</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Readiness</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
@@ -907,21 +953,65 @@ export function ConnectorsPage() {
               <TableCell>
                 <StatusBadge active={connector.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
               </TableCell>
+              <TableCell>{connector.clientSecretBinding ? 'Binding configured' : 'Needs binding'}</TableCell>
               <TableCell className="text-right">
-                <Switch
-                  aria-label={`Toggle ${connector.displayName}`}
-                  checked={connector.enabled}
-                  onCheckedChange={(enabled) =>
-                    updateConnector(connector.id, { enabled }).then(() =>
-                      queryClient.invalidateQueries({ queryKey: adminQueryKeys.connectors }),
-                    )
-                  }
-                />
+                <div className="flex justify-end gap-2">
+                  <Switch
+                    aria-label={`Toggle ${connector.displayName}`}
+                    checked={connector.enabled}
+                    onCheckedChange={(enabled) => updateMutation.mutate({ id: connector.id, input: { enabled } })}
+                  />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger aria-label={`Actions for ${connector.displayName}`}>
+                      <MoreHorizontal data-icon="inline-start" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem onClick={() => setSelectedConnectorId(connector.id)}>
+                          View details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setDeleteTarget(connector)}>
+                          <Trash2 data-icon="inline-start" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      <ConnectorDetailDialog
+        key={detailQuery.data?.id ?? selectedConnectorId ?? 'connector-detail'}
+        connector={detailQuery.data ?? null}
+        error={
+          updateMutation.errorMessage ??
+          (detailQuery.error instanceof Error ? detailQuery.error.message : null) ??
+          (readinessQuery.error instanceof Error ? readinessQuery.error.message : null)
+        }
+        onClose={() => setSelectedConnectorId(null)}
+        onSubmit={(input) => {
+          if (detailQuery.data) updateMutation.mutate({ id: detailQuery.data.id, input })
+        }}
+        open={selectedConnectorId !== null}
+        pending={updateMutation.isPending || detailQuery.isLoading}
+        readiness={readinessQuery.data ?? null}
+      />
+      <ConfirmDialog
+        description={
+          deleteTarget ? `Delete ${deleteTarget.displayName}. This removes it from hosted sign-in immediately.` : ''
+        }
+        error={deleteMutation.errorMessage}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id)
+        }}
+        open={deleteTarget !== null}
+        pending={deleteMutation.isPending}
+        title="Delete connector"
+      />
     </ResourcePage>
   )
 }
@@ -1773,15 +1863,18 @@ function CreateConnectorDialog({
   onSubmit,
   open,
   pending,
+  templates,
 }: {
   error: string | null
   onClose: () => void
   onSubmit: (input: z.infer<typeof createManagementConnectorRequestSchema>) => void
   open: boolean
   pending: boolean
+  templates: ConnectorTemplate[]
 }) {
   const [form, setForm] = useState<FormState>(emptyForm)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const selectedTemplate = templates.find((template) => template.providerId === form.template)
   return (
     <Dialog open={open}>
       <FormDialog
@@ -1794,8 +1887,12 @@ function CreateConnectorDialog({
             onSubmit(
               parseForm(createManagementConnectorRequestSchema, {
                 ...form,
-                providerType: form.providerType || 'social',
+                enabled: form.enabled === 'false' ? false : undefined,
+                providerType: selectedTemplate?.providerType ?? form.providerType ?? 'social',
+                providerId: selectedTemplate?.providerId ?? form.providerId,
+                displayName: form.displayName || selectedTemplate?.displayName,
                 scopes: form.scopes?.split(/\s+/).filter(Boolean),
+                providerMetadata: parseMetadata(form.providerMetadata),
               }),
             )
           } catch (submitError) {
@@ -1805,37 +1902,314 @@ function CreateConnectorDialog({
         pending={pending}
         title="Create connector"
       >
+        <Field label="Template">
+          <SelectInput
+            onChange={(event) => {
+              const template = templates.find((item) => item.providerId === event.target.value)
+              setForm((current) => ({
+                ...current,
+                template: event.target.value,
+                providerType: template?.providerType ?? 'social',
+                providerId: template?.providerId ?? '',
+                displayName: template?.displayName ?? '',
+                scopes: template?.defaultScopes.join(' ') ?? '',
+              }))
+            }}
+            value={form.template ?? ''}
+          >
+            <option value="">Custom provider</option>
+            {templates.map((template) => (
+              <option key={`${template.providerType}:${template.providerId}`} value={template.providerId}>
+                {template.displayName}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
         <Field label="Display name">
-          <TextInput onChange={(event) => setValue(setForm, 'displayName', event.target.value)} required />
+          <TextInput
+            onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
+            required
+            value={form.displayName ?? ''}
+          />
         </Field>
         <Field label="Provider ID">
-          <TextInput onChange={(event) => setValue(setForm, 'providerId', event.target.value)} required />
+          <TextInput
+            onChange={(event) => setValue(setForm, 'providerId', event.target.value)}
+            required
+            value={form.providerId ?? ''}
+          />
         </Field>
         <Field label="Provider type">
           <SelectInput
             onChange={(event) => setValue(setForm, 'providerType', event.target.value)}
-            defaultValue="social"
+            value={form.providerType ?? 'social'}
           >
             <option value="social">Social</option>
             <option value="generic_oauth">Generic OAuth</option>
           </SelectInput>
         </Field>
+        <Field label="Status">
+          <SelectInput
+            onChange={(event) => setValue(setForm, 'enabled', event.target.value)}
+            value={form.enabled ?? 'true'}
+          >
+            <option value="true">Enabled</option>
+            <option value="false">Disabled draft</option>
+          </SelectInput>
+        </Field>
         <Field label="Client ID">
-          <TextInput onChange={(event) => setValue(setForm, 'clientId', event.target.value)} required />
+          <TextInput onChange={(event) => setValue(setForm, 'clientId', event.target.value)} />
         </Field>
         <Field label="Client secret binding">
-          <TextInput onChange={(event) => setValue(setForm, 'clientSecretBinding', event.target.value)} required />
+          <TextInput onChange={(event) => setValue(setForm, 'clientSecretBinding', event.target.value)} />
         </Field>
         <Field label="Issuer">
           <TextInput onChange={(event) => setValue(setForm, 'issuer', event.target.value)} />
+        </Field>
+        <Field label="Authorization endpoint">
+          <TextInput onChange={(event) => setValue(setForm, 'authorizationEndpoint', event.target.value)} />
+        </Field>
+        <Field label="Token endpoint">
+          <TextInput onChange={(event) => setValue(setForm, 'tokenEndpoint', event.target.value)} />
+        </Field>
+        <Field label="User info endpoint">
+          <TextInput onChange={(event) => setValue(setForm, 'userInfoEndpoint', event.target.value)} />
+        </Field>
+        <Field label="JWKS endpoint">
+          <TextInput onChange={(event) => setValue(setForm, 'jwksEndpoint', event.target.value)} />
         </Field>
         <Field label="Scopes">
           <TextInput
             onChange={(event) => setValue(setForm, 'scopes', event.target.value)}
             placeholder="openid profile email"
+            value={form.scopes ?? ''}
           />
         </Field>
+        <Field label="Provider metadata JSON">
+          <TextArea onChange={(event) => setValue(setForm, 'providerMetadata', event.target.value)} />
+        </Field>
       </FormDialog>
+    </Dialog>
+  )
+}
+
+function ConnectorDetailDialog({
+  connector,
+  error,
+  onClose,
+  onSubmit,
+  open,
+  pending,
+  readiness,
+}: {
+  connector: ConnectorResponse | null
+  error: string | null
+  onClose: () => void
+  onSubmit: (input: z.infer<typeof updateManagementConnectorRequestSchema>) => void
+  open: boolean
+  pending: boolean
+  readiness: { ready: boolean; checks: Array<{ key: string; label: string; ok: boolean; message: string }> } | null
+}) {
+  const [form, setForm] = useState<FormState>(() => connectorToForm(connector))
+  const [validationError, setValidationError] = useState<string | null>(null)
+
+  if (!connector) {
+    return (
+      <Dialog open={open}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Connector details</DialogTitle>
+            <DialogDescription>Loading connector configuration.</DialogDescription>
+          </DialogHeader>
+          {error ? (
+            <div className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{error}</div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  return (
+    <Dialog open={open}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{connector.displayName}</DialogTitle>
+          <DialogDescription>
+            {connector.providerId} {connector.providerType === 'generic_oauth' ? 'generic OAuth' : 'social'} connector
+            configuration.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 p-4">
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">Configuration readiness</span>
+              <Badge variant={readiness?.ready ? 'secondary' : 'outline'}>
+                {readiness?.ready ? 'Ready' : 'Needs attention'}
+              </Badge>
+            </div>
+            <div className="grid gap-2">
+              {readiness?.checks.map((check) => (
+                <div className="flex items-start gap-2 text-sm" key={check.key}>
+                  {check.ok ? (
+                    <CheckCircle2 aria-hidden="true" size={16} />
+                  ) : (
+                    <AlertCircle aria-hidden="true" size={16} />
+                  )}
+                  <div>
+                    <div>{check.label}</div>
+                    <div className="text-xs text-muted-foreground">{check.message}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              try {
+                setValidationError(null)
+                onSubmit(
+                  parseForm(updateManagementConnectorRequestSchema, {
+                    ...connectorUpdateForm(form),
+                    enabled: form.enabled === 'true',
+                    scopes: form.scopes?.split(/\s+/).filter(Boolean),
+                    providerMetadata: parseMetadata(form.providerMetadata),
+                  }),
+                )
+              } catch (submitError) {
+                setValidationError(submitError instanceof Error ? submitError.message : 'Invalid form input.')
+              }
+            }}
+          >
+            {(validationError ?? error) ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                {validationError ?? error}
+              </div>
+            ) : null}
+            <Field label="Display name">
+              <TextInput
+                onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
+                value={form.displayName ?? ''}
+              />
+            </Field>
+            <Field label="Slug">
+              <TextInput onChange={(event) => setValue(setForm, 'slug', event.target.value)} value={form.slug ?? ''} />
+            </Field>
+            <Field label="Status">
+              <SelectInput
+                onChange={(event) => setValue(setForm, 'enabled', event.target.value)}
+                value={form.enabled ?? 'true'}
+              >
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+              </SelectInput>
+            </Field>
+            <Field label="Client ID">
+              <TextInput
+                onChange={(event) => setValue(setForm, 'clientId', event.target.value)}
+                value={form.clientId ?? ''}
+              />
+            </Field>
+            <Field label="Client secret binding">
+              <TextInput
+                onChange={(event) => setValue(setForm, 'clientSecretBinding', event.target.value)}
+                value={form.clientSecretBinding ?? ''}
+              />
+            </Field>
+            <Field label="Issuer">
+              <TextInput
+                onChange={(event) => setValue(setForm, 'issuer', event.target.value)}
+                value={form.issuer ?? ''}
+              />
+            </Field>
+            <Field label="Authorization endpoint">
+              <TextInput
+                onChange={(event) => setValue(setForm, 'authorizationEndpoint', event.target.value)}
+                value={form.authorizationEndpoint ?? ''}
+              />
+            </Field>
+            <Field label="Token endpoint">
+              <TextInput
+                onChange={(event) => setValue(setForm, 'tokenEndpoint', event.target.value)}
+                value={form.tokenEndpoint ?? ''}
+              />
+            </Field>
+            <Field label="User info endpoint">
+              <TextInput
+                onChange={(event) => setValue(setForm, 'userInfoEndpoint', event.target.value)}
+                value={form.userInfoEndpoint ?? ''}
+              />
+            </Field>
+            <Field label="JWKS endpoint">
+              <TextInput
+                onChange={(event) => setValue(setForm, 'jwksEndpoint', event.target.value)}
+                value={form.jwksEndpoint ?? ''}
+              />
+            </Field>
+            <Field label="Scopes">
+              <TextInput
+                onChange={(event) => setValue(setForm, 'scopes', event.target.value)}
+                value={form.scopes ?? ''}
+              />
+            </Field>
+            <Field label="Provider metadata JSON">
+              <TextArea
+                onChange={(event) => setValue(setForm, 'providerMetadata', event.target.value)}
+                value={form.providerMetadata ?? ''}
+              />
+            </Field>
+            <DialogFooter className="m-0 -mx-4 -mb-4">
+              <Button onClick={onClose} type="button" variant="secondary">
+                Close
+              </Button>
+              <Button disabled={pending} type="submit">
+                {pending ? 'Saving...' : 'Save changes'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ConfirmDialog({
+  description,
+  error,
+  onClose,
+  onConfirm,
+  open,
+  pending,
+  title,
+}: {
+  description: string
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+  open: boolean
+  pending: boolean
+  title: string
+}) {
+  return (
+    <Dialog open={open}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        {error ? (
+          <div className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{error}</div>
+        ) : null}
+        <DialogFooter>
+          <Button onClick={onClose} type="button" variant="secondary">
+            Cancel
+          </Button>
+          <Button disabled={pending} onClick={onConfirm} type="button" variant="danger">
+            {pending ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   )
 }
@@ -1934,6 +2308,50 @@ function parseForm<T extends z.ZodType>(schema: T, form: unknown): z.infer<T> {
   const result = schema.safeParse(removeBlankValues(form))
   if (!result.success) throw new Error(result.error.issues[0]?.message ?? 'Invalid form input.')
   return result.data
+}
+
+function parseMetadata(value: string | undefined) {
+  if (!value?.trim()) return undefined
+  const parsed = JSON.parse(value)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Provider metadata must be a JSON object.')
+  }
+  return parsed as Record<string, unknown>
+}
+
+function connectorUpdateForm(form: FormState) {
+  return {
+    ...form,
+    clientId: nullableFormValue(form.clientId),
+    clientSecretBinding: nullableFormValue(form.clientSecretBinding),
+    issuer: nullableFormValue(form.issuer),
+    authorizationEndpoint: nullableFormValue(form.authorizationEndpoint),
+    tokenEndpoint: nullableFormValue(form.tokenEndpoint),
+    userInfoEndpoint: nullableFormValue(form.userInfoEndpoint),
+    jwksEndpoint: nullableFormValue(form.jwksEndpoint),
+  }
+}
+
+function nullableFormValue(value: string | undefined) {
+  return value === '' ? null : value
+}
+
+function connectorToForm(connector: ConnectorResponse | null): FormState {
+  if (!connector) return emptyForm
+  return {
+    slug: connector.slug,
+    displayName: connector.displayName,
+    enabled: String(connector.enabled),
+    clientId: connector.clientId ?? '',
+    clientSecretBinding: connector.clientSecretBinding ?? '',
+    issuer: connector.issuer ?? '',
+    authorizationEndpoint: connector.authorizationEndpoint ?? '',
+    tokenEndpoint: connector.tokenEndpoint ?? '',
+    userInfoEndpoint: connector.userInfoEndpoint ?? '',
+    jwksEndpoint: connector.jwksEndpoint ?? '',
+    scopes: connector.scopes.join(' '),
+    providerMetadata: JSON.stringify(connector.providerMetadata, null, 2),
+  }
 }
 
 function removeBlankValues(input: unknown): unknown {

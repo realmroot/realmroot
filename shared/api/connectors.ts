@@ -18,13 +18,23 @@ const paginationMetadataSchema = z.object({
 
 export const connectorProviderMetadataSchema = z.record(z.string(), z.unknown())
 
+const connectorEndpointMetadataSchema = z.object({
+  issuer: z.string().nullable(),
+  authorizationEndpoint: z.string().nullable(),
+  tokenEndpoint: z.string().nullable(),
+  userInfoEndpoint: z.string().nullable(),
+  jwksEndpoint: z.string().nullable(),
+})
+
 export const connectorTemplateSchema = z.object({
   providerType: connectorProviderTypeSchema,
   providerId: z.string(),
   displayName: z.string(),
+  icon: z.string(),
   requiredFields: z.array(z.string()),
   optionalFields: z.array(z.string()),
   defaultScopes: z.array(z.string()),
+  endpoints: connectorEndpointMetadataSchema,
 })
 
 export const connectorResponseSchema = z.object({
@@ -45,6 +55,19 @@ export const connectorResponseSchema = z.object({
   providerMetadata: connectorProviderMetadataSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
+})
+
+export const connectorReadinessResponseSchema = z.object({
+  connectorId: z.string(),
+  ready: z.boolean(),
+  checks: z.array(
+    z.object({
+      key: z.string(),
+      label: z.string(),
+      ok: z.boolean(),
+      message: z.string(),
+    }),
+  ),
 })
 
 export const createConnectorRequestSchema = z
@@ -117,6 +140,7 @@ export const unlinkAccountQuerySchema = z.object({
 type ConnectorBoundaryInput = z.infer<typeof createConnectorRequestSchema>
 
 function validateConnectorFields(input: ConnectorBoundaryInput, ctx: z.RefinementCtx) {
+  if (input.enabled === false) return
   if (!input.clientId) {
     ctx.addIssue({ code: 'custom', path: ['clientId'], message: 'clientId is required.' })
   }
@@ -129,6 +153,16 @@ function validateConnectorFields(input: ConnectorBoundaryInput, ctx: z.Refinemen
   }
   if (input.providerType !== 'generic_oauth') return
 
+  if (
+    input.issuer &&
+    (input.authorizationEndpoint || input.tokenEndpoint || input.userInfoEndpoint || input.jwksEndpoint)
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['issuer'],
+      message: 'Generic OAuth uses either issuer discovery or explicit endpoints, not both.',
+    })
+  }
   if (!input.issuer && !input.authorizationEndpoint) {
     ctx.addIssue({
       code: 'custom',
@@ -150,6 +184,8 @@ export { paginationQuerySchema }
 export type ConnectorProviderType = z.infer<typeof connectorProviderTypeSchema>
 export type ConnectorResponse = z.infer<typeof connectorResponseSchema>
 export type ConnectorTemplate = z.infer<typeof connectorTemplateSchema>
+export type ConnectorReadinessResponse = z.infer<typeof connectorReadinessResponseSchema>
+export type ListConnectorTemplatesResponse = z.infer<typeof listConnectorTemplatesResponseSchema>
 export type CreateConnectorRequest = z.infer<typeof createConnectorRequestSchema>
 export type UpdateConnectorRequest = z.infer<typeof updateConnectorRequestSchema>
 export type LinkAccountRequest = z.infer<typeof linkAccountRequestSchema>

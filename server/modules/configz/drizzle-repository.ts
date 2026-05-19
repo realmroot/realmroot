@@ -2,6 +2,7 @@ import type { SQL } from 'drizzle-orm'
 import { eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { brandingSetting, identityProviderConnector, signInExperience, uploadedAsset } from '../../db/schema'
+import { connectorTemplates } from '../connectors/provider-templates'
 import type { ConfigzIdentityProvider, ConfigzRepository, ConfigzSettings } from './service'
 
 export function createDrizzleConfigzRepository(db: Database): ConfigzRepository {
@@ -84,5 +85,6 @@ function toIdentityProvider(row: IdentityProviderConnectorRow): ConfigzIdentityP
     providerType: row.providerType,
     providerId: row.providerId,
     displayName: row.displayName,
+    icon: connectorTemplates.find((template) => template.providerId === row.providerId)?.icon ?? 'oauth',
   }
 }

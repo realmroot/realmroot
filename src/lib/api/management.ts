@@ -23,6 +23,11 @@ import type {
   UpdateRoleRequest,
 } from '@shared/api/authorization'
 import type {
+  ConnectorReadinessResponse,
+  ConnectorResponse,
+  ListConnectorTemplatesResponse,
+} from '@shared/api/connectors'
+import type {
   CreateManagementConnectorRequest,
   ListManagementConnectorsResponse,
   ListManagementUsersResponse,
@@ -175,12 +180,28 @@ export function listConnectors() {
   return readRpcResponse(apiClient.api.management.connectors.$get())
 }
 
+export function listConnectorTemplates(): Promise<ListConnectorTemplatesResponse> {
+  return readRpcResponse(apiClient.api.management.connectors.templates.$get())
+}
+
 export function createConnector(input: CreateManagementConnectorRequest) {
   return readRpcResponse(apiClient.api.management.connectors.$post({ json: input }))
 }
 
+export function getConnector(id: string): Promise<ConnectorResponse> {
+  return readRpcResponse(apiClient.api.management.connectors[':id'].$get({ param: { id } }))
+}
+
 export function updateConnector(id: string, input: UpdateManagementConnectorRequest) {
   return readRpcResponse(apiClient.api.management.connectors[':id'].$patch({ param: { id }, json: input }))
+}
+
+export function deleteConnector(id: string) {
+  return readRpcResponse(apiClient.api.management.connectors[':id'].$delete({ param: { id } }))
+}
+
+export function getConnectorReadiness(id: string): Promise<ConnectorReadinessResponse> {
+  return readRpcResponse(apiClient.api.management.connectors[':id'].readiness.$get({ param: { id } }))
 }
 
 export function getSignInSettings() {
