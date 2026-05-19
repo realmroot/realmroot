@@ -128,6 +128,26 @@ describe('AuthLayout', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
   })
 
+  it('renders compact message states with a back link and icon', () => {
+    render(
+      <AuthLayout
+        backHref="/sign-in"
+        config={config}
+        description="This request is no longer available."
+        icon={<span aria-hidden="true">!</span>}
+        title="Request expired."
+        variant="message"
+      >
+        <p>Start again from the application.</p>
+      </AuthLayout>,
+    )
+
+    expect(screen.getByRole('main').className).toContain('authShell-message')
+    expect(screen.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe('/sign-in')
+    expect(screen.getByText('!').closest('.authMessageIcon')).toBeTruthy()
+    expect(screen.queryByText('Acme ID')).toBeNull()
+  })
+
   it('omits the eyebrow when one is not provided', () => {
     render(
       <AuthLayout config={null} description="Hosted identity" title="Sign in">

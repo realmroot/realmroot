@@ -596,6 +596,7 @@ describe('hosted auth pages', () => {
     render(<ConsentPage />)
 
     expect(await screen.findByText('Consent request expired.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe('/sign-in')
     cleanup()
     vi.restoreAllMocks()
     window.history.pushState(null, '', '/oauth/consent?client_id=client-1&state=state-1')
@@ -844,6 +845,7 @@ describe('hosted auth pages', () => {
     render(<AuthCallbackPage />)
     expect(await screen.findByRole('heading', { name: 'Sign-in could not continue.' })).toBeTruthy()
     expect(screen.getByText('Denied')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe('/sign-in')
 
     cleanup()
     window.history.pushState(

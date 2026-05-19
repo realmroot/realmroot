@@ -1,15 +1,30 @@
 import type { ConfigzConfigResponse } from '@shared/api/configz'
+import { ArrowLeft } from 'lucide-react'
 import { type CSSProperties, type ReactNode, useEffect } from 'react'
 
 type AuthLayoutProps = {
   children: ReactNode
   config: ConfigzConfigResponse | null
+  backHref?: string
+  backLabel?: string
   eyebrow?: string
+  icon?: ReactNode
+  variant?: 'form' | 'message'
   title: string
   description: string
 }
 
-export function AuthLayout({ children, config, eyebrow, title, description }: AuthLayoutProps) {
+export function AuthLayout({
+  backHref,
+  backLabel = 'Back',
+  children,
+  config,
+  eyebrow,
+  icon,
+  title,
+  description,
+  variant = 'form',
+}: AuthLayoutProps) {
   const style = brandingStyle(config)
 
   useEffect(() => {
@@ -22,17 +37,21 @@ export function AuthLayout({ children, config, eyebrow, title, description }: Au
   }, [config?.branding.faviconUrl])
 
   return (
-    <main className="authShell" style={style}>
-      <section className="authBrandPanel">
-        <BrandIdentity config={config} />
-        <div>
+    <main className={`authShell authShell-${variant}`} style={style}>
+      {backHref ? (
+        <a className="authBackLink" href={backHref}>
+          <ArrowLeft aria-hidden="true" size={16} />
+          {backLabel}
+        </a>
+      ) : null}
+      <section className="authPanel" aria-label={title}>
+        <div className="authBrandPanel">
+          {icon ? <div className="authMessageIcon">{icon}</div> : <BrandIdentity config={config} />}
           {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
           <h1>{title}</h1>
           <p>{description}</p>
         </div>
-      </section>
-      <section className="authPanel" aria-label={title}>
-        {children}
+        <div className="authContent">{children}</div>
         <p className="authPoweredBy">Powered by {config?.copy?.productName ?? 'FlareAuth'}</p>
       </section>
     </main>

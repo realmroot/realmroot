@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   ArrowRight,
+  CircleAlert,
   Eye,
   EyeOff,
   Fingerprint,
@@ -561,10 +562,13 @@ export function AuthCallbackPage() {
 
   return (
     <AuthLayout
+      backHref={state.error ? '/sign-in' : undefined}
       config={config}
       eyebrow="Callback"
+      icon={state.error ? <CircleAlert aria-hidden="true" size={28} /> : undefined}
       title={state.message}
       description="This page handles redirects from hosted authentication and OAuth journeys."
+      variant={state.error ? 'message' : 'form'}
     >
       {state.loading ? <LoadingMessage label="Checking callback state" /> : null}
       {state.error ? <Status tone="error">{state.error}</Status> : null}
