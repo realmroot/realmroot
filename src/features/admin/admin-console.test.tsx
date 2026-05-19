@@ -1083,6 +1083,36 @@ describe('admin console', () => {
     })
   })
 
+  it('closes connector delete confirmation without deleting', async () => {
+    const requests: Array<{ url: string; method: string }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-1' && method === 'DELETE') {
+        requests.push({ url, method })
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Delete'))
+    expect(screen.getByRole('heading', { name: 'Delete connector' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Delete connector' })).toBeNull()
+    })
+    expect(requests).toEqual([])
+  })
+
   it('covers connector draft creation, metadata validation, and generic OAuth ready details', async () => {
     const genericConnector = {
       ...connector,
