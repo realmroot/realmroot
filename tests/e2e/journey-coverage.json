@@ -6,6 +6,7 @@
     { "id": "first-admin-gate", "name": "Fresh deployment product routes redirect to first-admin onboarding" },
     { "id": "public-onboarding", "name": "Fresh deployment onboarding creates first admin" },
     { "id": "public-sign-in", "name": "Hosted sign-in renders enabled methods" },
+    { "id": "signed-out-account-redirect", "name": "Signed-out Account Center routes redirect to hosted sign-in" },
     { "id": "password-sign-in", "name": "Hosted password sign-in submits credentials" },
     { "id": "magic-link", "name": "Hosted magic-link request submits email" },
     { "id": "email-otp-sign-in", "name": "Hosted email OTP sign-in completes code flow" },

@@ -24,6 +24,7 @@ type JourneyId = (typeof journeyCoverage.journeys)[number]['id']
 
 let firstAdminRequired = false
 let adminSetupRequired = false
+let accountSignedIn = true
 
 const journeyAssertions: Record<
   JourneyId,
@@ -87,6 +88,31 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Password' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'OTP' })).toBeVisible()
+    },
+  },
+  'signed-out-account-redirect': {
+    suite: 'public and auth journeys',
+    assert: async ({ page }) => {
+      accountSignedIn = false
+      try {
+        for (const path of [
+          '/account',
+          '/account/profile',
+          '/account/security',
+          '/account/linked-accounts',
+          '/account/sessions',
+          '/account/authorized-apps',
+        ]) {
+          await page.goto(path)
+          await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
+          const url = new URL(page.url())
+          expect(url.pathname).toBe('/sign-in')
+          expect(url.searchParams.get('return_to')).toBe(path)
+          await expect(page.getByRole('navigation', { name: 'Account center' })).toHaveCount(0)
+        }
+      } finally {
+        accountSignedIn = true
+      }
     },
   },
   'password-sign-in': {
@@ -516,6 +542,11 @@ async function mockApi(page: Page) {
         status: 302,
         headers: { location: `/oidc/callback?code=demo-code&state=${url.searchParams.get('state') ?? ''}` },
       })
+      return
+    }
+
+    if (!accountSignedIn && path.startsWith('/api/account/')) {
+      await fulfill(route, { error: 'Authentication is required.' }, 401)
       return
     }
 

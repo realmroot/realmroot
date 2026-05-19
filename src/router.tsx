@@ -16,6 +16,7 @@ import {
   UsersPage,
 } from '@/features/admin/admin-console'
 import { ApiRequestError, getConfigz } from '@/lib/api'
+import { getAccountProfile } from '@/lib/api/account'
 import { adminQueryKeys, getAdminReadiness, getSignInSettings } from '@/lib/api/management'
 import { AccountRoute } from '@/routes/account'
 import { App } from '@/routes/app'
@@ -106,6 +107,16 @@ const oidcStartRoute = createRoute({
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account',
+  beforeLoad: async ({ location }) => {
+    try {
+      await queryClient.fetchQuery({ queryKey: ['account', 'profile'], queryFn: getAccountProfile })
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 401) {
+        throw redirect({ to: '/sign-in', search: { return_to: location.href } })
+      }
+      throw error
+    }
+  },
   component: () => <Outlet />,
 })
 

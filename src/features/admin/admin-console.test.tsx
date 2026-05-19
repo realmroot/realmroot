@@ -110,9 +110,56 @@ describe('admin console', () => {
     expect(window.location.search).toContain('return_to=')
   })
 
-  it('redirects fresh deployments from product routes to first-admin onboarding', async () => {
+  it('redirects signed-out account routes to sign-in before rendering account controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ error: 'Authentication is required.' }, 401))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    for (const path of [
+      '/account',
+      '/account/profile',
+      '/account/security',
+      '/account/linked-accounts',
+      '/account/sessions',
+      '/account/authorized-apps',
+    ]) {
+      window.history.pushState(null, '', path)
+      render(<AppRouter />)
+
+      expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
+      await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
+      expect(new URLSearchParams(window.location.search).get('return_to')).toBe(path)
+      expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
+
+      cleanup()
+      queryClient.clear()
+    }
+  })
+
+  it('surfaces non-auth account guard errors instead of converting them to sign-in redirects', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ error: 'Profile unavailable.' }, 503))
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/account/security')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByText('Profile unavailable.')).toBeTruthy()
+    expect(window.location.pathname).toBe('/account/security')
+  })
+
+  it('redirects fresh deployments from product routes to first-admin onboarding', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requestedUrls.push(url)
       if (url === '/api/configz')
         return Promise.resolve(jsonResponse({ ...configz, onboarding: { required: true, href: '/onboarding' } }))
       if (url === '/api/onboarding/status') return Promise.resolve(jsonResponse({ required: true }))
@@ -124,6 +171,7 @@ describe('admin console', () => {
 
     expect(await screen.findByRole('heading', { name: 'Create the first admin.' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/onboarding'))
+    expect(requestedUrls).not.toContain('/api/account/profile')
   })
 
   it('redirects representative fresh deployment product routes to first-admin onboarding', async () => {
