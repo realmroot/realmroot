@@ -25,8 +25,14 @@
     "/api-resources/{id}/permissions": {
       "$ref": "#/components/pathItems/PaginatedMutableCollection"
     },
+    "/api-resources/{id}/permissions/{permissionId}": {
+      "$ref": "#/components/pathItems/CrudResource"
+    },
     "/api-resources/{id}/scopes": {
       "$ref": "#/components/pathItems/PaginatedMutableCollection"
+    },
+    "/api-resources/{id}/scopes/{scopeId}": {
+      "$ref": "#/components/pathItems/CrudResource"
     },
     "/application-role-assignments": {
       "$ref": "#/components/pathItems/RoleAssignmentCollection"
@@ -268,6 +274,17 @@
       "$ref": "#/components/pathItems/CrudResource"
     },
     "/roles/{id}/permissions": {
+      "get": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "List permissions assigned to a role",
+        "responses": {
+          "200": {
+            "description": "Role permissions returned."
+          }
+        }
+      },
       "put": {
         "tags": [
           "Roles"

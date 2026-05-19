@@ -266,6 +266,15 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       await db.delete(role).where(eq(role.id, id))
     },
 
+    async listRolePermissions(roleId) {
+      const rows = await db
+        .select({ permission: apiPermission })
+        .from(rolePermission)
+        .innerJoin(apiPermission, eq(rolePermission.permissionId, apiPermission.id))
+        .where(eq(rolePermission.roleId, roleId))
+      return rows.map((row) => toPermission(row.permission))
+    },
+
     async replaceRolePermissions(roleId, permissionIds) {
       const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
         db.delete(rolePermission).where(eq(rolePermission.roleId, roleId)),

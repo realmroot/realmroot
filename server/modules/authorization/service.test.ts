@@ -52,6 +52,9 @@ describe('AuthorizationService', () => {
     await expect(service.listPermissions(resource.id, { limit: 20, offset: 0 })).resolves.toMatchObject({
       permissions: [{ key: 'contacts.read' }],
     })
+    await expect(service.listRolePermissions(role.id)).resolves.toMatchObject({
+      permissions: [{ key: 'contacts.read' }],
+    })
 
     const claims = await service.buildTokenClaims({
       userId: 'user-1',
@@ -104,6 +107,35 @@ describe('AuthorizationService', () => {
       message: 'Organization was not found.',
     })
     await expect(service.getResource('missing')).rejects.toMatchObject({
+      status: 404,
+      message: 'API resource was not found.',
+    })
+  })
+
+  it('updates and deletes API resources and lists roles', async () => {
+    const repository = new InMemoryAuthorizationRepository()
+    const service = new AuthorizationService(repository)
+    const resource = await service.createResource({
+      identifier: 'orders-api',
+      name: 'Orders API',
+      audience: 'https://api.example.com/orders',
+    })
+    const role = await service.createRole({
+      key: 'orders-reader',
+      name: 'Orders Reader',
+      resourceId: resource.id,
+    })
+
+    await expect(service.updateResource(resource.id, { enabled: false })).resolves.toMatchObject({
+      id: resource.id,
+      enabled: false,
+    })
+    await expect(service.listRoles({ limit: 20, offset: 0 })).resolves.toMatchObject({
+      roles: [{ id: role.id, key: 'orders-reader' }],
+      pagination: { total: 1 },
+    })
+    await service.deleteResource(resource.id)
+    await expect(service.getResource(resource.id)).rejects.toMatchObject({
       status: 404,
       message: 'API resource was not found.',
     })
@@ -728,6 +760,10 @@ class InMemoryAuthorizationRepository implements AuthorizationRepository {
 
   async deleteRole(id: string) {
     this.roles.delete(id)
+  }
+
+  async listRolePermissions(roleId: string) {
+    return this.permissionsFor(roleId)
   }
 
   async replaceRolePermissions(roleId: string, permissionIds: string[]) {

@@ -308,6 +308,14 @@ describe('createDrizzleAuthorizationRepository', () => {
     ])
   })
 
+  it('lists permissions assigned to a role', async () => {
+    const db = new FakeDb()
+    db.assignmentRows = [{ permission: permissionRow() }]
+    const repository = createDrizzleAuthorizationRepository(db as unknown as Database)
+
+    await expect(repository.listRolePermissions('role-1')).resolves.toMatchObject([{ id: 'permission-1' }])
+  })
+
   it('clears role permissions without inserting an empty permission list', async () => {
     const db = new FakeDb()
     const repository = createDrizzleAuthorizationRepository(db as unknown as Database)

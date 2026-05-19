@@ -6,12 +6,14 @@ import { AppRouter, queryClient } from '@/router'
 import {
   AdminDashboardPage,
   AdminOnboardingPage,
+  ApiResourceDetailPage,
   ApiResourcesPage,
   ApplicationsPage,
   BrandingPage,
   ConnectorsPage,
   DeploymentSettingsPage,
   OrganizationsPage,
+  RoleDetailPage,
   RolesPage,
   SecurityPage,
   SignInSettingsPage,
@@ -379,6 +381,51 @@ describe('admin console', () => {
 
     expect(await screen.findByRole('heading', { name: 'Tenant health' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/admin'))
+  })
+
+  it('renders authorization detail routes with route params', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/admin/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/roles/role-1') {
+        return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
+      }
+      if (url === '/api/management/roles/role-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [apiPermission] }))
+      }
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/management/api-resources/resource-1/scopes') {
+        return Promise.resolve(jsonResponse({ scopes: [apiScope], pagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    window.history.pushState(null, '', '/admin/roles/role-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/admin/roles/role-1')
+
+    cleanup()
+    queryClient.clear()
+    window.history.pushState(null, '', '/admin/api-resources/resource-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/admin/api-resources/resource-1')
   })
 
   it('surfaces non-auth admin readiness errors instead of converting them to sign-in redirects', async () => {
@@ -1269,6 +1316,7 @@ describe('admin console', () => {
     fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'auditor' } })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Auditor' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Reads audit events' } })
+    fireEvent.change(screen.getByLabelText('API resource'), { target: { value: 'resource-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(requests).toHaveLength(2))
 
@@ -1288,7 +1336,10 @@ describe('admin console', () => {
           url: '/api/management/organizations',
           body: { slug: 'northwind', name: 'Northwind', displayName: 'Northwind Traders' },
         },
-        { url: '/api/management/roles', body: { key: 'auditor', name: 'Auditor', description: 'Reads audit events' } },
+        {
+          url: '/api/management/roles',
+          body: { key: 'auditor', name: 'Auditor', description: 'Reads audit events', resourceId: 'resource-1' },
+        },
         {
           url: '/api/management/api-resources',
           body: {
@@ -1323,6 +1374,316 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
     expect(requests).toEqual([])
+  })
+
+  it('manages API resource scopes, permissions, role permissions, and assignments from detail pages', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method !== 'GET') requests.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : null })
+      if (url === '/api/management/api-resources/resource-1' && method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ ...apiResource, ...JSON.parse(String(init?.body)) }))
+      }
+      if (url === '/api/management/api-resources/resource-1' && method === 'DELETE') {
+        return Promise.resolve(jsonResponse(null, 204))
+      }
+      if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/management/api-resources/resource-1/scopes') {
+        if (method === 'POST') return Promise.resolve(jsonResponse(apiScope, 201))
+        return Promise.resolve(jsonResponse({ scopes: [apiScope], pagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/scopes/scope-1')
+        return Promise.resolve(jsonResponse(apiScope))
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        if (method === 'POST') return Promise.resolve(jsonResponse(apiPermission, 201))
+        return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions/permission-1') {
+        return Promise.resolve(jsonResponse(apiPermission))
+      }
+      if (url === '/api/management/roles/role-1')
+        return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
+      if (url === '/api/management/roles/role-1/permissions') {
+        if (method === 'PUT') return Promise.resolve(jsonResponse(null, 204))
+        return Promise.resolve(jsonResponse({ permissions: [] }))
+      }
+      if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      if (url === '/api/management/user-role-assignments') return Promise.resolve(jsonResponse(null, 204))
+      if (url === '/api/management/application-role-assignments') return Promise.resolve(jsonResponse(null, 204))
+      if (url === '/api/management/member-role-assignments') return Promise.resolve(jsonResponse(null, 204))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/api-resources/resource-1',
+        method: 'PATCH',
+        body: { enabled: false },
+      }),
+    )
+    fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), { target: { value: 'orders:write' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create scope' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/api-resources/resource-1/scopes',
+        method: 'POST',
+        body: { value: 'orders:write' },
+      }),
+    )
+    fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'orders.write' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create permission' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/api-resources/resource-1/permissions',
+        method: 'POST',
+        body: { key: 'orders.write' },
+      }),
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]!)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' }).at(-1)!)
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/api-resources/resource-1/scopes/scope-1',
+        method: 'PATCH',
+        body: { value: 'orders:read', description: 'Read orders' },
+      }),
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!)
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/api-resources/resource-1/scopes/scope-1',
+        method: 'DELETE',
+        body: null,
+      }),
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' }).at(-1)!)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' }).at(-1)!)
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/api-resources/resource-1/permissions/permission-1',
+        method: 'PATCH',
+        body: {
+          key: 'orders.read',
+          description: 'Read orders',
+          scopeId: 'scope-1',
+          tokenClaimValue: 'read',
+        },
+      }),
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1)!)
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/api-resources/resource-1/permissions/permission-1',
+        method: 'DELETE',
+        body: null,
+      }),
+    )
+
+    unmount()
+    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('orders.read')).toBeTruthy())
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save permissions' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/roles/role-1/permissions',
+        method: 'PUT',
+        body: { permissionIds: ['permission-1'] },
+      }),
+    )
+    fireEvent.change(screen.getByLabelText('Subject ID'), { target: { value: 'user-1' } })
+    fireEvent.change(screen.getByLabelText('Token claims JSON'), { target: { value: 'not-json' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
+    expect(await screen.findByText(/Unexpected token/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Token claims JSON'), { target: { value: '{"tier":"gold"}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/user-role-assignments',
+        method: 'POST',
+        body: { roleId: 'role-1', subjectId: 'user-1', tokenClaims: { tier: 'gold' } },
+      }),
+    )
+    fireEvent.change(screen.getByLabelText('Subject type'), { target: { value: 'application' } })
+    fireEvent.change(screen.getByLabelText('Subject ID'), { target: { value: 'app-1' } })
+    fireEvent.change(screen.getByLabelText('Token claims JSON'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/application-role-assignments',
+        method: 'POST',
+        body: { roleId: 'role-1', subjectId: 'app-1' },
+      }),
+    )
+    fireEvent.change(screen.getByLabelText('Subject type'), { target: { value: 'member' } })
+    fireEvent.change(screen.getByLabelText('Subject ID'), { target: { value: 'member-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/member-role-assignments',
+        method: 'POST',
+        body: { roleId: 'role-1', subjectId: 'member-1' },
+      }),
+    )
+  })
+
+  it('updates and deletes authorization roles and resources', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method !== 'GET') requests.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : null })
+      if (url === '/api/management/api-resources/resource-1' && method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ ...apiResource, ...JSON.parse(String(init?.body)) }))
+      }
+      if (url === '/api/management/api-resources/resource-1' && method === 'DELETE') {
+        return Promise.resolve(jsonResponse(null, 204))
+      }
+      if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/management/api-resources/resource-1/scopes') {
+        return Promise.resolve(jsonResponse({ scopes: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/roles/role-1' && method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ ...role, system: false, ...JSON.parse(String(init?.body)) }))
+      }
+      if (url === '/api/management/roles/role-1' && method === 'DELETE') {
+        return Promise.resolve(jsonResponse(null, 204))
+      }
+      if (url === '/api/management/roles/role-1') {
+        return Promise.resolve(jsonResponse({ ...role, system: false, resourceId: 'resource-1' }))
+      }
+      if (url === '/api/management/roles/role-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [] }))
+      }
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [], pagination: emptyPagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Orders API' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save resource' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/api-resources/resource-1',
+        method: 'PATCH',
+        body: {
+          identifier: 'management-api',
+          name: 'Orders API',
+          description: 'Management surface',
+          audience: 'https://auth.example.com/api/management',
+          tokenClaimsNamespace: null,
+        },
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Delete resource' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/api-resources/resource-1',
+        method: 'DELETE',
+        body: null,
+      }),
+    )
+
+    unmount()
+    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Operator' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save role' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/roles/role-1',
+        method: 'PATCH',
+        body: { key: 'admin', name: 'Operator', description: 'Tenant administrator' },
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Delete role' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/roles/role-1',
+        method: 'DELETE',
+        body: null,
+      }),
+    )
+  })
+
+  it('renders empty authorization detail rows and inline validation errors', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/management/api-resources/resource-1/scopes') {
+        return Promise.resolve(jsonResponse({ scopes: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [], pagination: emptyPagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+
+    expect(await screen.findByText('No scopes yet.')).toBeTruthy()
+    expect(screen.getByText('No permissions yet.')).toBeTruthy()
+
+    fireEvent.submit(screen.getByRole('button', { name: 'Create scope' }).closest('form')!)
+
+    expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
+  })
+
+  it('removes a selected role permission from local assignment state', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method !== 'GET') requests.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : null })
+      if (url === '/api/management/roles/role-1')
+        return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
+      if (url === '/api/management/roles/role-1/permissions') {
+        if (method === 'PUT') return Promise.resolve(jsonResponse(null, 204))
+        return Promise.resolve(jsonResponse({ permissions: [apiPermission] }))
+      }
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByRole('checkbox')).toHaveProperty('checked', true)
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save permissions' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/roles/role-1/permissions',
+        method: 'PUT',
+        body: { permissionIds: [] },
+      }),
+    )
   })
 
   it('renders admin variants for empty, disabled, and unset states', async () => {
@@ -1869,6 +2230,8 @@ const role = {
   applicationId: null,
   organizationId: null,
   resourceId: null,
+  tokenClaimName: null,
+  tokenClaimValue: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 }
@@ -1880,8 +2243,29 @@ const apiResource = {
   description: 'Management surface',
   audience: 'https://auth.example.com/api/management',
   enabled: true,
+  tokenClaimsNamespace: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const apiScope = {
+  id: 'scope-1',
+  resourceId: 'resource-1',
+  value: 'orders:read',
+  description: 'Read orders',
+  required: false,
+  tokenClaimName: null,
+  includeInAccessToken: true,
+  includeInIdToken: false,
+}
+
+const apiPermission = {
+  id: 'permission-1',
+  resourceId: 'resource-1',
+  scopeId: 'scope-1',
+  key: 'orders.read',
+  description: 'Read orders',
+  tokenClaimValue: 'read',
 }
 
 const signInSettings = {

@@ -220,6 +220,10 @@ export const listRolesResponseSchema = z.object({
   pagination: paginationMetadataSchema,
 })
 
+export const rolePermissionsResponseSchema = z.object({
+  permissions: z.array(apiPermissionResponseSchema),
+})
+
 export { paginationQuerySchema }
 
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>
@@ -235,12 +239,15 @@ export type ApiResourceResponse = z.infer<typeof apiResourceResponseSchema>
 export type ListApiResourcesResponse = z.infer<typeof listApiResourcesResponseSchema>
 export type ListOrganizationsResponse = z.infer<typeof listOrganizationsResponseSchema>
 export type ListRolesResponse = z.infer<typeof listRolesResponseSchema>
+export type RolePermissionsResponse = z.infer<typeof rolePermissionsResponseSchema>
 export type CreateApiResourceRequest = z.infer<typeof createApiResourceRequestSchema>
 export type UpdateApiResourceRequest = z.infer<typeof updateApiResourceRequestSchema>
 export type ApiScopeResponse = z.infer<typeof apiScopeResponseSchema>
+export type ListApiScopesResponse = z.infer<typeof listApiScopesResponseSchema>
 export type CreateApiScopeRequest = z.infer<typeof createApiScopeRequestSchema>
 export type UpdateApiScopeRequest = z.infer<typeof updateApiScopeRequestSchema>
 export type ApiPermissionResponse = z.infer<typeof apiPermissionResponseSchema>
+export type ListApiPermissionsResponse = z.infer<typeof listApiPermissionsResponseSchema>
 export type CreateApiPermissionRequest = z.infer<typeof createApiPermissionRequestSchema>
 export type UpdateApiPermissionRequest = z.infer<typeof updateApiPermissionRequestSchema>
 export type RoleResponse = z.infer<typeof roleResponseSchema>

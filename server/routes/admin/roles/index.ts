@@ -41,6 +41,10 @@ adminRolesRoute.delete('/:roleId', async (c) => {
   return c.body(null, 204)
 })
 
+adminRolesRoute.get('/:roleId/permissions', async (c) =>
+  c.json(await createAuthorizationService(c).listRolePermissions(c.req.param('roleId'))),
+)
+
 adminRolesRoute.put('/:roleId/permissions', async (c) => {
   const body = await readJson(c, replacePermissionsRequestSchema)
   await createAuthorizationService(c).replaceRolePermissions(c.req.param('roleId'), body.permissionIds)
@@ -49,21 +53,18 @@ adminRolesRoute.put('/:roleId/permissions', async (c) => {
 
 adminRolesRoute.post('/assignments/users', async (c) => {
   const { user } = getAuthContext(c)
-  await createAuthorizationService(c).assignUserRole(await readJson(c, assignRoleRequestSchema), user?.id ?? null)
+  await createAuthorizationService(c).assignUserRole(await readJson(c, assignRoleRequestSchema), user!.id)
   return c.body(null, 204)
 })
 
 adminRolesRoute.post('/assignments/applications', async (c) => {
   const { user } = getAuthContext(c)
-  await createAuthorizationService(c).assignApplicationRole(
-    await readJson(c, assignRoleRequestSchema),
-    user?.id ?? null,
-  )
+  await createAuthorizationService(c).assignApplicationRole(await readJson(c, assignRoleRequestSchema), user!.id)
   return c.body(null, 204)
 })
 
 adminRolesRoute.post('/assignments/members', async (c) => {
   const { user } = getAuthContext(c)
-  await createAuthorizationService(c).assignMemberRole(await readJson(c, assignRoleRequestSchema), user?.id ?? null)
+  await createAuthorizationService(c).assignMemberRole(await readJson(c, assignRoleRequestSchema), user!.id)
   return c.body(null, 204)
 })

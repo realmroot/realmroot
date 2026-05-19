@@ -45,8 +45,8 @@ OIDC discovery remains at:
 | Refresh tokens | Supported | `offline_access` is included and refresh tokens are stored separately in `oauth_refresh_token`. |
 | Consent flow | Supported | Consent is redirected to `/oauth/consent`; grants are stored in `oauth_consent`. |
 | UserInfo | Supported | Available when `openid` is in the granted scope set. |
-| Scopes | Supported | v1.0 provider scopes are frozen to `openid profile email offline_access`; product/API scopes can be added later with explicit schema and audience review. |
-| Resource indicators | Partial | The provider exposes audience/resource hooks and access-token claim context, but FlareAuth v1.0 does not mount a resource-server metadata endpoint until a concrete resource API exists. |
+| Scopes | Supported | OIDC scopes remain `openid profile email offline_access`; API resource scopes are managed under `/api/management/api-resources/{id}/scopes` and are passed into the authorization claim builder for matching audience/resource requests. |
+| Resource indicators | Supported | API resources define valid audiences. When a token request includes a matching resource/audience, FlareAuth emits audience/resource authorization metadata and RBAC claims for that API resource. |
 | Client credentials | Supported | The selected plugin supports `client_credentials`; v1.0 treats these as machine tokens without a user subject. |
 
 ## Token Shape
@@ -56,13 +56,22 @@ Access tokens are JWT-verifiable when issued for a valid audience through the JW
 Standard claims come from the provider/JWT layer:
 
 - `iss`: `{baseURL}/api/auth`
-- `aud`: `{baseURL}/api/auth` for v1.0 unless a future resource API adds `validAudiences`
+- `aud`: `{baseURL}/api/auth` for provider tokens, or the matched API resource audience when the OAuth provider issues a resource-bound token
 - `sub`: user id for user grants; absent from client-credentials grants unless a future machine identity model adds a subject
 - `azp`: OAuth client id
-- `scope`: granted scope string
+- `scope`: granted scope string; resource scopes are also mirrored into `authorization.scopes`
 - `sid`: session id for user-bound grants when available
 
-Custom claims are not added for v1.0. Organization/team claims stay out of tokens until Organization is enabled with a stable membership model.
+Authorization claims are added by the authorization module through the Better Auth OAuth provider access-token claim hook:
+
+- `authorization.scopes`: granted scopes as an array
+- `authorization.roles`: RBAC role keys assigned directly to the user, to the application, or to the user's organization member record
+- `authorization.permissions`: permission keys attached to those roles
+- `authorization.organization_id`: present for organization-scoped token construction
+- `authorization.resource` and `authorization.audience`: present when the requested audience matches an enabled API resource
+- Top-level `roles` and `permissions`: duplicated arrays for clients that expect simple RBAC claims
+
+Role assignments can contribute extra token claims, but reserved claim names are rejected at assignment time. Role `tokenClaimName` values are emitted either at the top level or under the API resource `tokenClaimsNamespace` when the resource defines one. Team management remains out of scope; organization membership roles are included through the existing organization member model.
 
 ## Client Model
 

@@ -95,6 +95,7 @@ describe('admin resource routes', () => {
     await expectJson(app, '/roles/role-1', 'GET', undefined, 200)
     await expectJson(app, '/roles/role-1', 'PATCH', { name: 'Owner' }, 200)
     await expectStatus(app, '/roles/role-1', 'DELETE', undefined, 204)
+    await expectJson(app, '/roles/role-1/permissions', 'GET', undefined, 200)
     await expectStatus(app, '/roles/role-1/permissions', 'PUT', { permissionIds: ['permission-1'] }, 204)
     await expectStatus(app, '/roles/assignments/users', 'POST', assignmentBody(), 204)
     await expectStatus(app, '/roles/assignments/applications', 'POST', assignmentBody(), 204)
@@ -187,9 +188,10 @@ async function loadConnectorRoutes() {
 function withAdminContext() {
   const app = new Hono()
   app.use('*', async (c, next) => {
+    const user = { id: 'admin-1', role: 'admin' }
     c.set('authContext', {
-      session: { session: { id: 'session-1' }, user: { id: 'admin-1', role: 'admin' } },
-      user: { id: 'admin-1', role: 'admin' },
+      session: { session: { id: 'session-1' }, user },
+      user,
     })
     await next()
   })
@@ -267,6 +269,7 @@ function authorizationServiceMock() {
     getRole: vi.fn().mockResolvedValue({ id: 'role-1' }),
     updateRole: vi.fn().mockResolvedValue({ id: 'role-1' }),
     deleteRole: vi.fn().mockResolvedValue(undefined),
+    listRolePermissions: vi.fn().mockResolvedValue({ permissions: [] }),
     replaceRolePermissions: vi.fn().mockResolvedValue(undefined),
     assignUserRole: vi.fn().mockResolvedValue(undefined),
     assignApplicationRole: vi.fn().mockResolvedValue(undefined),

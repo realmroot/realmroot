@@ -128,6 +128,93 @@ describe('management API client', () => {
       security: { key: 'security.get' },
     })
   })
+
+  it('maps fetch-based authorization helpers and response handling', async () => {
+    const fetchCalls: Array<{ path: string; init?: RequestInit }> = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input)
+        fetchCalls.push({ path, init })
+        if (path.includes('/empty-error/')) return Promise.resolve(new Response('', { status: 500 }))
+        if (path.includes('/string-error/')) {
+          return Promise.resolve(new Response(JSON.stringify({ error: 'String failure.' }), { status: 400 }))
+        }
+        if (path.includes('/object-error/')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: { message: 'Object failure.' } }), { status: 400 }),
+          )
+        }
+        if (path.includes('/message-error/')) {
+          return Promise.resolve(new Response(JSON.stringify({ message: 'Message failure.' }), { status: 400 }))
+        }
+        if (path.includes('/text-error/')) {
+          return Promise.resolve(new Response('Text failure.', { status: 400 }))
+        }
+        if (init?.method === 'DELETE' || path.includes('assignments')) {
+          return Promise.resolve(new Response(null, { status: 204 }))
+        }
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }),
+    )
+    const { management } = await loadManagementApi()
+
+    await management.getRole('role-1')
+    await management.deleteRole('role-1')
+    await management.listRolePermissions('role-1')
+    await management.replaceRolePermissions('role-1', ['permission-1'])
+    await management.assignUserRole({ roleId: 'role-1', subjectId: 'user-1' })
+    await management.assignApplicationRole({ roleId: 'role-1', subjectId: 'app-1' })
+    await management.assignMemberRole({ roleId: 'role-1', subjectId: 'member-1' })
+    await management.getApiResource('resource-1')
+    await management.deleteApiResource('resource-1')
+    await management.listApiScopes('resource-1')
+    await management.createApiScope('resource-1', { value: 'orders:read' })
+    await management.updateApiScope('resource-1', 'scope-1', { description: 'Read orders' })
+    await management.deleteApiScope('resource-1', 'scope-1')
+    await management.listApiPermissions('resource-1')
+    await management.createApiPermission('resource-1', { key: 'orders.read' })
+    await management.updateApiPermission('resource-1', 'permission-1', { key: 'orders.view' })
+    await management.deleteApiPermission('resource-1', 'permission-1')
+
+    expect(fetchCalls.map((call) => [call.path, call.init?.method ?? 'GET', call.init?.body])).toEqual([
+      ['/api/management/roles/role-1', 'GET', undefined],
+      ['/api/management/roles/role-1', 'DELETE', undefined],
+      ['/api/management/roles/role-1/permissions', 'GET', undefined],
+      ['/api/management/roles/role-1/permissions', 'PUT', JSON.stringify({ permissionIds: ['permission-1'] })],
+      ['/api/management/user-role-assignments', 'POST', JSON.stringify({ roleId: 'role-1', subjectId: 'user-1' })],
+      [
+        '/api/management/application-role-assignments',
+        'POST',
+        JSON.stringify({ roleId: 'role-1', subjectId: 'app-1' }),
+      ],
+      ['/api/management/member-role-assignments', 'POST', JSON.stringify({ roleId: 'role-1', subjectId: 'member-1' })],
+      ['/api/management/api-resources/resource-1', 'GET', undefined],
+      ['/api/management/api-resources/resource-1', 'DELETE', undefined],
+      ['/api/management/api-resources/resource-1/scopes', 'GET', undefined],
+      ['/api/management/api-resources/resource-1/scopes', 'POST', JSON.stringify({ value: 'orders:read' })],
+      [
+        '/api/management/api-resources/resource-1/scopes/scope-1',
+        'PATCH',
+        JSON.stringify({ description: 'Read orders' }),
+      ],
+      ['/api/management/api-resources/resource-1/scopes/scope-1', 'DELETE', undefined],
+      ['/api/management/api-resources/resource-1/permissions', 'GET', undefined],
+      ['/api/management/api-resources/resource-1/permissions', 'POST', JSON.stringify({ key: 'orders.read' })],
+      [
+        '/api/management/api-resources/resource-1/permissions/permission-1',
+        'PATCH',
+        JSON.stringify({ key: 'orders.view' }),
+      ],
+      ['/api/management/api-resources/resource-1/permissions/permission-1', 'DELETE', undefined],
+    ])
+
+    await expect(management.listApiScopes('empty-error')).rejects.toThrow('Request failed with status 500.')
+    await expect(management.listApiScopes('string-error')).rejects.toThrow('String failure.')
+    await expect(management.listApiScopes('object-error')).rejects.toThrow('Object failure.')
+    await expect(management.listApiScopes('message-error')).rejects.toThrow('Message failure.')
+    await expect(management.listApiScopes('text-error')).rejects.toThrow('Text failure.')
+  })
 })
 
 async function loadManagementApi() {
@@ -139,6 +226,14 @@ async function loadManagementApi() {
     })
 
   vi.doMock('@/lib/api', () => ({
+    ApiRequestError: class ApiRequestError extends Error {
+      constructor(
+        message: string,
+        readonly status: number,
+      ) {
+        super(message)
+      }
+    },
     apiClient: {
       api: {
         management: {
