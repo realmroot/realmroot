@@ -152,6 +152,69 @@ describe('ConnectorService', () => {
     expect(repository.update).not.toHaveBeenCalled()
   })
 
+  it('rejects enabled Cognito writes missing required provider metadata', async () => {
+    const repository = createRepository()
+    const service = new ConnectorService(repository)
+
+    await expect(
+      service.create(
+        {
+          providerType: 'social',
+          providerId: 'cognito',
+          displayName: 'Cognito',
+          clientId: 'client-id',
+          clientSecretBinding: 'COGNITO_CLIENT_SECRET',
+          providerMetadata: { domain: 'auth.example.com', region: 'us-east-1' },
+        },
+        { COGNITO_CLIENT_SECRET: 'secret' },
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Enabled Cognito connector requires providerMetadata.userPoolId.',
+    })
+    expect(repository.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects enabled generic OAuth writes missing endpoint requirements', async () => {
+    const repository = createRepository()
+    const service = new ConnectorService(repository)
+
+    await expect(
+      service.create(
+        {
+          providerType: 'generic_oauth',
+          providerId: 'missing-authorization',
+          displayName: 'Missing authorization',
+          clientId: 'client-id',
+          clientSecretBinding: 'GENERIC_CLIENT_SECRET',
+          tokenEndpoint: 'https://idp.example.com/token',
+        },
+        { GENERIC_CLIENT_SECRET: 'secret' },
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Enabled generic OAuth connector requires issuer or authorizationEndpoint.',
+    })
+
+    await expect(
+      service.create(
+        {
+          providerType: 'generic_oauth',
+          providerId: 'missing-token',
+          displayName: 'Missing token',
+          clientId: 'client-id',
+          clientSecretBinding: 'GENERIC_CLIENT_SECRET',
+          authorizationEndpoint: 'https://idp.example.com/authorize',
+        },
+        { GENERIC_CLIENT_SECRET: 'secret' },
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Enabled generic OAuth connector requires tokenEndpoint when issuer is not provided.',
+    })
+    expect(repository.create).not.toHaveBeenCalled()
+  })
+
   it('rejects duplicate provider configuration before inserting', async () => {
     const existing = connector({ providerType: 'generic_oauth', providerId: 'github' })
     const repository = createRepository({ existingProvider: existing })
@@ -187,15 +250,18 @@ describe('ConnectorService', () => {
       pagination: { limit: 25, offset: 0, total: 0, hasMore: false, nextOffset: null },
     })
     await expect(
-      service.create({
-        providerType: 'social',
-        providerId: 'github',
-        displayName: 'GitHub',
-        clientId: 'client-id',
-        clientSecretBinding: 'GITHUB_CLIENT_SECRET',
-        scopes: ['read:user'],
-        providerMetadata: { prompt: 'consent' },
-      }),
+      service.create(
+        {
+          providerType: 'social',
+          providerId: 'github',
+          displayName: 'GitHub',
+          clientId: 'client-id',
+          clientSecretBinding: 'GITHUB_CLIENT_SECRET',
+          scopes: ['read:user'],
+          providerMetadata: { prompt: 'consent' },
+        },
+        { GITHUB_CLIENT_SECRET: 'github-secret' },
+      ),
     ).resolves.toMatchObject({
       id: 'idp_github',
       providerId: 'github',
@@ -320,6 +386,33 @@ describe('ConnectorService', () => {
       connectorId: 'idp_google',
       ready: false,
       checks: expect.arrayContaining([expect.objectContaining({ key: 'clientSecretAvailable', ok: false })]),
+    })
+
+    const disabledService = new ConnectorService(
+      createRepository({
+        byId: connector({
+          id: 'idp_disabled',
+          enabled: false,
+          clientId: null,
+          clientSecretBinding: null,
+        }),
+      }),
+    )
+    await expect(disabledService.readiness('idp_disabled', {} as Env)).resolves.toMatchObject({
+      connectorId: 'idp_disabled',
+      ready: false,
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'enabled',
+          ok: false,
+          message: 'Connector is disabled.',
+        }),
+        expect.objectContaining({
+          key: 'clientId',
+          ok: false,
+          message: 'Client ID is missing.',
+        }),
+      ]),
     })
   })
 
@@ -493,6 +586,13 @@ describe('ConnectorService', () => {
               issuer: null,
               authorizationEndpoint: null,
               tokenEndpoint: 'https://idp.example.com/token',
+              clientSecretBinding: 'GENERIC_CLIENT_SECRET',
+            }),
+            connector({
+              providerType: 'generic_oauth',
+              providerId: 'mixed-generic',
+              issuer: 'https://idp.example.com',
+              authorizationEndpoint: 'https://idp.example.com/authorize',
               clientSecretBinding: 'GENERIC_CLIENT_SECRET',
             }),
           ],

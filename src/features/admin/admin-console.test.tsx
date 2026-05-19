@@ -2170,6 +2170,43 @@ describe('admin console', () => {
     expect(screen.getByRole('button', { name: 'Rotate key' })).toHaveProperty('disabled', true)
   })
 
+  it('retries new security, connector, and OIDC surface load errors', async () => {
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requests.push(url)
+      if (url === '/api/management/sign-in-settings') {
+        return Promise.resolve(jsonResponse({ error: 'Sign-in settings unavailable.' }, 503))
+      }
+      if (url === '/api/management/security/policy') {
+        return Promise.resolve(jsonResponse({ error: 'Security policy unavailable.' }, 503))
+      }
+      if (url === '/api/management/readiness') return Promise.resolve(jsonResponse(readinessIncomplete))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<PasswordlessConnectorsPage />)
+
+    expect(await screen.findByText('Sign-in settings unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/sign-in-settings').length).toBe(2))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/readiness').length).toBe(2))
+
+    unmount()
+    renderWithQuery(<SecurityGeneralPage />)
+
+    expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(2))
+
+    cleanup()
+    renderWithQuery(<DeploymentSettingsPage />)
+
+    expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(4))
+  })
+
   it('saves sign-in settings through the management boundary', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
