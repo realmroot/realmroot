@@ -6,7 +6,18 @@ import {
 } from '@shared/api/authorization'
 import { createManagementConnectorRequestSchema, managementCreateUserRequestSchema } from '@shared/api/management'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Copy, MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
+import {
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  ListChecks,
+  MoreHorizontal,
+  Plus,
+  RefreshCw,
+  Server,
+  ShieldCheck,
+} from 'lucide-react'
 import { type FormEvent, type ReactNode, useState } from 'react'
 import type { z } from 'zod'
 import { Badge } from '@/components/ui/badge'
@@ -53,6 +64,7 @@ import {
   updateConnector,
   updateUser,
 } from '@/lib/api/management'
+import { cn } from '@/lib/utils'
 
 type FormState = Record<string, string>
 
@@ -70,51 +82,151 @@ export function AdminDashboardPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Overview"
+        breadcrumb={['Overview']}
+        eyebrow="Dashboard"
         title="Tenant health"
-        description="Operational counts and configuration states across identity, access, and hosted UI modules."
+        description="Track setup readiness, identity activity, security posture, and standards-based integration metadata."
       />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Applications" value={dashboard.applications.pagination.total} />
-        <MetricCard label="Users" value={dashboard.users.pagination.total} />
-        <MetricCard label="Organizations" value={dashboard.organizations.pagination.total} />
-        <MetricCard label="Roles" value={dashboard.roles.pagination.total} />
+        <MetricCard
+          detail="OIDC clients ready for authorization code flows."
+          label="Applications"
+          value={dashboard.applications.pagination.total}
+        />
+        <MetricCard
+          detail="Tenant identities available to hosted auth."
+          label="Users"
+          value={dashboard.users.pagination.total}
+        />
+        <MetricCard
+          detail="Organizations represented in authorization policy."
+          label="Organizations"
+          value={dashboard.organizations.pagination.total}
+        />
+        <MetricCard
+          detail="Role definitions across tenant resources."
+          label="Roles"
+          value={dashboard.roles.pagination.total}
+        />
       </div>
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Recent applications</CardTitle>
-            <CardDescription>OIDC clients and their current operational state.</CardDescription>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle>Setup progress</CardTitle>
+                <CardDescription>Readiness checklist for operating the tenant in production.</CardDescription>
+              </div>
+              <Badge variant={dashboard.applications.pagination.total > 0 ? 'secondary' : 'outline'}>
+                {dashboard.applications.pagination.total > 0 ? 'Ready' : 'Action needed'}
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Client type</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dashboard.applications.applications.slice(0, 5).map((application) => (
-                  <TableRow key={application.id}>
-                    <TableCell>
-                      <div className="font-medium">{application.name}</div>
-                      <div className="text-xs text-muted-foreground">{application.clientId}</div>
-                    </TableCell>
-                    <TableCell>{application.clientType}</TableCell>
-                    <TableCell>
-                      <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <CardContent className="grid gap-3">
+            <SetupItem
+              complete={dashboard.applications.pagination.total > 0}
+              label="Create an OIDC application"
+              value={dashboard.applications.pagination.total > 0 ? 'Client configured' : 'Required before app sign-in'}
+            />
+            <SetupItem
+              complete={dashboard.connectors.pagination.total > 0}
+              label="Configure identity connectors"
+              value={dashboard.connectors.pagination.total > 0 ? 'Connector available' : 'Password sign-in still works'}
+            />
+            <SetupItem
+              complete={dashboard.security.policy.passkeys.enabled || dashboard.security.policy.mfa.mode === 'required'}
+              label="Review security policy"
+              value={`MFA ${dashboard.security.policy.mfa.mode}; passkeys ${
+                dashboard.security.policy.passkeys.enabled ? 'enabled' : 'disabled'
+              }`}
+            />
+            <SetupItem
+              complete={dashboard.users.pagination.total > 0}
+              label="Invite or create users"
+              value={`${dashboard.users.pagination.total} user${dashboard.users.pagination.total === 1 ? '' : 's'}`}
+            />
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Security posture</CardTitle>
+            <CardTitle>OIDC endpoints</CardTitle>
+            <CardDescription>Use discovery for client configuration and environment validation.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm">
+            <SettingRow label="Issuer" value={`${window.location.origin}/api/auth`} />
+            <SettingRow
+              label="Discovery"
+              value={`${window.location.origin}/api/auth/.well-known/openid-configuration`}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => window.open('/api/auth/.well-known/openid-configuration', '_blank', 'noopener')}
+                type="button"
+                variant="secondary"
+              >
+                <ExternalLink data-icon="inline-start" />
+                Discovery
+              </Button>
+              <Button
+                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/auth`)}
+                type="button"
+                variant="ghost"
+              >
+                <Copy data-icon="inline-start" />
+                Copy issuer
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-3">
+        <DashboardListCard
+          description="Most recent OIDC clients and operational state."
+          empty="Create an application to start routing sign-in requests."
+          title="Recent applications"
+        >
+          {dashboard.applications.applications.slice(0, 4).map((application) => (
+            <SummaryRow
+              key={application.id}
+              meta={application.clientId}
+              status={<StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />}
+              title={application.name}
+            />
+          ))}
+        </DashboardListCard>
+        <DashboardListCard
+          description="Recent identities available to the tenant."
+          empty="Create a user to verify account-center flows."
+          title="Recent users"
+        >
+          {dashboard.users.users.slice(0, 4).map((user) => (
+            <SummaryRow
+              key={user.id}
+              meta={user.email ?? user.id}
+              status={<StatusBadge active={!user.banned} activeLabel="Active" inactiveLabel="Banned" />}
+              title={user.name ?? user.email ?? user.id}
+            />
+          ))}
+        </DashboardListCard>
+        <DashboardListCard
+          description="Identity providers available in hosted auth."
+          empty="Add a connector when social or enterprise sign-in is needed."
+          title="Connectors"
+        >
+          {dashboard.connectors.connectors.slice(0, 4).map((connector) => (
+            <SummaryRow
+              key={connector.id}
+              meta={connector.providerId}
+              status={<StatusBadge active={connector.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />}
+              title={connector.displayName}
+            />
+          ))}
+        </DashboardListCard>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Security status</CardTitle>
             <CardDescription>Current tenant security policy from the management boundary.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm">
@@ -124,6 +236,25 @@ export function AdminDashboardPage() {
             <SettingRow
               label="Password sign-in"
               value={dashboard.signIn.signIn.passwordEnabled ? 'Enabled' : 'Disabled'}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Health signals</CardTitle>
+            <CardDescription>Signals that affect production readiness and operations.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <HealthRow icon={<Server aria-hidden="true" />} label="Runtime" value="Cloudflare Workers" />
+            <HealthRow
+              icon={<ShieldCheck aria-hidden="true" />}
+              label="Sessions"
+              value={`${dashboard.security.policy.sessions.freshAgeSeconds}s fresh age`}
+            />
+            <HealthRow
+              icon={<ListChecks aria-hidden="true" />}
+              label="Authorization"
+              value={`${dashboard.roles.pagination.total} roles, ${dashboard.apiResources.pagination.total} API resources`}
             />
           </CardContent>
         </Card>
@@ -154,7 +285,19 @@ export function ApplicationsPage() {
           New application
         </Button>
       }
+      auxiliary={
+        <CreateApplicationDialog
+          error={createMutation.errorMessage}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={createMutation.mutate}
+          open={dialogOpen}
+          pending={createMutation.isPending}
+        />
+      }
       error={query.error}
+      empty={query.data?.applications.length === 0}
+      emptyDescription="Create your first OIDC client to connect an application to hosted authentication."
+      emptyTitle="No applications yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
@@ -207,13 +350,6 @@ export function ApplicationsPage() {
           ))}
         </TableBody>
       </Table>
-      <CreateApplicationDialog
-        error={createMutation.errorMessage}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={createMutation.mutate}
-        open={dialogOpen}
-        pending={createMutation.isPending}
-      />
     </ResourcePage>
   )
 }
@@ -361,7 +497,21 @@ export function UsersPage() {
           New user
         </Button>
       }
+      auxiliary={
+        <CreateUserDialog
+          error={createMutation.errorMessage}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={createMutation.mutate}
+          open={dialogOpen}
+          pending={createMutation.isPending}
+        />
+      }
       error={query.error}
+      empty={query.data?.users.length === 0}
+      emptyDescription={
+        search ? 'No users match the current search.' : 'Create a user to verify sign-in and account-center behavior.'
+      }
+      emptyTitle={search ? 'No users found' : 'No users yet'}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
@@ -424,13 +574,6 @@ export function UsersPage() {
           ))}
         </TableBody>
       </Table>
-      <CreateUserDialog
-        error={createMutation.errorMessage}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={createMutation.mutate}
-        open={dialogOpen}
-        pending={createMutation.isPending}
-      />
     </ResourcePage>
   )
 }
@@ -457,7 +600,19 @@ export function ConnectorsPage() {
           New connector
         </Button>
       }
+      auxiliary={
+        <CreateConnectorDialog
+          error={createMutation.errorMessage}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={createMutation.mutate}
+          open={dialogOpen}
+          pending={createMutation.isPending}
+        />
+      }
       error={query.error}
+      empty={query.data?.connectors.length === 0}
+      emptyDescription="Add social or enterprise identity providers when your sign-in experience needs them."
+      emptyTitle="No connectors yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
@@ -498,13 +653,6 @@ export function ConnectorsPage() {
           ))}
         </TableBody>
       </Table>
-      <CreateConnectorDialog
-        error={createMutation.errorMessage}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={createMutation.mutate}
-        open={dialogOpen}
-        pending={createMutation.isPending}
-      />
     </ResourcePage>
   )
 }
@@ -514,7 +662,7 @@ export function SignInSettingsPage() {
 
   return (
     <ResourcePage
-      title="Sign-in settings"
+      title="Sign-in experience"
       description="Review enabled identifiers, authentication methods, and hosted auth links."
       error={query.error}
       loading={query.isLoading}
@@ -624,7 +772,25 @@ export function OrganizationsPage() {
           New organization
         </Button>
       }
+      auxiliary={
+        <SimpleCreateDialog
+          error={createMutation.errorMessage}
+          fields={[
+            ['slug', 'Slug'],
+            ['name', 'Name'],
+            ['displayName', 'Display name'],
+          ]}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={(form) => createMutation.mutate(parseForm(createOrganizationRequestSchema, form))}
+          open={dialogOpen}
+          pending={createMutation.isPending}
+          title="Create organization"
+        />
+      }
       error={query.error}
+      empty={query.data?.organizations.length === 0}
+      emptyDescription="Create organizations when authorization needs tenant-owned groups."
+      emptyTitle="No organizations yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
@@ -651,19 +817,6 @@ export function OrganizationsPage() {
           ))}
         </TableBody>
       </Table>
-      <SimpleCreateDialog
-        error={createMutation.errorMessage}
-        fields={[
-          ['slug', 'Slug'],
-          ['name', 'Name'],
-          ['displayName', 'Display name'],
-        ]}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={(form) => createMutation.mutate(parseForm(createOrganizationRequestSchema, form))}
-        open={dialogOpen}
-        pending={createMutation.isPending}
-        title="Create organization"
-      />
     </ResourcePage>
   )
 }
@@ -690,7 +843,25 @@ export function RolesPage() {
           New role
         </Button>
       }
+      auxiliary={
+        <SimpleCreateDialog
+          error={createMutation.errorMessage}
+          fields={[
+            ['key', 'Key'],
+            ['name', 'Name'],
+            ['description', 'Description'],
+          ]}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={(form) => createMutation.mutate(parseForm(createRoleRequestSchema, form))}
+          open={dialogOpen}
+          pending={createMutation.isPending}
+          title="Create role"
+        />
+      }
       error={query.error}
+      empty={query.data?.roles.length === 0}
+      emptyDescription="Create roles to model tenant, organization, application, or API permissions."
+      emptyTitle="No roles yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
@@ -717,19 +888,6 @@ export function RolesPage() {
           ))}
         </TableBody>
       </Table>
-      <SimpleCreateDialog
-        error={createMutation.errorMessage}
-        fields={[
-          ['key', 'Key'],
-          ['name', 'Name'],
-          ['description', 'Description'],
-        ]}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={(form) => createMutation.mutate(parseForm(createRoleRequestSchema, form))}
-        open={dialogOpen}
-        pending={createMutation.isPending}
-        title="Create role"
-      />
     </ResourcePage>
   )
 }
@@ -756,7 +914,26 @@ export function ApiResourcesPage() {
           New resource
         </Button>
       }
+      auxiliary={
+        <SimpleCreateDialog
+          error={createMutation.errorMessage}
+          fields={[
+            ['identifier', 'Identifier'],
+            ['name', 'Name'],
+            ['audience', 'Audience'],
+            ['description', 'Description'],
+          ]}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={(form) => createMutation.mutate(parseForm(createApiResourceRequestSchema, form))}
+          open={dialogOpen}
+          pending={createMutation.isPending}
+          title="Create API resource"
+        />
+      }
       error={query.error}
+      empty={query.data?.resources.length === 0}
+      emptyDescription="Register APIs before issuing access tokens for protected resources."
+      emptyTitle="No API resources yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
@@ -783,20 +960,6 @@ export function ApiResourcesPage() {
           ))}
         </TableBody>
       </Table>
-      <SimpleCreateDialog
-        error={createMutation.errorMessage}
-        fields={[
-          ['identifier', 'Identifier'],
-          ['name', 'Name'],
-          ['audience', 'Audience'],
-          ['description', 'Description'],
-        ]}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={(form) => createMutation.mutate(parseForm(createApiResourceRequestSchema, form))}
-        open={dialogOpen}
-        pending={createMutation.isPending}
-        title="Create API resource"
-      />
     </ResourcePage>
   )
 }
@@ -847,8 +1010,12 @@ export function DeploymentSettingsPage() {
 
 function ResourcePage({
   action,
+  auxiliary,
   children,
   description,
+  empty,
+  emptyDescription,
+  emptyTitle,
   error,
   loading,
   onRetry,
@@ -856,8 +1023,12 @@ function ResourcePage({
   toolbar,
 }: {
   action?: ReactNode
+  auxiliary?: ReactNode
   children: ReactNode
   description: string
+  empty?: boolean
+  emptyDescription?: string
+  emptyTitle?: string
   error?: Error | null
   loading?: boolean
   onRetry?: () => void
@@ -866,26 +1037,42 @@ function ResourcePage({
 }) {
   return (
     <>
-      <PageHeader action={action} description={description} eyebrow="Admin" title={title} />
+      <PageHeader
+        action={empty ? undefined : action}
+        breadcrumb={['Console', title]}
+        description={description}
+        eyebrow="Admin"
+        title={title}
+      />
       {toolbar ? <div className="max-w-sm">{toolbar}</div> : null}
       {loading ? <LoadingState label={`Loading ${title.toLowerCase()}`} /> : null}
       {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
-      {!loading && !error ? (
+      {!loading && !error && empty ? (
+        <EmptyState
+          action={action}
+          description={emptyDescription ?? `Create a ${title.toLowerCase()} item to populate this page.`}
+          title={emptyTitle ?? `No ${title.toLowerCase()} yet`}
+        />
+      ) : null}
+      {!loading && !error && !empty ? (
         <Card>
           <CardContent className="p-0">{children}</CardContent>
         </Card>
       ) : null}
+      {auxiliary}
     </>
   )
 }
 
 function PageHeader({
   action,
+  breadcrumb,
   description,
   eyebrow,
   title,
 }: {
   action?: ReactNode
+  breadcrumb?: string[]
   description: string
   eyebrow: string
   title: string
@@ -893,6 +1080,16 @@ function PageHeader({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
+        {breadcrumb ? (
+          <div className="mb-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            {breadcrumb.map((crumb, index) => (
+              <span className="inline-flex items-center gap-1" key={crumb}>
+                {index > 0 ? <span aria-hidden="true">/</span> : null}
+                <span>{crumb}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
         <p className="mb-1 text-xs font-semibold uppercase tracking-normal text-muted-foreground">{eyebrow}</p>
         <h1 className="text-2xl font-semibold leading-tight tracking-normal">{title}</h1>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p>
@@ -902,14 +1099,83 @@ function PageHeader({
   )
 }
 
-function MetricCard({ label, value }: { label: string; value: number }) {
+function MetricCard({ detail, label, value }: { detail: string; label: string; value: number }) {
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardDescription>{label}</CardDescription>
         <CardTitle className="text-2xl">{value}</CardTitle>
+        <p className="text-xs leading-5 text-muted-foreground">{detail}</p>
       </CardHeader>
     </Card>
+  )
+}
+
+function SetupItem({ complete, label, value }: { complete: boolean; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-md border border-border p-3">
+      <CheckCircle2
+        aria-hidden="true"
+        className={cn('mt-0.5 size-4', complete ? 'text-primary' : 'text-muted-foreground')}
+      />
+      <div className="min-w-0">
+        <p className="text-sm font-semibold">{label}</p>
+        <p className="text-sm text-muted-foreground">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function DashboardListCard({
+  children,
+  description,
+  empty,
+  title,
+}: {
+  children: ReactNode
+  description: string
+  empty: string
+  title: string
+}) {
+  const hasRows = Array.isArray(children) ? children.length > 0 : Boolean(children)
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {hasRows ? (
+          children
+        ) : (
+          <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">{empty}</p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function SummaryRow({ meta, status, title }: { meta: string; status: ReactNode; title: string }) {
+  return (
+    <div className="flex min-h-14 items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold">{title}</p>
+        <p className="truncate text-xs text-muted-foreground">{meta}</p>
+      </div>
+      {status}
+    </div>
+  )
+}
+
+function HealthRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-border p-3">
+      <span className="grid size-8 place-items-center rounded-md bg-muted text-muted-foreground">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold">{label}</p>
+        <p className="truncate text-sm text-muted-foreground">{value}</p>
+      </div>
+    </div>
   )
 }
 
@@ -930,9 +1196,9 @@ function PolicyCard({ rows, title }: { rows: Array<[string, string]>; title: str
 
 function SettingRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-md border border-border p-3">
+    <div className="flex flex-col gap-1 rounded-md border border-border p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <span className="text-sm font-medium">{label}</span>
-      <span className="max-w-[70%] text-right text-sm text-muted-foreground">{value}</span>
+      <span className="text-sm text-muted-foreground sm:max-w-[70%] sm:text-right">{value}</span>
     </div>
   )
 }
@@ -947,6 +1213,25 @@ function StatusBadge({
   inactiveLabel: string
 }) {
   return <Badge variant={active ? 'secondary' : 'outline'}>{active ? activeLabel : inactiveLabel}</Badge>
+}
+
+function EmptyState({ action, description, title }: { action?: ReactNode; description: string; title: string }) {
+  return (
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-start gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 place-items-center rounded-md bg-muted text-muted-foreground">
+            <ListChecks aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold">{title}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        {action}
+      </CardContent>
+    </Card>
+  )
 }
 
 function LoadingState({ label }: { label: string }) {

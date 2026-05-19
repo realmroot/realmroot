@@ -510,6 +510,41 @@ test('admin management journeys', async ({ page }) => {
   await runJourneySuite('admin management journeys', { page, requests })
 })
 
+test('admin console desktop and mobile screenshot evidence', async ({ page }, testInfo) => {
+  await mockApi(page)
+
+  for (const viewport of [
+    { name: 'desktop', width: 1440, height: 1000 },
+    { name: 'mobile', width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+
+    for (const route of [
+      { name: 'dashboard', path: '/admin', heading: 'Tenant health' },
+      { name: 'applications', path: '/admin/applications', heading: 'Applications' },
+      { name: 'sign-in-experience', path: '/admin/sign-in', heading: 'Sign-in experience' },
+      { name: 'security', path: '/admin/security', heading: 'Security' },
+    ]) {
+      await page.goto(route.path)
+      await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
+      await page.screenshot({
+        fullPage: true,
+        path: testInfo.outputPath(`admin-${route.name}-${viewport.name}.png`),
+      })
+      if (viewport.name === 'mobile' && route.name === 'dashboard') {
+        await page.getByRole('button', { name: 'Open admin navigation' }).click()
+        await expect(page.getByRole('navigation', { name: 'Admin mobile' })).toBeVisible()
+        await expect(page.getByRole('link', { name: /Sign-in experience/ })).toBeVisible()
+        await page.screenshot({
+          fullPage: true,
+          path: testInfo.outputPath('admin-dashboard-mobile-navigation.png'),
+        })
+        await page.getByRole('button', { name: 'Close admin navigation' }).click()
+      }
+    }
+  }
+})
+
 type JourneyAssertionSuite = (typeof journeyAssertions)[JourneyId]['suite']
 
 async function runJourneySuite(suite: JourneyAssertionSuite, context: JourneyContext) {

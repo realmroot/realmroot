@@ -51,6 +51,10 @@ describe('admin console', () => {
     renderWithQuery(<AdminDashboardPage />)
 
     expect(await screen.findByRole('heading', { name: 'Tenant health' })).toBeTruthy()
+    expect(screen.getByText('Setup progress')).toBeTruthy()
+    expect(screen.getByText('OIDC endpoints')).toBeTruthy()
+    expect(screen.getByText('Health signals')).toBeTruthy()
+    expect(screen.getByText('Authorization')).toBeTruthy()
     expect(screen.getByText('Customer portal')).toBeTruthy()
     expect(screen.getByText('client-1')).toBeTruthy()
     expect(screen.getByText('MFA policy')).toBeTruthy()
@@ -730,6 +734,100 @@ describe('admin console', () => {
     expect(await screen.findByText('Not set')).toBeTruthy()
   })
 
+  it('renders explicit empty states for admin collection pages', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/applications') {
+        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/roles')
+        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [], pagination: emptyPagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<ApplicationsPage />)
+    expect(await screen.findByText('No applications yet')).toBeTruthy()
+    expect(screen.queryByRole('table')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New application' }))
+    expect(await screen.findByRole('heading', { name: 'Create application' })).toBeTruthy()
+
+    unmount()
+    renderWithQuery(<UsersPage />)
+    expect(await screen.findByText('No users yet')).toBeTruthy()
+    expect(screen.queryByRole('table')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New user' }))
+    expect(await screen.findByRole('heading', { name: 'Create user' })).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<ConnectorsPage />)
+    expect(await screen.findByText('No connectors yet')).toBeTruthy()
+    expect(screen.queryByRole('table')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New connector' }))
+    expect(await screen.findByRole('heading', { name: 'Create connector' })).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<OrganizationsPage />)
+    expect(await screen.findByText('No organizations yet')).toBeTruthy()
+    expect(screen.queryByRole('table')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New organization' }))
+    expect(await screen.findByRole('heading', { name: 'Create organization' })).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<RolesPage />)
+    expect(await screen.findByText('No roles yet')).toBeTruthy()
+    expect(screen.queryByRole('table')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New role' }))
+    expect(await screen.findByRole('heading', { name: 'Create role' })).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<ApiResourcesPage />)
+    expect(await screen.findByText('No API resources yet')).toBeTruthy()
+    expect(screen.queryByRole('table')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New resource' }))
+    expect(await screen.findByRole('heading', { name: 'Create API resource' })).toBeTruthy()
+  })
+
+  it('renders collection loading and query error states', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/applications') {
+        return new Promise(() => undefined)
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<ApplicationsPage />)
+    expect(await screen.findByText('Loading applications')).toBeTruthy()
+    expect(screen.queryByRole('table')).toBeNull()
+
+    unmount()
+    vi.restoreAllMocks()
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(jsonResponse({ error: { message: 'Users unavailable.' } }, 503))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<UsersPage />)
+    expect(await screen.findByText('Users unavailable.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+    expect(screen.queryByRole('table')).toBeNull()
+  })
+
   it('renders static branding and deployment settings pages', () => {
     const { unmount } = renderWithQuery(<BrandingPage />)
 
@@ -830,6 +928,11 @@ const pagination = {
   total: 1,
   hasMore: false,
   nextOffset: null,
+}
+
+const emptyPagination = {
+  ...pagination,
+  total: 0,
 }
 
 const application = {
