@@ -210,7 +210,7 @@ export function AdminDashboardPage() {
         </DashboardListCard>
         <DashboardListCard
           description="Identity providers available in hosted auth."
-          empty="Add a connector when social or enterprise sign-in is needed."
+          empty="Add a connector when social or OAuth sign-in is needed."
           title="Connectors"
         >
           {dashboard.connectors.connectors.slice(0, 4).map((connector) => (
@@ -611,7 +611,7 @@ export function ConnectorsPage() {
       }
       error={query.error}
       empty={query.data?.connectors.length === 0}
-      emptyDescription="Add social or enterprise identity providers when your sign-in experience needs them."
+      emptyDescription="Add social or OAuth identity providers when your sign-in experience needs them."
       emptyTitle="No connectors yet"
       loading={query.isLoading}
       onRetry={() => query.refetch()}

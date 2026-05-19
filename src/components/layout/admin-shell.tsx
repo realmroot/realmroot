@@ -37,7 +37,7 @@ const adminNavGroups = [
     label: 'Applications',
     items: [
       { href: '/admin/applications', label: 'Applications', description: 'OIDC clients', icon: AppWindow },
-      { href: '/admin/connectors', label: 'Connectors', description: 'Social and enterprise IdPs', icon: Cable },
+      { href: '/admin/connectors', label: 'Connectors', description: 'Social and OAuth IdPs', icon: Cable },
     ],
   },
   {
