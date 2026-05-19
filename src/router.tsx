@@ -4,6 +4,7 @@ import { AdminShell } from '@/components/layout/admin-shell'
 import {
   AdminDashboardPage,
   AdminOnboardingPage,
+  ApiResourceDetailPage,
   ApiResourcesPage,
   ApplicationDetailPage,
   ApplicationsPage,
@@ -11,6 +12,7 @@ import {
   ConnectorsPage,
   DeploymentSettingsPage,
   OrganizationsPage,
+  RoleDetailPage,
   RolesPage,
   SecurityPage,
   SignInSettingsPage,
@@ -251,10 +253,28 @@ const adminRolesRoute = createRoute({
   component: RolesPage,
 })
 
+const adminRoleDetailRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/roles/{$roleId}',
+  component: () => {
+    const params = adminRoleDetailRoute.useParams()
+    return <RoleDetailPage roleId={params.roleId} />
+  },
+})
+
 const adminApiResourcesRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/api-resources',
   component: ApiResourcesPage,
+})
+
+const adminApiResourceDetailRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/api-resources/{$resourceId}',
+  component: () => {
+    const params = adminApiResourceDetailRoute.useParams()
+    return <ApiResourceDetailPage resourceId={params.resourceId} />
+  },
 })
 
 const adminBrandingRoute = createRoute({
@@ -311,7 +331,9 @@ const routeTree = rootRoute.addChildren([
     adminSecurityRoute,
     adminOrganizationsRoute,
     adminRolesRoute,
+    adminRoleDetailRoute,
     adminApiResourcesRoute,
+    adminApiResourceDetailRoute,
     adminBrandingRoute,
     adminDeploymentRoute,
     adminOnboardingRoute,

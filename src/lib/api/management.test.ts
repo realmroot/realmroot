@@ -62,15 +62,32 @@ describe('management API client', () => {
     await management.uploadBrandingLogo(new File(['logo'], 'logo.png'))
     await management.uploadBrandingFavicon(new File(['icon'], 'favicon.png'))
     await management.listRoles()
+    await management.getRole('role-1')
     await management.createRole({ key: 'admin', name: 'Admin' })
     await management.updateRole('role-1', { description: 'Tenant admin' })
+    await management.deleteRole('role-1')
+    await management.listRolePermissions('role-1')
+    await management.replaceRolePermissions('role-1', ['permission-1'])
+    await management.assignUserRole({ roleId: 'role-1', subjectId: 'user-1' })
+    await management.assignApplicationRole({ roleId: 'role-1', subjectId: 'app-1' })
+    await management.assignMemberRole({ roleId: 'role-1', subjectId: 'member-1' })
     await management.listApiResources()
+    await management.getApiResource('resource-1')
     await management.createApiResource({
       identifier: 'management-api',
       name: 'Management API',
       audience: 'https://auth.example.com/api/management',
     })
     await management.updateApiResource('resource-1', { enabled: false })
+    await management.deleteApiResource('resource-1')
+    await management.listApiScopes('resource-1')
+    await management.createApiScope('resource-1', { value: 'orders:read' })
+    await management.updateApiScope('resource-1', 'scope-1', { description: 'Read orders' })
+    await management.deleteApiScope('resource-1', 'scope-1')
+    await management.listApiPermissions('resource-1')
+    await management.createApiPermission('resource-1', { key: 'orders.read' })
+    await management.updateApiPermission('resource-1', 'permission-1', { key: 'orders.view' })
+    await management.deleteApiPermission('resource-1', 'permission-1')
 
     expect(calls).toEqual([
       ['applications.get'],
@@ -131,9 +148,17 @@ describe('management API client', () => {
       ['upload', '/api/management/branding/logo', expect.any(File)],
       ['upload', '/api/management/branding/favicon', expect.any(File)],
       ['roles.get'],
+      ['role.get', { param: { id: 'role-1' } }],
       ['roles.post', { json: { key: 'admin', name: 'Admin' } }],
       ['roles.patch', { param: { id: 'role-1' }, json: { description: 'Tenant admin' } }],
+      ['roles.delete', { param: { id: 'role-1' } }],
+      ['rolePermissions.get', { param: { id: 'role-1' } }],
+      ['rolePermissions.put', { param: { id: 'role-1' }, json: { permissionIds: ['permission-1'] } }],
+      ['userRoleAssignments.post', { json: { roleId: 'role-1', subjectId: 'user-1' } }],
+      ['applicationRoleAssignments.post', { json: { roleId: 'role-1', subjectId: 'app-1' } }],
+      ['memberRoleAssignments.post', { json: { roleId: 'role-1', subjectId: 'member-1' } }],
       ['apiResources.get'],
+      ['apiResource.get', { param: { id: 'resource-1' } }],
       [
         'apiResources.post',
         {
@@ -145,6 +170,18 @@ describe('management API client', () => {
         },
       ],
       ['apiResources.patch', { param: { id: 'resource-1' }, json: { enabled: false } }],
+      ['apiResources.delete', { param: { id: 'resource-1' } }],
+      ['apiScopes.get', { param: { id: 'resource-1' } }],
+      ['apiScopes.post', { param: { id: 'resource-1' }, json: { value: 'orders:read' } }],
+      ['apiScopes.patch', { param: { id: 'resource-1', scopeId: 'scope-1' }, json: { description: 'Read orders' } }],
+      ['apiScopes.delete', { param: { id: 'resource-1', scopeId: 'scope-1' } }],
+      ['apiPermissions.get', { param: { id: 'resource-1' } }],
+      ['apiPermissions.post', { param: { id: 'resource-1' }, json: { key: 'orders.read' } }],
+      [
+        'apiPermissions.patch',
+        { param: { id: 'resource-1', permissionId: 'permission-1' }, json: { key: 'orders.view' } },
+      ],
+      ['apiPermissions.delete', { param: { id: 'resource-1', permissionId: 'permission-1' } }],
     ])
   })
 
@@ -243,12 +280,43 @@ async function loadManagementApi() {
           roles: {
             $get: endpoint('roles.get'),
             $post: endpoint('roles.post'),
-            ':id': { $patch: endpoint('roles.patch') },
+            ':id': {
+              $get: endpoint('role.get'),
+              $patch: endpoint('roles.patch'),
+              $delete: endpoint('roles.delete'),
+              permissions: {
+                $get: endpoint('rolePermissions.get'),
+                $put: endpoint('rolePermissions.put'),
+              },
+            },
           },
+          'user-role-assignments': { $post: endpoint('userRoleAssignments.post') },
+          'application-role-assignments': { $post: endpoint('applicationRoleAssignments.post') },
+          'member-role-assignments': { $post: endpoint('memberRoleAssignments.post') },
           'api-resources': {
             $get: endpoint('apiResources.get'),
             $post: endpoint('apiResources.post'),
-            ':id': { $patch: endpoint('apiResources.patch') },
+            ':id': {
+              $get: endpoint('apiResource.get'),
+              $patch: endpoint('apiResources.patch'),
+              $delete: endpoint('apiResources.delete'),
+              scopes: {
+                $get: endpoint('apiScopes.get'),
+                $post: endpoint('apiScopes.post'),
+                ':scopeId': {
+                  $patch: endpoint('apiScopes.patch'),
+                  $delete: endpoint('apiScopes.delete'),
+                },
+              },
+              permissions: {
+                $get: endpoint('apiPermissions.get'),
+                $post: endpoint('apiPermissions.post'),
+                ':permissionId': {
+                  $patch: endpoint('apiPermissions.patch'),
+                  $delete: endpoint('apiPermissions.delete'),
+                },
+              },
+            },
           },
         },
       },

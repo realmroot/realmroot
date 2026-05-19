@@ -9,6 +9,7 @@ import {
   listRolesResponseSchema,
   organizationResponseSchema,
   paginationQuerySchema,
+  rolePermissionsResponseSchema,
   roleResponseSchema,
 } from './authorization'
 import { configzBrandingSchema, configzMethodSchema, hostedCustomCssSchema } from './configz'
@@ -272,6 +273,7 @@ export const managementResourceSchemas = {
   organizations: organizationResponseSchema,
   apiResources: apiResourceResponseSchema,
   apiScopes: apiScopeResponseSchema,
+  rolePermissions: rolePermissionsResponseSchema,
   roles: roleResponseSchema,
   signInSettings: managementSignInSettingsResponseSchema,
   brandingSettings: managementBrandingSettingsResponseSchema,

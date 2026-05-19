@@ -89,20 +89,17 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   app.route('/roles', adminRolesRoute)
   app.post('/user-role-assignments', requireAdmin(), async (c) => {
     const { user } = getAuthContext(c)
-    await createAuthorizationService(c).assignUserRole(await readJson(c, assignRoleRequestSchema), user?.id ?? null)
+    await createAuthorizationService(c).assignUserRole(await readJson(c, assignRoleRequestSchema), user!.id)
     return c.body(null, 204)
   })
   app.post('/application-role-assignments', requireAdmin(), async (c) => {
     const { user } = getAuthContext(c)
-    await createAuthorizationService(c).assignApplicationRole(
-      await readJson(c, assignRoleRequestSchema),
-      user?.id ?? null,
-    )
+    await createAuthorizationService(c).assignApplicationRole(await readJson(c, assignRoleRequestSchema), user!.id)
     return c.body(null, 204)
   })
   app.post('/member-role-assignments', requireAdmin(), async (c) => {
     const { user } = getAuthContext(c)
-    await createAuthorizationService(c).assignMemberRole(await readJson(c, assignRoleRequestSchema), user?.id ?? null)
+    await createAuthorizationService(c).assignMemberRole(await readJson(c, assignRoleRequestSchema), user!.id)
     return c.body(null, 204)
   })
 

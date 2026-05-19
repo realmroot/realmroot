@@ -876,14 +876,40 @@ const journeyAssertions: Record<
       await page.goto('/admin/roles')
       await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible()
       await expect(page.getByRole('row').filter({ hasText: 'Support' }).filter({ hasText: 'support' })).toBeVisible()
+      await page.getByRole('link', { name: 'Support' }).click()
+      await expect(page.getByRole('heading', { name: 'Support' })).toBeVisible()
+      await page.getByLabel('Subject ID').fill('user-1')
+      await page.getByLabel('Token claims JSON').fill('{"tier":"gold"}')
+      await page.getByRole('button', { name: 'Assign role' }).click()
       await page.goto('/admin/api-resources')
       await expect(page.getByRole('heading', { name: 'API resources' })).toBeVisible()
       await expect(page.getByText('Orders API')).toBeVisible()
       await expect(page.getByText('https://api.example.com/orders')).toBeVisible()
+      await page.getByRole('link', { name: 'Orders API' }).click()
+      await expect(page.getByRole('heading', { name: 'Orders API' })).toBeVisible()
+      await page.getByRole('textbox', { name: 'Value', exact: true }).fill('orders:write')
+      await page.getByRole('button', { name: 'Create scope' }).click()
+      await page.getByLabel('Key').fill('orders.write')
+      await page.getByRole('button', { name: 'Create permission' }).click()
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/management/organizations/org-1/logo',
         body: '[form-data]',
+      })
+      expect(requests).toContainEqual({
+        method: 'POST',
+        path: '/api/management/user-role-assignments',
+        body: { roleId: 'role-1', subjectId: 'user-1', tokenClaims: { tier: 'gold' } },
+      })
+      expect(requests).toContainEqual({
+        method: 'POST',
+        path: '/api/management/api-resources/resource-1/scopes',
+        body: { value: 'orders:write' },
+      })
+      expect(requests).toContainEqual({
+        method: 'POST',
+        path: '/api/management/api-resources/resource-1/permissions',
+        body: { key: 'orders.write' },
       })
     },
   },
@@ -1351,10 +1377,29 @@ async function responseFor(path: string, method: string, body: unknown): Promise
     if (method === 'POST') return role
     return { roles: [role], pagination }
   }
+  if (path === '/api/management/roles/role-1') return role
+  if (path === '/api/management/roles/role-1/permissions') {
+    if (method === 'PUT') return null
+    return { permissions: [apiPermission] }
+  }
+  if (path === '/api/management/user-role-assignments') return null
+  if (path === '/api/management/application-role-assignments') return null
+  if (path === '/api/management/member-role-assignments') return null
   if (path === '/api/management/api-resources') {
     if (method === 'POST') return apiResource
     return { resources: [apiResource], pagination }
   }
+  if (path === '/api/management/api-resources/resource-1') return apiResource
+  if (path === '/api/management/api-resources/resource-1/scopes') {
+    if (method === 'POST') return apiScope
+    return { scopes: [apiScope], pagination }
+  }
+  if (path === '/api/management/api-resources/resource-1/scopes/scope-1') return apiScope
+  if (path === '/api/management/api-resources/resource-1/permissions') {
+    if (method === 'POST') return apiPermission
+    return { permissions: [apiPermission], pagination }
+  }
+  if (path === '/api/management/api-resources/resource-1/permissions/permission-1') return apiPermission
   if (path === '/api/account/profile') return { user: profile }
   if (path === '/api/account/avatar') return { asset: uploadedAsset }
   if (path === '/api/account/linked-accounts') return { accounts: [linkedAccount] }
@@ -1691,6 +1736,12 @@ const role = {
   key: 'support',
   name: 'Support',
   description: null,
+  resourceId: 'resource-1',
+  organizationId: null,
+  applicationId: null,
+  system: false,
+  tokenClaimName: null,
+  tokenClaimValue: null,
   permissions: [],
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
@@ -1702,7 +1753,29 @@ const apiResource = {
   name: 'Orders API',
   audience: 'https://api.example.com/orders',
   description: null,
+  enabled: true,
+  tokenClaimsNamespace: null,
   scopes: [],
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const apiScope = {
+  id: 'scope-1',
+  resourceId: 'resource-1',
+  value: 'orders:read',
+  description: 'Read orders',
+  required: false,
+  tokenClaimName: null,
+  includeInAccessToken: true,
+  includeInIdToken: false,
+}
+
+const apiPermission = {
+  id: 'permission-1',
+  resourceId: 'resource-1',
+  scopeId: 'scope-1',
+  key: 'orders.read',
+  description: 'Read orders',
+  tokenClaimValue: 'read',
 }

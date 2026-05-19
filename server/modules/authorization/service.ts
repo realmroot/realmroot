@@ -81,6 +81,7 @@ export interface AuthorizationRepository {
   findRole(id: string): Promise<RoleResponse | null>
   updateRole(id: string, patch: UpdateRoleRequest): Promise<void>
   deleteRole(id: string): Promise<void>
+  listRolePermissions(roleId: string): Promise<ApiPermissionResponse[]>
   replaceRolePermissions(roleId: string, permissionIds: string[]): Promise<void>
   assignUserRole(input: RoleAssignmentInput): Promise<void>
   assignApplicationRole(input: RoleAssignmentInput): Promise<void>
@@ -339,6 +340,11 @@ export class AuthorizationService {
     const role = await this.getRole(id)
     if (role.system) throw badRequest('System roles cannot be deleted.')
     await this.repository.deleteRole(id)
+  }
+
+  async listRolePermissions(roleId: string) {
+    await this.getRole(roleId)
+    return { permissions: await this.repository.listRolePermissions(roleId) }
   }
 
   async replaceRolePermissions(roleId: string, permissionIds: string[]) {

@@ -402,6 +402,9 @@
         }
       }
     },
+    "/api-resources/{id}/permissions/{permissionId}": {
+      "$ref": "#/components/pathItems/CrudResource"
+    },
     "/api-resources/{id}/scopes": {
       "get": {
         "tags": [
@@ -594,6 +597,9 @@
           }
         }
       }
+    },
+    "/api-resources/{id}/scopes/{scopeId}": {
+      "$ref": "#/components/pathItems/CrudResource"
     },
     "/application-role-assignments": {
       "$ref": "#/components/pathItems/RoleAssignmentCollection"
@@ -1980,6 +1986,17 @@
       }
     },
     "/roles/{id}/permissions": {
+      "get": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "List permissions assigned to a role",
+        "responses": {
+          "200": {
+            "description": "Role permissions returned."
+          }
+        }
+      },
       "put": {
         "tags": [
           "Roles"

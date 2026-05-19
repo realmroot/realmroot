@@ -93,6 +93,18 @@ Connector `providerType` is restricted to `social` and `generic_oauth`, matching
 - API resources and scopes: `/api-resources`, `/api-resources/{id}`, `/api-resources/{id}/scopes`, `/api-resources/{id}/permissions`.
 - Security administration: `/security/policy`, `/security/users/{id}`, `/security/users/{id}/passkeys`, `/security/users/{id}/passkeys/{passkeyId}`, `/security/users/{id}/sessions`, `/security/users/{id}/sessions/{sessionId}`.
 
+Roles and API resources are complete resource-style surfaces. `GET /api-resources/{id}` and `PATCH /api-resources/{id}` manage the protected API identifier, display name, audience, enabled state, and optional token-claim namespace. Scopes are child resources under `GET|POST /api-resources/{id}/scopes` and `PATCH|DELETE /api-resources/{id}/scopes/{scopeId}`. Permissions follow the same pattern under `/api-resources/{id}/permissions`; permissions can reference a scope from the same API resource.
+
+`GET /roles/{id}` returns role metadata. `GET /roles/{id}/permissions` returns the current permission set, and `PUT /roles/{id}/permissions` replaces that set with:
+
+```json
+{
+  "permissionIds": ["perm_123"]
+}
+```
+
+Role assignments are idempotent `POST` requests. `roleId` identifies the role, `subjectId` is the user id, application id, or organization member id for the selected assignment endpoint, and optional `tokenClaims` must not override reserved `authorization`, `roles`, `permissions`, or URL-namespaced claims.
+
 Security administrators can delete a user passkey with `DELETE /security/users/{id}/passkeys/{passkeyId}`, revoke all user sessions with `DELETE /security/users/{id}/sessions`, and revoke one user session with `DELETE /security/users/{id}/sessions/{sessionId}`.
 
 Compatibility action routes inherited from the admin UI surface remain

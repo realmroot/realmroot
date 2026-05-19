@@ -5,9 +5,17 @@ import {
   type updateApplicationRequestSchema,
 } from '@shared/api/applications'
 import {
+  type assignRoleRequestSchema,
+  createApiPermissionRequestSchema,
   createApiResourceRequestSchema,
+  createApiScopeRequestSchema,
   createOrganizationRequestSchema,
   createRoleRequestSchema,
+  tokenClaimsSchema,
+  updateApiPermissionRequestSchema,
+  updateApiResourceRequestSchema,
+  updateApiScopeRequestSchema,
+  updateRoleRequestSchema,
 } from '@shared/api/authorization'
 import { hostedCustomCssSchema } from '@shared/api/configz'
 import type { ConnectorResponse, ConnectorTemplate } from '@shared/api/connectors'
@@ -65,33 +73,47 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   adminQueryKeys,
+  assignApplicationRole,
+  assignMemberRole,
+  assignUserRole,
   banUser,
+  createApiPermission,
   createApiResource,
+  createApiScope,
   createApplication,
   createConnector,
   createOrganization,
   createRole,
   createUser,
+  deleteApiPermission,
+  deleteApiResource,
+  deleteApiScope,
   deleteApplication,
   deleteConnector,
+  deleteRole,
   deleteUser,
   deleteUserPasskey,
   getAdminDashboard,
   getAdminReadiness,
+  getApiResource,
   getApplication,
   getBrandingSettings,
   getConnector,
   getConnectorReadiness,
+  getRole,
   getSecurityPolicy,
   getSignInSettings,
   getUser,
   getUserSecurity,
+  listApiPermissions,
   listApiResources,
+  listApiScopes,
   listApplicationClientSecrets,
   listApplications,
   listConnectors,
   listConnectorTemplates,
   listOrganizations,
+  listRolePermissions,
   listRoles,
   listUserApplications,
   listUserLinkedAccounts,
@@ -99,15 +121,20 @@ import {
   listUserSessions,
   listUsers,
   replaceApplicationRedirectUris,
+  replaceRolePermissions,
   requestPasswordReset,
   requestUserPasswordReset,
   revokeUserSession,
   revokeUserSessions,
   rotateApplicationClientSecret,
   unbanUser,
+  updateApiPermission,
+  updateApiResource,
+  updateApiScope,
   updateApplication,
   updateBrandingSettings,
   updateConnector,
+  updateRole,
   updateSignInSettings,
   updateUser,
   uploadApplicationLogo,
@@ -120,6 +147,13 @@ import { cn } from '@/lib/utils'
 type FormState = Record<string, string>
 
 const emptyForm: FormState = {}
+const tokenClaimsObjectSchema = tokenClaimsSchema.optional()
+const optionalAuthorizationFieldNames = new Set([
+  'description',
+  'tokenClaimName',
+  'tokenClaimValue',
+  'tokenClaimsNamespace',
+])
 
 export function AdminDashboardPage() {
   const query = useQuery({ queryKey: adminQueryKeys.dashboard, queryFn: getAdminDashboard })
@@ -2057,6 +2091,7 @@ export function OrganizationsPage() {
 
 export function RolesPage() {
   const query = useQuery({ queryKey: adminQueryKeys.roles, queryFn: listRoles })
+  const resourcesQuery = useQuery({ queryKey: adminQueryKeys.apiResources, queryFn: listApiResources })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const createMutation = useAdminMutation({
@@ -2078,18 +2113,13 @@ export function RolesPage() {
         </Button>
       }
       auxiliary={
-        <SimpleCreateDialog
+        <CreateRoleDialog
           error={createMutation.errorMessage}
-          fields={[
-            ['key', 'Key'],
-            ['name', 'Name'],
-            ['description', 'Description'],
-          ]}
           onClose={() => setDialogOpen(false)}
-          onSubmit={(form) => createMutation.mutate(parseForm(createRoleRequestSchema, form))}
+          onSubmit={createMutation.mutate}
           open={dialogOpen}
           pending={createMutation.isPending}
-          title="Create role"
+          resources={resourcesQuery.data?.resources ?? []}
         />
       }
       error={query.error}
@@ -2111,7 +2141,9 @@ export function RolesPage() {
           {query.data?.roles.map((role) => (
             <TableRow key={role.id}>
               <TableCell>
-                <div className="font-medium">{role.name}</div>
+                <a className="font-medium hover:underline" href={`/admin/roles/${role.id}`}>
+                  {role.name}
+                </a>
                 <div className="text-xs text-muted-foreground">{role.key}</div>
               </TableCell>
               <TableCell>{role.resourceId ?? role.organizationId ?? role.applicationId ?? 'Global'}</TableCell>
@@ -2122,6 +2154,252 @@ export function RolesPage() {
           ))}
         </TableBody>
       </Table>
+    </ResourcePage>
+  )
+}
+
+export function RoleDetailPage({ roleId }: { roleId: string }) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [assignment, setAssignment] = useState({ type: 'user', subjectId: '', tokenClaims: '' })
+  const [assignmentValidationError, setAssignmentValidationError] = useState<string | null>(null)
+  const [selectedResourceId, setSelectedResourceId] = useState('')
+  const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([])
+  const roleQuery = useQuery({ queryKey: [...adminQueryKeys.roles, roleId], queryFn: () => getRole(roleId) })
+  const resourcesQuery = useQuery({ queryKey: adminQueryKeys.apiResources, queryFn: listApiResources })
+  const rolePermissionsQuery = useQuery({
+    queryKey: [...adminQueryKeys.roles, roleId, 'permissions'],
+    queryFn: () => listRolePermissions(roleId),
+  })
+  const permissionsQuery = useQuery({
+    queryKey: [...adminQueryKeys.apiResources, selectedResourceId, 'permissions'],
+    queryFn: () => listApiPermissions(selectedResourceId),
+    enabled: selectedResourceId.length > 0,
+  })
+  const role = roleQuery.data
+
+  useEffect(() => {
+    if (role?.resourceId && selectedResourceId !== role.resourceId) setSelectedResourceId(role.resourceId)
+  }, [role?.resourceId, selectedResourceId])
+
+  useEffect(() => {
+    if (rolePermissionsQuery.data) {
+      setSelectedPermissionIds(rolePermissionsQuery.data.permissions.map((permission) => permission.id))
+    }
+  }, [rolePermissionsQuery.data])
+
+  const updateMutation = useMutation({
+    mutationFn: (input: z.infer<typeof updateRoleRequestSchema>) => updateRole(roleId, input),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([...adminQueryKeys.roles, roleId], updated)
+      return queryClient.invalidateQueries({ queryKey: adminQueryKeys.roles })
+    },
+  })
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteRole(roleId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.roles })
+      await navigate({ to: '/admin/roles' })
+    },
+  })
+  const permissionMutation = useMutation({
+    mutationFn: (permissionIds: string[]) => replaceRolePermissions(roleId, permissionIds),
+    onSuccess: () => rolePermissionsQuery.refetch(),
+  })
+  const assignmentMutation = useMutation({
+    mutationFn: (input: z.infer<typeof assignRoleRequestSchema> & { type: string }) => {
+      const payload = { roleId, subjectId: input.subjectId, tokenClaims: input.tokenClaims }
+      if (input.type === 'application') return assignApplicationRole(payload)
+      if (input.type === 'member') return assignMemberRole(payload)
+      return assignUserRole(payload)
+    },
+  })
+
+  const selectedPermissionIdSet = new Set(selectedPermissionIds)
+
+  return (
+    <ResourcePage
+      title={role?.name ?? 'Role'}
+      description="Manage role metadata, API permissions, and user, application, or organization member assignments."
+      framed={false}
+      action={
+        <a className="uiButton uiButton-secondary" href="/admin/roles">
+          Back to roles
+        </a>
+      }
+      error={roleQuery.error}
+      loading={roleQuery.isLoading}
+      onRetry={() => roleQuery.refetch()}
+    >
+      {role ? (
+        <div className="grid gap-4 p-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Role settings</CardTitle>
+              <CardDescription>
+                Scope fields are immutable after creation; update display metadata here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AuthorizationForm
+                buttonLabel="Save role"
+                defaults={{
+                  key: role.key,
+                  name: role.name,
+                  description: role.description ?? '',
+                  tokenClaimName: role.tokenClaimName ?? '',
+                  tokenClaimValue: role.tokenClaimValue ?? '',
+                }}
+                error={updateMutation.error}
+                fields={[
+                  ['key', 'Key'],
+                  ['name', 'Name'],
+                  ['description', 'Description'],
+                  ['tokenClaimName', 'Token claim name'],
+                  ['tokenClaimValue', 'Token claim value'],
+                ]}
+                onSubmit={(form) => updateMutation.mutate(parseForm(updateRoleRequestSchema, form))}
+                pending={updateMutation.isPending}
+              />
+              <div className="mt-4 flex flex-wrap gap-2">
+                <StatusBadge active={role.system} activeLabel="System role" inactiveLabel="Custom role" />
+                <Button
+                  disabled={role.system || deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate()}
+                  type="button"
+                  variant="danger"
+                >
+                  <Trash2 data-icon="inline-start" />
+                  Delete role
+                </Button>
+              </div>
+              <MutationError error={deleteMutation.error} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Permission assignment</CardTitle>
+              <CardDescription>
+                Select permissions from one API resource and replace the role permission set.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <Field label="API resource">
+                <SelectInput onChange={(event) => setSelectedResourceId(event.target.value)} value={selectedResourceId}>
+                  <option value="">Select resource</option>
+                  {resourcesQuery.data?.resources.map((resource) => (
+                    <option key={resource.id} value={resource.id}>
+                      {resource.name}
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+              <div className="grid gap-2">
+                {permissionsQuery.data?.permissions.map((permission) => (
+                  <label
+                    className="flex items-start gap-2 rounded-md border border-border p-3 text-sm"
+                    key={permission.id}
+                  >
+                    <input
+                      checked={selectedPermissionIdSet.has(permission.id)}
+                      disabled={permissionMutation.isPending}
+                      onChange={(event) => {
+                        const next = new Set(selectedPermissionIds)
+                        if (event.target.checked) next.add(permission.id)
+                        else next.delete(permission.id)
+                        setSelectedPermissionIds([...next])
+                      }}
+                      type="checkbox"
+                    />
+                    <span>
+                      <span className="font-medium">{permission.key}</span>
+                      <span className="block text-muted-foreground">{permission.description ?? 'No description'}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <Button
+                disabled={permissionMutation.isPending || selectedResourceId.length === 0}
+                onClick={() => permissionMutation.mutate(selectedPermissionIds)}
+                type="button"
+              >
+                <Save data-icon="inline-start" />
+                Save permissions
+              </Button>
+              <MutationError error={permissionMutation.error} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Assignments</CardTitle>
+              <CardDescription>
+                Assign this role to a user, an application, or an organization member record.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form
+                className="formStack"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  try {
+                    setAssignmentValidationError(null)
+                    assignmentMutation.mutate({
+                      type: assignment.type,
+                      roleId,
+                      subjectId: assignment.subjectId,
+                      tokenClaims: parseTokenClaims(assignment.tokenClaims),
+                    })
+                  } catch (submitError) {
+                    setAssignmentValidationError(
+                      submitError instanceof Error ? submitError.message : 'Invalid token claims JSON.',
+                    )
+                  }
+                }}
+              >
+                <Field label="Subject type">
+                  <SelectInput
+                    onChange={(event) => setAssignment((value) => ({ ...value, type: event.target.value }))}
+                    value={assignment.type}
+                  >
+                    <option value="user">User</option>
+                    <option value="application">Application</option>
+                    <option value="member">Organization member</option>
+                  </SelectInput>
+                </Field>
+                <Field label="Subject ID">
+                  <TextInput
+                    onChange={(event) => setAssignment((value) => ({ ...value, subjectId: event.target.value }))}
+                    required
+                    value={assignment.subjectId}
+                  />
+                </Field>
+                <Field label="Token claims JSON">
+                  <TextArea
+                    onChange={(event) => setAssignment((value) => ({ ...value, tokenClaims: event.target.value }))}
+                    placeholder='{"tier":"gold"}'
+                    value={assignment.tokenClaims}
+                  />
+                </Field>
+                <Button disabled={assignmentMutation.isPending} type="submit">
+                  <Save data-icon="inline-start" />
+                  Assign role
+                </Button>
+                {assignmentMutation.isSuccess ? (
+                  <p className="text-sm text-muted-foreground">Assignment saved.</p>
+                ) : null}
+                {assignmentValidationError ? (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                    {assignmentValidationError}
+                  </div>
+                ) : null}
+                <MutationError error={assignmentMutation.error} />
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
     </ResourcePage>
   )
 }
@@ -2183,7 +2461,9 @@ export function ApiResourcesPage() {
           {query.data?.resources.map((resource) => (
             <TableRow key={resource.id}>
               <TableCell>
-                <div className="font-medium">{resource.name}</div>
+                <a className="font-medium hover:underline" href={`/admin/api-resources/${resource.id}`}>
+                  {resource.name}
+                </a>
                 <div className="text-xs text-muted-foreground">{resource.identifier}</div>
               </TableCell>
               <TableCell>{resource.audience}</TableCell>
@@ -2194,6 +2474,246 @@ export function ApiResourcesPage() {
           ))}
         </TableBody>
       </Table>
+    </ResourcePage>
+  )
+}
+
+export function ApiResourceDetailPage({ resourceId }: { resourceId: string }) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const resourceQuery = useQuery({
+    queryKey: [...adminQueryKeys.apiResources, resourceId],
+    queryFn: () => getApiResource(resourceId),
+  })
+  const scopesQuery = useQuery({
+    queryKey: [...adminQueryKeys.apiResources, resourceId, 'scopes'],
+    queryFn: () => listApiScopes(resourceId),
+  })
+  const permissionsQuery = useQuery({
+    queryKey: [...adminQueryKeys.apiResources, resourceId, 'permissions'],
+    queryFn: () => listApiPermissions(resourceId),
+  })
+  const resource = resourceQuery.data
+  const refreshChildren = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.apiResources, resourceId, 'scopes'] }),
+      queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.apiResources, resourceId, 'permissions'] }),
+    ])
+  const updateMutation = useMutation({
+    mutationFn: (input: z.infer<typeof updateApiResourceRequestSchema>) => updateApiResource(resourceId, input),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([...adminQueryKeys.apiResources, resourceId], updated)
+      return queryClient.invalidateQueries({ queryKey: adminQueryKeys.apiResources })
+    },
+  })
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteApiResource(resourceId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.apiResources })
+      await navigate({ to: '/admin/api-resources' })
+    },
+  })
+  const createScopeMutation = useMutation({
+    mutationFn: (input: z.infer<typeof createApiScopeRequestSchema>) => createApiScope(resourceId, input),
+    onSuccess: refreshChildren,
+  })
+  const updateScopeMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: z.infer<typeof updateApiScopeRequestSchema> }) =>
+      updateApiScope(resourceId, id, input),
+    onSuccess: refreshChildren,
+  })
+  const deleteScopeMutation = useMutation({
+    mutationFn: (id: string) => deleteApiScope(resourceId, id),
+    onSuccess: refreshChildren,
+  })
+  const createPermissionMutation = useMutation({
+    mutationFn: (input: z.infer<typeof createApiPermissionRequestSchema>) => createApiPermission(resourceId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.apiResources, resourceId, 'permissions'] }),
+  })
+  const updatePermissionMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: z.infer<typeof updateApiPermissionRequestSchema> }) =>
+      updateApiPermission(resourceId, id, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.apiResources, resourceId, 'permissions'] }),
+  })
+  const deletePermissionMutation = useMutation({
+    mutationFn: (id: string) => deleteApiPermission(resourceId, id),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.apiResources, resourceId, 'permissions'] }),
+  })
+
+  return (
+    <ResourcePage
+      title={resource?.name ?? 'API resource'}
+      description="Manage the protected API audience, OAuth scopes, and permission keys used by RBAC roles."
+      framed={false}
+      action={
+        <a className="uiButton uiButton-secondary" href="/admin/api-resources">
+          Back to API resources
+        </a>
+      }
+      error={resourceQuery.error}
+      loading={resourceQuery.isLoading}
+      onRetry={() => resourceQuery.refetch()}
+    >
+      {resource ? (
+        <div className="grid gap-4 p-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Resource settings</CardTitle>
+              <CardDescription>
+                Audience is emitted into authorization claims for matching OAuth resource requests.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AuthorizationForm
+                buttonLabel="Save resource"
+                defaults={{
+                  identifier: resource.identifier,
+                  name: resource.name,
+                  audience: resource.audience,
+                  description: resource.description ?? '',
+                  tokenClaimsNamespace: resource.tokenClaimsNamespace ?? '',
+                }}
+                error={updateMutation.error}
+                fields={[
+                  ['identifier', 'Identifier'],
+                  ['name', 'Name'],
+                  ['audience', 'Audience'],
+                  ['description', 'Description'],
+                  ['tokenClaimsNamespace', 'Token claims namespace'],
+                ]}
+                onSubmit={(form) =>
+                  updateMutation.mutate(
+                    parseForm(updateApiResourceRequestSchema, {
+                      ...form,
+                      tokenClaimsNamespace: nullableString(form.tokenClaimsNamespace ?? ''),
+                    }),
+                  )
+                }
+                pending={updateMutation.isPending}
+              />
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  disabled={updateMutation.isPending}
+                  onClick={() => updateMutation.mutate({ enabled: !resource.enabled })}
+                  type="button"
+                  variant="secondary"
+                >
+                  {resource.enabled ? 'Disable' : 'Enable'}
+                </Button>
+                <Button
+                  disabled={deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate()}
+                  type="button"
+                  variant="danger"
+                >
+                  <Trash2 data-icon="inline-start" />
+                  Delete resource
+                </Button>
+              </div>
+              <MutationError error={deleteMutation.error} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Scopes</CardTitle>
+              <CardDescription>
+                Scopes become OAuth scope strings and can also drive token claim inclusion.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <AuthorizationForm
+                buttonLabel="Create scope"
+                defaults={{ value: '', description: '', tokenClaimName: '' }}
+                error={createScopeMutation.error}
+                fields={[
+                  ['value', 'Value'],
+                  ['description', 'Description'],
+                  ['tokenClaimName', 'Token claim name'],
+                ]}
+                onSubmit={(form) => createScopeMutation.mutate(parseForm(createApiScopeRequestSchema, form))}
+                pending={createScopeMutation.isPending}
+              />
+              <AuthorizationRows
+                empty="No scopes yet."
+                rows={scopesQuery.data?.scopes.map((scope) => ({
+                  id: scope.id,
+                  title: scope.value,
+                  detail: scope.description ?? 'No description',
+                  defaults: {
+                    value: scope.value,
+                    description: scope.description ?? '',
+                    tokenClaimName: scope.tokenClaimName ?? '',
+                  },
+                  fields: [
+                    ['value', 'Value'],
+                    ['description', 'Description'],
+                    ['tokenClaimName', 'Token claim name'],
+                  ],
+                  onDelete: () => deleteScopeMutation.mutate(scope.id),
+                  onEdit: (form) =>
+                    updateScopeMutation.mutate({ id: scope.id, input: parseForm(updateApiScopeRequestSchema, form) }),
+                }))}
+              />
+              <MutationError error={updateScopeMutation.error ?? deleteScopeMutation.error} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Permissions</CardTitle>
+              <CardDescription>
+                Permissions are assigned to roles and emitted through authorization claims.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <AuthorizationForm
+                buttonLabel="Create permission"
+                defaults={{ key: '', description: '', tokenClaimValue: '', scopeId: '' }}
+                error={createPermissionMutation.error}
+                fields={[
+                  ['key', 'Key'],
+                  ['description', 'Description'],
+                  ['scopeId', 'Scope ID'],
+                  ['tokenClaimValue', 'Token claim value'],
+                ]}
+                onSubmit={(form) => createPermissionMutation.mutate(parseForm(createApiPermissionRequestSchema, form))}
+                pending={createPermissionMutation.isPending}
+              />
+              <AuthorizationRows
+                empty="No permissions yet."
+                rows={permissionsQuery.data?.permissions.map((permission) => ({
+                  id: permission.id,
+                  title: permission.key,
+                  detail: permission.description ?? permission.scopeId ?? 'No description',
+                  defaults: {
+                    key: permission.key,
+                    description: permission.description ?? '',
+                    scopeId: permission.scopeId ?? '',
+                    tokenClaimValue: permission.tokenClaimValue ?? '',
+                  },
+                  fields: [
+                    ['key', 'Key'],
+                    ['description', 'Description'],
+                    ['scopeId', 'Scope ID'],
+                    ['tokenClaimValue', 'Token claim value'],
+                  ],
+                  onDelete: () => deletePermissionMutation.mutate(permission.id),
+                  onEdit: (form) =>
+                    updatePermissionMutation.mutate({
+                      id: permission.id,
+                      input: parseForm(updateApiPermissionRequestSchema, form),
+                    }),
+                }))}
+              />
+              <MutationError error={updatePermissionMutation.error ?? deletePermissionMutation.error} />
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
     </ResourcePage>
   )
 }
@@ -2423,6 +2943,124 @@ export function DeploymentSettingsPage() {
         </Card>
       </div>
     </ResourcePage>
+  )
+}
+
+function AuthorizationForm({
+  buttonLabel,
+  defaults,
+  error,
+  fields,
+  onSubmit,
+  pending,
+}: {
+  buttonLabel: string
+  defaults: FormState
+  error: unknown
+  fields: Array<[string, string]>
+  onSubmit: (form: FormState) => void
+  pending: boolean
+}) {
+  const [form, setForm] = useState(defaults)
+  const [validationError, setValidationError] = useState<string | null>(null)
+
+  return (
+    <form
+      className="formStack"
+      onSubmit={(event) => {
+        event.preventDefault()
+        try {
+          setValidationError(null)
+          onSubmit(form)
+        } catch (submitError) {
+          setValidationError(submitError instanceof Error ? submitError.message : 'Invalid form input.')
+        }
+      }}
+    >
+      {fields.map(([name, label]) => (
+        <Field key={name} label={label}>
+          <TextInput
+            onChange={(event) => setValue(setForm, name, event.target.value)}
+            required={!optionalAuthorizationFieldNames.has(name) && !name.endsWith('Id')}
+            value={form[name] ?? ''}
+          />
+        </Field>
+      ))}
+      <Button disabled={pending} type="submit">
+        <Save data-icon="inline-start" />
+        {buttonLabel}
+      </Button>
+      {validationError ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          {validationError}
+        </div>
+      ) : null}
+      <MutationError error={error} />
+    </form>
+  )
+}
+
+function AuthorizationRows({
+  empty,
+  rows = [],
+}: {
+  empty: string
+  rows?: Array<{
+    id: string
+    title: string
+    detail: string
+    defaults: FormState
+    fields: Array<[string, string]>
+    onDelete: () => void
+    onEdit: (form: FormState) => void
+  }>
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  if (rows.length === 0)
+    return <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">{empty}</p>
+
+  return (
+    <div className="grid gap-2">
+      {rows.map((row) => (
+        <div className="rounded-md border border-border p-3" key={row.id}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-medium">{row.title}</p>
+              <p className="text-sm text-muted-foreground">{row.detail}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setEditingId(editingId === row.id ? null : row.id)}
+                type="button"
+                variant="secondary"
+              >
+                Edit
+              </Button>
+              <Button onClick={row.onDelete} type="button" variant="danger">
+                <Trash2 data-icon="inline-start" />
+                Delete
+              </Button>
+            </div>
+          </div>
+          {editingId === row.id ? (
+            <div className="mt-3">
+              <AuthorizationForm
+                buttonLabel="Save"
+                defaults={row.defaults}
+                error={null}
+                fields={row.fields}
+                onSubmit={(form) => {
+                  row.onEdit(form)
+                  setEditingId(null)
+                }}
+                pending={false}
+              />
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -3224,6 +3862,64 @@ function CreateConnectorDialog({
   )
 }
 
+function CreateRoleDialog({
+  error,
+  onClose,
+  onSubmit,
+  open,
+  pending,
+  resources,
+}: {
+  error: string | null
+  onClose: () => void
+  onSubmit: (input: z.infer<typeof createRoleRequestSchema>) => void
+  open: boolean
+  pending: boolean
+  resources: Array<{ id: string; name: string }>
+}) {
+  const [form, setForm] = useState<FormState>(emptyForm)
+  const [validationError, setValidationError] = useState<string | null>(null)
+  return (
+    <Dialog open={open}>
+      <FormDialog
+        error={validationError ?? error}
+        onClose={onClose}
+        onSubmit={(event) => {
+          event.preventDefault()
+          try {
+            setValidationError(null)
+            onSubmit(parseForm(createRoleRequestSchema, form))
+          } catch (submitError) {
+            setValidationError(submitError instanceof Error ? submitError.message : 'Invalid form input.')
+          }
+        }}
+        pending={pending}
+        title="Create role"
+      >
+        <Field label="Key">
+          <TextInput onChange={(event) => setValue(setForm, 'key', event.target.value)} required />
+        </Field>
+        <Field label="Name">
+          <TextInput onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
+        </Field>
+        <Field label="Description">
+          <TextInput onChange={(event) => setValue(setForm, 'description', event.target.value)} />
+        </Field>
+        <Field label="API resource">
+          <SelectInput onChange={(event) => setValue(setForm, 'resourceId', event.target.value)} defaultValue="">
+            <option value="">Global role</option>
+            {resources.map((resource) => (
+              <option key={resource.id} value={resource.id}>
+                {resource.name}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+      </FormDialog>
+    </Dialog>
+  )
+}
+
 function ConnectorDetailDialog({
   connector,
   error,
@@ -3598,6 +4294,13 @@ function removeBlankValues(input: unknown): unknown {
 function nullableString(value: string) {
   const trimmed = value.trim()
   return trimmed ? trimmed : null
+}
+
+function parseTokenClaims(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const parsed = JSON.parse(trimmed) as unknown
+  return tokenClaimsObjectSchema.parse(parsed)
 }
 
 function customCssProperties(css: string): CSSProperties {
