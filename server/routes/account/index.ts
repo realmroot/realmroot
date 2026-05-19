@@ -1,3 +1,4 @@
+import type { Context } from 'hono'
 import { Hono } from 'hono'
 import {
   accountEmailChangeSchema,
@@ -9,6 +10,7 @@ import { paginationMetadata, paginationQuerySchema } from '../../../shared/api/p
 import { badRequest } from '../../lib/errors'
 import { requireAuth } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
+import { type ApplicationBindings, createApplicationService } from '../../modules/applications/context'
 import type { SecurityRepository } from '../../modules/security/repository'
 import type { UserRepository } from '../../modules/users/repository'
 import type { ManagementAuthApi } from '../auth-api'
@@ -16,8 +18,17 @@ import { toBoundaryError } from '../auth-api'
 import { readJson, readQuery } from '../validation'
 import { accountSecurityRoutes } from './security'
 
-export function accountRoutes(authApi: ManagementAuthApi, users: UserRepository, security?: SecurityRepository) {
-  const app = new Hono()
+export type AccountApplicationServiceFactory = (c: Context<{ Bindings: ApplicationBindings }>) => {
+  revokeConsent: (consentId: string, userId: string) => Promise<void>
+}
+
+export function accountRoutes(
+  authApi: ManagementAuthApi,
+  users: UserRepository,
+  security?: SecurityRepository,
+  applicationServiceFactory: AccountApplicationServiceFactory = createApplicationService,
+) {
+  const app = new Hono<{ Bindings: ApplicationBindings }>()
 
   app.use('*', requireAuth())
 
@@ -144,6 +155,11 @@ export function accountRoutes(authApi: ManagementAuthApi, users: UserRepository,
   app.get('/applications', async (c) => {
     const page = await users.listConsentedApplications(getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema))
     return c.json({ applications: page.items, pagination: paginationMetadata(page) })
+  })
+
+  app.delete('/applications/:consentId', async (c) => {
+    await applicationServiceFactory(c).revokeConsent(c.req.param('consentId'), getAuthContext(c).user!.id)
+    return c.body(null, 204)
   })
 
   app.get('/sessions', async (c) => {

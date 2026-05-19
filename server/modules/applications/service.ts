@@ -80,6 +80,7 @@ export interface ApplicationRepository {
     secret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'>
   }): Promise<ClientSecretRecord>
   findConsent(applicationId: string, userId: string): Promise<ConsentRecord | null>
+  revokeConsent(consentId: string, userId: string): Promise<boolean>
   createConsent(input: {
     applicationId: string
     clientId: string
@@ -317,6 +318,12 @@ export class ApplicationService {
       id: consent.id,
       scopes: consent.scopes,
       grantedAt: consent.grantedAt.toISOString(),
+    }
+  }
+
+  async revokeConsent(consentId: string, userId: string) {
+    if (!(await this.repository.revokeConsent(consentId, userId))) {
+      throw notFound('Application consent was not found.')
     }
   }
 

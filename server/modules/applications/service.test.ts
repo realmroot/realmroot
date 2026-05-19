@@ -398,6 +398,26 @@ describe('ApplicationService', () => {
     ).rejects.toMatchObject({ status: 400, message: 'Scope is not allowed for this client: bad-scope' })
   })
 
+  it('revokes consent for the owning user and rejects missing consent', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const created = await service.create(
+      {
+        name: 'Consent App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+      },
+      'admin-1',
+    )
+    const consent = await service.createConsent({ clientId: created.clientId, scopes: ['openid'] }, 'user-1')
+
+    await expect(service.revokeConsent(consent.id, 'user-1')).resolves.toBeUndefined()
+    await expect(service.revokeConsent(consent.id, 'user-1')).rejects.toMatchObject({
+      status: 404,
+      message: 'Application consent was not found.',
+    })
+  })
+
   it('handles OAuth consent defaults and rejects disabled or missing clients', async () => {
     const repository = new InMemoryApplicationRepository()
     const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
@@ -530,6 +550,15 @@ class InMemoryApplicationRepository implements ApplicationRepository {
 
   async findConsent(applicationId: string, userId: string) {
     return this.consents.get(consentKey(applicationId, userId)) ?? null
+  }
+
+  async revokeConsent(consentId: string, userId: string) {
+    const entry = [...this.consents.entries()].find(
+      ([key, consent]) => key.endsWith(`:${userId}`) && consent.id === consentId,
+    )
+    if (!entry) return false
+    this.consents.delete(entry[0])
+    return true
   }
 
   async createConsent(input: {

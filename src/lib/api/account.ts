@@ -48,6 +48,10 @@ export function listConsentedApplications() {
   return readRpcResponse(apiClient.api.account.applications.$get())
 }
 
+export function revokeApplicationConsent(consentId: string) {
+  return readRpcResponse(apiClient.api.account.applications[':consentId'].$delete({ param: { consentId } }))
+}
+
 export function listAccountSessions() {
   return readRpcResponse(apiClient.api.account.sessions.$get())
 }

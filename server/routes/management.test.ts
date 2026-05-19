@@ -330,6 +330,7 @@ describe('management routes', () => {
           applications: [],
           pagination: { limit: 1, offset: 0, total: 0, hasMore: false, nextOffset: null },
         }),
+        revokeConsent: vi.fn().mockResolvedValue(undefined),
       }),
     })
 
@@ -354,6 +355,7 @@ describe('management routes', () => {
           applications: [applicationFixture()],
           pagination: { limit: 1, offset: 0, total: 1, hasMore: false, nextOffset: null },
         }),
+        revokeConsent: vi.fn().mockResolvedValue(undefined),
       }),
     })
 
