@@ -342,10 +342,10 @@ h1 {
 
 .field {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   color: #27272a;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .field small {
@@ -356,18 +356,19 @@ h1 {
 
 .textInput {
   width: 100%;
-  min-height: 46px;
-  padding: 10px 12px;
+  min-height: 40px;
+  padding: 8px 10px;
   border: 1px solid #d4d4d8;
   border-radius: 8px;
   outline: none;
   background: #ffffff;
   color: var(--ink);
+  font-size: 14px;
 }
 
 .textInput[type="color"] {
-  min-height: 48px;
-  padding: 6px;
+  min-height: 40px;
+  padding: 5px;
 }
 
 .textInput[type="file"] {
@@ -390,7 +391,7 @@ h1 {
 }
 
 .textArea {
-  min-height: 108px;
+  min-height: 96px;
   resize: vertical;
 }
 
@@ -404,7 +405,7 @@ h1 {
 }
 
 .passwordField .textInput {
-  padding-right: 46px;
+  padding-right: 42px;
 }
 
 .passwordField button {
@@ -412,8 +413,8 @@ h1 {
   top: 50%;
   right: 6px;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   transform: translateY(-50%);
   border: 0;
@@ -451,16 +452,31 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: 36px;
+  padding: 0 12px;
   border: 1px solid transparent;
   border-radius: 8px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   transition:
     border-color 150ms ease,
     background-color 150ms ease,
     color 150ms ease,
     box-shadow 150ms ease;
+}
+
+.uiButton-sm,
+.uiButton-icon {
+  min-height: 32px;
+}
+
+.uiButton-sm {
+  padding: 0 10px;
+}
+
+.uiButton-icon {
+  width: 32px;
+  padding: 0;
 }
 
 .uiButton:disabled {
@@ -525,7 +541,7 @@ h1 {
 }
 
 .segmented button {
-  min-height: 40px;
+  min-height: 36px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -548,7 +564,7 @@ h1 {
   align-items: center;
   gap: 10px;
   margin: 0 0 16px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-radius: 8px;
   color: #1f2937;
   background: #f3f4f6;
@@ -633,12 +649,13 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
-  padding: 10px 12px;
+  min-height: 40px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: #27272a;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .socialButton:hover {
@@ -737,7 +754,7 @@ h1 {
 
 .settingsPanel {
   min-width: 0;
-  padding: 22px;
+  padding: 20px;
 }
 
 .settingsPanel > p {
