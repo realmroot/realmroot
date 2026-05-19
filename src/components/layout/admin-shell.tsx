@@ -123,14 +123,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
   )
 
   return (
-    <div className="min-h-dvh bg-muted/40 text-foreground">
-      <header className="sticky top-0 z-30 border-b border-border bg-background">
+    <div className="h-dvh overflow-hidden bg-muted/40 text-foreground">
+      <header className="h-16 w-full border-b border-border bg-background">
         <div className="flex h-16 items-center justify-between gap-3 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               aria-expanded={mobileNavOpen}
               aria-label={mobileNavOpen ? 'Close console navigation' : 'Open console navigation'}
-              className="inline-flex size-10 items-center justify-center rounded-md border border-border bg-background lg:hidden"
+              className="inline-flex size-11 items-center justify-center rounded-md border border-border bg-background lg:hidden"
               onClick={() => setMobileNavOpen((open) => !open)}
               type="button"
             >
@@ -167,16 +167,18 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </a>
           </div>
         </div>
-        {mobileNavOpen ? (
-          <div className="border-t border-border bg-background p-3 lg:hidden">
-            <nav aria-label="Console mobile">
+      </header>
+      {mobileNavOpen ? (
+        <div className="fixed inset-x-0 top-16 bottom-0 z-40 bg-background/80 lg:hidden">
+          <aside className="h-full w-[min(320px,calc(100vw-32px))] border-r border-border bg-background shadow-lg">
+            <nav aria-label="Console mobile" className="h-full overflow-y-auto px-3 py-4">
               <AdminNavigation onNavigate={() => setMobileNavOpen(false)} pathname={pathname} />
             </nav>
-          </div>
-        ) : null}
-      </header>
-      <div className="lg:flex lg:h-[calc(100dvh-4rem)]">
-        <aside className="hidden w-64 shrink-0 border-r border-border bg-background lg:flex lg:max-h-[calc(100dvh-4rem)] lg:flex-col lg:sticky lg:top-16">
+          </aside>
+        </div>
+      ) : null}
+      <div className="h-[calc(100dvh-4rem)] lg:flex">
+        <aside className="hidden w-[248px] shrink-0 border-r border-border bg-background lg:flex lg:h-[calc(100dvh-4rem)] lg:flex-col">
           <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Console">
             <AdminNavigation pathname={pathname} />
           </nav>
@@ -192,8 +194,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </a>
           </div>
         </aside>
-        <main className="min-w-0 flex-1 overflow-y-auto bg-muted/40">
-          <div className="mx-auto flex max-w-[1000px] flex-col gap-5 p-4 md:p-6 lg:p-8">{children}</div>
+        <main className="h-full min-w-0 flex-1 overflow-y-auto bg-muted/40">
+          <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-5 px-4 py-5 md:px-6 lg:px-8 lg:py-7">
+            {children}
+          </div>
         </main>
       </div>
     </div>

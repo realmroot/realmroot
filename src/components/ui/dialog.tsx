@@ -17,7 +17,7 @@ export function DialogContent({ className, ...props }: HTMLAttributes<HTMLDivEle
       <div
         aria-modal="true"
         className={cn(
-          'max-h-[90dvh] w-full max-w-xl overflow-auto rounded-lg border border-border bg-background shadow-lg',
+          'max-h-[90dvh] w-full max-w-xl overflow-auto rounded-md border border-border bg-background shadow-lg',
           className,
         )}
         role="dialog"
@@ -28,11 +28,11 @@ export function DialogContent({ className, ...props }: HTMLAttributes<HTMLDivEle
 }
 
 export function DialogHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex flex-col gap-1.5 border-b border-border p-5', className)} {...props} />
+  return <div className={cn('flex flex-col gap-1 border-b border-border p-4', className)} {...props} />
 }
 
 export function DialogTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn('text-lg font-semibold leading-none tracking-normal', className)} {...props} />
+  return <h2 className={cn('text-base font-semibold leading-5 tracking-normal', className)} {...props} />
 }
 
 export function DialogDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
@@ -40,7 +40,7 @@ export function DialogDescription({ className, ...props }: HTMLAttributes<HTMLPa
 }
 
 export function DialogFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex justify-end gap-2 border-t border-border p-5', className)} {...props} />
+  return <div className={cn('flex justify-end gap-2 border-t border-border p-4', className)} {...props} />
 }
 
 export function DialogClose(props: ButtonHTMLAttributes<HTMLButtonElement>) {

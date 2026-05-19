@@ -20,7 +20,7 @@ import {
 } from './dropdown-menu'
 import { Field, TextInput } from './field'
 import { Status } from './status'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table'
+import { Table, TableBody, TableCell, TableEmptyRow, TableHead, TableHeader, TableRow } from './table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs'
 
 afterEach(() => {
@@ -75,10 +75,10 @@ describe('composed UI primitives', () => {
     )
 
     expect(screen.getByText('Card footer')).toBeTruthy()
-    expect(screen.getByText('Card title').parentElement?.className).toContain('p-5')
+    expect(screen.getByText('Card title').parentElement?.className).toContain('p-4')
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByRole('dialog').parentElement?.className).toContain('overscroll-contain')
-    expect(screen.getByText('Dialog title').parentElement?.className).toContain('p-5')
+    expect(screen.getByText('Dialog title').parentElement?.className).toContain('p-4')
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
     expect(screen.queryByText('Hidden dialog')).toBeNull()
   })
@@ -108,9 +108,23 @@ describe('composed UI primitives', () => {
     expect(screen.getByRole('alert').hasAttribute('aria-live')).toBe(false)
     expect(screen.getByRole('alert').className).toContain('status-error')
     expect(screen.getByRole('table').parentElement?.className).toContain('overflow-x-auto')
-    expect(screen.getByRole('table').className).toContain('min-w-[48rem]')
-    expect(screen.getByRole('columnheader', { name: 'Name' }).className).toContain('h-11')
-    expect(screen.getByRole('cell', { name: 'Customer portal' }).className).toContain('h-[52px]')
+    expect(screen.getByRole('table').className).toContain('min-w-[44rem]')
+    expect(screen.getByRole('columnheader', { name: 'Name' }).className).toContain('h-9')
+    expect(screen.getByRole('cell', { name: 'Customer portal' }).className).toContain('h-11')
+  })
+
+  it('renders compact table empty rows inside table bodies', () => {
+    render(
+      <Table>
+        <TableBody>
+          <TableEmptyRow colSpan={3} description="No rows match this filter." title="No rows" />
+        </TableBody>
+      </Table>,
+    )
+
+    expect(screen.getByRole('cell').getAttribute('colspan')).toBe('3')
+    expect(screen.getByRole('heading', { name: 'No rows' }).className).toContain('text-sm')
+    expect(screen.getByText('No rows match this filter.').className).toContain('leading-5')
   })
 
   it('opens dropdown menus and closes them after item selection', () => {
@@ -191,8 +205,8 @@ describe('composed UI primitives', () => {
     const securityTab = screen.getByRole('tab', { name: 'Security' })
     const panel = screen.getByRole('tabpanel')
     expect(panel.textContent).toBe('Profile panel')
-    expect(profileTab.parentElement?.className).toContain('h-9')
-    expect(profileTab.className).toContain('h-8')
+    expect(profileTab.parentElement?.className).toContain('h-8')
+    expect(profileTab.className).toContain('h-7')
     expect(profileTab.getAttribute('aria-controls')).toBe(panel.id)
     expect(panel.getAttribute('aria-labelledby')).toBe(profileTab.id)
     expect(screen.queryByText('Security panel')).toBeNull()

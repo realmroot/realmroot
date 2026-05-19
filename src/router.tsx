@@ -186,21 +186,7 @@ const accountAuthorizedAppsRoute = createRoute({
 const consoleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/console',
-  beforeLoad: async ({ location }) => {
-    try {
-      await queryClient.fetchQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
-      const readiness = await loadAdminReadiness()
-      if (readiness.admin.setupRequired && location.pathname !== '/console/onboarding') {
-        throw redirect({ to: '/console/onboarding' })
-      }
-    } catch (error) {
-      if (isRedirect(error)) throw error
-      if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
-        throw redirect({ to: '/sign-in', search: { return_to: location.href } })
-      }
-      throw error
-    }
-  },
+  beforeLoad: ({ location }) => loadConsoleAccess(location),
   component: () => (
     <AdminShell>
       <Outlet />
@@ -611,6 +597,35 @@ export const router = createRouter({ routeTree })
 
 function isRedirect(error: unknown) {
   return typeof error === 'object' && error !== null && 'headers' in error && 'status' in error
+}
+
+export async function loadConsoleAccess(location: { href: string; pathname: string }) {
+  await loadConsoleAccount(location.href)
+
+  try {
+    await queryClient.fetchQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
+    const readiness = await loadAdminReadiness()
+    if (readiness.admin.setupRequired && location.pathname !== '/console/onboarding') {
+      throw redirect({ to: '/console/onboarding' })
+    }
+  } catch (error) {
+    if (isRedirect(error)) throw error
+    if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
+      throw redirect({ to: '/sign-in', search: { return_to: location.href } })
+    }
+    throw error
+  }
+}
+
+async function loadConsoleAccount(returnTo: string) {
+  try {
+    await queryClient.fetchQuery({ queryKey: ['account', 'profile'], queryFn: getAccountProfile })
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 401) {
+      throw redirect({ to: '/sign-in', search: { return_to: returnTo } })
+    }
+    throw error
+  }
 }
 
 async function loadAdminReadiness() {

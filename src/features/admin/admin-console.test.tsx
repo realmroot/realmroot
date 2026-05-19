@@ -10,6 +10,7 @@ import {
   ApiResourceDetailPage,
   ApiResourcesPage,
   ApplicationsPage,
+  AuditLogsPage,
   BrandingPage,
   CollectUserProfilePage,
   ConnectorsPage,
@@ -29,6 +30,7 @@ import {
   SecurityPasswordPolicyPage,
   SignInSettingsPage,
   UsersPage,
+  WebhooksPage,
 } from './admin-console'
 
 afterEach(() => {
@@ -163,11 +165,13 @@ describe('admin console', () => {
   })
 
   it('redirects unauthorized Console routes to sign-in with the requested return target', async () => {
+    const requestedUrls: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings')
-        return Promise.resolve(jsonResponse({ error: 'Unauthorized' }, 401))
+      requestedUrls.push(url)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ error: 'Authentication is required.' }, 401))
       return Promise.resolve(jsonResponse({}))
     })
     window.history.pushState(null, '', '/console/applications')
@@ -177,11 +181,15 @@ describe('admin console', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
     expect(decodeURIComponent(window.location.search)).toContain('return_to=/console/applications')
+    expect(requestedUrls.slice(0, 2)).toEqual(['/api/configz', '/api/account/profile'])
+    expect(requestedUrls).not.toContain('/api/management/sign-in-settings')
+    expect(requestedUrls).not.toContain('/api/management/readiness')
   })
 
   it('redirects forbidden Console routes to sign-in with return target', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse({ error: 'Forbidden' }, 403))
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       return Promise.resolve(jsonResponse({}))
@@ -193,6 +201,26 @@ describe('admin console', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
     expect(window.location.search).toContain('return_to=')
+  })
+
+  it('surfaces non-auth Console account guard errors before management requests', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ error: 'Profile unavailable.' }, 503))
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/console/users')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByText('Profile unavailable.')).toBeTruthy()
+    expect(window.location.pathname).toBe('/console/users')
+    expect(requestedUrls).toContain('/api/account/profile')
+    expect(requestedUrls).not.toContain('/api/management/sign-in-settings')
+    expect(requestedUrls).not.toContain('/api/management/readiness')
   })
 
   it('redirects signed-out account routes to sign-in before rendering account controls', async () => {
@@ -292,6 +320,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
@@ -346,6 +375,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
@@ -370,6 +400,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') {
@@ -560,6 +591,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/readiness') return Promise.resolve(jsonResponse({ error: 'Readiness failed.' }, 500))
@@ -3529,6 +3561,196 @@ describe('admin console', () => {
     expect(screen.queryByRole('heading', { name: 'Create API resource' })).toBeNull()
   })
 
+  it('renders page-specific resource actions and list toolbars', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/applications') {
+        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+      }
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(jsonResponse({ users: [user], pagination }))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      if (url === '/api/management/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const pages = [
+      {
+        action: 'New application',
+        component: <ApplicationsPage />,
+        heading: 'Applications',
+        searchLabel: 'Search applications',
+      },
+      { action: 'New user', component: <UsersPage />, heading: 'Users', searchLabel: 'Search users' },
+      {
+        action: 'Add social connector',
+        component: <ConnectorsPage />,
+        heading: 'Social connectors',
+        searchLabel: 'Search social connectors',
+      },
+      {
+        action: 'New organization',
+        component: <OrganizationsPage />,
+        heading: 'Organizations',
+        searchLabel: 'Search organizations',
+      },
+      { action: 'New role', component: <RolesPage />, heading: 'Roles', searchLabel: 'Search roles' },
+      {
+        action: 'New resource',
+        component: <ApiResourcesPage />,
+        heading: 'API resources',
+        searchLabel: 'Search API resources',
+      },
+      { action: 'Create endpoint', component: <WebhooksPage />, heading: 'Webhooks', searchLabel: 'Search webhooks' },
+      { component: <AuditLogsPage />, heading: 'Audit logs', searchLabel: 'Search audit logs' },
+    ]
+
+    for (const page of pages) {
+      renderWithQuery(page.component)
+
+      expect(await screen.findByRole('heading', { name: page.heading })).toBeTruthy()
+      expect(await screen.findByLabelText(page.searchLabel)).toBeTruthy()
+      if (page.action) expect(screen.getByRole('button', { name: page.action })).toBeTruthy()
+
+      cleanup()
+      queryClient.clear()
+    }
+  })
+
+  it('filters changed admin resource lists and shows filter-specific empty states', async () => {
+    const githubConnector = {
+      ...connector,
+      id: 'connector-2',
+      slug: 'github-oauth',
+      displayName: 'GitHub',
+      providerId: 'github',
+    }
+    const northwindOrganization = {
+      ...organization,
+      id: 'org-2',
+      slug: 'northwind',
+      name: 'Northwind',
+      displayName: 'Northwind Traders',
+    }
+    const billingManagerRole = {
+      ...role,
+      id: 'role-2',
+      key: 'billing-manager',
+      name: 'Billing manager',
+      description: 'Controls invoices',
+      system: false,
+      organizationId: 'org-1',
+    }
+    const ordersReaderRole = {
+      ...role,
+      id: 'role-3',
+      key: 'orders-reader',
+      name: 'Orders reader',
+      description: 'Reads orders',
+      system: false,
+      resourceId: 'resource-1',
+    }
+    const billingResource = {
+      ...apiResource,
+      id: 'resource-2',
+      identifier: 'billing-api',
+      name: 'Billing API',
+      audience: 'https://billing.example.com',
+    }
+
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector, githubConnector], pagination }))
+      }
+      if (url === '/api/management/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization, northwindOrganization], pagination }))
+      }
+      if (url === '/api/management/roles') {
+        return Promise.resolve(jsonResponse({ roles: [role, billingManagerRole, ordersReaderRole], pagination }))
+      }
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource, billingResource], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    expect(screen.getByText('GitHub')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search social connectors'), { target: { value: 'github' } })
+    await waitFor(() => {
+      expect(screen.getByText('GitHub')).toBeTruthy()
+      expect(screen.queryByText('Google')).toBeNull()
+    })
+    fireEvent.change(screen.getByLabelText('Search social connectors'), { target: { value: 'missing' } })
+    expect(await screen.findByText('No social connectors found')).toBeTruthy()
+    expect(screen.getByText('No social connectors match the current search.')).toBeTruthy()
+
+    unmount()
+    renderWithQuery(<OrganizationsPage />)
+
+    expect(await screen.findByText('Acme')).toBeTruthy()
+    expect(screen.getByText('Northwind')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search organizations'), { target: { value: 'north' } })
+    await waitFor(() => {
+      expect(screen.getByText('Northwind')).toBeTruthy()
+      expect(screen.queryByText('Acme')).toBeNull()
+    })
+    fireEvent.change(screen.getByLabelText('Search organizations'), { target: { value: 'missing' } })
+    expect(await screen.findByText('No organizations found')).toBeTruthy()
+    expect(screen.getByText('No organizations match the current search.')).toBeTruthy()
+
+    cleanup()
+    queryClient.clear()
+    renderWithQuery(<RolesPage />)
+
+    expect(await screen.findByText('Admin')).toBeTruthy()
+    expect(screen.getByText('Billing manager')).toBeTruthy()
+    expect(screen.getByText('Orders reader')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: 'billing' } })
+    await waitFor(() => {
+      expect(screen.getByText('Billing manager')).toBeTruthy()
+      expect(screen.queryByText('Admin')).toBeNull()
+      expect(screen.queryByText('Orders reader')).toBeNull()
+    })
+    fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Filter role scope'), { target: { value: 'resource' } })
+    await waitFor(() => {
+      expect(screen.getByText('Orders reader')).toBeTruthy()
+      expect(screen.queryByText('Admin')).toBeNull()
+      expect(screen.queryByText('Billing manager')).toBeNull()
+    })
+    fireEvent.change(screen.getByLabelText('Filter role scope'), { target: { value: 'application' } })
+    expect(await screen.findByText('No roles found')).toBeTruthy()
+    expect(screen.getByText('No roles match the current search or scope filter.')).toBeTruthy()
+
+    cleanup()
+    queryClient.clear()
+    renderWithQuery(<ApiResourcesPage />)
+
+    expect(await screen.findByText('Management API')).toBeTruthy()
+    expect(screen.getByText('Billing API')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search API resources'), { target: { value: 'billing' } })
+    await waitFor(() => {
+      expect(screen.getByText('Billing API')).toBeTruthy()
+      expect(screen.queryByText('Management API')).toBeNull()
+    })
+    fireEvent.change(screen.getByLabelText('Search API resources'), { target: { value: 'missing' } })
+    expect(await screen.findByText('No API resources found')).toBeTruthy()
+    expect(screen.getByText('No API resources match the current search.')).toBeTruthy()
+  })
+
   it('renders collection loading and query error states', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
@@ -3827,6 +4049,7 @@ function accountRouteFetch(input: RequestInfo | URL, init?: RequestInit) {
 function consoleRouteFetch(input: RequestInfo | URL) {
   const url = String(input)
   if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+  if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
   if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
   if (url === '/api/management/readiness') {
     return Promise.resolve(
