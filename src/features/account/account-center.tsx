@@ -392,7 +392,12 @@ function SecuritySections({
           }}
         >
           <Field label="Password">
-            <TextInput onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
+            <TextInput
+              autoComplete="current-password"
+              onChange={(event) => setPassword(event.target.value)}
+              type="password"
+              value={password}
+            />
           </Field>
           <Button type="submit" variant="secondary">
             Enroll authenticator app

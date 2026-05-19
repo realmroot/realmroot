@@ -5221,7 +5221,11 @@ function CreateUserDialog({
           <TextInput onChange={(event) => setValue(setForm, 'username', event.target.value)} />
         </Field>
         <Field label="Initial password">
-          <TextInput onChange={(event) => setValue(setForm, 'password', event.target.value)} type="password" />
+          <TextInput
+            autoComplete="new-password"
+            onChange={(event) => setValue(setForm, 'password', event.target.value)}
+            type="password"
+          />
         </Field>
       </FormDialog>
     </Dialog>
