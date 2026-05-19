@@ -69,9 +69,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Field, SelectInput, TextArea, TextInput } from '@/components/ui/field'
+import { PageHeader } from '@/components/ui/page-header'
+import { SettingRow } from '@/components/ui/setting-row'
 import { Switch } from '@/components/ui/switch'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableEmptyRow, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   adminQueryKeys,
@@ -147,6 +150,7 @@ import {
   uploadOrganizationLogo,
 } from '@/lib/api/management'
 import { cn } from '@/lib/utils'
+import { ConsoleActionBar, ConsoleDetailStack, ConsoleToolbar } from './console-primitives'
 
 type FormState = Record<string, string>
 
@@ -422,7 +426,7 @@ export function ApplicationsPage() {
       onRetry={() => query.refetch()}
     >
       <Tabs setValue={(value) => setSelectedTab(value as 'my-apps' | 'third-party')} value={selectedTab}>
-        <div className="consoleToolbar border-b border-border p-4">
+        <ConsoleToolbar className="border-b border-border p-3">
           <TabsList aria-label="Application lists">
             <TabsTrigger value="my-apps">My apps</TabsTrigger>
             <TabsTrigger value="third-party">Third-party apps</TabsTrigger>
@@ -433,7 +437,7 @@ export function ApplicationsPage() {
             placeholder="Search applications"
             value={search}
           />
-        </div>
+        </ConsoleToolbar>
         <TabsContent value="my-apps">
           <ApplicationsTableContent
             applications={visibleApplications}
@@ -544,7 +548,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
       onRetry={() => query.refetch()}
     >
       {application ? (
-        <div className="consoleDetailStack">
+        <ConsoleDetailStack>
           <Link className="consoleBackLink" to="/console/applications">
             <Undo2 data-icon="inline-start" />
             Back to applications
@@ -590,7 +594,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
                       <SettingRow label="App ID" value={application.clientId} />
                       <SettingRow label="Type" value={clientTypeLabel(application.clientType)} />
                       <SettingRow label="Status" value={application.disabled ? 'Disabled' : 'Enabled'} />
-                      <StickyActionBar>
+                      <ConsoleActionBar>
                         <Button disabled={updateMutation.isPending} type="submit">
                           <Save data-icon="inline-start" />
                           Save changes
@@ -598,7 +602,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
                         <Button disabled={updateMutation.isPending} type="reset" variant="secondary">
                           Discard
                         </Button>
-                      </StickyActionBar>
+                      </ConsoleActionBar>
                       <MutationError error={updateMutation.error} />
                     </form>
                   </CardContent>
@@ -641,14 +645,14 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
                       <Field label="CORS origins" help="Pending API support.">
                         <TextArea disabled placeholder="No CORS origins configured" rows={3} />
                       </Field>
-                      <StickyActionBar>
+                      <ConsoleActionBar>
                         <Button disabled={redirectMutation.isPending} type="submit">
                           Save redirect URIs
                         </Button>
                         <Button disabled={redirectMutation.isPending} type="reset" variant="secondary">
                           Discard
                         </Button>
-                      </StickyActionBar>
+                      </ConsoleActionBar>
                       <MutationError error={redirectMutation.error} />
                     </form>
                   </CardContent>
@@ -804,7 +808,7 @@ export function ApplicationDetailPage({ applicationId }: { applicationId: string
               </Card>
             </TabsContent>
           </Tabs>
-        </div>
+        </ConsoleDetailStack>
       ) : null}
       <SecretDisclosureDialog
         clientId={application?.clientId ?? null}
@@ -2407,7 +2411,7 @@ export function MfaPage() {
               </CardContent>
             </Card>
           </div>
-          <StickyActionBar>
+          <ConsoleActionBar>
             <Button disabled type="button">
               <Save data-icon="inline-start" />
               Save changes
@@ -2416,7 +2420,7 @@ export function MfaPage() {
               <Undo2 data-icon="inline-start" />
               Discard
             </Button>
-          </StickyActionBar>
+          </ConsoleActionBar>
         </div>
       ) : null}
     </ResourcePage>
@@ -4573,58 +4577,6 @@ function ObjectHeader({ badge, id, title }: { badge: string; id: string; title: 
   )
 }
 
-function TableEmptyRow({ colSpan, description, title }: { colSpan: number; description: string; title: string }) {
-  return (
-    <TableRow className="hover:bg-transparent">
-      <TableCell colSpan={colSpan}>
-        <div className="flex min-h-32 flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <p className="max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}
-
-function StickyActionBar({ children }: { children: ReactNode }) {
-  return <div className="stickyActionBar">{children}</div>
-}
-
-function PageHeader({
-  action,
-  breadcrumb,
-  description,
-  eyebrow,
-  title,
-}: {
-  action?: ReactNode
-  breadcrumb?: string[]
-  description: string
-  eyebrow: string
-  title: string
-}) {
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
-        {breadcrumb ? (
-          <div className="mb-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            {breadcrumb.map((crumb, index) => (
-              <span className="inline-flex items-center gap-1" key={crumb}>
-                {index > 0 ? <span aria-hidden="true">/</span> : null}
-                <span>{crumb}</span>
-              </span>
-            ))}
-          </div>
-        ) : null}
-        <p className="mb-1 text-xs font-semibold uppercase tracking-normal text-muted-foreground">{eyebrow}</p>
-        <h1 className="text-2xl font-semibold leading-tight tracking-normal">{title}</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p>
-      </div>
-      {action}
-    </div>
-  )
-}
-
 function MetricCard({
   detail,
   label,
@@ -4802,15 +4754,6 @@ function PolicyCard({ rows, title }: { rows: Array<[string, string]>; title: str
         ))}
       </CardContent>
     </Card>
-  )
-}
-
-function SettingRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-md border border-border p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      <span className="text-sm font-medium">{label}</span>
-      <span className="text-sm text-muted-foreground sm:max-w-[70%] sm:text-right">{value}</span>
-    </div>
   )
 }
 
@@ -5063,25 +5006,6 @@ function StatusBadge({
   inactiveLabel: string
 }) {
   return <Badge variant={active ? 'secondary' : 'outline'}>{active ? activeLabel : inactiveLabel}</Badge>
-}
-
-function EmptyState({ action, description, title }: { action?: ReactNode; description: string; title: string }) {
-  return (
-    <Card className="border-dashed">
-      <CardContent className="flex flex-col items-start gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="grid size-10 place-items-center rounded-md bg-muted text-muted-foreground">
-            <ListChecks aria-hidden="true" />
-          </span>
-          <div>
-            <h2 className="text-base font-semibold">{title}</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
-          </div>
-        </div>
-        {action}
-      </CardContent>
-    </Card>
-  )
 }
 
 function LoadingState({ label }: { label: string }) {
