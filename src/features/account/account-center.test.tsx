@@ -44,6 +44,7 @@ describe('account center', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Change email' }))
+    expect(document.querySelector('input[autocomplete="username"]')).toHaveProperty('value', 'jane@example.com')
     expect(screen.getByLabelText('Current password').getAttribute('autocomplete')).toBe('current-password')
     expect(screen.getByLabelText('New password').getAttribute('autocomplete')).toBe('new-password')
     fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'old-password' } })

@@ -321,6 +321,7 @@ function ProfileSection({ profile, mutate }: { profile: UserProfile; mutate: Mut
       <section className="settingsPanel">
         <h2>Password</h2>
         <form className="formStack" onSubmit={changePassword}>
+          <input autoComplete="username" hidden readOnly type="text" value={profile.email} />
           <Field label="Current password">
             <TextInput
               autoComplete="current-password"
