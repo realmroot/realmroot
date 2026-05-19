@@ -659,6 +659,10 @@ describe('admin console', () => {
         requests.push({ url, method, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ redirectUris: ['https://new.example.com/callback'] }))
       }
+      if (url === '/api/management/applications/app-1/logo' && method === 'POST') {
+        requests.push({ url, method, body: init?.body instanceof FormData ? '[form-data]' : init?.body })
+        return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
+      }
       if (url === '/api/management/applications/app-1' && method === 'DELETE') {
         requests.push({ url, method, body: null })
         return Promise.resolve(new Response(null, { status: 204 }))
@@ -693,6 +697,9 @@ describe('admin console', () => {
       target: { value: 'https://new.example.com/callback' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save redirect URIs' }))
+    fireEvent.change(screen.getByLabelText('Upload logo for Customer portal'), {
+      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Disable application' }))
     expect(await screen.findByRole('button', { name: 'Enable application' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Enable application' }))
@@ -707,6 +714,11 @@ describe('admin console', () => {
           url: '/api/management/applications/app-1/redirect-uris',
           method: 'PUT',
           body: { redirectUris: ['https://new.example.com/callback'] },
+        },
+        {
+          url: '/api/management/applications/app-1/logo',
+          method: 'POST',
+          body: '[form-data]',
         },
         {
           url: '/api/management/applications/app-1',
