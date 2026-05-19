@@ -1146,7 +1146,11 @@ test('admin console desktop and mobile screenshot evidence', async ({ page }, te
     for (const route of [
       { name: 'dashboard', path: '/console', heading: 'Tenant health' },
       { name: 'applications', path: '/console/applications', heading: 'Applications' },
-      { name: 'sign-in-experience', path: '/console/sign-in-experience/branding', heading: 'Branding' },
+      {
+        name: 'sign-in-experience',
+        path: '/console/sign-in-experience/sign-up-and-sign-in',
+        heading: 'Sign-up and sign-in',
+      },
       { name: 'security', path: '/console/security/password-policy', heading: 'Security' },
     ]) {
       await page.goto(route.path)

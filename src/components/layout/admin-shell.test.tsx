@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AdminShell } from './admin-shell'
@@ -34,12 +34,15 @@ describe('AdminShell', () => {
   it('renders Console navigation and marks the exact dashboard route active', () => {
     render(<AdminShell>Dashboard content</AdminShell>)
 
-    expect(screen.getByText('Identity Console')).toBeTruthy()
+    expect(screen.getAllByText('Console').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Default').length).toBeGreaterThan(0)
     expect(screen.getByText('Dashboard content')).toBeTruthy()
-    expect(screen.getByText('Dashboard content').closest('.min-h-dvh')?.className).toContain('bg-muted/60')
+    expect(screen.getByText('Dashboard content').closest('.min-h-dvh')?.className).toContain('bg-muted/40')
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('bg-primary/10')
+    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('h-9')
     expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).not.toContain('bg-primary/10')
+    expect(screen.queryByText('Tenant health')).toBeNull()
+    expect(screen.queryByText('OIDC clients')).toBeNull()
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
   })
 
@@ -70,7 +73,9 @@ describe('AdminShell', () => {
     expect(screen.getAllByRole('link', { name: /Sign-in & account/ }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
 
-    fireEvent.click(screen.getAllByRole('link', { name: /Applications/ }).at(-1)!)
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Console mobile' })).getByRole('link', { name: /Applications/ }),
+    )
 
     expect(screen.queryByRole('navigation', { name: 'Console mobile' })).toBeNull()
   })
