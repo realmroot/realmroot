@@ -86,6 +86,16 @@ const consentResponse = {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   },
+  user: {
+    email: 'jane@example.com',
+    displayName: 'Jane Stone',
+    image: null,
+  },
+  redirects: {
+    approveUrl:
+      '/api/auth/oauth2/authorize?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    denyUrl: 'https://client.example.com/callback?error=access_denied&state=state-1',
+  },
   requestedScopes: ['openid', 'profile'],
   existingConsent: null,
   state: 'state-1',
@@ -127,6 +137,166 @@ describe('hosted auth pages', () => {
 
     expect(await screen.findByRole('button', { name: 'Send magic link' })).toBeTruthy()
     expect(screen.queryByLabelText('Password')).toBeNull()
+  })
+
+  it('starts with an identifier step when identifier-first sign-in is enabled', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValue(
+      jsonResponse({
+        ...configz,
+        signIn: {
+          ...configz.signIn,
+          identifierFirst: true,
+        },
+      }),
+    )
+
+    render(<SignInPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email or username'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(screen.getByText('Signing in as')).toBeTruthy()
+    expect(screen.getByText('jane@example.com')).toBeTruthy()
+    expect(screen.getByLabelText('Password')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
+  })
+
+  it('keeps identifier-first identity across magic link and OTP methods', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') {
+        return Promise.resolve(
+          jsonResponse({
+            ...configz,
+            signIn: {
+              ...configz.signIn,
+              identifierFirst: true,
+            },
+          }),
+        )
+      }
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<SignInPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email or username'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Magic link' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send magic link' }))
+    fireEvent.click(screen.getByRole('button', { name: 'OTP' }))
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Send code' }) as HTMLButtonElement).disabled).toBe(false),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Send code' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual(
+        expect.arrayContaining([
+          { url: '/api/auth/sign-in/magic-link', body: { email: 'jane@example.com', errorCallbackURL: '/sign-in' } },
+          { url: '/api/auth/email-otp/send-verification-otp', body: { email: 'jane@example.com', type: 'sign-in' } },
+        ]),
+      )
+    })
+  })
+
+  it('requires an email when identifier-first username switches to email-only methods', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') {
+        return Promise.resolve(
+          jsonResponse({
+            ...configz,
+            signIn: {
+              ...configz.signIn,
+              identifierFirst: true,
+            },
+          }),
+        )
+      }
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<SignInPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email or username'), { target: { value: 'jane' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Magic link' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send magic link' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/sign-in/magic-link',
+        body: { email: 'jane@example.com', errorCallbackURL: '/sign-in' },
+      })
+    })
+  })
+
+  it('uses a separate OTP email when identifier-first starts from a username', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') {
+        return Promise.resolve(
+          jsonResponse({
+            ...configz,
+            signIn: {
+              ...configz.signIn,
+              identifierFirst: true,
+            },
+          }),
+        )
+      }
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<SignInPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email or username'), { target: { value: 'jane' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: 'OTP' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send code' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/email-otp/send-verification-otp',
+        body: { email: 'jane@example.com', type: 'sign-in' },
+      })
+    })
+  })
+
+  it('shows user-facing OIDC destination context without raw client identifiers', async () => {
+    window.history.pushState(
+      null,
+      '',
+      '/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
+
+    render(<SignInPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Continue to client.example.com.' })).toBeTruthy()
+    expect(screen.getByText('Sign in with your hosted account to continue to client.example.com.')).toBeTruthy()
+    expect(screen.queryByText(/client-1/)).toBeNull()
+  })
+
+  it('uses generic OIDC context when redirect URI is invalid', async () => {
+    window.history.pushState(null, '', '/sign-in?client_id=client-1&redirect_uri=not-a-url')
+    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
+
+    render(<SignInPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Continue to the requested application.' })).toBeTruthy()
+    expect(screen.getByText('Sign in with your hosted account to continue.')).toBeTruthy()
+    expect(screen.queryByText(/client-1/)).toBeNull()
   })
 
   it('submits password and OTP sign-in through native auth endpoints', async () => {
@@ -268,6 +438,8 @@ describe('hosted auth pages', () => {
     render(<ConsentPage />)
 
     expect(await screen.findByRole('heading', { name: 'Client App' })).toBeTruthy()
+    expect(screen.getByText('Signed in as')).toBeTruthy()
+    expect(screen.getByText('Jane Stone')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
 
     await waitFor(() => {
@@ -313,8 +485,6 @@ describe('hosted auth pages', () => {
       }
       return Promise.resolve(jsonResponse({ error: { message: 'Consent approval failed.' } }, 400))
     })
-    vi.spyOn(window.history, 'back').mockImplementation(() => undefined)
-
     render(<ConsentPage />)
 
     expect(await screen.findByText('OAuth client application')).toBeTruthy()
@@ -322,8 +492,9 @@ describe('hosted auth pages', () => {
     expect(screen.getByText('Allow refresh tokens for continued access.')).toBeTruthy()
     expect(screen.getByText('Allow this application to request this scope.')).toBeTruthy()
     expect(screen.getByText(/Previously approved on/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(window.history.back).toHaveBeenCalled()
+    expect(screen.getByRole('link', { name: 'Deny' }).getAttribute('href')).toBe(
+      'https://client.example.com/callback?error=access_denied&state=state-1',
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
 
     expect(await screen.findByText('Consent approval failed.')).toBeTruthy()

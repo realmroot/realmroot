@@ -146,6 +146,15 @@ export const consentRequestQuerySchema = z.object({
 
 export const consentRequestResponseSchema = z.object({
   application: applicationResponseSchema.omit({ secretMetadata: true }),
+  user: z.object({
+    email: z.email().nullable(),
+    displayName: z.string().nullable(),
+    image: z.string().nullable(),
+  }),
+  redirects: z.object({
+    approveUrl: z.string(),
+    denyUrl: z.string(),
+  }),
   requestedScopes: z.array(applicationScopeSchema),
   existingConsent: z
     .object({

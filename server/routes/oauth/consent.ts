@@ -13,8 +13,14 @@ import { readJson } from '../validation'
 
 type ConsentServicePort = {
   loadConsentRequest: (
-    input: { clientId: string; redirectUri: string; scope?: string; state?: string },
-    userId: string,
+    input: {
+      clientId: string
+      redirectUri: string
+      scope?: string
+      state?: string
+      authorizationParams?: Record<string, string>
+    },
+    user: { id: string; email?: string | null; name?: string | null; username?: string | null; image?: string | null },
   ) => Promise<unknown>
   createConsent: (input: Pick<CreateConsentRequest, 'clientId' | 'scopes'>, userId: string) => Promise<unknown>
 }
@@ -35,8 +41,9 @@ export function createOAuthConsentRoute(
         redirectUri: query.redirect_uri,
         scope: query.scope,
         state: query.state,
+        authorizationParams: Object.fromEntries(new URL(c.req.url).searchParams),
       },
-      user?.id ?? '',
+      user!,
     )
     return c.json(consent)
   })

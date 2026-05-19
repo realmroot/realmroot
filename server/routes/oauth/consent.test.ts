@@ -20,6 +20,37 @@ describe('OAuth consent routes', () => {
     expect(service.createConsent).not.toHaveBeenCalled()
   })
 
+  it('loads consent for the authenticated user', async () => {
+    const service = createConsentServiceMock()
+    const response = await createTestApp(service).request(
+      '/api/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&response_type=code&scope=openid%20profile&state=state-1&code_challenge=challenge-1&code_challenge_method=S256&nonce=nonce-1',
+      {
+        headers: userHeaders(),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(service.loadConsentRequest).toHaveBeenCalledWith(
+      {
+        clientId: 'client-1',
+        redirectUri: 'https://client.example.com/callback',
+        scope: 'openid profile',
+        state: 'state-1',
+        authorizationParams: {
+          client_id: 'client-1',
+          redirect_uri: 'https://client.example.com/callback',
+          response_type: 'code',
+          scope: 'openid profile',
+          state: 'state-1',
+          code_challenge: 'challenge-1',
+          code_challenge_method: 'S256',
+          nonce: 'nonce-1',
+        },
+      },
+      { id: 'user-1', email: 'jane@example.com', name: 'Jane Stone', image: 'https://auth.example.com/avatar.png' },
+    )
+  })
+
   it('validates hosted consent approval without accepting client permissions', async () => {
     const service = createConsentServiceMock()
     const response = await createTestApp(service).request('/api/oauth/consent', {
@@ -62,7 +93,9 @@ function createTestApp(service: ReturnType<typeof createConsentServiceMock>) {
     const userId = c.req.header('x-user-id')
     c.set('authContext', {
       session: userId ? { session: { id: 'session-1' }, user: { id: userId } } : null,
-      user: userId ? { id: userId } : null,
+      user: userId
+        ? { id: userId, email: 'jane@example.com', name: 'Jane Stone', image: 'https://auth.example.com/avatar.png' }
+        : null,
     })
     await next()
   })
@@ -75,7 +108,17 @@ function createTestApp(service: ReturnType<typeof createConsentServiceMock>) {
 
 function createConsentServiceMock() {
   return {
-    loadConsentRequest: vi.fn(),
+    loadConsentRequest: vi.fn().mockResolvedValue({
+      application: { clientId: 'client-1' },
+      user: { email: 'jane@example.com', displayName: 'Jane Stone', image: 'https://auth.example.com/avatar.png' },
+      redirects: {
+        approveUrl: '/api/auth/oauth2/authorize?client_id=client-1',
+        denyUrl: 'https://client.example.com/callback?error=access_denied',
+      },
+      requestedScopes: ['openid', 'profile'],
+      existingConsent: null,
+      state: 'state-1',
+    }),
     createConsent: vi.fn().mockResolvedValue({
       id: 'consent-1',
       scopes: ['openid', 'profile'],

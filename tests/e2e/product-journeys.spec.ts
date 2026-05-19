@@ -26,6 +26,7 @@ let firstAdminRequired = false
 let adminSetupRequired = false
 let accountSignedIn = true
 let applicationDisabled = false
+let identifierFirstRequired = false
 
 const journeyAssertions: Record<
   JourneyId,
@@ -89,6 +90,38 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Password' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'OTP' })).toBeVisible()
+    },
+  },
+  'oidc-hosted-sign-in-context': {
+    suite: 'public and auth journeys',
+    assert: async ({ page }) => {
+      await page.goto('/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback')
+      await expect(page.getByRole('heading', { name: 'Continue to client.example.com.' })).toBeVisible()
+      await expect(page.getByText('Sign in with your hosted account to continue to client.example.com.')).toBeVisible()
+      await expect(page.getByText('client-1')).toHaveCount(0)
+    },
+  },
+  'identifier-first-sign-in': {
+    suite: 'public and auth journeys',
+    assert: async ({ page, requests }) => {
+      identifierFirstRequired = true
+      try {
+        await page.goto('/sign-in')
+        await page.getByLabel('Email or username').fill('jane@example.com')
+        await page.getByRole('button', { name: 'Continue' }).click()
+        await expect(page.getByText('Signing in as')).toBeVisible()
+        await page.getByRole('button', { name: 'OTP' }).click()
+        await page.getByRole('button', { name: 'Send code' }).click()
+        expect(requests).toContainEqual({
+          method: 'POST',
+          path: '/api/auth/email-otp/send-verification-otp',
+          body: { email: 'jane@example.com', type: 'sign-in' },
+        })
+        await page.getByRole('button', { name: 'Change' }).click()
+        await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible()
+      } finally {
+        identifierFirstRequired = false
+      }
     },
   },
   'signed-out-account-redirect': {
@@ -199,14 +232,30 @@ const journeyAssertions: Record<
   'oauth-consent': {
     suite: 'OAuth consent journey',
     assert: async ({ page, requests }) => {
-      await page.goto('/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2Flocalhost%3A4173%2Foidc%2Fcallback')
+      await page.goto(
+        '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&response_type=code&scope=openid%20profile&state=state-1&code_challenge=challenge-1&code_challenge_method=S256&nonce=nonce-1',
+      )
       await expect(page.getByRole('heading', { name: 'Customer portal' })).toBeVisible()
+      await expect(page.getByText('Signed in as')).toBeVisible()
+      await expect(page.getByText('Jane Stone')).toBeVisible()
       await page.getByRole('button', { name: 'Approve access' }).click()
+      await expect(page).toHaveURL(/\/oidc\/callback\?code=demo-code&state=state-1/)
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/oauth/consent',
         body: { clientId: 'client-1', scopes: ['openid', 'profile'] },
       })
+    },
+  },
+  'oauth-consent-deny': {
+    suite: 'OAuth consent journey',
+    assert: async ({ page }) => {
+      await page.goto(
+        '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&state=state-1',
+      )
+      await page.getByRole('link', { name: 'Deny' }).click()
+      await expect(page).toHaveURL(/\/oidc\/callback\?error=access_denied&state=state-1/)
+      await expect(page.getByRole('heading', { name: 'Demo client callback' })).toBeVisible()
     },
   },
   'oidc-client-callback': {
@@ -817,7 +866,11 @@ async function responseFor(path: string, method: string, body: unknown): Promise
     return response.json()
   }
   if (path === '/api/configz') {
-    return { ...configz, onboarding: { required: firstAdminRequired, href: '/onboarding' } }
+    return {
+      ...configz,
+      onboarding: { required: firstAdminRequired, href: '/onboarding' },
+      signIn: { ...configz.signIn, identifierFirst: identifierFirstRequired },
+    }
   }
   if (path === '/api/onboarding/status') return { required: firstAdminRequired }
   if (path === '/api/onboarding/admin-users') {
@@ -1060,9 +1113,19 @@ const confidentialApplication = {
 
 const consentResponse = {
   application,
+  user: {
+    email: 'jane@example.com',
+    displayName: 'Jane Stone',
+    image: null,
+  },
+  redirects: {
+    approveUrl:
+      '/api/auth/oauth2/authorize?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&response_type=code&scope=openid+profile&state=state-1&code_challenge=challenge-1&code_challenge_method=S256&nonce=nonce-1',
+    denyUrl: 'http://127.0.0.1:5173/oidc/callback?error=access_denied&state=state-1',
+  },
   requestedScopes: ['openid', 'profile'],
   existingConsent: null,
-  state: null,
+  state: 'state-1',
 }
 
 const connector = {

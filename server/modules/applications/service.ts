@@ -249,8 +249,14 @@ export class ApplicationService {
   }
 
   async loadConsentRequest(
-    input: { clientId: string; redirectUri: string; scope?: string; state?: string },
-    userId: string,
+    input: {
+      clientId: string
+      redirectUri: string
+      scope?: string
+      state?: string
+      authorizationParams?: Record<string, string>
+    },
+    user: { id: string; email?: string | null; name?: string | null; username?: string | null; image?: string | null },
   ) {
     const application = await this.repository.findByClientId(input.clientId)
     if (!application || application.disabled) {
@@ -261,11 +267,26 @@ export class ApplicationService {
     }
 
     const requestedScopes = normalizeRequestedScopes(input.scope, application.allowedScopes)
-    const existingConsent = await this.repository.findConsent(application.id, userId)
+    const existingConsent = await this.repository.findConsent(application.id, user.id)
 
     const { secretMetadata: _secretMetadata, ...applicationResponse } = this.toResponse(application, [])
+    const approveParams = new URLSearchParams(input.authorizationParams)
+    approveParams.set('client_id', input.clientId)
+    approveParams.set('redirect_uri', input.redirectUri)
+    if (input.scope) approveParams.set('scope', input.scope)
+    if (input.state) approveParams.set('state', input.state)
+
     return {
       application: applicationResponse,
+      user: {
+        email: user.email ?? null,
+        displayName: user.name ?? user.username ?? user.email ?? null,
+        image: user.image ?? null,
+      },
+      redirects: {
+        approveUrl: `/api/auth/oauth2/authorize?${approveParams.toString()}`,
+        denyUrl: buildDeniedAuthorizationUrl(input.redirectUri, input.state),
+      },
       requestedScopes,
       existingConsent: existingConsent
         ? {
@@ -341,6 +362,14 @@ export class ApplicationService {
       updatedAt: application.updatedAt.toISOString(),
     }
   }
+}
+
+function buildDeniedAuthorizationUrl(redirectUri: string, state: string | undefined) {
+  const url = new URL(redirectUri)
+  url.searchParams.set('error', 'access_denied')
+  url.searchParams.set('error_description', 'The user denied the authorization request.')
+  if (state) url.searchParams.set('state', state)
+  return url.toString()
 }
 
 function normalizeClientSettings(

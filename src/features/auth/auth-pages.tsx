@@ -1,4 +1,14 @@
-import { ArrowLeft, BadgeCheck, Fingerprint, KeyRound, LinkIcon, LoaderCircle, Mail, ShieldCheck } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgeCheck,
+  Fingerprint,
+  KeyRound,
+  LinkIcon,
+  LoaderCircle,
+  Mail,
+  ShieldCheck,
+} from 'lucide-react'
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button, LinkButton } from '@/components/ui/button'
@@ -41,14 +51,19 @@ export function SignInPage() {
   const [mode, setMode] = useState<SignInMode>('password')
   const [submit, setSubmit] = useState(initialSubmitState)
   const [identifier, setIdentifier] = useState('')
+  const [identifierConfirmed, setIdentifierConfirmed] = useState(false)
   const [password, setPassword] = useState('')
   const [otp, setOtp] = useState('')
   const enabled = config?.signIn
   const callback = callbackURL()
+  const authContext = authRequestContext()
+  const identifierFirst = enabled?.identifierFirst === true
+  const showIdentifierStep = identifierFirst && !identifierConfirmed
 
   const socialProviders = config?.identityProviders ?? []
   const methods = useMemo(() => (enabled ? signInMethods(enabled) : []), [enabled])
   const activeMode = methods.some((method) => method.id === mode) ? mode : (methods[0]?.id ?? mode)
+  const needsEmailIdentifier = identifierFirst && activeMode !== 'password' && !identifier.includes('@')
 
   async function onPasswordSubmit(event: FormEvent) {
     event.preventDefault()
@@ -92,18 +107,51 @@ export function SignInPage() {
     <AuthLayout
       config={config}
       eyebrow="Hosted sign-in"
-      title={config?.copy.headline ?? 'Sign in to continue.'}
-      description={config?.copy.description ?? 'Use one of the enabled methods to access this application.'}
+      title={authContext.title ?? config?.copy.headline ?? 'Sign in to continue.'}
+      description={
+        authContext.description ??
+        config?.copy.description ??
+        'Use one of the enabled methods to access this application.'
+      }
     >
       {loading ? <LoadingMessage label="Loading sign-in options" /> : null}
       {error ? <Status tone="error">{error}</Status> : null}
+      {!loading && !error && methods.length === 0 ? (
+        <Status tone="warning">No sign-in methods are enabled. Contact the workspace administrator.</Status>
+      ) : null}
 
       <div className="authCardHeader">
-        <h2>Welcome back</h2>
-        <p>Choose the sign-in method configured for this deployment.</p>
+        <h2>{showIdentifierStep ? 'Enter your identifier' : 'Choose how to continue'}</h2>
+        <p>
+          {showIdentifierStep ? 'Start with the email or username for your hosted account.' : methodHelp(activeMode)}
+        </p>
       </div>
 
-      {methods.length > 1 ? (
+      {showIdentifierStep ? (
+        <form
+          className="formStack"
+          onSubmit={(event) => {
+            event.preventDefault()
+            setIdentifierConfirmed(true)
+          }}
+        >
+          <Field label={enabled?.usernameEnabled ? 'Email or username' : 'Email'}>
+            <TextInput
+              autoComplete="username"
+              onChange={(event) => setIdentifier(event.target.value)}
+              required
+              type="text"
+              value={identifier}
+            />
+          </Field>
+          <Button type="submit">
+            <ArrowRight size={18} />
+            Continue
+          </Button>
+        </form>
+      ) : null}
+
+      {!showIdentifierStep && methods.length > 1 ? (
         <div className="segmented" role="tablist" aria-label="Sign-in method">
           {methods.map((method) => (
             <button
@@ -118,17 +166,29 @@ export function SignInPage() {
         </div>
       ) : null}
 
-      {activeMode === 'password' && enabled?.passwordEnabled ? (
+      {!showIdentifierStep && identifierFirst && !needsEmailIdentifier ? (
+        <div className="identitySummary">
+          <span>Signing in as</span>
+          <strong>{identifier}</strong>
+          <button onClick={() => setIdentifierConfirmed(false)} type="button">
+            Change
+          </button>
+        </div>
+      ) : null}
+
+      {!showIdentifierStep && activeMode === 'password' && enabled?.passwordEnabled ? (
         <form className="formStack" onSubmit={onPasswordSubmit}>
-          <Field label={enabled.usernameEnabled ? 'Email or username' : 'Email'}>
-            <TextInput
-              autoComplete="username"
-              onChange={(event) => setIdentifier(event.target.value)}
-              required
-              type="text"
-              value={identifier}
-            />
-          </Field>
+          {!identifierFirst ? (
+            <Field label={enabled.usernameEnabled ? 'Email or username' : 'Email'}>
+              <TextInput
+                autoComplete="username"
+                onChange={(event) => setIdentifier(event.target.value)}
+                required
+                type="text"
+                value={identifier}
+              />
+            </Field>
+          ) : null}
           <Field label="Password">
             <TextInput
               autoComplete="current-password"
@@ -145,17 +205,19 @@ export function SignInPage() {
         </form>
       ) : null}
 
-      {activeMode === 'magic' && enabled?.magicLinkEnabled ? (
+      {!showIdentifierStep && activeMode === 'magic' && enabled?.magicLinkEnabled ? (
         <form className="formStack" onSubmit={onMagicSubmit}>
-          <Field label="Email">
-            <TextInput
-              autoComplete="email"
-              onChange={(event) => setIdentifier(event.target.value)}
-              required
-              type="email"
-              value={identifier}
-            />
-          </Field>
+          {!identifierFirst || needsEmailIdentifier ? (
+            <Field label="Email">
+              <TextInput
+                autoComplete="email"
+                onChange={(event) => setIdentifier(event.target.value)}
+                required
+                type="email"
+                value={identifier}
+              />
+            </Field>
+          ) : null}
           <Button disabled={submit.loading} type="submit">
             <LinkIcon size={18} />
             Send magic link
@@ -163,18 +225,20 @@ export function SignInPage() {
         </form>
       ) : null}
 
-      {activeMode === 'otp' && enabled?.emailOtpEnabled ? (
+      {!showIdentifierStep && activeMode === 'otp' && enabled?.emailOtpEnabled ? (
         <form className="formStack" onSubmit={onOtpSubmit}>
-          <Field label="Email">
-            <TextInput
-              autoComplete="email"
-              onChange={(event) => setIdentifier(event.target.value)}
-              required
-              type="email"
-              value={identifier}
-            />
-          </Field>
-          <Field label="One-time code" help="Leave blank to request a new code.">
+          {!identifierFirst || needsEmailIdentifier ? (
+            <Field label="Email">
+              <TextInput
+                autoComplete="email"
+                onChange={(event) => setIdentifier(event.target.value)}
+                required
+                type="email"
+                value={identifier}
+              />
+            </Field>
+          ) : null}
+          <Field label="One-time code" help="Request a code first, then enter the code from your email.">
             <TextInput
               autoComplete="one-time-code"
               inputMode="numeric"
@@ -189,7 +253,7 @@ export function SignInPage() {
         </form>
       ) : null}
 
-      <SocialButtons callback={callback} providers={socialProviders} />
+      {!showIdentifierStep ? <SocialButtons callback={callback} providers={socialProviders} /> : null}
       <SubmitStatus state={submit} />
 
       <div className="authLinks">
@@ -209,6 +273,7 @@ export function SignUpPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const created = submit.message !== null && submit.error === null
+  const authContext = authRequestContext()
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -228,9 +293,15 @@ export function SignUpPage() {
     <AuthLayout
       config={config}
       eyebrow="Create account"
-      title="Start with your identity."
-      description="Create a hosted account for every connected application."
+      title={authContext.title ?? 'Start with your identity.'}
+      description={authContext.description ?? 'Create a hosted account for every connected application.'}
     >
+      {created ? (
+        <div className="authCardHeader">
+          <h2>Check your inbox</h2>
+          <p>Use the verification message if this deployment requires confirmed email before continuing.</p>
+        </div>
+      ) : null}
       {created ? null : (
         <form className="formStack" onSubmit={onSubmit}>
           <Field label="Name">
@@ -287,6 +358,7 @@ export function ForgotPasswordPage() {
   const [otpRequested, setOtpRequested] = useState(false)
   const token = new URLSearchParams(window.location.search).get('token')
   const otpResetEnabled = config?.signIn.emailOtpEnabled === true
+  const authContext = authRequestContext()
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -316,9 +388,19 @@ export function ForgotPasswordPage() {
     <AuthLayout
       config={config}
       eyebrow="Account recovery"
-      title="Recover your password."
-      description="Request a reset email or finish the reset with a token or one-time code."
+      title={authContext.title ?? 'Recover your password.'}
+      description={
+        authContext.description ?? 'Request a reset email or finish the reset with a token or one-time code.'
+      }
     >
+      <div className="authCardHeader">
+        <h2>{token || otpRequested ? 'Set a new password' : 'Choose a recovery method'}</h2>
+        <p>
+          {token || otpRequested
+            ? 'Enter the new password for this account.'
+            : 'Use a reset link or a one-time code sent to your email.'}
+        </p>
+      </div>
       <form className="formStack" onSubmit={onSubmit}>
         {otpResetEnabled && !token ? (
           <div className="segmented" role="tablist" aria-label="Password reset method">
@@ -393,6 +475,7 @@ export function EmailVerificationPage() {
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const token = new URLSearchParams(window.location.search).get('token')
+  const authContext = authRequestContext()
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -416,9 +499,13 @@ export function EmailVerificationPage() {
     <AuthLayout
       config={config}
       eyebrow="Email verification"
-      title="Verify your email."
-      description="Confirm ownership of your email address before continuing."
+      title={authContext.title ?? 'Verify your email.'}
+      description={authContext.description ?? 'Confirm ownership of your email address before continuing.'}
     >
+      <div className="authCardHeader">
+        <h2>{token ? 'Verify this email link' : 'Confirm your inbox'}</h2>
+        <p>{token ? 'Complete verification with this secure link.' : 'Send a verification email or enter a code.'}</p>
+      </div>
       <form className="formStack" onSubmit={onSubmit}>
         {!token ? (
           <Field label="Email">
@@ -547,6 +634,34 @@ function signInMethods(enabled: NonNullable<ReturnType<typeof useConfigz>['data'
   return methods
 }
 
+function methodHelp(mode: SignInMode) {
+  if (mode === 'magic') return 'Receive a secure sign-in link at your email address.'
+  if (mode === 'otp') return 'Use a short one-time code sent to your email.'
+  return 'Use your password for this hosted account.'
+}
+
+function authRequestContext() {
+  const params = new URLSearchParams(window.location.search)
+  const redirectUri = params.get('redirect_uri')
+  if (!params.has('client_id') || !redirectUri) return {}
+
+  const destination = redirectDestination(redirectUri)
+  return {
+    title: destination ? `Continue to ${destination}.` : 'Continue to the requested application.',
+    description: destination
+      ? `Sign in with your hosted account to continue to ${destination}.`
+      : 'Sign in with your hosted account to continue.',
+  }
+}
+
+function redirectDestination(redirectUri: string) {
+  try {
+    return new URL(redirectUri).host
+  } catch {
+    return null
+  }
+}
+
 function navigateAfterAuth(response: unknown, callback: string | undefined) {
   const redirectUrl = resolveAuthRedirect(response, callback)
   if (window.location.pathname !== redirectUrl) {
@@ -578,11 +693,11 @@ function ChallengePreview() {
       <legend>Additional security challenges</legend>
       <div>
         <ShieldCheck size={18} />
-        <span>MFA challenge ready</span>
+        <span>Authenticator verification</span>
       </div>
       <div>
         <Fingerprint size={18} />
-        <span>Passkey enrollment ready</span>
+        <span>Passkey sign-in support</span>
       </div>
     </fieldset>
   )
