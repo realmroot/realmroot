@@ -112,9 +112,9 @@ FlareAuth 1.0 is production ready only when all of these are true:
 
 | Route | 1.0 requirement | Gate |
 | --- | --- | --- |
-| `/api/auth/.well-known/openid-configuration` | OIDC discovery metadata with production issuer and endpoint URLs. | Public. |
-| `/api/auth/oauth2/authorize` | Authorization endpoint for code flow with PKCE and allowed redirect URI validation. | Public protocol endpoint. |
-| `/api/auth/oauth2/token` | Token endpoint for authorization-code exchange and refresh where supported. | Client/protocol validation. |
+| `/api/auth/.well-known/openid-configuration` | OIDC discovery metadata with production issuer and endpoint URLs for SDK-free product integration. | Public. |
+| `/api/auth/oauth2/authorize` | Authorization endpoint for code flow with PKCE S256 and allowed redirect URI validation. | Public protocol endpoint. |
+| `/api/auth/oauth2/token` | Token endpoint for authorization-code exchange, public PKCE clients, confidential client authentication, and refresh where supported. | Client/protocol validation. |
 | `/api/auth/jwks` | JWKS endpoint for token verification. | Public. |
 | `/api/auth/userinfo` | UserInfo endpoint for OpenID profile claims. | Bearer token required. |
 | `/api/auth/oauth2/logout` or `/api/auth/oauth2/end-session` | RP-initiated end-session endpoint. | Session/protocol validation. |
@@ -252,7 +252,7 @@ Admin setup readiness is protected and read from `/api/management/readiness`:
 | Hosted sign-up | Creates an account through enabled identifiers and redirects into the authenticated product journey. |
 | Recovery and verification | Request and completion steps are separate, user-visible, reload-safe, and backed by configured email flows. |
 | OAuth consent | Shows client name, redirect URI context, requested scopes, approve/deny actions, and records consent against the application. |
-| OIDC integration | Discovery, authorize, token, JWKS, userinfo, and end-session endpoints use production issuer metadata and validate redirect URI/client constraints. |
+| OIDC integration | Discovery, authorize, token, JWKS, userinfo, and end-session endpoints use production issuer metadata and validate redirect URI/client constraints. Product apps integrate with standard OIDC authorization code plus PKCE and do not call FlareAuth management or account APIs. |
 | Account Center profile | Loads from account APIs, saves display name/username/avatar, requests email changes, changes password, and keeps `/account/profile` reload-safe. |
 | Account Center security | Shows MFA policy, supports TOTP enrollment, passkey registration, and 2-step state where enabled. |
 | Account Center linked accounts | Lists social identities and unlinks a connected account without leaving the section route. |
@@ -326,6 +326,8 @@ must include the review-environment acceptance path:
    `/admin/applications/{id}`, edit redirect URIs, disable and re-enable the
    client, copy the standard OIDC integration details, and verify confidential
    client secret metadata/one-time rotation when using a confidential client.
+   Verify a product app can complete authorization code with PKCE from discovery
+   metadata without FlareAuth account, management, or custom SDK calls.
 9. Visit every Console route in the route map directly and by sidebar
    navigation; every persistent nav item should point to a real route-backed
    page.

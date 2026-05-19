@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import managementOpenApi from '../../docs/api/management.openapi.json'
 import {
   listManagementConnectorsResponseSchema,
   managementCollectionRoutes,
   managementConnectorResponseSchema,
   managementReadinessResponseSchema,
 } from '../../shared/api/management'
+import type { SecurityPolicy } from '../../shared/api/security'
 import { createApp } from '../app'
 import type { SecurityRepository } from '../modules/security/repository'
 import type { UserRepository } from '../modules/users/repository'
@@ -12,6 +14,42 @@ import type { UserRepository } from '../modules/users/repository'
 describe('management routes', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
+  })
+
+  it('keeps the Management OpenAPI route inventory aligned with mounted routes', () => {
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: createSecurityRepositoryMock(),
+      securityPolicy: securityPolicy(),
+    })
+
+    expect(openApiOperations()).toEqual(mountedManagementOperations(app))
+
+    for (const operation of openApiOperationObjects()) {
+      expect(operation.responses, operation.key).toHaveProperty('401')
+      expect(operation.responses, operation.key).toHaveProperty('403')
+      expect(operation.declaredPathParameters, operation.key).toEqual(operation.pathParameters)
+
+      if (methodsWithJsonRequestBody.has(operation.method) && !operationsWithoutRequestBody.has(operation.key)) {
+        expect(requestBodyContent(operation.requestBody), operation.key).toEqual(
+          expect.objectContaining({
+            schema: expect.any(Object),
+          }),
+        )
+        expect(schemaReference(requestBodyContent(operation.requestBody).schema), operation.key).not.toBe(
+          '#/components/schemas/GenericObject',
+        )
+        expect(() =>
+          assertConstrainedOpenApiSchema(requestBodyContent(operation.requestBody).schema, operation.key),
+        ).not.toThrow()
+      }
+
+      for (const schema of operation.jsonResponseSchemas) {
+        expect(schema, operation.key).toEqual(expect.any(Object))
+        expect(schemaReference(schema), operation.key).not.toBe('#/components/schemas/GenericObject')
+        expect(() => assertConstrainedOpenApiSchema(schema, operation.key)).not.toThrow()
+      }
+    }
   })
 
   it('mounts the documented management collections behind the admin boundary', async () => {
@@ -236,7 +274,7 @@ describe('management routes', () => {
         userId: 'user-1',
         mfa: { enabled: true, factors: [] },
         passkeys: { enabled: true, count: 1 },
-        policy: securityPolicyFixture,
+        policy: securityPolicy(),
       },
     })
     await expect(passkeys.json()).resolves.toEqual({
@@ -820,24 +858,13 @@ function createUserRepositoryMock(): UserRepository {
   }
 }
 
-const securityPolicyFixture = {
-  mfa: { mode: 'optional' as const },
-  passkeys: { enabled: true, rpId: 'auth.example.com', rpName: 'FlareAuth', origins: ['https://auth.example.com'] },
-  sessions: {
-    expiresInSeconds: 3600,
-    updateAgeSeconds: 300,
-    freshAgeSeconds: 300,
-    cookieCacheSeconds: 60,
-  },
-}
-
 function createSecurityRepositoryMock(): SecurityRepository {
   return {
     getSecurityState: vi.fn().mockResolvedValue({
       userId: 'user-1',
       mfa: { enabled: true, factors: [] },
       passkeys: { enabled: true, count: 1 },
-      policy: securityPolicyFixture,
+      policy: securityPolicy(),
     }),
     listPasskeys: vi.fn().mockImplementation((_userId, page) =>
       Promise.resolve({
@@ -860,6 +887,243 @@ function createSecurityRepositoryMock(): SecurityRepository {
     ),
     deletePasskey: vi.fn().mockResolvedValue(undefined),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
+  }
+}
+
+function mountedManagementOperations(app: unknown) {
+  return [
+    ...new Set(
+      honoRoutes(app)
+        .filter((route) => route.method !== 'ALL')
+        .map(toManagementOperationKey),
+    ),
+  ]
+    .filter((key) => key !== null)
+    .sort()
+}
+
+function openApiOperations() {
+  return openApiOperationObjects()
+    .map(({ key }) => key)
+    .sort()
+}
+
+function openApiOperationObjects() {
+  return Object.entries(managementOpenApi.paths).flatMap(([path, pathItem]) =>
+    Object.entries(resolveOpenApiPathItem(pathItem))
+      .filter(([method]) => isManagementOpenApiMethod(method))
+      .map(([method, operation]) => {
+        const resolvedPathItem = resolveOpenApiPathItem(pathItem)
+        const resolvedOperation = openApiOperation(operation)
+        const key = `${method.toUpperCase()} ${normalizeManagementPath(path)}`
+        return {
+          key,
+          method: method.toUpperCase(),
+          pathParameters: pathParameterNames(path),
+          declaredPathParameters: declaredPathParameterNames(resolvedPathItem, resolvedOperation),
+          requestBody: resolvedOperation.requestBody,
+          responses: resolvedOperation.responses,
+          jsonResponseSchemas: Object.values(resolvedOperation.responses)
+            .map((response) => openApiJsonResponseSchema(response))
+            .filter((schema) => schema !== null),
+        }
+      }),
+  )
+}
+
+function resolveOpenApiPathItem(pathItem: unknown) {
+  const record = openApiRecord(pathItem)
+  const ref = record.$ref
+
+  if (typeof ref !== 'string') {
+    return record
+  }
+
+  const pathItems = managementOpenApi.components.pathItems as Record<string, unknown>
+  return openApiRecord(pathItems[ref.replace('#/components/pathItems/', '')])
+}
+
+function toManagementOperationKey(route: HonoRoute) {
+  if (!route.path.startsWith('/api/management')) {
+    return null
+  }
+
+  return `${route.method} ${normalizeManagementPath(route.path.replace('/api/management', '') || '/')}`
+}
+
+function normalizeManagementPath(path: string) {
+  return path.replace(/:[^/]+/g, '{param}').replace(/\{[^}]+}/g, '{param}')
+}
+
+function pathParameterNames(path: string) {
+  return [...path.matchAll(/\{([^}]+)}/g)].map((match) => match[1]).sort()
+}
+
+function declaredPathParameterNames(pathItem: Record<string, unknown>, operation: OpenApiOperation) {
+  return [...openApiParameters(pathItem.parameters), ...openApiParameters(operation.parameters)]
+    .filter((parameter) => parameter.in === 'path')
+    .map((parameter) => parameter.name)
+    .sort()
+}
+
+function openApiParameters(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.map((parameter) => {
+    const record = openApiRecord(parameter)
+    const ref = record.$ref
+    if (typeof ref !== 'string') {
+      return record as unknown as OpenApiParameter
+    }
+
+    const parameters = managementOpenApi.components.parameters as Record<string, unknown>
+    return openApiRecord(parameters[ref.replace('#/components/parameters/', '')]) as unknown as OpenApiParameter
+  })
+}
+
+function requestBodyContent(value: unknown) {
+  const content = openApiRecord(openApiRecord(value).content)
+  const mediaType = content['application/json'] ?? content['multipart/form-data']
+  return openApiRecord(mediaType)
+}
+
+function schemaReference(value: unknown) {
+  const ref = openApiRecord(value).$ref
+  return typeof ref === 'string' ? ref : null
+}
+
+function assertConstrainedOpenApiSchema(value: unknown, path: string, seen = new Set<string>()) {
+  if (value === undefined || value === null || typeof value === 'boolean') {
+    throw new Error(`${path} is not a concrete schema object`)
+  }
+
+  const schema = openApiRecord(value)
+  const ref = schema.$ref
+  if (typeof ref === 'string') {
+    if (ref === '#/components/schemas/GenericObject') {
+      throw new Error(`${path} uses GenericObject`)
+    }
+    if (seen.has(ref)) {
+      return
+    }
+    seen.add(ref)
+    assertConstrainedOpenApiSchema(resolveOpenApiSchemaRef(ref), `${path} ${ref}`, seen)
+    return
+  }
+
+  if (schema.type === 'object') {
+    const properties = schema.properties === undefined ? {} : openApiRecord(schema.properties)
+    const additionalProperties = schema.additionalProperties
+    if (Object.keys(properties).length === 0 && additionalProperties === undefined) {
+      throw new Error(`${path} uses an unconstrained object schema`)
+    }
+    if (additionalProperties === true) {
+      throw new Error(`${path} uses additionalProperties: true`)
+    }
+    if (additionalProperties !== undefined && typeof additionalProperties !== 'boolean') {
+      assertConstrainedOpenApiSchema(additionalProperties, `${path} additionalProperties`, seen)
+    }
+    for (const [property, propertySchema] of Object.entries(properties)) {
+      assertConstrainedOpenApiSchema(propertySchema, `${path}.${property}`, seen)
+    }
+  }
+
+  if (schema.items) {
+    assertConstrainedOpenApiSchema(schema.items, `${path}[]`, seen)
+  }
+
+  for (const key of ['oneOf', 'anyOf', 'allOf'] as const) {
+    const variants = schema[key]
+    if (Array.isArray(variants)) {
+      for (const [index, variant] of variants.entries()) {
+        assertConstrainedOpenApiSchema(variant, `${path}.${key}[${index}]`, seen)
+      }
+    }
+  }
+}
+
+function resolveOpenApiSchemaRef(ref: string) {
+  const schemas = managementOpenApi.components.schemas as Record<string, unknown>
+  return schemas[ref.replace('#/components/schemas/', '')]
+}
+
+function honoRoutes(app: unknown) {
+  return (app as { routes: HonoRoute[] }).routes
+}
+
+function openApiRecord(value: unknown) {
+  return value as Record<string, unknown>
+}
+
+function openApiOperation(value: unknown) {
+  return value as OpenApiOperation
+}
+
+function openApiJsonResponseSchema(value: unknown) {
+  const record = openApiRecord(value)
+  const ref = record.$ref
+  const response =
+    typeof ref === 'string' ? openApiRecord(openApiResponses()[ref.replace('#/components/responses/', '')]) : record
+  if (response.content === undefined) {
+    return null
+  }
+
+  const content = openApiRecord(response.content)
+  const jsonResponse = content['application/json']
+
+  if (jsonResponse === undefined) {
+    return null
+  }
+
+  return openApiRecord(jsonResponse).schema
+}
+
+function openApiResponses() {
+  return managementOpenApi.components.responses as Record<string, unknown>
+}
+
+function isManagementOpenApiMethod(method: string): method is ManagementOpenApiMethod {
+  return managementOpenApiMethods.includes(method as ManagementOpenApiMethod)
+}
+
+const managementOpenApiMethods = ['get', 'post', 'put', 'patch', 'delete'] as const
+type ManagementOpenApiMethod = (typeof managementOpenApiMethods)[number]
+const methodsWithJsonRequestBody = new Set(['POST', 'PUT', 'PATCH'])
+const operationsWithoutRequestBody = new Set(['POST /applications/{param}/client-secrets', 'POST /users/{param}/unban'])
+
+interface HonoRoute {
+  method: string
+  path: string
+}
+
+interface OpenApiOperation {
+  parameters?: unknown
+  requestBody?: unknown
+  responses: Record<string, unknown>
+}
+
+interface OpenApiParameter {
+  name: string
+  in: string
+}
+
+function securityPolicy(): SecurityPolicy {
+  return {
+    mfa: { mode: 'optional' },
+    passkeys: {
+      enabled: true,
+      rpId: 'auth.example.com',
+      rpName: 'FlareAuth',
+      origins: ['https://auth.example.com'],
+    },
+    sessions: {
+      expiresInSeconds: 3600,
+      updateAgeSeconds: 300,
+      freshAgeSeconds: 600,
+      cookieCacheSeconds: 60,
+    },
   }
 }
 
