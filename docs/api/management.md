@@ -62,6 +62,18 @@ Collection responses include:
 - Applications: `/applications`, `/applications/{id}`, `/applications/{id}/redirect-uris`, `/applications/{id}/client-secrets`.
 - Connectors: `GET /connectors`, `POST /connectors`, `GET /connectors/{id}`, `PATCH /connectors/{id}`, `DELETE /connectors/{id}`.
 
+Application resources are OIDC clients. `POST /applications` returns the created application; confidential clients include `clientSecret` in that creation response only. `GET /applications/{id}` returns client metadata, redirect URIs, allowed grant types, allowed scopes, token endpoint auth method, and discovery endpoint URLs. `PATCH /applications/{id}` updates metadata and lifecycle fields including `disabled`; lifecycle transitions do not use action endpoints. `DELETE /applications/{id}` deletes the application and its provider client.
+
+Redirect URIs are replaced as a set with `PUT /applications/{id}/redirect-uris`:
+
+```json
+{
+  "redirectUris": ["https://app.example.com/callback"]
+}
+```
+
+Client secret endpoints are only for confidential clients. `GET /applications/{id}/client-secrets` returns secret metadata only. `POST /applications/{id}/client-secrets` rotates the active secret and returns the raw `clientSecret` exactly once in the response; list and detail responses never return raw secret material.
+
 Connector responses use the same stable connector contract as the admin connector API: provider type/id, display name, enabled flag, OAuth endpoints, client id, secret binding reference, scopes, and provider metadata. Secret values are not returned; `clientSecretBinding` is a reference to deployment-managed secret material.
 
 Connector `providerType` is restricted to `social` and `generic_oauth`, matching the values loaded into Better Auth. Connector creation requires `clientId` and `clientSecretBinding`; generic OAuth creation also requires either `issuer` or `authorizationEndpoint`, and requires `tokenEndpoint` when `issuer` is not provided. Updates can clear nullable configuration fields, but enabled connectors must remain loadable by Better Auth. `providerId` is globally unique because Better Auth uses it as the provider key.

@@ -43,29 +43,35 @@ export const oidcEndpointMetadataSchema = z.object({
   endSessionEndpoint: z.string(),
 })
 
-export const applicationResponseSchema = z.object({
-  id: z.string(),
-  slug: z.string(),
-  name: z.string(),
-  description: z.string().nullable(),
-  homepageUrl: z.string().nullable(),
-  iconUrl: z.string().nullable(),
-  clientId: z.string(),
-  clientType: applicationClientTypeSchema,
-  public: z.boolean(),
-  firstParty: z.boolean(),
-  trusted: z.boolean(),
-  disabled: z.boolean(),
-  disabledReason: z.string().nullable(),
-  redirectUris: z.array(z.string()),
-  allowedGrantTypes: z.array(applicationGrantTypeSchema),
-  allowedScopes: z.array(applicationScopeSchema),
-  requirePkce: z.boolean(),
-  tokenEndpointAuthMethod: z.enum(['none', 'client_secret_basic', 'client_secret_post']),
-  secretMetadata: z.array(applicationSecretMetadataSchema),
-  oidc: oidcEndpointMetadataSchema,
-  createdAt: z.string(),
-  updatedAt: z.string(),
+export const applicationResponseSchema = z
+  .object({
+    id: z.string(),
+    slug: z.string(),
+    name: z.string(),
+    description: z.string().nullable(),
+    homepageUrl: z.string().nullable(),
+    iconUrl: z.string().nullable(),
+    clientId: z.string(),
+    clientType: applicationClientTypeSchema,
+    public: z.boolean(),
+    firstParty: z.boolean(),
+    trusted: z.boolean(),
+    disabled: z.boolean(),
+    disabledReason: z.string().nullable(),
+    redirectUris: z.array(z.string()),
+    allowedGrantTypes: z.array(applicationGrantTypeSchema),
+    allowedScopes: z.array(applicationScopeSchema),
+    requirePkce: z.boolean(),
+    tokenEndpointAuthMethod: z.enum(['none', 'client_secret_basic', 'client_secret_post']),
+    secretMetadata: z.array(applicationSecretMetadataSchema),
+    oidc: oidcEndpointMetadataSchema,
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .strict()
+
+export const createApplicationResponseSchema = applicationResponseSchema.extend({
+  clientSecret: z.string().optional(),
 })
 
 export const createApplicationRequestSchema = z.object({
@@ -160,6 +166,7 @@ export const createConsentRequestSchema = z.object({
 export const hostedConsentApprovalRequestSchema = createConsentRequestSchema.omit({ permissions: true }).strict()
 
 export type ApplicationResponse = z.infer<typeof applicationResponseSchema>
+export type CreateApplicationResponse = z.infer<typeof createApplicationResponseSchema>
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>
 export type PaginationMetadata = z.infer<typeof paginationMetadataSchema>
 export type CreateApplicationRequest = z.infer<typeof createApplicationRequestSchema>

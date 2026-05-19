@@ -5,6 +5,7 @@ import {
   AdminDashboardPage,
   AdminOnboardingPage,
   ApiResourcesPage,
+  ApplicationDetailPage,
   ApplicationsPage,
   BrandingPage,
   ConnectorsPage,
@@ -164,10 +165,7 @@ const adminRoute = createRoute({
   beforeLoad: async ({ location }) => {
     try {
       await queryClient.fetchQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
-      const readiness = await queryClient.fetchQuery({
-        queryKey: adminQueryKeys.readiness,
-        queryFn: getAdminReadiness,
-      })
+      const readiness = await loadAdminReadiness()
       if (readiness.admin.setupRequired && location.pathname !== readiness.admin.setupHref) {
         throw redirect({ to: '/admin/onboarding' })
       }
@@ -196,6 +194,15 @@ const adminApplicationsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/applications',
   component: ApplicationsPage,
+})
+
+const adminApplicationDetailRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/applications/{$applicationId}',
+  component: () => {
+    const params = adminApplicationDetailRoute.useParams()
+    return <ApplicationDetailPage applicationId={params.applicationId} />
+  },
 })
 
 const adminUsersRoute = createRoute({
@@ -256,10 +263,7 @@ const adminOnboardingRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/onboarding',
   beforeLoad: async () => {
-    const readiness = await queryClient.fetchQuery({
-      queryKey: adminQueryKeys.readiness,
-      queryFn: getAdminReadiness,
-    })
+    const readiness = await loadAdminReadiness()
     if (!readiness.admin.setupRequired) {
       throw redirect({ to: '/admin' })
     }
@@ -289,6 +293,7 @@ const routeTree = rootRoute.addChildren([
   adminRoute.addChildren([
     adminIndexRoute,
     adminApplicationsRoute,
+    adminApplicationDetailRoute,
     adminUsersRoute,
     adminConnectorsRoute,
     adminSignInRoute,
@@ -306,6 +311,12 @@ export const router = createRouter({ routeTree })
 
 function isRedirect(error: unknown) {
   return typeof error === 'object' && error !== null && 'headers' in error && 'status' in error
+}
+
+async function loadAdminReadiness() {
+  const readiness = await getAdminReadiness()
+  queryClient.setQueryData(adminQueryKeys.readiness, readiness)
+  return readiness
 }
 
 export function AppRouter() {

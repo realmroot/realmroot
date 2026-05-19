@@ -25,6 +25,7 @@ type JourneyId = (typeof journeyCoverage.journeys)[number]['id']
 let firstAdminRequired = false
 let adminSetupRequired = false
 let accountSignedIn = true
+let applicationDisabled = false
 
 const journeyAssertions: Record<
   JourneyId,
@@ -460,6 +461,48 @@ const journeyAssertions: Record<
       })
     },
   },
+  'admin-application-detail': {
+    suite: 'admin management journeys',
+    assert: async ({ page, requests }) => {
+      applicationDisabled = false
+      await page.goto('/admin/applications/app-1')
+      await expect(page.getByRole('heading', { name: 'Customer portal' })).toBeVisible()
+      await expect(page.getByText('Use these values with any standards-compliant OIDC SDK.')).toBeVisible()
+      await expect(page.getByText('https://auth.example.com/api/auth/.well-known/openid-configuration')).toBeVisible()
+      await expect(page.getByText('https://auth.example.com/api/auth/oauth2/authorize')).toBeVisible()
+      await expect(page.getByText('https://auth.example.com/api/auth/oauth2/token')).toBeVisible()
+      await expect(page.getByText('openid profile')).toBeVisible()
+      await page.getByLabel('Redirect URIs').fill('https://new.example.com/callback')
+      await page.getByRole('button', { name: 'Save redirect URIs' }).click()
+      await page.getByRole('button', { name: 'Disable application' }).click()
+      await page.getByRole('button', { name: 'Enable application' }).click()
+      await page.goto('/admin/applications/confidential-app')
+      await expect(page.getByRole('heading', { name: 'Server app' })).toBeVisible()
+      await expect(page.getByText('fas_existing')).toBeVisible()
+      await page.getByRole('button', { name: 'Rotate client secret' }).click()
+      await expect(page.getByText('fas_rotated_secret')).toBeVisible()
+      expect(requests).toContainEqual({
+        method: 'PUT',
+        path: '/api/management/applications/app-1/redirect-uris',
+        body: { redirectUris: ['https://new.example.com/callback'] },
+      })
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/management/applications/app-1',
+        body: { disabled: true, disabledReason: 'Disabled from admin console' },
+      })
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/management/applications/app-1',
+        body: { disabled: false, disabledReason: null },
+      })
+      expect(requests).toContainEqual({
+        method: 'POST',
+        path: '/api/management/applications/confidential-app/client-secrets',
+        body: null,
+      })
+    },
+  },
   'admin-connector-inventory': {
     suite: 'admin management journeys',
     assert: async ({ page }) => {
@@ -733,7 +776,7 @@ async function mockApi(page: Page) {
       return
     }
 
-    await fulfill(route, await responseFor(path, method))
+    await fulfill(route, await responseFor(path, method, body))
   })
 
   return requests
@@ -768,7 +811,7 @@ async function fulfill(route: Route, body: unknown, status = 200) {
   })
 }
 
-async function responseFor(path: string, method: string): Promise<unknown> {
+async function responseFor(path: string, method: string, body: unknown): Promise<unknown> {
   if (path === '/api/health') {
     const response = await createApp(createAuthMock()).request('/api/health', { method })
     return response.json()
@@ -804,6 +847,44 @@ async function responseFor(path: string, method: string): Promise<unknown> {
   if (path === '/api/management/applications') {
     if (method === 'POST') return application
     return { applications: [application], pagination }
+  }
+  if (path === '/api/management/applications/app-1') {
+    if (method === 'PATCH') {
+      applicationDisabled =
+        typeof body === 'object' && body !== null && 'disabled' in body && typeof body.disabled === 'boolean'
+          ? body.disabled
+          : applicationDisabled
+      return { ...application, disabled: applicationDisabled }
+    }
+    if (method === 'DELETE') return null
+    return { ...application, disabled: applicationDisabled }
+  }
+  if (path === '/api/management/applications/app-1/redirect-uris') {
+    if (method === 'PUT') return { redirectUris: ['https://new.example.com/callback'] }
+    return { redirectUris: application.redirectUris, pagination }
+  }
+  if (path === '/api/management/applications/app-1/client-secrets') {
+    return { secrets: [], pagination: emptyPagination }
+  }
+  if (path === '/api/management/applications/confidential-app') {
+    return confidentialApplication
+  }
+  if (path === '/api/management/applications/confidential-app/client-secrets') {
+    if (method === 'POST') {
+      return {
+        clientSecret: 'fas_rotated_secret',
+        secret: {
+          id: 'secret-2',
+          version: 2,
+          prefix: 'fas_rotated',
+          status: 'active',
+          createdAt: '2026-01-02T00:00:00.000Z',
+          expiresAt: null,
+          revokedAt: null,
+        },
+      }
+    }
+    return { secrets: confidentialApplication.secretMetadata, pagination }
   }
   if (path === '/api/management/users') {
     if (method === 'POST') return user
@@ -952,6 +1033,29 @@ const application = {
   },
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const confidentialApplication = {
+  ...application,
+  id: 'confidential-app',
+  slug: 'server-app',
+  name: 'Server app',
+  clientId: 'server-client',
+  clientType: 'confidential_web',
+  public: false,
+  requirePkce: false,
+  tokenEndpointAuthMethod: 'client_secret_basic',
+  secretMetadata: [
+    {
+      id: 'secret-1',
+      version: 1,
+      prefix: 'fas_existing',
+      status: 'active',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: null,
+      revokedAt: null,
+    },
+  ],
 }
 
 const consentResponse = {

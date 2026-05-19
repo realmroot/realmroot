@@ -3,6 +3,7 @@ import {
   applicationGrantTypes,
   applicationScopes,
   type CreateApplicationRequest,
+  type CreateApplicationResponse,
   type CreateConsentRequest,
   type ListApplicationsResponse,
   type ListClientSecretsResponse,
@@ -98,10 +99,7 @@ export class ApplicationService {
     private readonly options: ApplicationServiceOptions,
   ) {}
 
-  async create(
-    input: CreateApplicationRequest,
-    actorUserId: string,
-  ): Promise<ApplicationResponse & { clientSecret?: string }> {
+  async create(input: CreateApplicationRequest, actorUserId: string): Promise<CreateApplicationResponse> {
     const settings = normalizeClientSettings(
       input.clientType,
       input.redirectUris,

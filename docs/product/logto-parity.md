@@ -293,8 +293,12 @@ must include the review-environment acceptance path:
 7. Visit `/account/profile`, `/account/security`, `/account/linked-accounts`,
    `/account/sessions`, and `/account/authorized-apps` directly; reload and
    browser back/forward should preserve the selected section through the URL.
-8. Visit every Console route in the route map directly and by sidebar
+8. Visit `/admin/applications`; create or choose an application, open
+   `/admin/applications/{id}`, edit redirect URIs, disable and re-enable the
+   client, copy the standard OIDC integration details, and verify confidential
+   client secret metadata/one-time rotation when using a confidential client.
+9. Visit every Console route in the route map directly and by sidebar
    navigation; every persistent nav item should point to a real route-backed
    page.
-9. Capture evidence listed in the Review And Production Evidence section before
+10. Capture evidence listed in the Review And Production Evidence section before
    requesting production approval.

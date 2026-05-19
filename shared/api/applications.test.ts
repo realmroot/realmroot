@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  createApplicationResponseSchema,
   listApplicationsResponseSchema,
   listClientSecretsResponseSchema,
   listRedirectUrisResponseSchema,
@@ -34,4 +35,54 @@ describe('application API pagination contracts', () => {
     })
     expect(() => listApplicationsResponseSchema.parse({ applications: [] })).toThrow()
   })
+
+  it('makes one-time client secret material explicit in create responses only', () => {
+    const response = {
+      id: 'app-1',
+      slug: 'customer-portal',
+      name: 'Customer portal',
+      description: null,
+      homepageUrl: null,
+      iconUrl: null,
+      clientId: 'client-1',
+      clientType: 'confidential_web',
+      public: false,
+      firstParty: false,
+      trusted: false,
+      disabled: false,
+      disabledReason: null,
+      redirectUris: ['https://app.example.com/callback'],
+      allowedGrantTypes: ['authorization_code'],
+      allowedScopes: ['openid', 'profile'],
+      requirePkce: false,
+      tokenEndpointAuthMethod: 'client_secret_basic',
+      secretMetadata: [],
+      oidc: {
+        issuer: 'https://auth.example.com/api/auth',
+        authorizationEndpoint: 'https://auth.example.com/api/auth/oauth2/authorize',
+        tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+        jwksUri: 'https://auth.example.com/api/auth/jwks',
+        userInfoEndpoint: 'https://auth.example.com/api/auth/userinfo',
+        endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      clientSecret: 'fas_secret',
+    }
+
+    expect(createApplicationResponseSchema.parse(response).clientSecret).toBe('fas_secret')
+    expect(() =>
+      listApplicationsResponseSchema.parse({ applications: [response], pagination: pagination(1) }),
+    ).toThrow()
+  })
 })
+
+function pagination(total: number) {
+  return {
+    limit: 10,
+    offset: 0,
+    total,
+    hasMore: false,
+    nextOffset: null,
+  }
+}

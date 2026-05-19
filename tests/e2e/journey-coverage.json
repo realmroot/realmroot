@@ -33,6 +33,7 @@
     { "id": "admin-create-user", "name": "Admin users page creates a user" },
     { "id": "admin-user-inventory", "name": "Admin users page supports user search and status inventory" },
     { "id": "admin-create-application", "name": "Admin applications page creates an OIDC client" },
+    { "id": "admin-application-detail", "name": "Admin applications detail edits lifecycle, redirect URIs, integration details, and confidential secret rotation" },
     { "id": "admin-create-connector", "name": "Admin connectors page creates a connector" },
     { "id": "admin-connector-inventory", "name": "Admin connectors page lists provider settings and availability" },
     { "id": "admin-sign-in-settings", "name": "Admin sign-in experience page shows methods, defaults, and legal links" },

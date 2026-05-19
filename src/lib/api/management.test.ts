@@ -11,7 +11,13 @@ describe('management API client', () => {
 
     await management.listApplications()
     await management.createApplication({ name: 'Portal', clientType: 'public_spa', redirectUris: [] })
+    await management.getApplication('app-1')
     await management.updateApplication('app-1', { disabled: true })
+    await management.deleteApplication('app-1')
+    await management.listApplicationRedirectUris('app-1', { limit: 10, offset: 20 })
+    await management.replaceApplicationRedirectUris('app-1', { redirectUris: ['https://app.example.com/callback'] })
+    await management.listApplicationClientSecrets('app-1', { limit: 5 })
+    await management.rotateApplicationClientSecret('app-1')
     await management.listUsers({ search: 'jane', limit: 50, offset: undefined })
     await management.createUser({ email: 'jane@example.com', displayName: 'Jane Doe' })
     await management.updateUser('user-1', { role: 'admin' })
@@ -45,7 +51,13 @@ describe('management API client', () => {
     expect(calls).toEqual([
       ['applications.get'],
       ['applications.post', { json: { name: 'Portal', clientType: 'public_spa', redirectUris: [] } }],
+      ['application.get', { param: { id: 'app-1' } }],
       ['applications.patch', { param: { id: 'app-1' }, json: { disabled: true } }],
+      ['applications.delete', { param: { id: 'app-1' } }],
+      ['redirectUris.get', { param: { id: 'app-1' }, query: { limit: '10', offset: '20' } }],
+      ['redirectUris.put', { param: { id: 'app-1' }, json: { redirectUris: ['https://app.example.com/callback'] } }],
+      ['clientSecrets.get', { param: { id: 'app-1' }, query: { limit: '5' } }],
+      ['clientSecrets.post', { param: { id: 'app-1' } }],
       ['users.get', { query: { search: 'jane', limit: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
       ['users.patch', { param: { id: 'user-1' }, json: { role: 'admin' } }],
@@ -119,7 +131,19 @@ async function loadManagementApi() {
           applications: {
             $get: endpoint('applications.get'),
             $post: endpoint('applications.post'),
-            ':id': { $patch: endpoint('applications.patch') },
+            ':id': {
+              $get: endpoint('application.get'),
+              $patch: endpoint('applications.patch'),
+              $delete: endpoint('applications.delete'),
+              'redirect-uris': {
+                $get: endpoint('redirectUris.get'),
+                $put: endpoint('redirectUris.put'),
+              },
+              'client-secrets': {
+                $get: endpoint('clientSecrets.get'),
+                $post: endpoint('clientSecrets.post'),
+              },
+            },
           },
           users: {
             $get: endpoint('users.get'),

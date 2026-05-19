@@ -1,4 +1,9 @@
-import { createApplicationRequestSchema } from '@shared/api/applications'
+import {
+  type ApplicationResponse,
+  createApplicationRequestSchema,
+  replaceRedirectUrisRequestSchema,
+  type updateApplicationRequestSchema,
+} from '@shared/api/applications'
 import {
   createApiResourceRequestSchema,
   createOrganizationRequestSchema,
@@ -6,6 +11,7 @@ import {
 } from '@shared/api/authorization'
 import { createManagementConnectorRequestSchema, managementCreateUserRequestSchema } from '@shared/api/management'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate } from '@tanstack/react-router'
 import {
   AlertCircle,
   CheckCircle2,
@@ -17,6 +23,7 @@ import {
   RefreshCw,
   Server,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react'
 import { type FormEvent, type ReactNode, useState } from 'react'
 import type { z } from 'zod'
@@ -50,16 +57,21 @@ import {
   createOrganization,
   createRole,
   createUser,
+  deleteApplication,
   getAdminDashboard,
+  getApplication,
   getSecurityPolicy,
   getSignInSettings,
   listApiResources,
+  listApplicationClientSecrets,
   listApplications,
   listConnectors,
   listOrganizations,
   listRoles,
   listUsers,
+  replaceApplicationRedirectUris,
   requestPasswordReset,
+  rotateApplicationClientSecret,
   updateApplication,
   updateConnector,
   updateUser,
@@ -267,11 +279,18 @@ export function ApplicationsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.applications, queryFn: listApplications })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [createdSecret, setCreatedSecret] = useState<{ clientId: string; clientSecret: string } | null>(null)
   const createMutation = useAdminMutation({
     mutationFn: createApplication,
-    onSuccess: () => {
+    onSuccess: (application) => {
       setDialogOpen(false)
-      return queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications })
+      if (application.clientSecret) {
+        setCreatedSecret({ clientId: application.clientId, clientSecret: application.clientSecret })
+      }
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.readiness }),
+      ])
     },
   })
 
@@ -286,13 +305,21 @@ export function ApplicationsPage() {
         </Button>
       }
       auxiliary={
-        <CreateApplicationDialog
-          error={createMutation.errorMessage}
-          onClose={() => setDialogOpen(false)}
-          onSubmit={createMutation.mutate}
-          open={dialogOpen}
-          pending={createMutation.isPending}
-        />
+        <>
+          <CreateApplicationDialog
+            error={createMutation.errorMessage}
+            onClose={() => setDialogOpen(false)}
+            onSubmit={createMutation.mutate}
+            open={dialogOpen}
+            pending={createMutation.isPending}
+          />
+          <SecretDisclosureDialog
+            clientId={createdSecret?.clientId ?? null}
+            clientSecret={createdSecret?.clientSecret ?? null}
+            onClose={() => setCreatedSecret(null)}
+            open={createdSecret !== null}
+          />
+        </>
       }
       error={query.error}
       empty={query.data?.applications.length === 0}
@@ -301,55 +328,293 @@ export function ApplicationsPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Client</TableHead>
-            <TableHead>Grants</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {query.data?.applications.map((application) => (
-            <TableRow key={application.id}>
-              <TableCell>
-                <div className="font-medium">{application.name}</div>
-                <div className="text-xs text-muted-foreground">{application.slug}</div>
-              </TableCell>
-              <TableCell>
-                <div>{application.clientId}</div>
-                <div className="text-xs text-muted-foreground">{application.clientType}</div>
-              </TableCell>
-              <TableCell>{application.allowedGrantTypes.join(', ')}</TableCell>
-              <TableCell>
-                <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-              </TableCell>
-              <TableCell className="text-right">
-                <DropdownMenu>
-                  <DropdownMenuTrigger aria-label={`Actions for ${application.name}`}>
-                    <MoreHorizontal data-icon="inline-start" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          updateApplication(application.id, { disabled: !application.disabled }).then(() =>
-                            queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
-                          )
-                        }
-                      >
-                        {application.disabled ? 'Enable' : 'Disable'}
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
+      {query.data?.applications.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Client</TableHead>
+              <TableHead>Grants</TableHead>
+              <TableHead>Scopes</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {query.data.applications.map((application) => (
+              <TableRow key={application.id}>
+                <TableCell>
+                  <a className="font-medium hover:underline" href={`/admin/applications/${application.id}`}>
+                    {application.name}
+                  </a>
+                  <div className="text-xs text-muted-foreground">{application.slug}</div>
+                </TableCell>
+                <TableCell>
+                  <div>{application.clientId}</div>
+                  <div className="text-xs text-muted-foreground">{application.clientType}</div>
+                </TableCell>
+                <TableCell>{application.allowedGrantTypes.join(', ')}</TableCell>
+                <TableCell>{application.allowedScopes.join(' ')}</TableCell>
+                <TableCell>
+                  <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger aria-label={`Actions for ${application.name}`}>
+                      <MoreHorizontal data-icon="inline-start" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            updateApplication(application.id, { disabled: !application.disabled }).then(() =>
+                              queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+                            )
+                          }
+                        >
+                          {application.disabled ? 'Enable' : 'Disable'}
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </ResourcePage>
+  )
+}
+
+export function ApplicationDetailPage({ applicationId }: { applicationId: string }) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [rotatedSecret, setRotatedSecret] = useState<string | null>(null)
+  const query = useQuery({
+    queryKey: [...adminQueryKeys.applications, applicationId],
+    queryFn: () => getApplication(applicationId),
+  })
+  const secretsQuery = useQuery({
+    queryKey: [...adminQueryKeys.applications, applicationId, 'client-secrets'],
+    queryFn: () => listApplicationClientSecrets(applicationId),
+    enabled: query.data?.public === false,
+  })
+  const updateMutation = useMutation({
+    mutationFn: (input: z.infer<typeof updateApplicationRequestSchema>) => updateApplication(applicationId, input),
+    onSuccess: (application) => {
+      queryClient.setQueryData([...adminQueryKeys.applications, applicationId], application)
+      return queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications })
+    },
+  })
+  const redirectMutation = useMutation({
+    mutationFn: (input: z.infer<typeof replaceRedirectUrisRequestSchema>) =>
+      replaceApplicationRedirectUris(applicationId, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.applications, applicationId] }),
+  })
+  const rotateMutation = useMutation({
+    mutationFn: () => rotateApplicationClientSecret(applicationId),
+    onSuccess: (result) => {
+      setRotatedSecret(result.clientSecret)
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.applications, applicationId] }),
+        queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.applications, applicationId, 'client-secrets'] }),
+      ])
+    },
+  })
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteApplication(applicationId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.readiness }),
+      ])
+      await navigate({ to: '/admin/applications' })
+    },
+  })
+
+  const application = query.data
+
+  return (
+    <ResourcePage
+      title={application?.name ?? 'Application'}
+      description="Review client configuration, manage redirect URIs, rotate confidential secrets, and copy standard OIDC integration details."
+      framed={false}
+      action={
+        <Link className="uiButton uiButton-secondary" to="/admin/applications">
+          Back to applications
+        </Link>
+      }
+      error={query.error}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
+    >
+      {application ? (
+        <div className="grid gap-4 p-4 xl:grid-cols-[1fr_1fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Client configuration</CardTitle>
+              <CardDescription>Use these values with any standards-compliant OIDC SDK.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <SettingRow label="Client ID" value={application.clientId} />
+              <SettingRow label="Client type" value={clientTypeLabel(application.clientType)} />
+              <SettingRow label="Auth method" value={application.tokenEndpointAuthMethod} />
+              <SettingRow label="PKCE" value={application.requirePkce ? 'Required' : 'Optional'} />
+              <SettingRow label="Discovery" value={`${application.oidc.issuer}/.well-known/openid-configuration`} />
+              <SettingRow label="Issuer" value={application.oidc.issuer} />
+              <CopyButton label="Copy client config" value={clientConfig(application, rotatedSecret)} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Lifecycle</CardTitle>
+              <CardDescription>
+                Disable clients before deleting them when integrations are still active.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <SettingRow label="Status" value={application.disabled ? 'Disabled' : 'Enabled'} />
+              <SettingRow label="Reason" value={application.disabledReason ?? 'Not set'} />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  disabled={updateMutation.isPending}
+                  onClick={() =>
+                    updateMutation.mutate({
+                      disabled: !application.disabled,
+                      disabledReason: application.disabled ? null : 'Disabled from admin console',
+                    })
+                  }
+                  type="button"
+                  variant="secondary"
+                >
+                  {application.disabled ? 'Enable application' : 'Disable application'}
+                </Button>
+                <Button
+                  disabled={deleteMutation.isPending}
+                  onClick={() => setDeleteDialogOpen(true)}
+                  type="button"
+                  variant="danger"
+                >
+                  <Trash2 data-icon="inline-start" />
+                  Delete application
+                </Button>
+              </div>
+              <MutationError error={updateMutation.error ?? deleteMutation.error} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Redirect URIs</CardTitle>
+              <CardDescription>Authorization code callbacks registered for this client.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form
+                className="formStack"
+                key={application.updatedAt}
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  const form = new FormData(event.currentTarget)
+                  redirectMutation.mutate(
+                    parseForm(replaceRedirectUrisRequestSchema, {
+                      redirectUris: String(form.get('redirectUris') ?? '')
+                        .split('\n')
+                        .filter(Boolean),
+                    }),
+                  )
+                }}
+              >
+                <Field label="Redirect URIs" help="One URI per line.">
+                  <TextArea defaultValue={application.redirectUris.join('\n')} name="redirectUris" required rows={5} />
+                </Field>
+                <Button disabled={redirectMutation.isPending} type="submit">
+                  Save redirect URIs
+                </Button>
+                <MutationError error={redirectMutation.error} />
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Grants and scopes</CardTitle>
+              <CardDescription>Allowed OAuth grants and OIDC scopes exposed to client SDKs.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <SettingRow label="Grant types" value={application.allowedGrantTypes.join(', ')} />
+              <SettingRow label="Scopes" value={application.allowedScopes.join(' ')} />
+              <SettingRow label="Authorization endpoint" value={application.oidc.authorizationEndpoint} />
+              <SettingRow label="Token endpoint" value={application.oidc.tokenEndpoint} />
+              <SettingRow label="UserInfo endpoint" value={application.oidc.userInfoEndpoint} />
+              <SettingRow label="JWKS URI" value={application.oidc.jwksUri} />
+            </CardContent>
+          </Card>
+
+          {application.public ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Client secrets</CardTitle>
+                <CardDescription>Public clients use PKCE and do not have a client secret.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SettingRow label="Secret behavior" value="No client secret is issued for public clients." />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Client secrets</CardTitle>
+                <CardDescription>
+                  Raw secrets are only shown once immediately after creation or rotation.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Version</TableHead>
+                      <TableHead>Prefix</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {secretsQuery.data?.secrets.map((secret) => (
+                      <TableRow key={secret.id}>
+                        <TableCell>{secret.version}</TableCell>
+                        <TableCell>{secret.prefix ?? 'Hidden'}</TableCell>
+                        <TableCell>{secret.status}</TableCell>
+                        <TableCell>{formatDate(secret.createdAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <Button disabled={rotateMutation.isPending} onClick={() => rotateMutation.mutate()} type="button">
+                  Rotate client secret
+                </Button>
+                <MutationError error={secretsQuery.error ?? rotateMutation.error} />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      ) : null}
+      <SecretDisclosureDialog
+        clientId={application?.clientId ?? null}
+        clientSecret={rotatedSecret}
+        onClose={() => setRotatedSecret(null)}
+        open={rotatedSecret !== null}
+      />
+      <DeleteApplicationDialog
+        applicationName={application?.name ?? ''}
+        error={deleteMutation.error}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        open={deleteDialogOpen}
+        pending={deleteMutation.isPending}
+      />
     </ResourcePage>
   )
 }
@@ -363,7 +628,11 @@ export function AdminOnboardingPage() {
   })
   const createMutation = useAdminMutation({
     mutationFn: createApplication,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.readiness }),
+      ]),
   })
   const application = createMutation.data
 
@@ -1017,6 +1286,7 @@ function ResourcePage({
   emptyDescription,
   emptyTitle,
   error,
+  framed = true,
   loading,
   onRetry,
   title,
@@ -1030,6 +1300,7 @@ function ResourcePage({
   emptyDescription?: string
   emptyTitle?: string
   error?: Error | null
+  framed?: boolean
   loading?: boolean
   onRetry?: () => void
   title: string
@@ -1054,11 +1325,12 @@ function ResourcePage({
           title={emptyTitle ?? `No ${title.toLowerCase()} yet`}
         />
       ) : null}
-      {!loading && !error && !empty ? (
+      {!loading && !error && !empty && framed ? (
         <Card>
           <CardContent className="p-0">{children}</CardContent>
         </Card>
       ) : null}
+      {!loading && !error && !empty && !framed ? children : null}
       {auxiliary}
     </>
   )
@@ -1201,6 +1473,124 @@ function SettingRow({ label, value }: { label: string; value: string }) {
       <span className="text-sm text-muted-foreground sm:max-w-[70%] sm:text-right">{value}</span>
     </div>
   )
+}
+
+function CopyButton({ label, value }: { label: string; value: string }) {
+  return (
+    <Button onClick={() => navigator.clipboard.writeText(value)} type="button" variant="secondary">
+      <Copy data-icon="inline-start" />
+      {label}
+    </Button>
+  )
+}
+
+function SecretDisclosureDialog({
+  clientId,
+  clientSecret,
+  onClose,
+  open,
+}: {
+  clientId: string | null
+  clientSecret: string | null
+  onClose: () => void
+  open: boolean
+}) {
+  return (
+    <Dialog open={open}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Copy client secret</DialogTitle>
+          <DialogDescription>
+            This secret is shown once. Store it in your application secret manager before closing this dialog.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 p-4">
+          <SettingRow label="Client ID" value={clientId ?? ''} />
+          <SettingRow label="Client secret" value={clientSecret ?? ''} />
+          <CopyButton
+            label="Copy secret"
+            value={JSON.stringify({ clientId, clientSecret, tokenEndpointAuthMethod: 'client_secret_basic' }, null, 2)}
+          />
+        </div>
+        <DialogFooter className="m-0">
+          <Button onClick={onClose} type="button" variant="secondary">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DeleteApplicationDialog({
+  applicationName,
+  error,
+  onClose,
+  onConfirm,
+  open,
+  pending,
+}: {
+  applicationName: string
+  error: unknown
+  onClose: () => void
+  onConfirm: () => void
+  open: boolean
+  pending: boolean
+}) {
+  return (
+    <Dialog open={open}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete application</DialogTitle>
+          <DialogDescription>
+            Deleting {applicationName} removes the OIDC client and stops existing integrations from authenticating.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="p-4">
+          <MutationError error={error} />
+        </div>
+        <DialogFooter className="m-0">
+          <Button onClick={onClose} type="button" variant="secondary">
+            Cancel
+          </Button>
+          <Button disabled={pending} onClick={onConfirm} type="button" variant="danger">
+            Delete application
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function MutationError({ error }: { error: unknown }) {
+  if (!error) return null
+  return (
+    <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+      {error instanceof Error ? error.message : 'Request failed.'}
+    </div>
+  )
+}
+
+function clientConfig(application: ApplicationResponse, clientSecret: string | null) {
+  return JSON.stringify(
+    {
+      issuer: application.oidc.issuer,
+      discoveryUrl: `${application.oidc.issuer}/.well-known/openid-configuration`,
+      clientId: application.clientId,
+      redirectUris: application.redirectUris,
+      scopes: application.allowedScopes.join(' '),
+      tokenEndpointAuthMethod: application.tokenEndpointAuthMethod,
+      ...(clientSecret ? { clientSecret } : {}),
+    },
+    null,
+    2,
+  )
+}
+
+function clientTypeLabel(value: ApplicationResponse['clientType']) {
+  if (value === 'public_spa') return 'Public SPA'
+  if (value === 'public_native') return 'Public native'
+  return 'Confidential web'
 }
 
 function StatusBadge({
@@ -1560,7 +1950,7 @@ function useAdminMutation<TInput, TOutput>({
   onSuccess,
 }: {
   mutationFn: (input: TInput) => Promise<TOutput>
-  onSuccess: () => Promise<unknown>
+  onSuccess: (output: TOutput) => Promise<unknown>
 }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const mutation = useMutation({

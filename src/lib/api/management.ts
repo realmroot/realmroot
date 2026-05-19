@@ -1,7 +1,14 @@
 import type {
+  ApplicationResponse,
   CreateApplicationRequest,
+  CreateApplicationResponse,
   ListApplicationsResponse,
+  ListClientSecretsResponse,
+  ListRedirectUrisResponse,
   PaginationMetadata,
+  PaginationQuery,
+  ReplaceRedirectUrisRequest,
+  RotateClientSecretResponse,
   UpdateApplicationRequest,
 } from '@shared/api/applications'
 import type {
@@ -94,12 +101,54 @@ export function listApplications() {
   return readRpcResponse(apiClient.api.management.applications.$get())
 }
 
-export function createApplication(input: CreateApplicationRequest) {
+export function createApplication(input: CreateApplicationRequest): Promise<CreateApplicationResponse> {
   return readRpcResponse(apiClient.api.management.applications.$post({ json: input }))
+}
+
+export function getApplication(id: string): Promise<ApplicationResponse> {
+  return readRpcResponse(apiClient.api.management.applications[':id'].$get({ param: { id } }))
 }
 
 export function updateApplication(id: string, input: UpdateApplicationRequest) {
   return readRpcResponse(apiClient.api.management.applications[':id'].$patch({ param: { id }, json: input }))
+}
+
+export function deleteApplication(id: string) {
+  return readRpcResponse(apiClient.api.management.applications[':id'].$delete({ param: { id } }))
+}
+
+export function listApplicationRedirectUris(
+  id: string,
+  query: Partial<PaginationQuery> = {},
+): Promise<ListRedirectUrisResponse> {
+  return readRpcResponse(
+    apiClient.api.management.applications[':id']['redirect-uris'].$get({
+      param: { id },
+      query: stringifyQuery(query),
+    }),
+  )
+}
+
+export function replaceApplicationRedirectUris(id: string, input: ReplaceRedirectUrisRequest) {
+  return readRpcResponse(
+    apiClient.api.management.applications[':id']['redirect-uris'].$put({ param: { id }, json: input }),
+  )
+}
+
+export function listApplicationClientSecrets(
+  id: string,
+  query: Partial<PaginationQuery> = {},
+): Promise<ListClientSecretsResponse> {
+  return readRpcResponse(
+    apiClient.api.management.applications[':id']['client-secrets'].$get({
+      param: { id },
+      query: stringifyQuery(query),
+    }),
+  )
+}
+
+export function rotateApplicationClientSecret(id: string): Promise<RotateClientSecretResponse> {
+  return readRpcResponse(apiClient.api.management.applications[':id']['client-secrets'].$post({ param: { id } }))
 }
 
 export function listUsers(query: Partial<ManagementUserListQuery> = {}) {
@@ -180,4 +229,12 @@ export function createApiResource(input: CreateApiResourceRequest) {
 
 export function updateApiResource(id: string, input: UpdateApiResourceRequest) {
   return readRpcResponse(apiClient.api.management['api-resources'][':id'].$patch({ param: { id }, json: input }))
+}
+
+function stringifyQuery(query: Partial<PaginationQuery>): Partial<Record<keyof PaginationQuery, string>> {
+  return Object.fromEntries(
+    Object.entries(query)
+      .filter((entry): entry is [keyof PaginationQuery, number] => entry[1] !== undefined)
+      .map(([key, value]) => [key, String(value)]),
+  )
 }

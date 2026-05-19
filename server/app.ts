@@ -16,8 +16,14 @@ import type {
   ConsentApprovalResponse,
   ConsentRequestResponse,
   CreateApplicationRequest,
+  CreateApplicationResponse,
   HostedConsentApprovalRequest,
   ListApplicationsResponse,
+  ListClientSecretsResponse,
+  ListRedirectUrisResponse,
+  PaginationQuery,
+  ReplaceRedirectUrisRequest,
+  RotateClientSecretResponse,
   UpdateApplicationRequest,
 } from '../shared/api/applications'
 import type {
@@ -237,10 +243,26 @@ type RpcSchema = {
   }
   '/api/management/applications': {
     $get: RpcEndpoint<RpcNoInput, ListApplicationsResponse>
-    $post: RpcEndpoint<{ json: CreateApplicationRequest }, ApplicationResponse, 201>
+    $post: RpcEndpoint<{ json: CreateApplicationRequest }, CreateApplicationResponse, 201>
   }
   '/api/management/applications/:id': {
+    $get: RpcEndpoint<{ param: { id: string } }, ApplicationResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateApplicationRequest }, ApplicationResponse>
+    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
+  }
+  '/api/management/applications/:id/redirect-uris': {
+    $get: RpcEndpoint<
+      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListRedirectUrisResponse
+    >
+    $put: RpcEndpoint<{ param: { id: string }; json: ReplaceRedirectUrisRequest }, { redirectUris: string[] }>
+  }
+  '/api/management/applications/:id/client-secrets': {
+    $get: RpcEndpoint<
+      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListClientSecretsResponse
+    >
+    $post: RpcEndpoint<{ param: { id: string } }, RotateClientSecretResponse, 201>
   }
   '/api/management/users': {
     $get: RpcEndpoint<{ query: Partial<Record<keyof ManagementUserListQuery, string>> }, ListManagementUsersResponse>
