@@ -301,6 +301,11 @@ describe('ConnectorService', () => {
       } as unknown as Env),
     ).rejects.toMatchObject({ status: 400, message: 'Enabled connector requires clientId.' })
     await expect(
+      loadAuthConnectorConfig(createRepository({ enabled: [connector({ clientSecretBinding: null })] }), {
+        GOOGLE_CLIENT_SECRET: 'google-secret',
+      } as unknown as Env),
+    ).rejects.toMatchObject({ status: 400, message: 'Enabled connector requires clientSecretBinding.' })
+    await expect(
       loadAuthConnectorConfig(
         createRepository({ enabled: [connector({ clientSecretBinding: 'GOOGLE_CLIENT_SECRET' })] }),
         { GOOGLE_CLIENT_SECRET: '' } as unknown as Env,

@@ -1020,12 +1020,23 @@ describe('admin console', () => {
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'workspace-client' } })
     fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GOOGLE_WORKSPACE_SECRET' } })
-    fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('Authorization endpoint'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('Token endpoint'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('User info endpoint'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('JWKS endpoint'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://workspace.example.com' } })
+    fireEvent.change(screen.getByLabelText('Authorization endpoint'), {
+      target: { value: 'https://workspace.example.com/authorize' },
+    })
+    fireEvent.change(screen.getByLabelText('Token endpoint'), {
+      target: { value: 'https://workspace.example.com/token' },
+    })
+    fireEvent.change(screen.getByLabelText('User info endpoint'), {
+      target: { value: 'https://workspace.example.com/userinfo' },
+    })
+    fireEvent.change(screen.getByLabelText('JWKS endpoint'), {
+      target: { value: 'https://workspace.example.com/jwks' },
+    })
     fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email profile' } })
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Provider metadata must be a JSON object.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"prompt":"consent"}' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
@@ -1034,13 +1045,18 @@ describe('admin console', () => {
         url: '/api/management/connectors/connector-1',
         method: 'PATCH',
         body: expect.objectContaining({
+          authorizationEndpoint: 'https://workspace.example.com/authorize',
           clientId: 'workspace-client',
           clientSecretBinding: 'GOOGLE_WORKSPACE_SECRET',
           displayName: 'Google Workspace',
           enabled: false,
+          issuer: 'https://workspace.example.com',
+          jwksEndpoint: 'https://workspace.example.com/jwks',
           providerMetadata: { prompt: 'consent' },
           scopes: ['openid', 'email', 'profile'],
           slug: 'google-workspace',
+          tokenEndpoint: 'https://workspace.example.com/token',
+          userInfoEndpoint: 'https://workspace.example.com/userinfo',
         }),
       })
     })
@@ -1111,6 +1127,14 @@ describe('admin console', () => {
     fireEvent.change(screen.getByLabelText('Template'), { target: { value: 'generic-oauth' } })
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
     fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
+    fireEvent.change(screen.getByLabelText('Authorization endpoint'), {
+      target: { value: 'https://idp.example.com/authorize' },
+    })
+    fireEvent.change(screen.getByLabelText('Token endpoint'), { target: { value: 'https://idp.example.com/token' } })
+    fireEvent.change(screen.getByLabelText('User info endpoint'), {
+      target: { value: 'https://idp.example.com/userinfo' },
+    })
+    fireEvent.change(screen.getByLabelText('JWKS endpoint'), { target: { value: 'https://idp.example.com/jwks' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Provider metadata must be a JSON object.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"pkce":true}' } })
@@ -1121,8 +1145,12 @@ describe('admin console', () => {
         url: '/api/management/connectors',
         body: expect.objectContaining({
           enabled: false,
+          authorizationEndpoint: 'https://idp.example.com/authorize',
+          jwksEndpoint: 'https://idp.example.com/jwks',
           providerId: 'generic-oauth',
           providerMetadata: { pkce: true },
+          tokenEndpoint: 'https://idp.example.com/token',
+          userInfoEndpoint: 'https://idp.example.com/userinfo',
         }),
       })
     })
