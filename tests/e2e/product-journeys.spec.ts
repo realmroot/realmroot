@@ -235,6 +235,15 @@ const consoleRoutes = [
     activeNav: 'Organization template',
   },
   {
+    name: 'organization-template-permissions',
+    path: '/console/organization-template/organization-permissions',
+    heading: 'Organization template',
+    kind: 'settings',
+    journeyId: 'admin-authorization-inventory',
+    sentinel: 'Permission templates use API resources',
+    activeNav: 'Organization template',
+  },
+  {
     name: 'organizations',
     path: '/console/organizations',
     heading: 'Organizations',
