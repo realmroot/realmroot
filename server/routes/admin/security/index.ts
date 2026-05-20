@@ -1,24 +1,23 @@
 import { Hono } from 'hono'
 import { paginationMetadata, paginationQuerySchema } from '../../../../shared/api/pagination'
-import type { SecurityPolicy } from '../../../../shared/api/security'
+import { updateSecurityPolicySchema } from '../../../../shared/api/security'
 import { requireAdmin } from '../../../middleware/admin'
 import type { SecurityRepository } from '../../../modules/security/repository'
 import type { UserRepository } from '../../../modules/users/repository'
 import type { ManagementAuthApi } from '../../auth-api'
 import { toBoundaryError } from '../../auth-api'
-import { readQuery } from '../../validation'
+import { readJson, readQuery } from '../../validation'
 
-export function adminSecurityRoutes(
-  authApi: ManagementAuthApi,
-  users: UserRepository,
-  security: SecurityRepository,
-  policy: SecurityPolicy,
-) {
+export function adminSecurityRoutes(authApi: ManagementAuthApi, users: UserRepository, security: SecurityRepository) {
   const app = new Hono()
 
   app.use('*', requireAdmin())
 
-  app.get('/policy', (c) => c.json({ policy }))
+  app.get('/policy', async (c) => c.json({ policy: await security.getPolicy() }))
+
+  app.patch('/policy', async (c) =>
+    c.json({ policy: await security.updatePolicy(await readJson(c, updateSecurityPolicySchema)) }),
+  )
 
   app.get('/users/:id', async (c) => c.json({ security: await security.getSecurityState(c.req.param('id')) }))
 

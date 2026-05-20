@@ -397,6 +397,27 @@ function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {
       cookieCacheSeconds: 60 * 5,
       ...overrides.sessions,
     },
+    password: {
+      minLength: 8,
+      requiredCharacterTypes: 1,
+      customWords: [],
+      rejectUserInfo: true,
+      rejectSequential: true,
+      rejectCustomWords: false,
+      ...overrides.password,
+    },
+    captcha: {
+      enabled: false,
+      provider: 'turnstile',
+      siteKey: '',
+      secretBinding: '',
+      ...overrides.captcha,
+    },
+    blocklist: {
+      blockSubaddressing: false,
+      entries: [],
+      ...overrides.blocklist,
+    },
   } satisfies SecurityPolicyInput
 }
 
@@ -415,6 +436,24 @@ interface SecurityPolicyInput {
     updateAgeSeconds: number
     freshAgeSeconds: number
     cookieCacheSeconds: number
+  }
+  password: {
+    minLength: number
+    requiredCharacterTypes: number
+    customWords: string[]
+    rejectUserInfo: boolean
+    rejectSequential: boolean
+    rejectCustomWords: boolean
+  }
+  captcha: {
+    enabled: boolean
+    provider: 'turnstile'
+    siteKey: string
+    secretBinding: string
+  }
+  blocklist: {
+    blockSubaddressing: boolean
+    entries: string[]
   }
 }
 

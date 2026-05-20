@@ -78,6 +78,11 @@ describe('ConfigzService', () => {
         passkeysEnabled: false,
       },
       accountCenter: defaultAccountCenterSettings,
+      captcha: {
+        enabled: false,
+        provider: 'turnstile',
+        siteKey: '',
+      },
     })
   })
 

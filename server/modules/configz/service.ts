@@ -195,6 +195,11 @@ export class ConfigzService {
         passkeysEnabled: this.options.securityPolicy?.passkeys.enabled ?? false,
       },
       accountCenter: accountCenter ?? defaultAccountCenterSettings,
+      captcha: {
+        enabled: this.options.securityPolicy?.captcha.enabled ?? false,
+        provider: 'turnstile',
+        siteKey: this.options.securityPolicy?.captcha.siteKey ?? '',
+      },
     }
   }
 

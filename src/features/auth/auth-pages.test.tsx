@@ -72,6 +72,7 @@ const configz = {
     sessionsViewEnabled: true,
     dangerZoneEnabled: false,
   },
+  captcha: { enabled: false, provider: 'turnstile', siteKey: '' },
 }
 
 const consentResponse = {
@@ -123,6 +124,7 @@ const consentResponse = {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  delete window.turnstile
   window.history.pushState(null, '', '/')
 })
 
@@ -146,6 +148,109 @@ describe('hosted auth pages', () => {
     expect(screen.getByRole('button', { name: 'Continue with Example SSO' })).toBeTruthy()
     expect(screen.getByText('Powered by Acme ID')).toBeTruthy()
     expect(screen.queryByText('Authenticator verification')).toBeNull()
+  })
+
+  it('submits Turnstile CAPTCHA tokens with hosted auth initiation requests', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    let rendered = 0
+    type CaptchaCallbacks = {
+      callback: (token: string) => void
+      'expired-callback': () => void
+      'error-callback': () => void
+    }
+    const callbackRef: { current?: CaptchaCallbacks } = {}
+    window.turnstile = {
+      render: vi.fn((_element, options) => {
+        rendered += 1
+        callbackRef.current = options
+        options.callback(`captcha-token-${rendered}`)
+        return `widget-${rendered}`
+      }),
+      remove: vi.fn(),
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') {
+        return Promise.resolve(
+          jsonResponse({
+            ...configz,
+            captcha: { enabled: true, provider: 'turnstile', siteKey: 'site-key-1' },
+          }),
+        )
+      }
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ error: 'Invalid credentials.' }, 401))
+    })
+
+    const { unmount } = render(<SignInPage />)
+
+    fireEvent.change(await screen.findByLabelText('Email or username'), { target: { value: 'jane@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    await waitFor(() => expect(window.turnstile?.render).toHaveBeenCalled())
+    const captchaCallbacks = callbackRef.current
+    if (!captchaCallbacks) throw new Error('Turnstile callbacks were not registered.')
+    captchaCallbacks['expired-callback']()
+    captchaCallbacks['error-callback']()
+    captchaCallbacks.callback('captcha-token-restored')
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/sign-in/email',
+        body: {
+          email: 'jane@example.com',
+          password: 'password-1',
+          rememberMe: true,
+          captchaToken: 'captcha-token-1',
+        },
+      })
+    })
+
+    await waitFor(() => expect(window.turnstile?.remove).toHaveBeenCalledWith('widget-1'))
+    await waitFor(() => expect(window.turnstile?.render).toHaveBeenCalledTimes(2))
+    unmount()
+  })
+
+  it('loads the Turnstile script before rendering the CAPTCHA widget', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') {
+        return Promise.resolve(
+          jsonResponse({
+            ...configz,
+            captcha: { enabled: true, provider: 'turnstile', siteKey: 'site-key-1' },
+          }),
+        )
+      }
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<SignInPage />)
+
+    await waitFor(() => expect(document.querySelector('script[data-turnstile-script="true"]')).toBeTruthy())
+    const script = document.querySelector<HTMLScriptElement>('script[data-turnstile-script="true"]')!
+    window.turnstile = {
+      render: vi.fn((_element, options) => {
+        options.callback('captcha-token-1')
+        return 'widget-1'
+      }),
+      remove: vi.fn(),
+    }
+    script.dispatchEvent(new Event('load'))
+
+    await waitFor(() => expect(window.turnstile?.render).toHaveBeenCalled())
+    fireEvent.change(screen.getByLabelText('Email or username'), { target: { value: 'jane@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/sign-in/email',
+        body: expect.objectContaining({ captchaToken: 'captcha-token-1' }),
+      })
+    })
   })
 
   it('renders social connector icon variants from configz metadata', async () => {

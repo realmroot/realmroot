@@ -14,6 +14,7 @@ import { getAuthContext } from '../../middleware/auth-context'
 import { type ApplicationBindings, createApplicationService } from '../../modules/applications/context'
 import { type ConfigzBindings, createConfigzService } from '../../modules/configz/context'
 import { type ConfigzAccountCenter, defaultAccountCenterSettings } from '../../modules/configz/service'
+import { validateEmailPolicy, validatePasswordPolicy } from '../../modules/security/policy'
 import type { SecurityRepository } from '../../modules/security/repository'
 import type { UserRepository } from '../../modules/users/repository'
 import type { ManagementAuthApi } from '../auth-api'
@@ -53,6 +54,7 @@ export function accountRoutes(
       configzServiceFactory,
     )
     const body = await readJson(c, accountEmailChangeSchema)
+    if (security) validateEmailPolicy(body.email, (await security.getPolicy()).blocklist)
 
     try {
       return c.json(
@@ -96,6 +98,15 @@ export function accountRoutes(
       configzServiceFactory,
     )
     const body = await readJson(c, accountPasswordChangeSchema)
+    if (security) {
+      const policy = await security.getPolicy()
+      const user = getAuthContext(c).user!
+      validatePasswordPolicy(body.newPassword, policy.password, {
+        email: user.email,
+        name: user.name,
+        username: typeof user.username === 'string' ? user.username : null,
+      })
+    }
 
     try {
       return c.json(

@@ -18,6 +18,7 @@ export function signInWithPassword(input: {
   password: string
   callbackURL?: string
   rememberMe?: boolean
+  captchaToken?: string
 }) {
   return nativeAuth('/sign-in/email', input)
 }
@@ -27,6 +28,7 @@ export function signInWithUsername(input: {
   password: string
   callbackURL?: string
   rememberMe?: boolean
+  captchaToken?: string
 }) {
   return nativeAuth('/sign-in/username', input)
 }
@@ -42,11 +44,12 @@ export function signUp(input: {
   username?: string
   callbackURL?: string
   rememberMe?: boolean
+  captchaToken?: string
 }) {
   return nativeAuth('/sign-up/email', input)
 }
 
-export function requestPasswordReset(input: { email: string; redirectTo?: string }) {
+export function requestPasswordReset(input: { email: string; redirectTo?: string; captchaToken?: string }) {
   return nativeAuth('/request-password-reset', input)
 }
 
@@ -70,11 +73,16 @@ export function requestMagicLink(input: {
   callbackURL?: string
   newUserCallbackURL?: string
   errorCallbackURL?: string
+  captchaToken?: string
 }) {
   return nativeAuth('/sign-in/magic-link', input)
 }
 
-export function requestEmailOtp(input: { email: string; type: 'sign-in' | 'email-verification' | 'forget-password' }) {
+export function requestEmailOtp(input: {
+  email: string
+  type: 'sign-in' | 'email-verification' | 'forget-password'
+  captchaToken?: string
+}) {
   return nativeAuth('/email-otp/send-verification-otp', input)
 }
 
@@ -90,7 +98,7 @@ export function verifyEmailOtp(input: { email: string; otp: string }) {
   return nativeAuth('/email-otp/verify-email', input)
 }
 
-export function requestEmailOtpPasswordReset(input: { email: string }) {
+export function requestEmailOtpPasswordReset(input: { email: string; captchaToken?: string }) {
   return nativeAuth('/email-otp/request-password-reset', input)
 }
 

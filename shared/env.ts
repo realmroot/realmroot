@@ -140,6 +140,24 @@ function parseSecurityPolicy(env: Env, baseURL: string, trustedOrigins: string[]
         'SESSION_COOKIE_CACHE_SECONDS',
       ),
     },
+    password: {
+      minLength: 8,
+      requiredCharacterTypes: 1,
+      customWords: [],
+      rejectUserInfo: true,
+      rejectSequential: true,
+      rejectCustomWords: false,
+    },
+    captcha: {
+      enabled: false,
+      provider: 'turnstile',
+      siteKey: '',
+      secretBinding: '',
+    },
+    blocklist: {
+      blockSubaddressing: false,
+      entries: [],
+    },
   }
 }
 

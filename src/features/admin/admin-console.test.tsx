@@ -2139,9 +2139,10 @@ describe('admin console', () => {
     expect(screen.queryByLabelText('Provider ID')).toBeNull()
     expect(screen.queryByLabelText('Provider type')).toBeNull()
     expect(screen.queryByLabelText('Issuer')).toBeNull()
+    expect(screen.queryByLabelText('Display name')).toBeNull()
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-id' } })
     fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GITHUB_SECRET' } })
-    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'read:user user:email' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
@@ -2155,7 +2156,7 @@ describe('admin console', () => {
             providerType: 'social',
             clientId: 'client-id',
             clientSecretBinding: 'GITHUB_SECRET',
-            scopes: ['read:user', 'user:email'],
+            scopes: ['openid', 'email', 'profile'],
           },
         },
       ])
@@ -2216,11 +2217,13 @@ describe('admin console', () => {
 
   it('shows connector details, saves edits, displays readiness, and deletes connectors', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
+    let readinessRequests = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       if (url === '/api/management/connectors/connector-1/readiness') {
+        readinessRequests += 1
         return Promise.resolve(
           jsonResponse({
             connectorId: 'connector-1',
@@ -2257,21 +2260,32 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Actions for Google'))
-    fireEvent.click(await screen.findByText('View details'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Test setup/ }))
+    expect(await screen.findByText('Secret binding available')).toBeTruthy()
+    const readinessRequestsBeforeRun = readinessRequests
+    fireEvent.click(screen.getByRole('button', { name: 'Run test' }))
+    await waitFor(() => {
+      expect(readinessRequests).toBeGreaterThan(readinessRequestsBeforeRun)
+    })
+    expect(screen.queryByLabelText('Display name')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    cleanup()
+    renderWithQuery(<ConnectorsPage />)
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Edit connector'))
     expect(await screen.findByText('Secret binding available')).toBeTruthy()
     expect(screen.getByText('Connector identity')).toBeTruthy()
     expect(screen.getByText('Deployment credentials')).toBeTruthy()
     expect(screen.queryByText('OAuth endpoints')).toBeNull()
+    expect(screen.queryByLabelText('Slug')).toBeNull()
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
+    expect(screen.queryByLabelText('Provider metadata JSON')).toBeNull()
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Workspace' } })
-    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'google-workspace' } })
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'workspace-client' } })
     fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GOOGLE_WORKSPACE_SECRET' } })
-    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email profile' } })
-    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(await screen.findByText('Provider metadata must be a JSON object.')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"prompt":"consent"}' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -2284,14 +2298,17 @@ describe('admin console', () => {
           displayName: 'Google Workspace',
           enabled: false,
           issuer: 'https://accounts.google.com',
-          providerMetadata: { prompt: 'consent' },
-          scopes: ['openid', 'email', 'profile'],
-          slug: 'google-workspace',
+          providerMetadata: { prompt: 'select_account' },
+          scopes: ['openid', 'email'],
         }),
       })
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Google' })).toBeNull()
+    })
+
     cleanup()
     renderWithQuery(<ConnectorsPage />)
     expect(await screen.findByText('Google')).toBeTruthy()
@@ -2381,7 +2398,7 @@ describe('admin console', () => {
       authorizationEndpoint: 'https://idp.example.com/authorize',
       tokenEndpoint: 'https://idp.example.com/token',
       scopes: [],
-      providerMetadata: {},
+      providerMetadata: { pkce: true },
     }
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -2414,7 +2431,9 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
     fireEvent.click(screen.getAllByRole('button', { name: /Generic OAuth/ }).at(-1)!)
     fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'okta-main' } })
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Okta Main' } })
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
+    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email' } })
     fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
     fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://idp.example.com' } })
     fireEvent.change(screen.getByLabelText('Authorization endpoint'), {
@@ -2436,9 +2455,11 @@ describe('admin console', () => {
         body: expect.objectContaining({
           enabled: false,
           authorizationEndpoint: 'https://idp.example.com/authorize',
+          displayName: 'Okta Main',
           jwksEndpoint: 'https://idp.example.com/jwks',
           providerId: 'okta-main',
           providerMetadata: { pkce: true },
+          scopes: ['openid', 'email'],
           tokenEndpoint: 'https://idp.example.com/token',
           userInfoEndpoint: 'https://idp.example.com/userinfo',
         }),
@@ -2446,7 +2467,7 @@ describe('admin console', () => {
     })
 
     fireEvent.click(screen.getByLabelText('Actions for Generic OAuth'))
-    fireEvent.click(await screen.findByText('View details'))
+    fireEvent.click(await screen.findByText('Edit connector'))
     expect(await screen.findByText('Ready')).toBeTruthy()
     expect(screen.getByText(/generic OAuth connector configuration/)).toBeTruthy()
     expect(screen.getByText('Client ID configured')).toBeTruthy()
@@ -2462,6 +2483,70 @@ describe('admin console', () => {
       target: { value: 'https://tenant.example.com/userinfo' },
     })
     fireEvent.change(screen.getByLabelText('JWKS endpoint'), { target: { value: 'https://tenant.example.com/jwks' } })
+    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email profile' } })
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Provider metadata must be a JSON object.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"pkce":true}' } })
+  })
+
+  it('renders social connector edit provider requirements from templates', async () => {
+    const cognitoConnector = {
+      ...connector,
+      id: 'connector-cognito',
+      slug: 'cognito',
+      providerId: 'cognito',
+      displayName: 'Amazon Cognito',
+      providerMetadata: {
+        domain: 'auth.example.com',
+        region: 'us-east-1',
+        userPoolId: 'pool-1',
+      },
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-cognito/readiness') {
+        return Promise.resolve(jsonResponse({ connectorId: 'connector-cognito', ready: true, checks: [] }))
+      }
+      if (url === '/api/management/connectors/connector-cognito') return Promise.resolve(jsonResponse(cognitoConnector))
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [cognitoConnector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Amazon Cognito')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Amazon Cognito'))
+    fireEvent.click(await screen.findByText('Edit connector'))
+    expect(await screen.findByText('Provider requirements')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Domain'), { target: { value: 'login.example.com' } })
+    fireEvent.change(screen.getByLabelText('Region'), { target: { value: 'us-west-2' } })
+    fireEvent.change(screen.getByLabelText('User Pool ID'), { target: { value: 'pool-2' } })
+  })
+
+  it('shows loading state while social connector provider requirements load', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/connectors/templates') return new Promise(() => {})
+      if (url === '/api/management/connectors/connector-1/readiness') {
+        return Promise.resolve(jsonResponse({ connectorId: 'connector-1', ready: true, checks: [] }))
+      }
+      if (url === '/api/management/connectors/connector-1') return Promise.resolve(jsonResponse(connector))
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Edit connector'))
+    expect(await screen.findByText('Loading provider requirements.')).toBeTruthy()
   })
 
   it('saves connector detail edits with blank optional fields', async () => {
@@ -2502,12 +2587,12 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Actions for Google'))
-    fireEvent.click(await screen.findByText('View details'))
+    fireEvent.click(await screen.findByText('Edit connector'))
     expect(await screen.findByText('Needs attention')).toBeTruthy()
     expect(screen.getByText('Readiness checks have not reported for this connector.')).toBeTruthy()
     expect(screen.getByLabelText('Client ID')).toHaveProperty('value', '')
     expect(screen.getByLabelText('Client secret binding')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', '')
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Draft' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByRole('button', { name: 'Saving...' })).toHaveProperty('disabled', true)
@@ -2553,7 +2638,7 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Actions for Google'))
-    fireEvent.click(await screen.findByText('View details'))
+    fireEvent.click(await screen.findByText('Edit connector'))
 
     expect(await screen.findByRole('heading', { name: 'Connector details' })).toBeTruthy()
     expect(await screen.findByText('Connector detail unavailable.')).toBeTruthy()
@@ -2567,6 +2652,9 @@ describe('admin console', () => {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(connector, 201))
       }
+      if (url === '/api/management/connectors/templates') {
+        return Promise.resolve(jsonResponse(connectorTemplates))
+      }
       if (url === '/api/management/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       }
@@ -2577,10 +2665,10 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
-    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'GitHub' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Google/ }).at(-1)!)
     fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
 
-    expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
+    expect(await screen.findByText('clientId is required.')).toBeTruthy()
     expect(requests).toEqual([])
   })
 
@@ -2602,8 +2690,10 @@ describe('admin console', () => {
 
     expect(screen.queryByLabelText('Provider ID')).toBeNull()
     expect(screen.queryByLabelText('Provider type')).toBeNull()
-    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', 'openid email profile')
-    expect(screen.getByLabelText('Display name')).toHaveProperty('value', 'Google')
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
+    expect(screen.queryByLabelText('Display name')).toBeNull()
+    expect(screen.getByLabelText('Client ID')).toBeTruthy()
+    expect(screen.getByLabelText('Client secret binding')).toBeTruthy()
   })
 
   it('renders sign-in settings and security policy surfaces', async () => {
@@ -2628,9 +2718,9 @@ describe('admin console', () => {
     expect(await screen.findByText('Factors')).toBeTruthy()
     expect(screen.getByText('Passkeys')).toBeTruthy()
     expect(screen.getByText('Authenticator app')).toBeTruthy()
-    expect(screen.getByText('SMS verification code')).toBeTruthy()
+    expect(screen.queryByText('SMS verification code')).toBeNull()
     expect(screen.getByLabelText('Prompt policy')).toHaveProperty('value', 'required')
-    expect(screen.getByLabelText('Prompt policy')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Prompt policy')).toHaveProperty('disabled', false)
 
     cleanup()
     renderWithQuery(<SecurityGeneralPage />)
@@ -2648,30 +2738,30 @@ describe('admin console', () => {
 
     renderWithQuery(<MfaPage />)
     expect(await screen.findByText('Backup codes')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', false)
 
     cleanup()
     renderWithQuery(<SecurityPasswordPolicyPage />)
-    expect(screen.getByLabelText('Minimum length')).toHaveProperty('disabled', true)
-    expect(screen.getByText('Reject compromised passwords')).toBeTruthy()
-    expect(screen.getByText('1 required character type')).toBeTruthy()
+    expect(await screen.findByLabelText('Minimum length')).toHaveProperty('disabled', false)
+    expect(screen.getByText('Reject repetitive or sequential characters')).toBeTruthy()
+    expect(screen.getByLabelText('Required character types')).toHaveProperty('value', '2')
 
     cleanup()
     renderWithQuery(<SecurityCaptchaPage />)
-    expect(screen.getByText('Cloudflare Turnstile')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Setup provider' })).toHaveProperty('disabled', true)
+    expect(await screen.findByText('Turnstile')).toBeTruthy()
+    expect(screen.getByLabelText('Site key')).toHaveProperty('disabled', false)
 
     cleanup()
     renderWithQuery(<SecurityBlocklistPage />)
-    expect(screen.getByText('Block email subaddressing')).toBeTruthy()
-    expect(screen.getByLabelText('Custom email and domain blocklist')).toHaveProperty('disabled', true)
+    expect(await screen.findByText('Block email subaddressing')).toBeTruthy()
+    expect(screen.getByLabelText('Custom email and domain blocklist')).toHaveProperty('disabled', false)
 
     cleanup()
     renderWithQuery(<PasswordlessConnectorsPage />)
-    expect(await screen.findByText('Email and SMS connectors')).toBeTruthy()
+    expect(await screen.findByText('Email connector')).toBeTruthy()
     expect(screen.getByText('Cloudflare Email')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Managed' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: 'Setup SMS' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Inspect' })).toHaveProperty('disabled', false)
+    expect(screen.queryByText('SMS connector')).toBeNull()
 
     cleanup()
     renderWithQuery(<DeploymentSettingsPage />)
@@ -2679,10 +2769,21 @@ describe('admin console', () => {
     expect(screen.queryByRole('button', { name: 'Rotate key' })).toBeNull()
   })
 
-  it('derives built-in Cloudflare Email readiness and keeps SMS setup fixed in the passwordless connector view', async () => {
+  it('derives built-in Cloudflare Email readiness and exposes inspectable passwordless email details', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/sign-in-settings') {
+        return Promise.resolve(
+          jsonResponse({
+            ...signInSettings,
+            signIn: {
+              ...signInSettings.signIn,
+              magicLinkEnabled: false,
+              emailOtpEnabled: true,
+            },
+          }),
+        )
+      }
       if (url === '/api/management/readiness') {
         return Promise.resolve(
           jsonResponse({
@@ -2706,7 +2807,7 @@ describe('admin console', () => {
 
     renderWithQuery(<PasswordlessConnectorsPage />)
 
-    expect(await screen.findByText('Email and SMS connectors')).toBeTruthy()
+    expect(await screen.findByText('Email connector')).toBeTruthy()
     expect(screen.getByText('Cloudflare Email')).toBeTruthy()
     expect(
       screen.getByText(
@@ -2715,19 +2816,23 @@ describe('admin console', () => {
     ).toBeTruthy()
     expect(screen.getByText('Built-in')).toBeTruthy()
     expect(screen.getByText('Configured')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Managed' })).toHaveProperty('disabled', true)
-    expect(screen.getByText('SMS connector')).toBeTruthy()
-    expect(screen.getByText('Configurable')).toBeTruthy()
+    expect(screen.queryByText('SMS connector')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect' }))
+    expect(screen.getByRole('heading', { name: 'Cloudflare Email connector' })).toBeTruthy()
+    expect(screen.getByText('EMAIL')).toBeTruthy()
+    expect(screen.getByText('EMAIL_FROM')).toBeTruthy()
+    expect(screen.getAllByText('Magic link').at(-1)?.closest('div')?.textContent).toContain('Disabled')
+    expect(screen.getAllByText('Email code').at(-1)?.closest('div')?.textContent).toContain('Enabled')
     expect(
       screen.getByText(
-        'SMS remains a configurable delivery connector. Add provider credentials when SMS persistence is enabled for this environment.',
+        'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
       ),
     ).toBeTruthy()
-    expect(screen.getByText('Unconfigured')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Setup SMS' })).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Cloudflare Email connector' })).toBeNull())
   })
 
-  it('renders MFA and password policy compact controls as read-only', async () => {
+  it('renders editable MFA and password policy compact controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
@@ -2742,26 +2847,215 @@ describe('admin console', () => {
 
     const { unmount } = renderWithQuery(<MfaPage />)
 
-    for (const label of [
-      'Passkeys',
-      'Authenticator app',
-      'SMS verification code',
-      'Email verification code',
-      'Backup codes',
-    ] as const) {
-      expect(await screen.findByLabelText(label)).toHaveProperty('disabled', true)
-    }
-    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: 'Discard' })).toHaveProperty('disabled', true)
+    expect(await screen.findByText('Authenticator app')).toBeTruthy()
+    expect(screen.queryByText('SMS verification code')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: 'Discard' })).toHaveProperty('disabled', false)
 
     unmount()
     renderWithQuery(<SecurityPasswordPolicyPage />)
 
-    expect(screen.getAllByRole('radio')).toHaveLength(4)
-    for (const radio of screen.getAllByRole('radio')) expect(radio).toHaveProperty('disabled', true)
-    expect(screen.getAllByRole('checkbox')).toHaveLength(4)
-    for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).toHaveProperty('disabled', true)
-    expect(screen.getByText('Password hashing and reset flows')).toBeTruthy()
+    expect(await screen.findByLabelText('Minimum length')).toHaveProperty('value', '12')
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).toHaveProperty('disabled', false)
+  })
+
+  it('saves security policy changes through the management boundary', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/security/policy' && method === 'PATCH') {
+        const body = JSON.parse(String(init?.body))
+        requests.push({ url, method, body })
+        return Promise.resolve(
+          jsonResponse({
+            policy: {
+              ...securityPolicy.policy,
+              ...(body.policy as object),
+            },
+          }),
+        )
+      }
+      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<MfaPage />)
+
+    fireEvent.change(await screen.findByLabelText('Prompt policy'), { target: { value: 'optional' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          url: '/api/management/security/policy',
+          method: 'PATCH',
+          body: { policy: { mfa: { mode: 'optional' } } },
+        },
+      ]),
+    )
+
+    cleanup()
+    renderWithQuery(<SecurityPasswordPolicyPage />)
+
+    fireEvent.change(await screen.findByLabelText('Minimum length'), { target: { value: '14' } })
+    fireEvent.change(screen.getByLabelText('Required character types'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Custom words'), { target: { value: 'tenant\ninternal' } })
+    fireEvent.click(screen.getByLabelText('Reject custom words'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/security/policy',
+        method: 'PATCH',
+        body: {
+          policy: {
+            password: {
+              minLength: 14,
+              requiredCharacterTypes: 3,
+              customWords: ['tenant', 'internal'],
+              rejectUserInfo: true,
+              rejectSequential: true,
+              rejectCustomWords: true,
+            },
+          },
+        },
+      }),
+    )
+
+    cleanup()
+    renderWithQuery(<SecurityCaptchaPage />)
+
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enable CAPTCHA' }))
+    fireEvent.change(screen.getByLabelText('Site key'), { target: { value: 'site-key-1' } })
+    fireEvent.change(screen.getByLabelText('Secret binding'), { target: { value: 'TURNSTILE_SECRET' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/security/policy',
+        method: 'PATCH',
+        body: {
+          policy: {
+            captcha: {
+              enabled: true,
+              provider: 'turnstile',
+              siteKey: 'site-key-1',
+              secretBinding: 'TURNSTILE_SECRET',
+            },
+          },
+        },
+      }),
+    )
+
+    cleanup()
+    renderWithQuery(<SecurityBlocklistPage />)
+
+    fireEvent.click(await screen.findByRole('switch', { name: 'Block email subaddressing' }))
+    fireEvent.change(screen.getByLabelText('Custom email and domain blocklist'), {
+      target: { value: 'blocked@example.com\nblocked.test' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/security/policy',
+        method: 'PATCH',
+        body: {
+          policy: {
+            blocklist: {
+              blockSubaddressing: true,
+              entries: ['blocked@example.com', 'blocked.test'],
+            },
+          },
+        },
+      }),
+    )
+  })
+
+  it('resets security policy form edits to persisted values', async () => {
+    const policy = {
+      policy: {
+        ...securityPolicy.policy,
+        mfa: { mode: 'optional' },
+        passkeys: { ...securityPolicy.policy.passkeys, enabled: false },
+        password: {
+          minLength: 10,
+          requiredCharacterTypes: 1,
+          customWords: ['legacy'],
+          rejectUserInfo: false,
+          rejectSequential: false,
+          rejectCustomWords: true,
+        },
+        captcha: {
+          enabled: true,
+          provider: 'turnstile',
+          siteKey: 'persisted-site',
+          secretBinding: 'PERSISTED_SECRET',
+        },
+        blocklist: {
+          blockSubaddressing: true,
+          entries: ['persisted.example'],
+        },
+      },
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(policy))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<MfaPage />)
+    expect(await screen.findByLabelText('Prompt policy')).toHaveProperty('value', 'optional')
+    expect(screen.queryByText('Passkeys')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Prompt policy'), { target: { value: 'required' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByLabelText('Prompt policy')).toHaveProperty('value', 'optional')
+
+    unmount()
+    renderWithQuery(<SecurityPasswordPolicyPage />)
+    fireEvent.change(await screen.findByLabelText('Minimum length'), { target: { value: '18' } })
+    fireEvent.change(screen.getByLabelText('Required character types'), { target: { value: '4' } })
+    fireEvent.change(screen.getByLabelText('Custom words'), { target: { value: 'changed' } })
+    fireEvent.click(screen.getByLabelText('Reject repetitive or sequential characters'))
+    fireEvent.click(screen.getByLabelText('Reject user information'))
+    fireEvent.click(screen.getByLabelText('Reject custom words'))
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByLabelText('Minimum length')).toHaveProperty('value', '10')
+    expect(screen.getByLabelText('Required character types')).toHaveProperty('value', '1')
+    expect(screen.getByLabelText('Custom words')).toHaveProperty('value', 'legacy')
+    expect(screen.getByLabelText('Reject repetitive or sequential characters')).toHaveProperty('checked', false)
+    expect(screen.getByLabelText('Reject user information')).toHaveProperty('checked', false)
+    expect(screen.getByLabelText('Reject custom words')).toHaveProperty('checked', true)
+
+    cleanup()
+    renderWithQuery(<SecurityCaptchaPage />)
+    expect(await screen.findByLabelText('Site key')).toHaveProperty('value', 'persisted-site')
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'turnstile' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable CAPTCHA' }))
+    fireEvent.change(screen.getByLabelText('Site key'), { target: { value: 'changed-site' } })
+    fireEvent.change(screen.getByLabelText('Secret binding'), { target: { value: 'CHANGED_SECRET' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByRole('switch', { name: 'Enable CAPTCHA' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByLabelText('Site key')).toHaveProperty('value', 'persisted-site')
+    expect(screen.getByLabelText('Secret binding')).toHaveProperty('value', 'PERSISTED_SECRET')
+
+    cleanup()
+    renderWithQuery(<SecurityBlocklistPage />)
+    fireEvent.click(await screen.findByRole('switch', { name: 'Block email subaddressing' }))
+    fireEvent.change(screen.getByLabelText('Custom email and domain blocklist'), {
+      target: { value: 'changed.example' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByRole('switch', { name: 'Block email subaddressing' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByLabelText('Custom email and domain blocklist')).toHaveProperty('value', 'persisted.example')
+
+    cleanup()
+    renderWithQuery(<SecurityGeneralPage />)
+    expect(await screen.findByText('Enabled for hosted flows')).toBeTruthy()
+    expect(screen.getByText('1')).toBeTruthy()
+    expect(screen.getByText('10 characters')).toBeTruthy()
   })
 
   it('retries new security, connector, and OIDC surface load errors', async () => {
@@ -2794,11 +3088,32 @@ describe('admin console', () => {
     await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(2))
 
     cleanup()
-    renderWithQuery(<DeploymentSettingsPage />)
+    renderWithQuery(<SecurityPasswordPolicyPage />)
 
     expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(4))
+
+    cleanup()
+    renderWithQuery(<SecurityCaptchaPage />)
+
+    expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(6))
+
+    cleanup()
+    renderWithQuery(<SecurityBlocklistPage />)
+
+    expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(8))
+
+    cleanup()
+    renderWithQuery(<DeploymentSettingsPage />)
+
+    expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(10))
   })
 
   it('saves sign-in settings through the management boundary', async () => {
@@ -3194,6 +3509,8 @@ describe('admin console', () => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/management/connectors')
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       return Promise.resolve(jsonResponse({}))
     })
 
@@ -3208,7 +3525,7 @@ describe('admin console', () => {
     expect(screen.queryByRole('link', { name: 'Mobile' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Password' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Magic link' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Continue with identity provider/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Continue with Google' })).toBeTruthy()
     expect(screen.getByText('No account yet? Sign up')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Preview changed before save' } })
     expect(screen.getByRole('heading', { name: 'Preview changed before save' })).toBeTruthy()
@@ -3217,7 +3534,7 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Identifier-first flow' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Registration' }))
     expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
-    expect(screen.queryByRole('button', { name: /Continue with identity provider/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continue with Google' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Enter your identifier' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
     expect(screen.queryByLabelText('Password')).toBeNull()
@@ -4756,8 +5073,8 @@ describe('admin console', () => {
 
     cleanup()
     renderWithQuery(<MfaPage />)
-    expect(await screen.findByText('Passkeys')).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Passkeys' }).getAttribute('aria-checked')).toBe('false')
+    expect(await screen.findByText('Authenticator app')).toBeTruthy()
+    expect(screen.queryByText('Passkeys')).toBeNull()
 
     cleanup()
     renderWithQuery(<OrganizationsPage />)
@@ -5695,6 +6012,24 @@ const securityPolicy = {
       updateAgeSeconds: 300,
       freshAgeSeconds: 120,
       cookieCacheSeconds: 60,
+    },
+    password: {
+      minLength: 12,
+      requiredCharacterTypes: 2,
+      customWords: [],
+      rejectUserInfo: true,
+      rejectSequential: true,
+      rejectCustomWords: false,
+    },
+    captcha: {
+      enabled: false,
+      provider: 'turnstile',
+      siteKey: '',
+      secretBinding: '',
+    },
+    blocklist: {
+      blockSubaddressing: false,
+      entries: [],
     },
   },
 }

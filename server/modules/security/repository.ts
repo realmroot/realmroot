@@ -1,8 +1,8 @@
 import { and, count, desc, eq } from 'drizzle-orm'
 import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
-import type { SecurityPolicy } from '../../../shared/api/security'
+import { type SecurityPolicy, securityPolicySchema, type UpdateSecurityPolicyInput } from '../../../shared/api/security'
 import type { Database } from '../../db/client'
-import { passkey, session, twoFactor, user } from '../../db/schema'
+import { passkey, session, signInExperience, twoFactor, user } from '../../db/schema'
 import { notFound } from '../../lib/errors'
 
 export interface SecurityPasskey {
@@ -36,6 +36,8 @@ export interface SecurityState {
 }
 
 export interface SecurityRepository {
+  getPolicy(): Promise<SecurityPolicy>
+  updatePolicy(input: UpdateSecurityPolicyInput): Promise<SecurityPolicy>
   getSecurityState(userId: string): Promise<SecurityState>
   listPasskeys(userId: string, page: PaginationInput): Promise<PaginatedResult<SecurityPasskey>>
   deletePasskey(userId: string, passkeyId: string): Promise<void>
@@ -44,7 +46,42 @@ export interface SecurityRepository {
 
 export function createSecurityRepository(db: Database, policy: SecurityPolicy): SecurityRepository {
   return {
+    async getPolicy() {
+      return readManagedPolicy(db, policy)
+    },
+
+    async updatePolicy(input) {
+      const current = await readManagedPolicy(db, policy)
+      const next = securityPolicySchema.parse({
+        ...current,
+        ...input.policy,
+        passkeys: current.passkeys,
+        sessions: current.sessions,
+      })
+      const row = await readSettingsRow(db)
+      const metadata = {
+        ...(row?.metadata ?? {}),
+        securityPolicy: {
+          mfa: next.mfa,
+          password: next.password,
+          captcha: next.captcha,
+          blocklist: next.blocklist,
+        },
+      }
+
+      await db
+        .insert(signInExperience)
+        .values({ ...settingsInsertDefaults(row), id: settingsId, metadata, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: signInExperience.id,
+          set: { metadata, updatedAt: new Date() },
+        })
+
+      return next
+    },
+
     async getSecurityState(userId) {
+      const currentPolicy = await readManagedPolicy(db, policy)
       const [row] = await db
         .select({
           id: user.id,
@@ -76,10 +113,10 @@ export function createSecurityRepository(db: Database, policy: SecurityPolicy): 
           })),
         },
         passkeys: {
-          enabled: policy.passkeys.enabled,
+          enabled: currentPolicy.passkeys.enabled,
           count: await countTableRows(db, passkey, eq(passkey.userId, userId)),
         },
-        policy,
+        policy: currentPolicy,
       }
     },
 
@@ -132,6 +169,50 @@ export function createSecurityRepository(db: Database, policy: SecurityPolicy): 
       return row.token
     },
   }
+}
+
+const settingsId = 'default'
+
+async function readManagedPolicy(db: Database, defaults: SecurityPolicy): Promise<SecurityPolicy> {
+  const row = await readSettingsRow(db)
+  const managed = readObject(row?.metadata, 'securityPolicy')
+  return securityPolicySchema.parse({
+    ...defaults,
+    mfa: readObject(managed, 'mfa') ?? defaults.mfa,
+    password: readObject(managed, 'password') ?? defaults.password,
+    captcha: readObject(managed, 'captcha') ?? defaults.captcha,
+    blocklist: readObject(managed, 'blocklist') ?? defaults.blocklist,
+  })
+}
+
+async function readSettingsRow(db: Database): Promise<typeof signInExperience.$inferSelect | null> {
+  const rows = await db.select().from(signInExperience).where(eq(signInExperience.id, settingsId)).limit(1)
+  if (rows[0]) return rows[0]
+
+  const legacyRows = await db.select().from(signInExperience).limit(1)
+  return legacyRows[0] ?? null
+}
+
+function settingsInsertDefaults(settings: typeof signInExperience.$inferSelect | null) {
+  return {
+    defaultApplicationId: settings?.defaultApplicationId ?? null,
+    passwordEnabled: settings?.passwordEnabled ?? true,
+    signupEnabled: settings?.signupEnabled ?? true,
+    socialLoginEnabled: settings?.socialLoginEnabled ?? true,
+    identifierFirst: settings?.identifierFirst ?? false,
+    defaultRedirectUri: settings?.defaultRedirectUri ?? null,
+    termsUri: settings?.termsUri ?? null,
+    privacyUri: settings?.privacyUri ?? null,
+    supportEmail: settings?.supportEmail ?? null,
+    metadata: settings?.metadata ?? null,
+  }
+}
+
+function readObject(value: Record<string, unknown> | null | undefined, key: string): Record<string, unknown> | null {
+  const nested = value?.[key]
+  return typeof nested === 'object' && nested !== null && !Array.isArray(nested)
+    ? (nested as Record<string, unknown>)
+    : null
 }
 
 async function countTableRows(

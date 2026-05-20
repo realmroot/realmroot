@@ -1261,14 +1261,16 @@ const journeyAssertions: Record<
         'page',
       )
       await expect(page.getByText('Cloudflare Email', { exact: true }).first()).toBeVisible()
-      await expect(page.getByText('Email and SMS connectors')).toBeVisible()
-      await expect(page.getByText('SMS connector', { exact: true }).first()).toBeVisible()
+      await expect(page.getByText('Email connector')).toBeVisible()
       await expect(page.getByText('Runtime state')).toBeVisible()
       await expect(page.getByText('Magic link', { exact: true })).toBeVisible()
       await expect(page.getByText('Email code', { exact: true })).toBeVisible()
       await expect(page.getByText('EMAIL binding and EMAIL_FROM sender must be present.')).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Managed' })).toBeDisabled()
-      await expect(page.getByRole('button', { name: 'Setup SMS' })).toBeDisabled()
+      await page.getByRole('button', { name: 'Inspect' }).click()
+      const emailDialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Cloudflare Email connector' }) })
+      await expect(emailDialog).toBeVisible()
+      await expect(emailDialog.getByText('EMAIL_FROM')).toBeVisible()
+      await expect(page.getByText('SMS connector', { exact: true })).toHaveCount(0)
     },
   },
   'admin-social-connector-inventory': {
@@ -1391,7 +1393,7 @@ const journeyAssertions: Record<
         await expect(previewPanel).toBeVisible()
         await expect(previewPanel.getByText('Live preview')).toBeVisible()
         await expect(previewPanel.getByRole('heading', { name: 'Hosted sign-in' })).toBeVisible()
-        await expect(previewPanel.getByRole('button', { name: 'Continue with identity provider' })).toBeVisible()
+        await expect(previewPanel.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
         await expect(previewPanel.getByText('No account yet? Sign up')).toBeVisible()
       }
 
@@ -1472,34 +1474,41 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Multi-factor authentication' })).toBeVisible()
       await expect(page.getByText('Passkeys', { exact: true })).toBeVisible()
       await expect(page.getByText('Authenticator app', { exact: true })).toBeVisible()
-      await expect(page.getByText('SMS verification code', { exact: true })).toBeVisible()
+      await expect(page.getByText('SMS verification code', { exact: true })).toHaveCount(0)
       await expect(page.getByText('Email verification code', { exact: true })).toBeVisible()
       await expect(page.getByText('Backup codes', { exact: true })).toBeVisible()
       await expect(page.getByLabel('Prompt policy')).toHaveValue('optional')
-      await expect(page.getByLabel('Prompt policy')).toBeDisabled()
-      await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+      await expect(page.getByLabel('Prompt policy')).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled()
 
       await page.goto('/console/security/password-policy')
       await expect(page.getByRole('heading', { name: 'Security' })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Password requirements' })).toBeVisible()
-      await expect(page.getByLabel('Minimum length')).toBeDisabled()
-      await expect(page.getByText('1 required character type')).toBeVisible()
-      await expect(page.getByText('Reject compromised passwords')).toBeVisible()
+      await expect(page.getByLabel('Minimum length')).toHaveValue('12')
+      await expect(page.getByLabel('Minimum length')).toBeEnabled()
+      await expect(page.getByLabel('Required character types')).toHaveValue('2')
+      await expect(page.getByText('Reject repetitive or sequential characters')).toBeVisible()
+      await expect(page.getByText('Reject compromised passwords')).toHaveCount(0)
 
       await page.goto('/console/security/captcha')
       await expect(page.getByRole('heading', { name: 'CAPTCHA' })).toBeVisible()
       await expect(page.getByLabel('Provider')).toHaveValue('turnstile')
-      await expect(page.getByRole('button', { name: 'Setup provider' })).toBeDisabled()
+      await expect(page.getByLabel('Site key')).toBeEnabled()
+      await expect(page.getByLabel('Secret binding')).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Setup provider' })).toHaveCount(0)
 
       await page.goto('/console/security/blocklist')
       await expect(page.getByRole('heading', { name: 'Blocklist', exact: true })).toBeVisible()
       await expect(page.getByText('Block email subaddressing')).toBeVisible()
-      await expect(page.getByLabel('Custom email and domain blocklist')).toBeDisabled()
+      await expect(page.getByLabel('Custom email and domain blocklist')).toBeEnabled()
 
       await page.goto('/console/security/general')
       await expect(page.getByRole('heading', { name: 'General security' })).toBeVisible()
       await expect(page.getByText('MFA enforcement')).toBeVisible()
       await expect(page.getByText('3600s')).toBeVisible()
+      await expect(page.locator('span').filter({ hasText: /^CAPTCHA$/ })).toBeVisible()
+      await expect(page.getByText('Password minimum')).toBeVisible()
+      await expect(page.getByText('Blocklist entries')).toBeVisible()
       await expect(page.getByText('Fresh age')).toBeVisible()
       await expect(page.getByText('Cookie cache')).toBeVisible()
     },
@@ -1527,8 +1536,14 @@ const journeyAssertions: Record<
         },
       })
       await page.getByLabel('Actions for GitHub').click()
-      await page.getByText('View details').click()
+      await page.getByText('Test setup').click()
       await expect(page.getByText('Secret binding available')).toBeVisible()
+      await expect(page.getByLabel('Display name')).toHaveCount(0)
+      await page.getByRole('button', { name: 'Close' }).click()
+      await page.goto('/console/connectors/social')
+      await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
+      await page.getByLabel('Actions for GitHub').click()
+      await page.getByText('Edit connector').click()
       await page.getByLabel('Display name').fill('GitHub Enterprise')
       await page.getByRole('button', { name: 'Save changes' }).click()
       expect(requests).toContainEqual({
@@ -1751,6 +1766,10 @@ test('declares browser E2E journey coverage above target', () => {
   expect(journeyCoverage.honoRpcSmokeJourneys).toEqual(['api-health-smoke'])
   expect(new Set(consoleRoutes.map((route) => route.path)).size).toBe(consoleRoutes.length)
   expect(visualJourneyIds.every((id) => uniqueDeclaredIds.has(id))).toBe(true)
+})
+
+test.beforeEach(() => {
+  resetMockState()
 })
 
 test('public and auth journeys', async ({ page }) => {
@@ -2369,7 +2388,16 @@ async function responseFor(path: string, method: string, body: unknown): Promise
       },
     }
   }
-  if (path === '/api/management/security/policy') return { policy: securityPolicy }
+  if (path === '/api/management/security/policy') {
+    if (method === 'PATCH' && body && typeof body === 'object' && 'policy' in body) {
+      const input = (body as { policy?: Partial<typeof securityPolicy> }).policy
+      if (input?.mfa) Object.assign(securityPolicy.mfa, input.mfa)
+      if (input?.password) Object.assign(securityPolicy.password, input.password)
+      if (input?.captcha) Object.assign(securityPolicy.captcha, input.captcha)
+      if (input?.blocklist) Object.assign(securityPolicy.blocklist, input.blocklist)
+    }
+    return { policy: securityPolicy }
+  }
   if (path === '/api/management/applications') {
     if (method === 'POST') return application
     return { applications: [application], pagination }
@@ -2738,6 +2766,50 @@ const configz = {
   accountCenter: { ...defaultAccountCenter },
 }
 
+function resetMockState() {
+  firstAdminRequired = false
+  adminSetupRequired = false
+  accountSignedIn = true
+  accountApplicationRevoked = false
+  applicationDisabled = false
+  adminUserBanned = false
+  identifierFirstRequired = false
+  accountMfaEnabled = false
+  consentSessionAvailable = true
+
+  Object.assign(configz.signIn, {
+    passwordEnabled: true,
+    signupEnabled: true,
+    socialLoginEnabled: true,
+    magicLinkEnabled: true,
+    emailOtpEnabled: true,
+    usernameEnabled: true,
+    identifierFirst: false,
+  })
+  Object.assign(configz.branding, {
+    logoUrl: null,
+    faviconUrl: null,
+    primaryColor: '#b42318',
+    backgroundColor: '#f7f3ee',
+    customCss: null,
+  })
+  Object.assign(configz.links, {
+    termsUri: null,
+    privacyUri: null,
+    supportEmail: null,
+  })
+  Object.assign(configz.copy, {
+    productName: 'Acme ID',
+    headline: 'Sign in to Acme.',
+    description: 'Hosted identity for Acme apps.',
+  })
+  Object.assign(configz.defaults, {
+    applicationId: null,
+    redirectUri: null,
+  })
+  Object.assign(configz.accountCenter, defaultAccountCenter)
+}
+
 const application = {
   id: 'app-1',
   slug: 'customer-portal',
@@ -2921,6 +2993,16 @@ const securityPolicy = {
   mfa: { mode: 'optional' },
   passkeys: { enabled: true, rpId: 'localhost', rpName: 'Acme ID', origins: ['http://127.0.0.1:5173'] },
   sessions: { expiresInSeconds: 3600, updateAgeSeconds: 300, freshAgeSeconds: 300, cookieCacheSeconds: 60 },
+  password: {
+    minLength: 12,
+    requiredCharacterTypes: 2,
+    customWords: [],
+    rejectUserInfo: true,
+    rejectSequential: true,
+    rejectCustomWords: false,
+  },
+  captcha: { enabled: false, provider: 'turnstile', siteKey: '', secretBinding: '' },
+  blocklist: { blockSubaddressing: false, entries: [] },
 }
 
 const securityState = {

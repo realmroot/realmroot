@@ -101,6 +101,11 @@ export const configzConfigResponseSchema = z.object({
     passkeysEnabled: z.boolean(),
   }),
   accountCenter: configzAccountCenterSchema,
+  captcha: z.object({
+    enabled: z.boolean(),
+    provider: z.literal('turnstile'),
+    siteKey: z.string(),
+  }),
 })
 
 export type ConfigzConfigResponse = z.infer<typeof configzConfigResponseSchema>

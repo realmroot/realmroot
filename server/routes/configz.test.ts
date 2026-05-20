@@ -80,6 +80,11 @@ describe('configz routes', () => {
             sessionsViewEnabled: true,
             dangerZoneEnabled: false,
           },
+          captcha: {
+            enabled: false,
+            provider: 'turnstile',
+            siteKey: '',
+          },
         }),
       }),
     })
