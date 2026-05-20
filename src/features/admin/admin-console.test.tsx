@@ -934,12 +934,21 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Server app' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'server-app' } })
+    const createRedirectUrisInput = screen.getByLabelText('Redirect URIs')
+    createRedirectUrisInput.removeAttribute('required')
+    fireEvent.change(createRedirectUrisInput, {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Too small: expected array to have >=1 items')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Traditional web app/ }))
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://server.example.com/callback' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
+    expect(await screen.findByRole('heading', { name: 'Application created' })).toBeTruthy()
+    expect(screen.getAllByText('Client ID').length).toBeGreaterThan(0)
     expect(await screen.findByText('fas_created_secret')).toBeTruthy()
     expect(requests).toEqual([
       {
@@ -1041,7 +1050,7 @@ describe('admin console', () => {
     expect(screen.queryByLabelText('Upload logo for Partner app')).toBeNull()
   })
 
-  it('renders application detail lifecycle, redirect URI, and integration controls', async () => {
+  it('renders application detail lifecycle, redirect/origin/custom-data editing, and integration controls', async () => {
     const requests: Array<{ url: string; body: unknown; method: string }> = []
     const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
     Object.defineProperty(navigator, 'clipboard', {
@@ -1066,10 +1075,6 @@ describe('admin console', () => {
         currentApplication = { ...currentApplication, ...body }
         return Promise.resolve(jsonResponse(currentApplication))
       }
-      if (url === '/api/management/applications/app-1/redirect-uris' && method === 'PUT') {
-        requests.push({ url, method, body: JSON.parse(String(init?.body)) })
-        return Promise.resolve(jsonResponse({ redirectUris: ['https://new.example.com/callback'] }))
-      }
       if (url === '/api/management/applications/app-1/logo' && method === 'POST') {
         requests.push({ url, method, body: init?.body instanceof FormData ? '[form-data]' : init?.body })
         return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
@@ -1092,9 +1097,15 @@ describe('admin console', () => {
     expect(screen.getByRole('tab', { name: 'Settings' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Branding' })).toBeTruthy()
     expect(screen.getByLabelText('Application name')).toHaveProperty('value', 'Customer portal')
-    expect(screen.getByLabelText('Post sign-out redirect URIs')).toHaveProperty('disabled', true)
-    expect(screen.getByLabelText('CORS origins')).toHaveProperty('disabled', true)
-    expect(screen.getByLabelText('Custom data JSON')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Post sign-out redirect URIs')).toHaveProperty(
+      'value',
+      'https://app.example.com/signed-out',
+    )
+    expect(screen.getByLabelText('CORS origins')).toHaveProperty('value', 'https://app.example.com')
+    expect(screen.getByLabelText('Custom data JSON')).toHaveProperty('value', '{\n  "plan": "enterprise"\n}')
+    expect(screen.queryByText('Backchannel logout')).toBeNull()
+    expect(screen.queryByText('Token exchange')).toBeNull()
+    expect(screen.queryByText('Concurrent device limit')).toBeNull()
     expect(screen.getByText('https://auth.example.com/authorize')).toBeTruthy()
     expect(screen.getByText('https://auth.example.com/token')).toBeTruthy()
     expect(screen.getByText('https://auth.example.com/userinfo')).toBeTruthy()
@@ -1117,14 +1128,90 @@ describe('admin console', () => {
       discoveryUrl: 'https://auth.example.com/.well-known/openid-configuration',
       clientId: 'client-1',
       redirectUris: ['https://app.example.com/callback'],
+      postLogoutRedirectUris: ['https://app.example.com/signed-out'],
+      corsOrigins: ['https://app.example.com'],
       scopes: 'openid profile',
       tokenEndpointAuthMethod: 'none',
+      customData: { plan: 'enterprise' },
     })
 
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://new.example.com/callback' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save redirect URIs' }))
+    fireEvent.change(screen.getByLabelText('Post sign-out redirect URIs'), {
+      target: { value: 'https://new.example.com/signed-out' },
+    })
+    fireEvent.change(screen.getByLabelText('CORS origins'), {
+      target: { value: 'https://new.example.com\nhttp://localhost:4173' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save redirects and origins' }))
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/applications/app-1',
+        method: 'PATCH',
+        body: {
+          redirectUris: ['https://new.example.com/callback'],
+          postLogoutRedirectUris: ['https://new.example.com/signed-out'],
+          corsOrigins: ['https://new.example.com', 'http://localhost:4173'],
+        },
+      })
+    })
+
+    const redirectUrisInput = screen.getByLabelText('Redirect URIs')
+    redirectUrisInput.removeAttribute('required')
+    fireEvent.change(redirectUrisInput, {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save redirects and origins' }))
+    expect(await screen.findByText('Too small: expected array to have >=1 items')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
+      target: { value: '   ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/applications/app-1',
+        method: 'PATCH',
+        body: { customData: {} },
+      })
+    })
+
+    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
+      target: { value: '{"plan":"growth","beta":true}' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/applications/app-1',
+        method: 'PATCH',
+        body: { customData: { plan: 'growth', beta: true } },
+      })
+    })
+
+    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
+      target: { value: '["not-an-object"]' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
+    expect(await screen.findByText('Custom data JSON must be an object.')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/applications/app-1',
+        method: 'PATCH',
+        body: { customData: {} },
+      })
+    })
+
+    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
+      target: { value: '{"plan":"discarded"}' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Discard' }).at(-1) as HTMLButtonElement)
+    expect(screen.getByLabelText('Custom data JSON')).toHaveProperty('value', '{}')
     fireEvent.click(screen.getByRole('tab', { name: 'Branding' }))
     expect(screen.getByText('Display name')).toBeTruthy()
     expect(screen.getByText('Homepage URL')).toBeTruthy()
@@ -1148,9 +1235,28 @@ describe('admin console', () => {
           body: { name: 'Customer portal updated', description: null },
         },
         {
-          url: '/api/management/applications/app-1/redirect-uris',
-          method: 'PUT',
-          body: { redirectUris: ['https://new.example.com/callback'] },
+          url: '/api/management/applications/app-1',
+          method: 'PATCH',
+          body: {
+            redirectUris: ['https://new.example.com/callback'],
+            postLogoutRedirectUris: ['https://new.example.com/signed-out'],
+            corsOrigins: ['https://new.example.com', 'http://localhost:4173'],
+          },
+        },
+        {
+          url: '/api/management/applications/app-1',
+          method: 'PATCH',
+          body: { customData: {} },
+        },
+        {
+          url: '/api/management/applications/app-1',
+          method: 'PATCH',
+          body: { customData: { plan: 'growth', beta: true } },
+        },
+        {
+          url: '/api/management/applications/app-1',
+          method: 'PATCH',
+          body: { customData: {} },
         },
         {
           url: '/api/management/applications/app-1/logo',
@@ -1282,7 +1388,7 @@ describe('admin console', () => {
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/applications/app-1/redirect-uris' && init?.method === 'PUT') {
+      if (url === '/api/management/applications/app-1' && init?.method === 'PATCH') {
         return Promise.resolve(jsonResponse({ error: { message: 'Redirect URI is not allowed.' } }, 400))
       }
       if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
@@ -1296,9 +1402,9 @@ describe('admin console', () => {
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://bad.example.com/callback' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save redirect URIs' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save redirects and origins' }))
 
-    expect(await screen.findByText('Redirect URI is not allowed.')).toBeTruthy()
+    expect((await screen.findAllByText('Redirect URI is not allowed.')).length).toBeGreaterThan(0)
   })
 
   it('renders users and displays management API errors from create flow', async () => {
@@ -5235,6 +5341,9 @@ const application = {
   disabled: false,
   disabledReason: null,
   redirectUris: ['https://app.example.com/callback'],
+  postLogoutRedirectUris: ['https://app.example.com/signed-out'],
+  corsOrigins: ['https://app.example.com'],
+  customData: { plan: 'enterprise' },
   allowedGrantTypes: ['authorization_code'],
   allowedScopes: ['openid', 'profile'],
   requirePkce: true,

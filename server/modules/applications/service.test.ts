@@ -172,6 +172,17 @@ describe('ApplicationService', () => {
     ).resolves.toMatchObject({
       redirectUris: ['http://localhost:4173/oidc/callback'],
     })
+    await expect(
+      service.update(created.id, {
+        postLogoutRedirectUris: ['https://spa.example.com/signed-out', 'https://spa.example.com/signed-out'],
+        corsOrigins: ['https://spa.example.com', 'http://localhost:4173'],
+        customData: { plan: 'enterprise' },
+      }),
+    ).resolves.toMatchObject({
+      postLogoutRedirectUris: ['https://spa.example.com/signed-out'],
+      corsOrigins: ['https://spa.example.com', 'http://localhost:4173'],
+      customData: { plan: 'enterprise' },
+    })
   })
 
   it('paginates application collection responses', async () => {
@@ -325,6 +336,46 @@ describe('ApplicationService', () => {
         'admin-1',
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Unsupported grant type: bad-grant' })
+  })
+
+  it('validates application post sign-out redirects and CORS origins at the API boundary', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const created = await service.create(
+      {
+        name: 'Browser App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+      },
+      'admin-1',
+    )
+
+    await expect(
+      service.update(created.id, {
+        postLogoutRedirectUris: ['https://spa.example.com/signed-out#fragment'],
+      }),
+    ).rejects.toMatchObject({ status: 400, message: 'Post sign-out redirect URIs must not include fragments.' })
+    await expect(
+      service.update(created.id, {
+        corsOrigins: ['not an origin'],
+      }),
+    ).rejects.toMatchObject({ status: 400, message: 'CORS origins must be absolute origins.' })
+    await expect(
+      service.update(created.id, {
+        corsOrigins: ['https://spa.example.com/callback'],
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'CORS origins must include scheme, host, and optional port only.',
+    })
+    await expect(
+      service.update(created.id, {
+        corsOrigins: ['http://spa.example.com'],
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'CORS origins must use HTTPS except localhost development origins.',
+    })
   })
 
   it('loads consent data for an authorization request and records consent', async () => {

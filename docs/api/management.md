@@ -67,7 +67,7 @@ Collection responses include:
 - Connectors: `GET /connectors`, `POST /connectors`, `GET /connectors/templates`, `GET /connectors/{id}`, `GET /connectors/{id}/readiness`, `PATCH /connectors/{id}`, `DELETE /connectors/{id}`.
 - Webhooks: `/webhooks/endpoints`, `/webhooks/endpoints/{id}`, `/webhooks/endpoints/{id}/secrets`, `/webhooks/requests`, `/webhooks/requests/{id}`, `/webhooks/requests/{id}/retries`.
 
-Application resources are OIDC clients. `POST /applications` returns the created application; confidential clients include `clientSecret` in that creation response only. `GET /applications/{id}` returns client metadata, redirect URIs, allowed grant types, allowed scopes, token endpoint auth method, and discovery endpoint URLs. `PATCH /applications/{id}` updates metadata and lifecycle fields including `disabled`; lifecycle transitions do not use action endpoints. `DELETE /applications/{id}` deletes the application and its provider client.
+Application resources are OIDC clients. `POST /applications` returns the created application; confidential clients include `clientSecret` in that creation response only. `GET /applications/{id}` returns client metadata, redirect URIs, post sign-out redirect URIs, CORS origins, custom data, allowed grant types, allowed scopes, token endpoint auth method, and discovery endpoint URLs. `PATCH /applications/{id}` updates metadata, redirect/origin sets, custom data, and lifecycle fields including `disabled`; lifecycle transitions do not use action endpoints. `DELETE /applications/{id}` deletes the application and its provider client.
 
 Redirect URIs are replaced as a set with `PUT /applications/{id}/redirect-uris`:
 

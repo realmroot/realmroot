@@ -26,6 +26,8 @@ describe('createDrizzleApplicationRepository', () => {
           id: 'app-1',
           clientId: 'client-1',
           iconUrl: 'https://cdn.example.com/icon.png',
+          corsOrigins: ['https://app.example.com'],
+          customData: { plan: 'enterprise' },
           clientType: 'public_spa',
           allowedGrantTypes: ['authorization_code', 'refresh_token'],
           allowedScopes: ['openid', 'email'],
@@ -45,12 +47,16 @@ describe('createDrizzleApplicationRepository', () => {
     const metadataIconApp = {
       ...applicationRow(),
       id: 'app-2',
-      metadata: { iconUrl: 'https://cdn.example.com/metadata-icon.png' },
+      metadata: {
+        iconUrl: 'https://cdn.example.com/metadata-icon.png',
+        corsOrigins: ['https://metadata.example.com'],
+        customData: { plan: 'growth' },
+      },
     }
     const invalidMetadataApp = {
       ...applicationRow(),
       id: 'app-3',
-      metadata: { iconUrl: 42 },
+      metadata: { iconUrl: 42, corsOrigins: 'not-array', customData: [] },
       disabled: true,
     }
     const db = new FakeDb({
@@ -106,6 +112,8 @@ describe('createDrizzleApplicationRepository', () => {
           clientType: 'public_native',
           public: false,
           redirectUris: [],
+          corsOrigins: ['https://metadata.example.com'],
+          customData: { plan: 'growth' },
           allowedGrantTypes: [],
           allowedScopes: [],
           requirePkce: false,
@@ -114,6 +122,8 @@ describe('createDrizzleApplicationRepository', () => {
         {
           clientId: 'client-3',
           iconUrl: null,
+          corsOrigins: [],
+          customData: {},
           clientType: 'confidential_web',
           disabled: true,
           redirectUris: ['com.example.app:/callback'],
@@ -123,6 +133,31 @@ describe('createDrizzleApplicationRepository', () => {
         },
       ],
       pagination: { hasMore: true, nextOffset: 2, total: 3 },
+    })
+  })
+
+  it('maps non-object application metadata to empty application metadata fields', async () => {
+    const db = new FakeDb({
+      aggregate: [
+        {
+          application: {
+            ...applicationRow(),
+            metadata: 'not-object',
+          },
+          oauthClient: oauthClientRow(),
+        },
+      ],
+    })
+    const repository = createDrizzleApplicationRepository(db as unknown as Database)
+
+    await expect(repository.list({ limit: 1, offset: 0 })).resolves.toMatchObject({
+      items: [
+        {
+          iconUrl: null,
+          corsOrigins: [],
+          customData: {},
+        },
+      ],
     })
   })
 
@@ -233,6 +268,9 @@ describe('createDrizzleApplicationRepository', () => {
       trusted: true,
       disabled: true,
       redirectUris: ['https://admin.example.com/callback'],
+      postLogoutRedirectUris: ['https://admin.example.com/signed-out'],
+      corsOrigins: ['https://admin.example.com'],
+      customData: { plan: 'enterprise' },
       allowedGrantTypes: ['authorization_code'],
       allowedScopes: ['openid', 'profile'],
     })
@@ -243,7 +281,11 @@ describe('createDrizzleApplicationRepository', () => {
       set: {
         name: 'Admin Console',
         homepageUrl: 'https://admin.example.com',
-        metadata: { iconUrl: 'https://admin.example.com/icon.png' },
+        metadata: {
+          iconUrl: 'https://admin.example.com/icon.png',
+          corsOrigins: ['https://admin.example.com'],
+          customData: { plan: 'enterprise' },
+        },
         trusted: true,
         disabled: true,
         updatedAt: expect.any(Date),
@@ -258,9 +300,116 @@ describe('createDrizzleApplicationRepository', () => {
         skipConsent: true,
         disabled: true,
         redirectUris: '["https://admin.example.com/callback"]',
+        postLogoutRedirectUris: '["https://admin.example.com/signed-out"]',
         grantTypes: '["authorization_code"]',
         scopes: '["openid","profile"]',
         updatedAt: expect.any(Date),
+      },
+    })
+  })
+
+  it('merges application metadata fields across independent updates', async () => {
+    const db = new FakeDb({
+      application: [
+        {
+          id: 'app-1',
+          oauthClientId: 'client-1',
+          metadata: {
+            iconUrl: 'https://cdn.example.com/icon.png',
+            customData: { plan: 'enterprise' },
+          },
+        },
+      ],
+    })
+    const repository = createDrizzleApplicationRepository(db as unknown as Database)
+
+    await repository.update('app-1', {
+      corsOrigins: ['https://app.example.com'],
+    })
+
+    expect(db.updates[0]).toMatchObject({
+      table: application,
+      set: {
+        metadata: {
+          iconUrl: 'https://cdn.example.com/icon.png',
+          corsOrigins: ['https://app.example.com'],
+          customData: { plan: 'enterprise' },
+        },
+      },
+    })
+
+    await repository.update('app-1', {
+      iconUrl: null,
+      customData: {},
+    })
+
+    expect(db.updatesFor(application).at(-1)).toMatchObject({
+      table: application,
+      set: {
+        metadata: {
+          corsOrigins: ['https://app.example.com'],
+          customData: {},
+        },
+      },
+    })
+
+    await repository.update('app-1', {
+      iconUrl: null,
+      corsOrigins: [],
+      customData: {},
+    })
+
+    expect(db.updatesFor(application).at(-1)).toMatchObject({
+      table: application,
+      set: {
+        metadata: {
+          corsOrigins: [],
+          customData: {},
+        },
+      },
+    })
+  })
+
+  it('clears empty application metadata when the last metadata field is removed', async () => {
+    const db = new FakeDb({
+      application: [
+        { id: 'app-1', oauthClientId: 'client-1', metadata: { iconUrl: 'https://cdn.example.com/icon.png' } },
+      ],
+    })
+    const repository = createDrizzleApplicationRepository(db as unknown as Database)
+
+    await repository.update('app-1', {
+      iconUrl: null,
+    })
+
+    expect(db.updatesFor(application).at(-1)).toMatchObject({
+      table: application,
+      set: {
+        metadata: null,
+      },
+    })
+  })
+
+  it('clears metadata when the last stored icon URL is removed', async () => {
+    const db = new FakeDb({
+      application: [
+        {
+          id: 'app-1',
+          oauthClientId: 'client-1',
+          metadata: {
+            iconUrl: 'https://cdn.example.com/icon.png',
+          },
+        },
+      ],
+    })
+    const repository = createDrizzleApplicationRepository(db as unknown as Database)
+
+    await repository.update('app-1', { iconUrl: null })
+
+    expect(db.updates[0]).toMatchObject({
+      table: application,
+      set: {
+        metadata: null,
       },
     })
   })
@@ -454,6 +603,9 @@ function applicationInput() {
     disabled: false,
     disabledReason: null,
     redirectUris: ['https://admin.example.com/callback'],
+    postLogoutRedirectUris: [],
+    corsOrigins: [],
+    customData: {},
     allowedGrantTypes: ['authorization_code' as const],
     allowedScopes: ['openid' as const],
     requirePkce: false,
@@ -477,7 +629,11 @@ function applicationRow() {
     trusted: true,
     disabled: false,
     disabledReason: null,
-    metadata: { iconUrl: 'https://cdn.example.com/icon.png' },
+    metadata: {
+      iconUrl: 'https://cdn.example.com/icon.png',
+      corsOrigins: ['https://app.example.com'],
+      customData: { plan: 'enterprise' },
+    },
     createdAt: date(),
     updatedAt: date(),
   }
@@ -492,6 +648,7 @@ function oauthClientRow() {
     icon: null,
     uri: 'https://app.example.com',
     redirectUris: '["https://app.example.com/callback"]',
+    postLogoutRedirectUris: '["https://app.example.com/signed-out"]',
     grantTypes: '["authorization_code","refresh_token","invalid"]',
     responseTypes: '["code"]',
     scopes: '["openid","email","not-real"]',
@@ -534,9 +691,19 @@ class FakeDb {
       set: (set: unknown) => ({
         where: async () => {
           this.updates.push({ table, set })
+          if (table === application) {
+            const applicationSet = set as Record<string, unknown>
+            this.rows.application = this.rows.application?.map((row) =>
+              typeof row === 'object' && row !== null ? { ...row, ...applicationSet } : row,
+            )
+          }
         },
       }),
     }
+  }
+
+  updatesFor(table: unknown) {
+    return this.updates.filter((update) => update.table === table)
   }
 
   delete(table: unknown) {

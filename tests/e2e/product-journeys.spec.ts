@@ -1069,10 +1069,19 @@ const journeyAssertions: Record<
       await page.getByRole('tab', { name: 'Operations' }).click()
       await page.getByRole('button', { name: 'Send password reset' }).click()
       await page.getByRole('tab', { name: 'Sessions' }).click()
+      await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
       await page.getByRole('button', { name: 'Revoke', exact: true }).click()
-      await page.getByRole('button', { name: 'Revoke session' }).click()
+      const revokeSessionDialog = page.getByRole('dialog').filter({
+        has: page.getByRole('heading', { name: 'Revoke session' }),
+      })
+      await expect(revokeSessionDialog).toBeVisible()
+      await revokeSessionDialog.getByRole('button', { name: 'Revoke session' }).click()
       await page.getByRole('button', { name: 'Revoke all' }).click()
-      await page.getByRole('button', { name: 'Revoke sessions' }).click()
+      const revokeSessionsDialog = page.getByRole('dialog').filter({
+        has: page.getByRole('heading', { name: 'Revoke all sessions' }),
+      })
+      await expect(revokeSessionsDialog).toBeVisible()
+      await revokeSessionsDialog.getByRole('button', { name: 'Revoke sessions' }).click()
       await page.getByRole('tab', { name: 'Security' }).click()
       await page.getByRole('button', { name: 'Delete', exact: true }).click()
       await page.getByRole('button', { name: 'Delete passkey' }).click()
@@ -1135,16 +1144,18 @@ const journeyAssertions: Record<
       await page.getByLabel('Slug').fill('admin-console')
       await page.getByLabel('Redirect URIs').fill('http://localhost:4173/oidc/callback')
       await page.getByRole('button', { name: 'Save' }).click()
+      await expect(page.getByRole('heading', { name: 'Application created' })).toBeVisible()
+      await expect(page.getByRole('dialog').getByText('Client ID')).toBeVisible()
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/management/applications',
-          body: {
-            name: 'Admin console',
-            slug: 'admin-console',
-            clientType: 'public_spa',
-            firstParty: true,
-            redirectUris: ['http://localhost:4173/oidc/callback'],
-          },
+        body: {
+          name: 'Admin console',
+          slug: 'admin-console',
+          clientType: 'public_spa',
+          firstParty: true,
+          redirectUris: ['http://localhost:4173/oidc/callback'],
+        },
       })
     },
   },
@@ -1168,17 +1179,45 @@ const journeyAssertions: Record<
       await expect(page).toHaveURL(/\/console\/applications\/app-1\/settings$/)
       await page.waitForLoadState('networkidle')
       const redirectUrisInput = page.getByRole('textbox', { name: 'Redirect URIs', exact: true })
+      const postLogoutInput = page.getByRole('textbox', { name: 'Post sign-out redirect URIs', exact: true })
+      const corsOriginsInput = page.getByRole('textbox', { name: 'CORS origins', exact: true })
+      const customDataInput = page.getByRole('textbox', { name: 'Custom data JSON', exact: true })
       await expect(redirectUrisInput).toHaveValue('http://localhost:4173/oidc/callback')
+      await expect(postLogoutInput).toHaveValue('https://app.example.com/signed-out')
+      await expect(corsOriginsInput).toHaveValue('https://app.example.com')
+      await expect(customDataInput).toHaveValue('{\n  "plan": "enterprise"\n}')
+      await expect(page.getByText('App ID')).toBeVisible()
+      await expect(page.getByText('Backchannel logout')).toHaveCount(0)
+      await expect(page.getByText('Token exchange')).toHaveCount(0)
+      await expect(page.getByText('Concurrent device limit')).toHaveCount(0)
       await redirectUrisInput.fill('https://new.example.com/callback')
-      await expect(redirectUrisInput).toHaveValue('https://new.example.com/callback')
-      await page.getByRole('button', { name: 'Save redirect URIs' }).click()
+      await postLogoutInput.fill('https://new.example.com/signed-out')
+      await corsOriginsInput.fill('https://new.example.com\nhttp://localhost:4173')
+      await page.getByRole('button', { name: 'Save redirects and origins' }).click()
       await expect
         .poll(() =>
           requests.some(
             (request) =>
-              request.method === 'PUT' &&
-              request.path === '/api/management/applications/app-1/redirect-uris' &&
-              JSON.stringify(request.body) === JSON.stringify({ redirectUris: ['https://new.example.com/callback'] }),
+              request.method === 'PATCH' &&
+              request.path === '/api/management/applications/app-1' &&
+              JSON.stringify(request.body) ===
+                JSON.stringify({
+                  redirectUris: ['https://new.example.com/callback'],
+                  postLogoutRedirectUris: ['https://new.example.com/signed-out'],
+                  corsOrigins: ['https://new.example.com', 'http://localhost:4173'],
+                }),
+          ),
+        )
+        .toBe(true)
+      await customDataInput.fill('{"plan":"growth","beta":true}')
+      await page.getByRole('button', { name: 'Save custom data' }).click()
+      await expect
+        .poll(() =>
+          requests.some(
+            (request) =>
+              request.method === 'PATCH' &&
+              request.path === '/api/management/applications/app-1' &&
+              JSON.stringify(request.body) === JSON.stringify({ customData: { plan: 'growth', beta: true } }),
           ),
         )
         .toBe(true)
@@ -1191,9 +1230,18 @@ const journeyAssertions: Record<
       await page.getByRole('button', { name: 'Rotate client secret' }).click()
       await expect(page.getByText('fas_rotated_secret')).toBeVisible()
       expect(requests).toContainEqual({
-        method: 'PUT',
-        path: '/api/management/applications/app-1/redirect-uris',
-        body: { redirectUris: ['https://new.example.com/callback'] },
+        method: 'PATCH',
+        path: '/api/management/applications/app-1',
+        body: {
+          redirectUris: ['https://new.example.com/callback'],
+          postLogoutRedirectUris: ['https://new.example.com/signed-out'],
+          corsOrigins: ['https://new.example.com', 'http://localhost:4173'],
+        },
+      })
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        path: '/api/management/applications/app-1',
+        body: { customData: { plan: 'growth', beta: true } },
       })
       expect(requests).toContainEqual({
         method: 'PATCH',
@@ -2306,7 +2354,7 @@ async function responseFor(path: string, method: string, body: unknown): Promise
         typeof body === 'object' && body !== null && 'disabled' in body && typeof body.disabled === 'boolean'
           ? body.disabled
           : applicationDisabled
-      return { ...application, disabled: applicationDisabled }
+      return { ...application, ...(body && typeof body === 'object' ? body : {}), disabled: applicationDisabled }
     }
     if (method === 'DELETE') return null
     return { ...application, disabled: applicationDisabled }
@@ -2666,6 +2714,9 @@ const application = {
   disabled: false,
   disabledReason: null,
   redirectUris: ['http://localhost:4173/oidc/callback'],
+  postLogoutRedirectUris: ['https://app.example.com/signed-out'],
+  corsOrigins: ['https://app.example.com'],
+  customData: { plan: 'enterprise' },
   allowedGrantTypes: ['authorization_code'],
   allowedScopes: ['openid', 'profile'],
   requirePkce: true,

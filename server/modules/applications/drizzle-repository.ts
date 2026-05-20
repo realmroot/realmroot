@@ -15,6 +15,9 @@ import type { ApplicationAggregate, ApplicationRepository, ConsentRecord } from 
 
 type ApplicationRow = typeof application.$inferSelect
 type OAuthClientRow = typeof oauthClient.$inferSelect
+const corsOriginsMetadataKey = 'corsOrigins'
+const customDataMetadataKey = 'customData'
+const iconUrlMetadataKey = 'iconUrl'
 
 export function createDrizzleApplicationRepository(db: Database): ApplicationRepository {
   return {
@@ -86,21 +89,30 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
 
     async update(id, patch) {
       const now = new Date()
+      const currentRows = await db.select().from(application).where(eq(application.id, id)).limit(1)
+      const current = currentRows[0]
+      if (!current) return
+
       const applicationPatch = {
         ...(patch.slug !== undefined ? { slug: patch.slug } : {}),
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.description !== undefined ? { description: patch.description } : {}),
         ...(patch.homepageUrl !== undefined ? { homepageUrl: patch.homepageUrl } : {}),
-        ...(patch.iconUrl !== undefined ? { metadata: { iconUrl: patch.iconUrl } } : {}),
+        ...(patch.iconUrl !== undefined || patch.corsOrigins !== undefined || patch.customData !== undefined
+          ? {
+              metadata: writeApplicationMetadata(current.metadata, {
+                iconUrl: patch.iconUrl,
+                corsOrigins: patch.corsOrigins,
+                customData: patch.customData,
+              }),
+            }
+          : {}),
         ...(patch.firstParty !== undefined ? { firstParty: patch.firstParty } : {}),
         ...(patch.trusted !== undefined ? { trusted: patch.trusted } : {}),
         ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
         ...(patch.disabledReason !== undefined ? { disabledReason: patch.disabledReason } : {}),
         updatedAt: now,
       }
-      const currentRows = await db.select().from(application).where(eq(application.id, id)).limit(1)
-      const current = currentRows[0]
-      if (!current) return
 
       const oauthPatch = {
         ...(patch.name !== undefined ? { name: patch.name } : {}),
@@ -109,6 +121,9 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
         ...(patch.trusted !== undefined ? { skipConsent: patch.trusted } : {}),
         ...(patch.redirectUris !== undefined ? { redirectUris: serializeList(patch.redirectUris) } : {}),
+        ...(patch.postLogoutRedirectUris !== undefined
+          ? { postLogoutRedirectUris: serializeList(patch.postLogoutRedirectUris) }
+          : {}),
         ...(patch.allowedGrantTypes !== undefined ? { grantTypes: serializeList(patch.allowedGrantTypes) } : {}),
         ...(patch.allowedScopes !== undefined ? { scopes: serializeList(patch.allowedScopes) } : {}),
         updatedAt: now,
@@ -322,6 +337,7 @@ function toOAuthClientInsert(
     uri: input.homepageUrl,
     icon: input.iconUrl,
     redirectUris: serializeList(input.redirectUris),
+    postLogoutRedirectUris: serializeList(input.postLogoutRedirectUris),
     tokenEndpointAuthMethod: input.tokenEndpointAuthMethod,
     grantTypes: serializeList(input.allowedGrantTypes),
     responseTypes: serializeList(['code']),
@@ -351,6 +367,9 @@ function toAggregate(app: ApplicationRow, client: OAuthClientRow): ApplicationAg
     disabled: app.disabled || !!client.disabled,
     disabledReason: app.disabledReason,
     redirectUris: parseList(client.redirectUris),
+    postLogoutRedirectUris: parseList(client.postLogoutRedirectUris),
+    corsOrigins: readCorsOrigins(app.metadata),
+    customData: readCustomData(app.metadata),
     allowedGrantTypes: parseList(client.grantTypes).filter(isGrantType),
     allowedScopes: parseList(client.scopes).filter(isScope),
     requirePkce: client.requirePKCE ?? false,
@@ -393,10 +412,52 @@ function parseList(value: string | null): string[] {
 function readIconUrl(metadata: unknown) {
   return typeof metadata === 'object' &&
     metadata !== null &&
-    'iconUrl' in metadata &&
-    typeof metadata.iconUrl === 'string'
-    ? metadata.iconUrl
+    iconUrlMetadataKey in metadata &&
+    typeof metadata[iconUrlMetadataKey] === 'string'
+    ? metadata[iconUrlMetadataKey]
     : null
+}
+
+function readCorsOrigins(metadata: unknown) {
+  return readStringListMetadata(metadata, corsOriginsMetadataKey)
+}
+
+function readCustomData(metadata: unknown) {
+  if (
+    typeof metadata === 'object' &&
+    metadata !== null &&
+    customDataMetadataKey in metadata &&
+    typeof metadata[customDataMetadataKey] === 'object' &&
+    metadata[customDataMetadataKey] !== null &&
+    !Array.isArray(metadata[customDataMetadataKey])
+  ) {
+    return metadata[customDataMetadataKey] as Record<string, unknown>
+  }
+  return {}
+}
+
+function readStringListMetadata(metadata: unknown, key: string) {
+  if (typeof metadata !== 'object' || metadata === null || !(key in metadata)) return []
+  const value = (metadata as Record<string, unknown>)[key]
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function writeApplicationMetadata(
+  current: Record<string, unknown> | null,
+  patch: {
+    iconUrl?: string | null
+    corsOrigins?: string[]
+    customData?: Record<string, unknown>
+  },
+) {
+  const next = { ...(current ?? {}) }
+  if (patch.iconUrl !== undefined) {
+    if (patch.iconUrl) next[iconUrlMetadataKey] = patch.iconUrl
+    else delete next[iconUrlMetadataKey]
+  }
+  if (patch.corsOrigins !== undefined) next[corsOriginsMetadataKey] = patch.corsOrigins
+  if (patch.customData !== undefined) next[customDataMetadataKey] = patch.customData
+  return Object.keys(next).length ? next : null
 }
 
 function toClientType(value: string | null): ApplicationAggregate['clientType'] {
