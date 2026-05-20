@@ -1740,6 +1740,10 @@ test('declares browser E2E journey coverage above target', () => {
   expect(visualJourneyIds.every((id) => uniqueDeclaredIds.has(id))).toBe(true)
 })
 
+test.beforeEach(() => {
+  resetMockState()
+})
+
 test('public and auth journeys', async ({ page }) => {
   const requests = await mockApi(page)
   await runJourneySuite('public and auth journeys', { page, requests })
@@ -2672,6 +2676,50 @@ const configz = {
   },
   security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
   accountCenter: { ...defaultAccountCenter },
+}
+
+function resetMockState() {
+  firstAdminRequired = false
+  adminSetupRequired = false
+  accountSignedIn = true
+  accountApplicationRevoked = false
+  applicationDisabled = false
+  adminUserBanned = false
+  identifierFirstRequired = false
+  accountMfaEnabled = false
+  consentSessionAvailable = true
+
+  Object.assign(configz.signIn, {
+    passwordEnabled: true,
+    signupEnabled: true,
+    socialLoginEnabled: true,
+    magicLinkEnabled: true,
+    emailOtpEnabled: true,
+    usernameEnabled: true,
+    identifierFirst: false,
+  })
+  Object.assign(configz.branding, {
+    logoUrl: null,
+    faviconUrl: null,
+    primaryColor: '#b42318',
+    backgroundColor: '#f7f3ee',
+    customCss: null,
+  })
+  Object.assign(configz.links, {
+    termsUri: null,
+    privacyUri: null,
+    supportEmail: null,
+  })
+  Object.assign(configz.copy, {
+    productName: 'Acme ID',
+    headline: 'Sign in to Acme.',
+    description: 'Hosted identity for Acme apps.',
+  })
+  Object.assign(configz.defaults, {
+    applicationId: null,
+    redirectUri: null,
+  })
+  Object.assign(configz.accountCenter, defaultAccountCenter)
 }
 
 const application = {

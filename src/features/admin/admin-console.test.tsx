@@ -2399,7 +2399,7 @@ describe('admin console', () => {
       authorizationEndpoint: 'https://idp.example.com/authorize',
       tokenEndpoint: 'https://idp.example.com/token',
       scopes: [],
-      providerMetadata: {},
+      providerMetadata: { pkce: true },
     }
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -2432,7 +2432,9 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
     fireEvent.click(screen.getAllByRole('button', { name: /Generic OAuth/ }).at(-1)!)
     fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'okta-main' } })
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Okta Main' } })
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
+    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email' } })
     fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
     fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://idp.example.com' } })
     fireEvent.change(screen.getByLabelText('Authorization endpoint'), {
@@ -2454,9 +2456,11 @@ describe('admin console', () => {
         body: expect.objectContaining({
           enabled: false,
           authorizationEndpoint: 'https://idp.example.com/authorize',
+          displayName: 'Okta Main',
           jwksEndpoint: 'https://idp.example.com/jwks',
           providerId: 'okta-main',
           providerMetadata: { pkce: true },
+          scopes: ['openid', 'email'],
           tokenEndpoint: 'https://idp.example.com/token',
           userInfoEndpoint: 'https://idp.example.com/userinfo',
         }),
@@ -2480,6 +2484,70 @@ describe('admin console', () => {
       target: { value: 'https://tenant.example.com/userinfo' },
     })
     fireEvent.change(screen.getByLabelText('JWKS endpoint'), { target: { value: 'https://tenant.example.com/jwks' } })
+    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email profile' } })
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Provider metadata must be a JSON object.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"pkce":true}' } })
+  })
+
+  it('renders social connector edit provider requirements from templates', async () => {
+    const cognitoConnector = {
+      ...connector,
+      id: 'connector-cognito',
+      slug: 'cognito',
+      providerId: 'cognito',
+      displayName: 'Amazon Cognito',
+      providerMetadata: {
+        domain: 'auth.example.com',
+        region: 'us-east-1',
+        userPoolId: 'pool-1',
+      },
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors/connector-cognito/readiness') {
+        return Promise.resolve(jsonResponse({ connectorId: 'connector-cognito', ready: true, checks: [] }))
+      }
+      if (url === '/api/management/connectors/connector-cognito') return Promise.resolve(jsonResponse(cognitoConnector))
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [cognitoConnector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Amazon Cognito')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Amazon Cognito'))
+    fireEvent.click(await screen.findByText('Edit connector'))
+    expect(await screen.findByText('Provider requirements')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Domain'), { target: { value: 'login.example.com' } })
+    fireEvent.change(screen.getByLabelText('Region'), { target: { value: 'us-west-2' } })
+    fireEvent.change(screen.getByLabelText('User Pool ID'), { target: { value: 'pool-2' } })
+  })
+
+  it('shows loading state while social connector provider requirements load', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/connectors/templates') return new Promise(() => {})
+      if (url === '/api/management/connectors/connector-1/readiness') {
+        return Promise.resolve(jsonResponse({ connectorId: 'connector-1', ready: true, checks: [] }))
+      }
+      if (url === '/api/management/connectors/connector-1') return Promise.resolve(jsonResponse(connector))
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Edit connector'))
+    expect(await screen.findByText('Loading provider requirements.')).toBeTruthy()
   })
 
   it('saves connector detail edits with blank optional fields', async () => {
@@ -2705,7 +2773,18 @@ describe('admin console', () => {
   it('derives built-in Cloudflare Email readiness and exposes inspectable passwordless email details', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/sign-in-settings') {
+        return Promise.resolve(
+          jsonResponse({
+            ...signInSettings,
+            signIn: {
+              ...signInSettings.signIn,
+              magicLinkEnabled: false,
+              emailOtpEnabled: true,
+            },
+          }),
+        )
+      }
       if (url === '/api/management/readiness') {
         return Promise.resolve(
           jsonResponse({
@@ -2743,11 +2822,15 @@ describe('admin console', () => {
     expect(screen.getByRole('heading', { name: 'Cloudflare Email connector' })).toBeTruthy()
     expect(screen.getByText('EMAIL')).toBeTruthy()
     expect(screen.getByText('EMAIL_FROM')).toBeTruthy()
+    expect(screen.getAllByText('Magic link').at(-1)?.closest('div')?.textContent).toContain('Disabled')
+    expect(screen.getAllByText('Email code').at(-1)?.closest('div')?.textContent).toContain('Enabled')
     expect(
       screen.getByText(
         'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
       ),
     ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Cloudflare Email connector' })).toBeNull())
   })
 
   it('renders MFA and password policy compact controls as read-only', async () => {
