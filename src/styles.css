@@ -916,13 +916,82 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .consoleToolbar.rounded-lg {
-  border-radius: 16px;
+  border-radius: 8px;
 }
 
 .consoleToolbar .textInput {
   width: min(100%, 320px);
   min-height: 40px;
   padding-block: 8px;
+}
+
+.consoleListToolbar {
+  padding: 10px 12px;
+}
+
+.consoleResourceFrame,
+.consoleMetricCard,
+.consoleChartPanel,
+.consoleActivityCard {
+  border-radius: 8px;
+}
+
+.consoleResourceFrame th {
+  height: 42px;
+  padding-inline: 12px;
+}
+
+.consoleResourceFrame td {
+  height: 48px;
+  padding: 8px 12px;
+}
+
+.consoleMetricCard {
+  min-height: 128px;
+}
+
+.consoleChartPanel {
+  min-height: 420px;
+}
+
+.consoleChartCanvas {
+  position: relative;
+  min-height: 208px;
+  padding: 22px 0 24px;
+}
+
+.consoleChartAxis {
+  height: 1px;
+  margin-bottom: 31px;
+  background: var(--line);
+}
+
+.consoleChartLine {
+  position: absolute;
+  right: 0;
+  bottom: 40px;
+  left: 40px;
+  height: 2px;
+  background: var(--brand-primary);
+}
+
+.consoleChartLabels {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 40px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.consoleActivityCard {
+  min-height: 130px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .consoleDetailStack {

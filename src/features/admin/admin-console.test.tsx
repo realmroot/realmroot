@@ -71,31 +71,22 @@ describe('admin console', () => {
 
     renderWithQuery(<AdminDashboardPage />)
 
-    expect(await screen.findByRole('heading', { name: 'Tenant health' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy()
     expect(screen.getByText('Total users')).toBeTruthy()
-    expect(screen.getByText('New users')).toBeTruthy()
-    expect(screen.getByText('Active users')).toBeTruthy()
-    expect(screen.getByText('Monthly active')).toBeTruthy()
-    expect(screen.getAllByText('Pending')).toHaveLength(3)
-    expect(screen.getByText('Setup progress')).toBeTruthy()
-    expect(screen.getByText('OIDC endpoints')).toBeTruthy()
-    expect(screen.getByText('Health signals')).toBeTruthy()
-    expect(screen.getByText('Authorization')).toBeTruthy()
-    expect(screen.getByText('Customer portal')).toBeTruthy()
-    expect(screen.getByText('client-1')).toBeTruthy()
-    expect(screen.getByText('MFA policy')).toBeTruthy()
-    expect(screen.getByText('required')).toBeTruthy()
-    expect(screen.getByText('Password sign-in')).toBeTruthy()
+    expect(screen.getByText('New users today')).toBeTruthy()
+    expect(screen.getByText('New users past 7 days')).toBeTruthy()
+    expect(screen.getAllByText('Pending')).toHaveLength(4)
+    expect(screen.getByText('Daily active users')).toBeTruthy()
+    expect(screen.getByText('Weekly active users')).toBeTruthy()
+    expect(screen.getByText('Monthly active users')).toBeTruthy()
+    expect(metricValue('Total users')).toBe('1')
+    expect(metricValue('New users today')).toBe('--')
+    expect(metricValue('New users past 7 days')).toBe('--')
+    expect(screen.getByText('Pending activity data')).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Daily active users trend' })).toBeTruthy()
   })
 
-  it('runs dashboard OIDC actions and renders setup gaps', async () => {
-    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
-    const open = vi.fn()
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: clipboard,
-    })
-    vi.spyOn(window, 'open').mockImplementation(open)
+  it('renders dashboard empty metrics without setup marketing cards', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/applications') {
@@ -132,18 +123,12 @@ describe('admin console', () => {
 
     renderWithQuery(<AdminDashboardPage />)
 
-    expect(await screen.findByText('Action needed')).toBeTruthy()
-    expect(screen.getByText('Required before app sign-in')).toBeTruthy()
-    expect(screen.getByText('Password sign-in still works')).toBeTruthy()
-    expect(screen.getByText('MFA optional; passkeys disabled')).toBeTruthy()
-    expect(screen.getByText('0 users')).toBeTruthy()
-    expect(screen.getByText('Create an application to start routing sign-in requests.')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Discovery' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Copy issuer' }))
-
-    expect(open).toHaveBeenCalledWith('/api/auth/.well-known/openid-configuration', '_blank', 'noopener')
-    expect(clipboard.writeText).toHaveBeenCalledWith('http://localhost:3000/api/auth')
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy()
+    expect(metricValue('Total users')).toBe('0')
+    expect(screen.getAllByText('--').length).toBeGreaterThanOrEqual(5)
+    expect(screen.getAllByText('Pending')).toHaveLength(4)
+    expect(screen.queryByText('Setup progress')).toBeNull()
+    expect(screen.queryByText('Private cloud')).toBeNull()
   })
 
   it('renders dashboard load errors with retry action', async () => {
@@ -454,7 +439,7 @@ describe('admin console', () => {
 
     render(<AppRouter />)
 
-    expect(await screen.findByRole('heading', { name: 'Tenant health' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/console'))
   })
 
@@ -462,7 +447,7 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
 
     for (const [path, finalPath, heading] of [
-      ['/console', '/console', 'Tenant health'],
+      ['/console', '/console', 'Dashboard'],
       ['/console/applications', '/console/applications', 'Applications'],
       ['/console/sign-in-experience', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
       [
@@ -3891,9 +3876,9 @@ describe('admin console', () => {
 
     renderWithQuery(<AdminDashboardPage />)
 
-    expect(await screen.findByText('Customer portal')).toBeTruthy()
-    expect(screen.getByText('Password sign-in')).toBeTruthy()
-    expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0)
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy()
+    expect(screen.getByText('Daily active users')).toBeTruthy()
+    expect(screen.getAllByText('Pending')).toHaveLength(4)
 
     cleanup()
     renderWithQuery(<ApplicationsPage />)
@@ -4469,6 +4454,12 @@ function renderWithQuery(children: ReactNode) {
       {children}
     </QueryClientProvider>,
   )
+}
+
+function metricValue(label: string) {
+  const card = screen.getByText(label).closest('[data-ui="card"]')
+  expect(card).toBeTruthy()
+  return card?.querySelector('.text-2xl')?.textContent ?? ''
 }
 
 function jsonResponse(body: unknown, status = 200) {

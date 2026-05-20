@@ -34,18 +34,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   AlertCircle,
+  CalendarDays,
   CheckCircle2,
   Copy,
   ExternalLink,
   Eye,
   ImageUp,
-  ListChecks,
   MoreHorizontal,
   Plus,
   RefreshCw,
   Save,
-  Server,
-  ShieldCheck,
   Trash2,
   Undo2,
 } from 'lucide-react'
@@ -77,6 +75,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableEmptyRow, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  type AdminDashboard,
   adminQueryKeys,
   assignApplicationRole,
   assignMemberRole,
@@ -187,189 +186,20 @@ export function AdminDashboardPage() {
     <>
       <PageHeader
         breadcrumb={['Overview']}
-        eyebrow="Dashboard"
-        title="Tenant health"
-        description="Track identity volume, setup readiness, activity signals, and standards-based integration metadata."
+        eyebrow="Overview"
+        title="Dashboard"
+        description="Get an overview about your identity service performance."
       />
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <MetricCard
           detail="Tenant identities available to hosted auth."
           label="Total users"
           value={dashboard.users.pagination.total}
         />
-        <MetricCard
-          detail="Users created in the last 24 hours. Activity API pending."
-          label="New users"
-          pending
-          value="--"
-        />
-        <MetricCard
-          detail="Daily and weekly active users. Activity API pending."
-          label="Active users"
-          pending
-          value="DAU -- / WAU --"
-        />
-        <MetricCard detail="Monthly active users. Activity API pending." label="Monthly active" pending value="--" />
+        <MetricCard detail="Users created in the last 24 hours." label="New users today" pending value="--" />
+        <MetricCard detail="Users created in the past seven days." label="New users past 7 days" pending value="--" />
       </div>
-      <Card>
-        <CardHeader className="border-b border-border">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle>Operational status</CardTitle>
-              <CardDescription>Setup, protocol metadata, and runtime controls in one production view.</CardDescription>
-            </div>
-            <Badge variant={dashboard.applications.pagination.total > 0 ? 'secondary' : 'outline'}>
-              {dashboard.applications.pagination.total > 0 ? 'Ready' : 'Action needed'}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-4 p-4 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="grid gap-3">
-            <div>
-              <h2 className="text-sm font-semibold">Setup progress</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Readiness checklist for operating the tenant.</p>
-            </div>
-            <div className="grid gap-2">
-              <SetupItem
-                complete={dashboard.applications.pagination.total > 0}
-                label="Create an OIDC application"
-                value={
-                  dashboard.applications.pagination.total > 0 ? 'Client configured' : 'Required before app sign-in'
-                }
-              />
-              <SetupItem
-                complete={dashboard.connectors.pagination.total > 0}
-                label="Configure identity connectors"
-                value={
-                  dashboard.connectors.pagination.total > 0 ? 'Connector available' : 'Password sign-in still works'
-                }
-              />
-              <SetupItem
-                complete={
-                  dashboard.security.policy.passkeys.enabled || dashboard.security.policy.mfa.mode === 'required'
-                }
-                label="Review security policy"
-                value={`MFA ${dashboard.security.policy.mfa.mode}; passkeys ${
-                  dashboard.security.policy.passkeys.enabled ? 'enabled' : 'disabled'
-                }`}
-              />
-              <SetupItem
-                complete={dashboard.users.pagination.total > 0}
-                label="Invite or create users"
-                value={`${dashboard.users.pagination.total} user${dashboard.users.pagination.total === 1 ? '' : 's'}`}
-              />
-            </div>
-          </div>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <h2 className="text-sm font-semibold">OIDC endpoints</h2>
-              <p className="text-sm text-muted-foreground">Use discovery for client configuration.</p>
-              <div className="grid gap-2 text-sm">
-                <SettingRow label="Issuer" value={`${window.location.origin}/api/auth`} />
-                <SettingRow
-                  label="Discovery"
-                  value={`${window.location.origin}/api/auth/.well-known/openid-configuration`}
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  onClick={() => window.open('/api/auth/.well-known/openid-configuration', '_blank', 'noopener')}
-                  type="button"
-                  variant="secondary"
-                >
-                  <ExternalLink data-icon="inline-start" />
-                  Discovery
-                </Button>
-                <Button
-                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/auth`)}
-                  type="button"
-                  variant="secondary"
-                >
-                  <Copy data-icon="inline-start" />
-                  Copy issuer
-                </Button>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <h2 className="text-sm font-semibold">Health signals</h2>
-              <div className="grid gap-2">
-                <HealthRow icon={<Server aria-hidden="true" />} label="Runtime" value="Cloudflare Workers" />
-                <HealthRow
-                  icon={<ShieldCheck aria-hidden="true" />}
-                  label="Sessions"
-                  value={`${dashboard.security.policy.sessions.freshAgeSeconds}s fresh age`}
-                />
-                <HealthRow
-                  icon={<ListChecks aria-hidden="true" />}
-                  label="Authorization"
-                  value={`${dashboard.roles.pagination.total} roles, ${dashboard.apiResources.pagination.total} API resources`}
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      <div className="grid gap-4 xl:grid-cols-3">
-        <DashboardListCard
-          description="Most recent OIDC clients and operational state."
-          empty="Create an application to start routing sign-in requests."
-          title="Recent applications"
-        >
-          {dashboard.applications.applications.slice(0, 4).map((application) => (
-            <SummaryRow
-              key={application.id}
-              meta={application.clientId}
-              status={<StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />}
-              title={application.name}
-            />
-          ))}
-        </DashboardListCard>
-        <DashboardListCard
-          description="Recent identities available to the tenant."
-          empty="Create a user to verify account-center flows."
-          title="Recent users"
-        >
-          {dashboard.users.users.slice(0, 4).map((user) => (
-            <SummaryRow
-              key={user.id}
-              meta={user.email ?? user.id}
-              status={<StatusBadge active={!user.banned} activeLabel="Active" inactiveLabel="Banned" />}
-              title={user.name ?? user.email ?? user.id}
-            />
-          ))}
-        </DashboardListCard>
-        <DashboardListCard
-          description="Identity providers available in hosted auth."
-          empty="Add a connector when social or OAuth sign-in is needed."
-          title="Connectors"
-        >
-          {dashboard.connectors.connectors.slice(0, 4).map((connector) => (
-            <SummaryRow
-              key={connector.id}
-              meta={connector.providerId}
-              status={<StatusBadge active={connector.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />}
-              title={connector.displayName}
-            />
-          ))}
-        </DashboardListCard>
-      </div>
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Security status</CardTitle>
-            <CardDescription>Current tenant security policy from the management boundary.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm">
-            <SettingRow label="MFA policy" value={dashboard.security.policy.mfa.mode} />
-            <SettingRow label="Passkeys" value={dashboard.security.policy.passkeys.enabled ? 'Enabled' : 'Disabled'} />
-            <SettingRow label="Session lifetime" value={`${dashboard.security.policy.sessions.expiresInSeconds}s`} />
-            <SettingRow
-              label="Password sign-in"
-              value={dashboard.signIn.signIn.passwordEnabled ? 'Enabled' : 'Disabled'}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <DashboardChartPanel dashboard={dashboard} />
     </>
   )
 }
@@ -4852,7 +4682,7 @@ function ResourcePage({
         />
       ) : null}
       {!loading && !error && framed ? (
-        <Card>
+        <Card className="consoleResourceFrame">
           <CardContent className="p-0">{children}</CardContent>
         </Card>
       ) : null}
@@ -4864,7 +4694,7 @@ function ResourcePage({
 
 function ListToolbar({ children }: { children: ReactNode }) {
   return (
-    <ConsoleToolbar className="rounded-lg border border-border bg-background p-3">
+    <ConsoleToolbar className="consoleListToolbar rounded-lg border border-border bg-background">
       <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col sm:auto-cols-max">{children}</div>
     </ConsoleToolbar>
   )
@@ -4964,32 +4794,86 @@ function MetricCard({
   value: number | string
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="consoleMetricCard">
+      <CardHeader className="p-5">
         <div className="flex items-center justify-between gap-2">
-          <CardDescription>{label}</CardDescription>
+          <CardDescription className="font-semibold text-foreground">{label}</CardDescription>
           {pending ? <Badge variant="outline">Pending</Badge> : null}
         </div>
-        <CardTitle className="text-2xl">{value}</CardTitle>
+        <CardTitle className="pt-5 text-2xl leading-none">{value}</CardTitle>
         <p className="text-xs leading-5 text-muted-foreground">{detail}</p>
       </CardHeader>
     </Card>
   )
 }
 
-function SetupItem({ complete, label, value }: { complete: boolean; label: string; value: string }) {
+function DashboardChartPanel({ dashboard }: { dashboard: AdminDashboard }) {
+  void dashboard
+
   return (
-    <div className="flex items-start gap-3 rounded-md border border-border p-3">
-      <CheckCircle2
-        aria-hidden="true"
-        className={cn('mt-0.5 size-4', complete ? 'text-primary' : 'text-muted-foreground')}
-      />
-      <div className="min-w-0">
-        <p className="text-sm font-semibold">{label}</p>
-        <p className="text-sm text-muted-foreground">{value}</p>
+    <Card className="consoleChartPanel">
+      <CardHeader className="flex-row items-start justify-between gap-3 p-5">
+        <div>
+          <CardTitle>Daily active users</CardTitle>
+          <div className="mt-6 flex items-baseline gap-2">
+            <span className="text-2xl font-semibold leading-none">--</span>
+            <span className="text-sm font-medium text-muted-foreground">Pending activity data</span>
+          </div>
+        </div>
+        <Button type="button" variant="secondary">
+          {formatDashboardDate(new Date())}
+          <CalendarDays data-icon="inline-end" />
+        </Button>
+      </CardHeader>
+      <CardContent className="grid gap-6 p-5 pt-0">
+        <div aria-label="Daily active users trend" className="consoleChartCanvas" role="img">
+          <div className="consoleChartAxis" />
+          <div className="consoleChartAxis" />
+          <div className="consoleChartAxis" />
+          <div className="consoleChartAxis" />
+          <div className="consoleChartLine" />
+          <div className="consoleChartLabels" aria-hidden="true">
+            {dashboardChartLabels(new Date()).map((label) => (
+              <span key={label}>{label}</span>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <DashboardActivityCard label="Weekly active users" />
+          <DashboardActivityCard label="Monthly active users" />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function DashboardActivityCard({ label }: { label: string }) {
+  return (
+    <div className="consoleActivityCard">
+      <p className="text-sm font-semibold">{label}</p>
+      <div className="mt-8 flex items-baseline justify-between gap-3">
+        <span className="text-2xl font-semibold leading-none">--</span>
+        <span className="text-sm font-medium text-muted-foreground">Pending</span>
       </div>
     </div>
   )
+}
+
+function formatDashboardDate(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function dashboardChartLabels(date: Date) {
+  return Array.from({ length: 8 }, (_, index) => {
+    const labelDate = new Date(date)
+    labelDate.setDate(date.getDate() - (7 - index) * 4)
+    const month = String(labelDate.getMonth() + 1).padStart(2, '0')
+    const day = String(labelDate.getDate()).padStart(2, '0')
+    return `${month}-${day}`
+  })
 }
 
 function SetupChecklist({ items, title }: { items: ManagementReadinessItem[]; title: string }) {
@@ -5023,35 +4907,6 @@ function SetupChecklist({ items, title }: { items: ManagementReadinessItem[]; ti
         })}
       </div>
     </section>
-  )
-}
-
-function DashboardListCard({
-  children,
-  description,
-  empty,
-  title,
-}: {
-  children: ReactNode
-  description: string
-  empty: string
-  title: string
-}) {
-  const hasRows = Array.isArray(children) ? children.length > 0 : Boolean(children)
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-2">
-        {hasRows ? (
-          children
-        ) : (
-          <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">{empty}</p>
-        )}
-      </CardContent>
-    </Card>
   )
 }
 
@@ -5143,18 +4998,6 @@ function SummaryRow({ meta, status, title }: { meta: string; status: ReactNode; 
         <p className="truncate text-xs text-muted-foreground">{meta}</p>
       </div>
       {status}
-    </div>
-  )
-}
-
-function HealthRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-md border border-border p-3">
-      <span className="grid size-8 place-items-center rounded-md bg-muted text-muted-foreground">{icon}</span>
-      <div className="min-w-0">
-        <p className="text-sm font-semibold">{label}</p>
-        <p className="truncate text-sm text-muted-foreground">{value}</p>
-      </div>
     </div>
   )
 }

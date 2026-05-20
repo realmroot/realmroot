@@ -65,10 +65,10 @@ const consoleRoutes = [
   {
     name: 'dashboard',
     path: '/console/dashboard',
-    heading: 'Tenant health',
+    heading: 'Dashboard',
     kind: 'shell',
     journeyId: 'admin-dashboard',
-    sentinel: 'Setup progress',
+    sentinel: 'Daily active users',
     activeNav: 'Dashboard',
   },
   {
@@ -879,10 +879,10 @@ const journeyAssertions: Record<
     suite: 'admin management journeys',
     assert: async ({ page }) => {
       await page.goto('/console')
-      await expect(page.getByRole('heading', { name: 'Tenant health' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
       await page.goto('/console/onboarding')
       await expect(page).toHaveURL(/\/console$/)
-      await expect(page.getByRole('heading', { name: 'Tenant health' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
     },
   },
   'admin-setup-gate': {
@@ -939,7 +939,7 @@ const journeyAssertions: Record<
       await expect(consoleNav.getByRole('link', { name: 'Audit logs' })).toHaveCount(0)
 
       for (const item of [
-        { label: 'Dashboard', href: '/console', heading: 'Tenant health' },
+        { label: 'Dashboard', href: '/console', heading: 'Dashboard' },
         { label: 'Applications', href: '/console/applications', heading: 'Applications' },
         {
           label: 'Sign-in & account',
@@ -1756,7 +1756,8 @@ async function expectConsoleRouteContent(page: Page, route: ConsoleVisualRoute) 
   await expect(main.getByRole('heading', { name: route.heading, level: 1 })).toBeVisible()
   await expect(main.getByText(route.sentinel, { exact: false }).first()).toBeVisible()
   await expect(main.getByRole('heading', { level: 1 })).toHaveCount(1)
-  if (route.name !== 'dashboard') await expect(main.getByText('Setup progress')).toHaveCount(0)
+  await expect(main.getByText('Setup progress')).toHaveCount(0)
+  await expect(main.getByText('Private cloud')).toHaveCount(0)
 
   if (route.activeNav) {
     const consoleNav = page.getByRole('navigation', { name: 'Console' })
