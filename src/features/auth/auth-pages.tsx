@@ -624,7 +624,7 @@ function SocialButtons({
           <span aria-hidden="true" className="providerIcon">
             {providerIconLabel(provider)}
           </span>
-          Continue with {provider.displayName}
+          <span className="socialButtonText">Continue with {provider.displayName}</span>
         </button>
       ))}
     </fieldset>

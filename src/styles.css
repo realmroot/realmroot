@@ -350,6 +350,8 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .authContent {
+  display: grid;
+  width: 100%;
   margin-top: 14px;
 }
 
@@ -509,6 +511,11 @@ main:not(.shell):not(.authShell) h1 {
   margin: 0 0 6px;
   font-size: 15px;
   line-height: 1.3;
+}
+
+.authCardHeader {
+  width: 100%;
+  text-align: left;
 }
 
 .authCardHeader p {
@@ -967,13 +974,17 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .socialButton {
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
   align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  padding: 8px 10px;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
+  background: #ffffff;
   color: #27272a;
   font-size: 14px;
   font-weight: 600;
@@ -987,18 +998,33 @@ main:not(.shell):not(.authShell) h1 {
 .providerIcon {
   display: inline-grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--line);
   border-radius: 6px;
+  background: color-mix(in srgb, var(--brand-background) 26%, #ffffff);
   color: var(--muted);
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
 }
 
+.socialButtonText {
+  min-width: 0;
+  text-align: center;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .authLinks {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  column-gap: 18px;
+  row-gap: 10px;
 }
 
 .authLinks a,
@@ -1794,7 +1820,6 @@ main:not(.shell):not(.authShell) h1 {
 
   .segmented,
   .consentStack .buttonRow,
-  .authLinks,
   .accountNav {
     grid-template-columns: 1fr;
   }
