@@ -99,7 +99,7 @@ const consoleRoutes = [
     heading: 'Branding',
     kind: 'settings',
     journeyId: 'admin-branding-settings',
-    sentinel: 'Hosted sign-in preview',
+    sentinel: 'Live preview',
     activeNav: 'Sign-in & account',
   },
   {
@@ -127,24 +127,6 @@ const consoleRoutes = [
     kind: 'settings',
     journeyId: 'admin-sign-in-experience-routes',
     sentinel: 'Language and messages',
-    activeNav: 'Sign-in & account',
-  },
-  {
-    name: 'desktop-sign-in-preview',
-    path: '/console/sign-in-experience/desktop',
-    heading: 'Desktop',
-    kind: 'settings',
-    journeyId: 'admin-sign-in-experience-routes',
-    sentinel: 'Desktop preview',
-    activeNav: 'Sign-in & account',
-  },
-  {
-    name: 'mobile-sign-in-preview',
-    path: '/console/sign-in-experience/mobile',
-    heading: 'Mobile',
-    kind: 'settings',
-    journeyId: 'admin-sign-in-experience-routes',
-    sentinel: 'Mobile preview',
     activeNav: 'Sign-in & account',
   },
   {
@@ -1310,8 +1292,6 @@ const journeyAssertions: Record<
         { path: '/console/sign-in-experience/collect-user-profile', heading: 'Collect user profile' },
         { path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
         { path: '/console/sign-in-experience/content', heading: 'Content' },
-        { path: '/console/sign-in-experience/desktop', heading: 'Desktop' },
-        { path: '/console/sign-in-experience/mobile', heading: 'Mobile' },
       ]) {
         await page.goto(route.path)
         await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`))
@@ -1327,8 +1307,6 @@ const journeyAssertions: Record<
         },
         { tab: 'Account Center', path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
         { tab: 'Content', path: '/console/sign-in-experience/content', heading: 'Content' },
-        { tab: 'Desktop', path: '/console/sign-in-experience/desktop', heading: 'Desktop' },
-        { tab: 'Mobile', path: '/console/sign-in-experience/mobile', heading: 'Mobile' },
         {
           tab: 'Sign-up and sign-in',
           path: '/console/sign-in-experience/sign-up-and-sign-in',
@@ -1340,6 +1318,22 @@ const journeyAssertions: Record<
         await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible()
         await expect(page.getByRole('link', { exact: true, name: route.tab })).toHaveAttribute('aria-current', 'page')
       }
+
+      await expect(page.getByRole('link', { exact: true, name: 'Desktop' })).toHaveCount(0)
+      await expect(page.getByRole('link', { exact: true, name: 'Mobile' })).toHaveCount(0)
+
+      for (const path of [
+        '/console/sign-in-experience/sign-up-and-sign-in',
+        '/console/sign-in-experience/branding',
+        '/console/sign-in-experience/content',
+      ]) {
+        await page.goto(path)
+        await expect(page.getByLabel('Hosted authentication preview')).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Hosted sign-in' })).toBeVisible()
+      }
+
+      await page.getByRole('tab', { name: 'Mobile' }).click()
+      await expect(page.getByRole('tab', { name: 'Mobile' })).toHaveAttribute('aria-selected', 'true')
     },
   },
   'admin-content-settings': {
@@ -1540,7 +1534,7 @@ const journeyAssertions: Record<
       await page.goto('/console/sign-in-experience/branding')
       const main = page.getByRole('main')
       await expect(page.getByRole('heading', { name: 'Branding' })).toBeVisible()
-      await expect(main.getByText('Hosted sign-in preview')).toBeVisible()
+      await expect(main.getByText('Live preview')).toBeVisible()
       await page.getByLabel('Upload branding logo').setInputFiles({
         name: 'logo.png',
         mimeType: 'image/png',

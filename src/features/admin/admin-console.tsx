@@ -42,6 +42,7 @@ import {
   Eye,
   Globe2,
   ImageUp,
+  KeyRound,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -50,7 +51,7 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react'
-import { type CSSProperties, createElement, type FormEvent, type ReactNode, useEffect, useState } from 'react'
+import { type CSSProperties, createElement, type FormEvent, type ReactNode, useEffect, useId, useState } from 'react'
 import type { z } from 'zod'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -176,6 +177,25 @@ type ApiResourceDetailSection = 'settings' | 'scopes' | 'permissions'
 type OrganizationTemplateSection = 'organization-roles' | 'organization-permissions'
 type WebhooksSection = 'endpoints' | 'requests'
 type SignInPreviewSurface = 'desktop' | 'mobile'
+type HostedAuthPreviewState = {
+  backgroundColor?: string
+  customCss?: string
+  description: string
+  emailOtpEnabled?: boolean
+  headline: string
+  identifierFirst?: boolean
+  logoUrl?: string
+  magicLinkEnabled?: boolean
+  passwordEnabled?: boolean
+  primaryColor?: string
+  privacyUri?: string
+  productName: string
+  signupEnabled?: boolean
+  socialLoginEnabled?: boolean
+  supportEmail?: string
+  termsUri?: string
+  usernameEnabled?: boolean
+}
 
 const applicationTypeOptions = [
   {
@@ -1974,6 +1994,7 @@ export function ConnectorsPage() {
 
 export function SignInSettingsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
+  const brandingQuery = useQuery({ queryKey: adminQueryKeys.branding, queryFn: getBrandingSettings })
   const queryClient = useQueryClient()
   const [form, setForm] = useState({
     passwordEnabled: true,
@@ -2050,202 +2071,230 @@ export function SignInSettingsPage() {
     updateMutation.mutate(payload.data)
   }
 
+  const preview: HostedAuthPreviewState = {
+    productName: form.productName,
+    headline: form.headline,
+    description: form.description,
+    logoUrl: brandingQuery.data?.branding?.logoUrl ?? undefined,
+    primaryColor: brandingQuery.data?.branding?.primaryColor ?? undefined,
+    backgroundColor: brandingQuery.data?.branding?.backgroundColor ?? undefined,
+    customCss: brandingQuery.data?.branding?.customCss ?? undefined,
+    passwordEnabled: form.passwordEnabled,
+    signupEnabled: form.signupEnabled,
+    socialLoginEnabled: form.socialLoginEnabled,
+    identifierFirst: form.identifierFirst,
+    usernameEnabled: query.data?.signIn.usernameEnabled,
+    magicLinkEnabled: query.data?.signIn.magicLinkEnabled,
+    emailOtpEnabled: query.data?.signIn.emailOtpEnabled,
+    termsUri: form.termsUri,
+    privacyUri: form.privacyUri,
+    supportEmail: form.supportEmail,
+  }
+
   return (
     <SignInExperiencePage
       activeTab="sign-up-and-sign-in"
       description="Configure identifiers, authentication method visibility, recovery behavior, and hosted auth defaults."
-      error={query.error}
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
+      error={query.error ?? brandingQuery.error}
+      loading={query.isLoading || brandingQuery.isLoading}
+      onRetry={() => {
+        void query.refetch()
+        void brandingQuery.refetch()
+      }}
       title="Sign-up and sign-in"
     >
       {query.data ? (
-        <form className="grid gap-4" onSubmit={onSubmit}>
-          <SettingsSections>
-            <SettingsSection
-              title="Sign-up"
-              description="Control self-service registration and the identifiers collected by hosted auth."
-            >
-              <div className="grid gap-3">
-                <SwitchRow
-                  checked={form.signupEnabled}
-                  label="Registration"
-                  onCheckedChange={(signupEnabled) => setForm((value) => ({ ...value, signupEnabled }))}
-                />
-                <SettingRow
-                  label="Sign-up identifiers"
-                  value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
-                />
-                <SettingRow
-                  label="Sign-up password requirement"
-                  value={form.passwordEnabled ? 'Password required' : 'Unavailable'}
-                />
-                <UnavailableSetting
-                  label="Custom profile collection"
-                  value="Configure supported profile fields on the Collect user profile tab."
-                />
-              </div>
-            </SettingsSection>
-            <SettingsSection
-              title="Sign-in methods"
-              description="Control which hosted sign-in options are visible at runtime."
-            >
-              <div className="grid gap-3">
-                <SwitchRow
-                  checked={form.passwordEnabled}
-                  label="Password sign-in"
-                  onCheckedChange={(passwordEnabled) => setForm((value) => ({ ...value, passwordEnabled }))}
-                />
-                <SwitchRow
-                  checked={form.socialLoginEnabled}
-                  label="Social sign-in"
-                  onCheckedChange={(socialLoginEnabled) => setForm((value) => ({ ...value, socialLoginEnabled }))}
-                />
-                <SwitchRow
-                  checked={form.identifierFirst}
-                  label="Identifier-first flow"
-                  onCheckedChange={(identifierFirst) => setForm((value) => ({ ...value, identifierFirst }))}
-                />
-                <SettingRow
-                  label="Sign-in identifiers"
-                  value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
-                />
-                <SettingRow
-                  label="Magic link"
-                  value={query.data.signIn.magicLinkEnabled ? 'Available from runtime' : 'Unavailable'}
-                />
-                <SettingRow
-                  label="Email OTP"
-                  value={query.data.signIn.emailOtpEnabled ? 'Available from runtime' : 'Unavailable'}
-                />
-                <SwitchRow checked={false} disabled label="Passkey sign-in" />
-                <UnavailableSetting
-                  label="Social provider setup"
-                  value="Add enabled identity providers from Connectors before enabling social sign-in."
-                />
-              </div>
-            </SettingsSection>
-            <SettingsSection
-              title="Recovery and redirects"
-              description="Public defaults exposed through configz and hosted recovery flows."
-            >
-              <div className="formStack">
-                <Field label="Default application ID">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, applicationId: event.target.value }))}
-                    value={form.applicationId}
-                  />
-                </Field>
-                <Field label="Unknown-session redirect URL">
-                  <TextInput
-                    aria-label="Default redirect URI"
-                    onChange={(event) => setForm((value) => ({ ...value, redirectUri: event.target.value }))}
-                    type="url"
-                    value={form.redirectUri}
-                  />
-                </Field>
-                <SettingRow
-                  label="Forgot-password verification"
-                  value={query.data.signIn.emailOtpEnabled ? 'Email OTP available' : 'Email link'}
-                />
-                <UnavailableSetting
-                  label="Additional recovery methods"
-                  value="No additional verification methods are exposed by the current config model."
-                />
-                {validationError || updateMutation.errorMessage ? (
-                  <StatusBadge
-                    active={false}
-                    activeLabel=""
-                    inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
-                  />
-                ) : null}
-              </div>
-            </SettingsSection>
-            <SettingsSection
-              title="Hosted copy source"
-              description="Content is also available on the Content tab and saves through the same management boundary."
-            >
-              <div className="formStack">
-                <Field label="Product name">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
-                    required
-                    value={form.productName}
-                  />
-                </Field>
-                <Field label="Headline">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
-                    required
-                    value={form.headline}
-                  />
-                </Field>
-                <Field label="Description">
-                  <TextArea
-                    onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
-                    required
-                    value={form.description}
-                  />
-                </Field>
-                <Field label="Terms URL">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
-                    type="url"
-                    value={form.termsUri}
-                  />
-                </Field>
-                <Field label="Privacy URL">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
-                    type="url"
-                    value={form.privacyUri}
-                  />
-                </Field>
-                <Field label="Support email">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
-                    type="email"
-                    value={form.supportEmail}
-                  />
-                </Field>
-              </div>
-            </SettingsSection>
-            <SettingsSection
-              title="Changes"
-              description="Save updates through the management boundary or restore the loaded values."
-            >
-              <ConsoleActionBar>
-                <Button disabled={updateMutation.isPending} type="submit">
-                  <Save data-icon="inline-start" />
-                  Save sign-in settings
-                </Button>
-                <Button
-                  onClick={() => {
-                    setForm({
-                      passwordEnabled: query.data.signIn.passwordEnabled,
-                      signupEnabled: query.data.signIn.signupEnabled,
-                      socialLoginEnabled: query.data.signIn.socialLoginEnabled,
-                      identifierFirst: query.data.signIn.identifierFirst,
-                      applicationId: query.data.defaults.applicationId ?? '',
-                      redirectUri: query.data.defaults.redirectUri ?? '',
-                      termsUri: query.data.links.termsUri ?? '',
-                      privacyUri: query.data.links.privacyUri ?? '',
-                      supportEmail: query.data.links.supportEmail ?? '',
-                      productName: query.data.copy.productName,
-                      headline: query.data.copy.headline,
-                      description: query.data.copy.description,
-                    })
-                    setValidationError(null)
-                  }}
-                  type="button"
-                  variant="ghost"
+        <form onSubmit={onSubmit}>
+          <SignInExperienceEditorLayout
+            preview={<HostedAuthPreview preview={preview} />}
+            settings={
+              <SettingsSections>
+                <SettingsSection
+                  title="Sign-up"
+                  description="Control self-service registration and the identifiers collected by hosted auth."
                 >
-                  <Undo2 data-icon="inline-start" />
-                  Discard
-                </Button>
-              </ConsoleActionBar>
-            </SettingsSection>
-          </SettingsSections>
+                  <div className="grid gap-3">
+                    <SwitchRow
+                      checked={form.signupEnabled}
+                      label="Registration"
+                      onCheckedChange={(signupEnabled) => setForm((value) => ({ ...value, signupEnabled }))}
+                    />
+                    <SettingRow
+                      label="Sign-up identifiers"
+                      value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
+                    />
+                    <SettingRow
+                      label="Sign-up password requirement"
+                      value={form.passwordEnabled ? 'Password required' : 'Unavailable'}
+                    />
+                    <UnavailableSetting
+                      label="Custom profile collection"
+                      value="Configure supported profile fields on the Collect user profile tab."
+                    />
+                  </div>
+                </SettingsSection>
+                <SettingsSection
+                  title="Sign-in methods"
+                  description="Control which hosted sign-in options are visible at runtime."
+                >
+                  <div className="grid gap-3">
+                    <SwitchRow
+                      checked={form.passwordEnabled}
+                      label="Password sign-in"
+                      onCheckedChange={(passwordEnabled) => setForm((value) => ({ ...value, passwordEnabled }))}
+                    />
+                    <SwitchRow
+                      checked={form.socialLoginEnabled}
+                      label="Social sign-in"
+                      onCheckedChange={(socialLoginEnabled) => setForm((value) => ({ ...value, socialLoginEnabled }))}
+                    />
+                    <SwitchRow
+                      checked={form.identifierFirst}
+                      label="Identifier-first flow"
+                      onCheckedChange={(identifierFirst) => setForm((value) => ({ ...value, identifierFirst }))}
+                    />
+                    <SettingRow
+                      label="Sign-in identifiers"
+                      value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
+                    />
+                    <SettingRow
+                      label="Magic link"
+                      value={query.data.signIn.magicLinkEnabled ? 'Available from runtime' : 'Unavailable'}
+                    />
+                    <SettingRow
+                      label="Email OTP"
+                      value={query.data.signIn.emailOtpEnabled ? 'Available from runtime' : 'Unavailable'}
+                    />
+                    <SwitchRow checked={false} disabled label="Passkey sign-in" />
+                    <UnavailableSetting
+                      label="Social provider setup"
+                      value="Add enabled identity providers from Connectors before enabling social sign-in."
+                    />
+                  </div>
+                </SettingsSection>
+                <SettingsSection
+                  title="Recovery and redirects"
+                  description="Public defaults exposed through configz and hosted recovery flows."
+                >
+                  <div className="formStack">
+                    <Field label="Default application ID">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, applicationId: event.target.value }))}
+                        value={form.applicationId}
+                      />
+                    </Field>
+                    <Field label="Unknown-session redirect URL">
+                      <TextInput
+                        aria-label="Default redirect URI"
+                        onChange={(event) => setForm((value) => ({ ...value, redirectUri: event.target.value }))}
+                        type="url"
+                        value={form.redirectUri}
+                      />
+                    </Field>
+                    <SettingRow
+                      label="Forgot-password verification"
+                      value={query.data.signIn.emailOtpEnabled ? 'Email OTP available' : 'Email link'}
+                    />
+                    <UnavailableSetting
+                      label="Additional recovery methods"
+                      value="No additional verification methods are exposed by the current config model."
+                    />
+                    {validationError || updateMutation.errorMessage ? (
+                      <StatusBadge
+                        active={false}
+                        activeLabel=""
+                        inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
+                      />
+                    ) : null}
+                  </div>
+                </SettingsSection>
+                <SettingsSection
+                  title="Hosted copy source"
+                  description="Content is also available on the Content tab and saves through the same management boundary."
+                >
+                  <div className="formStack">
+                    <Field label="Product name">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
+                        required
+                        value={form.productName}
+                      />
+                    </Field>
+                    <Field label="Headline">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
+                        required
+                        value={form.headline}
+                      />
+                    </Field>
+                    <Field label="Description">
+                      <TextArea
+                        onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
+                        required
+                        value={form.description}
+                      />
+                    </Field>
+                    <Field label="Terms URL">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
+                        type="url"
+                        value={form.termsUri}
+                      />
+                    </Field>
+                    <Field label="Privacy URL">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
+                        type="url"
+                        value={form.privacyUri}
+                      />
+                    </Field>
+                    <Field label="Support email">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
+                        type="email"
+                        value={form.supportEmail}
+                      />
+                    </Field>
+                  </div>
+                </SettingsSection>
+                <SettingsSection
+                  title="Changes"
+                  description="Save updates through the management boundary or restore the loaded values."
+                >
+                  <ConsoleActionBar>
+                    <Button disabled={updateMutation.isPending} type="submit">
+                      <Save data-icon="inline-start" />
+                      Save sign-in settings
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setForm({
+                          passwordEnabled: query.data.signIn.passwordEnabled,
+                          signupEnabled: query.data.signIn.signupEnabled,
+                          socialLoginEnabled: query.data.signIn.socialLoginEnabled,
+                          identifierFirst: query.data.signIn.identifierFirst,
+                          applicationId: query.data.defaults.applicationId ?? '',
+                          redirectUri: query.data.defaults.redirectUri ?? '',
+                          termsUri: query.data.links.termsUri ?? '',
+                          privacyUri: query.data.links.privacyUri ?? '',
+                          supportEmail: query.data.links.supportEmail ?? '',
+                          productName: query.data.copy.productName,
+                          headline: query.data.copy.headline,
+                          description: query.data.copy.description,
+                        })
+                        setValidationError(null)
+                      }}
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Undo2 data-icon="inline-start" />
+                      Discard
+                    </Button>
+                  </ConsoleActionBar>
+                </SettingsSection>
+              </SettingsSections>
+            }
+          />
         </form>
       ) : null}
     </SignInExperiencePage>
@@ -3500,8 +3549,8 @@ export function ApiResourceDetailPage({
 
 export function BrandingPage() {
   const query = useQuery({ queryKey: adminQueryKeys.branding, queryFn: getBrandingSettings })
+  const signInQuery = useQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
   const queryClient = useQueryClient()
-  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [form, setForm] = useState({
     logoUrl: '',
     faviconUrl: '',
@@ -3575,164 +3624,145 @@ export function BrandingPage() {
     updateMutation.mutate(payload.data)
   }
 
-  const previewStyle = {
-    '--brand-primary': form.primaryColor,
-    '--brand-background': form.backgroundColor,
-    ...customCssProperties(form.customCss),
-  } as CSSProperties
+  const preview: HostedAuthPreviewState = {
+    productName: form.productName,
+    headline: form.headline,
+    description: form.description,
+    logoUrl: form.logoUrl,
+    primaryColor: form.primaryColor,
+    backgroundColor: form.backgroundColor,
+    customCss: form.customCss,
+    passwordEnabled: signInQuery.data?.signIn?.passwordEnabled,
+    signupEnabled: signInQuery.data?.signIn?.signupEnabled,
+    socialLoginEnabled: signInQuery.data?.signIn?.socialLoginEnabled,
+    identifierFirst: signInQuery.data?.signIn?.identifierFirst,
+    usernameEnabled: signInQuery.data?.signIn?.usernameEnabled,
+    magicLinkEnabled: signInQuery.data?.signIn?.magicLinkEnabled,
+    emailOtpEnabled: signInQuery.data?.signIn?.emailOtpEnabled,
+  }
 
   return (
     <SignInExperiencePage
       activeTab="branding"
       title="Branding"
       description="Configure hosted sign-in and Account Center brand assets, colors, and constrained theme variables."
-      error={query.error}
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
+      error={query.error ?? signInQuery.error}
+      loading={query.isLoading || signInQuery.isLoading}
+      onRetry={() => {
+        void query.refetch()
+        void signInQuery.refetch()
+      }}
     >
       {query.data ? (
-        <form className="grid gap-4" onSubmit={onSubmit}>
-          <SettingsSections>
-            <SettingsSection
-              title="Brand settings"
-              description="External asset URLs must use HTTPS. Custom CSS accepts --auth-* declarations only."
-            >
-              <div className="formStack">
-                <Field label="Product name">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
-                    required
-                    value={form.productName}
-                  />
-                </Field>
-                <Field label="Logo URL">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, logoUrl: event.target.value }))}
-                    type="url"
-                    value={form.logoUrl}
-                  />
-                </Field>
-                <AssetUploadControl
-                  accept="image/png,image/jpeg,image/webp"
-                  label="Upload branding logo"
-                  onFile={(file) => logoMutation.mutate(file)}
-                  previewUrl={form.logoUrl || null}
-                />
-                <Field label="Favicon URL">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, faviconUrl: event.target.value }))}
-                    type="url"
-                    value={form.faviconUrl}
-                  />
-                </Field>
-                <AssetUploadControl
-                  accept="image/png,image/webp,image/x-icon,image/vnd.microsoft.icon"
-                  label="Upload favicon"
-                  onFile={(file) => faviconMutation.mutate(file)}
-                  previewUrl={form.faviconUrl || null}
-                />
-                <Field label="Primary color">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, primaryColor: event.target.value }))}
-                    type="color"
-                    value={form.primaryColor}
-                  />
-                </Field>
-                <Field label="Background color">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, backgroundColor: event.target.value }))}
-                    type="color"
-                    value={form.backgroundColor}
-                  />
-                </Field>
-                <SwitchRow checked={false} disabled label="Dark mode" />
-                <Field label="Custom CSS">
-                  <TextArea
-                    onChange={(event) => setForm((value) => ({ ...value, customCss: event.target.value }))}
-                    placeholder="--auth-panel-radius: 8px;"
-                    value={form.customCss}
-                  />
-                </Field>
-                {validationError ||
-                updateMutation.errorMessage ||
-                logoMutation.errorMessage ||
-                faviconMutation.errorMessage ? (
-                  <div className="text-sm text-destructive">
-                    {validationError ??
-                      updateMutation.errorMessage ??
-                      logoMutation.errorMessage ??
-                      faviconMutation.errorMessage}
-                  </div>
-                ) : null}
-              </div>
-            </SettingsSection>
-            <SettingsSection
-              title="Hosted sign-in preview"
-              description="Preview uses the same public config consumed by hosted auth surfaces."
-            >
-              <div className="grid gap-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Viewport</span>
-                  <Tabs setValue={(value) => setPreviewMode(value as 'desktop' | 'mobile')} value={previewMode}>
-                    <TabsList aria-label="Preview viewport">
-                      <TabsTrigger value="desktop">Desktop</TabsTrigger>
-                      <TabsTrigger value="mobile">Mobile</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </div>
-                <div
-                  className={cn('brandingPreview', previewMode === 'mobile' && 'mx-auto max-w-80')}
-                  style={previewStyle}
+        <form onSubmit={onSubmit}>
+          <SignInExperienceEditorLayout
+            preview={<HostedAuthPreview preview={preview} />}
+            settings={
+              <SettingsSections>
+                <SettingsSection
+                  title="Brand settings"
+                  description="External asset URLs must use HTTPS. Custom CSS accepts --auth-* declarations only."
                 >
-                  <div className="brand">
-                    {form.logoUrl ? (
-                      <img className="brandLogo" src={form.logoUrl} alt="" width="36" height="36" />
-                    ) : (
-                      <span className="brandMark">{form.productName.slice(0, 1).toUpperCase()}</span>
-                    )}
-                    <span>{form.productName}</span>
+                  <div className="formStack">
+                    <Field label="Product name">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
+                        required
+                        value={form.productName}
+                      />
+                    </Field>
+                    <Field label="Logo URL">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, logoUrl: event.target.value }))}
+                        type="url"
+                        value={form.logoUrl}
+                      />
+                    </Field>
+                    <AssetUploadControl
+                      accept="image/png,image/jpeg,image/webp"
+                      label="Upload branding logo"
+                      onFile={(file) => logoMutation.mutate(file)}
+                      previewUrl={form.logoUrl || null}
+                    />
+                    <Field label="Favicon URL">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, faviconUrl: event.target.value }))}
+                        type="url"
+                        value={form.faviconUrl}
+                      />
+                    </Field>
+                    <AssetUploadControl
+                      accept="image/png,image/webp,image/x-icon,image/vnd.microsoft.icon"
+                      label="Upload favicon"
+                      onFile={(file) => faviconMutation.mutate(file)}
+                      previewUrl={form.faviconUrl || null}
+                    />
+                    <Field label="Primary color">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, primaryColor: event.target.value }))}
+                        type="color"
+                        value={form.primaryColor}
+                      />
+                    </Field>
+                    <Field label="Background color">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, backgroundColor: event.target.value }))}
+                        type="color"
+                        value={form.backgroundColor}
+                      />
+                    </Field>
+                    <SwitchRow checked={false} disabled label="Dark mode" />
+                    <Field label="Custom CSS">
+                      <TextArea
+                        onChange={(event) => setForm((value) => ({ ...value, customCss: event.target.value }))}
+                        placeholder="--auth-panel-radius: 8px;"
+                        value={form.customCss}
+                      />
+                    </Field>
+                    {validationError ||
+                    updateMutation.errorMessage ||
+                    logoMutation.errorMessage ||
+                    faviconMutation.errorMessage ? (
+                      <div className="text-sm text-destructive">
+                        {validationError ??
+                          updateMutation.errorMessage ??
+                          logoMutation.errorMessage ??
+                          faviconMutation.errorMessage}
+                      </div>
+                    ) : null}
                   </div>
-                  <div>
-                    <p className="eyebrow">Hosted sign-in</p>
-                    <h2>{form.headline}</h2>
-                    <p>{form.description}</p>
-                  </div>
-                  <Button type="button">
-                    <Eye data-icon="inline-start" />
-                    Live preview
-                  </Button>
-                </div>
-              </div>
-            </SettingsSection>
-            <SettingsSection title="Changes" description="Save brand updates or restore the loaded values.">
-              <ConsoleActionBar>
-                <Button disabled={updateMutation.isPending} type="submit">
-                  <Save data-icon="inline-start" />
-                  Save branding
-                </Button>
-                <Button
-                  onClick={() => {
-                    setForm({
-                      logoUrl: query.data.branding.logoUrl ?? '',
-                      faviconUrl: query.data.branding.faviconUrl ?? '',
-                      primaryColor: query.data.branding.primaryColor ?? '#b42318',
-                      backgroundColor: query.data.branding.backgroundColor ?? '#f7f3ee',
-                      customCss: query.data.branding.customCss ?? '',
-                      productName: query.data.copy.productName,
-                      headline: query.data.copy.headline,
-                      description: query.data.copy.description,
-                    })
-                    setValidationError(null)
-                  }}
-                  type="button"
-                  variant="ghost"
-                >
-                  <Undo2 data-icon="inline-start" />
-                  Discard
-                </Button>
-              </ConsoleActionBar>
-            </SettingsSection>
-          </SettingsSections>
+                </SettingsSection>
+                <SettingsSection title="Changes" description="Save brand updates or restore the loaded values.">
+                  <ConsoleActionBar>
+                    <Button disabled={updateMutation.isPending} type="submit">
+                      <Save data-icon="inline-start" />
+                      Save branding
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setForm({
+                          logoUrl: query.data.branding.logoUrl ?? '',
+                          faviconUrl: query.data.branding.faviconUrl ?? '',
+                          primaryColor: query.data.branding.primaryColor ?? '#b42318',
+                          backgroundColor: query.data.branding.backgroundColor ?? '#f7f3ee',
+                          customCss: query.data.branding.customCss ?? '',
+                          productName: query.data.copy.productName,
+                          headline: query.data.copy.headline,
+                          description: query.data.copy.description,
+                        })
+                        setValidationError(null)
+                      }}
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Undo2 data-icon="inline-start" />
+                      Discard
+                    </Button>
+                  </ConsoleActionBar>
+                </SettingsSection>
+              </SettingsSections>
+            }
+          />
         </form>
       ) : null}
     </SignInExperiencePage>
@@ -3824,6 +3854,7 @@ export function AccountCenterSettingsPage() {
 
 export function ContentSettingsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
+  const brandingQuery = useQuery({ queryKey: adminQueryKeys.branding, queryFn: getBrandingSettings })
   const queryClient = useQueryClient()
   const [form, setForm] = useState({
     productName: '',
@@ -3876,194 +3907,150 @@ export function ContentSettingsPage() {
     updateMutation.mutate(payload.data)
   }
 
+  const preview: HostedAuthPreviewState = {
+    productName: form.productName,
+    headline: form.headline,
+    description: form.description,
+    logoUrl: brandingQuery.data?.branding?.logoUrl ?? undefined,
+    primaryColor: brandingQuery.data?.branding?.primaryColor ?? undefined,
+    backgroundColor: brandingQuery.data?.branding?.backgroundColor ?? undefined,
+    customCss: brandingQuery.data?.branding?.customCss ?? undefined,
+    passwordEnabled: query.data?.signIn.passwordEnabled,
+    signupEnabled: query.data?.signIn.signupEnabled,
+    socialLoginEnabled: query.data?.signIn.socialLoginEnabled,
+    identifierFirst: query.data?.signIn.identifierFirst,
+    usernameEnabled: query.data?.signIn.usernameEnabled,
+    magicLinkEnabled: query.data?.signIn.magicLinkEnabled,
+    emailOtpEnabled: query.data?.signIn.emailOtpEnabled,
+    termsUri: form.termsUri,
+    privacyUri: form.privacyUri,
+    supportEmail: form.supportEmail,
+  }
+
   return (
     <SignInExperiencePage
       activeTab="content"
       description="Manage hosted authentication language, page messages, and legal links."
-      error={query.error}
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
+      error={query.error ?? brandingQuery.error}
+      loading={query.isLoading || brandingQuery.isLoading}
+      onRetry={() => {
+        void query.refetch()
+        void brandingQuery.refetch()
+      }}
       title="Content"
     >
       {query.data ? (
-        <form className="grid gap-4" onSubmit={onSubmit}>
-          <SettingsSections>
-            <SettingsSection
-              title="Language and messages"
-              description="These strings are exposed through public hosted auth config."
-            >
-              <div className="formStack">
-                <Field label="Language">
-                  <SelectInput disabled value="en">
-                    <option value="en">English</option>
-                  </SelectInput>
-                </Field>
-                <Field label="Product name">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
-                    required
-                    value={form.productName}
-                  />
-                </Field>
-                <Field label="Sign-in message">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
-                    required
-                    value={form.headline}
-                  />
-                </Field>
-                <Field label="Sign-up message">
-                  <TextArea
-                    onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
-                    required
-                    value={form.description}
-                  />
-                </Field>
-                <UnavailableSetting
-                  label="Password message"
-                  value="No separate password message field is exposed by configz."
-                />
-                <UnavailableSetting
-                  label="Account message"
-                  value="No separate account message field is exposed by configz."
-                />
-              </div>
-            </SettingsSection>
-            <SettingsSection
-              title="Links"
-              description="Public legal and support links must use safe values accepted by management validation."
-            >
-              <div className="formStack">
-                <Field label="Terms URL">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
-                    type="url"
-                    value={form.termsUri}
-                  />
-                </Field>
-                <Field label="Privacy URL">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
-                    type="url"
-                    value={form.privacyUri}
-                  />
-                </Field>
-                <Field label="Support email">
-                  <TextInput
-                    onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
-                    type="email"
-                    value={form.supportEmail}
-                  />
-                </Field>
-                {validationError || updateMutation.errorMessage ? (
-                  <StatusBadge
-                    active={false}
-                    activeLabel=""
-                    inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
-                  />
-                ) : null}
-              </div>
-            </SettingsSection>
-            <SettingsSection title="Changes" description="Save hosted copy updates or restore the loaded values.">
-              <ConsoleActionBar>
-                <Button disabled={updateMutation.isPending} type="submit">
-                  <Save data-icon="inline-start" />
-                  Save content
-                </Button>
-                <Button
-                  onClick={() => {
-                    setForm({
-                      productName: query.data.copy.productName,
-                      headline: query.data.copy.headline,
-                      description: query.data.copy.description,
-                      termsUri: query.data.links.termsUri ?? '',
-                      privacyUri: query.data.links.privacyUri ?? '',
-                      supportEmail: query.data.links.supportEmail ?? '',
-                    })
-                    setValidationError(null)
-                  }}
-                  type="button"
-                  variant="ghost"
+        <form onSubmit={onSubmit}>
+          <SignInExperienceEditorLayout
+            preview={<HostedAuthPreview preview={preview} />}
+            settings={
+              <SettingsSections>
+                <SettingsSection
+                  title="Language and messages"
+                  description="These strings are exposed through public hosted auth config."
                 >
-                  <Undo2 data-icon="inline-start" />
-                  Discard
-                </Button>
-              </ConsoleActionBar>
-            </SettingsSection>
-          </SettingsSections>
+                  <div className="formStack">
+                    <Field label="Language">
+                      <SelectInput disabled value="en">
+                        <option value="en">English</option>
+                      </SelectInput>
+                    </Field>
+                    <Field label="Product name">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
+                        required
+                        value={form.productName}
+                      />
+                    </Field>
+                    <Field label="Sign-in message">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
+                        required
+                        value={form.headline}
+                      />
+                    </Field>
+                    <Field label="Sign-up message">
+                      <TextArea
+                        onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
+                        required
+                        value={form.description}
+                      />
+                    </Field>
+                    <UnavailableSetting
+                      label="Password message"
+                      value="No separate password message field is exposed by configz."
+                    />
+                    <UnavailableSetting
+                      label="Account message"
+                      value="No separate account message field is exposed by configz."
+                    />
+                  </div>
+                </SettingsSection>
+                <SettingsSection
+                  title="Links"
+                  description="Public legal and support links must use safe values accepted by management validation."
+                >
+                  <div className="formStack">
+                    <Field label="Terms URL">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
+                        type="url"
+                        value={form.termsUri}
+                      />
+                    </Field>
+                    <Field label="Privacy URL">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
+                        type="url"
+                        value={form.privacyUri}
+                      />
+                    </Field>
+                    <Field label="Support email">
+                      <TextInput
+                        onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
+                        type="email"
+                        value={form.supportEmail}
+                      />
+                    </Field>
+                    {validationError || updateMutation.errorMessage ? (
+                      <StatusBadge
+                        active={false}
+                        activeLabel=""
+                        inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
+                      />
+                    ) : null}
+                  </div>
+                </SettingsSection>
+                <SettingsSection title="Changes" description="Save hosted copy updates or restore the loaded values.">
+                  <ConsoleActionBar>
+                    <Button disabled={updateMutation.isPending} type="submit">
+                      <Save data-icon="inline-start" />
+                      Save content
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setForm({
+                          productName: query.data.copy.productName,
+                          headline: query.data.copy.headline,
+                          description: query.data.copy.description,
+                          termsUri: query.data.links.termsUri ?? '',
+                          privacyUri: query.data.links.privacyUri ?? '',
+                          supportEmail: query.data.links.supportEmail ?? '',
+                        })
+                        setValidationError(null)
+                      }}
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Undo2 data-icon="inline-start" />
+                      Discard
+                    </Button>
+                  </ConsoleActionBar>
+                </SettingsSection>
+              </SettingsSections>
+            }
+          />
         </form>
-      ) : null}
-    </SignInExperiencePage>
-  )
-}
-
-export function SignInPreviewSettingsPage({ surface }: { surface: SignInPreviewSurface }) {
-  const query = useQuery({ queryKey: adminQueryKeys.branding, queryFn: getBrandingSettings })
-  const branding = query.data?.branding
-  const title = surface === 'desktop' ? 'Desktop' : 'Mobile'
-  const previewStyle = {
-    '--brand-primary': branding?.primaryColor ?? '#b42318',
-    '--brand-background': branding?.backgroundColor ?? '#f7f3ee',
-    ...customCssProperties(branding?.customCss ?? ''),
-  } as CSSProperties
-
-  return (
-    <SignInExperiencePage
-      activeTab={surface}
-      description={`Review the hosted sign-in ${surface} presentation using current branding and content settings.`}
-      error={query.error}
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
-      title={title}
-    >
-      {query.data ? (
-        <SettingsSections>
-          <SettingsSection
-            title={`${title} preview`}
-            description="This preview reads from the same public configuration used by hosted auth."
-          >
-            <div className="grid gap-4">
-              <div
-                className={cn('brandingPreview', surface === 'mobile' ? 'mx-auto w-full max-w-80' : 'min-h-[320px]')}
-                style={previewStyle}
-              >
-                <div className="brand">
-                  {branding?.logoUrl ? (
-                    <img className="brandLogo" src={branding.logoUrl} alt="" width="36" height="36" />
-                  ) : (
-                    <span className="brandMark">{query.data.copy.productName.slice(0, 1).toUpperCase()}</span>
-                  )}
-                  <span>{query.data.copy.productName}</span>
-                </div>
-                <div>
-                  <p className="eyebrow">Hosted sign-in</p>
-                  <h2>{query.data.copy.headline}</h2>
-                  <p>{query.data.copy.description}</p>
-                </div>
-                <Button onClick={() => window.open('/sign-in', '_blank', 'noopener')} type="button">
-                  <Eye data-icon="inline-start" />
-                  Live preview
-                </Button>
-              </div>
-            </div>
-          </SettingsSection>
-          <SettingsSection
-            title={`${title} layout`}
-            description="Current hosted auth routes use one responsive surface with platform-specific viewport constraints."
-          >
-            <div className="grid gap-3">
-              <SettingRow label="Primary route" value="/sign-in" />
-              <SettingRow label="Sign-up route" value="/sign-up" />
-              <SettingRow label="Forgot password route" value="/forgot-password" />
-              <SettingRow
-                label="Viewport"
-                value={
-                  surface === 'desktop' ? 'Centered panel with constrained line length' : 'Full-width mobile panel'
-                }
-              />
-            </div>
-          </SettingsSection>
-        </SettingsSections>
       ) : null}
     </SignInExperiencePage>
   )
@@ -4522,8 +4509,6 @@ const signInExperienceTabs: SignInExperienceTab[] = [
   },
   { value: 'account-center', label: 'Account Center', href: '/console/sign-in-experience/account-center' },
   { value: 'content', label: 'Content', href: '/console/sign-in-experience/content' },
-  { value: 'desktop', label: 'Desktop', href: '/console/sign-in-experience/desktop' },
-  { value: 'mobile', label: 'Mobile', href: '/console/sign-in-experience/mobile' },
 ]
 
 function SignInExperiencePage({
@@ -4562,6 +4547,162 @@ function SignInExperiencePage({
       {children}
     </ResourcePage>
   )
+}
+
+function SignInExperienceEditorLayout({ preview, settings }: { preview: ReactNode; settings: ReactNode }) {
+  return (
+    <div className="signInExperienceLayout">
+      <div className="signInExperienceSettings">{settings}</div>
+      <aside className="signInExperiencePreviewPanel" aria-label="Hosted authentication preview">
+        {preview}
+      </aside>
+    </div>
+  )
+}
+
+function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState }) {
+  const [surface, setSurface] = useState<SignInPreviewSurface>('desktop')
+  const previewStyle = {
+    '--brand-primary': preview.primaryColor ?? '#b42318',
+    '--brand-background': preview.backgroundColor ?? '#f7f3ee',
+    ...customCssProperties(preview.customCss ?? ''),
+  } as CSSProperties
+  const productName = preview.productName || 'FlareAuth'
+  const methods = hostedAuthMethods(preview)
+  const legalLinks = [
+    preview.termsUri ? ['Terms', preview.termsUri] : null,
+    preview.privacyUri ? ['Privacy', preview.privacyUri] : null,
+    preview.supportEmail ? ['Support', `mailto:${preview.supportEmail}`] : null,
+  ].filter((link): link is [string, string] => link !== null)
+
+  return (
+    <div className="hostedPreviewShell">
+      <div className="hostedPreviewHeader">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Live preview</p>
+          <h2>Hosted sign-in</h2>
+        </div>
+        <Tabs setValue={(value) => setSurface(value as SignInPreviewSurface)} value={surface}>
+          <TabsList aria-label="Preview viewport">
+            <TabsTrigger value="desktop">Desktop</TabsTrigger>
+            <TabsTrigger value="mobile">Mobile</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      <div
+        className={cn('brandingPreview hostedAuthPreview', surface === 'mobile' && 'hostedAuthPreview-mobile')}
+        style={previewStyle}
+      >
+        <section className="hostedAuthPanel" aria-label={`${productName} hosted sign-in preview`}>
+          <div className="authBrandPanel">
+            <div className="brand brandLink">
+              <PreviewBrandMark logoUrl={preview.logoUrl} productName={productName} />
+              <span>{productName}</span>
+            </div>
+            <p className="eyebrow">Hosted sign-in</p>
+            <h2>{preview.headline || 'Sign in to continue.'}</h2>
+            <p>{preview.description || 'Use one of the enabled methods to access this application.'}</p>
+          </div>
+          <div className="authContent">
+            <div className="authCardHeader">
+              <h2>{preview.identifierFirst ? 'Enter your identifier' : 'Choose how to continue'}</h2>
+              <p>
+                {preview.identifierFirst
+                  ? 'Start with the email or username for your hosted account.'
+                  : methodHelpText(methods)}
+              </p>
+            </div>
+            {methods.length > 1 ? (
+              <div className="segmented" role="tablist" aria-label="Sign-in method preview">
+                {methods.map((method, index) => (
+                  <button className={index === 0 ? 'active' : ''} key={method} type="button">
+                    {method}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="formStack">
+              <label className="field">
+                {preview.usernameEnabled ? 'Email or username' : 'Email'}
+                <input className="textInput" readOnly type="text" value="" />
+              </label>
+              {preview.passwordEnabled !== false && !preview.identifierFirst ? (
+                <label className="field">
+                  Password
+                  <input className="textInput" readOnly type="password" value="" />
+                </label>
+              ) : null}
+              <button className="uiButton uiButton-primary w-full" type="button">
+                <KeyRound data-icon="inline-start" size={16} />
+                {preview.identifierFirst ? 'Continue' : 'Sign in'}
+              </button>
+            </div>
+            {preview.socialLoginEnabled ? (
+              <div className="socialGrid mt-3">
+                <button className="socialButton w-full" type="button">
+                  <span aria-hidden="true" className="providerIcon">
+                    ID
+                  </span>
+                  Continue with identity provider
+                </button>
+              </div>
+            ) : null}
+            {preview.signupEnabled ? <p className="hostedPreviewPrompt">No account yet? Sign up</p> : null}
+            {legalLinks.length > 0 ? (
+              <div className="authLinks">
+                {legalLinks.map(([label, href]) => (
+                  <a href={href} key={label}>
+                    {label}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <p className="authPoweredBy">Powered by {productName}</p>
+        </section>
+      </div>
+      <Button onClick={() => window.open('/sign-in', '_blank', 'noopener')} type="button" variant="secondary">
+        <Eye data-icon="inline-start" />
+        Open hosted sign-in
+      </Button>
+    </div>
+  )
+}
+
+function PreviewBrandMark({ logoUrl, productName }: { logoUrl?: string | null; productName: string }) {
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null)
+  const brandInitial = productName.trim().slice(0, 1).toUpperCase() || 'F'
+  const showLogo = Boolean(logoUrl && failedLogoUrl !== logoUrl)
+
+  if (showLogo && logoUrl) {
+    return (
+      <img
+        className="brandLogo"
+        src={logoUrl}
+        alt=""
+        width="36"
+        height="36"
+        onError={() => setFailedLogoUrl(logoUrl)}
+      />
+    )
+  }
+
+  return <span className="brandMark">{brandInitial}</span>
+}
+
+function hostedAuthMethods(preview: HostedAuthPreviewState) {
+  const methods = [
+    preview.passwordEnabled === false ? null : 'Password',
+    preview.magicLinkEnabled ? 'Magic link' : null,
+    preview.emailOtpEnabled ? 'Email OTP' : null,
+  ].filter((method): method is string => method !== null)
+  return methods.length > 0 ? methods : ['Unavailable']
+}
+
+function methodHelpText(methods: string[]) {
+  if (methods.length === 1 && methods[0] === 'Unavailable') return 'No sign-in methods are enabled.'
+  if (methods.length === 1) return `${methods[0]} sign-in is available for hosted auth.`
+  return 'Choose an enabled method to access this application.'
 }
 
 function SettingsSections({ children }: { children: ReactNode }) {
@@ -4717,19 +4858,22 @@ function AssetUploadControl({
   onFile: (file: File) => void
   previewUrl: string | null
 }) {
+  const inputId = useId()
+
   return (
     <div className="assetUploadRow">
-      {previewUrl ? (
-        <img alt="" className="assetPreview" src={previewUrl} width="64" height="64" />
-      ) : (
-        <div className="assetPreview text-muted-foreground">
-          <ImageUp size={18} />
-        </div>
-      )}
-      <Field label={label}>
-        <TextInput
+      <AssetUploadPreview previewUrl={previewUrl} />
+      <div className="assetUploadField">
+        <span className="assetUploadLabel">{label}</span>
+        <label className="assetUploadButton" htmlFor={inputId}>
+          <ImageUp data-icon="inline-start" size={16} />
+          Choose file
+        </label>
+        <input
           accept={accept}
           aria-label={label}
+          className="assetUploadInput"
+          id={inputId}
           onChange={(event) => {
             const file = event.currentTarget.files?.[0]
             if (file) onFile(file)
@@ -4737,7 +4881,31 @@ function AssetUploadControl({
           }}
           type="file"
         />
-      </Field>
+      </div>
+    </div>
+  )
+}
+
+function AssetUploadPreview({ previewUrl }: { previewUrl: string | null }) {
+  const [failedPreviewUrl, setFailedPreviewUrl] = useState<string | null>(null)
+  const showPreview = Boolean(previewUrl && failedPreviewUrl !== previewUrl)
+
+  if (showPreview && previewUrl) {
+    return (
+      <img
+        alt=""
+        className="assetPreview"
+        src={previewUrl}
+        width="64"
+        height="64"
+        onError={() => setFailedPreviewUrl(previewUrl)}
+      />
+    )
+  }
+
+  return (
+    <div className="assetPreview text-muted-foreground">
+      <ImageUp size={18} />
     </div>
   )
 }

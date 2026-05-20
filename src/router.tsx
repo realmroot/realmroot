@@ -27,7 +27,6 @@ import {
   SecurityCaptchaPage,
   SecurityGeneralPage,
   SecurityPasswordPolicyPage,
-  SignInPreviewSettingsPage,
   SignInSettingsPage,
   UserDetailPage,
   UsersPage,
@@ -382,18 +381,6 @@ const consoleSignInContentRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/sign-in-experience/content',
   component: ContentSettingsPage,
-})
-
-const consoleSignInDesktopRoute = createRoute({
-  getParentRoute: () => consoleRoute,
-  path: '/sign-in-experience/desktop',
-  component: () => <SignInPreviewSettingsPage surface="desktop" />,
-})
-
-const consoleSignInMobileRoute = createRoute({
-  getParentRoute: () => consoleRoute,
-  path: '/sign-in-experience/mobile',
-  component: () => <SignInPreviewSettingsPage surface="mobile" />,
 })
 
 const consoleMultiFactorAuthRoute = createRoute({
@@ -762,8 +749,6 @@ const routeTree = rootRoute.addChildren([
     consoleSignInCollectUserProfileRoute,
     consoleSignInAccountCenterRoute,
     consoleSignInContentRoute,
-    consoleSignInDesktopRoute,
-    consoleSignInMobileRoute,
     consoleMultiFactorAuthRoute,
     consoleSecurityIndexRoute,
     consoleSecurityPasswordPolicyRoute,
