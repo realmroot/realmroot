@@ -19,9 +19,9 @@ describe('auth callback URL resolution', () => {
   })
 
   it('uses explicit hosted callback parameters for non-OAuth flows', () => {
-    window.history.pushState(null, '', '/sign-in?callbackURL=%2Faccount&redirect_uri=https%3A%2F%2Fclient.example.com')
+    window.history.pushState(null, '', '/sign-in?callbackURL=%2Fprofile&redirect_uri=https%3A%2F%2Fclient.example.com')
 
-    expect(callbackURL()).toBe('/account')
+    expect(callbackURL()).toBe('/profile')
   })
 
   it('rejects unsafe hosted callback paths', () => {

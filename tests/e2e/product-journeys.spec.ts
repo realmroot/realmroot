@@ -53,12 +53,7 @@ const hostedAuthRoutes = [
 ] as const
 
 const accountRoutes = [
-  { name: 'account-home', path: '/account', heading: 'Jane Stone' },
-  { name: 'account-profile', path: '/account/profile', heading: 'Jane Stone' },
-  { name: 'account-security', path: '/account/security', heading: 'Jane Stone' },
-  { name: 'account-linked-accounts', path: '/account/linked-accounts', heading: 'Jane Stone' },
-  { name: 'account-sessions', path: '/account/sessions', heading: 'Jane Stone' },
-  { name: 'account-authorized-apps', path: '/account/authorized-apps', heading: 'Jane Stone' },
+  { name: 'profile', path: '/profile', heading: 'Jane Stone' },
 ] as const
 
 const consoleRoutes = [
@@ -104,7 +99,7 @@ const consoleRoutes = [
     heading: 'Branding',
     kind: 'settings',
     journeyId: 'admin-branding-settings',
-    sentinel: 'Hosted sign-in preview',
+    sentinel: 'Live preview',
     activeNav: 'Sign-in & account',
   },
   {
@@ -132,24 +127,6 @@ const consoleRoutes = [
     kind: 'settings',
     journeyId: 'admin-sign-in-experience-routes',
     sentinel: 'Language and messages',
-    activeNav: 'Sign-in & account',
-  },
-  {
-    name: 'desktop-sign-in-preview',
-    path: '/console/sign-in-experience/desktop',
-    heading: 'Desktop',
-    kind: 'settings',
-    journeyId: 'admin-sign-in-experience-routes',
-    sentinel: 'Desktop preview',
-    activeNav: 'Sign-in & account',
-  },
-  {
-    name: 'mobile-sign-in-preview',
-    path: '/console/sign-in-experience/mobile',
-    heading: 'Mobile',
-    kind: 'settings',
-    journeyId: 'admin-sign-in-experience-routes',
-    sentinel: 'Mobile preview',
     activeNav: 'Sign-in & account',
   },
   {
@@ -365,12 +342,38 @@ const journeyAssertions: Record<
     assert: (context: JourneyContext) => Promise<void>
   }
 > = {
-  'platform-status': {
+  'api-health-smoke': {
+    suite: 'public and auth journeys',
+    assert: async ({ page }) => {
+      await page.goto('/sign-in')
+      const health = await page.evaluate(() => fetch('/api/health').then((response) => response.json()))
+      expect(health).toEqual({ ok: true, service: 'flareauth' })
+    },
+  },
+  'root-signed-out-redirect': {
+    suite: 'public and auth journeys',
+    assert: async ({ page }) => {
+      accountSignedIn = false
+      try {
+        await page.goto('/')
+        await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
+        const url = new URL(page.url())
+        expect(url.pathname).toBe('/sign-in')
+        expect(url.searchParams.get('return_to')).toBeNull()
+      } finally {
+        accountSignedIn = true
+      }
+    },
+  },
+  'root-signed-in-redirect': {
     suite: 'public and auth journeys',
     assert: async ({ page }) => {
       await page.goto('/')
-      await expect(page.getByRole('heading', { name: 'One auth service for every app on your edge.' })).toBeVisible()
-      await expect(page.getByText('API status: online')).toBeVisible()
+      await expect(page).toHaveURL(/\/profile$/)
+      await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
+      for (const section of accountSections) {
+        await expect(page.getByRole('heading', { name: section })).toBeVisible()
+      }
     },
   },
   'first-admin-gate': {
@@ -378,7 +381,7 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       firstAdminRequired = true
       try {
-        await page.goto('/account/security')
+        await page.goto('/')
         await expect(page).toHaveURL(/\/onboarding$/)
         await expect(page.getByRole('heading', { name: 'Create the first admin.' })).toBeVisible()
       } finally {
@@ -461,6 +464,7 @@ const journeyAssertions: Record<
       accountSignedIn = false
       try {
         for (const path of [
+          '/profile',
           '/account',
           '/account/profile',
           '/account/security',
@@ -472,7 +476,7 @@ const journeyAssertions: Record<
           await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
           const url = new URL(page.url())
           expect(url.pathname).toBe('/sign-in')
-          expect(url.searchParams.get('return_to')).toBe(path)
+          expect(url.searchParams.get('return_to')).toBe('/profile')
           await expect(page.getByRole('navigation', { name: 'Account center' })).toHaveCount(0)
         }
       } finally {
@@ -487,7 +491,7 @@ const journeyAssertions: Record<
       await page.getByLabel('Email or username').fill('jane@example.com')
       await page.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
       await page.getByRole('button', { name: 'Sign in' }).click()
-      await expect(page).toHaveURL(/\/account$/)
+      await expect(page).toHaveURL(/\/profile$/)
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/auth/sign-in/email',
@@ -513,7 +517,7 @@ const journeyAssertions: Record<
         await page.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
         await page.getByRole('button', { name: 'Sign in' }).click()
 
-        await expect(page).toHaveURL(/\/account$/)
+        await expect(page).toHaveURL(/\/profile$/)
         await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
         await expectAccountSinglePageSections(page)
         expect(requests).toContainEqual({
@@ -670,9 +674,9 @@ const journeyAssertions: Record<
   'account-center': {
     suite: 'account center journey',
     assert: async ({ page }) => {
-      await page.goto('/account')
+      await page.goto('/profile')
       await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
-      await expect(page).toHaveURL(/\/account$/)
+      await expect(page).toHaveURL(/\/profile$/)
       await expectAccountSinglePageSections(page)
       await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
     },
@@ -681,6 +685,7 @@ const journeyAssertions: Record<
     suite: 'account center journey',
     assert: async ({ page }) => {
       for (const path of [
+        '/account',
         '/account/profile',
         '/account/security',
         '/account/linked-accounts',
@@ -688,7 +693,7 @@ const journeyAssertions: Record<
         '/account/authorized-apps',
       ]) {
         await page.goto(path)
-        await expect(page).toHaveURL(/\/account$/)
+        await expect(page).toHaveURL(/\/profile$/)
         await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
         await expectAccountSinglePageSections(page)
       }
@@ -697,7 +702,7 @@ const journeyAssertions: Record<
   'profile-update': {
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
-      await page.goto('/account')
+      await page.goto('/profile')
       await page.getByLabel('Display name').fill('Jane Q. Stone')
       await page.getByRole('button', { name: 'Save profile' }).click()
       await expect.poll(() => requests).toContainEqual({
@@ -710,7 +715,7 @@ const journeyAssertions: Record<
   'profile-avatar-upload': {
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
-      await page.goto('/account')
+      await page.goto('/profile')
       await page.locator('input[type="file"]').setInputFiles({
         name: 'avatar.png',
         mimeType: 'image/png',
@@ -727,7 +732,7 @@ const journeyAssertions: Record<
   'email-update': {
     suite: 'account center journey',
     assert: async ({ page }) => {
-      await page.goto('/account')
+      await page.goto('/profile')
       await page.getByLabel('Email').fill('jane.new@example.com')
       await page.getByRole('button', { name: 'Change email' }).click()
     },
@@ -735,7 +740,7 @@ const journeyAssertions: Record<
   'password-update': {
     suite: 'account center journey',
     assert: async ({ page }) => {
-      await page.goto('/account')
+      await page.goto('/profile')
       await page.getByRole('textbox', { name: 'Current password', exact: true }).fill('password-1')
       await page.getByRole('textbox', { name: 'New password', exact: true }).fill('new-password')
       await page.getByRole('button', { name: 'Change password' }).click()
@@ -744,7 +749,7 @@ const journeyAssertions: Record<
   'totp-flow': {
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
-      await page.goto('/account/security')
+      await page.goto('/profile')
       const mfaSection = page.locator('.settingsPanel', { has: page.getByRole('heading', { name: 'MFA' }) })
       await mfaSection.getByRole('textbox', { name: 'Password', exact: true }).fill('password-1')
       await page.getByRole('button', { name: 'Enroll authenticator app' }).click()
@@ -768,7 +773,7 @@ const journeyAssertions: Record<
   'passkey-flow': {
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
-      await page.goto('/account/security')
+      await page.goto('/profile')
       await page.getByLabel('Passkey name').fill('MacBook Touch ID')
       await page.getByRole('button', { name: 'Add passkey' }).click()
       await page.getByRole('button', { name: 'Remove' }).click()
@@ -786,7 +791,7 @@ const journeyAssertions: Record<
   'linked-account-unlink': {
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
-      await page.goto('/account/linked-accounts')
+      await page.goto('/profile')
       await page.getByRole('button', { name: 'Unlink' }).click()
       await expect(page.getByRole('dialog')).toBeVisible()
       await page.getByRole('button', { name: 'Cancel' }).click()
@@ -802,7 +807,7 @@ const journeyAssertions: Record<
   'session-revocation': {
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
-      await page.goto('/account/sessions')
+      await page.goto('/profile')
       await page.getByRole('button', { name: 'Revoke other sessions' }).click()
       await expect(page.getByRole('dialog')).toBeVisible()
       await page.getByRole('button', { name: 'Cancel' }).click()
@@ -825,7 +830,7 @@ const journeyAssertions: Record<
     suite: 'account center journey',
     assert: async ({ page, requests }) => {
       accountApplicationRevoked = false
-      await page.goto('/account/authorized-apps')
+      await page.goto('/profile')
       await expect(page.getByText('Customer portal')).toBeVisible()
       await page
         .locator('.settingsPanel', { has: page.getByRole('heading', { name: 'Authorized apps' }) })
@@ -855,7 +860,7 @@ const journeyAssertions: Record<
         if (path.startsWith('/api/account/') && response.status() === 401) accountUnauthorizedResponses.push(path)
       })
 
-      await page.goto('/account')
+      await page.goto('/profile')
       await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
       await page.getByRole('button', { name: 'Sign out' }).click()
       await expect(page).toHaveURL(/\/sign-in$/)
@@ -1287,8 +1292,6 @@ const journeyAssertions: Record<
         { path: '/console/sign-in-experience/collect-user-profile', heading: 'Collect user profile' },
         { path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
         { path: '/console/sign-in-experience/content', heading: 'Content' },
-        { path: '/console/sign-in-experience/desktop', heading: 'Desktop' },
-        { path: '/console/sign-in-experience/mobile', heading: 'Mobile' },
       ]) {
         await page.goto(route.path)
         await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`))
@@ -1304,8 +1307,6 @@ const journeyAssertions: Record<
         },
         { tab: 'Account Center', path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
         { tab: 'Content', path: '/console/sign-in-experience/content', heading: 'Content' },
-        { tab: 'Desktop', path: '/console/sign-in-experience/desktop', heading: 'Desktop' },
-        { tab: 'Mobile', path: '/console/sign-in-experience/mobile', heading: 'Mobile' },
         {
           tab: 'Sign-up and sign-in',
           path: '/console/sign-in-experience/sign-up-and-sign-in',
@@ -1317,6 +1318,22 @@ const journeyAssertions: Record<
         await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible()
         await expect(page.getByRole('link', { exact: true, name: route.tab })).toHaveAttribute('aria-current', 'page')
       }
+
+      await expect(page.getByRole('link', { exact: true, name: 'Desktop' })).toHaveCount(0)
+      await expect(page.getByRole('link', { exact: true, name: 'Mobile' })).toHaveCount(0)
+
+      for (const path of [
+        '/console/sign-in-experience/sign-up-and-sign-in',
+        '/console/sign-in-experience/branding',
+        '/console/sign-in-experience/content',
+      ]) {
+        await page.goto(path)
+        await expect(page.getByLabel('Hosted authentication preview')).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Hosted sign-in' })).toBeVisible()
+      }
+
+      await page.getByRole('tab', { name: 'Mobile' }).click()
+      await expect(page.getByRole('tab', { name: 'Mobile' })).toHaveAttribute('aria-selected', 'true')
     },
   },
   'admin-content-settings': {
@@ -1516,7 +1533,7 @@ const journeyAssertions: Record<
       await page.goto('/console/sign-in-experience/branding')
       const main = page.getByRole('main')
       await expect(page.getByRole('heading', { name: 'Branding' })).toBeVisible()
-      await expect(main.getByText('Hosted sign-in preview')).toBeVisible()
+      await expect(main.getByText('Live preview')).toBeVisible()
       await page.getByLabel('Upload branding logo').setInputFiles({
         name: 'logo.png',
         mimeType: 'image/png',
@@ -1612,7 +1629,7 @@ test('declares browser E2E journey coverage above target', () => {
   expect(covered).toBe(total)
   expect(journeyCoverage.waivers).toEqual([])
   expect(ratio).toBeGreaterThanOrEqual(journeyCoverage.target)
-  expect(journeyCoverage.honoRpcSmokeJourneys).toEqual(['platform-status'])
+  expect(journeyCoverage.honoRpcSmokeJourneys).toEqual(['api-health-smoke'])
   expect(new Set(consoleRoutes.map((route) => route.path)).size).toBe(consoleRoutes.length)
   expect(visualJourneyIds.every((id) => uniqueDeclaredIds.has(id))).toBe(true)
 })
@@ -1709,7 +1726,7 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
       await test.step(`${viewport.name} ${route.name}`, async () => {
         await page.goto(route.path)
         await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
-        if (route.path.startsWith('/account')) await expectAccountSinglePageSections(page)
+        if (route.path.startsWith('/profile')) await expectAccountSinglePageSections(page)
         if (
           route.path === '/sign-in' ||
           route.path === '/sign-up' ||
@@ -1720,17 +1737,23 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
         }
         await expectInitialViewportDensity(
           page,
-          route.path.startsWith('/account')
+          route.path.startsWith('/profile')
             ? 'account'
             : route.path.startsWith('/oauth') || 'compactAuth' in route
               ? 'message'
               : 'hosted',
         )
         await expectNoDocumentHorizontalOverflow(page)
-        await page.screenshot({
+        const screenshot = await page.screenshot({
           fullPage: true,
           path: testInfo.outputPath(`${route.name}-${viewport.name}.png`),
         })
+        if (route.path === '/profile') {
+          await testInfo.attach(`${route.name}-${viewport.name}.png`, {
+            body: screenshot,
+            contentType: 'image/png',
+          })
+        }
       })
     }
 
@@ -1986,7 +2009,7 @@ async function expectInitialViewportDensity(page: Page, surface: 'account' | 'ho
 }
 
 async function expectAccountSinglePageSections(page: Page) {
-  await expect(page).toHaveURL(/\/account$/)
+  await expect(page).toHaveURL(/\/profile$/)
   await expect(page.getByRole('navigation', { name: 'Account center' })).toHaveCount(0)
 
   for (const section of accountSections) {

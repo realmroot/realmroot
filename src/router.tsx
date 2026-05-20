@@ -27,7 +27,6 @@ import {
   SecurityCaptchaPage,
   SecurityGeneralPage,
   SecurityPasswordPolicyPage,
-  SignInPreviewSettingsPage,
   SignInSettingsPage,
   UserDetailPage,
   UsersPage,
@@ -37,7 +36,6 @@ import { ApiRequestError, getConfigz } from '@/lib/api'
 import { getAccountProfile } from '@/lib/api/account'
 import { adminQueryKeys, getAdminReadiness, getSignInSettings } from '@/lib/api/management'
 import { AccountRoute } from '@/routes/account'
-import { App } from '@/routes/app'
 import { AuthCallbackRoute } from '@/routes/auth-callback'
 import { EmailVerificationRoute } from '@/routes/email-verification'
 import { ForgotPasswordRoute } from '@/routes/forgot-password'
@@ -65,7 +63,10 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: App,
+  beforeLoad: async () => {
+    await loadAccountAccess()
+    throw redirect({ to: '/profile' })
+  },
 })
 
 const signInRoute = createRoute({
@@ -125,15 +126,8 @@ const oidcStartRoute = createRoute({
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account',
-  beforeLoad: async ({ location }) => {
-    try {
-      await queryClient.fetchQuery({ queryKey: ['account', 'profile'], queryFn: getAccountProfile })
-    } catch (error) {
-      if (error instanceof ApiRequestError && error.status === 401) {
-        throw redirect({ to: '/sign-in', search: { return_to: location.href } })
-      }
-      throw error
-    }
+  beforeLoad: () => {
+    throw redirect({ to: '/profile' })
   },
   component: () => <Outlet />,
 })
@@ -147,56 +141,40 @@ const accountIndexRoute = createRoute({
 const accountProfileRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/profile',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const accountSecurityRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/security',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const accountLinkedAccountsRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/linked-accounts',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const accountSessionsRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/sessions',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const accountAuthorizedAppsRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/authorized-apps',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
+  beforeLoad: async ({ location }) => loadAccountAccess(location.href),
+  component: AccountRoute,
 })
 
 const profileSecurityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile/security',
   beforeLoad: () => {
-    throw redirect({ to: '/account' })
+    throw redirect({ to: '/profile' })
   },
 })
 
@@ -204,7 +182,7 @@ const profileLinkedAccountsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile/linked-accounts',
   beforeLoad: () => {
-    throw redirect({ to: '/account' })
+    throw redirect({ to: '/profile' })
   },
 })
 
@@ -212,7 +190,7 @@ const profileSessionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile/sessions',
   beforeLoad: () => {
-    throw redirect({ to: '/account' })
+    throw redirect({ to: '/profile' })
   },
 })
 
@@ -220,7 +198,7 @@ const profileAuthorizedAppsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile/authorized-apps',
   beforeLoad: () => {
-    throw redirect({ to: '/account' })
+    throw redirect({ to: '/profile' })
   },
 })
 
@@ -403,18 +381,6 @@ const consoleSignInContentRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/sign-in-experience/content',
   component: ContentSettingsPage,
-})
-
-const consoleSignInDesktopRoute = createRoute({
-  getParentRoute: () => consoleRoute,
-  path: '/sign-in-experience/desktop',
-  component: () => <SignInPreviewSettingsPage surface="desktop" />,
-})
-
-const consoleSignInMobileRoute = createRoute({
-  getParentRoute: () => consoleRoute,
-  path: '/sign-in-experience/mobile',
-  component: () => <SignInPreviewSettingsPage surface="mobile" />,
 })
 
 const consoleMultiFactorAuthRoute = createRoute({
@@ -783,8 +749,6 @@ const routeTree = rootRoute.addChildren([
     consoleSignInCollectUserProfileRoute,
     consoleSignInAccountCenterRoute,
     consoleSignInContentRoute,
-    consoleSignInDesktopRoute,
-    consoleSignInMobileRoute,
     consoleMultiFactorAuthRoute,
     consoleSecurityIndexRoute,
     consoleSecurityPasswordPolicyRoute,
@@ -841,6 +805,18 @@ export const router = createRouter({ routeTree })
 
 function isRedirect(error: unknown) {
   return typeof error === 'object' && error !== null && 'headers' in error && 'status' in error
+}
+
+async function loadAccountAccess(returnTo?: string) {
+  try {
+    await queryClient.fetchQuery({ queryKey: ['account', 'profile'], queryFn: getAccountProfile })
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 401) {
+      if (returnTo) throw redirect({ to: '/sign-in', search: { return_to: returnTo } })
+      throw redirect({ to: '/sign-in' })
+    }
+    throw error
+  }
 }
 
 export async function loadConsoleAccess(location: { href: string; pathname: string }) {

@@ -39,7 +39,7 @@ describe('AdminShell', () => {
     expect(screen.getAllByText('Console').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Default').length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: /Open account center/ })).toBeTruthy()
-    expect(screen.getByRole('link', { name: /Account center/ }).getAttribute('href')).toBe('/account')
+    expect(screen.getByRole('link', { name: /Account center/ }).getAttribute('href')).toBe('/profile')
     expect(screen.getByText('Dashboard content')).toBeTruthy()
     expect(screen.getByText('Dashboard content').closest('.consoleShell')).toBeTruthy()
     expect(document.querySelector('header')?.className).toContain('consoleTopbar')

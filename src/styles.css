@@ -431,6 +431,79 @@ main:not(.shell):not(.authShell) h1 {
   line-height: 1.6;
 }
 
+.signInExperienceLayout {
+  display: grid;
+  gap: 16px;
+}
+
+.signInExperienceSettings {
+  min-width: 0;
+}
+
+.signInExperiencePreviewPanel {
+  min-width: 0;
+}
+
+.hostedPreviewShell {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.hostedPreviewHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hostedPreviewHeader h2 {
+  margin: 2px 0 0;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.hostedAuthPreview {
+  min-height: auto;
+  padding: 18px;
+}
+
+.hostedAuthPreview-mobile {
+  max-width: 340px;
+  margin-inline: auto;
+}
+
+.hostedAuthPanel {
+  display: grid;
+  width: min(100%, 372px);
+  gap: 14px;
+  margin-inline: auto;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 10%, var(--line));
+  border-radius: var(--auth-panel-radius, 8px);
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgb(24 24 27 / 7%);
+}
+
+.hostedAuthPreview-mobile .hostedAuthPanel {
+  padding: 18px;
+}
+
+.hostedAuthPanel .authBrandPanel h2 {
+  max-width: 340px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.hostedPreviewPrompt {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 .authCardHeader h2,
 .settingsPanel h2 {
   margin: 0 0 6px;
@@ -543,21 +616,138 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .assetUploadRow {
+  position: relative;
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
 }
 
+.avatarUploadControl {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.assetUploadField {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.assetUploadLabel {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.assetUploadButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  max-width: 100%;
+  min-height: 40px;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease;
+}
+
+.assetUploadButton:hover,
+.assetUploadRow:focus-within .assetUploadButton {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 14%, transparent);
+  color: var(--brand-primary);
+}
+
+.assetUploadInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .assetPreview {
   display: grid;
   flex-shrink: 0;
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
   object-fit: cover;
+}
+
+.avatarUploadMeta {
+  display: grid;
+  gap: 5px;
+  justify-items: start;
+}
+
+.avatarUploadLabel {
+  color: #3f3f46;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.avatarUploadHelp {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.avatarUploadButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.avatarUploadButton:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--line));
+  background: #fafafa;
+}
+
+.avatarUploadButton:focus-within,
+.avatarUploadButton:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary) 18%, transparent);
+  outline-offset: 2px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .uiButton {
@@ -843,13 +1033,13 @@ main:not(.shell):not(.authShell) h1 {
 .accountChrome {
   display: grid;
   gap: 14px;
-  max-width: 840px;
+  max-width: 1040px;
   margin: 0 auto;
 }
 
 .accountContent {
   min-width: 0;
-  padding: 18px;
+  padding: 20px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -866,7 +1056,19 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .accountHeader {
-  margin-bottom: 4px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.accountHeader h1 {
+  margin: 2px 0 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.accountHeader .eyebrow {
+  margin: 0;
 }
 
 .accountGrid {
@@ -880,6 +1082,70 @@ main:not(.shell):not(.authShell) h1 {
   gap: 12px;
 }
 
+.accountHero {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 7%, #ffffff), #ffffff 72%),
+    #ffffff;
+}
+
+.accountHeaderAvatar {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 16%, var(--line));
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--brand-primary);
+  object-fit: cover;
+}
+
+.accountHeaderMeta {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.accountHeaderMeta h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.accountHeaderMeta p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.accountHeaderBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.accountHeaderBadges span {
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #52525b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .accountPanelGroup {
   display: grid;
   gap: 0;
@@ -890,8 +1156,12 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .accountContent .settingsPanel {
+  display: grid;
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+  gap: 8px 20px;
+  align-items: start;
   min-width: 0;
-  padding: 16px;
+  padding: 14px 16px;
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;
@@ -902,16 +1172,80 @@ main:not(.shell):not(.authShell) h1 {
   border-top: 0;
 }
 
-.accountContent .settingsPanel h2 {
-  font-size: 16px;
+.panelTitle {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
-.accountContent .settingsPanel > p {
-  margin-bottom: 14px;
+.panelTitle h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.panelTitle p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.panelHeader .panelTitle {
+  margin-bottom: 0;
+}
+
+.accountContent .settingsPanel > :not(.panelTitle) {
+  grid-column: 2;
 }
 
 .accountContent .settingsPanel > .formStack + .formStack {
-  margin-top: 12px;
+  margin-top: 6px;
+}
+
+.accountContent .field {
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: start;
+}
+
+.accountContent .field label {
+  padding-top: 8px;
+  color: #3f3f46;
+  font-size: 13px;
+}
+
+.accountContent .field small {
+  grid-column: 2;
+}
+
+.accountContent .formStack > .uiButton {
+  justify-self: start;
+  min-height: 36px;
+  margin-left: 130px;
+}
+
+.settingsBody {
+  display: grid;
+  gap: 10px;
+}
+
+.settingsBodyHeader {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.accountContent .itemRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.accountContent .itemRow .uiButton {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
 }
 
 .itemList {
@@ -966,6 +1300,18 @@ main:not(.shell):not(.authShell) h1 {
   position: relative;
   min-height: 208px;
   padding: 22px 0 24px;
+}
+
+@media (min-width: 1280px) {
+  .signInExperienceLayout {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+    align-items: start;
+  }
+
+  .signInExperiencePreviewPanel {
+    position: sticky;
+    top: 24px;
+  }
 }
 
 .consoleChartAxis {
@@ -1373,6 +1719,77 @@ main:not(.shell):not(.authShell) h1 {
   .assetUploadRow {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .avatarUploadControl,
+  .accountHero {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 10px 12px;
+    padding: 12px;
+  }
+
+  .accountHero > .uiButton {
+    grid-column: 1 / -1;
+    justify-self: start;
+    min-height: 36px;
+  }
+
+  .accountHeaderAvatar {
+    width: 52px;
+    height: 52px;
+  }
+
+  .assetPreview {
+    width: 52px;
+    height: 52px;
+  }
+
+  .accountContent .settingsPanel {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .accountContent .settingsPanel > :not(.panelTitle) {
+    grid-column: auto;
+  }
+
+  .accountContent .field {
+    grid-template-columns: 1fr;
+  }
+
+  .accountContent .field label {
+    padding-top: 0;
+  }
+
+  .accountContent .field small {
+    grid-column: auto;
+  }
+
+  .accountContent .formStack > .uiButton {
+    justify-self: start;
+    margin-left: 0;
+  }
+
+  .settingsBodyHeader {
+    justify-content: flex-start;
+  }
+
+  .accountContent .itemRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .accountContent .itemRow .uiButton {
+    justify-self: end;
+  }
+
+  .accountContent .panelTitle {
+    margin-bottom: 8px;
+  }
+
+  .accountContent .panelTitle p {
+    display: none;
   }
 
   .segmented,

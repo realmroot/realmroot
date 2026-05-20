@@ -369,7 +369,7 @@ describe('hosted auth pages', () => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
-      return Promise.resolve(jsonResponse({ url: '/account' }))
+      return Promise.resolve(jsonResponse({ url: '/profile' }))
     })
 
     render(<SignInPage />)
@@ -543,9 +543,9 @@ describe('hosted auth pages', () => {
   })
 
   it('navigates after successful password sign-in', async () => {
-    expect(resolveAuthRedirect({ url: '/auth/callback' }, '/account')).toBe('/auth/callback')
-    expect(resolveAuthRedirect({ token: 'token-1' }, '/account')).toBe('/account')
-    expect(resolveAuthRedirect({ token: 'token-1' }, undefined)).toBe('/account')
+    expect(resolveAuthRedirect({ url: '/auth/callback' }, '/profile')).toBe('/auth/callback')
+    expect(resolveAuthRedirect({ token: 'token-1' }, '/profile')).toBe('/profile')
+    expect(resolveAuthRedirect({ token: 'token-1' }, undefined)).toBe('/profile')
   })
 
   it('posts native Better Auth social sign-in and redirects to the provider authorization URL', async () => {
@@ -595,9 +595,9 @@ describe('hosted auth pages', () => {
   })
 
   it('rejects external redirect targets from native auth responses and query params', () => {
-    expect(resolveAuthRedirect({ url: 'https://evil.example.com/callback' }, '/account')).toBe('/account')
-    expect(resolveAuthRedirect({ redirectTo: '//evil.example.com' }, '/account')).toBe('/account')
-    expect(resolveAuthRedirect({}, 'https://evil.example.com/callback')).toBe('/account')
+    expect(resolveAuthRedirect({ url: 'https://evil.example.com/callback' }, '/profile')).toBe('/profile')
+    expect(resolveAuthRedirect({ redirectTo: '//evil.example.com' }, '/profile')).toBe('/profile')
+    expect(resolveAuthRedirect({}, 'https://evil.example.com/callback')).toBe('/profile')
   })
 
   it('posts OAuth consent approval and returns to the authorization endpoint', async () => {
@@ -958,11 +958,11 @@ describe('hosted auth pages', () => {
     window.history.pushState(null, '', '/auth/callback')
     render(<AuthCallbackPage />)
     expect(await screen.findByRole('heading', { name: 'Sign-in complete.' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/account')
+    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/profile')
   })
 
   it('accepts callbackURL fields from native auth responses', () => {
-    expect(resolveAuthRedirect({ callbackURL: '/console/onboarding' }, '/account')).toBe('/console/onboarding')
+    expect(resolveAuthRedirect({ callbackURL: '/console/onboarding' }, '/profile')).toBe('/console/onboarding')
   })
 })
 
