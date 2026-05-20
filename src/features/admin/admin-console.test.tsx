@@ -528,11 +528,11 @@ describe('admin console', () => {
       ['Content', '/console/sign-in-experience/content', 'Content'],
       ['Sign-up and sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
     ] as const) {
-      fireEvent.click(screen.getByRole('tab', { name: label }))
+      fireEvent.click(screen.getByRole('link', { name: label }))
 
       await waitFor(() => expect(window.location.pathname).toBe(path))
       expect((await screen.findAllByRole('heading', { name: heading })).length).toBeGreaterThan(0)
-      expect(screen.getByRole('tab', { name: label }).getAttribute('aria-selected')).toBe('true')
+      expect(screen.getByRole('link', { name: label }).getAttribute('aria-current')).toBe('page')
     }
   })
 
@@ -579,7 +579,11 @@ describe('admin console', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Sign-up and sign-in' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Branding' }))
+    expect(screen.getByRole('link', { name: 'Branding' })).toHaveProperty(
+      'href',
+      `${window.location.origin}/console/sign-in-experience/branding`,
+    )
+    fireEvent.click(screen.getByRole('link', { name: 'Branding' }))
 
     expect(await screen.findByRole('heading', { name: 'Branding' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/console/sign-in-experience/branding'))
@@ -760,11 +764,18 @@ describe('admin console', () => {
       render(<AppRouter />)
 
       expect(await screen.findByRole('heading', { name: scenario.heading })).toBeTruthy()
-      expect((await screen.findByRole('tab', { name: scenario.tab })).getAttribute('aria-selected')).toBe('true')
+      let activeRouteTab =
+        screen.queryByRole('tab', { name: scenario.tab }) ?? screen.queryByRole('link', { name: scenario.tab })
+      if (!activeRouteTab) activeRouteTab = await screen.findByRole('link', { name: scenario.tab })
+      expect(activeRouteTab.getAttribute('aria-selected') ?? activeRouteTab.getAttribute('aria-current')).toMatch(
+        /^(true|page)$/,
+      )
       expect((await screen.findAllByText(scenario.text)).length).toBeGreaterThan(0)
       expect(window.location.pathname).toBe(scenario.path)
 
-      fireEvent.click(screen.getByRole('tab', { name: scenario.nextTab }))
+      fireEvent.click(
+        screen.queryByRole('tab', { name: scenario.nextTab }) ?? screen.getByRole('link', { name: scenario.nextTab }),
+      )
       await waitFor(() => expect(window.location.pathname).toBe(scenario.nextPath))
       expect((await screen.findAllByText(scenario.nextText)).length).toBeGreaterThan(0)
     }
@@ -2935,21 +2946,21 @@ describe('admin console', () => {
 
     const { unmount } = renderWithQuery(<CollectUserProfilePage />)
 
-    expect(screen.getByRole('tab', { name: 'Collect user profile' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('link', { name: 'Collect user profile' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('button', { name: 'Add field' })).toHaveProperty('disabled', true)
     expect(screen.getByText(/Field label, field type, and user data key controls/)).toBeTruthy()
 
     unmount()
     renderWithQuery(<AccountCenterSettingsPage />)
 
-    expect(screen.getByRole('tab', { name: 'Account Center' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('link', { name: 'Account Center' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByText('/api/account')).toBeTruthy()
     expect(screen.getByText('Authorized apps view')).toBeTruthy()
 
     cleanup()
     renderWithQuery(<ContentSettingsPage />)
 
-    expect((await screen.findByRole('tab', { name: 'Content' })).getAttribute('aria-selected')).toBe('true')
+    expect((await screen.findByRole('link', { name: 'Content' })).getAttribute('aria-current')).toBe('page')
     expect(await screen.findByLabelText('Language')).toHaveProperty('disabled', true)
     expect(screen.getByLabelText('Sign-in message')).toHaveProperty('value', 'Sign in to Acme Auth')
   })
@@ -3273,7 +3284,7 @@ describe('admin console', () => {
     expect(screen.getByText('Organization')).toBeTruthy()
     expect(screen.getByText('billing_roles')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Organization permissions' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Organization permissions' }))
     expect(screen.getByText('Permission templates use API resources')).toBeTruthy()
   })
 

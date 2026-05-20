@@ -650,6 +650,7 @@ export function ApplicationDetailPage({
                   <CardContent>
                     <form
                       className="formStack"
+                      id="application-redirect-uris-form"
                       key={application.updatedAt}
                       onSubmit={(event) => {
                         event.preventDefault()
@@ -1882,24 +1883,19 @@ export function PasswordlessConnectorsPage() {
     >
       <div className="grid gap-4">
         <ConnectorSectionTabs active="passwordless" />
-        <div className="grid gap-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle>Email connector</CardTitle>
-                  <CardDescription>
-                    Email delivery is limited to the configured runtime email service binding.
-                  </CardDescription>
-                </div>
+        <SettingsSections>
+          <SettingsSection
+            title="Email connector"
+            description="Email delivery is limited to the configured runtime email service binding."
+          >
+            <div className="grid gap-3">
+              <div className="flex justify-end">
                 <StatusBadge
                   active={emailReady === true}
                   activeLabel="Configured"
                   inactiveLabel={emailReady === false ? 'Unconfigured' : 'Unknown'}
                 />
               </div>
-            </CardHeader>
-            <CardContent className="grid gap-3">
               <SettingRow
                 label="Magic link"
                 value={signInQuery.data?.signIn.magicLinkEnabled ? 'Enabled' : 'Disabled'}
@@ -1916,29 +1912,24 @@ export function PasswordlessConnectorsPage() {
                 Email delivery is configured through deployment bindings, so Console does not persist provider setup
                 locally.
               </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle>SMS connector</CardTitle>
-                  <CardDescription>
-                    SMS delivery is visible for planning but has no backend connector yet.
-                  </CardDescription>
-                </div>
+            </div>
+          </SettingsSection>
+          <SettingsSection
+            title="SMS connector"
+            description="SMS delivery is visible for planning but has no backend connector yet."
+          >
+            <div className="grid gap-3">
+              <div className="flex justify-end">
                 <StatusBadge active={false} activeLabel="Configured" inactiveLabel="Unconfigured" />
               </div>
-            </CardHeader>
-            <CardContent className="grid gap-3">
               <SettingRow label="SMS code" value="Unavailable" />
               <SettingRow label="Backend contract" value="Not available in local runtime" />
               <Button disabled type="button" variant="secondary">
                 Setup SMS
               </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </SettingsSection>
+        </SettingsSections>
       </div>
     </ResourcePage>
   )
@@ -2222,195 +2213,192 @@ export function SignInSettingsPage() {
       title="Sign-up and sign-in"
     >
       {query.data ? (
-        <form className="grid gap-4 xl:grid-cols-2" onSubmit={onSubmit}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Sign-up</CardTitle>
-              <CardDescription>
-                Control self-service registration and the identifiers collected by hosted auth.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <SwitchRow
-                checked={form.signupEnabled}
-                label="Registration"
-                onCheckedChange={(signupEnabled) => setForm((value) => ({ ...value, signupEnabled }))}
-              />
-              <SettingRow
-                label="Sign-up identifiers"
-                value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
-              />
-              <SettingRow
-                label="Sign-up password requirement"
-                value={form.passwordEnabled ? 'Password required' : 'Unavailable'}
-              />
-              <UnavailableSetting
-                label="Custom profile collection"
-                value="Configure supported profile fields on the Collect user profile tab."
-              />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Sign-in methods</CardTitle>
-              <CardDescription>Control which hosted sign-in options are visible at runtime.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <SwitchRow
-                checked={form.passwordEnabled}
-                label="Password sign-in"
-                onCheckedChange={(passwordEnabled) => setForm((value) => ({ ...value, passwordEnabled }))}
-              />
-              <SwitchRow
-                checked={form.socialLoginEnabled}
-                label="Social sign-in"
-                onCheckedChange={(socialLoginEnabled) => setForm((value) => ({ ...value, socialLoginEnabled }))}
-              />
-              <SwitchRow
-                checked={form.identifierFirst}
-                label="Identifier-first flow"
-                onCheckedChange={(identifierFirst) => setForm((value) => ({ ...value, identifierFirst }))}
-              />
-              <SettingRow
-                label="Sign-in identifiers"
-                value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
-              />
-              <SettingRow
-                label="Magic link"
-                value={query.data.signIn.magicLinkEnabled ? 'Available from runtime' : 'Unavailable'}
-              />
-              <SettingRow
-                label="Email OTP"
-                value={query.data.signIn.emailOtpEnabled ? 'Available from runtime' : 'Unavailable'}
-              />
-              <SwitchRow checked={false} disabled label="Passkey sign-in" />
-              <UnavailableSetting
-                label="Social provider setup"
-                value="Add enabled identity providers from Connectors before enabling social sign-in."
-              />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Recovery and redirects</CardTitle>
-              <CardDescription>Public defaults exposed through configz and hosted recovery flows.</CardDescription>
-            </CardHeader>
-            <CardContent className="formStack">
-              <Field label="Default application ID">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, applicationId: event.target.value }))}
-                  value={form.applicationId}
+        <form className="grid gap-4" onSubmit={onSubmit}>
+          <SettingsSections>
+            <SettingsSection
+              title="Sign-up"
+              description="Control self-service registration and the identifiers collected by hosted auth."
+            >
+              <div className="grid gap-3">
+                <SwitchRow
+                  checked={form.signupEnabled}
+                  label="Registration"
+                  onCheckedChange={(signupEnabled) => setForm((value) => ({ ...value, signupEnabled }))}
                 />
-              </Field>
-              <Field label="Unknown-session redirect URL">
-                <TextInput
-                  aria-label="Default redirect URI"
-                  onChange={(event) => setForm((value) => ({ ...value, redirectUri: event.target.value }))}
-                  type="url"
-                  value={form.redirectUri}
+                <SettingRow
+                  label="Sign-up identifiers"
+                  value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
                 />
-              </Field>
-              <SettingRow
-                label="Forgot-password verification"
-                value={query.data.signIn.emailOtpEnabled ? 'Email OTP available' : 'Email link'}
-              />
-              <UnavailableSetting
-                label="Additional recovery methods"
-                value="No additional verification methods are exposed by the current config model."
-              />
-              {validationError || updateMutation.errorMessage ? (
-                <StatusBadge
-                  active={false}
-                  activeLabel=""
-                  inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
+                <SettingRow
+                  label="Sign-up password requirement"
+                  value={form.passwordEnabled ? 'Password required' : 'Unavailable'}
                 />
-              ) : null}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Hosted copy source</CardTitle>
-              <CardDescription>
-                Content is also available on the Content tab and saves through the same management boundary.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="formStack">
-              <Field label="Product name">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
-                  required
-                  value={form.productName}
+                <UnavailableSetting
+                  label="Custom profile collection"
+                  value="Configure supported profile fields on the Collect user profile tab."
                 />
-              </Field>
-              <Field label="Headline">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
-                  required
-                  value={form.headline}
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Sign-in methods"
+              description="Control which hosted sign-in options are visible at runtime."
+            >
+              <div className="grid gap-3">
+                <SwitchRow
+                  checked={form.passwordEnabled}
+                  label="Password sign-in"
+                  onCheckedChange={(passwordEnabled) => setForm((value) => ({ ...value, passwordEnabled }))}
                 />
-              </Field>
-              <Field label="Description">
-                <TextArea
-                  onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
-                  required
-                  value={form.description}
+                <SwitchRow
+                  checked={form.socialLoginEnabled}
+                  label="Social sign-in"
+                  onCheckedChange={(socialLoginEnabled) => setForm((value) => ({ ...value, socialLoginEnabled }))}
                 />
-              </Field>
-              <Field label="Terms URL">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
-                  type="url"
-                  value={form.termsUri}
+                <SwitchRow
+                  checked={form.identifierFirst}
+                  label="Identifier-first flow"
+                  onCheckedChange={(identifierFirst) => setForm((value) => ({ ...value, identifierFirst }))}
                 />
-              </Field>
-              <Field label="Privacy URL">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
-                  type="url"
-                  value={form.privacyUri}
+                <SettingRow
+                  label="Sign-in identifiers"
+                  value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
                 />
-              </Field>
-              <Field label="Support email">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
-                  type="email"
-                  value={form.supportEmail}
+                <SettingRow
+                  label="Magic link"
+                  value={query.data.signIn.magicLinkEnabled ? 'Available from runtime' : 'Unavailable'}
                 />
-              </Field>
-            </CardContent>
-          </Card>
-          <div className="xl:col-span-2">
-            <ConsoleActionBar>
-              <Button disabled={updateMutation.isPending} type="submit">
-                <Save data-icon="inline-start" />
-                Save sign-in settings
-              </Button>
-              <Button
-                onClick={() => {
-                  setForm({
-                    passwordEnabled: query.data.signIn.passwordEnabled,
-                    signupEnabled: query.data.signIn.signupEnabled,
-                    socialLoginEnabled: query.data.signIn.socialLoginEnabled,
-                    identifierFirst: query.data.signIn.identifierFirst,
-                    applicationId: query.data.defaults.applicationId ?? '',
-                    redirectUri: query.data.defaults.redirectUri ?? '',
-                    termsUri: query.data.links.termsUri ?? '',
-                    privacyUri: query.data.links.privacyUri ?? '',
-                    supportEmail: query.data.links.supportEmail ?? '',
-                    productName: query.data.copy.productName,
-                    headline: query.data.copy.headline,
-                    description: query.data.copy.description,
-                  })
-                  setValidationError(null)
-                }}
-                type="button"
-                variant="ghost"
-              >
-                <Undo2 data-icon="inline-start" />
-                Discard
-              </Button>
-            </ConsoleActionBar>
-          </div>
+                <SettingRow
+                  label="Email OTP"
+                  value={query.data.signIn.emailOtpEnabled ? 'Available from runtime' : 'Unavailable'}
+                />
+                <SwitchRow checked={false} disabled label="Passkey sign-in" />
+                <UnavailableSetting
+                  label="Social provider setup"
+                  value="Add enabled identity providers from Connectors before enabling social sign-in."
+                />
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Recovery and redirects"
+              description="Public defaults exposed through configz and hosted recovery flows."
+            >
+              <div className="formStack">
+                <Field label="Default application ID">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, applicationId: event.target.value }))}
+                    value={form.applicationId}
+                  />
+                </Field>
+                <Field label="Unknown-session redirect URL">
+                  <TextInput
+                    aria-label="Default redirect URI"
+                    onChange={(event) => setForm((value) => ({ ...value, redirectUri: event.target.value }))}
+                    type="url"
+                    value={form.redirectUri}
+                  />
+                </Field>
+                <SettingRow
+                  label="Forgot-password verification"
+                  value={query.data.signIn.emailOtpEnabled ? 'Email OTP available' : 'Email link'}
+                />
+                <UnavailableSetting
+                  label="Additional recovery methods"
+                  value="No additional verification methods are exposed by the current config model."
+                />
+                {validationError || updateMutation.errorMessage ? (
+                  <StatusBadge
+                    active={false}
+                    activeLabel=""
+                    inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
+                  />
+                ) : null}
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Hosted copy source"
+              description="Content is also available on the Content tab and saves through the same management boundary."
+            >
+              <div className="formStack">
+                <Field label="Product name">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
+                    required
+                    value={form.productName}
+                  />
+                </Field>
+                <Field label="Headline">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
+                    required
+                    value={form.headline}
+                  />
+                </Field>
+                <Field label="Description">
+                  <TextArea
+                    onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
+                    required
+                    value={form.description}
+                  />
+                </Field>
+                <Field label="Terms URL">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
+                    type="url"
+                    value={form.termsUri}
+                  />
+                </Field>
+                <Field label="Privacy URL">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
+                    type="url"
+                    value={form.privacyUri}
+                  />
+                </Field>
+                <Field label="Support email">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
+                    type="email"
+                    value={form.supportEmail}
+                  />
+                </Field>
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Changes"
+              description="Save updates through the management boundary or restore the loaded values."
+            >
+              <ConsoleActionBar>
+                <Button disabled={updateMutation.isPending} type="submit">
+                  <Save data-icon="inline-start" />
+                  Save sign-in settings
+                </Button>
+                <Button
+                  onClick={() => {
+                    setForm({
+                      passwordEnabled: query.data.signIn.passwordEnabled,
+                      signupEnabled: query.data.signIn.signupEnabled,
+                      socialLoginEnabled: query.data.signIn.socialLoginEnabled,
+                      identifierFirst: query.data.signIn.identifierFirst,
+                      applicationId: query.data.defaults.applicationId ?? '',
+                      redirectUri: query.data.defaults.redirectUri ?? '',
+                      termsUri: query.data.links.termsUri ?? '',
+                      privacyUri: query.data.links.privacyUri ?? '',
+                      supportEmail: query.data.links.supportEmail ?? '',
+                      productName: query.data.copy.productName,
+                      headline: query.data.copy.headline,
+                      description: query.data.copy.description,
+                    })
+                    setValidationError(null)
+                  }}
+                  type="button"
+                  variant="ghost"
+                >
+                  <Undo2 data-icon="inline-start" />
+                  Discard
+                </Button>
+              </ConsoleActionBar>
+            </SettingsSection>
+          </SettingsSections>
         </form>
       ) : null}
     </SignInExperiencePage>
@@ -2431,13 +2419,12 @@ export function MfaPage() {
     >
       {query.data ? (
         <div className="grid gap-4">
-          <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-            <Card>
-              <CardHeader>
-                <CardTitle>Factors</CardTitle>
-                <CardDescription>Available second factors surfaced by account and deployment support.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2">
+          <SettingsSections>
+            <SettingsSection
+              title="Factors"
+              description="Available second factors surfaced by account and deployment support."
+            >
+              <div className="grid gap-3 md:grid-cols-2">
                 <FactorStatusCard
                   detail={`RP ${query.data.policy.passkeys.rpName}; ${
                     query.data.policy.passkeys.origins.length
@@ -2465,14 +2452,13 @@ export function MfaPage() {
                   enabled
                   title="Backup codes"
                 />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Policy controls</CardTitle>
-                <CardDescription>MFA enforcement is currently backed by deployment policy.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4">
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Policy controls"
+              description="MFA enforcement is currently backed by deployment policy."
+            >
+              <div className="grid gap-4">
                 <Field label="Prompt policy">
                   <SelectInput aria-label="Prompt policy" disabled value={query.data.policy.mfa.mode}>
                     <option value="required">Required</option>
@@ -2487,19 +2473,24 @@ export function MfaPage() {
                   Save is disabled because MFA policy is loaded from the local deployment environment. Update the
                   deployment policy to persist changes.
                 </p>
-              </CardContent>
-            </Card>
-          </div>
-          <ConsoleActionBar>
-            <Button disabled type="button">
-              <Save data-icon="inline-start" />
-              Save changes
-            </Button>
-            <Button disabled type="button" variant="ghost">
-              <Undo2 data-icon="inline-start" />
-              Discard
-            </Button>
-          </ConsoleActionBar>
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Changes"
+              description="Policy changes require a persisted management contract before Console can save them."
+            >
+              <ConsoleActionBar>
+                <Button disabled type="button">
+                  <Save data-icon="inline-start" />
+                  Save changes
+                </Button>
+                <Button disabled type="button" variant="ghost">
+                  <Undo2 data-icon="inline-start" />
+                  Discard
+                </Button>
+              </ConsoleActionBar>
+            </SettingsSection>
+          </SettingsSections>
         </div>
       ) : null}
     </ResourcePage>
@@ -2514,15 +2505,12 @@ export function SecurityPasswordPolicyPage() {
       framed={false}
     >
       <SecuritySectionTabs active="password-policy" />
-      <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Password policy</CardTitle>
-            <CardDescription>
-              Password controls are visible here and disabled until backed by policy storage.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
+      <SettingsSections>
+        <SettingsSection
+          title="Password policy"
+          description="Password controls are visible here and disabled until backed by policy storage."
+        >
+          <div className="grid gap-4">
             <Field label="Minimum length">
               <TextInput aria-label="Minimum length" disabled placeholder="Unavailable until policy storage exists" />
             </Field>
@@ -2535,19 +2523,18 @@ export function SecurityPasswordPolicyPage() {
             <Field label="Custom words">
               <TextArea aria-label="Custom words" disabled placeholder="Unavailable until policy storage exists" />
             </Field>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Persistence</CardTitle>
-            <CardDescription>These controls are not written until a management contract exists.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
+          </div>
+        </SettingsSection>
+        <SettingsSection
+          title="Persistence"
+          description="These controls are not written until a management contract exists."
+        >
+          <div className="grid gap-3">
             <SettingRow label="Current backend" value="Password hashing and reset flows" />
             <SettingRow label="Policy storage" value="Not available in local runtime" />
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </SettingsSection>
+      </SettingsSections>
     </ResourcePage>
   )
 }
@@ -2560,13 +2547,12 @@ export function SecurityCaptchaPage() {
       framed={false}
     >
       <SecuritySectionTabs active="captcha" />
-      <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Provider setup</CardTitle>
-            <CardDescription>CAPTCHA provider persistence is not available in this local runtime.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
+      <SettingsSections>
+        <SettingsSection
+          title="Provider setup"
+          description="CAPTCHA provider persistence is not available in this local runtime."
+        >
+          <div className="grid gap-4">
             <SwitchRow checked={false} disabled label="Enable CAPTCHA" />
             <Field label="Provider">
               <SelectInput aria-label="Provider" disabled value="turnstile">
@@ -2579,20 +2565,16 @@ export function SecurityCaptchaPage() {
             <Button disabled type="button" variant="secondary">
               Setup provider
             </Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Flow copy</CardTitle>
-            <CardDescription>Copy shown when CAPTCHA is active.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
+          </div>
+        </SettingsSection>
+        <SettingsSection title="Flow copy" description="Copy shown when CAPTCHA is active.">
+          <div className="grid gap-3">
             <SettingRow label="Sign-up" value="Complete the verification challenge before creating an account." />
             <SettingRow label="Sign-in" value="Complete the verification challenge before signing in." />
             <SettingRow label="Password recovery" value="Complete the verification challenge before recovery email." />
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </SettingsSection>
+      </SettingsSections>
     </ResourcePage>
   )
 }
@@ -2605,13 +2587,12 @@ export function SecurityBlocklistPage() {
       framed={false}
     >
       <SecuritySectionTabs active="blocklist" />
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Email blocklist</CardTitle>
-            <CardDescription>Blocklist persistence is not available in this local runtime.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
+      <SettingsSections>
+        <SettingsSection
+          title="Email blocklist"
+          description="Blocklist persistence is not available in this local runtime."
+        >
+          <div className="grid gap-4">
             <SwitchRow checked={false} disabled label="Block email subaddressing" />
             <Field label="Custom email and domain blocklist" help="One email address or domain per line.">
               <TextArea
@@ -2620,9 +2601,9 @@ export function SecurityBlocklistPage() {
                 placeholder={'blocked@example.com\nexample.org'}
               />
             </Field>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </SettingsSection>
+      </SettingsSections>
     </ResourcePage>
   )
 }
@@ -2641,29 +2622,26 @@ export function SecurityGeneralPage() {
     >
       <SecuritySectionTabs active="general" />
       {query.data ? (
-        <div className="grid gap-4 xl:grid-cols-3">
-          <PolicyCard
-            rows={[
-              ['MFA enforcement', query.data.policy.mfa.mode],
-              ['Passkeys', query.data.policy.passkeys.enabled ? 'Enabled' : 'Disabled'],
-            ]}
-            title="Protection"
-          />
-          <PolicyCard
-            rows={[
-              ['Session TTL', `${query.data.policy.sessions.expiresInSeconds}s`],
-              ['Fresh age', `${query.data.policy.sessions.freshAgeSeconds}s`],
-            ]}
-            title="Session policy"
-          />
-          <PolicyCard
-            rows={[
-              ['Security headers', 'Managed by Worker middleware'],
-              ['Cookie cache', `${query.data.policy.sessions.cookieCacheSeconds}s`],
-            ]}
-            title="Headers and cookies"
-          />
-        </div>
+        <SettingsSections>
+          <SettingsSection title="Protection" description="Tenant sign-in protections from deployment policy.">
+            <div className="grid gap-3">
+              <SettingRow label="MFA enforcement" value={query.data.policy.mfa.mode} />
+              <SettingRow label="Passkeys" value={query.data.policy.passkeys.enabled ? 'Enabled' : 'Disabled'} />
+            </div>
+          </SettingsSection>
+          <SettingsSection title="Session policy" description="Session lifetime values currently active in runtime.">
+            <div className="grid gap-3">
+              <SettingRow label="Session TTL" value={`${query.data.policy.sessions.expiresInSeconds}s`} />
+              <SettingRow label="Fresh age" value={`${query.data.policy.sessions.freshAgeSeconds}s`} />
+            </div>
+          </SettingsSection>
+          <SettingsSection title="Headers and cookies" description="Runtime-managed browser protection settings.">
+            <div className="grid gap-3">
+              <SettingRow label="Security headers" value="Managed by Worker middleware" />
+              <SettingRow label="Cookie cache" value={`${query.data.policy.sessions.cookieCacheSeconds}s`} />
+            </div>
+          </SettingsSection>
+        </SettingsSections>
       ) : null}
     </ResourcePage>
   )
@@ -3767,153 +3745,148 @@ export function BrandingPage() {
       onRetry={() => query.refetch()}
     >
       {query.data ? (
-        <form className="grid gap-4 xl:grid-cols-2" onSubmit={onSubmit}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Brand settings</CardTitle>
-              <CardDescription>
-                External asset URLs must use HTTPS. Custom CSS accepts --auth-* declarations only.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="formStack">
-              <Field label="Product name">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
-                  required
-                  value={form.productName}
+        <form className="grid gap-4" onSubmit={onSubmit}>
+          <SettingsSections>
+            <SettingsSection
+              title="Brand settings"
+              description="External asset URLs must use HTTPS. Custom CSS accepts --auth-* declarations only."
+            >
+              <div className="formStack">
+                <Field label="Product name">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
+                    required
+                    value={form.productName}
+                  />
+                </Field>
+                <Field label="Logo URL">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, logoUrl: event.target.value }))}
+                    type="url"
+                    value={form.logoUrl}
+                  />
+                </Field>
+                <AssetUploadControl
+                  accept="image/png,image/jpeg,image/webp"
+                  label="Upload branding logo"
+                  onFile={(file) => logoMutation.mutate(file)}
+                  previewUrl={form.logoUrl || null}
                 />
-              </Field>
-              <Field label="Logo URL">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, logoUrl: event.target.value }))}
-                  type="url"
-                  value={form.logoUrl}
+                <Field label="Favicon URL">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, faviconUrl: event.target.value }))}
+                    type="url"
+                    value={form.faviconUrl}
+                  />
+                </Field>
+                <AssetUploadControl
+                  accept="image/png,image/webp,image/x-icon,image/vnd.microsoft.icon"
+                  label="Upload favicon"
+                  onFile={(file) => faviconMutation.mutate(file)}
+                  previewUrl={form.faviconUrl || null}
                 />
-              </Field>
-              <AssetUploadControl
-                accept="image/png,image/jpeg,image/webp"
-                label="Upload branding logo"
-                onFile={(file) => logoMutation.mutate(file)}
-                previewUrl={form.logoUrl || null}
-              />
-              <Field label="Favicon URL">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, faviconUrl: event.target.value }))}
-                  type="url"
-                  value={form.faviconUrl}
-                />
-              </Field>
-              <AssetUploadControl
-                accept="image/png,image/webp,image/x-icon,image/vnd.microsoft.icon"
-                label="Upload favicon"
-                onFile={(file) => faviconMutation.mutate(file)}
-                previewUrl={form.faviconUrl || null}
-              />
-              <Field label="Primary color">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, primaryColor: event.target.value }))}
-                  type="color"
-                  value={form.primaryColor}
-                />
-              </Field>
-              <Field label="Background color">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, backgroundColor: event.target.value }))}
-                  type="color"
-                  value={form.backgroundColor}
-                />
-              </Field>
-              <SwitchRow checked={false} disabled label="Dark mode" />
-              <Field label="Custom CSS">
-                <TextArea
-                  onChange={(event) => setForm((value) => ({ ...value, customCss: event.target.value }))}
-                  placeholder="--auth-panel-radius: 8px;"
-                  value={form.customCss}
-                />
-              </Field>
-              {validationError ||
-              updateMutation.errorMessage ||
-              logoMutation.errorMessage ||
-              faviconMutation.errorMessage ? (
-                <div className="text-sm text-destructive">
-                  {validationError ??
-                    updateMutation.errorMessage ??
-                    logoMutation.errorMessage ??
-                    faviconMutation.errorMessage}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle>Hosted sign-in preview</CardTitle>
-                  <CardDescription>
-                    Preview uses the same public config consumed by hosted auth surfaces.
-                  </CardDescription>
-                </div>
-                <Tabs setValue={(value) => setPreviewMode(value as 'desktop' | 'mobile')} value={previewMode}>
-                  <TabsList aria-label="Preview viewport">
-                    <TabsTrigger value="desktop">Desktop</TabsTrigger>
-                    <TabsTrigger value="mobile">Mobile</TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                <Field label="Primary color">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, primaryColor: event.target.value }))}
+                    type="color"
+                    value={form.primaryColor}
+                  />
+                </Field>
+                <Field label="Background color">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, backgroundColor: event.target.value }))}
+                    type="color"
+                    value={form.backgroundColor}
+                  />
+                </Field>
+                <SwitchRow checked={false} disabled label="Dark mode" />
+                <Field label="Custom CSS">
+                  <TextArea
+                    onChange={(event) => setForm((value) => ({ ...value, customCss: event.target.value }))}
+                    placeholder="--auth-panel-radius: 8px;"
+                    value={form.customCss}
+                  />
+                </Field>
+                {validationError ||
+                updateMutation.errorMessage ||
+                logoMutation.errorMessage ||
+                faviconMutation.errorMessage ? (
+                  <div className="text-sm text-destructive">
+                    {validationError ??
+                      updateMutation.errorMessage ??
+                      logoMutation.errorMessage ??
+                      faviconMutation.errorMessage}
+                  </div>
+                ) : null}
               </div>
-            </CardHeader>
-            <CardContent>
-              <div
-                className={cn('brandingPreview', previewMode === 'mobile' && 'mx-auto max-w-80')}
-                style={previewStyle}
-              >
-                <div className="brand">
-                  {form.logoUrl ? (
-                    <img className="brandLogo" src={form.logoUrl} alt="" width="36" height="36" />
-                  ) : (
-                    <span className="brandMark">{form.productName.slice(0, 1).toUpperCase()}</span>
-                  )}
-                  <span>{form.productName}</span>
+            </SettingsSection>
+            <SettingsSection
+              title="Hosted sign-in preview"
+              description="Preview uses the same public config consumed by hosted auth surfaces."
+            >
+              <div className="grid gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Viewport</span>
+                  <Tabs setValue={(value) => setPreviewMode(value as 'desktop' | 'mobile')} value={previewMode}>
+                    <TabsList aria-label="Preview viewport">
+                      <TabsTrigger value="desktop">Desktop</TabsTrigger>
+                      <TabsTrigger value="mobile">Mobile</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                 </div>
-                <div>
-                  <p className="eyebrow">Hosted sign-in</p>
-                  <h2>{form.headline}</h2>
-                  <p>{form.description}</p>
+                <div
+                  className={cn('brandingPreview', previewMode === 'mobile' && 'mx-auto max-w-80')}
+                  style={previewStyle}
+                >
+                  <div className="brand">
+                    {form.logoUrl ? (
+                      <img className="brandLogo" src={form.logoUrl} alt="" width="36" height="36" />
+                    ) : (
+                      <span className="brandMark">{form.productName.slice(0, 1).toUpperCase()}</span>
+                    )}
+                    <span>{form.productName}</span>
+                  </div>
+                  <div>
+                    <p className="eyebrow">Hosted sign-in</p>
+                    <h2>{form.headline}</h2>
+                    <p>{form.description}</p>
+                  </div>
+                  <Button type="button">
+                    <Eye data-icon="inline-start" />
+                    Live preview
+                  </Button>
                 </div>
-                <Button type="button">
-                  <Eye data-icon="inline-start" />
-                  Live preview
+              </div>
+            </SettingsSection>
+            <SettingsSection title="Changes" description="Save brand updates or restore the loaded values.">
+              <ConsoleActionBar>
+                <Button disabled={updateMutation.isPending} type="submit">
+                  <Save data-icon="inline-start" />
+                  Save branding
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
-          <div className="xl:col-span-2">
-            <ConsoleActionBar>
-              <Button disabled={updateMutation.isPending} type="submit">
-                <Save data-icon="inline-start" />
-                Save branding
-              </Button>
-              <Button
-                onClick={() => {
-                  setForm({
-                    logoUrl: query.data.branding.logoUrl ?? '',
-                    faviconUrl: query.data.branding.faviconUrl ?? '',
-                    primaryColor: query.data.branding.primaryColor ?? '#b42318',
-                    backgroundColor: query.data.branding.backgroundColor ?? '#f7f3ee',
-                    customCss: query.data.branding.customCss ?? '',
-                    productName: query.data.copy.productName,
-                    headline: query.data.copy.headline,
-                    description: query.data.copy.description,
-                  })
-                  setValidationError(null)
-                }}
-                type="button"
-                variant="ghost"
-              >
-                <Undo2 data-icon="inline-start" />
-                Discard
-              </Button>
-            </ConsoleActionBar>
-          </div>
+                <Button
+                  onClick={() => {
+                    setForm({
+                      logoUrl: query.data.branding.logoUrl ?? '',
+                      faviconUrl: query.data.branding.faviconUrl ?? '',
+                      primaryColor: query.data.branding.primaryColor ?? '#b42318',
+                      backgroundColor: query.data.branding.backgroundColor ?? '#f7f3ee',
+                      customCss: query.data.branding.customCss ?? '',
+                      productName: query.data.copy.productName,
+                      headline: query.data.copy.headline,
+                      description: query.data.copy.description,
+                    })
+                    setValidationError(null)
+                  }}
+                  type="button"
+                  variant="ghost"
+                >
+                  <Undo2 data-icon="inline-start" />
+                  Discard
+                </Button>
+              </ConsoleActionBar>
+            </SettingsSection>
+          </SettingsSections>
         </form>
       ) : null}
     </SignInExperiencePage>
@@ -3927,41 +3900,35 @@ export function CollectUserProfilePage() {
       description="Review custom profile field collection for hosted sign-up and account completion."
       title="Collect user profile"
     >
-      <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Custom profile fields</CardTitle>
-            <CardDescription>
-              Backend support for configurable profile fields is not available in this build.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <EmptyState
-              action={
-                <Button disabled type="button" variant="secondary">
-                  <Plus data-icon="inline-start" />
-                  Add field
-                </Button>
-              }
-              description="Field label, field type, and user data key controls will become available after a management contract exists for profile field persistence."
-              framed={false}
-              title="No custom fields"
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Supported profile data</CardTitle>
-            <CardDescription>Current hosted auth collects the built-in user profile fields.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
+      <SettingsSections>
+        <SettingsSection
+          title="Custom profile fields"
+          description="Backend support for configurable profile fields is not available in this build."
+        >
+          <EmptyState
+            action={
+              <Button disabled type="button" variant="secondary">
+                <Plus data-icon="inline-start" />
+                Add field
+              </Button>
+            }
+            description="Field label, field type, and user data key controls will become available after a management contract exists for profile field persistence."
+            framed={false}
+            title="No custom fields"
+          />
+        </SettingsSection>
+        <SettingsSection
+          title="Supported profile data"
+          description="Current hosted auth collects the built-in user profile fields."
+        >
+          <div className="grid gap-3">
             <SettingRow label="Email" value="Built in" />
             <SettingRow label="Name" value="Built in" />
             <SettingRow label="Username" value="Available when username sign-in is enabled" />
             <SettingRow label="Avatar" value="Managed from user profile surfaces" />
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </SettingsSection>
+      </SettingsSections>
     </SignInExperiencePage>
   )
 }
@@ -3973,15 +3940,12 @@ export function AccountCenterSettingsPage() {
       description="Configure the self-service account center exposure and review available account management surfaces."
       title="Account Center"
     >
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Account center</CardTitle>
-            <CardDescription>
-              The account API and prebuilt account UI are enabled by the current deployment routes.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
+      <SettingsSections>
+        <SettingsSection
+          title="Account center"
+          description="The account API and prebuilt account UI are enabled by the current deployment routes."
+        >
+          <div className="grid gap-3">
             <SettingRow label="Account API" value="/api/account" />
             <SettingRow label="Prebuilt UI" value="/account" />
             <SettingRow label="Profile route" value="/account/profile" />
@@ -3991,16 +3955,13 @@ export function AccountCenterSettingsPage() {
               <ExternalLink data-icon="inline-start" />
               Open account center
             </Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Account field permissions</CardTitle>
-            <CardDescription>
-              Permissions reflect the account API surfaces currently available to users.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
+          </div>
+        </SettingsSection>
+        <SettingsSection
+          title="Account field permissions"
+          description="Permissions reflect the account API surfaces currently available to users."
+        >
+          <div className="grid gap-3">
             <SettingRow label="Profile" value="User editable" />
             <SettingRow label="Email" value="Managed by auth flows" />
             <SettingRow label="Password" value="Managed by recovery flows" />
@@ -4008,9 +3969,9 @@ export function AccountCenterSettingsPage() {
             <SettingRow label="MFA" value="Security view" />
             <SettingRow label="Sessions" value="User revocable" />
             <SettingRow label="Apps" value="Authorized apps view" />
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </SettingsSection>
+      </SettingsSections>
     </SignInExperiencePage>
   )
 }
@@ -4079,113 +4040,111 @@ export function ContentSettingsPage() {
       title="Content"
     >
       {query.data ? (
-        <form className="grid gap-4 xl:grid-cols-2" onSubmit={onSubmit}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Language and messages</CardTitle>
-              <CardDescription>These strings are exposed through public hosted auth config.</CardDescription>
-            </CardHeader>
-            <CardContent className="formStack">
-              <Field label="Language">
-                <SelectInput disabled value="en">
-                  <option value="en">English</option>
-                </SelectInput>
-              </Field>
-              <Field label="Product name">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
-                  required
-                  value={form.productName}
+        <form className="grid gap-4" onSubmit={onSubmit}>
+          <SettingsSections>
+            <SettingsSection
+              title="Language and messages"
+              description="These strings are exposed through public hosted auth config."
+            >
+              <div className="formStack">
+                <Field label="Language">
+                  <SelectInput disabled value="en">
+                    <option value="en">English</option>
+                  </SelectInput>
+                </Field>
+                <Field label="Product name">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
+                    required
+                    value={form.productName}
+                  />
+                </Field>
+                <Field label="Sign-in message">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
+                    required
+                    value={form.headline}
+                  />
+                </Field>
+                <Field label="Sign-up message">
+                  <TextArea
+                    onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
+                    required
+                    value={form.description}
+                  />
+                </Field>
+                <UnavailableSetting
+                  label="Password message"
+                  value="No separate password message field is exposed by configz."
                 />
-              </Field>
-              <Field label="Sign-in message">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, headline: event.target.value }))}
-                  required
-                  value={form.headline}
+                <UnavailableSetting
+                  label="Account message"
+                  value="No separate account message field is exposed by configz."
                 />
-              </Field>
-              <Field label="Sign-up message">
-                <TextArea
-                  onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))}
-                  required
-                  value={form.description}
-                />
-              </Field>
-              <UnavailableSetting
-                label="Password message"
-                value="No separate password message field is exposed by configz."
-              />
-              <UnavailableSetting
-                label="Account message"
-                value="No separate account message field is exposed by configz."
-              />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Links</CardTitle>
-              <CardDescription>
-                Public legal and support links must use safe values accepted by management validation.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="formStack">
-              <Field label="Terms URL">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
-                  type="url"
-                  value={form.termsUri}
-                />
-              </Field>
-              <Field label="Privacy URL">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
-                  type="url"
-                  value={form.privacyUri}
-                />
-              </Field>
-              <Field label="Support email">
-                <TextInput
-                  onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
-                  type="email"
-                  value={form.supportEmail}
-                />
-              </Field>
-              {validationError || updateMutation.errorMessage ? (
-                <StatusBadge
-                  active={false}
-                  activeLabel=""
-                  inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
-                />
-              ) : null}
-            </CardContent>
-          </Card>
-          <div className="xl:col-span-2">
-            <ConsoleActionBar>
-              <Button disabled={updateMutation.isPending} type="submit">
-                <Save data-icon="inline-start" />
-                Save content
-              </Button>
-              <Button
-                onClick={() => {
-                  setForm({
-                    productName: query.data.copy.productName,
-                    headline: query.data.copy.headline,
-                    description: query.data.copy.description,
-                    termsUri: query.data.links.termsUri ?? '',
-                    privacyUri: query.data.links.privacyUri ?? '',
-                    supportEmail: query.data.links.supportEmail ?? '',
-                  })
-                  setValidationError(null)
-                }}
-                type="button"
-                variant="ghost"
-              >
-                <Undo2 data-icon="inline-start" />
-                Discard
-              </Button>
-            </ConsoleActionBar>
-          </div>
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Links"
+              description="Public legal and support links must use safe values accepted by management validation."
+            >
+              <div className="formStack">
+                <Field label="Terms URL">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, termsUri: event.target.value }))}
+                    type="url"
+                    value={form.termsUri}
+                  />
+                </Field>
+                <Field label="Privacy URL">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, privacyUri: event.target.value }))}
+                    type="url"
+                    value={form.privacyUri}
+                  />
+                </Field>
+                <Field label="Support email">
+                  <TextInput
+                    onChange={(event) => setForm((value) => ({ ...value, supportEmail: event.target.value }))}
+                    type="email"
+                    value={form.supportEmail}
+                  />
+                </Field>
+                {validationError || updateMutation.errorMessage ? (
+                  <StatusBadge
+                    active={false}
+                    activeLabel=""
+                    inactiveLabel={validationError ?? updateMutation.errorMessage ?? ''}
+                  />
+                ) : null}
+              </div>
+            </SettingsSection>
+            <SettingsSection title="Changes" description="Save hosted copy updates or restore the loaded values.">
+              <ConsoleActionBar>
+                <Button disabled={updateMutation.isPending} type="submit">
+                  <Save data-icon="inline-start" />
+                  Save content
+                </Button>
+                <Button
+                  onClick={() => {
+                    setForm({
+                      productName: query.data.copy.productName,
+                      headline: query.data.copy.headline,
+                      description: query.data.copy.description,
+                      termsUri: query.data.links.termsUri ?? '',
+                      privacyUri: query.data.links.privacyUri ?? '',
+                      supportEmail: query.data.links.supportEmail ?? '',
+                    })
+                    setValidationError(null)
+                  }}
+                  type="button"
+                  variant="ghost"
+                >
+                  <Undo2 data-icon="inline-start" />
+                  Discard
+                </Button>
+              </ConsoleActionBar>
+            </SettingsSection>
+          </SettingsSections>
         </form>
       ) : null}
     </SignInExperiencePage>
@@ -4200,52 +4159,45 @@ export function DeploymentSettingsPage() {
     <ResourcePage
       title="OIDC configs"
       description="Review issuer metadata, session TTL, and signing-key runtime state for this tenant."
+      action={
+        <Button disabled type="button" variant="secondary">
+          <RefreshCw data-icon="inline-start" />
+          Rotate key
+        </Button>
+      }
       error={query.error}
       framed={false}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
       {query.data ? (
-        <div className="grid gap-4">
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Runtime endpoints</CardTitle>
-                <CardDescription>Static Console settings tied to the current deployment.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                <SettingRow label="Platform" value="Cloudflare Workers" />
-                <SettingRow label="Database" value="D1" />
-                <SettingRow label="Auth issuer" value="/api/auth" />
-                <SettingRow label="Discovery" value="/api/auth/.well-known/openid-configuration" />
-                <SettingRow label="JWKS URI" value="/api/auth/jwks" />
-                <SettingRow label="Management API" value="/api/management" />
-              </CardContent>
-            </Card>
-            <PolicyCard
-              rows={[
-                ['Session TTL', `${query.data.policy.sessions.expiresInSeconds}s`],
-                ['Update age', `${query.data.policy.sessions.updateAgeSeconds}s`],
-                ['Fresh age', `${query.data.policy.sessions.freshAgeSeconds}s`],
-                ['Cookie cache', `${query.data.policy.sessions.cookieCacheSeconds}s`],
-              ]}
-              title="Session TTL"
-            />
-          </div>
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <CardTitle>Signing keys</CardTitle>
-                  <CardDescription>Deployment-managed OIDC signing material exposed through JWKS.</CardDescription>
-                </div>
-                <Button disabled type="button" variant="secondary">
-                  <RefreshCw data-icon="inline-start" />
-                  Rotate key
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-4">
+        <SettingsSections>
+          <SettingsSection
+            title="Runtime endpoints"
+            description="Static Console settings tied to the current deployment."
+          >
+            <div className="grid gap-3">
+              <SettingRow label="Platform" value="Cloudflare Workers" />
+              <SettingRow label="Database" value="D1" />
+              <SettingRow label="Auth issuer" value="/api/auth" />
+              <SettingRow label="Discovery" value="/api/auth/.well-known/openid-configuration" />
+              <SettingRow label="JWKS URI" value="/api/auth/jwks" />
+              <SettingRow label="Management API" value="/api/management" />
+            </div>
+          </SettingsSection>
+          <SettingsSection title="Session TTL" description="Runtime session lifetime and cookie-cache values.">
+            <div className="grid gap-3">
+              <SettingRow label="Session TTL" value={`${query.data.policy.sessions.expiresInSeconds}s`} />
+              <SettingRow label="Update age" value={`${query.data.policy.sessions.updateAgeSeconds}s`} />
+              <SettingRow label="Fresh age" value={`${query.data.policy.sessions.freshAgeSeconds}s`} />
+              <SettingRow label="Cookie cache" value={`${query.data.policy.sessions.cookieCacheSeconds}s`} />
+            </div>
+          </SettingsSection>
+          <SettingsSection
+            title="Signing keys"
+            description="Deployment-managed OIDC signing material exposed through JWKS."
+          >
+            <div className="grid gap-4">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -4292,9 +4244,9 @@ export function DeploymentSettingsPage() {
                   />
                 </TabsContent>
               </Tabs>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </SettingsSection>
+        </SettingsSections>
       ) : null}
     </ResourcePage>
   )
@@ -4311,17 +4263,15 @@ export function ConsolePlaceholderPage({
 }) {
   return (
     <ResourcePage title={title} description={description} framed={false}>
-      <Card>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {rows.map(([label, value]) => (
-            <SettingRow key={label} label={label} value={value} />
-          ))}
-        </CardContent>
-      </Card>
+      <SettingsSections>
+        <SettingsSection title={title} description={description}>
+          <div className="grid gap-3">
+            {rows.map(([label, value]) => (
+              <SettingRow key={label} label={label} value={value} />
+            ))}
+          </div>
+        </SettingsSection>
+      </SettingsSections>
     </ResourcePage>
   )
 }
@@ -4331,7 +4281,6 @@ export function OrganizationTemplatePage({
 }: {
   section?: OrganizationTemplateSection
 }) {
-  const navigate = useNavigate()
   const [tab, setTab] = useState<OrganizationTemplateSection>(section)
   const [roleSearch, setRoleSearch] = useState('')
   const rolesQuery = useQuery({ queryKey: adminQueryKeys.roles, queryFn: listRoles })
@@ -4353,73 +4302,70 @@ export function OrganizationTemplatePage({
       loading={rolesQuery.isLoading}
       onRetry={() => rolesQuery.refetch()}
     >
-      <Tabs
-        className="grid gap-4"
-        setValue={(value) => {
-          const next = value as OrganizationTemplateSection
-          setTab(next)
-          navigateConsoleTab(navigate, `/console/organization-template/${next}`)
-        }}
-        value={tab}
-      >
-        <TabsList aria-label="Organization template sections">
-          <TabsTrigger value="organization-roles">Organization roles</TabsTrigger>
-          <TabsTrigger value="organization-permissions">Organization permissions</TabsTrigger>
-        </TabsList>
-        <TabsContent value="organization-roles">
-          <Card>
-            <CardHeader>
-              <CardTitle>Organization roles</CardTitle>
-              <CardDescription>Create and search organization role definitions through the roles API.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <TextInput
-                  aria-label="Search organization roles"
-                  onChange={(event) => setRoleSearch(event.target.value)}
-                  placeholder="Search roles"
-                  value={roleSearch}
-                />
-                <a className="uiButton uiButton-primary" href="/console/roles">
-                  <Plus data-icon="inline-start" />
-                  Create role
-                </a>
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Scope</TableHead>
-                    <TableHead>Token claim</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {organizationRoles?.map((role) => (
-                    <TableRow key={role.id}>
-                      <TableCell>
-                        <a className="font-medium hover:underline" href={`/console/roles/${role.id}`}>
-                          {role.name}
-                        </a>
-                        <div className="text-xs text-muted-foreground">{role.key}</div>
-                      </TableCell>
-                      <TableCell>{role.organizationId ? 'Organization' : 'Global template'}</TableCell>
-                      <TableCell>{role.tokenClaimName ?? 'Default authorization claims'}</TableCell>
+      <div className="grid gap-4">
+        <RoutedSettingsTabs
+          active={tab}
+          ariaLabel="Organization template sections"
+          onSelect={(value) => setTab(value)}
+          tabs={[
+            ['organization-roles', 'Organization roles', '/console/organization-template/organization-roles'],
+            [
+              'organization-permissions',
+              'Organization permissions',
+              '/console/organization-template/organization-permissions',
+            ],
+          ]}
+        />
+        <SettingsSections>
+          {tab === 'organization-roles' ? (
+            <SettingsSection
+              title="Organization roles"
+              description="Create and search organization role definitions through the roles API."
+            >
+              <div className="grid gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <TextInput
+                    aria-label="Search organization roles"
+                    onChange={(event) => setRoleSearch(event.target.value)}
+                    placeholder="Search roles"
+                    value={roleSearch}
+                  />
+                  <a className="uiButton uiButton-primary" href="/console/roles">
+                    <Plus data-icon="inline-start" />
+                    Create role
+                  </a>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Scope</TableHead>
+                      <TableHead>Token claim</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="organization-permissions">
-          <Card>
-            <CardHeader>
-              <CardTitle>Organization permissions</CardTitle>
-              <CardDescription>
-                Permissions are managed on API resources and attached to organization roles.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+                  </TableHeader>
+                  <TableBody>
+                    {organizationRoles?.map((role) => (
+                      <TableRow key={role.id}>
+                        <TableCell>
+                          <a className="font-medium hover:underline" href={`/console/roles/${role.id}`}>
+                            {role.name}
+                          </a>
+                          <div className="text-xs text-muted-foreground">{role.key}</div>
+                        </TableCell>
+                        <TableCell>{role.organizationId ? 'Organization' : 'Global template'}</TableCell>
+                        <TableCell>{role.tokenClaimName ?? 'Default authorization claims'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </SettingsSection>
+          ) : null}
+          {tab === 'organization-permissions' ? (
+            <SettingsSection
+              title="Organization permissions"
+              description="Permissions are managed on API resources and attached to organization roles."
+            >
               <EmptyState
                 action={
                   <a className="uiButton uiButton-secondary" href="/console/api-resources">
@@ -4430,10 +4376,10 @@ export function OrganizationTemplatePage({
                 framed={false}
                 title="Permission templates use API resources"
               />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </SettingsSection>
+          ) : null}
+        </SettingsSections>
+      </div>
     </ResourcePage>
   )
 }
@@ -4445,7 +4391,7 @@ export function CustomizeJwtPage() {
       description="Review token claim controls backed by the current authorization model."
       framed={false}
     >
-      <div className="grid gap-4 xl:grid-cols-3">
+      <SettingsSections>
         <TokenCustomizationCard
           title="Access token"
           rows={[
@@ -4470,7 +4416,7 @@ export function CustomizeJwtPage() {
             ['Arbitrary claim editor', 'Unavailable until a dedicated ID token customization API exists.'],
           ]}
         />
-      </div>
+      </SettingsSections>
     </ResourcePage>
   )
 }
@@ -4638,17 +4584,13 @@ export function AuditLogsPage() {
 
 function TokenCustomizationCard({ rows, title }: { rows: Array<[string, string]>; title: string }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>Claim controls reflect the persisted authorization contract.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
+    <SettingsSection title={title} description="Claim controls reflect the persisted authorization contract.">
+      <div className="grid gap-3">
         {rows.map(([label, value]) => (
           <SettingRow key={label} label={label} value={value} />
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   )
 }
 
@@ -4691,8 +4633,6 @@ function SignInExperiencePage({
   onRetry?: () => void
   title: string
 }) {
-  const navigate = useNavigate()
-
   return (
     <ResourcePage
       description={description}
@@ -4702,28 +4642,39 @@ function SignInExperiencePage({
       onRetry={onRetry}
       title={title}
       toolbar={
-        <Tabs
-          setValue={(value) => {
-            const tab = signInExperienceTabs.find((item) => item.value === value)!
-            void navigate({ to: tab.href })
-          }}
-          value={activeTab}
-        >
-          <TabsList
-            aria-label="Sign-in and account settings"
-            className="flex w-full flex-wrap sm:inline-flex sm:w-auto"
-          >
-            {signInExperienceTabs.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <RoutedSettingsTabs
+          active={activeTab}
+          ariaLabel="Sign-in and account settings"
+          tabs={signInExperienceTabs.map((tab) => [tab.value, tab.label, tab.href] as const)}
+        />
       }
     >
       {children}
     </ResourcePage>
+  )
+}
+
+function SettingsSections({ children }: { children: ReactNode }) {
+  return <div className="rounded-md border border-border bg-background">{children}</div>
+}
+
+function SettingsSection({
+  children,
+  description,
+  title,
+}: {
+  children: ReactNode
+  description: string
+  title: string
+}) {
+  return (
+    <section className="grid gap-3 border-b border-border p-4 last:border-b-0 md:grid-cols-[15rem_minmax(0,1fr)]">
+      <div>
+        <h2 className="text-sm font-semibold leading-5 tracking-normal">{title}</h2>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
   )
 }
 
@@ -5155,12 +5106,16 @@ function ConnectorSectionTabs({ active }: { active: 'passwordless' | 'social' })
 function RoutedSettingsTabs<TValue extends string>({
   active,
   ariaLabel,
+  onSelect,
   tabs,
 }: {
   active: TValue
   ariaLabel: string
+  onSelect?: (value: TValue) => void
   tabs: ReadonlyArray<readonly [TValue, string, string]>
 }) {
+  const navigate = useNavigate()
+
   return (
     <nav aria-label={ariaLabel} className="inline-flex flex-wrap rounded-lg bg-muted p-1">
       {tabs.map(([value, label, to]) => (
@@ -5172,6 +5127,14 @@ function RoutedSettingsTabs<TValue extends string>({
           )}
           href={to}
           key={value}
+          onClick={(event) => {
+            if (event.defaultPrevented || event.button !== 0) return
+            if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return
+
+            event.preventDefault()
+            onSelect?.(value)
+            navigateConsoleTab(navigate, to)
+          }}
         >
           {label}
         </a>
