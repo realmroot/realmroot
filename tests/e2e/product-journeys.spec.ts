@@ -1146,6 +1146,16 @@ const journeyAssertions: Record<
       await redirectUrisInput.fill('https://new.example.com/callback')
       await expect(redirectUrisInput).toHaveValue('https://new.example.com/callback')
       await page.getByRole('button', { name: 'Save redirect URIs' }).click()
+      await expect
+        .poll(() =>
+          requests.some(
+            (request) =>
+              request.method === 'PUT' &&
+              request.path === '/api/management/applications/app-1/redirect-uris' &&
+              JSON.stringify(request.body) === JSON.stringify({ redirectUris: ['https://new.example.com/callback'] }),
+          ),
+        )
+        .toBe(true)
       await page.getByRole('button', { name: 'Disable application' }).click()
       await page.getByRole('button', { name: 'Enable application' }).click()
       await page.goto('/console/applications/confidential-app')
@@ -1244,7 +1254,10 @@ const journeyAssertions: Record<
     suite: 'admin management journeys',
     assert: async ({ page }) => {
       await page.goto('/console/sign-in-experience/sign-up-and-sign-in')
-      await expect(page.getByRole('tab', { name: 'Sign-up and sign-in' })).toHaveAttribute('aria-selected', 'true')
+      await expect(page.getByRole('link', { exact: true, name: 'Sign-up and sign-in' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      )
 
       for (const route of [
         {
@@ -1276,10 +1289,10 @@ const journeyAssertions: Record<
           heading: 'Sign-up and sign-in',
         },
       ]) {
-        await page.getByRole('tab', { name: route.tab }).click()
+        await page.getByRole('link', { exact: true, name: route.tab }).click()
         await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`))
         await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible()
-        await expect(page.getByRole('tab', { name: route.tab })).toHaveAttribute('aria-selected', 'true')
+        await expect(page.getByRole('link', { exact: true, name: route.tab })).toHaveAttribute('aria-current', 'page')
       }
     },
   },
