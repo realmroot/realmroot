@@ -1,8 +1,10 @@
 {
   "target": 1,
-  "honoRpcSmokeJourneys": ["platform-status"],
+  "honoRpcSmokeJourneys": ["api-health-smoke"],
   "journeys": [
-    { "id": "platform-status", "name": "Public home page shows API platform status" },
+    { "id": "api-health-smoke", "name": "Hono API health smoke returns platform status" },
+    { "id": "root-signed-out-redirect", "name": "Root redirects signed-out users to hosted sign-in" },
+    { "id": "root-signed-in-redirect", "name": "Root redirects signed-in users to the profile entry point" },
     { "id": "first-admin-gate", "name": "Fresh deployment product routes redirect to first-admin onboarding" },
     { "id": "public-onboarding", "name": "Fresh deployment onboarding creates first admin" },
     { "id": "public-sign-in", "name": "Hosted sign-in renders enabled methods" },

@@ -36,7 +36,6 @@ import { ApiRequestError, getConfigz } from '@/lib/api'
 import { getAccountProfile } from '@/lib/api/account'
 import { adminQueryKeys, getAdminReadiness, getSignInSettings } from '@/lib/api/management'
 import { AccountRoute } from '@/routes/account'
-import { App } from '@/routes/app'
 import { AuthCallbackRoute } from '@/routes/auth-callback'
 import { EmailVerificationRoute } from '@/routes/email-verification'
 import { ForgotPasswordRoute } from '@/routes/forgot-password'
@@ -64,7 +63,10 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: App,
+  beforeLoad: async () => {
+    await loadAccountAccess()
+    throw redirect({ to: '/profile' })
+  },
 })
 
 const signInRoute = createRoute({
@@ -124,16 +126,7 @@ const oidcStartRoute = createRoute({
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account',
-  beforeLoad: async ({ location }) => {
-    try {
-      await queryClient.fetchQuery({ queryKey: ['account', 'profile'], queryFn: getAccountProfile })
-    } catch (error) {
-      if (error instanceof ApiRequestError && error.status === 401) {
-        throw redirect({ to: '/sign-in', search: { return_to: location.href } })
-      }
-      throw error
-    }
-  },
+  beforeLoad: async ({ location }) => loadAccountAccess(location.href),
   component: () => <Outlet />,
 })
 
@@ -186,16 +179,15 @@ const accountAuthorizedAppsRoute = createRoute({
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
+  beforeLoad: async ({ location }) => loadAccountAccess(location.href),
+  component: AccountRoute,
 })
 
 const profileSecurityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile/security',
   beforeLoad: () => {
-    throw redirect({ to: '/account' })
+    throw redirect({ to: '/profile' })
   },
 })
 
@@ -203,7 +195,7 @@ const profileLinkedAccountsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile/linked-accounts',
   beforeLoad: () => {
-    throw redirect({ to: '/account' })
+    throw redirect({ to: '/profile' })
   },
 })
 
@@ -211,7 +203,7 @@ const profileSessionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile/sessions',
   beforeLoad: () => {
-    throw redirect({ to: '/account' })
+    throw redirect({ to: '/profile' })
   },
 })
 
@@ -219,7 +211,7 @@ const profileAuthorizedAppsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile/authorized-apps',
   beforeLoad: () => {
-    throw redirect({ to: '/account' })
+    throw redirect({ to: '/profile' })
   },
 })
 
@@ -826,6 +818,18 @@ export const router = createRouter({ routeTree })
 
 function isRedirect(error: unknown) {
   return typeof error === 'object' && error !== null && 'headers' in error && 'status' in error
+}
+
+async function loadAccountAccess(returnTo?: string) {
+  try {
+    await queryClient.fetchQuery({ queryKey: ['account', 'profile'], queryFn: getAccountProfile })
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 401) {
+      if (returnTo) throw redirect({ to: '/sign-in', search: { return_to: returnTo } })
+      throw redirect({ to: '/sign-in' })
+    }
+    throw error
+  }
 }
 
 export async function loadConsoleAccess(location: { href: string; pathname: string }) {
