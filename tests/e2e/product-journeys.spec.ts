@@ -1809,6 +1809,23 @@ async function expectConsoleRouteContent(page: Page, route: ConsoleVisualRoute) 
       await expect(consoleNav.getByRole('link', { name: route.activeNav })).toHaveClass(/bg-primary\/10/)
     }
   }
+
+  if (route.name === 'user-detail') {
+    await expect(main.getByRole('heading', { name: 'Identity summary' })).toBeVisible()
+    await expect(main.getByText('Authorized apps')).toBeVisible()
+  }
+  if (route.name === 'organization-detail') {
+    await expect(main.getByRole('heading', { name: 'Organization summary' })).toBeVisible()
+    await expect(main.getByText('Organization ID', { exact: true })).toBeVisible()
+  }
+  if (route.name === 'role-detail') {
+    await expect(main.getByRole('heading', { name: 'Role summary' })).toBeVisible()
+    await expect(main.getByText('Scope', { exact: true })).toBeVisible()
+  }
+  if (route.name === 'api-resource-detail') {
+    await expect(main.getByRole('heading', { name: 'Resource summary' })).toBeVisible()
+    await expect(main.getByText('Claims namespace', { exact: true })).toBeVisible()
+  }
 }
 
 async function expectNoDocumentHorizontalOverflow(page: Page) {

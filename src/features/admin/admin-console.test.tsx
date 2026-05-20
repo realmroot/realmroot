@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRouter, queryClient } from '@/router'
@@ -30,6 +30,7 @@ import {
   SecurityGeneralPage,
   SecurityPasswordPolicyPage,
   SignInSettingsPage,
+  UserDetailPage,
   UsersPage,
   WebhooksPage,
 } from './admin-console'
@@ -1588,8 +1589,13 @@ describe('admin console', () => {
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
     expect(window.location.pathname).toBe('/console/users/user-1/profile')
     expect(screen.getByRole('tab', { name: 'Profile' }).getAttribute('aria-selected')).toBe('true')
+    expect(summaryCard('Identity summary').getByText('User ID')).toBeTruthy()
+    expect(summaryCard('Identity summary').getByText('user-1')).toBeTruthy()
+    expect(summaryCard('Identity summary').getByText('jane@example.com')).toBeTruthy()
+    expect(summaryCard('Identity summary').getByText('admin')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: 'Security' }))
     expect(screen.getByText('MFA and passkeys')).toBeTruthy()
+    expect(summaryCard('Identity summary').getByText('Account status')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
     expect(await screen.findByRole('button', { name: 'Send password reset' })).toBeTruthy()
     expect(fetches.map((entry) => entry.url)).toEqual(
@@ -1602,6 +1608,13 @@ describe('admin console', () => {
         '/api/management/users/user-1/passkeys?',
       ]),
     )
+    await waitFor(() => {
+      const summary = summaryCard('Identity summary')
+      expect(summary.getByText('Sessions')).toBeTruthy()
+      expect(summary.getByText('Linked accounts')).toBeTruthy()
+      expect(summary.getByText('Authorized apps')).toBeTruthy()
+      expect(summary.getAllByText('1').length).toBeGreaterThanOrEqual(3)
+    })
 
     fireEvent.click(screen.getByRole('tab', { name: 'Profile' }))
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Jane Q. Stone' } })
@@ -3546,6 +3559,10 @@ describe('admin console', () => {
 
     expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected')).toBe('true')
+    expect(summaryCard('Organization summary').getByText('org-1')).toBeTruthy()
+    expect(summaryCard('Organization summary').getByText('acme')).toBeTruthy()
+    expect(summaryCard('Organization summary').getByText('Acme Inc.')).toBeTruthy()
+    expect(summaryCard('Organization summary').getByText('Enabled')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Acme Updated' } })
     fireEvent.change(screen.getByLabelText('Disabled reason'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save organization' }))
@@ -3562,8 +3579,9 @@ describe('admin console', () => {
       })
     })
     fireEvent.click(screen.getByRole('tab', { name: 'Authorization' }))
-    expect(screen.getByText('Organization ID')).toBeTruthy()
+    expect(screen.getAllByText('Organization ID').length).toBeGreaterThan(0)
     expect(screen.getByText('Members and invitations')).toBeTruthy()
+    expect(summaryCard('Organization summary').getByText('Not set')).toBeTruthy()
   })
 
   it('searches organization template roles and opens permission guidance', async () => {
@@ -3718,6 +3736,10 @@ describe('admin console', () => {
     const { unmount } = renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
 
     expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
+    expect(summaryCard('Resource summary').getByText('resource-1')).toBeTruthy()
+    expect(summaryCard('Resource summary').getByText('management-api')).toBeTruthy()
+    expect(summaryCard('Resource summary').getByText('https://auth.example.com/api/management')).toBeTruthy()
+    expect(summaryCard('Resource summary').getByText('Enabled')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Disable' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
@@ -3792,7 +3814,12 @@ describe('admin console', () => {
     renderWithQuery(<RoleDetailPage roleId="role-1" section="permissions" />)
 
     expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('role-1')).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('admin')).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('API resource resource-1')).toBeTruthy()
     await waitFor(() => expect(screen.getByText('orders.read')).toBeTruthy())
+    expect(summaryCard('Role summary').getByText('Permissions')).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('0')).toBeTruthy()
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.click(screen.getByRole('button', { name: 'Save permissions' }))
     await waitFor(() =>
@@ -4175,6 +4202,162 @@ describe('admin console', () => {
         body: { permissionIds: [] },
       }),
     )
+  })
+
+  it('renders detail summary variants for unset and scoped records', async () => {
+    let roleDetail = {
+      ...role,
+      applicationId: 'app-1' as string | null,
+      organizationId: null as string | null,
+      resourceId: null as string | null,
+      system: false,
+      tokenClaimName: 'roles' as string | null,
+      tokenClaimValue: 'admin' as string | null,
+    }
+    const disabledOrganization = {
+      ...organization,
+      displayName: null,
+      disabled: true,
+      disabledReason: 'Paused by policy',
+    }
+    const disabledResource = {
+      ...apiResource,
+      enabled: false,
+      tokenClaimsNamespace: 'https://claims.example.com',
+    }
+
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/users/user-1') {
+        return Promise.resolve(
+          jsonResponse({
+            user: {
+              id: 'user-1',
+              email: null,
+              emailVerified: false,
+              username: null,
+              role: null,
+              banned: true,
+              banReason: 'abuse',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          }),
+        )
+      }
+      if (url.startsWith('/api/management/users/user-1/sessions')) {
+        return Promise.resolve(jsonResponse({ sessions: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+        return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/users/user-1/applications')) {
+        return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/users/user-1/security')
+        return Promise.resolve(jsonResponse({ security: adminSecurity }))
+      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+        return Promise.resolve(jsonResponse({ passkeys: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/organizations/org-1') return Promise.resolve(jsonResponse(disabledOrganization))
+      if (url === '/api/management/roles/role-1') return Promise.resolve(jsonResponse(roleDetail))
+      if (url === '/api/management/roles/role-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [apiPermission] }))
+      }
+      if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(disabledResource))
+      if (url === '/api/management/api-resources/resource-1/scopes') {
+        return Promise.resolve(jsonResponse({ scopes: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(jsonResponse({ permissions: [], pagination: emptyPagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<UserDetailPage userId="user-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'user-1' })).toBeTruthy()
+    expect(summaryCard('Identity summary').getByText('Not set')).toBeTruthy()
+    expect(summaryCard('Identity summary').getByText('user')).toBeTruthy()
+    expect(summaryCard('Identity summary').getByText('Banned')).toBeTruthy()
+    expect(summaryCard('Identity summary').getAllByText('0').length).toBeGreaterThanOrEqual(3)
+
+    cleanup()
+    renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
+    expect(summaryCard('Organization summary').getByText('Acme')).toBeTruthy()
+    expect(summaryCard('Organization summary').getByText('Disabled')).toBeTruthy()
+    expect(summaryCard('Organization summary').getByText('Paused by policy')).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
+    expect(summaryCard('Resource summary').getByText('Disabled')).toBeTruthy()
+    expect(summaryCard('Resource summary').getByText('https://claims.example.com')).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('Application app-1')).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('1')).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('roles')).toBeTruthy()
+
+    cleanup()
+    roleDetail = { ...role, organizationId: 'org-1', resourceId: null, system: false }
+    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('Organization org-1')).toBeTruthy()
+
+    cleanup()
+    roleDetail = { ...role, applicationId: null, organizationId: null, resourceId: null }
+    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('Tenant')).toBeTruthy()
+  })
+
+  it('renders detail summary counts while related detail lists are loading', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/management/api-resources/resource-1/scopes') return new Promise(() => undefined)
+      if (url === '/api/management/api-resources/resource-1/permissions') return new Promise(() => undefined)
+      if (url === '/api/management/users/user-1') return Promise.resolve(jsonResponse({ user }))
+      if (url.startsWith('/api/management/users/user-1/sessions')) return new Promise(() => undefined)
+      if (url.startsWith('/api/management/users/user-1/linked-accounts')) return new Promise(() => undefined)
+      if (url.startsWith('/api/management/users/user-1/applications')) return new Promise(() => undefined)
+      if (url === '/api/management/users/user-1/security') return new Promise(() => undefined)
+      if (url.startsWith('/api/management/users/user-1/passkeys')) return new Promise(() => undefined)
+      if (url === '/api/management/roles/role-1') {
+        return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
+      }
+      if (url === '/api/management/roles/role-1/permissions') return new Promise(() => undefined)
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
+    expect(summaryCard('Resource summary').getAllByText('0')).toHaveLength(2)
+
+    cleanup()
+    renderWithQuery(<RoleDetailPage roleId="role-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
+    expect(summaryCard('Role summary').getByText('0')).toBeTruthy()
+
+    cleanup()
+    renderWithQuery(<UserDetailPage userId="user-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Jane Doe' })).toBeTruthy()
+    expect(summaryCard('Identity summary').getAllByText('0')).toHaveLength(3)
   })
 
   it('renders admin variants for empty, disabled, and unset states', async () => {
@@ -4806,6 +4989,12 @@ function metricValue(label: string) {
   const card = screen.getByText(label).closest('[data-ui="card"]')
   expect(card).toBeTruthy()
   return card?.querySelector('.text-2xl')?.textContent ?? ''
+}
+
+function summaryCard(title: string) {
+  const card = screen.getByRole('heading', { name: title }).closest('[data-ui="card"]')
+  expect(card).toBeTruthy()
+  return within(card as HTMLElement)
 }
 
 function jsonResponse(body: unknown, status = 200) {

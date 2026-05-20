@@ -1368,6 +1368,12 @@ export function UserDetailPage({ userId, section = 'profile' }: { userId: string
                 error={applicationsQuery.error}
               />
             ) : null}
+            <UserIdentitySummaryCard
+              applicationsCount={applicationsQuery.data?.applications.length ?? 0}
+              linkedAccountsCount={linkedAccountsQuery.data?.accounts.length ?? 0}
+              sessionsCount={sessionsQuery.data?.sessions.length ?? 0}
+              user={user}
+            />
           </div>
           <BanUserDialog
             error={banMutation.error}
@@ -1726,6 +1732,36 @@ function UserApplicationsCard({
           </p>
         )}
         <MutationError error={error} />
+      </CardContent>
+    </Card>
+  )
+}
+
+function UserIdentitySummaryCard({
+  applicationsCount,
+  linkedAccountsCount,
+  sessionsCount,
+  user,
+}: {
+  applicationsCount: number
+  linkedAccountsCount: number
+  sessionsCount: number
+  user: ManagementUserResponse
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Identity summary</CardTitle>
+        <CardDescription>Read-only context for the selected user tab.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <SettingRow label="User ID" value={user.id} />
+        <SettingRow label="Email" value={user.email ?? 'Not set'} />
+        <SettingRow label="Role" value={formatRole(user.role)} />
+        <SettingRow label="Account status" value={user.banned ? 'Banned' : 'Active'} />
+        <SettingRow label="Sessions" value={String(sessionsCount)} />
+        <SettingRow label="Linked accounts" value={String(linkedAccountsCount)} />
+        <SettingRow label="Authorized apps" value={String(applicationsCount)} />
       </CardContent>
     </Card>
   )
@@ -2778,10 +2814,44 @@ export function OrganizationDetailPage({
                 </CardContent>
               </Card>
             ) : null}
+            <OrganizationSummaryCard organization={organization} />
           </div>
         </div>
       ) : null}
     </ResourcePage>
+  )
+}
+
+function OrganizationSummaryCard({
+  organization,
+}: {
+  organization: {
+    id: string
+    slug: string
+    name: string
+    displayName: string | null
+    disabled: boolean
+    disabledReason: string | null
+    createdAt: string | Date
+    updatedAt: string | Date
+  }
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Organization summary</CardTitle>
+        <CardDescription>Read-only organization identity and lifecycle fields.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <SettingRow label="Organization ID" value={organization.id} />
+        <SettingRow label="Slug" value={organization.slug} />
+        <SettingRow label="Display name" value={organization.displayName ?? organization.name} />
+        <SettingRow label="Status" value={organization.disabled ? 'Disabled' : 'Enabled'} />
+        <SettingRow label="Disabled reason" value={organization.disabledReason ?? 'Not set'} />
+        <SettingRow label="Created" value={formatDate(organization.createdAt)} />
+        <SettingRow label="Updated" value={formatDate(organization.updatedAt)} />
+      </CardContent>
+    </Card>
   )
 }
 
@@ -3162,11 +3232,59 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
                 </CardContent>
               </Card>
             ) : null}
+            <RoleSummaryCard permissionCount={rolePermissionsQuery.data?.permissions.length ?? 0} role={role} />
           </div>
         </div>
       ) : null}
     </ResourcePage>
   )
+}
+
+function RoleSummaryCard({
+  permissionCount,
+  role,
+}: {
+  permissionCount: number
+  role: {
+    id: string
+    key: string
+    name: string
+    system: boolean
+    applicationId: string | null
+    organizationId: string | null
+    resourceId: string | null
+    tokenClaimName: string | null
+    tokenClaimValue: string | null
+  }
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Role summary</CardTitle>
+        <CardDescription>Read-only role scope and token claim context.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <SettingRow label="Role ID" value={role.id} />
+        <SettingRow label="Key" value={role.key} />
+        <SettingRow label="Type" value={role.system ? 'System role' : 'Custom role'} />
+        <SettingRow label="Scope" value={roleScopeLabel(role)} />
+        <SettingRow label="Permissions" value={String(permissionCount)} />
+        <SettingRow label="Token claim" value={role.tokenClaimName ?? 'Not set'} />
+        <SettingRow label="Token value" value={role.tokenClaimValue ?? 'Not set'} />
+      </CardContent>
+    </Card>
+  )
+}
+
+function roleScopeLabel(role: {
+  applicationId: string | null
+  organizationId: string | null
+  resourceId: string | null
+}) {
+  if (role.resourceId) return `API resource ${role.resourceId}`
+  if (role.organizationId) return `Organization ${role.organizationId}`
+  if (role.applicationId) return `Application ${role.applicationId}`
+  return 'Tenant'
 }
 
 export function ApiResourcesPage() {
@@ -3540,10 +3658,52 @@ export function ApiResourceDetailPage({
                 </CardContent>
               </Card>
             ) : null}
+            <ApiResourceSummaryCard
+              permissionsCount={permissionsQuery.data?.permissions.length ?? 0}
+              resource={resource}
+              scopesCount={scopesQuery.data?.scopes.length ?? 0}
+            />
           </div>
         </div>
       ) : null}
     </ResourcePage>
+  )
+}
+
+function ApiResourceSummaryCard({
+  permissionsCount,
+  resource,
+  scopesCount,
+}: {
+  permissionsCount: number
+  resource: {
+    id: string
+    identifier: string
+    audience: string
+    enabled: boolean
+    tokenClaimsNamespace: string | null
+    createdAt: string | Date
+    updatedAt: string | Date
+  }
+  scopesCount: number
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Resource summary</CardTitle>
+        <CardDescription>Read-only API authorization context.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <SettingRow label="Resource ID" value={resource.id} />
+        <SettingRow label="Identifier" value={resource.identifier} />
+        <SettingRow label="Audience" value={resource.audience} />
+        <SettingRow label="Status" value={resource.enabled ? 'Enabled' : 'Disabled'} />
+        <SettingRow label="Scopes" value={String(scopesCount)} />
+        <SettingRow label="Permissions" value={String(permissionsCount)} />
+        <SettingRow label="Claims namespace" value={resource.tokenClaimsNamespace ?? 'Default'} />
+        <SettingRow label="Updated" value={formatDate(resource.updatedAt)} />
+      </CardContent>
+    </Card>
   )
 }
 
