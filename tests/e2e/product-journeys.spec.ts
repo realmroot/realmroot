@@ -135,9 +135,27 @@ const consoleRoutes = [
     activeNav: 'Sign-in & account',
   },
   {
+    name: 'desktop-sign-in-preview',
+    path: '/console/sign-in-experience/desktop',
+    heading: 'Desktop',
+    kind: 'settings',
+    journeyId: 'admin-sign-in-experience-routes',
+    sentinel: 'Desktop preview',
+    activeNav: 'Sign-in & account',
+  },
+  {
+    name: 'mobile-sign-in-preview',
+    path: '/console/sign-in-experience/mobile',
+    heading: 'Mobile',
+    kind: 'settings',
+    journeyId: 'admin-sign-in-experience-routes',
+    sentinel: 'Mobile preview',
+    activeNav: 'Sign-in & account',
+  },
+  {
     name: 'mfa',
     path: '/console/mfa',
-    heading: 'Multi-factor auth',
+    heading: 'Multi-factor authentication',
     kind: 'settings',
     journeyId: 'admin-security-policy',
     sentinel: 'Policy controls',
@@ -146,7 +164,7 @@ const consoleRoutes = [
   {
     name: 'connectors',
     path: '/console/connectors/passwordless',
-    heading: 'Passwordless connectors',
+    heading: 'Connectors',
     kind: 'list',
     journeyId: 'admin-connector-inventory',
     sentinel: 'Email connector',
@@ -155,7 +173,7 @@ const consoleRoutes = [
   {
     name: 'social-connectors',
     path: '/console/connectors/social',
-    heading: 'Social connectors',
+    heading: 'Connectors',
     kind: 'list',
     journeyId: 'admin-social-connector-inventory',
     sentinel: 'GitHub',
@@ -167,7 +185,7 @@ const consoleRoutes = [
     heading: 'Security',
     kind: 'settings',
     journeyId: 'admin-security-policy',
-    sentinel: 'Password policy',
+    sentinel: 'Password requirements',
     activeNav: 'Security',
   },
   {
@@ -308,7 +326,7 @@ const consoleRoutes = [
   {
     name: 'tenant-settings',
     path: '/console/tenant-settings/oidc-configs',
-    heading: 'OIDC configs',
+    heading: 'Settings',
     kind: 'settings',
     journeyId: 'admin-deployment-settings',
     sentinel: 'Runtime endpoints',
@@ -946,8 +964,8 @@ const journeyAssertions: Record<
           href: '/console/sign-in-experience/sign-up-and-sign-in',
           heading: 'Sign-up and sign-in',
         },
-        { label: 'Multi-factor auth', href: '/console/mfa', heading: 'Multi-factor auth' },
-        { label: 'Connectors', href: '/console/connectors/passwordless', heading: 'Passwordless connectors' },
+        { label: 'Multi-factor auth', href: '/console/mfa', heading: 'Multi-factor authentication' },
+        { label: 'Connectors', href: '/console/connectors/passwordless', heading: 'Connectors' },
         { label: 'Security', href: '/console/security/password-policy', heading: 'Security' },
         { label: 'API resources', href: '/console/api-resources', heading: 'API resources' },
         { label: 'Roles', href: '/console/roles', heading: 'Roles' },
@@ -960,7 +978,7 @@ const journeyAssertions: Record<
         { label: 'User management', href: '/console/users', heading: 'Users' },
         { label: 'Custom JWT', href: '/console/customize-jwt', heading: 'Custom JWT' },
         { label: 'Webhooks', href: '/console/webhooks/endpoints', heading: 'Webhooks' },
-        { label: 'Settings', href: '/console/tenant-settings/oidc-configs', heading: 'OIDC configs' },
+        { label: 'Settings', href: '/console/tenant-settings/oidc-configs', heading: 'Settings' },
       ]) {
         const link = consoleNav.locator(`a[href="${item.href}"]`)
         await expect(link).toContainText(item.label)
@@ -1191,10 +1209,10 @@ const journeyAssertions: Record<
     suite: 'admin management journeys',
     assert: async ({ page }) => {
       await page.goto('/console/connectors/passwordless')
-      await expect(page.getByRole('heading', { name: 'Passwordless connectors' })).toBeVisible()
-      await expect(page.getByText('Email connector')).toBeVisible()
-      await expect(page.getByText('Email delivery is limited to the configured runtime email service binding.')).toBeVisible()
-      await expect(page.getByText('SMS connector')).toBeVisible()
+      await expect(page.getByRole('heading', { exact: true, name: 'Connectors' })).toBeVisible()
+      await expect(page.getByText('Email connector', { exact: true }).first()).toBeVisible()
+      await expect(page.getByText('Email and SMS connectors')).toBeVisible()
+      await expect(page.getByText('SMS connector', { exact: true }).first()).toBeVisible()
       await expect(page.getByRole('button', { name: 'Email setup unavailable locally' })).toBeDisabled()
       await expect(page.getByRole('button', { name: 'Setup SMS' })).toBeDisabled()
     },
@@ -1203,7 +1221,7 @@ const journeyAssertions: Record<
     suite: 'admin management journeys',
     assert: async ({ page }) => {
       await page.goto('/console/connectors/social')
-      await expect(page.getByRole('heading', { name: 'Social connectors' })).toBeVisible()
+      await expect(page.getByRole('heading', { exact: true, name: 'Connectors' })).toBeVisible()
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await expect(page.getByRole('cell', { name: 'github', exact: true })).toBeVisible()
       await expect(page.getByText('read:user, user:email')).toBeVisible()
@@ -1269,6 +1287,8 @@ const journeyAssertions: Record<
         { path: '/console/sign-in-experience/collect-user-profile', heading: 'Collect user profile' },
         { path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
         { path: '/console/sign-in-experience/content', heading: 'Content' },
+        { path: '/console/sign-in-experience/desktop', heading: 'Desktop' },
+        { path: '/console/sign-in-experience/mobile', heading: 'Mobile' },
       ]) {
         await page.goto(route.path)
         await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`))
@@ -1284,6 +1304,8 @@ const journeyAssertions: Record<
         },
         { tab: 'Account Center', path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
         { tab: 'Content', path: '/console/sign-in-experience/content', heading: 'Content' },
+        { tab: 'Desktop', path: '/console/sign-in-experience/desktop', heading: 'Desktop' },
+        { tab: 'Mobile', path: '/console/sign-in-experience/mobile', heading: 'Mobile' },
         {
           tab: 'Sign-up and sign-in',
           path: '/console/sign-in-experience/sign-up-and-sign-in',
@@ -1340,11 +1362,11 @@ const journeyAssertions: Record<
     suite: 'admin management journeys',
     assert: async ({ page }) => {
       await page.goto('/console/mfa')
-      await expect(page.getByRole('heading', { name: 'Multi-factor auth' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Multi-factor authentication' })).toBeVisible()
       await expect(page.getByText('Passkeys', { exact: true })).toBeVisible()
       await expect(page.getByText('Authenticator app', { exact: true })).toBeVisible()
-      await expect(page.getByText('SMS code', { exact: true })).toBeVisible()
-      await expect(page.getByText('Email code', { exact: true })).toBeVisible()
+      await expect(page.getByText('SMS verification code', { exact: true })).toBeVisible()
+      await expect(page.getByText('Email verification code', { exact: true })).toBeVisible()
       await expect(page.getByText('Backup codes', { exact: true })).toBeVisible()
       await expect(page.getByLabel('Prompt policy')).toHaveValue('optional')
       await expect(page.getByLabel('Prompt policy')).toBeDisabled()
@@ -1352,10 +1374,10 @@ const journeyAssertions: Record<
 
       await page.goto('/console/security/password-policy')
       await expect(page.getByRole('heading', { name: 'Security' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Password policy' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Password requirements' })).toBeVisible()
       await expect(page.getByLabel('Minimum length')).toBeDisabled()
-      await expect(page.getByText('Required character types')).toBeVisible()
-      await expect(page.getByText('Compromised-password rejection')).toBeVisible()
+      await expect(page.getByText('1 required character type')).toBeVisible()
+      await expect(page.getByText('Reject compromised passwords')).toBeVisible()
 
       await page.goto('/console/security/captcha')
       await expect(page.getByRole('heading', { name: 'CAPTCHA' })).toBeVisible()
@@ -1549,7 +1571,7 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       await page.goto('/console/tenant-settings/oidc-configs')
       const main = page.getByRole('main')
-      await expect(page.getByRole('heading', { name: 'OIDC configs' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
       await expect(main.getByRole('heading', { name: 'Runtime endpoints' })).toBeVisible()
       await expect(main.getByText('Platform')).toBeVisible()
       await expect(main.getByText('Cloudflare Workers')).toBeVisible()

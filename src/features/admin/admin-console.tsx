@@ -173,6 +173,7 @@ type RoleDetailSection = 'settings' | 'permissions' | 'assignments'
 type ApiResourceDetailSection = 'settings' | 'scopes' | 'permissions'
 type OrganizationTemplateSection = 'organization-roles' | 'organization-permissions'
 type WebhooksSection = 'endpoints' | 'requests'
+type SignInPreviewSurface = 'desktop' | 'mobile'
 
 export function AdminDashboardPage() {
   const query = useQuery({ queryKey: adminQueryKeys.dashboard, queryFn: getAdminDashboard })
@@ -1860,7 +1861,7 @@ export function PasswordlessConnectorsPage() {
 
   return (
     <ResourcePage
-      title="Passwordless connectors"
+      title="Connectors"
       description="Review email and SMS delivery connectors for passwordless hosted authentication."
       error={signInQuery.error ?? readinessQuery.error}
       framed={false}
@@ -1874,17 +1875,37 @@ export function PasswordlessConnectorsPage() {
         <ConnectorSectionTabs active="passwordless" />
         <SettingsSections>
           <SettingsSection
-            title="Email connector"
-            description="Email delivery is limited to the configured runtime email service binding."
+            title="Email and SMS connectors"
+            description="Passwordless delivery options exposed by the current Cloudflare deployment."
+          >
+            <div className="overflow-hidden rounded-md border border-border">
+              <ConnectorSetupRow
+                action="Email setup unavailable locally"
+                description="Magic links and email codes are sent through the configured runtime email service binding."
+                status={
+                  <StatusBadge
+                    active={emailReady === true}
+                    activeLabel="Configured"
+                    inactiveLabel={emailReady === false ? 'Unconfigured' : 'Unknown'}
+                  />
+                }
+                title="Email connector"
+                type="Email"
+              />
+              <ConnectorSetupRow
+                action="Setup SMS"
+                description="SMS code delivery is visible for planning but has no backend connector contract yet."
+                status={<StatusBadge active={false} activeLabel="Configured" inactiveLabel="Unconfigured" />}
+                title="SMS connector"
+                type="SMS"
+              />
+            </div>
+          </SettingsSection>
+          <SettingsSection
+            title="Runtime state"
+            description="Passwordless sign-in flags currently loaded from hosted auth settings."
           >
             <div className="grid gap-3">
-              <div className="flex justify-end">
-                <StatusBadge
-                  active={emailReady === true}
-                  activeLabel="Configured"
-                  inactiveLabel={emailReady === false ? 'Unconfigured' : 'Unknown'}
-                />
-              </div>
               <SettingRow
                 label="Magic link"
                 value={signInQuery.data?.signIn.magicLinkEnabled ? 'Enabled' : 'Disabled'}
@@ -1894,28 +1915,6 @@ export function PasswordlessConnectorsPage() {
                 value={signInQuery.data?.signIn.emailOtpEnabled ? 'Enabled' : 'Disabled'}
               />
               <SettingRow label="Runtime requirement" value="EMAIL binding and EMAIL_FROM sender must be present." />
-              <Button disabled type="button" variant="secondary">
-                Email setup unavailable locally
-              </Button>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Email delivery is configured through deployment bindings, so Console does not persist provider setup
-                locally.
-              </p>
-            </div>
-          </SettingsSection>
-          <SettingsSection
-            title="SMS connector"
-            description="SMS delivery is visible for planning but has no backend connector yet."
-          >
-            <div className="grid gap-3">
-              <div className="flex justify-end">
-                <StatusBadge active={false} activeLabel="Configured" inactiveLabel="Unconfigured" />
-              </div>
-              <SettingRow label="SMS code" value="Unavailable" />
-              <SettingRow label="Backend contract" value="Not available in local runtime" />
-              <Button disabled type="button" variant="secondary">
-                Setup SMS
-              </Button>
             </div>
           </SettingsSection>
         </SettingsSections>
@@ -1980,7 +1979,7 @@ export function ConnectorsPage() {
 
   return (
     <ResourcePage
-      title="Social connectors"
+      title="Connectors"
       description="Configure social and generic OAuth providers used by the hosted sign-in settings."
       action={
         <Button onClick={() => setDialogOpen(true)}>
@@ -2399,7 +2398,7 @@ export function MfaPage() {
 
   return (
     <ResourcePage
-      title="Multi-factor auth"
+      title="Multi-factor authentication"
       description="Review tenant MFA factors and deployment policy for hosted account protection."
       error={query.error}
       framed={false}
@@ -2413,33 +2412,38 @@ export function MfaPage() {
               title="Factors"
               description="Available second factors surfaced by account and deployment support."
             >
-              <div className="grid gap-3 md:grid-cols-2">
-                <FactorStatusCard
+              <div className="grid gap-3">
+                <ToggleSettingRow
                   detail={`RP ${query.data.policy.passkeys.rpName}; ${
                     query.data.policy.passkeys.origins.length
                   } allowed origin${query.data.policy.passkeys.origins.length === 1 ? '' : 's'}.`}
-                  enabled={query.data.policy.passkeys.enabled}
-                  title="Passkeys"
+                  checked={query.data.policy.passkeys.enabled}
+                  disabled
+                  label="Passkeys"
                 />
-                <FactorStatusCard
+                <ToggleSettingRow
                   detail="Authenticator app enrollment is available from the account security flow."
-                  enabled
-                  title="Authenticator app"
+                  checked
+                  disabled
+                  label="Authenticator app"
                 />
-                <FactorStatusCard
+                <ToggleSettingRow
                   detail="SMS code enrollment is not backed by a connector contract in this runtime."
-                  enabled={false}
-                  title="SMS code"
+                  checked={false}
+                  disabled
+                  label="SMS verification code"
                 />
-                <FactorStatusCard
+                <ToggleSettingRow
                   detail="Email OTP is delivered through the configured Cloudflare Email Service binding."
-                  enabled
-                  title="Email code"
+                  checked
+                  disabled
+                  label="Email verification code"
                 />
-                <FactorStatusCard
+                <ToggleSettingRow
                   detail="Backup code generation is available from the account MFA flow."
-                  enabled
-                  title="Backup codes"
+                  checked
+                  disabled
+                  label="Backup codes"
                 />
               </div>
             </SettingsSection>
@@ -2496,18 +2500,18 @@ export function SecurityPasswordPolicyPage() {
       <SecuritySectionTabs active="password-policy" />
       <SettingsSections>
         <SettingsSection
-          title="Password policy"
-          description="Password controls are visible here and disabled until backed by policy storage."
+          title="Password requirements"
+          description="Password controls are visible here until policy storage is available."
         >
           <div className="grid gap-4">
             <Field label="Minimum length">
-              <TextInput aria-label="Minimum length" disabled placeholder="Unavailable until policy storage exists" />
+              <TextInput aria-label="Minimum length" disabled value="8" />
             </Field>
-            <div className="grid gap-3">
-              <SettingRow label="Required character types" value="Unavailable until policy storage exists" />
-              <SettingRow label="Compromised-password rejection" value="Unavailable until policy storage exists" />
-              <SettingRow label="Low-security phrase rejection" value="Unavailable until policy storage exists" />
-              <SettingRow label="User-info rejection" value="Unavailable until policy storage exists" />
+            <div className="grid gap-2">
+              <RadioSettingRow checked label="1 required character type" name="required-character-types" />
+              <RadioSettingRow label="2 required character types" name="required-character-types" />
+              <RadioSettingRow label="3 required character types" name="required-character-types" />
+              <RadioSettingRow label="4 required character types" name="required-character-types" />
             </div>
             <Field label="Custom words">
               <TextArea aria-label="Custom words" disabled placeholder="Unavailable until policy storage exists" />
@@ -2515,12 +2519,15 @@ export function SecurityPasswordPolicyPage() {
           </div>
         </SettingsSection>
         <SettingsSection
-          title="Persistence"
-          description="These controls are not written until a management contract exists."
+          title="Password rejection"
+          description="Static rejection rules shown as compact controls until management persistence exists."
         >
           <div className="grid gap-3">
+            <CheckboxSettingRow checked label="Reject compromised passwords" />
+            <CheckboxSettingRow checked label="Reject repetitive or sequential characters" />
+            <CheckboxSettingRow checked label="Reject user information" />
+            <CheckboxSettingRow label="Reject custom words" />
             <SettingRow label="Current backend" value="Password hashing and reset flows" />
-            <SettingRow label="Policy storage" value="Not available in local runtime" />
           </div>
         </SettingsSection>
       </SettingsSections>
@@ -4131,13 +4138,85 @@ export function ContentSettingsPage() {
   )
 }
 
+export function SignInPreviewSettingsPage({ surface }: { surface: SignInPreviewSurface }) {
+  const query = useQuery({ queryKey: adminQueryKeys.branding, queryFn: getBrandingSettings })
+  const branding = query.data?.branding
+  const title = surface === 'desktop' ? 'Desktop' : 'Mobile'
+  const previewStyle = {
+    '--brand-primary': branding?.primaryColor ?? '#b42318',
+    '--brand-background': branding?.backgroundColor ?? '#f7f3ee',
+    ...customCssProperties(branding?.customCss ?? ''),
+  } as CSSProperties
+
+  return (
+    <SignInExperiencePage
+      activeTab={surface}
+      description={`Review the hosted sign-in ${surface} presentation using current branding and content settings.`}
+      error={query.error}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
+      title={title}
+    >
+      {query.data ? (
+        <SettingsSections>
+          <SettingsSection
+            title={`${title} preview`}
+            description="This preview reads from the same public configuration used by hosted auth."
+          >
+            <div className="grid gap-4">
+              <div
+                className={cn('brandingPreview', surface === 'mobile' ? 'mx-auto w-full max-w-80' : 'min-h-[320px]')}
+                style={previewStyle}
+              >
+                <div className="brand">
+                  {branding?.logoUrl ? (
+                    <img className="brandLogo" src={branding.logoUrl} alt="" width="36" height="36" />
+                  ) : (
+                    <span className="brandMark">{query.data.copy.productName.slice(0, 1).toUpperCase()}</span>
+                  )}
+                  <span>{query.data.copy.productName}</span>
+                </div>
+                <div>
+                  <p className="eyebrow">Hosted sign-in</p>
+                  <h2>{query.data.copy.headline}</h2>
+                  <p>{query.data.copy.description}</p>
+                </div>
+                <Button onClick={() => window.open('/sign-in', '_blank', 'noopener')} type="button">
+                  <Eye data-icon="inline-start" />
+                  Live preview
+                </Button>
+              </div>
+            </div>
+          </SettingsSection>
+          <SettingsSection
+            title={`${title} layout`}
+            description="Current hosted auth routes use one responsive surface with platform-specific viewport constraints."
+          >
+            <div className="grid gap-3">
+              <SettingRow label="Primary route" value="/sign-in" />
+              <SettingRow label="Sign-up route" value="/sign-up" />
+              <SettingRow label="Forgot password route" value="/forgot-password" />
+              <SettingRow
+                label="Viewport"
+                value={
+                  surface === 'desktop' ? 'Centered panel with constrained line length' : 'Full-width mobile panel'
+                }
+              />
+            </div>
+          </SettingsSection>
+        </SettingsSections>
+      ) : null}
+    </SignInExperiencePage>
+  )
+}
+
 export function DeploymentSettingsPage() {
   const query = useQuery({ queryKey: adminQueryKeys.security, queryFn: getSecurityPolicy })
   const [keyTab, setKeyTab] = useState('private')
 
   return (
     <ResourcePage
-      title="OIDC configs"
+      title="Settings"
       description="Review issuer metadata, session TTL, and signing-key runtime state for this tenant."
       action={
         <Button disabled type="button" variant="secondary">
@@ -4150,6 +4229,11 @@ export function DeploymentSettingsPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
+      <RoutedSettingsTabs
+        active="oidc-configs"
+        ariaLabel="Tenant settings"
+        tabs={[['oidc-configs', 'OIDC configs', '/console/tenant-settings/oidc-configs']]}
+      />
       {query.data ? (
         <SettingsSections>
           <SettingsSection
@@ -4402,7 +4486,6 @@ export function CustomizeJwtPage() {
 }
 
 export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSection }) {
-  const navigate = useNavigate()
   const [selectedTab, setSelectedTab] = useState<WebhooksSection>(section)
   useEffect(() => setSelectedTab(section), [section])
 
@@ -4418,33 +4501,31 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
         </Button>
       }
       toolbar={
+        <RoutedSettingsTabs
+          active={selectedTab}
+          ariaLabel="Webhook sections"
+          onSelect={(value) => setSelectedTab(value)}
+          tabs={[
+            ['endpoints', 'Endpoints', '/console/webhooks/endpoints'],
+            ['requests', 'Requests', '/console/webhooks/requests'],
+          ]}
+        />
+      }
+    >
+      <div className="consoleDetailStack">
         <ListToolbar>
           <TextInput aria-label="Search webhooks" disabled placeholder="Search endpoints" />
           <SelectInput aria-label="Filter webhook status" disabled value="">
             <option value="">Any status</option>
           </SelectInput>
         </ListToolbar>
-      }
-    >
-      <div className="consoleDetailStack">
-        <DetailTabs
-          label="Webhook sections"
-          onChange={(value) => {
-            const next = value as WebhooksSection
-            setSelectedTab(next)
-            navigateConsoleTab(navigate, `/console/webhooks/${next}`)
-          }}
-          tabs={webhooksTabs()}
-          value={selectedTab}
-        />
         {selectedTab === 'endpoints' ? (
-          <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-            <Card>
-              <CardHeader>
-                <CardTitle>Create endpoint</CardTitle>
-                <CardDescription>Endpoint creation is disabled until webhook delivery storage exists.</CardDescription>
-              </CardHeader>
-              <CardContent className="formStack">
+          <SettingsSections>
+            <SettingsSection
+              title="Create endpoint"
+              description="Endpoint creation is disabled until webhook delivery storage exists."
+            >
+              <div className="formStack">
                 <Field label="Endpoint URL">
                   <TextInput disabled placeholder="https://example.com/webhooks/auth" type="url" />
                 </Field>
@@ -4458,42 +4539,38 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
                   <Plus data-icon="inline-start" />
                   Create endpoint
                 </Button>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Endpoints</CardTitle>
-                <CardDescription>Endpoint rows appear here after webhook delivery storage exists.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Endpoint</TableHead>
-                      <TableHead>Events</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableEmptyRow
-                      colSpan={4}
-                      description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
-                      title="Webhook delivery unavailable"
-                    />
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Endpoints"
+              description="Endpoint rows appear here after webhook delivery storage exists."
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Endpoint</TableHead>
+                    <TableHead>Events</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableEmptyRow
+                    colSpan={4}
+                    description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
+                    title="Webhook delivery unavailable"
+                  />
+                </TableBody>
+              </Table>
+            </SettingsSection>
+          </SettingsSections>
         ) : null}
         {selectedTab === 'requests' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent requests</CardTitle>
-              <CardDescription>Delivery request persistence is not available in this build.</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <SettingsSections>
+            <SettingsSection
+              title="Recent requests"
+              description="Delivery request persistence is not available in this build."
+            >
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -4511,8 +4588,8 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
                   />
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </SettingsSection>
+          </SettingsSections>
         ) : null}
       </div>
     </ResourcePage>
@@ -4586,6 +4663,8 @@ const signInExperienceTabs: SignInExperienceTab[] = [
   },
   { value: 'account-center', label: 'Account Center', href: '/console/sign-in-experience/account-center' },
   { value: 'content', label: 'Content', href: '/console/sign-in-experience/content' },
+  { value: 'desktop', label: 'Desktop', href: '/console/sign-in-experience/desktop' },
+  { value: 'mobile', label: 'Mobile', href: '/console/sign-in-experience/mobile' },
 ]
 
 function SignInExperiencePage({
@@ -4627,7 +4706,7 @@ function SignInExperiencePage({
 }
 
 function SettingsSections({ children }: { children: ReactNode }) {
-  return <div className="rounded-md border border-border bg-background">{children}</div>
+  return <div className="grid gap-4">{children}</div>
 }
 
 function SettingsSection({
@@ -4640,9 +4719,9 @@ function SettingsSection({
   title: string
 }) {
   return (
-    <section className="grid gap-3 border-b border-border p-4 last:border-b-0 md:grid-cols-[15rem_minmax(0,1fr)]">
+    <section className="grid gap-4 rounded-2xl border border-border bg-background p-5 md:grid-cols-[18rem_minmax(0,1fr)]">
       <div>
-        <h2 className="text-sm font-semibold leading-5 tracking-normal">{title}</h2>
+        <h2 className="text-xs font-semibold uppercase leading-5 tracking-[0.12em] text-muted-foreground">{title}</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
       </div>
       <div className="min-w-0">{children}</div>
@@ -4945,13 +5024,6 @@ function apiResourceDetailTabs(): DetailTab[] {
   ]
 }
 
-function webhooksTabs(): DetailTab[] {
-  return [
-    { value: 'endpoints', label: 'Endpoints' },
-    { value: 'requests', label: 'Requests' },
-  ]
-}
-
 function MetricCard({
   detail,
   label,
@@ -5097,13 +5169,13 @@ function RoutedSettingsTabs<TValue extends string>({
   const navigate = useNavigate()
 
   return (
-    <nav aria-label={ariaLabel} className="inline-flex flex-wrap rounded-lg bg-muted p-1">
+    <nav aria-label={ariaLabel} className="flex flex-wrap gap-6 border-b border-border">
       {tabs.map(([value, label, to]) => (
         <a
           aria-current={active === value ? 'page' : undefined}
           className={cn(
-            'inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground',
-            active === value && 'bg-background text-foreground shadow-sm',
+            'relative -mb-px inline-flex min-h-10 items-center justify-center border-b-2 border-transparent px-1 text-sm font-medium text-muted-foreground',
+            active === value && 'border-primary text-primary',
           )}
           href={to}
           key={value}
@@ -5123,14 +5195,72 @@ function RoutedSettingsTabs<TValue extends string>({
   )
 }
 
-function FactorStatusCard({ detail, enabled, title }: { detail: string; enabled: boolean; title: string }) {
+function ToggleSettingRow({
+  checked,
+  detail,
+  disabled,
+  label,
+}: {
+  checked: boolean
+  detail: string
+  disabled?: boolean
+  label: string
+}) {
   return (
-    <div className="grid gap-2 rounded-md border border-border p-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold">{title}</p>
-        <StatusBadge active={enabled} activeLabel="Available" inactiveLabel="Unavailable" />
+    <div className="flex items-center justify-between gap-4 rounded-md border border-border px-4 py-3">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold">{label}</p>
+        <p className="mt-1 text-sm leading-5 text-muted-foreground">{detail}</p>
       </div>
-      <p className="text-sm leading-6 text-muted-foreground">{detail}</p>
+      <Switch aria-label={label} checked={checked} disabled={disabled} />
+    </div>
+  )
+}
+
+function CheckboxSettingRow({ checked = false, label }: { checked?: boolean; label: string }) {
+  return (
+    <label className="flex items-center gap-3 rounded-md border border-border px-4 py-3 text-sm font-medium">
+      <input checked={checked} className="size-4 accent-primary" disabled readOnly type="checkbox" />
+      <span>{label}</span>
+    </label>
+  )
+}
+
+function RadioSettingRow({ checked = false, label, name }: { checked?: boolean; label: string; name: string }) {
+  return (
+    <label className="flex items-center gap-3 rounded-md border border-border px-4 py-3 text-sm font-medium">
+      <input checked={checked} className="size-4 accent-primary" disabled name={name} readOnly type="radio" />
+      <span>{label}</span>
+    </label>
+  )
+}
+
+function ConnectorSetupRow({
+  action,
+  description,
+  status,
+  title,
+  type,
+}: {
+  action: string
+  description: string
+  status: ReactNode
+  title: string
+  type: string
+}) {
+  return (
+    <div className="grid gap-3 border-b border-border p-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_10rem_14rem] md:items-center">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p>
+      </div>
+      <span className="text-sm text-muted-foreground">{type}</span>
+      <div className="flex flex-wrap items-center gap-2 md:justify-end">
+        {status}
+        <Button className="whitespace-nowrap" disabled size="sm" type="button" variant="secondary">
+          {action}
+        </Button>
+      </div>
     </div>
   )
 }
