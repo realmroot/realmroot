@@ -10,6 +10,7 @@ export const applicationScopeSchema = z.enum(applicationScopes)
 
 const nonEmptyString = z.string().trim().min(1)
 const optionalUrl = z.url().optional()
+const customDataSchema = z.record(z.string(), z.unknown())
 
 export const paginationQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -59,6 +60,9 @@ export const applicationResponseSchema = z
     disabled: z.boolean(),
     disabledReason: z.string().nullable(),
     redirectUris: z.array(z.string()),
+    postLogoutRedirectUris: z.array(z.string()),
+    corsOrigins: z.array(z.string()),
+    customData: customDataSchema,
     allowedGrantTypes: z.array(applicationGrantTypeSchema),
     allowedScopes: z.array(applicationScopeSchema),
     requirePkce: z.boolean(),
@@ -105,6 +109,9 @@ export const updateApplicationRequestSchema = z.object({
   homepageUrl: optionalUrl.nullable(),
   iconUrl: optionalUrl.nullable(),
   redirectUris: z.array(nonEmptyString).min(1).optional(),
+  postLogoutRedirectUris: z.array(nonEmptyString).optional(),
+  corsOrigins: z.array(nonEmptyString).optional(),
+  customData: customDataSchema.optional(),
   allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
   allowedScopes: z.array(applicationScopeSchema).min(1).optional(),
   firstParty: z.boolean().optional(),

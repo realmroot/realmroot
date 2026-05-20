@@ -1,7 +1,6 @@
 import {
   type ApplicationResponse,
   createApplicationRequestSchema,
-  replaceRedirectUrisRequestSchema,
   updateApplicationRequestSchema,
 } from '@shared/api/applications'
 import {
@@ -54,7 +53,7 @@ import {
 import { type CSSProperties, createElement, type FormEvent, type ReactNode, useEffect, useId, useState } from 'react'
 import type { z } from 'zod'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, LinkButton } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -129,7 +128,6 @@ import {
   listUserPasskeys,
   listUserSessions,
   listUsers,
-  replaceApplicationRedirectUris,
   replaceRolePermissions,
   requestPasswordReset,
   requestUserPasswordReset,
@@ -255,14 +253,9 @@ export function ApplicationsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedTab, setSelectedTab] = useState<'my-apps' | 'third-party'>('my-apps')
   const [search, setSearch] = useState('')
-  const [createdSecret, setCreatedSecret] = useState<{ clientId: string; clientSecret: string } | null>(null)
   const createMutation = useAdminMutation({
     mutationFn: createApplication,
-    onSuccess: (application) => {
-      setDialogOpen(false)
-      if (application.clientSecret) {
-        setCreatedSecret({ clientId: application.clientId, clientSecret: application.clientSecret })
-      }
+    onSuccess: () => {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.readiness }),
@@ -291,21 +284,17 @@ export function ApplicationsPage() {
         </Button>
       }
       auxiliary={
-        <>
-          <CreateApplicationDialog
-            error={createMutation.errorMessage}
-            onClose={() => setDialogOpen(false)}
-            onSubmit={createMutation.mutate}
-            open={dialogOpen}
-            pending={createMutation.isPending}
-          />
-          <SecretDisclosureDialog
-            clientId={createdSecret?.clientId ?? null}
-            clientSecret={createdSecret?.clientSecret ?? null}
-            onClose={() => setCreatedSecret(null)}
-            open={createdSecret !== null}
-          />
-        </>
+        <CreateApplicationDialog
+          createdApplication={createMutation.data ?? null}
+          error={createMutation.errorMessage}
+          onClose={() => {
+            setDialogOpen(false)
+            createMutation.reset()
+          }}
+          onSubmit={createMutation.mutate}
+          open={dialogOpen}
+          pending={createMutation.isPending}
+        />
       }
       error={query.error}
       empty={applications.length === 0}
@@ -378,6 +367,8 @@ export function ApplicationDetailPage({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [rotatedSecret, setRotatedSecret] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<ApplicationDetailSection>(section)
+  const [redirectFormError, setRedirectFormError] = useState<string | null>(null)
+  const [customDataFormError, setCustomDataFormError] = useState<string | null>(null)
   useEffect(() => setSelectedTab(section), [section])
   const query = useQuery({
     queryKey: [...adminQueryKeys.applications, applicationId],
@@ -394,11 +385,6 @@ export function ApplicationDetailPage({
       queryClient.setQueryData([...adminQueryKeys.applications, applicationId], application)
       return queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications })
     },
-  })
-  const redirectMutation = useMutation({
-    mutationFn: (input: z.infer<typeof replaceRedirectUrisRequestSchema>) =>
-      replaceApplicationRedirectUris(applicationId, input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.applications, applicationId] }),
   })
   const rotateMutation = useMutation({
     mutationFn: () => rotateApplicationClientSecret(applicationId),
@@ -511,24 +497,28 @@ export function ApplicationDetailPage({
                 <Card className="applicationSettingsPanel">
                   <CardHeader>
                     <CardTitle>Redirects and origins</CardTitle>
-                    <CardDescription>
-                      Callbacks backed by the current API plus pending integration surfaces.
-                    </CardDescription>
+                    <CardDescription>Callbacks and browser origins accepted by this client.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <form
                       className="formStack"
                       id="application-redirect-uris-form"
+                      key={`redirects-${application.id}-${application.updatedAt}`}
                       onSubmit={(event) => {
                         event.preventDefault()
-                        const form = new FormData(event.currentTarget)
-                        redirectMutation.mutate(
-                          parseForm(replaceRedirectUrisRequestSchema, {
-                            redirectUris: String(form.get('redirectUris') ?? '')
-                              .split('\n')
-                              .filter(Boolean),
-                          }),
-                        )
+                        try {
+                          setRedirectFormError(null)
+                          const form = new FormData(event.currentTarget)
+                          updateMutation.mutate(
+                            parseForm(updateApplicationRequestSchema, {
+                              redirectUris: parseLineList(form.get('redirectUris') as string),
+                              postLogoutRedirectUris: parseLineList(form.get('postLogoutRedirectUris') as string),
+                              corsOrigins: parseLineList(form.get('corsOrigins') as string),
+                            }),
+                          )
+                        } catch (submitError) {
+                          setRedirectFormError((submitError as Error).message)
+                        }
                       }}
                     >
                       <Field label="Redirect URIs" help="One URI per line.">
@@ -539,21 +529,32 @@ export function ApplicationDetailPage({
                           rows={5}
                         />
                       </Field>
-                      <Field label="Post sign-out redirect URIs" help="Pending API support.">
-                        <TextArea disabled placeholder="No sign-out redirects configured" rows={3} />
+                      <Field label="Post sign-out redirect URIs" help="One URI per line.">
+                        <TextArea
+                          defaultValue={application.postLogoutRedirectUris.join('\n')}
+                          name="postLogoutRedirectUris"
+                          placeholder="https://app.example.com/signed-out"
+                          rows={3}
+                        />
                       </Field>
-                      <Field label="CORS origins" help="Pending API support.">
-                        <TextArea disabled placeholder="No CORS origins configured" rows={3} />
+                      <Field label="CORS origins" help="One origin per line. Include scheme, host, and optional port.">
+                        <TextArea
+                          defaultValue={application.corsOrigins.join('\n')}
+                          name="corsOrigins"
+                          placeholder="https://app.example.com"
+                          rows={3}
+                        />
                       </Field>
                       <ConsoleActionBar>
-                        <Button disabled={redirectMutation.isPending} type="submit">
-                          Save redirect URIs
+                        <Button disabled={updateMutation.isPending} type="submit">
+                          Save redirects and origins
                         </Button>
-                        <Button disabled={redirectMutation.isPending} type="reset" variant="secondary">
+                        <Button disabled={updateMutation.isPending} type="reset" variant="secondary">
                           Discard
                         </Button>
                       </ConsoleActionBar>
-                      <MutationError error={redirectMutation.error} />
+                      {redirectFormError ? <p className="text-sm text-destructive">{redirectFormError}</p> : null}
+                      <MutationError error={updateMutation.error} />
                     </form>
                   </CardContent>
                 </Card>
@@ -627,23 +628,51 @@ export function ApplicationDetailPage({
                 <Card className="applicationSettingsPanel">
                   <CardHeader>
                     <CardTitle>Advanced options</CardTitle>
-                    <CardDescription>
-                      Current grant data plus pending non-destructive configuration controls.
-                    </CardDescription>
+                    <CardDescription>Grant, scope, and custom metadata included with this client.</CardDescription>
                   </CardHeader>
-                  <CardContent className="grid gap-3">
+                  <CardContent className="formStack">
                     <SettingRow label="Grant types" value={application.allowedGrantTypes.join(', ')} />
                     <SettingRow label="Scopes" value={application.allowedScopes.join(' ')} />
                     <SettingRow
                       label="Refresh tokens"
                       value={application.allowedScopes.includes('offline_access') ? 'Allowed by scope' : 'Not enabled'}
                     />
-                    <SettingRow label="Backchannel logout" value="Pending API support" />
-                    <SettingRow label="Token exchange" value="Pending API support" />
-                    <SettingRow label="Concurrent device limit" value="Pending API support" />
-                    <Field label="Custom data JSON" help="Pending API support.">
-                      <TextArea disabled placeholder="{}" rows={4} />
-                    </Field>
+                    <form
+                      className="formStack"
+                      key={`custom-data-${application.id}-${application.updatedAt}`}
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        try {
+                          setCustomDataFormError(null)
+                          const form = new FormData(event.currentTarget)
+                          updateMutation.mutate(
+                            parseForm(updateApplicationRequestSchema, {
+                              customData: parseCustomData(form.get('customData') as string),
+                            }),
+                          )
+                        } catch (submitError) {
+                          setCustomDataFormError((submitError as Error).message)
+                        }
+                      }}
+                    >
+                      <Field label="Custom data JSON" help="JSON object stored with this application.">
+                        <TextArea
+                          defaultValue={JSON.stringify(application.customData, null, 2)}
+                          name="customData"
+                          rows={5}
+                        />
+                      </Field>
+                      <ConsoleActionBar>
+                        <Button disabled={updateMutation.isPending} type="submit">
+                          Save custom data
+                        </Button>
+                        <Button disabled={updateMutation.isPending} type="reset" variant="secondary">
+                          Discard
+                        </Button>
+                      </ConsoleActionBar>
+                      {customDataFormError ? <p className="text-sm text-destructive">{customDataFormError}</p> : null}
+                      <MutationError error={updateMutation.error} />
+                    </form>
                   </CardContent>
                 </Card>
 
@@ -5740,8 +5769,11 @@ function clientConfig(application: ApplicationResponse, clientSecret: string | n
       discoveryUrl: `${application.oidc.issuer}/.well-known/openid-configuration`,
       clientId: application.clientId,
       redirectUris: application.redirectUris,
+      postLogoutRedirectUris: application.postLogoutRedirectUris,
+      corsOrigins: application.corsOrigins,
       scopes: application.allowedScopes.join(' '),
       tokenEndpointAuthMethod: application.tokenEndpointAuthMethod,
+      customData: application.customData,
       ...(clientSecret ? { clientSecret } : {}),
     },
     null,
@@ -5797,61 +5829,95 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry?: () => void }) 
 }
 
 function CreateApplicationDialog({
+  createdApplication,
   error,
   onClose,
   onSubmit,
   open,
   pending,
 }: {
+  createdApplication: (ApplicationResponse & { clientSecret?: string }) | null
   error: string | null
   onClose: () => void
   onSubmit: (input: z.infer<typeof createApplicationRequestSchema>) => void
   open: boolean
   pending: boolean
 }) {
-  const [form, setForm] = useState<FormState>({ clientType: 'public_spa' })
+  const [form, setForm] = useState<FormState>({ clientType: 'public_spa', redirectUris: '' })
   const [validationError, setValidationError] = useState<string | null>(null)
   return (
     <Dialog open={open}>
-      <FormDialog
-        error={validationError ?? error}
-        onClose={onClose}
-        onSubmit={(event) => {
-          event.preventDefault()
-          try {
-            setValidationError(null)
-            onSubmit(
-              parseForm(createApplicationRequestSchema, {
-                ...form,
-                clientType: form.clientType || 'public_spa',
-                firstParty: true,
-                redirectUris: form.redirectUris?.split('\n').filter(Boolean) ?? [],
-              }),
-            )
-          } catch (submitError) {
-            setValidationError(submitError instanceof Error ? submitError.message : 'Invalid form input.')
-          }
-        }}
-        pending={pending}
-        title="Create application"
-      >
-        <Field label="Name">
-          <TextInput onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
-        </Field>
-        <Field label="Slug">
-          <TextInput
-            onChange={(event) => setValue(setForm, 'slug', event.target.value)}
-            placeholder="customer-portal"
+      {createdApplication ? (
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Application created</DialogTitle>
+            <DialogDescription>
+              Copy the generated credentials, then open the settings page to finish setup.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 p-4 text-sm">
+            <div className="flex items-center gap-2 text-foreground">
+              <CheckCircle2 data-icon="inline-start" />
+              {createdApplication.name}
+            </div>
+            <SettingRow label="Client ID" value={createdApplication.clientId} />
+            {createdApplication.clientSecret ? (
+              <SettingRow label="Client secret" value={createdApplication.clientSecret} />
+            ) : (
+              <SettingRow label="Client secret" value="No secret for public clients" />
+            )}
+            <SettingRow label="Redirect URIs" value={createdApplication.redirectUris.join(', ')} />
+            <SettingRow label="Next step" value="Review redirects, origins, and client metadata." />
+          </div>
+          <DialogFooter className="m-0">
+            <LinkButton href={`/console/applications/${createdApplication.id}/settings`} variant="secondary">
+              Open settings
+            </LinkButton>
+            <Button onClick={onClose} type="button">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      ) : (
+        <FormDialog
+          error={validationError ?? error}
+          onClose={onClose}
+          onSubmit={(event) => {
+            event.preventDefault()
+            try {
+              setValidationError(null)
+              onSubmit(
+                parseForm(createApplicationRequestSchema, {
+                  ...form,
+                  firstParty: true,
+                  redirectUris: form.redirectUris.split('\n').filter(Boolean),
+                }),
+              )
+            } catch (submitError) {
+              setValidationError((submitError as Error).message)
+            }
+          }}
+          pending={pending}
+          title="Create application"
+        >
+          <Field label="Name">
+            <TextInput onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
+          </Field>
+          <Field label="Slug">
+            <TextInput
+              onChange={(event) => setValue(setForm, 'slug', event.target.value)}
+              placeholder="customer-portal"
+            />
+          </Field>
+          <ApplicationTypeCards
+            onChange={(clientType) => setValue(setForm, 'clientType', clientType)}
+            value={form.clientType}
           />
-        </Field>
-        <ApplicationTypeCards
-          onChange={(clientType) => setValue(setForm, 'clientType', clientType)}
-          value={form.clientType}
-        />
-        <Field label="Redirect URIs" help="One URI per line.">
-          <TextArea onChange={(event) => setValue(setForm, 'redirectUris', event.target.value)} required />
-        </Field>
-      </FormDialog>
+          <Field label="Redirect URIs" help="One URI per line.">
+            <TextArea onChange={(event) => setValue(setForm, 'redirectUris', event.target.value)} required />
+          </Field>
+        </FormDialog>
+      )}
     </Dialog>
   )
 }
@@ -6605,6 +6671,23 @@ function parseTokenClaims(value: string) {
   return tokenClaimsObjectSchema.parse(parsed)
 }
 
+function parseLineList(value: string) {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function parseCustomData(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return {}
+  const parsed = JSON.parse(trimmed) as unknown
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Custom data JSON must be an object.')
+  }
+  return parsed as Record<string, unknown>
+}
+
 function customCssProperties(css: string): CSSProperties {
   const result = hostedCustomCssSchema.safeParse(css)
   if (!result.success) return {}
@@ -6646,6 +6729,10 @@ function useAdminMutation<TInput, TOutput>({
     errorMessage,
     isPending: mutation.isPending,
     mutate: (input: TInput) => mutation.mutate(input),
+    reset: () => {
+      setErrorMessage(null)
+      mutation.reset()
+    },
   }
 }
 

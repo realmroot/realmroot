@@ -661,7 +661,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateApplicationRequest"
+                "$ref": "#/components/schemas/UpdateApplicationRequest"
               }
             }
           }
@@ -3761,6 +3761,34 @@
           }
         }
       },
+      "JsonValue": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JsonValue"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            }
+          }
+        ]
+      },
       "OidcEndpointMetadata": {
         "type": "object",
         "required": [
@@ -3809,6 +3837,9 @@
           "disabled",
           "disabledReason",
           "redirectUris",
+          "postLogoutRedirectUris",
+          "corsOrigins",
+          "customData",
           "allowedGrantTypes",
           "allowedScopes",
           "requirePkce",
@@ -3823,7 +3854,9 @@
             "type": "string"
           },
           "slug": {
-            "type": "string"
+            "type": "string",
+            "minLength": 3,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
           },
           "name": {
             "type": "string"
@@ -3838,13 +3871,15 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "format": "uri"
           },
           "iconUrl": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "format": "uri"
           },
           "clientId": {
             "type": "string"
@@ -3879,6 +3914,24 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          },
+          "postLogoutRedirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "corsOrigins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "customData": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
             }
           },
           "allowedGrantTypes": {
@@ -3974,6 +4027,100 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "UpdateApplicationRequest": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "homepageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "iconUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "redirectUris": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "postLogoutRedirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "corsOrigins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "customData": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            }
+          },
+          "allowedGrantTypes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "enum": [
+                "authorization_code",
+                "refresh_token",
+                "client_credentials"
+              ]
+            }
+          },
+          "allowedScopes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "enum": [
+                "openid",
+                "profile",
+                "email",
+                "offline_access"
+              ]
+            }
+          },
+          "firstParty": {
+            "type": "boolean"
+          },
+          "trusted": {
+            "type": "boolean"
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "disabledReason": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

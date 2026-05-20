@@ -30,6 +30,9 @@ export interface ApplicationAggregate {
   disabled: boolean
   disabledReason: string | null
   redirectUris: string[]
+  postLogoutRedirectUris: string[]
+  corsOrigins: string[]
+  customData: Record<string, unknown>
   allowedGrantTypes: ApplicationResponse['allowedGrantTypes']
   allowedScopes: ApplicationResponse['allowedScopes']
   requirePkce: boolean
@@ -127,6 +130,9 @@ export class ApplicationService {
         disabled: false,
         disabledReason: null,
         redirectUris: settings.redirectUris,
+        postLogoutRedirectUris: [],
+        corsOrigins: [],
+        customData: {},
         allowedGrantTypes: settings.allowedGrantTypes,
         allowedScopes: settings.allowedScopes,
         requirePkce: input.clientType !== 'confidential_web',
@@ -179,6 +185,11 @@ export class ApplicationService {
             input.allowedScopes ?? application.allowedScopes,
           )
         : null
+    const postLogoutRedirectUris =
+      input.postLogoutRedirectUris !== undefined
+        ? normalizePostLogoutRedirectUris(application.clientType, input.postLogoutRedirectUris)
+        : undefined
+    const corsOrigins = input.corsOrigins !== undefined ? normalizeCorsOrigins(input.corsOrigins) : undefined
 
     await this.repository.update(id, {
       slug: input.slug,
@@ -191,6 +202,9 @@ export class ApplicationService {
       disabled: input.disabled,
       disabledReason: input.disabledReason,
       redirectUris: settings?.redirectUris,
+      postLogoutRedirectUris,
+      corsOrigins,
+      customData: input.customData,
       allowedGrantTypes: settings?.allowedGrantTypes,
       allowedScopes: settings?.allowedScopes,
     })
@@ -352,6 +366,9 @@ export class ApplicationService {
       disabled: application.disabled,
       disabledReason: application.disabledReason,
       redirectUris: application.redirectUris,
+      postLogoutRedirectUris: application.postLogoutRedirectUris,
+      corsOrigins: application.corsOrigins,
+      customData: application.customData,
       allowedGrantTypes: application.allowedGrantTypes,
       allowedScopes: application.allowedScopes,
       requirePkce: application.requirePkce,
@@ -416,6 +433,22 @@ function normalizeClientSettings(
   }
 }
 
+function normalizePostLogoutRedirectUris(clientType: ApplicationResponse['clientType'], values: string[]) {
+  const redirectUris = dedupe(values)
+  for (const redirectUri of redirectUris) {
+    validateRedirectUri(clientType, redirectUri, 'Post sign-out redirect URIs')
+  }
+  return redirectUris
+}
+
+function normalizeCorsOrigins(values: string[]) {
+  const origins = dedupe(values)
+  for (const origin of origins) {
+    validateCorsOrigin(origin)
+  }
+  return origins
+}
+
 function defaultPagination(): PaginationQuery {
   return { limit: 50, offset: 0 }
 }
@@ -432,16 +465,16 @@ function normalizeRequestedScopes(scope: string | undefined, allowedScopes: Appl
   return requestedScopes
 }
 
-function validateRedirectUri(clientType: ApplicationResponse['clientType'], value: string) {
+function validateRedirectUri(clientType: ApplicationResponse['clientType'], value: string, label = 'Redirect URIs') {
   let url: URL
   try {
     url = new URL(value)
   } catch {
-    throw badRequest('Redirect URIs must be absolute URLs.')
+    throw badRequest(`${label} must be absolute URLs.`)
   }
 
   if (url.hash) {
-    throw badRequest('Redirect URIs must not include fragments.')
+    throw badRequest(`${label} must not include fragments.`)
   }
   if (clientType === 'public_native' && url.protocol !== 'https:' && url.protocol !== 'http:') {
     validateNativeRedirectScheme(url.protocol)
@@ -454,7 +487,27 @@ function validateRedirectUri(clientType: ApplicationResponse['clientType'], valu
     return
   }
 
-  throw badRequest('Redirect URIs must use HTTPS except localhost development URLs.')
+  throw badRequest(`${label} must use HTTPS except localhost development URLs.`)
+}
+
+function validateCorsOrigin(value: string) {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw badRequest('CORS origins must be absolute origins.')
+  }
+  if (url.pathname !== '/' || url.search || url.hash || url.username || url.password) {
+    throw badRequest('CORS origins must include scheme, host, and optional port only.')
+  }
+
+  const localhost =
+    url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1' || url.hostname === '[::1]'
+  if (url.protocol === 'https:' || (localhost && url.protocol === 'http:')) {
+    return
+  }
+
+  throw badRequest('CORS origins must use HTTPS except localhost development origins.')
 }
 
 function validateNativeRedirectScheme(protocol: string) {
