@@ -47,7 +47,11 @@ describe('createDrizzleApplicationRepository', () => {
     const metadataIconApp = {
       ...applicationRow(),
       id: 'app-2',
-      metadata: { iconUrl: 'https://cdn.example.com/metadata-icon.png' },
+      metadata: {
+        iconUrl: 'https://cdn.example.com/metadata-icon.png',
+        corsOrigins: ['https://metadata.example.com'],
+        customData: { plan: 'growth' },
+      },
     }
     const invalidMetadataApp = {
       ...applicationRow(),
@@ -108,6 +112,8 @@ describe('createDrizzleApplicationRepository', () => {
           clientType: 'public_native',
           public: false,
           redirectUris: [],
+          corsOrigins: ['https://metadata.example.com'],
+          customData: { plan: 'growth' },
           allowedGrantTypes: [],
           allowedScopes: [],
           requirePkce: false,
@@ -127,6 +133,31 @@ describe('createDrizzleApplicationRepository', () => {
         },
       ],
       pagination: { hasMore: true, nextOffset: 2, total: 3 },
+    })
+  })
+
+  it('maps non-object application metadata to empty application metadata fields', async () => {
+    const db = new FakeDb({
+      aggregate: [
+        {
+          application: {
+            ...applicationRow(),
+            metadata: 'not-object',
+          },
+          oauthClient: oauthClientRow(),
+        },
+      ],
+    })
+    const repository = createDrizzleApplicationRepository(db as unknown as Database)
+
+    await expect(repository.list({ limit: 1, offset: 0 })).resolves.toMatchObject({
+      items: [
+        {
+          iconUrl: null,
+          corsOrigins: [],
+          customData: {},
+        },
+      ],
     })
   })
 
@@ -352,6 +383,30 @@ describe('createDrizzleApplicationRepository', () => {
     })
 
     expect(db.updatesFor(application).at(-1)).toMatchObject({
+      table: application,
+      set: {
+        metadata: null,
+      },
+    })
+  })
+
+  it('clears metadata when the last stored icon URL is removed', async () => {
+    const db = new FakeDb({
+      application: [
+        {
+          id: 'app-1',
+          oauthClientId: 'client-1',
+          metadata: {
+            iconUrl: 'https://cdn.example.com/icon.png',
+          },
+        },
+      ],
+    })
+    const repository = createDrizzleApplicationRepository(db as unknown as Database)
+
+    await repository.update('app-1', { iconUrl: null })
+
+    expect(db.updates[0]).toMatchObject({
       table: application,
       set: {
         metadata: null,

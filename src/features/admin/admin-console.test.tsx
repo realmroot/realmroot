@@ -935,6 +935,13 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Server app' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'server-app' } })
+    const createRedirectUrisInput = screen.getByLabelText('Redirect URIs')
+    createRedirectUrisInput.removeAttribute('required')
+    fireEvent.change(createRedirectUrisInput, {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Too small: expected array to have >=1 items')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Traditional web app/ }))
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://server.example.com/callback' },
@@ -1129,18 +1136,6 @@ describe('admin console', () => {
       customData: { plan: 'enterprise' },
     })
 
-    const redirectUrisInput = screen.getByLabelText('Redirect URIs')
-    redirectUrisInput.removeAttribute('required')
-    fireEvent.change(redirectUrisInput, {
-      target: { value: '' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save redirects and origins' }))
-    expect(
-      await screen.findByText((_, element) =>
-        Boolean(element?.classList.contains('text-destructive') && element.textContent?.trim()),
-      ),
-    ).toBeTruthy()
-
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://new.example.com/callback' },
     })
@@ -1162,11 +1157,14 @@ describe('admin console', () => {
         },
       })
     })
-    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
-      target: { value: '[]' },
+
+    const redirectUrisInput = screen.getByLabelText('Redirect URIs')
+    redirectUrisInput.removeAttribute('required')
+    fireEvent.change(redirectUrisInput, {
+      target: { value: '' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
-    expect(await screen.findByText('Custom data JSON must be an object.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save redirects and origins' }))
+    expect(await screen.findByText('Too small: expected array to have >=1 items')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('Custom data JSON'), {
       target: { value: '   ' },
@@ -1191,14 +1189,30 @@ describe('admin console', () => {
         body: { customData: { plan: 'growth', beta: true } },
       })
     })
+
+    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
+      target: { value: '["not-an-object"]' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
+    expect(await screen.findByText('Custom data JSON must be an object.')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/applications/app-1',
+        method: 'PATCH',
+        body: { customData: {} },
+      })
+    })
+
     fireEvent.change(screen.getByLabelText('Custom data JSON'), {
       target: { value: '{"plan":"discarded"}' },
     })
     fireEvent.click(screen.getAllByRole('button', { name: 'Discard' }).at(-1) as HTMLButtonElement)
-    expect(screen.getByLabelText('Custom data JSON')).toHaveProperty(
-      'value',
-      '{\n  "plan": "growth",\n  "beta": true\n}',
-    )
+    expect(screen.getByLabelText('Custom data JSON')).toHaveProperty('value', '{}')
     fireEvent.click(screen.getByRole('tab', { name: 'Branding' }))
     expect(screen.getByText('Display name')).toBeTruthy()
     expect(screen.getByText('Homepage URL')).toBeTruthy()
@@ -1239,6 +1253,11 @@ describe('admin console', () => {
           url: '/api/management/applications/app-1',
           method: 'PATCH',
           body: { customData: { plan: 'growth', beta: true } },
+        },
+        {
+          url: '/api/management/applications/app-1',
+          method: 'PATCH',
+          body: { customData: {} },
         },
         {
           url: '/api/management/applications/app-1/logo',

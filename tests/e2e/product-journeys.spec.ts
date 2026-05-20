@@ -1078,10 +1078,19 @@ const journeyAssertions: Record<
       await page.getByRole('tab', { name: 'Operations' }).click()
       await page.getByRole('button', { name: 'Send password reset' }).click()
       await page.getByRole('tab', { name: 'Sessions' }).click()
+      await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
       await page.getByRole('button', { name: 'Revoke', exact: true }).click()
-      await page.getByRole('button', { name: 'Revoke session' }).click()
+      const revokeSessionDialog = page.getByRole('dialog').filter({
+        has: page.getByRole('heading', { name: 'Revoke session' }),
+      })
+      await expect(revokeSessionDialog).toBeVisible()
+      await revokeSessionDialog.getByRole('button', { name: 'Revoke session' }).click()
       await page.getByRole('button', { name: 'Revoke all' }).click()
-      await page.getByRole('button', { name: 'Revoke sessions' }).click()
+      const revokeSessionsDialog = page.getByRole('dialog').filter({
+        has: page.getByRole('heading', { name: 'Revoke all sessions' }),
+      })
+      await expect(revokeSessionsDialog).toBeVisible()
+      await revokeSessionsDialog.getByRole('button', { name: 'Revoke sessions' }).click()
       await page.getByRole('tab', { name: 'Security' }).click()
       await page.getByRole('button', { name: 'Delete', exact: true }).click()
       await page.getByRole('button', { name: 'Delete passkey' }).click()
