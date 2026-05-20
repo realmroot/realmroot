@@ -35,8 +35,8 @@ const accountSections = [
 ] as const
 
 const hostedAuthRoutes = [
-  { name: 'hosted-sign-in', path: '/sign-in', heading: /Sign in to/ },
-  { name: 'hosted-sign-up', path: '/sign-up', heading: 'Start with your identity.' },
+  { name: 'hosted-sign-in', evidenceName: 'hosted-sign-in-social-state', path: '/sign-in', heading: /Sign in to/ },
+  { name: 'hosted-sign-up', evidenceName: 'hosted-sign-up-registration', path: '/sign-up', heading: 'Start with your identity.' },
   { name: 'hosted-recovery', path: '/forgot-password', heading: 'Recover your password.' },
   { name: 'hosted-email-verification', path: '/email-verification', heading: 'Verify your email.' },
   {
@@ -53,7 +53,7 @@ const hostedAuthRoutes = [
 ] as const
 
 const accountRoutes = [
-  { name: 'profile', path: '/profile', heading: 'Jane Stone' },
+  { name: 'profile', evidenceName: 'account-profile', path: '/profile', heading: 'Jane Stone' },
 ] as const
 
 const consoleRoutes = [
@@ -86,6 +86,7 @@ const consoleRoutes = [
   },
   {
     name: 'sign-in-experience',
+    evidenceName: 'sign-up-and-sign-in-preview',
     path: '/console/sign-in-experience/sign-up-and-sign-in',
     heading: 'Sign-up and sign-in',
     kind: 'settings',
@@ -95,6 +96,7 @@ const consoleRoutes = [
   },
   {
     name: 'branding',
+    evidenceName: 'branding-preview',
     path: '/console/sign-in-experience/branding',
     heading: 'Branding',
     kind: 'settings',
@@ -104,6 +106,7 @@ const consoleRoutes = [
   },
   {
     name: 'collect-profile',
+    evidenceName: 'collect-user-profile-settings',
     path: '/console/sign-in-experience/collect-user-profile',
     heading: 'Collect user profile',
     kind: 'settings',
@@ -113,6 +116,7 @@ const consoleRoutes = [
   },
   {
     name: 'account-center-settings',
+    evidenceName: 'account-center-settings',
     path: '/console/sign-in-experience/account-center',
     heading: 'Account Center',
     kind: 'settings',
@@ -122,6 +126,7 @@ const consoleRoutes = [
   },
   {
     name: 'content-settings',
+    evidenceName: 'content-preview',
     path: '/console/sign-in-experience/content',
     heading: 'Content',
     kind: 'settings',
@@ -140,6 +145,7 @@ const consoleRoutes = [
   },
   {
     name: 'connectors',
+    evidenceName: 'passwordless-connectors',
     path: '/console/connectors/passwordless',
     heading: 'Connectors',
     kind: 'list',
@@ -149,6 +155,7 @@ const consoleRoutes = [
   },
   {
     name: 'social-connectors',
+    evidenceName: 'social-connectors',
     path: '/console/connectors/social',
     heading: 'Connectors',
     kind: 'list',
@@ -419,6 +426,7 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Password', exact: true })).toBeVisible()
       await expect(page.getByRole('button', { name: 'OTP' })).toBeVisible()
+      await expect(page.getByText('Social sign-in providers')).toBeVisible()
       await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Continue with Example SSO' })).toBeVisible()
     },
@@ -593,6 +601,8 @@ const journeyAssertions: Record<
     suite: 'public and auth journeys',
     assert: async ({ page, requests }) => {
       await page.goto('/sign-up')
+      await expect(page.getByRole('heading', { name: 'Start with your identity.' })).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Already have an account?' })).toHaveAttribute('href', '/sign-in')
       await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Jane Stone')
       await page.getByLabel('Email').fill('jane@example.com')
       await page.getByLabel('Username').fill('jane')
@@ -1216,9 +1226,17 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       await page.goto('/console/connectors/passwordless')
       await expect(page.getByRole('heading', { exact: true, name: 'Connectors' })).toBeVisible()
+      await expect(page.getByRole('navigation', { name: 'Connector settings' }).getByRole('link', { name: 'Passwordless' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      )
       await expect(page.getByText('Cloudflare Email', { exact: true }).first()).toBeVisible()
       await expect(page.getByText('Email and SMS connectors')).toBeVisible()
       await expect(page.getByText('SMS connector', { exact: true }).first()).toBeVisible()
+      await expect(page.getByText('Runtime state')).toBeVisible()
+      await expect(page.getByText('Magic link', { exact: true })).toBeVisible()
+      await expect(page.getByText('Email code', { exact: true })).toBeVisible()
+      await expect(page.getByText('EMAIL binding and EMAIL_FROM sender must be present.')).toBeVisible()
       await expect(page.getByRole('button', { name: 'Managed' })).toBeDisabled()
       await expect(page.getByRole('button', { name: 'Setup SMS' })).toBeDisabled()
     },
@@ -1228,9 +1246,15 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       await page.goto('/console/connectors/social')
       await expect(page.getByRole('heading', { exact: true, name: 'Connectors' })).toBeVisible()
+      await expect(page.getByRole('navigation', { name: 'Connector settings' }).getByRole('link', { name: 'Social' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      )
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await expect(page.getByRole('cell', { name: 'github', exact: true })).toBeVisible()
       await expect(page.getByText('read:user, user:email')).toBeVisible()
+      await expect(page.getByText('Enabled', { exact: true }).first()).toBeVisible()
+      await expect(page.getByText('Binding configured')).toBeVisible()
       await expect(page.getByLabel('Toggle GitHub')).toBeVisible()
     },
   },
@@ -1323,14 +1347,24 @@ const journeyAssertions: Record<
       await expect(page.getByRole('link', { exact: true, name: 'Desktop' })).toHaveCount(0)
       await expect(page.getByRole('link', { exact: true, name: 'Mobile' })).toHaveCount(0)
 
+      for (const legacyPath of ['/console/sign-in-experience/desktop', '/console/sign-in-experience/mobile']) {
+        await page.goto(legacyPath)
+        await expect(page).toHaveURL(/\/console\/sign-in-experience\/sign-up-and-sign-in$/)
+        await expect(page.getByRole('heading', { name: 'Sign-up and sign-in' })).toBeVisible()
+      }
+
       for (const path of [
         '/console/sign-in-experience/sign-up-and-sign-in',
         '/console/sign-in-experience/branding',
         '/console/sign-in-experience/content',
       ]) {
         await page.goto(path)
-        await expect(page.getByLabel('Hosted authentication preview')).toBeVisible()
-        await expect(page.getByRole('heading', { name: 'Hosted sign-in' })).toBeVisible()
+        const previewPanel = page.getByLabel('Hosted authentication preview')
+        await expect(previewPanel).toBeVisible()
+        await expect(previewPanel.getByText('Live preview')).toBeVisible()
+        await expect(previewPanel.getByRole('heading', { name: 'Hosted sign-in' })).toBeVisible()
+        await expect(previewPanel.getByRole('button', { name: 'Continue with identity provider' })).toBeVisible()
+        await expect(previewPanel.getByText('No account yet? Sign up')).toBeVisible()
       }
 
       await page.getByRole('tab', { name: 'Mobile' }).click()
@@ -1670,7 +1704,7 @@ test('admin console desktop and mobile screenshot evidence', async ({ page }, te
       await expectNoDocumentHorizontalOverflow(page)
       await page.screenshot({
         fullPage: true,
-        path: testInfo.outputPath(`admin-${route.name}-1280x720.png`),
+        path: testInfo.outputPath(`${consoleEvidenceName(route)}-1280x720.png`),
       })
     })
   }
@@ -1693,7 +1727,7 @@ test('admin console desktop and mobile screenshot evidence', async ({ page }, te
         await expectNoDocumentHorizontalOverflow(page)
         await page.screenshot({
           fullPage: true,
-          path: testInfo.outputPath(`admin-${route.name}-${viewport.name}.png`),
+          path: testInfo.outputPath(`${consoleEvidenceName(route)}-${viewport.name}.png`),
         })
         if (viewport.name === 'mobile' && route.name === 'dashboard') {
           await page.getByRole('button', { name: 'Open console navigation' }).click()
@@ -1751,10 +1785,10 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
         await expectNoDocumentHorizontalOverflow(page)
         const screenshot = await page.screenshot({
           fullPage: true,
-          path: testInfo.outputPath(`${route.name}-${viewport.name}.png`),
+          path: testInfo.outputPath(`${routeEvidenceName(route)}-${viewport.name}.png`),
         })
         if (route.path === '/profile') {
-          await testInfo.attach(`${route.name}-${viewport.name}.png`, {
+          await testInfo.attach(`${routeEvidenceName(route)}-${viewport.name}.png`, {
             body: screenshot,
             contentType: 'image/png',
           })
@@ -1784,6 +1818,15 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
 type JourneyAssertionSuite = (typeof journeyAssertions)[JourneyId]['suite']
 type ConsoleVisualRoute = (typeof consoleRoutes)[number]
 type ConsolePageKind = ConsoleVisualRoute['kind']
+type VisualRoute = (typeof hostedAuthRoutes)[number] | (typeof accountRoutes)[number]
+
+function consoleEvidenceName(route: ConsoleVisualRoute) {
+  return `admin-${'evidenceName' in route ? route.evidenceName : route.name}`
+}
+
+function routeEvidenceName(route: VisualRoute) {
+  return 'evidenceName' in route ? route.evidenceName : route.name
+}
 
 async function runJourneySuite(suite: JourneyAssertionSuite, context: JourneyContext) {
   for (const [id, journey] of Object.entries(journeyAssertions)) {

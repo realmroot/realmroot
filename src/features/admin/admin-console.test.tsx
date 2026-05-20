@@ -457,6 +457,8 @@ describe('admin console', () => {
         '/console/sign-in-experience/sign-up-and-sign-in',
         'Sign-up and sign-in',
       ],
+      ['/console/sign-in-experience/desktop', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
+      ['/console/sign-in-experience/mobile', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
       ['/console/sign-in-experience/branding', '/console/sign-in-experience/branding', 'Branding'],
       [
         '/console/sign-in-experience/collect-user-profile',

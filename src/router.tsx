@@ -359,6 +359,22 @@ const consoleSignInSignUpAndSignInRoute = createRoute({
   component: SignInSettingsPage,
 })
 
+const consoleSignInExperienceDesktopCompatibilityRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/sign-in-experience/desktop',
+  beforeLoad: () => {
+    throw redirect({ to: '/console/sign-in-experience/sign-up-and-sign-in' })
+  },
+})
+
+const consoleSignInExperienceMobileCompatibilityRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/sign-in-experience/mobile',
+  beforeLoad: () => {
+    throw redirect({ to: '/console/sign-in-experience/sign-up-and-sign-in' })
+  },
+})
+
 const consoleSignInBrandingRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/sign-in-experience/branding',
@@ -745,6 +761,8 @@ const routeTree = rootRoute.addChildren([
     consoleConnectorsSocialRoute,
     consoleSignInExperienceIndexRoute,
     consoleSignInSignUpAndSignInRoute,
+    consoleSignInExperienceDesktopCompatibilityRoute,
+    consoleSignInExperienceMobileCompatibilityRoute,
     consoleSignInBrandingRoute,
     consoleSignInCollectUserProfileRoute,
     consoleSignInAccountCenterRoute,
