@@ -34,11 +34,30 @@ const accountSections = [
   'Authorized apps',
 ] as const
 
+const hostedAppAuthSearch =
+  '?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&response_type=code&scope=openid%20profile&state=state-1&code_challenge=challenge-1&code_challenge_method=S256&nonce=nonce-1'
+
 const hostedAuthRoutes = [
-  { name: 'hosted-sign-in', evidenceName: 'hosted-sign-in-social-state', path: '/sign-in', heading: /Sign in to/ },
-  { name: 'hosted-sign-up', evidenceName: 'hosted-sign-up-registration', path: '/sign-up', heading: 'Start with your identity.' },
-  { name: 'hosted-recovery', path: '/forgot-password', heading: 'Recover your password.' },
-  { name: 'hosted-email-verification', path: '/email-verification', heading: 'Verify your email.' },
+  {
+    name: 'hosted-sign-in',
+    path: `/sign-in${hostedAppAuthSearch}`,
+    heading: 'Continue to 127.0.0.1:5173.',
+  },
+  {
+    name: 'hosted-sign-up',
+    path: `/sign-up${hostedAppAuthSearch}`,
+    heading: 'Create an account for 127.0.0.1:5173.',
+  },
+  {
+    name: 'hosted-recovery',
+    path: `/forgot-password${hostedAppAuthSearch}`,
+    heading: 'Recover access for 127.0.0.1:5173.',
+  },
+  {
+    name: 'hosted-email-verification',
+    path: `/email-verification${hostedAppAuthSearch}`,
+    heading: 'Verify your email for 127.0.0.1:5173.',
+  },
   {
     name: 'hosted-callback-error',
     path: '/auth/callback?error=access_denied&error_description=Denied',
@@ -53,7 +72,8 @@ const hostedAuthRoutes = [
 ] as const
 
 const accountRoutes = [
-  { name: 'profile', evidenceName: 'account-profile', path: '/profile', heading: 'Jane Stone' },
+  { name: 'profile', path: '/profile', heading: 'Jane Stone' },
+  { name: 'account-compat', path: '/account', heading: 'Jane Stone' },
 ] as const
 
 const consoleRoutes = [
@@ -1876,71 +1896,126 @@ async function captureApplicationCreateEvidence(page: Page, testInfo: { outputPa
 test('hosted auth account and branding screenshot evidence', async ({ page }, testInfo) => {
   test.setTimeout(60_000)
 
+  const previousLinks = { ...configz.links }
+  Object.assign(configz.links, {
+    termsUri: 'https://client.example.com/terms',
+    privacyUri: 'https://client.example.com/privacy',
+    supportEmail: 'support@client.example.com',
+  })
+
   await mockApi(page)
   await mockPasskeys(page)
 
-  for (const viewport of [
-    { name: 'desktop', width: 1440, height: 1000 },
-    { name: 'tablet', width: 768, height: 1024 },
-    { name: 'mobile', width: 390, height: 844 },
-  ]) {
-    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+  try {
+    for (const viewport of [
+      { name: 'desktop', width: 1440, height: 1000 },
+      { name: 'tablet', width: 768, height: 1024 },
+      { name: 'mobile', width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height })
 
-    for (const route of [...hostedAuthRoutes, ...accountRoutes]) {
-      await test.step(`${viewport.name} ${route.name}`, async () => {
-        await page.goto(route.path)
-        await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
-        if (route.path === '/sign-in') {
-          await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
-          await expect(page.getByRole('button', { name: 'Continue with Example SSO' })).toBeVisible()
-        }
-        if (route.path.startsWith('/profile')) await expectAccountSinglePageSections(page)
-        if (
-          route.path === '/sign-in' ||
-          route.path === '/sign-up' ||
-          route.path === '/forgot-password' ||
-          'compactAuth' in route
-        ) {
-          await expectHostedAuthCompactShell(page)
-        }
-        await expectInitialViewportDensity(
-          page,
-          route.path.startsWith('/profile')
-            ? 'account'
-            : route.path.startsWith('/oauth') || 'compactAuth' in route
-              ? 'message'
-              : 'hosted',
-        )
-        await expectNoDocumentHorizontalOverflow(page)
-        const screenshot = await page.screenshot({
-          fullPage: true,
-          path: testInfo.outputPath(`${routeEvidenceName(route)}-${viewport.name}.png`),
-        })
-        if (route.path === '/profile') {
+      for (const route of [...hostedAuthRoutes, ...accountRoutes]) {
+        await test.step(`${viewport.name} ${route.name}`, async () => {
+          await page.goto(route.path)
+          await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
+          if (
+            route.name === 'hosted-sign-in' ||
+            route.name === 'hosted-sign-up' ||
+            route.name === 'hosted-recovery' ||
+            route.name === 'hosted-email-verification'
+          ) {
+            if (route.name === 'hosted-sign-in' || route.name === 'hosted-sign-up') {
+              await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
+              await expect(page.getByRole('button', { name: 'Continue with Example SSO' })).toBeVisible()
+            }
+            await expect(page.getByRole('link', { name: 'Terms' })).toHaveAttribute(
+              'href',
+              'https://client.example.com/terms',
+            )
+            await expect(page.getByRole('link', { name: 'Privacy' })).toHaveAttribute(
+              'href',
+              'https://client.example.com/privacy',
+            )
+            await expect(page.getByRole('link', { name: 'Support' })).toHaveAttribute(
+              'href',
+              'mailto:support@client.example.com',
+            )
+          }
+          if (route.name === 'hosted-recovery') {
+            const href = await page.getByRole('link', { name: 'Back to sign in' }).getAttribute('href')
+            expect(href).not.toBeNull()
+            expect(new URL(href ?? '', 'http://127.0.0.1:5173').pathname).toBe('/sign-in')
+            expect(new URLSearchParams(new URL(href ?? '', 'http://127.0.0.1:5173').search)).toEqual(
+              new URLSearchParams(hostedAppAuthSearch),
+            )
+          }
+          if (route.name === 'hosted-email-verification') {
+            await expect(
+              page.getByText('Confirm your email address before continuing to 127.0.0.1:5173.'),
+            ).toBeVisible()
+          }
+          if (route.name === 'hosted-callback-error') {
+            await expect(page.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/sign-in')
+          }
+          if (route.name === 'oauth-consent') {
+            await expect(page.getByText('Signed in as')).toBeVisible()
+          }
+          if (route.name === 'account-compat') {
+            await expect(page).toHaveURL(/\/profile$/)
+          }
+          if (route.path.startsWith('/profile') || route.path === '/account') await expectAccountSinglePageSections(page)
+          if (
+            route.path.startsWith('/sign-in') ||
+            route.path.startsWith('/sign-up') ||
+            route.path.startsWith('/forgot-password') ||
+            route.path.startsWith('/email-verification') ||
+            'compactAuth' in route
+          ) {
+            await expectHostedAuthCompactShell(page)
+          }
+          await expectInitialViewportDensity(
+            page,
+            route.path.startsWith('/profile') || route.path === '/account'
+              ? 'account'
+              : route.path.startsWith('/oauth') || 'compactAuth' in route
+                ? 'message'
+                : 'hosted',
+          )
+          await expectNoDocumentHorizontalOverflow(page)
+          const screenshot = await page.screenshot({
+            fullPage: true,
+            path: testInfo.outputPath(`${routeEvidenceName(route)}-${viewport.name}.png`),
+          })
           await testInfo.attach(`${routeEvidenceName(route)}-${viewport.name}.png`, {
             body: screenshot,
             contentType: 'image/png',
           })
-        }
-      })
-    }
+        })
+      }
 
-    consentSessionAvailable = false
-    try {
-      await page.goto(
-        '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&state=state-1',
-      )
-      await expect(page.getByRole('heading', { name: 'Review application access.' })).toBeVisible()
-      await expect(page.getByText('Authentication is required.')).toBeVisible()
-      await expectHostedAuthCompactShell(page)
-      await expectNoDocumentHorizontalOverflow(page)
-      await page.screenshot({
-        fullPage: true,
-        path: testInfo.outputPath(`oauth-consent-auth-required-${viewport.name}.png`),
-      })
-    } finally {
-      consentSessionAvailable = true
+      consentSessionAvailable = false
+      try {
+        await page.goto(
+          '/oauth/consent?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A5173%2Foidc%2Fcallback&state=state-1',
+        )
+        await expect(page.getByRole('heading', { name: 'Review application access.' })).toBeVisible()
+        await expect(page.getByText('Authentication is required.')).toBeVisible()
+        await expectHostedAuthCompactShell(page)
+        await expectNoDocumentHorizontalOverflow(page)
+        const screenshot = await page.screenshot({
+          fullPage: true,
+          path: testInfo.outputPath(`oauth-consent-auth-required-${viewport.name}.png`),
+        })
+        await testInfo.attach(`oauth-consent-auth-required-${viewport.name}.png`, {
+          body: screenshot,
+          contentType: 'image/png',
+        })
+      } finally {
+        consentSessionAvailable = true
+      }
     }
+  } finally {
+    Object.assign(configz.links, previousLinks)
   }
 })
 

@@ -145,6 +145,32 @@ describe('AuthLayout', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
   })
 
+  it('renders configured legal and support links', () => {
+    render(
+      <AuthLayout
+        config={{
+          ...config,
+          links: {
+            termsUri: 'https://client.example.com/terms',
+            privacyUri: 'https://client.example.com/privacy',
+            supportEmail: 'support@client.example.com',
+          },
+        }}
+        description="Hosted identity"
+        title="Sign in"
+      >
+        <button type="button">Continue</button>
+      </AuthLayout>,
+    )
+
+    expect(screen.getByRole('navigation', { name: 'Hosted authentication legal links' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Terms' }).getAttribute('href')).toBe('https://client.example.com/terms')
+    expect(screen.getByRole('link', { name: 'Privacy' }).getAttribute('href')).toBe(
+      'https://client.example.com/privacy',
+    )
+    expect(screen.getByRole('link', { name: 'Support' }).getAttribute('href')).toBe('mailto:support@client.example.com')
+  })
+
   it('renders compact message states with a back link and icon', () => {
     render(
       <AuthLayout

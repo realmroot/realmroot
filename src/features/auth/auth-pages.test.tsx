@@ -476,6 +476,123 @@ describe('hosted auth pages', () => {
     expect(screen.queryByText(/client-1/)).toBeNull()
   })
 
+  it('keeps app-specific hosted auth context across sign-up, recovery, and social sign-up', async () => {
+    window.history.pushState(
+      null,
+      '',
+      '/sign-up?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ url: 'https://github.com/login/oauth/authorize?state=social-state' }))
+    })
+
+    render(<SignUpPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Create an account for client.example.com.' })).toBeTruthy()
+    expect(screen.getByText('Create a hosted account to continue to client.example.com.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Already have an account?' }).getAttribute('href')).toBe(
+      '/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with GitHub' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/sign-in/social',
+        body: {
+          provider: 'github',
+          callbackURL:
+            '/api/auth/oauth2/authorize?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+        },
+      })
+    })
+  })
+
+  it('renders app-specific recovery context and preserves the hosted sign-in return path', async () => {
+    window.history.pushState(
+      null,
+      '',
+      '/forgot-password?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
+
+    render(<ForgotPasswordPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Recover access for client.example.com.' })).toBeTruthy()
+    expect(screen.getByText('Recover your hosted account before continuing to client.example.com.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to sign in' }).getAttribute('href')).toBe(
+      '/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+  })
+
+  it('preserves app-specific recovery context in password reset email links', async () => {
+    window.history.pushState(
+      null,
+      '',
+      '/forgot-password?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ success: true }))
+    })
+
+    render(<ForgotPasswordPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'OTP code' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Email link' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send reset email' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/request-password-reset',
+        body: {
+          email: 'jane@example.com',
+          redirectTo:
+            'http://localhost:3000/forgot-password?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+        },
+      })
+    })
+  })
+
+  it('drops reset tokens from preserved hosted auth continuation links', async () => {
+    window.history.pushState(
+      null,
+      '',
+      '/forgot-password?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1&token=reset-token',
+    )
+    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
+
+    render(<ForgotPasswordPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Recover access for client.example.com.' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to sign in' }).getAttribute('href')).toBe(
+      '/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+  })
+
+  it('renders app-specific email verification context', async () => {
+    window.history.pushState(
+      null,
+      '',
+      '/email-verification?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
+
+    render(<EmailVerificationPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Verify your email for client.example.com.' })).toBeTruthy()
+    expect(screen.getByText('Confirm your email address before continuing to client.example.com.')).toBeTruthy()
+  })
+
   it('uses generic OIDC context when redirect URI is invalid', async () => {
     window.history.pushState(null, '', '/sign-in?client_id=client-1&redirect_uri=not-a-url')
     vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
@@ -648,6 +765,46 @@ describe('hosted auth pages', () => {
       ])
     })
     expect(screen.getByText('Magic link sent. Check your email to continue.')).toBeTruthy()
+  })
+
+  it('preserves app-specific context in hosted auth page links and magic-link errors', async () => {
+    window.history.pushState(
+      null,
+      '',
+      '/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<SignInPage />)
+
+    expect((await screen.findByRole('link', { name: 'Create account' })).getAttribute('href')).toBe(
+      '/sign-up?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    expect(screen.getByRole('link', { name: 'Forgot password?' }).getAttribute('href')).toBe(
+      '/forgot-password?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Magic link' }))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send magic link' }))
+
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/auth/sign-in/magic-link',
+        body: {
+          email: 'jane@example.com',
+          callbackURL:
+            '/api/auth/oauth2/authorize?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+          errorCallbackURL:
+            '/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+        },
+      })
+    })
   })
 
   it('surfaces native auth submission failures', async () => {

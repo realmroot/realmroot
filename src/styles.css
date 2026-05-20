@@ -1043,6 +1043,25 @@ main:not(.shell):not(.authShell) h1 {
   text-decoration: none;
 }
 
+.authLegalLinks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 14px;
+  margin-top: 14px;
+}
+
+.authLegalLinks a {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.authLegalLinks a:hover {
+  color: var(--brand-primary);
+}
+
 .authPoweredBy {
   margin-top: 16px;
   color: var(--muted);

@@ -52,6 +52,7 @@ export function AuthLayout({
           <p>{description}</p>
         </div>
         <div className="authContent">{children}</div>
+        <AuthLegalLinks config={config} />
         <p className="authPoweredBy">Powered by {config?.copy?.productName ?? 'FlareAuth'}</p>
       </section>
     </main>
@@ -93,4 +94,24 @@ function customProperties(css: string | null): CSSProperties {
         return [declaration.slice(0, separator).trim(), declaration.slice(separator + 1).trim()]
       }),
   ) as CSSProperties
+}
+
+function AuthLegalLinks({ config }: { config: ConfigzConfigResponse | null }) {
+  const links = [
+    config?.links.termsUri ? ['Terms', config.links.termsUri] : null,
+    config?.links.privacyUri ? ['Privacy', config.links.privacyUri] : null,
+    config?.links.supportEmail ? ['Support', `mailto:${config.links.supportEmail}`] : null,
+  ].filter((link): link is [string, string] => link !== null)
+
+  if (links.length === 0) return null
+
+  return (
+    <nav className="authLegalLinks" aria-label="Hosted authentication legal links">
+      {links.map(([label, href]) => (
+        <a href={href} key={label}>
+          {label}
+        </a>
+      ))}
+    </nav>
+  )
 }

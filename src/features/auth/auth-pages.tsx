@@ -65,7 +65,7 @@ export function SignInPage() {
   const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const enabled = config?.signIn
   const callback = callbackURL()
-  const authContext = authRequestContext()
+  const authContext = authRequestContext('sign-in')
   const identifierFirst = enabled?.identifierFirst === true
   const showIdentifierStep = identifierFirst && !identifierConfirmed
 
@@ -110,7 +110,7 @@ export function SignInPage() {
         await requestMagicLink({
           email: identifier,
           callbackURL: callback,
-          errorCallbackURL: '/sign-in',
+          errorCallbackURL: authPageHref('/sign-in'),
           captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
         })
         return 'Magic link sent. Check your email to continue.'
@@ -298,8 +298,8 @@ export function SignInPage() {
       <SubmitStatus state={submit} />
 
       <div className="authLinks">
-        {enabled?.signupEnabled ? <a href="/sign-up">Create account</a> : null}
-        {enabled?.passwordEnabled ? <a href="/forgot-password">Forgot password?</a> : null}
+        {enabled?.signupEnabled ? <a href={authPageHref('/sign-up')}>Create account</a> : null}
+        {enabled?.passwordEnabled ? <a href={authPageHref('/forgot-password')}>Forgot password?</a> : null}
       </div>
     </AuthLayout>
   )
@@ -315,7 +315,9 @@ export function SignUpPage() {
   const [captchaToken, setCaptchaToken] = useState('')
   const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const created = submit.message !== null && submit.error === null
-  const authContext = authRequestContext()
+  const authContext = authRequestContext('sign-up')
+  const callback = callbackURL()
+  const socialProviders = config?.identityProviders ?? []
   const resetCaptcha = () => resetCaptchaState(config, setCaptchaToken, setCaptchaResetKey)
 
   async function onSubmit(event: FormEvent) {
@@ -327,7 +329,7 @@ export function SignUpPage() {
           name,
           password,
           username: config?.signIn.usernameEnabled && username ? username : undefined,
-          callbackURL: callbackURL(),
+          callbackURL: callback,
           captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
         })
         return 'Account created. Check your email if verification is required.'
@@ -387,9 +389,10 @@ export function SignUpPage() {
           </Button>
         </form>
       )}
+      {created ? null : <SocialButtons callback={callback} providers={socialProviders} />}
       <SubmitStatus state={submit} />
       <div className="authLinks">
-        <a href="/sign-in">Already have an account?</a>
+        <a href={authPageHref('/sign-in')}>Already have an account?</a>
       </div>
     </AuthLayout>
   )
@@ -407,7 +410,7 @@ export function ForgotPasswordPage() {
   const [otpRequested, setOtpRequested] = useState(false)
   const token = new URLSearchParams(window.location.search).get('token')
   const otpResetEnabled = config?.signIn.emailOtpEnabled === true
-  const authContext = authRequestContext()
+  const authContext = authRequestContext('recovery')
   const resetCaptcha = () => resetCaptchaState(config, setCaptchaToken, setCaptchaResetKey)
 
   async function onSubmit(event: FormEvent) {
@@ -439,7 +442,7 @@ export function ForgotPasswordPage() {
       try {
         await requestPasswordReset({
           email,
-          redirectTo: `${window.location.origin}/forgot-password`,
+          redirectTo: `${window.location.origin}${authPageHref('/forgot-password')}`,
           captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
         })
         return 'Password reset email sent.'
@@ -544,7 +547,7 @@ export function ForgotPasswordPage() {
             Change recovery method
           </button>
         ) : null}
-        <a href="/sign-in">Back to sign in</a>
+        <a href={authPageHref('/sign-in')}>Back to sign in</a>
       </div>
     </AuthLayout>
   )
@@ -556,7 +559,7 @@ export function EmailVerificationPage() {
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const token = new URLSearchParams(window.location.search).get('token')
-  const authContext = authRequestContext()
+  const authContext = authRequestContext('verification')
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -736,17 +739,53 @@ function methodHelp(mode: SignInMode) {
   return 'Use your password for this hosted account.'
 }
 
-function authRequestContext() {
+function authRequestContext(intent: 'sign-in' | 'sign-up' | 'recovery' | 'verification') {
   const params = new URLSearchParams(window.location.search)
   const redirectUri = params.get('redirect_uri')
   if (!params.has('client_id') || !redirectUri) return {}
 
   const destination = redirectDestination(redirectUri)
+  const fallbackTitle =
+    intent === 'sign-up'
+      ? 'Create an account for the requested application.'
+      : intent === 'recovery'
+        ? 'Recover access for the requested application.'
+        : intent === 'verification'
+          ? 'Verify your email for the requested application.'
+          : 'Continue to the requested application.'
+  const fallbackDescription =
+    intent === 'sign-up'
+      ? 'Create a hosted account to continue.'
+      : intent === 'recovery'
+        ? 'Recover your hosted account before continuing.'
+        : intent === 'verification'
+          ? 'Confirm your email address before continuing.'
+          : 'Sign in with your hosted account to continue.'
+
+  if (!destination) {
+    return {
+      title: fallbackTitle,
+      description: fallbackDescription,
+    }
+  }
+
   return {
-    title: destination ? `Continue to ${destination}.` : 'Continue to the requested application.',
-    description: destination
-      ? `Sign in with your hosted account to continue to ${destination}.`
-      : 'Sign in with your hosted account to continue.',
+    title:
+      intent === 'sign-up'
+        ? `Create an account for ${destination}.`
+        : intent === 'recovery'
+          ? `Recover access for ${destination}.`
+          : intent === 'verification'
+            ? `Verify your email for ${destination}.`
+            : `Continue to ${destination}.`,
+    description:
+      intent === 'sign-up'
+        ? `Create a hosted account to continue to ${destination}.`
+        : intent === 'recovery'
+          ? `Recover your hosted account before continuing to ${destination}.`
+          : intent === 'verification'
+            ? `Confirm your email address before continuing to ${destination}.`
+            : `Sign in with your hosted account to continue to ${destination}.`,
   }
 }
 
@@ -756,6 +795,30 @@ function redirectDestination(redirectUri: string) {
   } catch {
     return null
   }
+}
+
+function authPageHref(path: string) {
+  const params = authContinuationParams()
+  return params.size > 0 ? `${path}?${params.toString()}` : path
+}
+
+function authContinuationParams() {
+  const params = new URLSearchParams(window.location.search)
+  const continuation = new URLSearchParams()
+  for (const name of [
+    'client_id',
+    'redirect_uri',
+    'response_type',
+    'scope',
+    'state',
+    'code_challenge',
+    'code_challenge_method',
+    'nonce',
+  ]) {
+    const value = params.get(name)
+    if (value) continuation.set(name, value)
+  }
+  return continuation.has('client_id') && continuation.has('redirect_uri') ? continuation : new URLSearchParams()
 }
 
 function navigateAfterAuth(response: unknown, callback: string | undefined) {
