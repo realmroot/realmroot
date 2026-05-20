@@ -47,8 +47,8 @@ describe('account center', () => {
     expect(screen.getByRole('region', { name: 'Session management' })).toBeTruthy()
 
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
-    expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('48')
-    expect(document.querySelector('img.assetPreview')?.getAttribute('height')).toBe('48')
+    expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('56')
+    expect(document.querySelector('img.assetPreview')?.getAttribute('height')).toBe('56')
   })
 
   it('updates profile, email, and password from the profile section', async () => {

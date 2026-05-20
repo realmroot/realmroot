@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Fingerprint, KeyRound, LoaderCircle, Mail, UserRound } from 'lucide-react'
+import { Fingerprint, KeyRound, LoaderCircle, Mail, Upload, UserRound } from 'lucide-react'
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from 'react'
 import { BrandIdentity, brandingStyle } from '@/components/layout/auth-layout'
 import { Button } from '@/components/ui/button'
@@ -192,16 +192,14 @@ export function AccountCenter() {
       <div className="accountChrome">
         <BrandIdentity config={config} />
         <section className="accountContent">
-          <div className="accountHeader">
-            <div>
-              <p className="eyebrow">Account</p>
-              <h1>{data.profile?.displayName ?? 'Your account'}</h1>
-              {data.profile ? <p className="muted">{data.profile.email}</p> : null}
+          {!data.profile ? (
+            <div className="accountHeader">
+              <div>
+                <p className="eyebrow">Account settings</p>
+                <h1>Your account</h1>
+              </div>
             </div>
-            <Button onClick={() => void signOutFromAccount()} variant="secondary">
-              Sign out
-            </Button>
-          </div>
+          ) : null}
           {loading ? (
             <Status>
               <LoaderCircle className="spin" size={18} />
@@ -212,7 +210,7 @@ export function AccountCenter() {
           {message ? <Status tone="success">{message}</Status> : null}
           {!loading && data.profile ? (
             <div className="accountSectionStack">
-              <section className="accountIdentityBlock" aria-label="Profile summary">
+              <section className="accountHero" aria-label="Profile summary">
                 {data.profile.image ? (
                   <img alt="" className="accountHeaderAvatar" src={data.profile.image} width="64" height="64" />
                 ) : (
@@ -221,7 +219,8 @@ export function AccountCenter() {
                   </div>
                 )}
                 <div className="accountHeaderMeta">
-                  <p className="accountHeaderName">{data.profile.displayName}</p>
+                  <p className="eyebrow">Profile</p>
+                  <h1>{data.profile.displayName}</h1>
                   <p>{data.profile.email}</p>
                   <div className="accountHeaderBadges">
                     <span>{data.profile.emailVerified ? 'Verified email' : 'Email verification required'}</span>
@@ -229,6 +228,9 @@ export function AccountCenter() {
                     <span>{data.passkeys.length} passkeys</span>
                   </div>
                 </div>
+                <Button onClick={() => void signOutFromAccount()} variant="secondary">
+                  Sign out
+                </Button>
               </section>
               <section className="accountPanelGroup" aria-label="Profile settings">
                 <ProfileSections profile={data.profile} mutate={mutate} />
@@ -315,21 +317,35 @@ function ProfileSections({ profile, mutate }: { profile: UserProfile; mutate: Mu
       <section className="settingsPanel">
         <PanelTitle title="Profile" description="Public identity and avatar shown across trusted applications." />
         <form className="formStack" onSubmit={saveProfile}>
-          <div className="assetUploadRow">
+          <div className="avatarUploadControl">
             {avatarPreview ? (
-              <img alt="" className="assetPreview" src={avatarPreview} width="48" height="48" />
+              <img alt="" className="assetPreview" src={avatarPreview} width="56" height="56" />
             ) : (
               <div className="assetPreview" aria-hidden="true">
                 <UserRound size={28} />
               </div>
             )}
-            <Field help="PNG, JPEG, or WebP up to 2 MB." label="Avatar image">
-              <TextInput
+            <div className="avatarUploadMeta">
+              <span className="avatarUploadLabel">Avatar image</span>
+              <span className="avatarUploadHelp">PNG, JPEG, or WebP up to 2 MB.</span>
+              <button
+                className="avatarUploadButton"
+                onClick={() => document.getElementById('account-avatar-upload')?.click()}
+                type="button"
+              >
+                <Upload size={16} />
+                Upload image
+              </button>
+              <input
                 accept="image/png,image/jpeg,image/webp"
+                aria-label="Avatar image"
+                className="visuallyHidden"
+                id="account-avatar-upload"
                 onChange={(event) => uploadAvatar(event.currentTarget.files?.[0])}
+                tabIndex={-1}
                 type="file"
               />
-            </Field>
+            </div>
           </div>
           <Field label="Display name">
             <TextInput
@@ -585,47 +601,49 @@ function SessionsSection({
 }) {
   return (
     <section className="settingsPanel">
-      <div className="panelHeader">
-        <PanelTitle title="Sessions and devices" description="Active browser sessions for this account." />
-        <Button
-          onClick={() =>
-            confirm({
-              title: 'Revoke other sessions',
-              description: 'Every other active session for this account will be signed out.',
-              actionLabel: 'Revoke sessions',
-              onConfirm: () => mutate('Other sessions revoked.', revokeOtherSessions),
-            })
-          }
-          type="button"
-          variant="secondary"
-        >
-          Revoke other sessions
-        </Button>
+      <PanelTitle title="Sessions and devices" description="Active browser sessions for this account." />
+      <div className="settingsBody">
+        <div className="settingsBodyHeader">
+          <Button
+            onClick={() =>
+              confirm({
+                title: 'Revoke other sessions',
+                description: 'Every other active session for this account will be signed out.',
+                actionLabel: 'Revoke sessions',
+                onConfirm: () => mutate('Other sessions revoked.', revokeOtherSessions),
+              })
+            }
+            type="button"
+            variant="secondary"
+          >
+            Revoke other sessions
+          </Button>
+        </div>
+        <ItemList
+          empty="No active sessions."
+          items={sessions.map((session) => ({
+            id: session.id,
+            title: session.userAgent ?? 'Unknown device',
+            meta: `${session.ipAddress ?? 'No IP'} / expires ${formatDate(session.expiresAt)}`,
+            action: (
+              <Button
+                onClick={() =>
+                  confirm({
+                    title: 'Revoke session',
+                    description: 'This device session will be signed out.',
+                    actionLabel: 'Revoke session',
+                    onConfirm: () => mutate('Session revoked.', () => revokeSession(session.id)),
+                  })
+                }
+                type="button"
+                variant="ghost"
+              >
+                Revoke
+              </Button>
+            ),
+          }))}
+        />
       </div>
-      <ItemList
-        empty="No active sessions."
-        items={sessions.map((session) => ({
-          id: session.id,
-          title: session.userAgent ?? 'Unknown device',
-          meta: `${session.ipAddress ?? 'No IP'} / expires ${formatDate(session.expiresAt)}`,
-          action: (
-            <Button
-              onClick={() =>
-                confirm({
-                  title: 'Revoke session',
-                  description: 'This device session will be signed out.',
-                  actionLabel: 'Revoke session',
-                  onConfirm: () => mutate('Session revoked.', () => revokeSession(session.id)),
-                })
-              }
-              type="button"
-              variant="ghost"
-            >
-              Revoke
-            </Button>
-          ),
-        }))}
-      />
     </section>
   )
 }
