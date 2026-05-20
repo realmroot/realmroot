@@ -167,7 +167,7 @@ const consoleRoutes = [
     heading: 'Connectors',
     kind: 'list',
     journeyId: 'admin-connector-inventory',
-    sentinel: 'Email connector',
+    sentinel: 'Cloudflare Email',
     activeNav: 'Connectors',
   },
   {
@@ -1210,10 +1210,10 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       await page.goto('/console/connectors/passwordless')
       await expect(page.getByRole('heading', { exact: true, name: 'Connectors' })).toBeVisible()
-      await expect(page.getByText('Email connector', { exact: true }).first()).toBeVisible()
+      await expect(page.getByText('Cloudflare Email', { exact: true }).first()).toBeVisible()
       await expect(page.getByText('Email and SMS connectors')).toBeVisible()
       await expect(page.getByText('SMS connector', { exact: true }).first()).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Email setup unavailable locally' })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Managed' })).toBeDisabled()
       await expect(page.getByRole('button', { name: 'Setup SMS' })).toBeDisabled()
     },
   },
@@ -1403,8 +1403,7 @@ const journeyAssertions: Record<
       await page.goto('/console/connectors/social')
       await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'Add social connector' }).click()
-      await page.getByLabel('Template').selectOption('google')
-      await page.getByLabel('Display name').fill('Google')
+      await page.getByRole('button', { name: /Google/ }).click()
       await page.getByLabel('Client ID').fill('google-client')
       await page.getByLabel('Client secret binding').fill('GOOGLE_SECRET')
       await page.getByRole('button', { name: 'Save' }).click()

@@ -2009,12 +2009,13 @@ describe('admin console', () => {
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Toggle Google'))
     fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
-    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'GitHub' } })
-    fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'github' } })
-    fireEvent.change(screen.getByLabelText('Provider type'), { target: { value: 'generic_oauth' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Google/ }).at(-1)!)
+    expect(screen.getByText(/defaults are applied from the provider template/i)).toBeTruthy()
+    expect(screen.queryByLabelText('Provider ID')).toBeNull()
+    expect(screen.queryByLabelText('Provider type')).toBeNull()
+    expect(screen.queryByLabelText('Issuer')).toBeNull()
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-id' } })
     fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GITHUB_SECRET' } })
-    fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://github.com/login/oauth' } })
     fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'read:user user:email' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -2024,13 +2025,64 @@ describe('admin console', () => {
         {
           url: '/api/management/connectors',
           body: {
-            displayName: 'GitHub',
-            providerId: 'github',
-            providerType: 'generic_oauth',
+            displayName: 'Google',
+            providerId: 'google',
+            providerType: 'social',
             clientId: 'client-id',
             clientSecretBinding: 'GITHUB_SECRET',
-            issuer: 'https://github.com/login/oauth',
             scopes: ['read:user', 'user:email'],
+          },
+        },
+      ])
+    })
+  })
+
+  it('creates a social connector with required provider metadata from a template', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/connectors' && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse(connector, 201))
+      }
+      if (url === '/api/management/connectors/templates') {
+        return Promise.resolve(jsonResponse(connectorTemplates))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
+    fireEvent.click(screen.getAllByRole('button', { name: /Amazon Cognito/ }).at(-1)!)
+    expect(screen.getByLabelText('User Pool ID')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'cognito-client' } })
+    fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'COGNITO_SECRET' } })
+    fireEvent.change(screen.getByLabelText('Domain'), { target: { value: 'auth.example.com' } })
+    fireEvent.change(screen.getByLabelText('Region'), { target: { value: 'us-east-1' } })
+    fireEvent.change(screen.getByLabelText('User Pool ID'), { target: { value: 'pool-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          url: '/api/management/connectors',
+          body: {
+            displayName: 'Amazon Cognito',
+            providerId: 'cognito',
+            providerType: 'social',
+            clientId: 'cognito-client',
+            clientSecretBinding: 'COGNITO_SECRET',
+            scopes: ['openid', 'email', 'profile'],
+            providerMetadata: {
+              domain: 'auth.example.com',
+              region: 'us-east-1',
+              userPoolId: 'pool-1',
+            },
           },
         },
       ])
@@ -2082,24 +2134,14 @@ describe('admin console', () => {
     fireEvent.click(screen.getByLabelText('Actions for Google'))
     fireEvent.click(await screen.findByText('View details'))
     expect(await screen.findByText('Secret binding available')).toBeTruthy()
+    expect(screen.getByText('Connector identity')).toBeTruthy()
+    expect(screen.getByText('Deployment credentials')).toBeTruthy()
+    expect(screen.queryByText('OAuth endpoints')).toBeNull()
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Workspace' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'google-workspace' } })
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'workspace-client' } })
     fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GOOGLE_WORKSPACE_SECRET' } })
-    fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://workspace.example.com' } })
-    fireEvent.change(screen.getByLabelText('Authorization endpoint'), {
-      target: { value: 'https://workspace.example.com/authorize' },
-    })
-    fireEvent.change(screen.getByLabelText('Token endpoint'), {
-      target: { value: 'https://workspace.example.com/token' },
-    })
-    fireEvent.change(screen.getByLabelText('User info endpoint'), {
-      target: { value: 'https://workspace.example.com/userinfo' },
-    })
-    fireEvent.change(screen.getByLabelText('JWKS endpoint'), {
-      target: { value: 'https://workspace.example.com/jwks' },
-    })
     fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email profile' } })
     fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -2112,18 +2154,14 @@ describe('admin console', () => {
         url: '/api/management/connectors/connector-1',
         method: 'PATCH',
         body: expect.objectContaining({
-          authorizationEndpoint: 'https://workspace.example.com/authorize',
           clientId: 'workspace-client',
           clientSecretBinding: 'GOOGLE_WORKSPACE_SECRET',
           displayName: 'Google Workspace',
           enabled: false,
-          issuer: 'https://workspace.example.com',
-          jwksEndpoint: 'https://workspace.example.com/jwks',
+          issuer: 'https://accounts.google.com',
           providerMetadata: { prompt: 'consent' },
           scopes: ['openid', 'email', 'profile'],
           slug: 'google-workspace',
-          tokenEndpoint: 'https://workspace.example.com/token',
-          userInfoEndpoint: 'https://workspace.example.com/userinfo',
         }),
       })
     })
@@ -2249,9 +2287,11 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Generic OAuth')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
-    fireEvent.change(screen.getByLabelText('Template'), { target: { value: 'generic-oauth' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Generic OAuth/ }).at(-1)!)
+    fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'okta-main' } })
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
     fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
+    fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://idp.example.com' } })
     fireEvent.change(screen.getByLabelText('Authorization endpoint'), {
       target: { value: 'https://idp.example.com/authorize' },
     })
@@ -2272,7 +2312,7 @@ describe('admin console', () => {
           enabled: false,
           authorizationEndpoint: 'https://idp.example.com/authorize',
           jwksEndpoint: 'https://idp.example.com/jwks',
-          providerId: 'generic-oauth',
+          providerId: 'okta-main',
           providerMetadata: { pkce: true },
           tokenEndpoint: 'https://idp.example.com/token',
           userInfoEndpoint: 'https://idp.example.com/userinfo',
@@ -2285,6 +2325,18 @@ describe('admin console', () => {
     expect(await screen.findByText('Ready')).toBeTruthy()
     expect(screen.getByText(/generic OAuth connector configuration/)).toBeTruthy()
     expect(screen.getByText('Client ID configured')).toBeTruthy()
+    expect(screen.getByText('OAuth endpoints')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://tenant.example.com' } })
+    fireEvent.change(screen.getByLabelText('Authorization endpoint'), {
+      target: { value: 'https://tenant.example.com/authorize' },
+    })
+    fireEvent.change(screen.getByLabelText('Token endpoint'), {
+      target: { value: 'https://tenant.example.com/token' },
+    })
+    fireEvent.change(screen.getByLabelText('User info endpoint'), {
+      target: { value: 'https://tenant.example.com/userinfo' },
+    })
+    fireEvent.change(screen.getByLabelText('JWKS endpoint'), { target: { value: 'https://tenant.example.com/jwks' } })
   })
 
   it('saves connector detail edits with blank optional fields', async () => {
@@ -2327,9 +2379,9 @@ describe('admin console', () => {
     fireEvent.click(screen.getByLabelText('Actions for Google'))
     fireEvent.click(await screen.findByText('View details'))
     expect(await screen.findByText('Needs attention')).toBeTruthy()
+    expect(screen.getByText('Readiness checks have not reported for this connector.')).toBeTruthy()
     expect(screen.getByLabelText('Client ID')).toHaveProperty('value', '')
     expect(screen.getByLabelText('Client secret binding')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Issuer')).toHaveProperty('value', '')
     expect(screen.getByLabelText('Scopes')).toHaveProperty('value', '')
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Draft' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -2407,7 +2459,7 @@ describe('admin console', () => {
     expect(requests).toEqual([])
   })
 
-  it('resets connector template defaults when returning to a custom provider', async () => {
+  it('applies provider template defaults without exposing social provider internals', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
@@ -2421,15 +2473,12 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
-    fireEvent.change(screen.getByLabelText('Template'), { target: { value: 'google' } })
-    expect(screen.getByLabelText('Provider ID')).toHaveProperty('value', 'google')
-    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', 'openid email profile')
-    fireEvent.change(screen.getByLabelText('Template'), { target: { value: '' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Google/ }).at(-1)!)
 
-    expect(screen.getByLabelText('Provider type')).toHaveProperty('value', 'social')
-    expect(screen.getByLabelText('Provider ID')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Display name')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', '')
+    expect(screen.queryByLabelText('Provider ID')).toBeNull()
+    expect(screen.queryByLabelText('Provider type')).toBeNull()
+    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', 'openid email profile')
+    expect(screen.getByLabelText('Display name')).toHaveProperty('value', 'Google')
   })
 
   it('renders sign-in settings and security policy surfaces', async () => {
@@ -2495,12 +2544,62 @@ describe('admin console', () => {
     cleanup()
     renderWithQuery(<PasswordlessConnectorsPage />)
     expect(await screen.findByText('Email and SMS connectors')).toBeTruthy()
+    expect(screen.getByText('Cloudflare Email')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Managed' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Setup SMS' })).toHaveProperty('disabled', true)
 
     cleanup()
     renderWithQuery(<DeploymentSettingsPage />)
     expect(await screen.findByText('Signing keys')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Rotate key' })).toHaveProperty('disabled', true)
+  })
+
+  it('derives built-in Cloudflare Email readiness and keeps SMS setup fixed in the passwordless connector view', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({
+            ...readinessIncomplete,
+            recommended: [
+              {
+                id: 'email_delivery',
+                label: 'Confirm email delivery',
+                description:
+                  'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
+                status: 'complete',
+                href: '/console/tenant-settings/oidc-configs',
+                action: 'Review deployment',
+              },
+            ],
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<PasswordlessConnectorsPage />)
+
+    expect(await screen.findByText('Email and SMS connectors')).toBeTruthy()
+    expect(screen.getByText('Cloudflare Email')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Cloudflare Email is built into this deployment. Magic links and email codes use the runtime EMAIL binding and EMAIL_FROM sender.',
+      ),
+    ).toBeTruthy()
+    expect(screen.getByText('Built-in')).toBeTruthy()
+    expect(screen.getByText('Configured')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Managed' })).toHaveProperty('disabled', true)
+    expect(screen.getByText('SMS connector')).toBeTruthy()
+    expect(screen.getByText('Configurable')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'SMS remains a configurable delivery connector. Add provider credentials when SMS persistence is enabled for this environment.',
+      ),
+    ).toBeTruthy()
+    expect(screen.getByText('Unconfigured')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Setup SMS' })).toHaveProperty('disabled', true)
   })
 
   it('renders MFA and password policy compact controls as read-only', async () => {
@@ -4748,6 +4847,28 @@ const connectorTemplates = {
       displayName: 'Google',
       icon: 'google',
       requiredFields: ['clientId', 'clientSecretBinding'],
+      optionalFields: ['scopes'],
+      defaultScopes: ['openid', 'email', 'profile'],
+      endpoints: {
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+      },
+    },
+    {
+      providerType: 'social',
+      providerId: 'cognito',
+      displayName: 'Amazon Cognito',
+      icon: 'cognito',
+      requiredFields: [
+        'clientId',
+        'clientSecretBinding',
+        'providerMetadata.domain',
+        'providerMetadata.region',
+        'providerMetadata.userPoolId',
+      ],
       optionalFields: ['scopes'],
       defaultScopes: ['openid', 'email', 'profile'],
       endpoints: {

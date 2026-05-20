@@ -1739,8 +1739,8 @@ export function PasswordlessConnectorsPage() {
           >
             <div className="overflow-hidden rounded-md border border-border">
               <ConnectorSetupRow
-                action="Email setup unavailable locally"
-                description="Magic links and email codes are sent through the configured runtime email service binding."
+                action="Managed"
+                description="Cloudflare Email is built into this deployment. Magic links and email codes use the runtime EMAIL binding and EMAIL_FROM sender."
                 status={
                   <StatusBadge
                     active={emailReady === true}
@@ -1748,15 +1748,15 @@ export function PasswordlessConnectorsPage() {
                     inactiveLabel={emailReady === false ? 'Unconfigured' : 'Unknown'}
                   />
                 }
-                title="Email connector"
-                type="Email"
+                title="Cloudflare Email"
+                type="Built-in"
               />
               <ConnectorSetupRow
                 action="Setup SMS"
-                description="SMS code delivery is visible for planning but has no backend connector contract yet."
+                description="SMS remains a configurable delivery connector. Add provider credentials when SMS persistence is enabled for this environment."
                 status={<StatusBadge active={false} activeLabel="Configured" inactiveLabel="Unconfigured" />}
                 title="SMS connector"
-                type="SMS"
+                type="Configurable"
               />
             </div>
           </SettingsSection>
@@ -5624,7 +5624,11 @@ function CreateConnectorDialog({
 }) {
   const [form, setForm] = useState<FormState>(emptyForm)
   const [validationError, setValidationError] = useState<string | null>(null)
-  const selectedTemplate = templates.find((template) => template.providerId === form.template)
+  const selectedTemplate = templates.find((template) => connectorTemplateKey(template) === form.templateKey)
+  const selectedProviderType = selectedTemplate?.providerType ?? 'social'
+  const isGenericOAuth = selectedProviderType === 'generic_oauth'
+  const requiredMetadataFields =
+    selectedTemplate?.requiredFields.filter((field) => field.startsWith('providerMetadata.')) ?? []
   return (
     <Dialog open={open}>
       <FormDialog
@@ -5638,11 +5642,15 @@ function CreateConnectorDialog({
               parseForm(createManagementConnectorRequestSchema, {
                 ...form,
                 enabled: form.enabled === 'false' ? false : undefined,
-                providerType: selectedTemplate?.providerType ?? form.providerType ?? 'social',
-                providerId: selectedTemplate?.providerId ?? form.providerId,
+                providerType: selectedProviderType,
+                providerId:
+                  selectedTemplate?.providerType === 'generic_oauth'
+                    ? form.providerId
+                    : (selectedTemplate?.providerId ?? form.providerId),
                 displayName: form.displayName || selectedTemplate?.displayName,
+                templateKey: undefined,
                 scopes: form.scopes?.split(/\s+/).filter(Boolean),
-                providerMetadata: parseMetadata(form.providerMetadata),
+                providerMetadata: parseConnectorMetadata(form),
               }),
             )
           } catch (submitError) {
@@ -5652,51 +5660,41 @@ function CreateConnectorDialog({
         pending={pending}
         title="Create connector"
       >
-        <Field label="Template">
-          <SelectInput
-            onChange={(event) => {
-              const template = templates.find((item) => item.providerId === event.target.value)
-              setForm((current) => ({
-                ...current,
-                template: event.target.value,
-                providerType: template?.providerType ?? 'social',
-                providerId: template?.providerId ?? '',
-                displayName: template?.displayName ?? '',
-                scopes: template?.defaultScopes.join(' ') ?? '',
-              }))
-            }}
-            value={form.template ?? ''}
-          >
-            <option value="">Custom provider</option>
-            {templates.map((template) => (
-              <option key={`${template.providerType}:${template.providerId}`} value={template.providerId}>
-                {template.displayName}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
+        <ConnectorTemplateCards
+          onChange={(template) => {
+            setForm({
+              templateKey: connectorTemplateKey(template),
+              displayName: template.displayName,
+              providerId: template.providerType === 'generic_oauth' ? '' : template.providerId,
+              scopes: template.defaultScopes.join(' '),
+              enabled: 'true',
+            })
+          }}
+          templates={templates}
+          value={form.templateKey ?? ''}
+        />
+        {selectedTemplate ? (
+          <div className="rounded-md border border-border bg-muted/25 p-3 text-sm text-muted-foreground">
+            {selectedTemplate.displayName} defaults are applied from the provider template. Only deployment credentials
+            and required provider-specific fields are collected here.
+          </div>
+        ) : null}
+        {isGenericOAuth ? (
+          <Field label="Provider ID" help="Stable provider key used by hosted sign-in.">
+            <TextInput
+              onChange={(event) => setValue(setForm, 'providerId', event.target.value)}
+              placeholder="acme-idp"
+              required
+              value={form.providerId ?? ''}
+            />
+          </Field>
+        ) : null}
         <Field label="Display name">
           <TextInput
             onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
             required
             value={form.displayName ?? ''}
           />
-        </Field>
-        <Field label="Provider ID">
-          <TextInput
-            onChange={(event) => setValue(setForm, 'providerId', event.target.value)}
-            required
-            value={form.providerId ?? ''}
-          />
-        </Field>
-        <Field label="Provider type">
-          <SelectInput
-            onChange={(event) => setValue(setForm, 'providerType', event.target.value)}
-            value={form.providerType ?? 'social'}
-          >
-            <option value="social">Social</option>
-            <option value="generic_oauth">Generic OAuth</option>
-          </SelectInput>
         </Field>
         <Field label="Status">
           <SelectInput
@@ -5713,33 +5711,87 @@ function CreateConnectorDialog({
         <Field label="Client secret binding">
           <TextInput onChange={(event) => setValue(setForm, 'clientSecretBinding', event.target.value)} />
         </Field>
-        <Field label="Issuer">
-          <TextInput onChange={(event) => setValue(setForm, 'issuer', event.target.value)} />
-        </Field>
-        <Field label="Authorization endpoint">
-          <TextInput onChange={(event) => setValue(setForm, 'authorizationEndpoint', event.target.value)} />
-        </Field>
-        <Field label="Token endpoint">
-          <TextInput onChange={(event) => setValue(setForm, 'tokenEndpoint', event.target.value)} />
-        </Field>
-        <Field label="User info endpoint">
-          <TextInput onChange={(event) => setValue(setForm, 'userInfoEndpoint', event.target.value)} />
-        </Field>
-        <Field label="JWKS endpoint">
-          <TextInput onChange={(event) => setValue(setForm, 'jwksEndpoint', event.target.value)} />
-        </Field>
-        <Field label="Scopes">
+        {requiredMetadataFields.map((field) => {
+          const metadataKey = field.replace('providerMetadata.', '')
+          return (
+            <Field key={field} label={connectorFieldLabel(metadataKey)}>
+              <TextInput
+                onChange={(event) => setValue(setForm, `metadata.${metadataKey}`, event.target.value)}
+                required
+                value={form[`metadata.${metadataKey}`] ?? ''}
+              />
+            </Field>
+          )
+        })}
+        {isGenericOAuth ? (
+          <>
+            <Field label="Issuer">
+              <TextInput onChange={(event) => setValue(setForm, 'issuer', event.target.value)} />
+            </Field>
+            <Field label="Authorization endpoint">
+              <TextInput onChange={(event) => setValue(setForm, 'authorizationEndpoint', event.target.value)} />
+            </Field>
+            <Field label="Token endpoint">
+              <TextInput onChange={(event) => setValue(setForm, 'tokenEndpoint', event.target.value)} />
+            </Field>
+            <Field label="User info endpoint">
+              <TextInput onChange={(event) => setValue(setForm, 'userInfoEndpoint', event.target.value)} />
+            </Field>
+            <Field label="JWKS endpoint">
+              <TextInput onChange={(event) => setValue(setForm, 'jwksEndpoint', event.target.value)} />
+            </Field>
+            <Field label="Provider metadata JSON">
+              <TextArea onChange={(event) => setValue(setForm, 'providerMetadata', event.target.value)} />
+            </Field>
+          </>
+        ) : null}
+        <Field label="Scopes" help="Space-separated OAuth scopes. Provider defaults are prefilled.">
           <TextInput
             onChange={(event) => setValue(setForm, 'scopes', event.target.value)}
             placeholder="openid profile email"
             value={form.scopes ?? ''}
           />
         </Field>
-        <Field label="Provider metadata JSON">
-          <TextArea onChange={(event) => setValue(setForm, 'providerMetadata', event.target.value)} />
-        </Field>
       </FormDialog>
     </Dialog>
+  )
+}
+
+function ConnectorTemplateCards({
+  onChange,
+  templates,
+  value,
+}: {
+  onChange: (template: ConnectorTemplate) => void
+  templates: ConnectorTemplate[]
+  value: string
+}) {
+  return (
+    <fieldset className="applicationTypeGrid">
+      <legend>Provider template</legend>
+      {templates.map((template) => {
+        const key = connectorTemplateKey(template)
+        return (
+          <button
+            aria-pressed={value === key}
+            className={cn('applicationTypeCard', value === key && 'selected')}
+            key={key}
+            onClick={() => onChange(template)}
+            type="button"
+          >
+            <span className="applicationTypeIcon" aria-hidden="true">
+              {template.providerType === 'generic_oauth' ? <Globe2 size={18} /> : <AppWindow size={18} />}
+            </span>
+            <span>
+              <strong>{template.displayName}</strong>
+              <small>
+                {template.providerType === 'generic_oauth' ? 'Custom OAuth endpoints' : 'Managed social defaults'}
+              </small>
+            </span>
+          </button>
+        )
+      })}
+    </fieldset>
   )
 }
 
@@ -5853,7 +5905,7 @@ function ConnectorDetailDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 p-4">
-          <div className="grid gap-2">
+          <div className="grid gap-2 rounded-md border border-border p-3">
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-medium">Configuration readiness</span>
               <Badge variant={readiness?.ready ? 'secondary' : 'outline'}>
@@ -5861,19 +5913,23 @@ function ConnectorDetailDialog({
               </Badge>
             </div>
             <div className="grid gap-2">
-              {readiness?.checks.map((check) => (
-                <div className="flex items-start gap-2 text-sm" key={check.key}>
-                  {check.ok ? (
-                    <CheckCircle2 aria-hidden="true" size={16} />
-                  ) : (
-                    <AlertCircle aria-hidden="true" size={16} />
-                  )}
-                  <div>
-                    <div>{check.label}</div>
-                    <div className="text-xs text-muted-foreground">{check.message}</div>
+              {readiness?.checks.length ? (
+                readiness.checks.map((check) => (
+                  <div className="flex items-start gap-2 text-sm" key={check.key}>
+                    {check.ok ? (
+                      <CheckCircle2 aria-hidden="true" size={16} />
+                    ) : (
+                      <AlertCircle aria-hidden="true" size={16} />
+                    )}
+                    <div>
+                      <div>{check.label}</div>
+                      <div className="text-xs text-muted-foreground">{check.message}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">Readiness checks have not reported for this connector.</p>
+              )}
             </div>
           </div>
           <form
@@ -5900,72 +5956,86 @@ function ConnectorDetailDialog({
                 {validationError ?? error}
               </div>
             ) : null}
-            <Field label="Display name">
-              <TextInput
-                onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
-                value={form.displayName ?? ''}
-              />
-            </Field>
-            <Field label="Slug">
-              <TextInput onChange={(event) => setValue(setForm, 'slug', event.target.value)} value={form.slug ?? ''} />
-            </Field>
-            <Field label="Status">
-              <SelectInput
-                onChange={(event) => setValue(setForm, 'enabled', event.target.value)}
-                value={form.enabled ?? 'true'}
-              >
-                <option value="true">Enabled</option>
-                <option value="false">Disabled</option>
-              </SelectInput>
-            </Field>
-            <Field label="Client ID">
-              <TextInput
-                onChange={(event) => setValue(setForm, 'clientId', event.target.value)}
-                value={form.clientId ?? ''}
-              />
-            </Field>
-            <Field label="Client secret binding">
-              <TextInput
-                onChange={(event) => setValue(setForm, 'clientSecretBinding', event.target.value)}
-                value={form.clientSecretBinding ?? ''}
-              />
-            </Field>
-            <Field label="Issuer">
-              <TextInput
-                onChange={(event) => setValue(setForm, 'issuer', event.target.value)}
-                value={form.issuer ?? ''}
-              />
-            </Field>
-            <Field label="Authorization endpoint">
-              <TextInput
-                onChange={(event) => setValue(setForm, 'authorizationEndpoint', event.target.value)}
-                value={form.authorizationEndpoint ?? ''}
-              />
-            </Field>
-            <Field label="Token endpoint">
-              <TextInput
-                onChange={(event) => setValue(setForm, 'tokenEndpoint', event.target.value)}
-                value={form.tokenEndpoint ?? ''}
-              />
-            </Field>
-            <Field label="User info endpoint">
-              <TextInput
-                onChange={(event) => setValue(setForm, 'userInfoEndpoint', event.target.value)}
-                value={form.userInfoEndpoint ?? ''}
-              />
-            </Field>
-            <Field label="JWKS endpoint">
-              <TextInput
-                onChange={(event) => setValue(setForm, 'jwksEndpoint', event.target.value)}
-                value={form.jwksEndpoint ?? ''}
-              />
-            </Field>
-            <Field label="Scopes">
-              <TextInput
-                onChange={(event) => setValue(setForm, 'scopes', event.target.value)}
-                value={form.scopes ?? ''}
-              />
-            </Field>
+            <div className="grid gap-3 rounded-md border border-border p-3">
+              <p className="text-sm font-semibold">Connector identity</p>
+              <Field label="Display name">
+                <TextInput
+                  onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
+                  value={form.displayName ?? ''}
+                />
+              </Field>
+              <Field label="Slug">
+                <TextInput
+                  onChange={(event) => setValue(setForm, 'slug', event.target.value)}
+                  value={form.slug ?? ''}
+                />
+              </Field>
+              <Field label="Status">
+                <SelectInput
+                  onChange={(event) => setValue(setForm, 'enabled', event.target.value)}
+                  value={form.enabled ?? 'true'}
+                >
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </SelectInput>
+              </Field>
+            </div>
+            <div className="grid gap-3 rounded-md border border-border p-3">
+              <p className="text-sm font-semibold">Deployment credentials</p>
+              <Field label="Client ID">
+                <TextInput
+                  onChange={(event) => setValue(setForm, 'clientId', event.target.value)}
+                  value={form.clientId ?? ''}
+                />
+              </Field>
+              <Field label="Client secret binding">
+                <TextInput
+                  onChange={(event) => setValue(setForm, 'clientSecretBinding', event.target.value)}
+                  value={form.clientSecretBinding ?? ''}
+                />
+              </Field>
+              <Field label="Scopes">
+                <TextInput
+                  onChange={(event) => setValue(setForm, 'scopes', event.target.value)}
+                  value={form.scopes ?? ''}
+                />
+              </Field>
+            </div>
+            {connector.providerType === 'generic_oauth' ? (
+              <div className="grid gap-3 rounded-md border border-border p-3">
+                <p className="text-sm font-semibold">OAuth endpoints</p>
+                <Field label="Issuer">
+                  <TextInput
+                    onChange={(event) => setValue(setForm, 'issuer', event.target.value)}
+                    value={form.issuer ?? ''}
+                  />
+                </Field>
+                <Field label="Authorization endpoint">
+                  <TextInput
+                    onChange={(event) => setValue(setForm, 'authorizationEndpoint', event.target.value)}
+                    value={form.authorizationEndpoint ?? ''}
+                  />
+                </Field>
+                <Field label="Token endpoint">
+                  <TextInput
+                    onChange={(event) => setValue(setForm, 'tokenEndpoint', event.target.value)}
+                    value={form.tokenEndpoint ?? ''}
+                  />
+                </Field>
+                <Field label="User info endpoint">
+                  <TextInput
+                    onChange={(event) => setValue(setForm, 'userInfoEndpoint', event.target.value)}
+                    value={form.userInfoEndpoint ?? ''}
+                  />
+                </Field>
+                <Field label="JWKS endpoint">
+                  <TextInput
+                    onChange={(event) => setValue(setForm, 'jwksEndpoint', event.target.value)}
+                    value={form.jwksEndpoint ?? ''}
+                  />
+                </Field>
+              </div>
+            ) : null}
             <Field label="Provider metadata JSON">
               <TextArea
                 onChange={(event) => setValue(setForm, 'providerMetadata', event.target.value)}
@@ -6130,6 +6200,29 @@ function parseMetadata(value: string | undefined) {
     throw new Error('Provider metadata must be a JSON object.')
   }
   return parsed as Record<string, unknown>
+}
+
+function parseConnectorMetadata(form: FormState) {
+  const metadata = parseMetadata(form.providerMetadata) ?? {}
+  for (const [key, value] of Object.entries(form)) {
+    if (!key.startsWith('metadata.') || value === '') continue
+    metadata[key.replace('metadata.', '')] = value
+  }
+  return Object.keys(metadata).length ? metadata : undefined
+}
+
+function connectorTemplateKey(template: ConnectorTemplate) {
+  return `${template.providerType}:${template.providerId}`
+}
+
+function connectorFieldLabel(field: string) {
+  return field
+    .replace(/URI/g, 'Uri')
+    .replace(/ID/g, 'Id')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .replace(/\bUri\b/g, 'URI')
+    .replace(/\bId\b/g, 'ID')
 }
 
 function connectorUpdateForm(form: FormState) {
