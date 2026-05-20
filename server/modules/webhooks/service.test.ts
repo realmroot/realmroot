@@ -25,6 +25,7 @@ describe('WebhookService', () => {
       events: ['user.created'],
       enabled: true,
     })
+    await expect(service.getEndpoint(created.endpoint.id)).resolves.toMatchObject({ id: created.endpoint.id })
     expect(await service.listEndpoints({ limit: 50, offset: 0, status: 'enabled' })).toMatchObject({
       endpoints: [{ id: created.endpoint.id }],
       pagination: { total: 1, hasMore: false },
@@ -58,6 +59,10 @@ describe('WebhookService', () => {
     })
 
     await expect(service.getRequest(request.id)).resolves.toMatchObject({ id: 'whr_1', status: 'failed' })
+    await expect(service.listRequests({ limit: 50, offset: 0, status: 'failed' })).resolves.toMatchObject({
+      requests: [{ id: 'whr_1', status: 'failed' }],
+      pagination: { total: 1, hasMore: false },
+    })
     await expect(service.retryRequest(request.id)).resolves.toMatchObject({ id: 'whr_1', status: 'pending' })
 
     await service.deleteEndpoint(created.endpoint.id)

@@ -3514,6 +3514,8 @@ describe('admin console', () => {
 
   it('manages webhook endpoint controls and request detail through the management API', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
+    const writeText = vi.fn()
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
@@ -3554,6 +3556,8 @@ describe('admin console', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Create endpoint' })[0])
 
     await screen.findByText('whsec_created_secret')
+    fireEvent.click(screen.getByRole('button', { name: 'Copy secret' }))
+    expect(writeText).toHaveBeenCalledWith('whsec_created_secret')
     expect(requests).toContainEqual({
       url: '/api/management/webhooks/endpoints',
       method: 'POST',
