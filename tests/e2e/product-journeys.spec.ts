@@ -1482,34 +1482,41 @@ const journeyAssertions: Record<
       await expect(page.getByRole('heading', { name: 'Multi-factor authentication' })).toBeVisible()
       await expect(page.getByText('Passkeys', { exact: true })).toBeVisible()
       await expect(page.getByText('Authenticator app', { exact: true })).toBeVisible()
-      await expect(page.getByText('SMS verification code', { exact: true })).toBeVisible()
+      await expect(page.getByText('SMS verification code', { exact: true })).toHaveCount(0)
       await expect(page.getByText('Email verification code', { exact: true })).toBeVisible()
       await expect(page.getByText('Backup codes', { exact: true })).toBeVisible()
       await expect(page.getByLabel('Prompt policy')).toHaveValue('optional')
-      await expect(page.getByLabel('Prompt policy')).toBeDisabled()
-      await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+      await expect(page.getByLabel('Prompt policy')).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled()
 
       await page.goto('/console/security/password-policy')
       await expect(page.getByRole('heading', { name: 'Security' })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Password requirements' })).toBeVisible()
-      await expect(page.getByLabel('Minimum length')).toBeDisabled()
-      await expect(page.getByText('1 required character type')).toBeVisible()
-      await expect(page.getByText('Reject compromised passwords')).toBeVisible()
+      await expect(page.getByLabel('Minimum length')).toHaveValue('12')
+      await expect(page.getByLabel('Minimum length')).toBeEnabled()
+      await expect(page.getByLabel('Required character types')).toHaveValue('2')
+      await expect(page.getByText('Reject repetitive or sequential characters')).toBeVisible()
+      await expect(page.getByText('Reject compromised passwords')).toHaveCount(0)
 
       await page.goto('/console/security/captcha')
       await expect(page.getByRole('heading', { name: 'CAPTCHA' })).toBeVisible()
       await expect(page.getByLabel('Provider')).toHaveValue('turnstile')
-      await expect(page.getByRole('button', { name: 'Setup provider' })).toBeDisabled()
+      await expect(page.getByLabel('Site key')).toBeEnabled()
+      await expect(page.getByLabel('Secret binding')).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Setup provider' })).toHaveCount(0)
 
       await page.goto('/console/security/blocklist')
       await expect(page.getByRole('heading', { name: 'Blocklist', exact: true })).toBeVisible()
       await expect(page.getByText('Block email subaddressing')).toBeVisible()
-      await expect(page.getByLabel('Custom email and domain blocklist')).toBeDisabled()
+      await expect(page.getByLabel('Custom email and domain blocklist')).toBeEnabled()
 
       await page.goto('/console/security/general')
       await expect(page.getByRole('heading', { name: 'General security' })).toBeVisible()
       await expect(page.getByText('MFA enforcement')).toBeVisible()
       await expect(page.getByText('3600s')).toBeVisible()
+      await expect(page.locator('span').filter({ hasText: /^CAPTCHA$/ })).toBeVisible()
+      await expect(page.getByText('Password minimum')).toBeVisible()
+      await expect(page.getByText('Blocklist entries')).toBeVisible()
       await expect(page.getByText('Fresh age')).toBeVisible()
       await expect(page.getByText('Cookie cache')).toBeVisible()
     },
@@ -2360,7 +2367,16 @@ async function responseFor(path: string, method: string, body: unknown): Promise
       },
     }
   }
-  if (path === '/api/management/security/policy') return { policy: securityPolicy }
+  if (path === '/api/management/security/policy') {
+    if (method === 'PATCH' && body && typeof body === 'object' && 'policy' in body) {
+      const input = (body as { policy?: Partial<typeof securityPolicy> }).policy
+      if (input?.mfa) Object.assign(securityPolicy.mfa, input.mfa)
+      if (input?.password) Object.assign(securityPolicy.password, input.password)
+      if (input?.captcha) Object.assign(securityPolicy.captcha, input.captcha)
+      if (input?.blocklist) Object.assign(securityPolicy.blocklist, input.blocklist)
+    }
+    return { policy: securityPolicy }
+  }
   if (path === '/api/management/applications') {
     if (method === 'POST') return application
     return { applications: [application], pagination }
@@ -2905,6 +2921,16 @@ const securityPolicy = {
   mfa: { mode: 'optional' },
   passkeys: { enabled: true, rpId: 'localhost', rpName: 'Acme ID', origins: ['http://127.0.0.1:5173'] },
   sessions: { expiresInSeconds: 3600, updateAgeSeconds: 300, freshAgeSeconds: 300, cookieCacheSeconds: 60 },
+  password: {
+    minLength: 12,
+    requiredCharacterTypes: 2,
+    customWords: [],
+    rejectUserInfo: true,
+    rejectSequential: true,
+    rejectCustomWords: false,
+  },
+  captcha: { enabled: false, provider: 'turnstile', siteKey: '', secretBinding: '' },
+  blocklist: { blockSubaddressing: false, entries: [] },
 }
 
 const securityState = {

@@ -113,6 +113,48 @@ describe('management routes', () => {
     })
   })
 
+  it('enforces managed password and blocklist policy for management user creation', async () => {
+    const auth = createAuthMock()
+    const policy = securityPolicy({
+      password: {
+        minLength: 12,
+        requiredCharacterTypes: 3,
+        customWords: [],
+        rejectUserInfo: true,
+        rejectSequential: true,
+        rejectCustomWords: false,
+      },
+      blocklist: {
+        blockSubaddressing: true,
+        entries: ['blocked.example'],
+      },
+    })
+    const app = createApp(auth, {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: createSecurityRepositoryMock(policy),
+      securityPolicy: policy,
+    })
+
+    const weakPassword = await app.request('/api/management/users', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({ email: 'ada@example.com', displayName: 'Ada', password: 'Password1' }),
+    })
+    const blockedEmail = await app.request('/api/management/users', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({ email: 'ada@blocked.example', displayName: 'Ada', password: 'Valid-pass-Zed!' }),
+    })
+
+    expect(weakPassword.status).toBe(400)
+    await expect(weakPassword.json()).resolves.toMatchObject({
+      error: { message: 'Password must be at least 12 characters.' },
+    })
+    expect(blockedEmail.status).toBe(400)
+    await expect(blockedEmail.json()).resolves.toMatchObject({ error: { message: 'Email address is not allowed.' } })
+    expect(auth.api.createUser).not.toHaveBeenCalled()
+  })
+
   it('keeps admin user list compatibility while normalizing management user lists', async () => {
     const auth = createAuthMock()
     auth.api.listUsers.mockResolvedValueOnce({ users: [{ id: 'user-1' }], total: 1, limit: 50 })
@@ -303,6 +345,53 @@ describe('management routes', () => {
     expect(security.getSecurityState).toHaveBeenCalledWith('user-1')
     expect(security.listPasskeys).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
     expect(security.deletePasskey).toHaveBeenCalledWith('user-1', 'passkey-1')
+  })
+
+  it('reads and updates managed security policy through the management boundary', async () => {
+    const security = createSecurityRepositoryMock()
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: security,
+      securityPolicy: securityPolicy(),
+    })
+    const headers = adminHeaders()
+    const body = {
+      policy: {
+        mfa: { mode: 'required' },
+        password: {
+          minLength: 14,
+          requiredCharacterTypes: 3,
+          customWords: ['flareauth'],
+          rejectUserInfo: true,
+          rejectSequential: true,
+          rejectCustomWords: true,
+        },
+        captcha: {
+          enabled: true,
+          provider: 'turnstile',
+          siteKey: 'site-key-1',
+          secretBinding: 'TURNSTILE_SECRET',
+        },
+        blocklist: {
+          blockSubaddressing: true,
+          entries: ['blocked@example.com', 'example.org'],
+        },
+      },
+    }
+
+    const current = await app.request('/api/management/security/policy', { headers })
+    const updated = await app.request('/api/management/security/policy', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(body),
+    })
+
+    expect(current.status).toBe(200)
+    expect(updated.status).toBe(200)
+    await expect(current.json()).resolves.toEqual({ policy: securityPolicy() })
+    await expect(updated.json()).resolves.toEqual({ policy: updatedSecurityPolicy() })
+    expect(security.getPolicy).toHaveBeenCalledTimes(3)
+    expect(security.updatePolicy).toHaveBeenCalledWith(body)
   })
 
   it('updates and revokes specific managed users through the management boundary', async () => {
@@ -937,13 +1026,15 @@ function createUserRepositoryMock(): UserRepository {
   }
 }
 
-function createSecurityRepositoryMock(): SecurityRepository {
+function createSecurityRepositoryMock(policy = securityPolicy()): SecurityRepository {
   return {
+    getPolicy: vi.fn().mockResolvedValue(policy),
+    updatePolicy: vi.fn().mockResolvedValue(updatedSecurityPolicy()),
     getSecurityState: vi.fn().mockResolvedValue({
       userId: 'user-1',
       mfa: { enabled: true, factors: [] },
-      passkeys: { enabled: true, count: 1 },
-      policy: securityPolicy(),
+      passkeys: { enabled: policy.passkeys.enabled, count: 1 },
+      policy,
     }),
     listPasskeys: vi.fn().mockImplementation((_userId, page) =>
       Promise.resolve({
@@ -1188,8 +1279,8 @@ interface OpenApiParameter {
   in: string
 }
 
-function securityPolicy(): SecurityPolicy {
-  return {
+function securityPolicy(overrides: Partial<SecurityPolicy> = {}): SecurityPolicy {
+  const policy: SecurityPolicy = {
     mfa: { mode: 'optional' },
     passkeys: {
       enabled: true,
@@ -1202,6 +1293,59 @@ function securityPolicy(): SecurityPolicy {
       updateAgeSeconds: 300,
       freshAgeSeconds: 600,
       cookieCacheSeconds: 60,
+    },
+    password: {
+      minLength: 12,
+      requiredCharacterTypes: 2,
+      customWords: [],
+      rejectUserInfo: true,
+      rejectSequential: true,
+      rejectCustomWords: false,
+    },
+    captcha: {
+      enabled: false,
+      provider: 'turnstile',
+      siteKey: '',
+      secretBinding: '',
+    },
+    blocklist: {
+      blockSubaddressing: false,
+      entries: [],
+    },
+  }
+  return {
+    ...policy,
+    ...overrides,
+    mfa: { ...policy.mfa, ...overrides.mfa },
+    passkeys: { ...policy.passkeys, ...overrides.passkeys },
+    sessions: { ...policy.sessions, ...overrides.sessions },
+    password: { ...policy.password, ...overrides.password },
+    captcha: { ...policy.captcha, ...overrides.captcha },
+    blocklist: { ...policy.blocklist, ...overrides.blocklist },
+  }
+}
+
+function updatedSecurityPolicy(): SecurityPolicy {
+  return {
+    ...securityPolicy(),
+    mfa: { mode: 'required' },
+    password: {
+      minLength: 14,
+      requiredCharacterTypes: 3,
+      customWords: ['flareauth'],
+      rejectUserInfo: true,
+      rejectSequential: true,
+      rejectCustomWords: true,
+    },
+    captcha: {
+      enabled: true,
+      provider: 'turnstile',
+      siteKey: 'site-key-1',
+      secretBinding: 'TURNSTILE_SECRET',
+    },
+    blocklist: {
+      blockSubaddressing: true,
+      entries: ['blocked@example.com', 'example.org'],
     },
   }
 }

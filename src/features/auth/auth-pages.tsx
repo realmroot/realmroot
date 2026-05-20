@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff, KeyRound, LinkIcon, LoaderCircle, Mail } from 'lucide-react'
-import { type ComponentProps, type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type ComponentProps, type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button, LinkButton } from '@/components/ui/button'
 import { Field, TextInput } from '@/components/ui/field'
@@ -30,6 +30,23 @@ type SubmitState = {
 
 type SignInMode = 'password' | 'magic' | 'otp'
 
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        element: HTMLElement,
+        options: {
+          sitekey: string
+          callback: (token: string) => void
+          'expired-callback': () => void
+          'error-callback': () => void
+        },
+      ) => string
+      remove: (widget: string) => void
+    }
+  }
+}
+
 const initialSubmitState: SubmitState = {
   loading: false,
   message: null,
@@ -44,6 +61,8 @@ export function SignInPage() {
   const [identifierConfirmed, setIdentifierConfirmed] = useState(false)
   const [password, setPassword] = useState('')
   const [otp, setOtp] = useState('')
+  const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const enabled = config?.signIn
   const callback = callbackURL()
   const authContext = authRequestContext()
@@ -54,28 +73,50 @@ export function SignInPage() {
   const methods = useMemo(() => (enabled ? signInMethods(enabled) : []), [enabled])
   const activeMode = methods.some((method) => method.id === mode) ? mode : (methods[0]?.id ?? mode)
   const needsEmailIdentifier = identifierFirst && activeMode !== 'password' && !identifier.includes('@')
+  const resetCaptcha = () => resetCaptchaState(config, setCaptchaToken, setCaptchaResetKey)
 
   async function onPasswordSubmit(event: FormEvent) {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
-      const useUsername = enabled?.usernameEnabled && !identifier.includes('@')
-      const response = useUsername
-        ? await signInWithUsername({ username: identifier, password, callbackURL: callback, rememberMe: true })
-        : await signInWithPassword({ email: identifier, password, callbackURL: callback, rememberMe: true })
-      navigateAfterAuth(response, callback)
-      return 'Signed in. Redirecting to the requested application.'
+      try {
+        const useUsername = enabled?.usernameEnabled && !identifier.includes('@')
+        const response = useUsername
+          ? await signInWithUsername({
+              username: identifier,
+              password,
+              callbackURL: callback,
+              rememberMe: true,
+              captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
+            })
+          : await signInWithPassword({
+              email: identifier,
+              password,
+              callbackURL: callback,
+              rememberMe: true,
+              captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
+            })
+        navigateAfterAuth(response, callback)
+        return 'Signed in. Redirecting to the requested application.'
+      } finally {
+        resetCaptcha()
+      }
     })
   }
 
   async function onMagicSubmit(event: FormEvent) {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
-      await requestMagicLink({
-        email: identifier,
-        callbackURL: callback,
-        errorCallbackURL: '/sign-in',
-      })
-      return 'Magic link sent. Check your email to continue.'
+      try {
+        await requestMagicLink({
+          email: identifier,
+          callbackURL: callback,
+          errorCallbackURL: '/sign-in',
+          captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
+        })
+        return 'Magic link sent. Check your email to continue.'
+      } finally {
+        resetCaptcha()
+      }
     })
   }
 
@@ -83,8 +124,16 @@ export function SignInPage() {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
       if (!otp) {
-        await requestEmailOtp({ email: identifier, type: 'sign-in' })
-        return 'One-time code sent. Enter it here to finish signing in.'
+        try {
+          await requestEmailOtp({
+            email: identifier,
+            type: 'sign-in',
+            captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
+          })
+          return 'One-time code sent. Enter it here to finish signing in.'
+        } finally {
+          resetCaptcha()
+        }
       }
 
       const response = await signInWithEmailOtp({ email: identifier, otp })
@@ -187,6 +236,7 @@ export function SignInPage() {
               value={password}
             />
           </Field>
+          <CaptchaTokenField key={captchaResetKey} config={config} onChange={setCaptchaToken} />
           <Button disabled={submit.loading} type="submit">
             <KeyRound size={18} />
             Sign in
@@ -207,6 +257,7 @@ export function SignInPage() {
               />
             </Field>
           ) : null}
+          <CaptchaTokenField key={captchaResetKey} config={config} onChange={setCaptchaToken} />
           <Button disabled={submit.loading} type="submit">
             <LinkIcon size={18} />
             Send magic link
@@ -235,6 +286,7 @@ export function SignInPage() {
               value={otp}
             />
           </Field>
+          {!otp ? <CaptchaTokenField key={captchaResetKey} config={config} onChange={setCaptchaToken} /> : null}
           <Button disabled={submit.loading} type="submit">
             <Mail size={18} />
             {otp ? 'Verify code' : 'Send code'}
@@ -260,20 +312,28 @@ export function SignUpPage() {
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const created = submit.message !== null && submit.error === null
   const authContext = authRequestContext()
+  const resetCaptcha = () => resetCaptchaState(config, setCaptchaToken, setCaptchaResetKey)
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
     await submitRequest(setSubmit, async () => {
-      await signUp({
-        email,
-        name,
-        password,
-        username: config?.signIn.usernameEnabled && username ? username : undefined,
-        callbackURL: callbackURL(),
-      })
-      return 'Account created. Check your email if verification is required.'
+      try {
+        await signUp({
+          email,
+          name,
+          password,
+          username: config?.signIn.usernameEnabled && username ? username : undefined,
+          callbackURL: callbackURL(),
+          captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
+        })
+        return 'Account created. Check your email if verification is required.'
+      } finally {
+        resetCaptcha()
+      }
     })
   }
 
@@ -313,15 +373,15 @@ export function SignUpPage() {
               />
             </Field>
           ) : null}
-          <Field label="Password" help="Use at least 8 characters.">
+          <Field label="Password">
             <PasswordInput
               autoComplete="new-password"
-              minLength={8}
               onChange={(event) => setPassword(event.target.value)}
               required
               value={password}
             />
           </Field>
+          <CaptchaTokenField key={captchaResetKey} config={config} onChange={setCaptchaToken} />
           <Button disabled={submit.loading} type="submit">
             Create account
           </Button>
@@ -341,11 +401,14 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [password, setPassword] = useState('')
+  const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const [resetMethod, setResetMethod] = useState<'email' | 'otp'>('email')
   const [otpRequested, setOtpRequested] = useState(false)
   const token = new URLSearchParams(window.location.search).get('token')
   const otpResetEnabled = config?.signIn.emailOtpEnabled === true
   const authContext = authRequestContext()
+  const resetCaptcha = () => resetCaptchaState(config, setCaptchaToken, setCaptchaResetKey)
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -361,13 +424,28 @@ export function ForgotPasswordPage() {
       }
 
       if (resetMethod === 'otp' && otpResetEnabled) {
-        await requestEmailOtpPasswordReset({ email })
-        setOtpRequested(true)
-        return 'Password reset code sent.'
+        try {
+          await requestEmailOtpPasswordReset({
+            email,
+            captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
+          })
+          setOtpRequested(true)
+          return 'Password reset code sent.'
+        } finally {
+          resetCaptcha()
+        }
       }
 
-      await requestPasswordReset({ email, redirectTo: `${window.location.origin}/forgot-password` })
-      return 'Password reset email sent.'
+      try {
+        await requestPasswordReset({
+          email,
+          redirectTo: `${window.location.origin}/forgot-password`,
+          captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
+        })
+        return 'Password reset email sent.'
+      } finally {
+        resetCaptcha()
+      }
     })
   }
 
@@ -417,6 +495,9 @@ export function ForgotPasswordPage() {
               value={email}
             />
           </Field>
+        ) : null}
+        {!token && !otpRequested ? (
+          <CaptchaTokenField key={captchaResetKey} config={config} onChange={setCaptchaToken} />
         ) : null}
         {otpResetEnabled && resetMethod === 'otp' && otpRequested && !token ? (
           <Field label="One-time code">
@@ -731,6 +812,92 @@ function PasswordInput(props: Omit<ComponentProps<typeof TextInput>, 'type'>) {
       </button>
     </div>
   )
+}
+
+function CaptchaTokenField({
+  config,
+  onChange,
+}: {
+  config: ReturnType<typeof useConfigz>['data']
+  onChange: (value: string) => void
+}) {
+  const widgetId = useId()
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!config?.captcha?.enabled || !config.captcha.siteKey || !containerRef.current) return
+
+    let disposed = false
+    let widget: string | null = null
+
+    loadTurnstileScript()
+      .then(() => {
+        if (disposed || !containerRef.current || !window.turnstile) return
+        widget = window.turnstile.render(containerRef.current, {
+          sitekey: config.captcha.siteKey,
+          callback: onChange,
+          'expired-callback': () => onChange(''),
+          'error-callback': () => onChange(''),
+        })
+      })
+      .catch(() => onChange(''))
+
+    return () => {
+      disposed = true
+      onChange('')
+      if (widget && window.turnstile) window.turnstile.remove(widget)
+    }
+  }, [config?.captcha?.enabled, config?.captcha?.siteKey, onChange])
+
+  if (!config?.captcha?.enabled) return null
+
+  return (
+    <Field label="CAPTCHA">
+      <div>
+        <div aria-describedby={`${widgetId}-status`} ref={containerRef} />
+        <span className="sr-only" id={`${widgetId}-status`}>
+          Complete the CAPTCHA challenge to continue.
+        </span>
+      </div>
+    </Field>
+  )
+}
+
+function resetCaptchaState(
+  config: ReturnType<typeof useConfigz>['data'],
+  setCaptchaToken: (value: string) => void,
+  setCaptchaResetKey: (updater: (value: number) => number) => void,
+) {
+  if (!config?.captcha?.enabled) return
+  setCaptchaToken('')
+  setCaptchaResetKey((value) => value + 1)
+}
+
+let turnstileScriptPromise: Promise<void> | null = null
+
+function loadTurnstileScript() {
+  if (window.turnstile) return Promise.resolve()
+  if (turnstileScriptPromise) return turnstileScriptPromise
+
+  turnstileScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-turnstile-script="true"]')
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true })
+      existing.addEventListener('error', () => reject(new Error('CAPTCHA script failed to load.')), { once: true })
+      return
+    }
+
+    const script = document.createElement('script')
+    script.async = true
+    script.defer = true
+    script.dataset.turnstileScript = 'true'
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    script.addEventListener('load', () => resolve(), { once: true })
+    script.addEventListener('error', () => reject(new Error('CAPTCHA script failed to load.')), { once: true })
+    document.head.appendChild(script)
+  })
+
+  return turnstileScriptPromise
 }
 
 async function submitRequest(setSubmit: (state: SubmitState) => void, operation: () => Promise<string>) {

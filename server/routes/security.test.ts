@@ -13,7 +13,7 @@ describe('security routes', () => {
 
   it('serves account security state and delegates MFA/passkey enrollment APIs to Better Auth', async () => {
     const auth = createAuthMock()
-    const security = createSecurityRepositoryMock()
+    const security = createSecurityRepositoryMock(securityPolicy({ mfa: { mode: 'required' } }))
     const app = createApp(auth, {
       userRepository: createUserRepositoryMock(),
       securityRepository: security,
@@ -419,7 +419,7 @@ describe('security routes', () => {
 
   it('serves admin security resources and revokes user sessions', async () => {
     const auth = createAuthMock()
-    const security = createSecurityRepositoryMock()
+    const security = createSecurityRepositoryMock(securityPolicy({ mfa: { mode: 'required' } }))
     const users = createUserRepositoryMock()
     const app = createApp(auth, {
       userRepository: users,
@@ -506,6 +506,268 @@ describe('security routes', () => {
       headers: expect.any(Headers),
     })
   })
+
+  it('persists admin security policy updates through both admin and management boundaries', async () => {
+    const security = createSecurityRepositoryMock()
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: security,
+      securityPolicy: securityPolicy(),
+    })
+    const body = {
+      policy: {
+        mfa: { mode: 'required' },
+        password: {
+          minLength: 14,
+          requiredCharacterTypes: 3,
+          customWords: ['flareauth'],
+          rejectUserInfo: true,
+          rejectSequential: true,
+          rejectCustomWords: true,
+        },
+        captcha: {
+          enabled: true,
+          provider: 'turnstile',
+          siteKey: 'site-key-1',
+          secretBinding: 'TURNSTILE_SECRET',
+        },
+        blocklist: {
+          blockSubaddressing: true,
+          entries: ['blocked@example.com', 'example.org'],
+        },
+      },
+    }
+
+    const adminResponse = await app.request('/api/admin/security/policy', {
+      method: 'PATCH',
+      headers: adminHeaders(),
+      body: JSON.stringify(body),
+    })
+    const managementResponse = await app.request('/api/management/security/policy', {
+      method: 'PATCH',
+      headers: adminHeaders(),
+      body: JSON.stringify(body),
+    })
+
+    expect(adminResponse.status).toBe(200)
+    expect(managementResponse.status).toBe(200)
+    await expect(adminResponse.json()).resolves.toEqual({ policy: updatedSecurityPolicy() })
+    await expect(managementResponse.json()).resolves.toEqual({ policy: updatedSecurityPolicy() })
+    expect(security.updatePolicy).toHaveBeenCalledTimes(2)
+    expect(security.updatePolicy).toHaveBeenCalledWith(body)
+  })
+
+  it('enforces password, blocklist, and CAPTCHA policy before delegated account flows', async () => {
+    const auth = createAuthMock()
+    const policy = securityPolicy({
+      password: {
+        minLength: 12,
+        requiredCharacterTypes: 3,
+        customWords: ['flareauth'],
+        rejectUserInfo: true,
+        rejectSequential: true,
+        rejectCustomWords: true,
+      },
+      captcha: {
+        enabled: true,
+        provider: 'turnstile',
+        siteKey: 'site-key-1',
+        secretBinding: 'TURNSTILE_SECRET',
+      },
+      blocklist: {
+        blockSubaddressing: true,
+        entries: ['blocked@example.com', 'blocked.test'],
+      },
+    })
+    const app = createApp(auth, {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: createSecurityRepositoryMock(policy),
+      securityPolicy: policy,
+    })
+
+    const weakSignup = await app.request('/api/auth/sign-up/email', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'allowed@example.com', password: 'short', name: 'Allowed' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const blockedSignup = await app.request('/api/auth/sign-up/email', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user+test@example.com', password: 'Valid-pass-123', name: 'Allowed' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const blockedEmailChange = await app.request('/api/account/email/change', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user@blocked.test' }),
+      headers: userHeaders(),
+    })
+    const weakPasswordChange = await app.request('/api/account/password/change', {
+      method: 'POST',
+      body: JSON.stringify({
+        currentPassword: 'old-password',
+        newPassword: 'abc123abc123',
+        revokeOtherSessions: true,
+      }),
+      headers: userHeaders(),
+    })
+    const weakReset = await app.request('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token: 'token-1', newPassword: 'abc123abc123' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const weakOtpReset = await app.request('/api/auth/email-otp/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'allowed@example.com', otp: '123456', password: 'abc123abc123' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const missingResetPassword = await app.request('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token: 'token-1' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const nonJsonSignup = await app.request('/api/auth/sign-up/email', {
+      method: 'POST',
+      body: new FormData(),
+    })
+    const getReset = await app.request('/api/auth/reset-password')
+
+    expect(weakSignup.status).toBe(400)
+    await expect(weakSignup.json()).resolves.toMatchObject({
+      error: { message: 'Password must be at least 12 characters.' },
+    })
+    expect(blockedSignup.status).toBe(400)
+    await expect(blockedSignup.json()).resolves.toMatchObject({
+      error: { message: 'Email subaddressing is not allowed.' },
+    })
+    expect(blockedEmailChange.status).toBe(400)
+    await expect(blockedEmailChange.json()).resolves.toMatchObject({
+      error: { message: 'Email address is not allowed.' },
+    })
+    expect(weakPasswordChange.status).toBe(400)
+    await expect(weakPasswordChange.json()).resolves.toMatchObject({
+      error: { message: 'Password must include at least 3 character types.' },
+    })
+    expect(weakReset.status).toBe(400)
+    await expect(weakReset.json()).resolves.toMatchObject({
+      error: { message: 'Password must include at least 3 character types.' },
+    })
+    expect(weakOtpReset.status).toBe(400)
+    await expect(weakOtpReset.json()).resolves.toMatchObject({
+      error: { message: 'Password must include at least 3 character types.' },
+    })
+    expect(missingResetPassword.status).toBe(400)
+    await expect(missingResetPassword.json()).resolves.toMatchObject({
+      error: { message: 'newPassword is required.' },
+    })
+    expect(nonJsonSignup.status).toBe(400)
+    await expect(nonJsonSignup.json()).resolves.toMatchObject({
+      error: { message: 'email is required.' },
+    })
+    expect(getReset.status).toBe(400)
+    await expect(getReset.json()).resolves.toMatchObject({
+      error: { message: 'newPassword is required.' },
+    })
+  })
+
+  it('verifies CAPTCHA tokens for hosted auth requests when enabled', async () => {
+    const verify = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    )
+    const policy = securityPolicy({
+      captcha: {
+        enabled: true,
+        provider: 'turnstile',
+        siteKey: 'site-key-1',
+        secretBinding: 'TURNSTILE_SECRET',
+      },
+    })
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: createSecurityRepositoryMock(policy),
+      securityPolicy: policy,
+    })
+
+    const missing = await app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user@example.com', password: 'password-1' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const verified = await app.request(
+      '/api/auth/sign-in/email',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'captcha-token-1' }),
+        headers: { 'content-type': 'application/json' },
+      },
+      { TURNSTILE_SECRET: 'secret-1' },
+    )
+    const missingMagic = await app.request('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user@example.com' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const verifiedOtpRequest = await app.request(
+      '/api/auth/email-otp/send-verification-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email: 'user@example.com', type: 'sign-in', captchaToken: 'captcha-token-2' }),
+        headers: { 'content-type': 'application/json' },
+      },
+      { TURNSTILE_SECRET: 'secret-1' },
+    )
+    const missingSecret = await app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'captcha-token-3' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    verify.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: false }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+    const failedVerification = await app.request(
+      '/api/auth/sign-in/email',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'captcha-token-4' }),
+        headers: { 'content-type': 'application/json' },
+      },
+      { TURNSTILE_SECRET: 'secret-1' },
+    )
+    const malformed = await app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      body: '{',
+      headers: { 'content-type': 'application/json' },
+    })
+
+    expect(missing.status).toBe(400)
+    await expect(missing.json()).resolves.toMatchObject({ error: { message: 'CAPTCHA verification is required.' } })
+    expect(verified.status).toBe(204)
+    expect(missingMagic.status).toBe(400)
+    await expect(missingMagic.json()).resolves.toMatchObject({
+      error: { message: 'CAPTCHA verification is required.' },
+    })
+    expect(verifiedOtpRequest.status).toBe(204)
+    expect(missingSecret.status).toBe(400)
+    await expect(missingSecret.json()).resolves.toMatchObject({
+      error: { message: 'CAPTCHA secret binding is not configured.' },
+    })
+    expect(failedVerification.status).toBe(400)
+    await expect(failedVerification.json()).resolves.toMatchObject({
+      error: { message: 'CAPTCHA verification failed.' },
+    })
+    expect(malformed.status).toBe(400)
+    await expect(malformed.json()).resolves.toMatchObject({ error: { message: 'Invalid JSON body.' } })
+    expect(verify).toHaveBeenCalledWith(
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    verify.mockRestore()
+  })
 })
 
 function createAuthMock() {
@@ -544,6 +806,8 @@ function createAuthMock() {
       revokeSessions: vi.fn().mockResolvedValue({ status: true }),
       revokeUserSession: vi.fn().mockResolvedValue({ success: true }),
       revokeUserSessions: vi.fn().mockResolvedValue({ success: true }),
+      changeEmail: vi.fn().mockResolvedValue({ status: true }),
+      changePassword: vi.fn().mockResolvedValue({ status: true }),
     },
     handler: async () => new Response(null, { status: 204 }),
   }
@@ -567,6 +831,8 @@ function createSecurityRepositoryMock(
   options: { mfaEnabled?: boolean } = {},
 ): SecurityRepository {
   return {
+    getPolicy: vi.fn().mockResolvedValue(policy),
+    updatePolicy: vi.fn().mockResolvedValue(updatedSecurityPolicy()),
     getSecurityState: vi.fn().mockImplementation((userId: string) =>
       Promise.resolve({
         userId,
@@ -645,7 +911,52 @@ function securityPolicy(overrides: Partial<SecurityPolicy> = {}): SecurityPolicy
       cookieCacheSeconds: 60 * 5,
       ...overrides.sessions,
     },
+    password: {
+      minLength: 12,
+      requiredCharacterTypes: 2,
+      customWords: [],
+      rejectUserInfo: true,
+      rejectSequential: true,
+      rejectCustomWords: false,
+      ...overrides.password,
+    },
+    captcha: {
+      enabled: false,
+      provider: 'turnstile',
+      siteKey: '',
+      secretBinding: '',
+      ...overrides.captcha,
+    },
+    blocklist: {
+      blockSubaddressing: false,
+      entries: [],
+      ...overrides.blocklist,
+    },
   }
+}
+
+function updatedSecurityPolicy(): SecurityPolicy {
+  return securityPolicy({
+    mfa: { mode: 'required' },
+    password: {
+      minLength: 14,
+      requiredCharacterTypes: 3,
+      customWords: ['flareauth'],
+      rejectUserInfo: true,
+      rejectSequential: true,
+      rejectCustomWords: true,
+    },
+    captcha: {
+      enabled: true,
+      provider: 'turnstile',
+      siteKey: 'site-key-1',
+      secretBinding: 'TURNSTILE_SECRET',
+    },
+    blocklist: {
+      blockSubaddressing: true,
+      entries: ['blocked@example.com', 'example.org'],
+    },
+  })
 }
 
 function adminHeaders() {

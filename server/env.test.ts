@@ -73,6 +73,24 @@ describe('validateEnv', () => {
           freshAgeSeconds: 60 * 60 * 24,
           cookieCacheSeconds: 60 * 5,
         },
+        password: {
+          minLength: 8,
+          requiredCharacterTypes: 1,
+          customWords: [],
+          rejectUserInfo: true,
+          rejectSequential: true,
+          rejectCustomWords: false,
+        },
+        captcha: {
+          enabled: false,
+          provider: 'turnstile',
+          siteKey: '',
+          secretBinding: '',
+        },
+        blocklist: {
+          blockSubaddressing: false,
+          entries: [],
+        },
       },
     })
   })
@@ -108,6 +126,24 @@ describe('validateEnv', () => {
         updateAgeSeconds: 300,
         freshAgeSeconds: 600,
         cookieCacheSeconds: 60,
+      },
+      password: {
+        minLength: 8,
+        requiredCharacterTypes: 1,
+        customWords: [],
+        rejectUserInfo: true,
+        rejectSequential: true,
+        rejectCustomWords: false,
+      },
+      captcha: {
+        enabled: false,
+        provider: 'turnstile',
+        siteKey: '',
+        secretBinding: '',
+      },
+      blocklist: {
+        blockSubaddressing: false,
+        entries: [],
       },
     })
   })

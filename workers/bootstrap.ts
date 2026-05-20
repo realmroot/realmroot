@@ -17,14 +17,16 @@ let cachedEmail: Env['EMAIL'] | null = null
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const config = validateEnv(env, request.url)
-    const auth = await getAuth(env, config)
     const db = createDb(env.DB)
+    const securityRepository = createSecurityRepository(db, config.securityPolicy)
+    const securityPolicy = await securityRepository.getPolicy()
+    const auth = await getAuth(env, { ...config, securityPolicy })
     return createApp(auth, {
       trustedOrigins: config.trustedOrigins,
       userRepository: createUserRepository(db),
-      securityRepository: createSecurityRepository(db, config.securityPolicy),
+      securityRepository,
       onboardingRepository: createOnboardingRepository(env.DB),
-      securityPolicy: config.securityPolicy,
+      securityPolicy,
     }).fetch(request, env, ctx)
   },
 }

@@ -12,6 +12,7 @@ import {
 } from '../../../../shared/api/users'
 import { badRequest } from '../../../lib/errors'
 import { requireAdmin } from '../../../middleware/admin'
+import { validateEmailPolicy, validatePasswordPolicy } from '../../../modules/security/policy'
 import type { SecurityRepository } from '../../../modules/security/repository'
 import type { UserRepository } from '../../../modules/users/repository'
 import type { ManagementAuthApi } from '../../auth-api'
@@ -62,6 +63,17 @@ export function adminUserRoutes(
   app.post('/', async (c) => {
     const body = await readJson(c, adminCreateUserSchema)
     await users.assertAdminAvatarReference(body.avatarAssetId)
+    if (options.securityRepository) {
+      const policy = await options.securityRepository.getPolicy()
+      validateEmailPolicy(body.email, policy.blocklist)
+      if (body.password) {
+        validatePasswordPolicy(body.password, policy.password, {
+          email: body.email,
+          name: body.displayName,
+          username: body.username ?? null,
+        })
+      }
+    }
 
     try {
       return c.json(

@@ -128,10 +128,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   }
 
   if (options.userRepository && options.securityRepository && options.securityPolicy) {
-    app.route(
-      '/security',
-      adminSecurityRoutes(options.authApi, options.userRepository, options.securityRepository, options.securityPolicy),
-    )
+    app.route('/security', adminSecurityRoutes(options.authApi, options.userRepository, options.securityRepository))
   }
 
   {

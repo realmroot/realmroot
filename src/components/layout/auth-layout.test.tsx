@@ -78,6 +78,11 @@ const config: ConfigzConfigResponse = {
     sessionsViewEnabled: true,
     dangerZoneEnabled: false,
   },
+  captcha: {
+    enabled: false,
+    provider: 'turnstile',
+    siteKey: '',
+  },
 }
 
 afterEach(() => {

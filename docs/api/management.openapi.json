@@ -2156,6 +2156,43 @@
             "$ref": "#/components/responses/Forbidden"
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "Security"
+        ],
+        "summary": "Update managed security policy",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSecurityPolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Security policy updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityPolicyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
       }
     },
     "/security/users/{id}": {
@@ -5866,6 +5903,31 @@
           }
         }
       },
+      "UpdateSecurityPolicyRequest": {
+        "type": "object",
+        "required": [
+          "policy"
+        ],
+        "properties": {
+          "policy": {
+            "type": "object",
+            "properties": {
+              "mfa": {
+                "$ref": "#/components/schemas/SecurityMfaPolicy"
+              },
+              "password": {
+                "$ref": "#/components/schemas/SecurityPasswordPolicy"
+              },
+              "captcha": {
+                "$ref": "#/components/schemas/SecurityCaptchaPolicy"
+              },
+              "blocklist": {
+                "$ref": "#/components/schemas/SecurityBlocklistPolicy"
+              }
+            }
+          }
+        }
+      },
       "SecurityPasskey": {
         "type": "object",
         "required": [
@@ -6896,12 +6958,105 @@
           }
         }
       },
+      "SecurityPasswordPolicy": {
+        "type": "object",
+        "required": [
+          "minLength",
+          "requiredCharacterTypes",
+          "customWords",
+          "rejectUserInfo",
+          "rejectSequential",
+          "rejectCustomWords"
+        ],
+        "properties": {
+          "minLength": {
+            "type": "integer",
+            "minimum": 8,
+            "maximum": 128
+          },
+          "requiredCharacterTypes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "customWords": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          "rejectUserInfo": {
+            "type": "boolean"
+          },
+          "rejectSequential": {
+            "type": "boolean"
+          },
+          "rejectCustomWords": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SecurityCaptchaPolicy": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "provider",
+          "siteKey",
+          "secretBinding"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "turnstile"
+            ]
+          },
+          "siteKey": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "secretBinding": {
+            "type": "string",
+            "maxLength": 80
+          }
+        }
+      },
+      "SecurityBlocklistPolicy": {
+        "type": "object",
+        "required": [
+          "blockSubaddressing",
+          "entries"
+        ],
+        "properties": {
+          "blockSubaddressing": {
+            "type": "boolean"
+          },
+          "entries": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        }
+      },
       "SecurityPolicy": {
         "type": "object",
         "required": [
           "mfa",
           "passkeys",
-          "sessions"
+          "sessions",
+          "password",
+          "captcha",
+          "blocklist"
         ],
         "properties": {
           "mfa": {
@@ -6912,6 +7067,15 @@
           },
           "sessions": {
             "$ref": "#/components/schemas/SecuritySessionPolicy"
+          },
+          "password": {
+            "$ref": "#/components/schemas/SecurityPasswordPolicy"
+          },
+          "captcha": {
+            "$ref": "#/components/schemas/SecurityCaptchaPolicy"
+          },
+          "blocklist": {
+            "$ref": "#/components/schemas/SecurityBlocklistPolicy"
           }
         }
       },

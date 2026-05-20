@@ -146,6 +146,7 @@ import {
   updateConnector,
   updateOrganization,
   updateRole,
+  updateSecurityPolicy,
   updateSignInSettings,
   updateUser,
   uploadApplicationLogo,
@@ -2395,6 +2396,18 @@ export function SignInSettingsPage() {
 
 export function MfaPage() {
   const query = useQuery({ queryKey: adminQueryKeys.security, queryFn: getSecurityPolicy })
+  const queryClient = useQueryClient()
+  const [mode, setMode] = useState<'optional' | 'required'>('optional')
+  const updateMutation = useMutation({
+    mutationFn: () => updateSecurityPolicy({ policy: { mfa: { mode } } }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.security })
+    },
+  })
+
+  useEffect(() => {
+    if (query.data) setMode(query.data.policy.mfa.mode)
+  }, [query.data])
 
   return (
     <ResourcePage
@@ -2406,200 +2419,392 @@ export function MfaPage() {
       onRetry={() => query.refetch()}
     >
       {query.data ? (
-        <div className="grid gap-4">
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            updateMutation.mutate()
+          }}
+        >
           <SettingsSections>
             <SettingsSection
               title="Factors"
               description="Available second factors surfaced by account and deployment support."
             >
               <div className="grid gap-3">
-                <ToggleSettingRow
-                  detail={`RP ${query.data.policy.passkeys.rpName}; ${
-                    query.data.policy.passkeys.origins.length
-                  } allowed origin${query.data.policy.passkeys.origins.length === 1 ? '' : 's'}.`}
-                  checked={query.data.policy.passkeys.enabled}
-                  disabled
-                  label="Passkeys"
-                />
-                <ToggleSettingRow
-                  detail="Authenticator app enrollment is available from the account security flow."
-                  checked
-                  disabled
-                  label="Authenticator app"
-                />
-                <ToggleSettingRow
-                  detail="SMS code enrollment is not backed by a connector contract in this runtime."
-                  checked={false}
-                  disabled
-                  label="SMS verification code"
-                />
-                <ToggleSettingRow
-                  detail="Email OTP is delivered through the configured Cloudflare Email Service binding."
-                  checked
-                  disabled
-                  label="Email verification code"
-                />
-                <ToggleSettingRow
-                  detail="Backup code generation is available from the account MFA flow."
-                  checked
-                  disabled
-                  label="Backup codes"
-                />
+                {query.data.policy.passkeys.enabled ? (
+                  <SettingRow label="Passkeys" value={query.data.policy.passkeys.rpName} />
+                ) : null}
+                <SettingRow label="Authenticator app" value="Available" />
+                <SettingRow label="Email verification code" value="Available" />
+                <SettingRow label="Backup codes" value="Available" />
               </div>
             </SettingsSection>
             <SettingsSection
               title="Policy controls"
-              description="MFA enforcement is currently backed by deployment policy."
+              description="Prompt policy is persisted for hosted account access."
             >
               <div className="grid gap-4">
                 <Field label="Prompt policy">
-                  <SelectInput aria-label="Prompt policy" disabled value={query.data.policy.mfa.mode}>
+                  <SelectInput
+                    aria-label="Prompt policy"
+                    onChange={(event) => setMode(event.target.value as 'optional' | 'required')}
+                    value={mode}
+                  >
                     <option value="required">Required</option>
                     <option value="optional">Optional</option>
-                    <option disabled value="none">
-                      No prompt
-                    </option>
                   </SelectInput>
                 </Field>
                 <SettingRow label="Persisted mode" value={query.data.policy.mfa.mode} />
-                <p className="text-sm leading-6 text-muted-foreground">
-                  Save is disabled because MFA policy is loaded from the local deployment environment. Update the
-                  deployment policy to persist changes.
-                </p>
               </div>
             </SettingsSection>
-            <SettingsSection
-              title="Changes"
-              description="Policy changes require a persisted management contract before Console can save them."
-            >
+            <SettingsSection title="Changes" description="Save or reset tenant MFA policy changes.">
+              <MutationError error={updateMutation.error} />
               <ConsoleActionBar>
-                <Button disabled type="button">
+                <Button disabled={updateMutation.isPending} type="submit">
                   <Save data-icon="inline-start" />
                   Save changes
                 </Button>
-                <Button disabled type="button" variant="ghost">
+                <Button onClick={() => setMode(query.data.policy.mfa.mode)} type="button" variant="ghost">
                   <Undo2 data-icon="inline-start" />
                   Discard
                 </Button>
               </ConsoleActionBar>
             </SettingsSection>
           </SettingsSections>
-        </div>
+        </form>
       ) : null}
     </ResourcePage>
   )
 }
 
 export function SecurityPasswordPolicyPage() {
+  const query = useQuery({ queryKey: adminQueryKeys.security, queryFn: getSecurityPolicy })
+  const queryClient = useQueryClient()
+  const [minLength, setMinLength] = useState(8)
+  const [requiredCharacterTypes, setRequiredCharacterTypes] = useState(1)
+  const [customWords, setCustomWords] = useState('')
+  const [rejectUserInfo, setRejectUserInfo] = useState(true)
+  const [rejectSequential, setRejectSequential] = useState(true)
+  const [rejectCustomWords, setRejectCustomWords] = useState(false)
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      updateSecurityPolicy({
+        policy: {
+          password: {
+            minLength,
+            requiredCharacterTypes,
+            customWords: lines(customWords),
+            rejectUserInfo,
+            rejectSequential,
+            rejectCustomWords,
+          },
+        },
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.security })
+    },
+  })
+
+  useEffect(() => {
+    if (!query.data) return
+    const policy = query.data.policy.password
+    setMinLength(policy.minLength)
+    setRequiredCharacterTypes(policy.requiredCharacterTypes)
+    setCustomWords(policy.customWords.join('\n'))
+    setRejectUserInfo(policy.rejectUserInfo)
+    setRejectSequential(policy.rejectSequential)
+    setRejectCustomWords(policy.rejectCustomWords)
+  }, [query.data])
+
   return (
     <ResourcePage
       title="Security"
-      description="Configure password-policy requirements when a persistence contract is available."
+      description="Configure password requirements enforced by hosted account flows."
+      error={query.error}
       framed={false}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
     >
       <SecuritySectionTabs active="password-policy" />
-      <SettingsSections>
-        <SettingsSection
-          title="Password requirements"
-          description="Password controls are visible here until policy storage is available."
+      {query.data ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            updateMutation.mutate()
+          }}
         >
-          <div className="grid gap-4">
-            <Field label="Minimum length">
-              <TextInput aria-label="Minimum length" disabled value="8" />
-            </Field>
-            <div className="grid gap-2">
-              <RadioSettingRow checked label="1 required character type" name="required-character-types" />
-              <RadioSettingRow label="2 required character types" name="required-character-types" />
-              <RadioSettingRow label="3 required character types" name="required-character-types" />
-              <RadioSettingRow label="4 required character types" name="required-character-types" />
-            </div>
-            <Field label="Custom words">
-              <TextArea aria-label="Custom words" disabled placeholder="Unavailable until policy storage exists" />
-            </Field>
-          </div>
-        </SettingsSection>
-        <SettingsSection
-          title="Password rejection"
-          description="Static rejection rules shown as compact controls until management persistence exists."
-        >
-          <div className="grid gap-3">
-            <CheckboxSettingRow checked label="Reject compromised passwords" />
-            <CheckboxSettingRow checked label="Reject repetitive or sequential characters" />
-            <CheckboxSettingRow checked label="Reject user information" />
-            <CheckboxSettingRow label="Reject custom words" />
-            <SettingRow label="Current backend" value="Password hashing and reset flows" />
-          </div>
-        </SettingsSection>
-      </SettingsSections>
+          <SettingsSections>
+            <SettingsSection title="Password requirements" description="Set minimum strength for new passwords.">
+              <div className="grid gap-4">
+                <Field label="Minimum length">
+                  <TextInput
+                    aria-label="Minimum length"
+                    min={8}
+                    max={128}
+                    onChange={(event) => setMinLength(Number(event.target.value))}
+                    type="number"
+                    value={String(minLength)}
+                  />
+                </Field>
+                <Field label="Required character types">
+                  <SelectInput
+                    aria-label="Required character types"
+                    onChange={(event) => setRequiredCharacterTypes(Number(event.target.value))}
+                    value={String(requiredCharacterTypes)}
+                  >
+                    <option value="1">1 required character type</option>
+                    <option value="2">2 required character types</option>
+                    <option value="3">3 required character types</option>
+                    <option value="4">4 required character types</option>
+                  </SelectInput>
+                </Field>
+                <Field label="Custom words">
+                  <TextArea
+                    aria-label="Custom words"
+                    onChange={(event) => setCustomWords(event.target.value)}
+                    placeholder={'company\nproduct'}
+                    value={customWords}
+                  />
+                </Field>
+              </div>
+            </SettingsSection>
+            <SettingsSection title="Password rejection" description="Choose persisted password rejection rules.">
+              <div className="grid gap-3">
+                <label className="flex items-center gap-3 rounded-md border border-border px-4 py-3 text-sm font-medium">
+                  <input
+                    checked={rejectSequential}
+                    className="size-4 accent-primary"
+                    onChange={(event) => setRejectSequential(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>Reject repetitive or sequential characters</span>
+                </label>
+                <label className="flex items-center gap-3 rounded-md border border-border px-4 py-3 text-sm font-medium">
+                  <input
+                    checked={rejectUserInfo}
+                    className="size-4 accent-primary"
+                    onChange={(event) => setRejectUserInfo(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>Reject user information</span>
+                </label>
+                <label className="flex items-center gap-3 rounded-md border border-border px-4 py-3 text-sm font-medium">
+                  <input
+                    checked={rejectCustomWords}
+                    className="size-4 accent-primary"
+                    onChange={(event) => setRejectCustomWords(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>Reject custom words</span>
+                </label>
+              </div>
+            </SettingsSection>
+            <SettingsSection title="Changes" description="Save or reset password policy changes.">
+              <MutationError error={updateMutation.error} />
+              <ConsoleActionBar>
+                <Button disabled={updateMutation.isPending} type="submit">
+                  <Save data-icon="inline-start" />
+                  Save changes
+                </Button>
+                <Button
+                  onClick={() => {
+                    const policy = query.data.policy.password
+                    setMinLength(policy.minLength)
+                    setRequiredCharacterTypes(policy.requiredCharacterTypes)
+                    setCustomWords(policy.customWords.join('\n'))
+                    setRejectUserInfo(policy.rejectUserInfo)
+                    setRejectSequential(policy.rejectSequential)
+                    setRejectCustomWords(policy.rejectCustomWords)
+                  }}
+                  type="button"
+                  variant="ghost"
+                >
+                  <Undo2 data-icon="inline-start" />
+                  Discard
+                </Button>
+              </ConsoleActionBar>
+            </SettingsSection>
+          </SettingsSections>
+        </form>
+      ) : null}
     </ResourcePage>
   )
 }
 
 export function SecurityCaptchaPage() {
+  const query = useQuery({ queryKey: adminQueryKeys.security, queryFn: getSecurityPolicy })
+  const queryClient = useQueryClient()
+  const [enabled, setEnabled] = useState(false)
+  const [siteKey, setSiteKey] = useState('')
+  const [secretBinding, setSecretBinding] = useState('')
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      updateSecurityPolicy({
+        policy: { captcha: { enabled, provider: 'turnstile', siteKey, secretBinding } },
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.security })
+    },
+  })
+
+  useEffect(() => {
+    if (!query.data) return
+    setEnabled(query.data.policy.captcha.enabled)
+    setSiteKey(query.data.policy.captcha.siteKey)
+    setSecretBinding(query.data.policy.captcha.secretBinding)
+  }, [query.data])
+
   return (
     <ResourcePage
       title="CAPTCHA"
       description="Review CAPTCHA provider setup for hosted sign-up, sign-in, and password recovery flows."
+      error={query.error}
       framed={false}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
     >
       <SecuritySectionTabs active="captcha" />
-      <SettingsSections>
-        <SettingsSection
-          title="Provider setup"
-          description="CAPTCHA provider persistence is not available in this local runtime."
+      {query.data ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            updateMutation.mutate()
+          }}
         >
-          <div className="grid gap-4">
-            <SwitchRow checked={false} disabled label="Enable CAPTCHA" />
-            <Field label="Provider">
-              <SelectInput aria-label="Provider" disabled value="turnstile">
-                <option value="turnstile">Cloudflare Turnstile</option>
-              </SelectInput>
-            </Field>
-            <Field label="Site key">
-              <TextInput aria-label="Site key" disabled placeholder="Provider setup disabled locally" />
-            </Field>
-            <Button disabled type="button" variant="secondary">
-              Setup provider
-            </Button>
-          </div>
-        </SettingsSection>
-        <SettingsSection title="Flow copy" description="Copy shown when CAPTCHA is active.">
-          <div className="grid gap-3">
-            <SettingRow label="Sign-up" value="Complete the verification challenge before creating an account." />
-            <SettingRow label="Sign-in" value="Complete the verification challenge before signing in." />
-            <SettingRow label="Password recovery" value="Complete the verification challenge before recovery email." />
-          </div>
-        </SettingsSection>
-      </SettingsSections>
+          <SettingsSections>
+            <SettingsSection title="Provider setup" description="Configure Turnstile verification for hosted flows.">
+              <div className="grid gap-4">
+                <SwitchRow checked={enabled} label="Enable CAPTCHA" onCheckedChange={setEnabled} />
+                <Field label="Provider">
+                  <SelectInput aria-label="Provider" onChange={() => undefined} value="turnstile">
+                    <option value="turnstile">Turnstile</option>
+                  </SelectInput>
+                </Field>
+                <Field label="Site key">
+                  <TextInput
+                    aria-label="Site key"
+                    onChange={(event) => setSiteKey(event.target.value)}
+                    value={siteKey}
+                  />
+                </Field>
+                <Field label="Secret binding">
+                  <TextInput
+                    aria-label="Secret binding"
+                    onChange={(event) => setSecretBinding(event.target.value)}
+                    placeholder="TURNSTILE_SECRET"
+                    value={secretBinding}
+                  />
+                </Field>
+              </div>
+            </SettingsSection>
+            <SettingsSection title="Changes" description="Save or reset CAPTCHA policy changes.">
+              <MutationError error={updateMutation.error} />
+              <ConsoleActionBar>
+                <Button disabled={updateMutation.isPending} type="submit">
+                  <Save data-icon="inline-start" />
+                  Save changes
+                </Button>
+                <Button
+                  onClick={() => {
+                    setEnabled(query.data.policy.captcha.enabled)
+                    setSiteKey(query.data.policy.captcha.siteKey)
+                    setSecretBinding(query.data.policy.captcha.secretBinding)
+                  }}
+                  type="button"
+                  variant="ghost"
+                >
+                  <Undo2 data-icon="inline-start" />
+                  Discard
+                </Button>
+              </ConsoleActionBar>
+            </SettingsSection>
+          </SettingsSections>
+        </form>
+      ) : null}
     </ResourcePage>
   )
 }
 
 export function SecurityBlocklistPage() {
+  const query = useQuery({ queryKey: adminQueryKeys.security, queryFn: getSecurityPolicy })
+  const queryClient = useQueryClient()
+  const [blockSubaddressing, setBlockSubaddressing] = useState(false)
+  const [entries, setEntries] = useState('')
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      updateSecurityPolicy({
+        policy: { blocklist: { blockSubaddressing, entries: lines(entries) } },
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.security })
+    },
+  })
+
+  useEffect(() => {
+    if (!query.data) return
+    setBlockSubaddressing(query.data.policy.blocklist.blockSubaddressing)
+    setEntries(query.data.policy.blocklist.entries.join('\n'))
+  }, [query.data])
+
   return (
     <ResourcePage
       title="Blocklist"
       description="Review sign-up blocklist settings for email aliases, addresses, and domains."
+      error={query.error}
       framed={false}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
     >
       <SecuritySectionTabs active="blocklist" />
-      <SettingsSections>
-        <SettingsSection
-          title="Email blocklist"
-          description="Blocklist persistence is not available in this local runtime."
+      {query.data ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            updateMutation.mutate()
+          }}
         >
-          <div className="grid gap-4">
-            <SwitchRow checked={false} disabled label="Block email subaddressing" />
-            <Field label="Custom email and domain blocklist" help="One email address or domain per line.">
-              <TextArea
-                aria-label="Custom email and domain blocklist"
-                disabled
-                placeholder={'blocked@example.com\nexample.org'}
-              />
-            </Field>
-          </div>
-        </SettingsSection>
-      </SettingsSections>
+          <SettingsSections>
+            <SettingsSection title="Email blocklist" description="Persist blocked email and domain rules.">
+              <div className="grid gap-4">
+                <SwitchRow
+                  checked={blockSubaddressing}
+                  label="Block email subaddressing"
+                  onCheckedChange={setBlockSubaddressing}
+                />
+                <Field label="Custom email and domain blocklist" help="One email address or domain per line.">
+                  <TextArea
+                    aria-label="Custom email and domain blocklist"
+                    onChange={(event) => setEntries(event.target.value)}
+                    placeholder={'blocked@example.com\nexample.org'}
+                    value={entries}
+                  />
+                </Field>
+              </div>
+            </SettingsSection>
+            <SettingsSection title="Changes" description="Save or reset blocklist changes.">
+              <MutationError error={updateMutation.error} />
+              <ConsoleActionBar>
+                <Button disabled={updateMutation.isPending} type="submit">
+                  <Save data-icon="inline-start" />
+                  Save changes
+                </Button>
+                <Button
+                  onClick={() => {
+                    setBlockSubaddressing(query.data.policy.blocklist.blockSubaddressing)
+                    setEntries(query.data.policy.blocklist.entries.join('\n'))
+                  }}
+                  type="button"
+                  variant="ghost"
+                >
+                  <Undo2 data-icon="inline-start" />
+                  Discard
+                </Button>
+              </ConsoleActionBar>
+            </SettingsSection>
+          </SettingsSections>
+        </form>
+      ) : null}
     </ResourcePage>
   )
 }
@@ -2619,10 +2824,16 @@ export function SecurityGeneralPage() {
       <SecuritySectionTabs active="general" />
       {query.data ? (
         <SettingsSections>
-          <SettingsSection title="Protection" description="Tenant sign-in protections from deployment policy.">
+          <SettingsSection title="Protection" description="Tenant sign-in protections from persisted policy.">
             <div className="grid gap-3">
               <SettingRow label="MFA enforcement" value={query.data.policy.mfa.mode} />
               <SettingRow label="Passkeys" value={query.data.policy.passkeys.enabled ? 'Enabled' : 'Disabled'} />
+              <SettingRow
+                label="CAPTCHA"
+                value={query.data.policy.captcha.enabled ? 'Enabled for hosted flows' : 'Disabled'}
+              />
+              <SettingRow label="Email blocklist entries" value={String(query.data.policy.blocklist.entries.length)} />
+              <SettingRow label="Password minimum" value={`${query.data.policy.password.minLength} characters`} />
             </div>
           </SettingsSection>
           <SettingsSection title="Session policy" description="Session lifetime values currently active in runtime.">
@@ -5463,6 +5674,13 @@ function SecuritySectionTabs({ active }: { active: 'password-policy' | 'captcha'
   )
 }
 
+function lines(value: string) {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
 function ConnectorSectionTabs({ active }: { active: 'passwordless' | 'social' }) {
   return (
     <RoutedSettingsTabs
@@ -5513,46 +5731,6 @@ function RoutedSettingsTabs<TValue extends string>({
         </a>
       ))}
     </nav>
-  )
-}
-
-function ToggleSettingRow({
-  checked,
-  detail,
-  disabled,
-  label,
-}: {
-  checked: boolean
-  detail: string
-  disabled?: boolean
-  label: string
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-md border border-border px-4 py-3">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold">{label}</p>
-        <p className="mt-1 text-sm leading-5 text-muted-foreground">{detail}</p>
-      </div>
-      <Switch aria-label={label} checked={checked} disabled={disabled} />
-    </div>
-  )
-}
-
-function CheckboxSettingRow({ checked = false, label }: { checked?: boolean; label: string }) {
-  return (
-    <label className="flex items-center gap-3 rounded-md border border-border px-4 py-3 text-sm font-medium">
-      <input checked={checked} className="size-4 accent-primary" disabled readOnly type="checkbox" />
-      <span>{label}</span>
-    </label>
-  )
-}
-
-function RadioSettingRow({ checked = false, label, name }: { checked?: boolean; label: string; name: string }) {
-  return (
-    <label className="flex items-center gap-3 rounded-md border border-border px-4 py-3 text-sm font-medium">
-      <input checked={checked} className="size-4 accent-primary" disabled name={name} readOnly type="radio" />
-      <span>{label}</span>
-    </label>
   )
 }
 

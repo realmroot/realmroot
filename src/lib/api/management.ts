@@ -61,7 +61,7 @@ import type {
   UpdateManagementConnectorRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
-import type { SecurityPolicy } from '@shared/api/security'
+import type { SecurityPolicy, UpdateSecurityPolicyInput } from '@shared/api/security'
 import { apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
 
 export const adminQueryKeys = {
@@ -341,6 +341,10 @@ export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
 
 export function getSecurityPolicy() {
   return readRpcResponse(apiClient.api.management.security.policy.$get())
+}
+
+export function updateSecurityPolicy(input: UpdateSecurityPolicyInput) {
+  return readRpcResponse(apiClient.api.management.security.policy.$patch({ json: input }))
 }
 
 export function listOrganizations() {

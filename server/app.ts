@@ -85,6 +85,7 @@ import type {
   SecurityTotpDisableInput,
   SecurityTotpEnrollmentInput,
   SecurityTotpVerificationInput,
+  UpdateSecurityPolicyInput,
 } from '../shared/api/security'
 import type { Auth } from './auth'
 import { forbidden, handleApiError, notFound } from './lib/errors'
@@ -92,7 +93,7 @@ import { accessLog } from './middleware/access-log'
 import { authContext, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
-import { requireDeploymentMfa } from './middleware/security-policy'
+import { requireSecurityPolicy } from './middleware/security-policy'
 import type { ConfigzBindings } from './modules/configz/context'
 import type { OnboardingRepository } from './modules/onboarding/repository'
 import type { SecurityRepository } from './modules/security/repository'
@@ -155,8 +156,8 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
   app.use('/api/*', trustedOriginCors(options.trustedOrigins ?? []))
   app.use('/api/*', authContext(auth))
 
-  if (options.securityRepository && options.securityPolicy) {
-    app.use('/api/*', requireDeploymentMfa(options.securityPolicy, options.securityRepository))
+  if (options.securityRepository) {
+    app.use('/api/*', requireSecurityPolicy(options.securityRepository))
   }
 
   app.onError((error, c) => handleApiError(error, c))
@@ -174,7 +175,10 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
 
     if (options.userRepository) {
       const managementApi = auth.api as unknown as ManagementAuthApi
-      app.route('/api/admin/users', adminUserRoutes(managementApi, options.userRepository))
+      app.route(
+        '/api/admin/users',
+        adminUserRoutes(managementApi, options.userRepository, { securityRepository: options.securityRepository }),
+      )
       app.route(
         '/api/account',
         accountRoutes(
@@ -407,6 +411,7 @@ type RpcSchema = {
   }
   '/api/management/security/policy': {
     $get: RpcEndpoint<RpcNoInput, { policy: SecurityPolicy }>
+    $patch: RpcEndpoint<{ json: UpdateSecurityPolicyInput }, { policy: SecurityPolicy }>
   }
   '/api/management/organizations': {
     $get: RpcEndpoint<RpcNoInput, ListOrganizationsResponse>
@@ -518,7 +523,10 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
 function mountRpcRoutes(app: Hono, auth: AuthHandler, options: RpcAppOptions) {
   const managementApi = auth.api as unknown as ManagementAuthApi
   return mountCoreApiRoutes(app, auth, options)
-    .route('/api/admin/users', adminUserRoutes(managementApi, options.userRepository))
+    .route(
+      '/api/admin/users',
+      adminUserRoutes(managementApi, options.userRepository, { securityRepository: options.securityRepository }),
+    )
     .route(
       '/api/account',
       accountRoutes(
@@ -542,7 +550,7 @@ function mountRpcRoutes(app: Hono, auth: AuthHandler, options: RpcAppOptions) {
     )
     .route(
       '/api/admin/security',
-      adminSecurityRoutes(managementApi, options.userRepository, options.securityRepository, options.securityPolicy),
+      adminSecurityRoutes(managementApi, options.userRepository, options.securityRepository),
     )
 }
 

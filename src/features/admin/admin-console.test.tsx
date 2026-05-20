@@ -2719,9 +2719,9 @@ describe('admin console', () => {
     expect(await screen.findByText('Factors')).toBeTruthy()
     expect(screen.getByText('Passkeys')).toBeTruthy()
     expect(screen.getByText('Authenticator app')).toBeTruthy()
-    expect(screen.getByText('SMS verification code')).toBeTruthy()
+    expect(screen.queryByText('SMS verification code')).toBeNull()
     expect(screen.getByLabelText('Prompt policy')).toHaveProperty('value', 'required')
-    expect(screen.getByLabelText('Prompt policy')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Prompt policy')).toHaveProperty('disabled', false)
 
     cleanup()
     renderWithQuery(<SecurityGeneralPage />)
@@ -2739,23 +2739,23 @@ describe('admin console', () => {
 
     renderWithQuery(<MfaPage />)
     expect(await screen.findByText('Backup codes')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', false)
 
     cleanup()
     renderWithQuery(<SecurityPasswordPolicyPage />)
-    expect(screen.getByLabelText('Minimum length')).toHaveProperty('disabled', true)
-    expect(screen.getByText('Reject compromised passwords')).toBeTruthy()
-    expect(screen.getByText('1 required character type')).toBeTruthy()
+    expect(await screen.findByLabelText('Minimum length')).toHaveProperty('disabled', false)
+    expect(screen.getByText('Reject repetitive or sequential characters')).toBeTruthy()
+    expect(screen.getByLabelText('Required character types')).toHaveProperty('value', '2')
 
     cleanup()
     renderWithQuery(<SecurityCaptchaPage />)
-    expect(screen.getByText('Cloudflare Turnstile')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Setup provider' })).toHaveProperty('disabled', true)
+    expect(await screen.findByText('Turnstile')).toBeTruthy()
+    expect(screen.getByLabelText('Site key')).toHaveProperty('disabled', false)
 
     cleanup()
     renderWithQuery(<SecurityBlocklistPage />)
-    expect(screen.getByText('Block email subaddressing')).toBeTruthy()
-    expect(screen.getByLabelText('Custom email and domain blocklist')).toHaveProperty('disabled', true)
+    expect(await screen.findByText('Block email subaddressing')).toBeTruthy()
+    expect(screen.getByLabelText('Custom email and domain blocklist')).toHaveProperty('disabled', false)
 
     cleanup()
     renderWithQuery(<PasswordlessConnectorsPage />)
@@ -2833,7 +2833,7 @@ describe('admin console', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Cloudflare Email connector' })).toBeNull())
   })
 
-  it('renders MFA and password policy compact controls as read-only', async () => {
+  it('renders editable MFA and password policy compact controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
@@ -2842,26 +2842,215 @@ describe('admin console', () => {
 
     const { unmount } = renderWithQuery(<MfaPage />)
 
-    for (const label of [
-      'Passkeys',
-      'Authenticator app',
-      'SMS verification code',
-      'Email verification code',
-      'Backup codes',
-    ] as const) {
-      expect(await screen.findByLabelText(label)).toHaveProperty('disabled', true)
-    }
-    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: 'Discard' })).toHaveProperty('disabled', true)
+    expect(await screen.findByText('Authenticator app')).toBeTruthy()
+    expect(screen.queryByText('SMS verification code')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: 'Discard' })).toHaveProperty('disabled', false)
 
     unmount()
     renderWithQuery(<SecurityPasswordPolicyPage />)
 
-    expect(screen.getAllByRole('radio')).toHaveLength(4)
-    for (const radio of screen.getAllByRole('radio')) expect(radio).toHaveProperty('disabled', true)
-    expect(screen.getAllByRole('checkbox')).toHaveLength(4)
-    for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).toHaveProperty('disabled', true)
-    expect(screen.getByText('Password hashing and reset flows')).toBeTruthy()
+    expect(await screen.findByLabelText('Minimum length')).toHaveProperty('value', '12')
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).toHaveProperty('disabled', false)
+  })
+
+  it('saves security policy changes through the management boundary', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/security/policy' && method === 'PATCH') {
+        const body = JSON.parse(String(init?.body))
+        requests.push({ url, method, body })
+        return Promise.resolve(
+          jsonResponse({
+            policy: {
+              ...securityPolicy.policy,
+              ...(body.policy as object),
+            },
+          }),
+        )
+      }
+      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<MfaPage />)
+
+    fireEvent.change(await screen.findByLabelText('Prompt policy'), { target: { value: 'optional' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          url: '/api/management/security/policy',
+          method: 'PATCH',
+          body: { policy: { mfa: { mode: 'optional' } } },
+        },
+      ]),
+    )
+
+    cleanup()
+    renderWithQuery(<SecurityPasswordPolicyPage />)
+
+    fireEvent.change(await screen.findByLabelText('Minimum length'), { target: { value: '14' } })
+    fireEvent.change(screen.getByLabelText('Required character types'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Custom words'), { target: { value: 'tenant\ninternal' } })
+    fireEvent.click(screen.getByLabelText('Reject custom words'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/security/policy',
+        method: 'PATCH',
+        body: {
+          policy: {
+            password: {
+              minLength: 14,
+              requiredCharacterTypes: 3,
+              customWords: ['tenant', 'internal'],
+              rejectUserInfo: true,
+              rejectSequential: true,
+              rejectCustomWords: true,
+            },
+          },
+        },
+      }),
+    )
+
+    cleanup()
+    renderWithQuery(<SecurityCaptchaPage />)
+
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enable CAPTCHA' }))
+    fireEvent.change(screen.getByLabelText('Site key'), { target: { value: 'site-key-1' } })
+    fireEvent.change(screen.getByLabelText('Secret binding'), { target: { value: 'TURNSTILE_SECRET' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/security/policy',
+        method: 'PATCH',
+        body: {
+          policy: {
+            captcha: {
+              enabled: true,
+              provider: 'turnstile',
+              siteKey: 'site-key-1',
+              secretBinding: 'TURNSTILE_SECRET',
+            },
+          },
+        },
+      }),
+    )
+
+    cleanup()
+    renderWithQuery(<SecurityBlocklistPage />)
+
+    fireEvent.click(await screen.findByRole('switch', { name: 'Block email subaddressing' }))
+    fireEvent.change(screen.getByLabelText('Custom email and domain blocklist'), {
+      target: { value: 'blocked@example.com\nblocked.test' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/security/policy',
+        method: 'PATCH',
+        body: {
+          policy: {
+            blocklist: {
+              blockSubaddressing: true,
+              entries: ['blocked@example.com', 'blocked.test'],
+            },
+          },
+        },
+      }),
+    )
+  })
+
+  it('resets security policy form edits to persisted values', async () => {
+    const policy = {
+      policy: {
+        ...securityPolicy.policy,
+        mfa: { mode: 'optional' },
+        passkeys: { ...securityPolicy.policy.passkeys, enabled: false },
+        password: {
+          minLength: 10,
+          requiredCharacterTypes: 1,
+          customWords: ['legacy'],
+          rejectUserInfo: false,
+          rejectSequential: false,
+          rejectCustomWords: true,
+        },
+        captcha: {
+          enabled: true,
+          provider: 'turnstile',
+          siteKey: 'persisted-site',
+          secretBinding: 'PERSISTED_SECRET',
+        },
+        blocklist: {
+          blockSubaddressing: true,
+          entries: ['persisted.example'],
+        },
+      },
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(policy))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<MfaPage />)
+    expect(await screen.findByLabelText('Prompt policy')).toHaveProperty('value', 'optional')
+    expect(screen.queryByText('Passkeys')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Prompt policy'), { target: { value: 'required' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByLabelText('Prompt policy')).toHaveProperty('value', 'optional')
+
+    unmount()
+    renderWithQuery(<SecurityPasswordPolicyPage />)
+    fireEvent.change(await screen.findByLabelText('Minimum length'), { target: { value: '18' } })
+    fireEvent.change(screen.getByLabelText('Required character types'), { target: { value: '4' } })
+    fireEvent.change(screen.getByLabelText('Custom words'), { target: { value: 'changed' } })
+    fireEvent.click(screen.getByLabelText('Reject repetitive or sequential characters'))
+    fireEvent.click(screen.getByLabelText('Reject user information'))
+    fireEvent.click(screen.getByLabelText('Reject custom words'))
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByLabelText('Minimum length')).toHaveProperty('value', '10')
+    expect(screen.getByLabelText('Required character types')).toHaveProperty('value', '1')
+    expect(screen.getByLabelText('Custom words')).toHaveProperty('value', 'legacy')
+    expect(screen.getByLabelText('Reject repetitive or sequential characters')).toHaveProperty('checked', false)
+    expect(screen.getByLabelText('Reject user information')).toHaveProperty('checked', false)
+    expect(screen.getByLabelText('Reject custom words')).toHaveProperty('checked', true)
+
+    cleanup()
+    renderWithQuery(<SecurityCaptchaPage />)
+    expect(await screen.findByLabelText('Site key')).toHaveProperty('value', 'persisted-site')
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'turnstile' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable CAPTCHA' }))
+    fireEvent.change(screen.getByLabelText('Site key'), { target: { value: 'changed-site' } })
+    fireEvent.change(screen.getByLabelText('Secret binding'), { target: { value: 'CHANGED_SECRET' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByRole('switch', { name: 'Enable CAPTCHA' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByLabelText('Site key')).toHaveProperty('value', 'persisted-site')
+    expect(screen.getByLabelText('Secret binding')).toHaveProperty('value', 'PERSISTED_SECRET')
+
+    cleanup()
+    renderWithQuery(<SecurityBlocklistPage />)
+    fireEvent.click(await screen.findByRole('switch', { name: 'Block email subaddressing' }))
+    fireEvent.change(screen.getByLabelText('Custom email and domain blocklist'), {
+      target: { value: 'changed.example' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByRole('switch', { name: 'Block email subaddressing' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByLabelText('Custom email and domain blocklist')).toHaveProperty('value', 'persisted.example')
+
+    cleanup()
+    renderWithQuery(<SecurityGeneralPage />)
+    expect(await screen.findByText('Enabled for hosted flows')).toBeTruthy()
+    expect(screen.getByText('1')).toBeTruthy()
+    expect(screen.getByText('10 characters')).toBeTruthy()
   })
 
   it('retries new security, connector, and OIDC surface load errors', async () => {
@@ -2894,11 +3083,32 @@ describe('admin console', () => {
     await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(2))
 
     cleanup()
-    renderWithQuery(<DeploymentSettingsPage />)
+    renderWithQuery(<SecurityPasswordPolicyPage />)
 
     expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(4))
+
+    cleanup()
+    renderWithQuery(<SecurityCaptchaPage />)
+
+    expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(6))
+
+    cleanup()
+    renderWithQuery(<SecurityBlocklistPage />)
+
+    expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(8))
+
+    cleanup()
+    renderWithQuery(<DeploymentSettingsPage />)
+
+    expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/management/security/policy').length).toBe(10))
   })
 
   it('saves sign-in settings through the management boundary', async () => {
@@ -4732,8 +4942,8 @@ describe('admin console', () => {
 
     cleanup()
     renderWithQuery(<MfaPage />)
-    expect(await screen.findByText('Passkeys')).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Passkeys' }).getAttribute('aria-checked')).toBe('false')
+    expect(await screen.findByText('Authenticator app')).toBeTruthy()
+    expect(screen.queryByText('Passkeys')).toBeNull()
 
     cleanup()
     renderWithQuery(<OrganizationsPage />)
@@ -5640,6 +5850,24 @@ const securityPolicy = {
       updateAgeSeconds: 300,
       freshAgeSeconds: 120,
       cookieCacheSeconds: 60,
+    },
+    password: {
+      minLength: 12,
+      requiredCharacterTypes: 2,
+      customWords: [],
+      rejectUserInfo: true,
+      rejectSequential: true,
+      rejectCustomWords: false,
+    },
+    captcha: {
+      enabled: false,
+      provider: 'turnstile',
+      siteKey: '',
+      secretBinding: '',
+    },
+    blocklist: {
+      blockSubaddressing: false,
+      entries: [],
     },
   },
 }

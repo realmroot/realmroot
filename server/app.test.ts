@@ -229,6 +229,8 @@ function createUserRepositoryMock() {
 
 function createSecurityRepositoryMock() {
   return {
+    getPolicy: vi.fn().mockResolvedValue(securityPolicy()),
+    updatePolicy: vi.fn().mockResolvedValue(securityPolicy()),
     getSecurityState: vi.fn().mockResolvedValue({
       userId: 'user-1',
       mfa: { enabled: true, factors: [{ id: 'factor-1', type: 'totp', verified: true }] },
@@ -256,6 +258,16 @@ function securityPolicy() {
       freshAgeSeconds: 60 * 60 * 24,
       cookieCacheSeconds: 60 * 5,
     },
+    password: {
+      minLength: 8,
+      requiredCharacterTypes: 1,
+      customWords: [],
+      rejectUserInfo: false,
+      rejectSequential: false,
+      rejectCustomWords: false,
+    },
+    captcha: { enabled: false, provider: 'turnstile' as const, siteKey: '', secretBinding: '' },
+    blocklist: { blockSubaddressing: false, entries: [] },
   }
 }
 

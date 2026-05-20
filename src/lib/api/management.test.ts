@@ -55,6 +55,7 @@ describe('management API client', () => {
     await management.updateBrandingSettings({ branding: { primaryColor: '#2563eb' } })
     await management.getAdminReadiness()
     await management.getSecurityPolicy()
+    await management.updateSecurityPolicy({ policy: { mfa: { mode: 'required' } } })
     await management.listOrganizations()
     await management.createOrganization({ slug: 'acme', name: 'Acme' })
     await management.updateOrganization('org-1', { disabled: true })
@@ -141,6 +142,7 @@ describe('management API client', () => {
       ['branding.patch', { json: { branding: { primaryColor: '#2563eb' } } }],
       ['readiness.get'],
       ['security.get'],
+      ['security.patch', { json: { policy: { mfa: { mode: 'required' } } } }],
       ['organizations.get'],
       ['organizations.post', { json: { slug: 'acme', name: 'Acme' } }],
       ['organizations.patch', { param: { id: 'org-1' }, json: { disabled: true } }],
@@ -271,7 +273,7 @@ async function loadManagementApi() {
           'sign-in-settings': { $get: endpoint('signIn.get'), $patch: endpoint('signIn.patch') },
           'branding-settings': { $get: endpoint('branding.get'), $patch: endpoint('branding.patch') },
           readiness: { $get: endpoint('readiness.get') },
-          security: { policy: { $get: endpoint('security.get') } },
+          security: { policy: { $get: endpoint('security.get'), $patch: endpoint('security.patch') } },
           organizations: {
             $get: endpoint('organizations.get'),
             $post: endpoint('organizations.post'),
