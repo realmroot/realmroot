@@ -261,7 +261,7 @@ describe('admin console', () => {
     }
   })
 
-  it('redirects top-level profile compatibility routes to the account center', async () => {
+  it('renders the top-level profile entry route and redirects legacy profile sections', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(accountRouteFetch)
 
     for (const path of [
@@ -274,7 +274,7 @@ describe('admin console', () => {
       window.history.pushState(null, '', path)
       render(<AppRouter />)
 
-      await waitFor(() => expect(window.location.pathname).toBe('/account'))
+      await waitFor(() => expect(window.location.pathname).toBe('/profile'))
       expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
 
       cleanup()

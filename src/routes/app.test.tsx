@@ -1,108 +1,111 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { App } from './app'
+import { AppRouter, queryClient } from '@/router'
 
-vi.mock('@/lib/api', () => ({
-  getPlatformStatus: vi.fn(),
-  getConfigz: vi.fn(),
+vi.mock('@/routes/account', () => ({
+  AccountRoute: () => <h1>Profile route</h1>,
 }))
 
-import { getConfigz, getPlatformStatus } from '@/lib/api'
+vi.mock('@/routes/onboarding', () => ({
+  OnboardingRoute: () => <h1>First-admin onboarding</h1>,
+}))
+
+vi.mock('@/routes/sign-in', () => ({
+  SignInRoute: () => <h1>Sign in route</h1>,
+}))
 
 afterEach(() => {
   cleanup()
+  queryClient.clear()
   vi.restoreAllMocks()
+  window.history.pushState(null, '', '/')
 })
 
-describe('App', () => {
-  it('shows first-run onboarding when configz requires it', async () => {
-    vi.mocked(getPlatformStatus).mockResolvedValue({ ok: true, service: 'flareauth' })
-    vi.mocked(getConfigz).mockResolvedValue({
-      onboarding: { required: true, href: '/onboarding' },
-      signIn: {
-        passwordEnabled: true,
-        signupEnabled: true,
-        socialLoginEnabled: false,
-        magicLinkEnabled: false,
-        emailOtpEnabled: false,
-        usernameEnabled: false,
-        identifierFirst: false,
-      },
-      branding: { logoUrl: null, faviconUrl: null, primaryColor: null, backgroundColor: null, customCss: null },
-      identityProviders: [],
-      links: { termsUri: null, privacyUri: null, supportEmail: null },
-      copy: { productName: 'FlareAuth', headline: 'Sign in.', description: 'Hosted identity.' },
-      defaults: { applicationId: null, redirectUri: null },
-      auth: {
-        basePath: '/api/auth',
-        signInEmailPath: '/api/auth/sign-in/email',
-        signInUsernamePath: '/api/auth/sign-in/username',
-        signUpEmailPath: '/api/auth/sign-up/email',
-        signOutPath: '/api/auth/sign-out',
-        requestPasswordResetPath: '/api/auth/request-password-reset',
-        resetPasswordPath: '/api/auth/reset-password',
-        sendVerificationEmailPath: '/api/auth/send-verification-email',
-        verifyEmailPath: '/api/auth/verify-email',
-        magicLinkPath: '/api/auth/sign-in/magic-link',
-        emailOtpPath: '/api/auth/email-otp/send-verification-otp',
-        emailOtpSignInPath: '/api/auth/sign-in/email-otp',
-        emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
-        emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
-        emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
-      },
-      oidc: {
-        issuer: '/api/auth',
-        discoveryUrl: '/api/auth/.well-known/openid-configuration',
-        authorizationEndpoint: '/api/auth/oauth2/authorize',
-        tokenEndpoint: '/api/auth/oauth2/token',
-        jwksUri: '/api/auth/jwks',
-        userInfoEndpoint: '/api/auth/oauth2/userinfo',
-        endSessionEndpoint: '/api/auth/oauth2/logout',
-      },
-      security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: false },
+describe('root route', () => {
+  it('redirects signed-out root visits to sign-in without a return target', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz(false)))
+      if (url === '/api/account/profile') {
+        return Promise.resolve(jsonResponse({ error: 'Authentication is required.' }, 401))
+      }
+      return Promise.resolve(jsonResponse({}))
     })
 
-    render(<App />)
+    render(<AppRouter />)
 
-    expect(await screen.findByText('API status: online')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'First-run onboarding' }).getAttribute('href')).toBe('/onboarding')
+    expect(await screen.findByRole('heading', { name: 'Sign in route' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
+    expect(window.location.search).toBe('')
   })
 
-  it('surfaces unavailable platform status', async () => {
-    vi.mocked(getPlatformStatus).mockRejectedValue(new Error('offline'))
-    vi.mocked(getConfigz).mockResolvedValue({ onboarding: { required: false, href: '/onboarding' } } as never)
+  it('redirects signed-in root visits to the profile entry point', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz(false)))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
+      return Promise.resolve(jsonResponse({}))
+    })
 
-    render(<App />)
+    render(<AppRouter />)
 
-    expect(await screen.findByText('API status: unavailable')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Profile route' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/profile'))
   })
 
-  it('ignores async landing-page responses after unmount', async () => {
-    const status = deferred<{ ok: true; service: string }>()
-    const config = deferred<{ onboarding: { required: boolean; href: string } }>()
-    vi.mocked(getPlatformStatus).mockReturnValue(status.promise)
-    vi.mocked(getConfigz).mockReturnValue(config.promise as never)
+  it('preserves first-admin onboarding ahead of root auth redirects', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz(true)))
+      return Promise.resolve(jsonResponse({}))
+    })
 
-    const view = render(<App />)
-    view.unmount()
+    render(<AppRouter />)
 
-    await status.resolve({ ok: true, service: 'flareauth' })
-    await config.resolve({ onboarding: { required: true, href: '/onboarding' } })
+    expect(await screen.findByRole('heading', { name: 'First-admin onboarding' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'))
+    expect(requestedUrls).not.toContain('/api/account/profile')
+  })
 
-    expect(view.container.textContent).toBe('')
+  it('preserves return_to on protected profile routes', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz(false)))
+      if (url === '/api/account/profile') {
+        return Promise.resolve(jsonResponse({ error: 'Authentication is required.' }, 401))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/profile')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Sign in route' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
+    expect(new URLSearchParams(window.location.search).get('return_to')).toBe('/profile')
   })
 })
 
-function deferred<T>() {
-  let resolvePromise!: (value: T) => void
-  const promise = new Promise<T>((resolve) => {
-    resolvePromise = resolve
-  })
+const user = {
+  id: 'user-1',
+  email: 'jane@example.com',
+  name: 'Jane Stone',
+  displayName: 'Jane Stone',
+  username: 'jane',
+  role: 'user',
+}
+
+function configz(onboardingRequired: boolean) {
   return {
-    promise,
-    async resolve(value: T) {
-      resolvePromise(value)
-      await promise
-    },
+    onboarding: { required: onboardingRequired, href: '/onboarding' },
   }
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
 }

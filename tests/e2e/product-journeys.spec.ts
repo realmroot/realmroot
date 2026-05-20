@@ -365,12 +365,38 @@ const journeyAssertions: Record<
     assert: (context: JourneyContext) => Promise<void>
   }
 > = {
-  'platform-status': {
+  'api-health-smoke': {
+    suite: 'public and auth journeys',
+    assert: async ({ page }) => {
+      await page.goto('/sign-in')
+      const health = await page.evaluate(() => fetch('/api/health').then((response) => response.json()))
+      expect(health).toEqual({ ok: true, service: 'flareauth' })
+    },
+  },
+  'root-signed-out-redirect': {
+    suite: 'public and auth journeys',
+    assert: async ({ page }) => {
+      accountSignedIn = false
+      try {
+        await page.goto('/')
+        await expect(page.getByRole('heading', { name: 'Sign in to Acme.' })).toBeVisible()
+        const url = new URL(page.url())
+        expect(url.pathname).toBe('/sign-in')
+        expect(url.searchParams.get('return_to')).toBeNull()
+      } finally {
+        accountSignedIn = true
+      }
+    },
+  },
+  'root-signed-in-redirect': {
     suite: 'public and auth journeys',
     assert: async ({ page }) => {
       await page.goto('/')
-      await expect(page.getByRole('heading', { name: 'One auth service for every app on your edge.' })).toBeVisible()
-      await expect(page.getByText('API status: online')).toBeVisible()
+      await expect(page).toHaveURL(/\/profile$/)
+      await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
+      for (const section of accountSections) {
+        await expect(page.getByRole('heading', { name: section })).toBeVisible()
+      }
     },
   },
   'first-admin-gate': {
@@ -378,7 +404,7 @@ const journeyAssertions: Record<
     assert: async ({ page }) => {
       firstAdminRequired = true
       try {
-        await page.goto('/account/security')
+        await page.goto('/')
         await expect(page).toHaveURL(/\/onboarding$/)
         await expect(page.getByRole('heading', { name: 'Create the first admin.' })).toBeVisible()
       } finally {
@@ -1613,7 +1639,7 @@ test('declares browser E2E journey coverage above target', () => {
   expect(covered).toBe(total)
   expect(journeyCoverage.waivers).toEqual([])
   expect(ratio).toBeGreaterThanOrEqual(journeyCoverage.target)
-  expect(journeyCoverage.honoRpcSmokeJourneys).toEqual(['platform-status'])
+  expect(journeyCoverage.honoRpcSmokeJourneys).toEqual(['api-health-smoke'])
   expect(new Set(consoleRoutes.map((route) => route.path)).size).toBe(consoleRoutes.length)
   expect(visualJourneyIds.every((id) => uniqueDeclaredIds.has(id))).toBe(true)
 })
