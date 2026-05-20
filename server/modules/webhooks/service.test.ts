@@ -99,11 +99,51 @@ describe('WebhookService', () => {
     ).rejects.toMatchObject({ status: 400 })
     await expect(service.retryRequest(request.id)).rejects.toMatchObject({ status: 400 })
   })
+
+  it('returns not found when webhook resources disappear during mutations', async () => {
+    const repository = new InMemoryWebhookRepository()
+    const service = new WebhookService(repository)
+
+    await expect(service.updateEndpoint('missing', { enabled: false })).rejects.toMatchObject({ status: 404 })
+    await expect(service.deleteEndpoint('missing')).rejects.toMatchObject({ status: 404 })
+    await expect(service.rotateSecret('missing')).rejects.toMatchObject({ status: 404 })
+    await expect(service.getRequest('missing')).rejects.toMatchObject({ status: 404 })
+    await expect(service.retryRequest('missing')).rejects.toMatchObject({ status: 404 })
+
+    const created = await service.createEndpoint(
+      { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true },
+      'admin-1',
+    )
+    repository.missingEndpointUpdateIds.add(created.endpoint.id)
+    await expect(service.updateEndpoint(created.endpoint.id, { events: ['session.revoked'] })).rejects.toMatchObject({
+      status: 404,
+    })
+    await expect(service.rotateSecret(created.endpoint.id)).rejects.toMatchObject({ status: 404 })
+
+    const request = repository.createRequest({
+      id: 'whr_1',
+      endpointId: created.endpoint.id,
+      event: 'user.created',
+      status: 'failed',
+      attemptCount: 1,
+      httpStatus: 500,
+      error: null,
+      requestBody: null,
+      responseBody: null,
+      nextAttemptAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    repository.missingRequestUpdateIds.add(request.id)
+    await expect(service.retryRequest(request.id)).rejects.toMatchObject({ status: 404 })
+  })
 })
 
 class InMemoryWebhookRepository implements WebhookRepository {
   private endpoints: WebhookEndpointRow[] = []
   private requests: WebhookRequestRow[] = []
+  readonly missingEndpointUpdateIds = new Set<string>()
+  readonly missingRequestUpdateIds = new Set<string>()
 
   async listEndpoints(query: ListWebhookEndpointsQuery) {
     const items = this.endpoints.filter((endpoint) => {
@@ -124,6 +164,7 @@ class InMemoryWebhookRepository implements WebhookRepository {
   }
 
   async updateEndpoint(id: string, input: Partial<WebhookEndpointInsert>) {
+    if (this.missingEndpointUpdateIds.has(id)) return null
     const current = await this.findEndpoint(id)
     if (!current) return null
     Object.assign(current, input)
@@ -149,6 +190,7 @@ class InMemoryWebhookRepository implements WebhookRepository {
   }
 
   async updateRequest(id: string, input: Partial<WebhookRequestInsert>) {
+    if (this.missingRequestUpdateIds.has(id)) return null
     const current = await this.findRequest(id)
     if (!current) return null
     Object.assign(current, input)

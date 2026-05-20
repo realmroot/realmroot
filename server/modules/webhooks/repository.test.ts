@@ -44,6 +44,26 @@ describe('createWebhookRepository', () => {
     await repository.deleteEndpoint(endpoint.id)
     expect(db.deletedEndpointIds).toEqual([endpoint.id])
   })
+
+  it('returns null and zero totals for absent webhook rows', async () => {
+    const db = new FakeDb()
+    const repository = createWebhookRepository(db as unknown as Database)
+
+    await expect(repository.listEndpoints({ limit: 10, offset: 0 })).resolves.toEqual({ items: [], total: 0 })
+    await expect(repository.findEndpoint('missing')).resolves.toBeNull()
+    await expect(repository.updateEndpoint('missing', { enabled: false })).resolves.toBeNull()
+    await expect(repository.listRequests({ limit: 10, offset: 0 })).resolves.toEqual({ items: [], total: 0 })
+    await expect(repository.findRequest('missing')).resolves.toBeNull()
+    await expect(repository.updateRequest('missing', { status: 'pending' })).resolves.toBeNull()
+  })
+
+  it('returns null when an updated request no longer has an endpoint', async () => {
+    const request = webhookRequestRow({ endpointId: 'missing-endpoint' })
+    const db = new FakeDb({ requests: [request] })
+    const repository = createWebhookRepository(db as unknown as Database)
+
+    await expect(repository.updateRequest(request.id, { status: 'pending' })).resolves.toBeNull()
+  })
 })
 
 class FakeDb {
@@ -162,7 +182,10 @@ class FakeSelectQuery implements PromiseLike<unknown[]> {
   }
 
   private async execute() {
-    if (this.selection && 'value' in this.selection) return [{ value: this.rows().length }]
+    if (this.selection && 'value' in this.selection) {
+      const rows = this.rows()
+      return rows.length > 0 ? [{ value: rows.length }] : []
+    }
     if (this.selection && 'request' in this.selection) {
       return this.db.requests.map((request) => ({
         request,
