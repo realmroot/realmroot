@@ -1623,8 +1623,16 @@ describe('admin console', () => {
     expect(screen.getByText('user')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Filter role'), { target: { value: 'admin' } })
     fireEvent.change(screen.getByLabelText('Filter status'), { target: { value: 'true' } })
-    fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Previous' }))
+    expect(await screen.findByRole('button', { name: 'Previous' })).toHaveProperty('disabled', true)
+    expect(await screen.findByRole('button', { name: 'Next' })).toHaveProperty('disabled', false)
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Previous' })).toHaveProperty('disabled', false))
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
+    await waitFor(() => {
+      expect(requests.at(-1)).toContain('role=admin')
+      expect(requests.at(-1)).toContain('banned=true')
+      expect(requests.at(-1)).toContain('offset=0')
+    })
 
     await waitFor(() => {
       expect(

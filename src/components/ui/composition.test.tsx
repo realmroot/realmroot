@@ -75,7 +75,8 @@ describe('composed UI primitives', () => {
     )
 
     expect(screen.getByText('Card footer')).toBeTruthy()
-    expect(screen.getByText('Card title').parentElement?.className).toContain('p-5')
+    expect(screen.getByText('Card title').closest('[data-ui="card"]')?.className).toContain('rounded-lg')
+    expect(screen.getByText('Card title').parentElement?.className).toContain('p-4')
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByRole('dialog').parentElement?.className).toContain('overscroll-contain')
     expect(screen.getByText('Dialog title').parentElement?.className).toContain('p-4')
@@ -109,8 +110,8 @@ describe('composed UI primitives', () => {
 
     const section = screen.getByRole('region', { name: 'Normal section' })
     expect(section.querySelectorAll('[data-ui="card"]')).toHaveLength(1)
-    expect(section.querySelector('[data-ui="card"]')?.className).toContain('rounded-2xl')
-    expect(screen.getByText('Normal section').parentElement?.className).toContain('p-5')
+    expect(section.querySelector('[data-ui="card"]')?.className).toContain('rounded-lg')
+    expect(screen.getByText('Normal section').parentElement?.className).toContain('p-4')
     expect(screen.getByRole('button', { name: 'Search' }).parentElement?.className).toContain('consoleToolbar')
   })
 
