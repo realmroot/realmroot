@@ -212,16 +212,24 @@ export function AccountCenter() {
           {message ? <Status tone="success">{message}</Status> : null}
           {!loading && data.profile ? (
             <div className="accountSectionStack">
-              <ProfileSections profile={data.profile} mutate={mutate} />
-              <SecuritySections
-                confirm={setConfirmation}
-                data={data}
-                mutate={mutate}
-                profileEmail={data.profile.email}
-              />
-              <ConnectionsSection accounts={data.linkedAccounts} confirm={setConfirmation} mutate={mutate} />
-              <SessionsSection confirm={setConfirmation} sessions={data.sessions} mutate={mutate} />
-              <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
+              <section className="accountPanelGroup" aria-label="Profile settings">
+                <ProfileSections profile={data.profile} mutate={mutate} />
+              </section>
+              <section className="accountPanelGroup" aria-label="Security settings">
+                <SecuritySections
+                  confirm={setConfirmation}
+                  data={data}
+                  mutate={mutate}
+                  profileEmail={data.profile.email}
+                />
+              </section>
+              <section className="accountPanelGroup" aria-label="Social and app access">
+                <ConnectionsSection accounts={data.linkedAccounts} confirm={setConfirmation} mutate={mutate} />
+                <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
+              </section>
+              <section className="accountPanelGroup" aria-label="Session management">
+                <SessionsSection confirm={setConfirmation} sessions={data.sessions} mutate={mutate} />
+              </section>
             </div>
           ) : null}
         </section>
