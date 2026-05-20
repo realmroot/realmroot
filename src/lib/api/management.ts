@@ -60,6 +60,17 @@ import type {
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { SecurityPolicy } from '@shared/api/security'
+import type {
+  CreateWebhookEndpointRequest,
+  ListWebhookEndpointsQuery,
+  ListWebhookEndpointsResponse,
+  ListWebhookRequestsQuery,
+  ListWebhookRequestsResponse,
+  UpdateWebhookEndpointRequest,
+  WebhookEndpoint,
+  WebhookEndpointSecretResponse,
+  WebhookRequest,
+} from '@shared/api/webhooks'
 import { apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
 
 export const adminQueryKeys = {
@@ -73,6 +84,8 @@ export const adminQueryKeys = {
   organizations: ['admin', 'organizations'] as const,
   roles: ['admin', 'roles'] as const,
   apiResources: ['admin', 'api-resources'] as const,
+  webhookEndpoints: ['admin', 'webhooks', 'endpoints'] as const,
+  webhookRequests: ['admin', 'webhooks', 'requests'] as const,
   readiness: ['admin', 'readiness'] as const,
 }
 
@@ -328,6 +341,42 @@ export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
   return readRpcResponse(apiClient.api.management.readiness.$get())
 }
 
+export function listWebhookEndpoints(
+  query: Partial<ListWebhookEndpointsQuery> = {},
+): Promise<ListWebhookEndpointsResponse> {
+  return readRpcResponse(apiClient.api.management.webhooks.endpoints.$get({ query: stringifyWebhookQuery(query) }))
+}
+
+export function createWebhookEndpoint(input: CreateWebhookEndpointRequest): Promise<WebhookEndpointSecretResponse> {
+  return readRpcResponse(apiClient.api.management.webhooks.endpoints.$post({ json: input }))
+}
+
+export function updateWebhookEndpoint(id: string, input: UpdateWebhookEndpointRequest): Promise<WebhookEndpoint> {
+  return readRpcResponse(apiClient.api.management.webhooks.endpoints[':id'].$patch({ param: { id }, json: input }))
+}
+
+export function deleteWebhookEndpoint(id: string) {
+  return readRpcResponse(apiClient.api.management.webhooks.endpoints[':id'].$delete({ param: { id } }))
+}
+
+export function rotateWebhookEndpointSecret(id: string): Promise<WebhookEndpointSecretResponse> {
+  return readRpcResponse(apiClient.api.management.webhooks.endpoints[':id'].secrets.$post({ param: { id } }))
+}
+
+export function listWebhookRequests(
+  query: Partial<ListWebhookRequestsQuery> = {},
+): Promise<ListWebhookRequestsResponse> {
+  return readRpcResponse(apiClient.api.management.webhooks.requests.$get({ query: stringifyWebhookQuery(query) }))
+}
+
+export function getWebhookRequest(id: string): Promise<WebhookRequest> {
+  return readRpcResponse(apiClient.api.management.webhooks.requests[':id'].$get({ param: { id } }))
+}
+
+export function retryWebhookRequest(id: string): Promise<WebhookRequest> {
+  return readRpcResponse(apiClient.api.management.webhooks.requests[':id'].retries.$post({ param: { id } }))
+}
+
 export function getSecurityPolicy() {
   return readRpcResponse(apiClient.api.management.security.policy.$get())
 }
@@ -495,4 +544,12 @@ function stringifyQuery(query: Partial<PaginationQuery>): Partial<Record<keyof P
       .filter((entry): entry is [keyof PaginationQuery, number] => entry[1] !== undefined)
       .map(([key, value]) => [key, String(value)]),
   )
+}
+
+function stringifyWebhookQuery<T extends Record<string, unknown>>(query: Partial<T>): Partial<Record<keyof T, string>> {
+  return Object.fromEntries(
+    Object.entries(query)
+      .filter((entry): entry is [keyof T & string, Exclude<T[keyof T], undefined>] => entry[1] !== undefined)
+      .map(([key, value]) => [key, String(value)]),
+  ) as Partial<Record<keyof T, string>>
 }

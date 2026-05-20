@@ -295,17 +295,8 @@ const consoleRoutes = [
     heading: 'Webhooks',
     kind: 'settings',
     journeyId: 'admin-authorization-inventory',
-    sentinel: 'Webhook delivery unavailable',
+    sentinel: 'Create endpoint',
     activeNav: 'Webhooks',
-  },
-  {
-    name: 'audit-logs',
-    path: '/console/audit-logs',
-    heading: 'Audit logs',
-    kind: 'list',
-    journeyId: 'admin-authorization-inventory',
-    sentinel: 'No audit events to display',
-    activeNav: null,
   },
   {
     name: 'tenant-settings',
@@ -1555,11 +1546,40 @@ const journeyAssertions: Record<
       await page.getByRole('tab', { name: 'Permissions' }).click()
       await expect(page).toHaveURL(/\/console\/api-resources\/resource-1\/permissions$/)
       await expect(page.getByRole('button', { name: 'Create permission' })).toBeVisible()
+      await page.goto('/console/webhooks/endpoints')
+      await expect(page.getByRole('heading', { name: 'Webhooks' })).toBeVisible()
+      await page.getByLabel('Endpoint URL').fill('https://events.example.com/flareauth')
+      await page.getByRole('button', { name: 'Create endpoint' }).first().click()
+      await expect(page.getByRole('dialog').getByText('whsec_created_secret')).toBeVisible()
+      await page.getByRole('button', { name: 'Done' }).click()
+      await expect(page.getByRole('row').filter({ hasText: 'https://app.example.com/webhooks/auth' })).toBeVisible()
+      await page.getByRole('button', { name: 'Rotate secret' }).click()
+      await expect(page.getByRole('dialog').getByText('whsec_rotated_secret')).toBeVisible()
+      await page.getByRole('button', { name: 'Done' }).click()
+      await page.getByRole('link', { name: 'Requests' }).click()
+      await expect(page).toHaveURL(/\/console\/webhooks\/requests$/)
+      await expect(page.getByRole('row').filter({ hasText: 'user.created' }).filter({ hasText: 'Failed' })).toBeVisible()
+      await page.getByRole('button', { name: 'Retry' }).click()
       expect(requests).toContainEqual({
         method: 'POST',
         path: '/api/management/organizations/org-1/logo',
         body: '[form-data]',
       })
+      expect(requests).toEqual(
+        expect.arrayContaining([
+          {
+            method: 'POST',
+            path: '/api/management/webhooks/endpoints',
+            body: {
+              url: 'https://events.example.com/flareauth',
+              events: ['user.created'],
+              enabled: true,
+            },
+          },
+          { method: 'POST', path: '/api/management/webhooks/endpoints/wh_1/secrets', body: null },
+          { method: 'POST', path: '/api/management/webhooks/requests/whr_1/retries', body: null },
+        ]),
+      )
     },
   },
   'admin-branding-settings': {
@@ -1640,7 +1660,7 @@ const journeyAssertions: Record<
       await expect(main.getByText('3600s')).toBeVisible()
       await expect(main.getByRole('heading', { name: 'Signing keys' })).toBeVisible()
       await expect(main.getByText('OIDC JWT signing')).toBeVisible()
-      await expect(main.getByRole('button', { name: 'Rotate key' })).toBeDisabled()
+      await expect(main.getByRole('button', { name: 'Rotate key' })).toHaveCount(0)
     },
   },
 }
@@ -2408,6 +2428,31 @@ async function responseFor(path: string, method: string, body: unknown): Promise
     if (method === 'DELETE') return {}
     return connector
   }
+  if (path === '/api/management/webhooks/endpoints') {
+    if (method === 'POST') {
+      return {
+        endpoint: {
+          ...webhookEndpoint,
+          ...(body && typeof body === 'object' ? body : {}),
+        },
+        signingSecret: 'whsec_created_secret',
+      }
+    }
+    return { endpoints: [webhookEndpoint], pagination }
+  }
+  if (path === '/api/management/webhooks/endpoints/wh_1') {
+    if (method === 'PATCH') return { ...webhookEndpoint, ...(body && typeof body === 'object' ? body : {}) }
+    if (method === 'DELETE') return null
+    return webhookEndpoint
+  }
+  if (path === '/api/management/webhooks/endpoints/wh_1/secrets') {
+    return { endpoint: webhookEndpoint, signingSecret: 'whsec_rotated_secret' }
+  }
+  if (path === '/api/management/webhooks/requests') return { requests: [webhookRequest], pagination }
+  if (path === '/api/management/webhooks/requests/whr_1') return webhookRequest
+  if (path === '/api/management/webhooks/requests/whr_1/retries') {
+    return { ...webhookRequest, status: 'pending', nextAttemptAt: '2026-01-01T00:05:00.000Z' }
+  }
   if (path === '/api/management/organizations') {
     if (method === 'POST') return organization
     return { organizations: [organization], pagination }
@@ -2501,6 +2546,32 @@ const pagination = {
 const emptyPagination = {
   ...pagination,
   total: 0,
+}
+
+const webhookEndpoint = {
+  id: 'wh_1',
+  url: 'https://app.example.com/webhooks/auth',
+  events: ['user.created', 'session.revoked'],
+  enabled: true,
+  secretPrefix: 'whsec_abcd123',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const webhookRequest = {
+  id: 'whr_1',
+  endpointId: 'wh_1',
+  endpointUrl: 'https://app.example.com/webhooks/auth',
+  event: 'user.created',
+  status: 'failed',
+  attemptCount: 1,
+  httpStatus: 500,
+  error: 'Server error',
+  requestBody: '{"id":"user-1"}',
+  responseBody: '{"error":"failed"}',
+  nextAttemptAt: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
 }
 
 const configz = {

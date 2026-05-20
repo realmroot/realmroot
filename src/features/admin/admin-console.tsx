@@ -30,6 +30,13 @@ import {
   updateManagementConnectorRequestSchema,
   updateManagementSignInSettingsRequestSchema,
 } from '@shared/api/management'
+import {
+  createWebhookEndpointRequestSchema,
+  type WebhookEndpoint,
+  type WebhookEvent,
+  type WebhookRequest,
+  webhookEvents,
+} from '@shared/api/webhooks'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
@@ -93,6 +100,7 @@ import {
   createOrganization,
   createRole,
   createUser,
+  createWebhookEndpoint,
   deleteApiPermission,
   deleteApiResource,
   deleteApiScope,
@@ -101,6 +109,7 @@ import {
   deleteRole,
   deleteUser,
   deleteUserPasskey,
+  deleteWebhookEndpoint,
   getAdminDashboard,
   getAdminReadiness,
   getApiResource,
@@ -129,13 +138,17 @@ import {
   listUserPasskeys,
   listUserSessions,
   listUsers,
+  listWebhookEndpoints,
+  listWebhookRequests,
   replaceApplicationRedirectUris,
   replaceRolePermissions,
   requestPasswordReset,
   requestUserPasswordReset,
+  retryWebhookRequest,
   revokeUserSession,
   revokeUserSessions,
   rotateApplicationClientSecret,
+  rotateWebhookEndpointSecret,
   unbanUser,
   updateApiPermission,
   updateApiResource,
@@ -147,6 +160,7 @@ import {
   updateRole,
   updateSignInSettings,
   updateUser,
+  updateWebhookEndpoint,
   uploadApplicationLogo,
   uploadBrandingFavicon,
   uploadBrandingLogo,
@@ -4224,12 +4238,6 @@ export function DeploymentSettingsPage() {
     <ResourcePage
       title="Settings"
       description="Review issuer metadata, session TTL, and signing-key runtime state for this tenant."
-      action={
-        <Button disabled type="button" variant="secondary">
-          <RefreshCw data-icon="inline-start" />
-          Rotate key
-        </Button>
-      }
       error={query.error}
       framed={false}
       loading={query.isLoading}
@@ -4274,7 +4282,6 @@ export function DeploymentSettingsPage() {
                     <TableHead>Key</TableHead>
                     <TableHead>Use</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Rotation</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -4284,7 +4291,6 @@ export function DeploymentSettingsPage() {
                     <TableCell>
                       <StatusBadge active activeLabel="Active" inactiveLabel="Inactive" />
                     </TableCell>
-                    <TableCell>Rotation endpoint is not supported in this runtime.</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -4475,7 +4481,6 @@ export function CustomizeJwtPage() {
           rows={[
             ['Application roles', 'Application role assignments are supported.'],
             ['Custom claims', 'Use assignment token claims for trusted application subjects.'],
-            ['Interactive user fields', 'Unavailable because this token has no user session.'],
           ]}
         />
         <TokenCustomizationCard
@@ -4483,7 +4488,6 @@ export function CustomizeJwtPage() {
           rows={[
             ['Profile claims', 'Built-in auth profile claims are issued by the auth provider.'],
             ['Scope toggles', 'API scopes can opt into ID token inclusion where configured.'],
-            ['Arbitrary claim editor', 'Unavailable until a dedicated ID token customization API exists.'],
           ]}
         />
       </SettingsSections>
@@ -4493,18 +4497,91 @@ export function CustomizeJwtPage() {
 
 export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSection }) {
   const [selectedTab, setSelectedTab] = useState<WebhooksSection>(section)
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [endpointUrl, setEndpointUrl] = useState('')
+  const [selectedEvents, setSelectedEvents] = useState<WebhookEvent[]>(['user.created'])
+  const [secretDisclosure, setSecretDisclosure] = useState<string | null>(null)
+  const [selectedRequest, setSelectedRequest] = useState<WebhookRequest | null>(null)
+  const endpointsQuery = useQuery({
+    queryKey: [...adminQueryKeys.webhookEndpoints, search, status],
+    queryFn: () =>
+      listWebhookEndpoints({
+        search: search || undefined,
+        status: status === 'enabled' || status === 'disabled' ? status : undefined,
+      }),
+  })
+  const requestsQuery = useQuery({
+    queryKey: [...adminQueryKeys.webhookRequests, search, status],
+    queryFn: () =>
+      listWebhookRequests({
+        search: search || undefined,
+        status: status === 'pending' || status === 'delivered' || status === 'failed' ? status : undefined,
+      }),
+  })
+  const queryClient = useQueryClient()
+  const createMutation = useAdminMutation({
+    mutationFn: createWebhookEndpoint,
+    onSuccess: async (response) => {
+      setEndpointUrl('')
+      setSelectedEvents(['user.created'])
+      setSecretDisclosure(response.signingSecret)
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.webhookEndpoints })
+    },
+  })
+  const updateMutation = useAdminMutation({
+    mutationFn: ({ id, input }: { id: string; input: { enabled?: boolean } }) => updateWebhookEndpoint(id, input),
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.webhookEndpoints }),
+  })
+  const deleteMutation = useAdminMutation({
+    mutationFn: deleteWebhookEndpoint,
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.webhookEndpoints }),
+  })
+  const rotateMutation = useAdminMutation({
+    mutationFn: rotateWebhookEndpointSecret,
+    onSuccess: async (response) => {
+      setSecretDisclosure(response.signingSecret)
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.webhookEndpoints })
+    },
+  })
+  const retryMutation = useAdminMutation({
+    mutationFn: retryWebhookRequest,
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.webhookRequests }),
+  })
   useEffect(() => setSelectedTab(section), [section])
+
+  function toggleEvent(event: WebhookEvent, checked: boolean) {
+    setSelectedEvents((events) => (checked ? [...events, event] : events.filter((value) => value !== event)))
+  }
+
+  function createEndpoint(event: FormEvent) {
+    event.preventDefault()
+    const parsed = createWebhookEndpointRequestSchema.safeParse({
+      url: endpointUrl,
+      events: selectedEvents,
+      enabled: true,
+    })
+    if (!parsed.success) return
+    createMutation.mutate(parsed.data)
+  }
 
   return (
     <ResourcePage
       title="Webhooks"
-      description="Prepare event endpoint configuration. Delivery workers and persistence are not available in this build."
+      description="Configure signed event endpoints and inspect persisted delivery requests."
       framed={false}
       action={
-        <Button disabled type="button">
-          <Plus data-icon="inline-start" />
-          Create endpoint
-        </Button>
+        selectedTab === 'endpoints' ? (
+          <Button form="webhook-create-form" type="submit">
+            <Plus data-icon="inline-start" />
+            Create endpoint
+          </Button>
+        ) : (
+          <a className="uiButton uiButton-primary" href="/console/webhooks/endpoints">
+            <Plus data-icon="inline-start" />
+            Create endpoint
+          </a>
+        )
       }
       toolbar={
         <RoutedSettingsTabs
@@ -4520,36 +4597,71 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
     >
       <div className="consoleDetailStack">
         <ListToolbar>
-          <TextInput aria-label="Search webhooks" disabled placeholder="Search endpoints" />
-          <SelectInput aria-label="Filter webhook status" disabled value="">
+          <TextInput
+            aria-label="Search webhooks"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search endpoints or events"
+            value={search}
+          />
+          <SelectInput
+            aria-label="Filter webhook status"
+            onChange={(event) => setStatus(event.target.value)}
+            value={status}
+          >
             <option value="">Any status</option>
+            {selectedTab === 'endpoints' ? (
+              <>
+                <option value="enabled">Enabled</option>
+                <option value="disabled">Disabled</option>
+              </>
+            ) : (
+              <>
+                <option value="pending">Pending</option>
+                <option value="delivered">Delivered</option>
+                <option value="failed">Failed</option>
+              </>
+            )}
           </SelectInput>
         </ListToolbar>
         {selectedTab === 'endpoints' ? (
           <SettingsSections>
-            <SettingsSection
-              title="Create endpoint"
-              description="Endpoint creation is disabled until webhook delivery storage exists."
-            >
-              <div className="formStack">
+            <SettingsSection title="Create endpoint" description="Create a signed HTTPS endpoint for selected events.">
+              <form className="formStack" id="webhook-create-form" onSubmit={createEndpoint}>
                 <Field label="Endpoint URL">
-                  <TextInput disabled placeholder="https://example.com/webhooks/auth" type="url" />
+                  <TextInput
+                    onChange={(event) => setEndpointUrl(event.target.value)}
+                    placeholder="https://example.com/webhooks/auth"
+                    required
+                    type="url"
+                    value={endpointUrl}
+                  />
                 </Field>
-                <Field label="Events">
-                  <TextInput disabled placeholder="user.created, session.revoked" />
-                </Field>
-                <Field label="Signing secret">
-                  <TextInput disabled placeholder="Generated when endpoint creation is supported" />
-                </Field>
-                <Button disabled type="button" variant="secondary">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {webhookEvents.map((event) => (
+                    <SwitchRow
+                      checked={selectedEvents.includes(event)}
+                      key={event}
+                      label={event}
+                      onCheckedChange={(checked) => toggleEvent(event, checked)}
+                    />
+                  ))}
+                </div>
+                {createMutation.errorMessage ? (
+                  <StatusBadge active={false} activeLabel="" inactiveLabel={createMutation.errorMessage} />
+                ) : null}
+                <Button
+                  disabled={createMutation.isPending || selectedEvents.length === 0}
+                  type="submit"
+                  variant="secondary"
+                >
                   <Plus data-icon="inline-start" />
                   Create endpoint
                 </Button>
-              </div>
+              </form>
             </SettingsSection>
             <SettingsSection
               title="Endpoints"
-              description="Endpoint rows appear here after webhook delivery storage exists."
+              description="Manage enabled state, signing secret rotation, and endpoint deletion."
             >
               <Table>
                 <TableHeader>
@@ -4557,15 +4669,27 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
                     <TableHead>Endpoint</TableHead>
                     <TableHead>Events</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead />
+                    <TableHead>Secret</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableEmptyRow
-                    colSpan={4}
-                    description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
-                    title="Webhook delivery unavailable"
-                  />
+                  {endpointsQuery.data?.endpoints?.map((endpoint) => (
+                    <WebhookEndpointRow
+                      endpoint={endpoint}
+                      key={endpoint.id}
+                      onDelete={(id) => deleteMutation.mutate(id)}
+                      onRotate={(id) => rotateMutation.mutate(id)}
+                      onToggle={(id, enabled) => updateMutation.mutate({ id, input: { enabled } })}
+                    />
+                  ))}
+                  {endpointsQuery.data?.endpoints?.length === 0 ? (
+                    <TableEmptyRow
+                      colSpan={5}
+                      description="Create an HTTPS endpoint to receive signed events."
+                      title="No webhook endpoints"
+                    />
+                  ) : null}
                 </TableBody>
               </Table>
             </SettingsSection>
@@ -4575,7 +4699,7 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
           <SettingsSections>
             <SettingsSection
               title="Recent requests"
-              description="Delivery request persistence is not available in this build."
+              description="Inspect persisted delivery attempts and retry failed requests."
             >
               <Table>
                 <TableHeader>
@@ -4584,56 +4708,168 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
                     <TableHead>Endpoint</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Created</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableEmptyRow
-                    colSpan={4}
-                    description="Webhook request views will show signed delivery attempts after endpoint persistence and dispatch workers exist."
-                    title="No webhook requests"
-                  />
+                  {requestsQuery.data?.requests?.map((request) => (
+                    <TableRow key={request.id}>
+                      <TableCell>
+                        <button
+                          className="font-medium hover:underline"
+                          onClick={() => setSelectedRequest(request)}
+                          type="button"
+                        >
+                          {request.event}
+                        </button>
+                        <div className="text-xs text-muted-foreground">{request.id}</div>
+                      </TableCell>
+                      <TableCell>{request.endpointUrl}</TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          active={request.status === 'delivered'}
+                          activeLabel="Delivered"
+                          inactiveLabel={request.status === 'pending' ? 'Pending' : 'Failed'}
+                        />
+                      </TableCell>
+                      <TableCell>{formatDate(request.createdAt)}</TableCell>
+                      <TableCell>
+                        <Button
+                          disabled={request.status === 'delivered' || retryMutation.isPending}
+                          onClick={() => retryMutation.mutate(request.id)}
+                          type="button"
+                          variant="secondary"
+                        >
+                          <RefreshCw data-icon="inline-start" />
+                          Retry
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {requestsQuery.data?.requests?.length === 0 ? (
+                    <TableEmptyRow
+                      colSpan={5}
+                      description="Signed delivery attempts are recorded here when webhook events are dispatched."
+                      title="No webhook requests"
+                    />
+                  ) : null}
                 </TableBody>
               </Table>
             </SettingsSection>
           </SettingsSections>
         ) : null}
       </div>
+      <WebhookSecretDisclosureDialog secret={secretDisclosure} onClose={() => setSecretDisclosure(null)} />
+      <WebhookRequestDialog request={selectedRequest} onClose={() => setSelectedRequest(null)} />
     </ResourcePage>
   )
 }
 
-export function AuditLogsPage() {
+function WebhookEndpointRow({
+  endpoint,
+  onDelete,
+  onRotate,
+  onToggle,
+}: {
+  endpoint: WebhookEndpoint
+  onDelete: (id: string) => void
+  onRotate: (id: string) => void
+  onToggle: (id: string, enabled: boolean) => void
+}) {
   return (
-    <ResourcePage
-      title="Audit logs"
-      description="Inspect available activity signals without claiming enterprise audit immutability."
-      toolbar={
-        <ListToolbar>
-          <TextInput aria-label="Search audit logs" disabled placeholder="Search events" />
-          <TextInput aria-label="Actor" disabled placeholder="Actor" />
-          <TextInput aria-label="Resource" disabled placeholder="Resource" />
-          <TextInput aria-label="Date" disabled type="date" />
-        </ListToolbar>
-      }
-    >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Time</TableHead>
-            <TableHead>Actor</TableHead>
-            <TableHead>Event</TableHead>
-            <TableHead>Resource</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableEmptyRow
-            colSpan={4}
-            description="No audit log API is available yet. Existing operational tables remain available from their Console modules."
-            title="No audit events to display"
-          />
-        </TableBody>
-      </Table>
-    </ResourcePage>
+    <TableRow>
+      <TableCell>
+        <div className="font-medium">{endpoint.url}</div>
+        <div className="text-xs text-muted-foreground">{endpoint.id}</div>
+      </TableCell>
+      <TableCell>{endpoint.events.join(', ')}</TableCell>
+      <TableCell>
+        <SwitchRow
+          checked={endpoint.enabled}
+          label={endpoint.enabled ? 'Enabled' : 'Disabled'}
+          onCheckedChange={(checked) => onToggle(endpoint.id, checked)}
+        />
+      </TableCell>
+      <TableCell>{endpoint.secretPrefix}...</TableCell>
+      <TableCell>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => onRotate(endpoint.id)} type="button" variant="secondary">
+            <RefreshCw data-icon="inline-start" />
+            Rotate secret
+          </Button>
+          <Button onClick={() => onDelete(endpoint.id)} type="button" variant="danger">
+            <Trash2 data-icon="inline-start" />
+            Delete
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+function WebhookSecretDisclosureDialog({ onClose, secret }: { onClose: () => void; secret: string | null }) {
+  return (
+    <Dialog open={Boolean(secret)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Signing secret</DialogTitle>
+          <DialogDescription>Copy this secret now. It is shown only once.</DialogDescription>
+        </DialogHeader>
+        {secret ? (
+          <div className="grid gap-3 p-4">
+            <code className="break-all rounded-md border border-border bg-muted p-3 text-sm">{secret}</code>
+            <Button onClick={() => navigator.clipboard.writeText(secret)} type="button" variant="secondary">
+              <Copy data-icon="inline-start" />
+              Copy secret
+            </Button>
+          </div>
+        ) : null}
+        <DialogFooter className="m-0">
+          <Button onClick={onClose} type="button">
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function WebhookRequestDialog({ onClose, request }: { onClose: () => void; request: WebhookRequest | null }) {
+  return (
+    <Dialog open={Boolean(request)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Webhook request</DialogTitle>
+          <DialogDescription>{request?.id}</DialogDescription>
+        </DialogHeader>
+        {request ? (
+          <div className="grid gap-3 p-4">
+            <SettingRow label="Endpoint" value={request.endpointUrl} />
+            <SettingRow label="Event" value={request.event} />
+            <SettingRow label="Status" value={request.status} />
+            <SettingRow label="Attempts" value={String(request.attemptCount)} />
+            <SettingRow label="HTTP status" value={request.httpStatus ? String(request.httpStatus) : 'Pending'} />
+            {request.error ? <SettingRow label="Error" value={request.error} /> : null}
+            {request.requestBody ? <PayloadBlock label="Request body" value={request.requestBody} /> : null}
+            {request.responseBody ? <PayloadBlock label="Response body" value={request.responseBody} /> : null}
+          </div>
+        ) : null}
+        <DialogFooter className="m-0">
+          <Button onClick={onClose} type="button">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PayloadBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <p className="text-sm font-medium">{label}</p>
+      <pre className="max-h-48 overflow-auto rounded-md border border-border bg-muted p-3 text-xs">{value}</pre>
+    </div>
   )
 }
 

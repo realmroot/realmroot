@@ -83,6 +83,17 @@ import type {
   SecurityTotpEnrollmentInput,
   SecurityTotpVerificationInput,
 } from '../shared/api/security'
+import type {
+  CreateWebhookEndpointRequest,
+  ListWebhookEndpointsQuery,
+  ListWebhookEndpointsResponse,
+  ListWebhookRequestsQuery,
+  ListWebhookRequestsResponse,
+  UpdateWebhookEndpointRequest,
+  WebhookEndpoint,
+  WebhookEndpointSecretResponse,
+  WebhookRequest,
+} from '../shared/api/webhooks'
 import type { Auth } from './auth'
 import { forbidden, handleApiError, notFound } from './lib/errors'
 import { accessLog } from './middleware/access-log'
@@ -115,6 +126,7 @@ import {
   type ManagementConfigzServiceFactory,
 } from './routes/management'
 import type { ConnectorServiceFactory } from './routes/management/connectors'
+import type { WebhookServiceFactory } from './routes/management/webhooks'
 import { oauthConsentRoute } from './routes/oauth/consent'
 import { onboardingRoutes } from './routes/onboarding'
 
@@ -134,6 +146,7 @@ export interface AppOptions {
   configzServiceFactory?: ConfigzServiceFactory & ManagementConfigzServiceFactory
   applicationServiceFactory?: ManagementApplicationServiceFactory
   connectorServiceFactory?: ConnectorServiceFactory
+  webhookServiceFactory?: WebhookServiceFactory
   assetServiceFactory?: AssetServiceFactory
 }
 
@@ -380,6 +393,30 @@ type RpcSchema = {
     $get: RpcEndpoint<RpcNoInput, ManagementBrandingSettingsResponse>
     $patch: RpcEndpoint<{ json: UpdateManagementBrandingSettingsRequest }, ManagementBrandingSettingsResponse>
   }
+  '/api/management/webhooks/endpoints': {
+    $get: RpcEndpoint<
+      { query?: Partial<Record<keyof ListWebhookEndpointsQuery, string>> },
+      ListWebhookEndpointsResponse
+    >
+    $post: RpcEndpoint<{ json: CreateWebhookEndpointRequest }, WebhookEndpointSecretResponse, 201>
+  }
+  '/api/management/webhooks/endpoints/:id': {
+    $get: RpcEndpoint<{ param: { id: string } }, WebhookEndpoint>
+    $patch: RpcEndpoint<{ param: { id: string }; json: UpdateWebhookEndpointRequest }, WebhookEndpoint>
+    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
+  }
+  '/api/management/webhooks/endpoints/:id/secrets': {
+    $post: RpcEndpoint<{ param: { id: string } }, WebhookEndpointSecretResponse, 201>
+  }
+  '/api/management/webhooks/requests': {
+    $get: RpcEndpoint<{ query?: Partial<Record<keyof ListWebhookRequestsQuery, string>> }, ListWebhookRequestsResponse>
+  }
+  '/api/management/webhooks/requests/:id': {
+    $get: RpcEndpoint<{ param: { id: string } }, WebhookRequest>
+  }
+  '/api/management/webhooks/requests/:id/retries': {
+    $post: RpcEndpoint<{ param: { id: string } }, WebhookRequest, 202>
+  }
   '/api/management/readiness': {
     $get: RpcEndpoint<RpcNoInput, ManagementReadinessResponse>
   }
@@ -483,6 +520,7 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
         configzServiceFactory: options.configzServiceFactory,
         applicationServiceFactory: options.applicationServiceFactory,
         connectorServiceFactory: options.connectorServiceFactory,
+        webhookServiceFactory: options.webhookServiceFactory,
       }),
     )
 

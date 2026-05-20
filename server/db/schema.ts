@@ -690,6 +690,60 @@ export const emailServiceConfig = sqliteTable('email_service_config', {
     .notNull(),
 })
 
+export const webhookEndpoint = sqliteTable(
+  'webhook_endpoint',
+  {
+    id: text('id').primaryKey(),
+    url: text('url').notNull(),
+    events: text('events', { mode: 'json' }).$type<string[]>().notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
+    signingSecret: text('signing_secret').notNull(),
+    secretPrefix: text('secret_prefix').notNull(),
+    createdByUserId: text('created_by_user_id').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('webhookEndpoint_enabled_idx').on(table.enabled),
+    index('webhookEndpoint_createdByUserId_idx').on(table.createdByUserId),
+  ],
+)
+
+export const webhookDeliveryRequest = sqliteTable(
+  'webhook_delivery_request',
+  {
+    id: text('id').primaryKey(),
+    endpointId: text('endpoint_id')
+      .notNull()
+      .references(() => webhookEndpoint.id, { onDelete: 'cascade' }),
+    event: text('event').notNull(),
+    status: text('status').notNull().default('pending'),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    httpStatus: integer('http_status'),
+    error: text('error'),
+    requestBody: text('request_body'),
+    responseBody: text('response_body'),
+    nextAttemptAt: integer('next_attempt_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('webhookDeliveryRequest_endpointId_idx').on(table.endpointId),
+    index('webhookDeliveryRequest_status_idx').on(table.status),
+    index('webhookDeliveryRequest_createdAt_idx').on(table.createdAt),
+  ],
+)
+
 export const signInExperience = sqliteTable('sign_in_experience', {
   id: text('id').primaryKey(),
   defaultApplicationId: text('default_application_id').references(() => application.id, { onDelete: 'set null' }),

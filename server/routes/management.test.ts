@@ -864,6 +864,99 @@ describe('management routes', () => {
     expect(response.status).toBe(400)
     expect(connectors.create).not.toHaveBeenCalled()
   })
+
+  it('exposes webhook endpoint and request resources through the management boundary', async () => {
+    const webhooks = createWebhookServiceMock()
+    const app = createApp(createAuthMock(), { webhookServiceFactory: () => webhooks })
+    const headers = adminHeaders()
+
+    const list = await app.request('/api/management/webhooks/endpoints?limit=10&offset=5&search=auth&status=enabled', {
+      headers,
+    })
+    const created = await app.request('/api/management/webhooks/endpoints', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        url: 'https://events.example.com/flareauth',
+        events: ['user.created'],
+        enabled: true,
+      }),
+    })
+    const detail = await app.request('/api/management/webhooks/endpoints/wh_1', { headers })
+    const updated = await app.request('/api/management/webhooks/endpoints/wh_1', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ enabled: false }),
+    })
+    const rotated = await app.request('/api/management/webhooks/endpoints/wh_1/secrets', { method: 'POST', headers })
+    const requests = await app.request('/api/management/webhooks/requests?limit=2&offset=4&status=failed', {
+      headers,
+    })
+    const requestDetail = await app.request('/api/management/webhooks/requests/whr_1', { headers })
+    const retried = await app.request('/api/management/webhooks/requests/whr_1/retries', { method: 'POST', headers })
+    const deleted = await app.request('/api/management/webhooks/endpoints/wh_1', { method: 'DELETE', headers })
+
+    expect(list.status).toBe(200)
+    await expect(list.json()).resolves.toEqual({
+      endpoints: [webhookEndpointResponse()],
+      pagination: { limit: 10, offset: 5, total: 1, hasMore: false, nextOffset: null },
+    })
+    expect(created.status).toBe(201)
+    await expect(created.json()).resolves.toEqual({
+      endpoint: webhookEndpointResponse(),
+      signingSecret: 'whsec_created_secret',
+    })
+    await expect(detail.json()).resolves.toEqual(webhookEndpointResponse())
+    await expect(updated.json()).resolves.toEqual({ ...webhookEndpointResponse(), enabled: false })
+    expect(rotated.status).toBe(201)
+    await expect(rotated.json()).resolves.toEqual({
+      endpoint: webhookEndpointResponse(),
+      signingSecret: 'whsec_rotated_secret',
+    })
+    await expect(requests.json()).resolves.toEqual({
+      requests: [webhookRequestResponse()],
+      pagination: { limit: 2, offset: 4, total: 1, hasMore: false, nextOffset: null },
+    })
+    await expect(requestDetail.json()).resolves.toEqual(webhookRequestResponse())
+    expect(retried.status).toBe(202)
+    await expect(retried.json()).resolves.toEqual({ ...webhookRequestResponse(), status: 'pending' })
+    expect(deleted.status).toBe(204)
+
+    expect(webhooks.listEndpoints).toHaveBeenCalledWith({
+      limit: 10,
+      offset: 5,
+      search: 'auth',
+      status: 'enabled',
+    })
+    expect(webhooks.createEndpoint).toHaveBeenCalledWith(
+      { url: 'https://events.example.com/flareauth', events: ['user.created'], enabled: true },
+      'admin-1',
+    )
+    expect(webhooks.updateEndpoint).toHaveBeenCalledWith('wh_1', { enabled: false })
+    expect(webhooks.rotateSecret).toHaveBeenCalledWith('wh_1')
+    expect(webhooks.listRequests).toHaveBeenCalledWith({ limit: 2, offset: 4, status: 'failed' })
+    expect(webhooks.getRequest).toHaveBeenCalledWith('whr_1')
+    expect(webhooks.retryRequest).toHaveBeenCalledWith('whr_1')
+    expect(webhooks.deleteEndpoint).toHaveBeenCalledWith('wh_1')
+  })
+
+  it('protects and validates webhook management requests', async () => {
+    const webhooks = createWebhookServiceMock()
+    const app = createApp(createAuthMock(), { webhookServiceFactory: () => webhooks })
+
+    const unauthenticated = await app.request('/api/management/webhooks/endpoints')
+    const nonAdmin = await app.request('/api/management/webhooks/endpoints', { headers: userHeaders() })
+    const invalid = await app.request('/api/management/webhooks/endpoints', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({ url: 'http://events.example.com/flareauth', events: [] }),
+    })
+
+    expect(unauthenticated.status).toBe(401)
+    expect(nonAdmin.status).toBe(403)
+    expect(invalid.status).toBe(400)
+    expect(webhooks.createEndpoint).not.toHaveBeenCalled()
+  })
 })
 
 function createAuthMock() {
@@ -1151,7 +1244,12 @@ function isManagementOpenApiMethod(method: string): method is ManagementOpenApiM
 const managementOpenApiMethods = ['get', 'post', 'put', 'patch', 'delete'] as const
 type ManagementOpenApiMethod = (typeof managementOpenApiMethods)[number]
 const methodsWithJsonRequestBody = new Set(['POST', 'PUT', 'PATCH'])
-const operationsWithoutRequestBody = new Set(['POST /applications/{param}/client-secrets', 'POST /users/{param}/unban'])
+const operationsWithoutRequestBody = new Set([
+  'POST /applications/{param}/client-secrets',
+  'POST /users/{param}/unban',
+  'POST /webhooks/endpoints/{param}/secrets',
+  'POST /webhooks/requests/{param}/retries',
+])
 
 interface HonoRoute {
   method: string
@@ -1348,6 +1446,66 @@ function createConnectorServiceMock() {
     }),
     update: vi.fn().mockResolvedValue({ ...connectorFixture(), enabled: false, displayName: 'Google Workspace' }),
     delete: vi.fn().mockResolvedValue(undefined),
+  }
+}
+
+function createWebhookServiceMock() {
+  return {
+    listEndpoints: vi.fn().mockImplementation((query) =>
+      Promise.resolve({
+        endpoints: [webhookEndpointResponse()],
+        pagination: { limit: query.limit, offset: query.offset, total: 1, hasMore: false, nextOffset: null },
+      }),
+    ),
+    createEndpoint: vi.fn().mockResolvedValue({
+      endpoint: webhookEndpointResponse(),
+      signingSecret: 'whsec_created_secret',
+    }),
+    getEndpoint: vi.fn().mockResolvedValue(webhookEndpointResponse()),
+    updateEndpoint: vi.fn().mockResolvedValue({ ...webhookEndpointResponse(), enabled: false }),
+    deleteEndpoint: vi.fn().mockResolvedValue(undefined),
+    rotateSecret: vi.fn().mockResolvedValue({
+      endpoint: webhookEndpointResponse(),
+      signingSecret: 'whsec_rotated_secret',
+    }),
+    listRequests: vi.fn().mockImplementation((query) =>
+      Promise.resolve({
+        requests: [webhookRequestResponse()],
+        pagination: { limit: query.limit, offset: query.offset, total: 1, hasMore: false, nextOffset: null },
+      }),
+    ),
+    getRequest: vi.fn().mockResolvedValue(webhookRequestResponse()),
+    retryRequest: vi.fn().mockResolvedValue({ ...webhookRequestResponse(), status: 'pending' }),
+  }
+}
+
+function webhookEndpointResponse() {
+  return {
+    id: 'wh_1',
+    url: 'https://app.example.com/webhooks/auth',
+    events: ['user.created', 'session.revoked'],
+    enabled: true,
+    secretPrefix: 'whsec_abcd123',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function webhookRequestResponse() {
+  return {
+    id: 'whr_1',
+    endpointId: 'wh_1',
+    endpointUrl: 'https://app.example.com/webhooks/auth',
+    event: 'user.created',
+    status: 'failed',
+    attemptCount: 1,
+    httpStatus: 500,
+    error: 'Server error',
+    requestBody: '{"id":"user-1"}',
+    responseBody: '{"error":"failed"}',
+    nextAttemptAt: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
   }
 }
 

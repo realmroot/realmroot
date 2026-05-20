@@ -11,12 +11,12 @@ import {
   ApiResourcesPage,
   ApplicationDetailPage,
   ApplicationsPage,
-  AuditLogsPage,
   BrandingPage,
   CollectUserProfilePage,
   ConnectorsPage,
   ConsolePlaceholderPage,
   ContentSettingsPage,
+  CustomizeJwtPage,
   DeploymentSettingsPage,
   MfaPage,
   OrganizationDetailPage,
@@ -486,7 +486,6 @@ describe('admin console', () => {
       ['/console/webhooks', '/console/webhooks/endpoints', 'Webhooks'],
       ['/console/webhooks/endpoints', '/console/webhooks/endpoints', 'Webhooks'],
       ['/console/webhooks/requests', '/console/webhooks/requests', 'Webhooks'],
-      ['/console/audit-logs', '/console/audit-logs', 'Audit logs'],
       ['/console/tenant-settings', '/console/tenant-settings/oidc-configs', 'Settings'],
       ['/console/tenant-settings/oidc-configs', '/console/tenant-settings/oidc-configs', 'Settings'],
     ] as const) {
@@ -743,10 +742,10 @@ describe('admin console', () => {
         path: '/console/webhooks/requests',
         heading: 'Webhooks',
         tab: 'Requests',
-        text: 'No webhook requests',
+        text: 'Recent requests',
         nextTab: 'Endpoints',
         nextPath: '/console/webhooks/endpoints',
-        nextText: 'Webhook delivery unavailable',
+        nextText: 'Create endpoint',
       },
     ] as const) {
       cleanup()
@@ -2543,7 +2542,7 @@ describe('admin console', () => {
     cleanup()
     renderWithQuery(<DeploymentSettingsPage />)
     expect(await screen.findByText('Signing keys')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Rotate key' })).toHaveProperty('disabled', true)
+    expect(screen.queryByRole('button', { name: 'Rotate key' })).toBeNull()
   })
 
   it('derives built-in Cloudflare Email readiness and keeps SMS setup fixed in the passwordless connector view', async () => {
@@ -2598,6 +2597,12 @@ describe('admin console', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url.startsWith('/api/management/webhooks/endpoints')) {
+        return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
+      }
+      if (url.startsWith('/api/management/webhooks/requests')) {
+        return Promise.resolve(jsonResponse({ requests: [webhookRequest], pagination }))
+      }
       return Promise.resolve(jsonResponse({}))
     })
 
@@ -3291,8 +3296,8 @@ describe('admin console', () => {
 
     expect(screen.getByRole('link', { name: 'Requests' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: 'Endpoints' }).getAttribute('aria-current')).toBeNull()
-    expect(screen.getByLabelText('Search webhooks')).toHaveProperty('disabled', true)
-    expect(screen.getByLabelText('Filter webhook status')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Search webhooks')).not.toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Filter webhook status')).not.toHaveProperty('disabled', true)
 
     cleanup()
     renderWithQuery(<DeploymentSettingsPage />)
@@ -3312,6 +3317,125 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open account center' }))
 
     expect(open).toHaveBeenCalledWith('/profile', '_blank', 'noopener')
+  })
+
+  it('manages webhook endpoint controls and request detail through the management API', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null
+      requests.push({ url, method, body })
+
+      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'GET') {
+        return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
+      }
+      if (url === '/api/management/webhooks/endpoints' && method === 'POST') {
+        return Promise.resolve(jsonResponse({ endpoint: webhookEndpoint, signingSecret: 'whsec_created_secret' }, 201))
+      }
+      if (url === '/api/management/webhooks/endpoints/wh_1' && method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ ...webhookEndpoint, enabled: false }))
+      }
+      if (url === '/api/management/webhooks/endpoints/wh_1/secrets' && method === 'POST') {
+        return Promise.resolve(jsonResponse({ endpoint: webhookEndpoint, signingSecret: 'whsec_rotated_secret' }, 201))
+      }
+      if (url === '/api/management/webhooks/endpoints/wh_1' && method === 'DELETE') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url.startsWith('/api/management/webhooks/requests') && method === 'GET') {
+        return Promise.resolve(jsonResponse({ requests: [webhookRequest], pagination }))
+      }
+      if (url === '/api/management/webhooks/requests/whr_1/retries' && method === 'POST') {
+        return Promise.resolve(jsonResponse({ ...webhookRequest, status: 'pending' }, 202))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<WebhooksPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Webhooks' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Endpoint URL'), {
+      target: { value: 'https://events.example.com/auth' },
+    })
+    fireEvent.click(screen.getByLabelText('session.revoked'))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create endpoint' })[0])
+
+    await screen.findByText('whsec_created_secret')
+    expect(requests).toContainEqual({
+      url: '/api/management/webhooks/endpoints',
+      method: 'POST',
+      body: {
+        url: 'https://events.example.com/auth',
+        events: ['user.created', 'session.revoked'],
+        enabled: true,
+      },
+    })
+
+    fireEvent.change(screen.getByLabelText('Search webhooks'), { target: { value: 'auth' } })
+    fireEvent.change(screen.getByLabelText('Filter webhook status'), { target: { value: 'enabled' } })
+    await waitFor(() =>
+      expect(
+        requests.some((request) => request.url.includes('search=auth') && request.url.includes('status=enabled')),
+      ).toBe(true),
+    )
+
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enabled' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/webhooks/endpoints/wh_1',
+        method: 'PATCH',
+        body: { enabled: false },
+      }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }))
+    await screen.findByText('whsec_rotated_secret')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (request) => request.url === '/api/management/webhooks/endpoints/wh_1' && request.method === 'DELETE',
+        ),
+      ).toBe(true),
+    )
+
+    cleanup()
+    renderWithQuery(<WebhooksPage section="requests" />)
+
+    expect((await screen.findByRole('link', { name: 'Requests' })).getAttribute('aria-current')).toBe('page')
+    fireEvent.change(screen.getByLabelText('Filter webhook status'), { target: { value: 'failed' } })
+    await waitFor(() => expect(requests.some((request) => request.url.includes('status=failed'))).toBe(true))
+    fireEvent.click(await screen.findByRole('button', { name: 'user.created' }))
+    expect(await screen.findByText('Webhook request')).toBeTruthy()
+    expect(screen.getByText('Server error')).toBeTruthy()
+    expect(screen.getByText('Request body')).toBeTruthy()
+    expect(screen.getByText('Response body')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/management/webhooks/requests/whr_1/retries',
+        method: 'POST',
+        body: null,
+      }),
+    )
+  })
+
+  it('hides deferred audit logs and unavailable JWT controls', async () => {
+    renderWithQuery(<CustomizeJwtPage />)
+
+    expect(screen.getByRole('heading', { name: 'Custom JWT' })).toBeTruthy()
+    expect(screen.queryByText(/Unavailable/i)).toBeNull()
+    expect(screen.queryByText(/Arbitrary claim editor/i)).toBeNull()
+    expect(screen.queryByText(/Interactive user fields/i)).toBeNull()
+
+    cleanup()
+    vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
+    window.history.pushState(null, '', '/console/audit-logs')
+
+    render(<AppRouter />)
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Audit logs' })).toBeNull())
+    expect(screen.queryByLabelText('Search audit logs')).toBeNull()
   })
 
   it('saves content settings through the sign-in management boundary', async () => {
@@ -4567,7 +4691,6 @@ describe('admin console', () => {
         searchLabel: 'Search API resources',
       },
       { action: 'Create endpoint', component: <WebhooksPage />, heading: 'Webhooks', searchLabel: 'Search webhooks' },
-      { component: <AuditLogsPage />, heading: 'Audit logs', searchLabel: 'Search audit logs' },
     ]
 
     for (const page of pages) {
@@ -5047,6 +5170,12 @@ function consoleRouteFetch(input: RequestInfo | URL) {
   if (url === '/api/management/api-resources') {
     return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
   }
+  if (url.startsWith('/api/management/webhooks/endpoints')) {
+    return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
+  }
+  if (url.startsWith('/api/management/webhooks/requests')) {
+    return Promise.resolve(jsonResponse({ requests: [webhookRequest], pagination }))
+  }
   if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
   if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
   return Promise.resolve(jsonResponse({}))
@@ -5063,6 +5192,32 @@ const pagination = {
 const emptyPagination = {
   ...pagination,
   total: 0,
+}
+
+const webhookEndpoint = {
+  id: 'wh_1',
+  url: 'https://app.example.com/webhooks/auth',
+  events: ['user.created', 'session.revoked'],
+  enabled: true,
+  secretPrefix: 'whsec_abcd123',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+const webhookRequest = {
+  id: 'whr_1',
+  endpointId: 'wh_1',
+  endpointUrl: 'https://app.example.com/webhooks/auth',
+  event: 'user.created',
+  status: 'failed',
+  attemptCount: 1,
+  httpStatus: 500,
+  error: 'Server error',
+  requestBody: '{"id":"user-1"}',
+  responseBody: '{"error":"failed"}',
+  nextAttemptAt: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
 }
 
 const application = {
