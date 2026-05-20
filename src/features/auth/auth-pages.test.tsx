@@ -117,9 +117,13 @@ describe('hosted auth pages', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
     expect(screen.getByRole('main', { name: 'Hosted authentication' })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Sign in to Acme.' })).toBeTruthy()
+    expect(document.querySelector('.authPanel')).toBeTruthy()
+    expect(document.querySelector('.authBrandPanel .brandMark')?.textContent).toBe('A')
+    expect(document.querySelector('.segmented')?.children).toHaveLength(3)
     expect(screen.getByRole('button', { name: 'Password' }).className).toBe('active')
     expect(screen.getByRole('button', { name: 'Magic link' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'OTP' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in' }).className).toContain('uiButton-primary')
     expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeTruthy()
     expect(screen.getByText('Powered by Acme ID')).toBeTruthy()
     expect(screen.queryByText('Authenticator verification')).toBeNull()
@@ -446,6 +450,7 @@ describe('hosted auth pages', () => {
     render(<ForgotPasswordPage />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'OTP code' }))
+    expect(document.querySelector('.segmented')?.children).toHaveLength(2)
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send reset code' }))
 

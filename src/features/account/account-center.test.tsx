@@ -29,6 +29,8 @@ describe('account center', () => {
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
+    expect(document.querySelectorAll('.accountContent')).toHaveLength(1)
+    expect(document.querySelectorAll('.accountSectionStack')).toHaveLength(1)
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Identifiers' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Password' })).toBeTruthy()
@@ -37,6 +39,7 @@ describe('account center', () => {
     expect(screen.getByRole('heading', { name: 'Linked social accounts' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Sessions and devices' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Authorized apps' })).toBeTruthy()
+    expect(document.querySelectorAll('.accountSectionStack > .settingsPanel')).toHaveLength(8)
 
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
     expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('48')
