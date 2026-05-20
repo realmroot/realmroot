@@ -15,13 +15,21 @@ import {
 import { badRequest, forbidden } from '../../../lib/errors'
 import { requireAuth } from '../../../middleware/admin'
 import { getAuthContext } from '../../../middleware/auth-context'
+import type { ConfigzAccountCenter } from '../../../modules/configz/service'
 import type { SecurityRepository } from '../../../modules/security/repository'
 import type { UserRepository } from '../../../modules/users/repository'
 import type { ManagementAuthApi } from '../../auth-api'
 import { toBoundaryError } from '../../auth-api'
 import { readJson, readQuery } from '../../validation'
 
-export function accountSecurityRoutes(authApi: ManagementAuthApi, users: UserRepository, security: SecurityRepository) {
+type AccountCenterSettingsReader = (c: Context) => Promise<ConfigzAccountCenter>
+
+export function accountSecurityRoutes(
+  authApi: ManagementAuthApi,
+  users: UserRepository,
+  security: SecurityRepository,
+  accountCenterSettings?: AccountCenterSettingsReader,
+) {
   const app = new Hono()
 
   app.use('*', requireAuth())
@@ -156,11 +164,13 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, users: UserRep
   })
 
   app.get('/sessions', async (c) => {
+    await assertSessionsEnabled(c, accountCenterSettings)
     const page = await users.listSessions(currentUserId(c), readQuery(c, paginationQuerySchema))
     return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
   })
 
   app.delete('/sessions', async (c) => {
+    await assertSessionsEnabled(c, accountCenterSettings)
     try {
       return c.json(await authApi.revokeSessions({ headers: c.req.raw.headers }))
     } catch (error) {
@@ -169,6 +179,7 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, users: UserRep
   })
 
   app.delete('/sessions/:sessionId', async (c) => {
+    await assertSessionsEnabled(c, accountCenterSettings)
     const token = await security.getSessionToken(currentUserId(c), c.req.param('sessionId'))
 
     try {
@@ -190,5 +201,11 @@ async function assertPasskeysEnabled(c: Context, security: SecurityRepository) {
 
   if (!state.policy.passkeys.enabled) {
     throw badRequest('Passkeys are disabled for this deployment.')
+  }
+}
+
+async function assertSessionsEnabled(c: Context, accountCenterSettings?: AccountCenterSettingsReader) {
+  if (accountCenterSettings && !(await accountCenterSettings(c)).sessionsViewEnabled) {
+    throw forbidden('Session management is disabled for this account center.')
   }
 }

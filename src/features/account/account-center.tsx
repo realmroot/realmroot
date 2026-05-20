@@ -116,7 +116,9 @@ export function AccountCenterPage() {
 
 export function AccountCenter() {
   const navigate = useNavigate()
-  const { data: config } = useConfigz()
+  const configState = useConfigz()
+  const config = configState.data
+  const accountCenter = config?.accountCenter ?? defaultAccountCenterSettings
   const [data, setData] = useState(emptyAccountData)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -124,14 +126,15 @@ export function AccountCenter() {
   const [confirmation, setConfirmation] = useState<DestructiveConfirmation | null>(null)
 
   const reload = useCallback(async () => {
+    if (!config) return
     setLoading(true)
     setError(null)
     try {
       const [profile, linkedAccounts, applications, sessions, security, passkeys] = await Promise.all([
         getAccountProfile(),
-        listLinkedAccounts(),
-        listConsentedApplications(),
-        listAccountSessions(),
+        accountCenter.connectedAccountsEnabled ? listLinkedAccounts() : Promise.resolve({ accounts: [] }),
+        accountCenter.connectedAccountsEnabled ? listConsentedApplications() : Promise.resolve({ applications: [] }),
+        accountCenter.sessionsViewEnabled ? listAccountSessions() : Promise.resolve({ sessions: [] }),
         getAccountSecurity(),
         listPasskeys(),
       ])
@@ -148,11 +151,17 @@ export function AccountCenter() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [accountCenter.connectedAccountsEnabled, accountCenter.sessionsViewEnabled, config])
 
   useEffect(() => {
+    if (configState.loading) return
+    if (configState.error) {
+      setError(configState.error)
+      setLoading(false)
+      return
+    }
     void reload()
-  }, [reload])
+  }, [configState.error, configState.loading, reload])
 
   async function mutate<T>(
     label: string,
@@ -232,9 +241,11 @@ export function AccountCenter() {
                   Sign out
                 </Button>
               </section>
-              <section className="accountPanelGroup" aria-label="Profile settings">
-                <ProfileSections profile={data.profile} mutate={mutate} />
-              </section>
+              {accountCenter.profileEditingEnabled || accountCenter.passwordChangeEnabled ? (
+                <section className="accountPanelGroup" aria-label="Profile settings">
+                  <ProfileSections accountCenter={accountCenter} profile={data.profile} mutate={mutate} />
+                </section>
+              ) : null}
               <section className="accountPanelGroup" aria-label="Security settings">
                 <SecuritySections
                   confirm={setConfirmation}
@@ -243,13 +254,17 @@ export function AccountCenter() {
                   profileEmail={data.profile.email}
                 />
               </section>
-              <section className="accountPanelGroup" aria-label="Social and app access">
-                <ConnectionsSection accounts={data.linkedAccounts} confirm={setConfirmation} mutate={mutate} />
-                <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
-              </section>
-              <section className="accountPanelGroup" aria-label="Session management">
-                <SessionsSection confirm={setConfirmation} sessions={data.sessions} mutate={mutate} />
-              </section>
+              {accountCenter.connectedAccountsEnabled ? (
+                <section className="accountPanelGroup" aria-label="Social and app access">
+                  <ConnectionsSection accounts={data.linkedAccounts} confirm={setConfirmation} mutate={mutate} />
+                  <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
+                </section>
+              ) : null}
+              {accountCenter.sessionsViewEnabled ? (
+                <section className="accountPanelGroup" aria-label="Session management">
+                  <SessionsSection confirm={setConfirmation} sessions={data.sessions} mutate={mutate} />
+                </section>
+              ) : null}
             </div>
           ) : null}
         </section>
@@ -259,7 +274,27 @@ export function AccountCenter() {
   )
 }
 
-function ProfileSections({ profile, mutate }: { profile: UserProfile; mutate: MutationHandler }) {
+const defaultAccountCenterSettings = {
+  profileEditingEnabled: true,
+  displayNameEditable: true,
+  usernameEditable: true,
+  avatarEditable: true,
+  emailChangeEnabled: true,
+  passwordChangeEnabled: true,
+  connectedAccountsEnabled: true,
+  sessionsViewEnabled: true,
+  dangerZoneEnabled: false,
+}
+
+function ProfileSections({
+  accountCenter,
+  profile,
+  mutate,
+}: {
+  accountCenter: typeof defaultAccountCenterSettings
+  profile: UserProfile
+  mutate: MutationHandler
+}) {
   const [displayName, setDisplayName] = useState(profile.displayName)
   const [username, setUsername] = useState(profile.username ?? '')
   const [avatarAssetId, setAvatarAssetId] = useState(profile.avatarAssetId ?? '')
@@ -314,108 +349,128 @@ function ProfileSections({ profile, mutate }: { profile: UserProfile; mutate: Mu
 
   return (
     <>
-      <section className="settingsPanel">
-        <PanelTitle title="Profile" description="Public identity and avatar shown across trusted applications." />
-        <form className="formStack" onSubmit={saveProfile}>
-          <div className="avatarUploadControl">
-            {avatarPreview ? (
-              <img alt="" className="assetPreview" src={avatarPreview} width="56" height="56" />
-            ) : (
-              <div className="assetPreview" aria-hidden="true">
-                <UserRound size={28} />
+      {accountCenter.profileEditingEnabled ? (
+        <section className="settingsPanel">
+          <PanelTitle title="Profile" description="Public identity and avatar shown across trusted applications." />
+          <form className="formStack" onSubmit={saveProfile}>
+            {accountCenter.avatarEditable ? (
+              <div className="avatarUploadControl">
+                {avatarPreview ? (
+                  <img alt="" className="assetPreview" src={avatarPreview} width="56" height="56" />
+                ) : (
+                  <div className="assetPreview" aria-hidden="true">
+                    <UserRound size={28} />
+                  </div>
+                )}
+                <div className="avatarUploadMeta">
+                  <span className="avatarUploadLabel">Avatar image</span>
+                  <span className="avatarUploadHelp">PNG, JPEG, or WebP up to 2 MB.</span>
+                  <button
+                    className="avatarUploadButton"
+                    onClick={() => document.getElementById('account-avatar-upload')?.click()}
+                    type="button"
+                  >
+                    <Upload size={16} />
+                    Upload image
+                  </button>
+                  <input
+                    accept="image/png,image/jpeg,image/webp"
+                    aria-label="Avatar image"
+                    className="visuallyHidden"
+                    id="account-avatar-upload"
+                    onChange={(event) => uploadAvatar(event.currentTarget.files?.[0])}
+                    tabIndex={-1}
+                    type="file"
+                  />
+                </div>
               </div>
-            )}
-            <div className="avatarUploadMeta">
-              <span className="avatarUploadLabel">Avatar image</span>
-              <span className="avatarUploadHelp">PNG, JPEG, or WebP up to 2 MB.</span>
-              <button
-                className="avatarUploadButton"
-                onClick={() => document.getElementById('account-avatar-upload')?.click()}
-                type="button"
-              >
-                <Upload size={16} />
-                Upload image
-              </button>
-              <input
-                accept="image/png,image/jpeg,image/webp"
-                aria-label="Avatar image"
-                className="visuallyHidden"
-                id="account-avatar-upload"
-                onChange={(event) => uploadAvatar(event.currentTarget.files?.[0])}
-                tabIndex={-1}
-                type="file"
+            ) : null}
+            {accountCenter.displayNameEditable ? (
+              <Field label="Display name">
+                <TextInput
+                  autoComplete="name"
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  required
+                  value={displayName}
+                />
+              </Field>
+            ) : null}
+            {accountCenter.displayNameEditable || accountCenter.avatarEditable ? (
+              <Button type="submit">Save profile</Button>
+            ) : null}
+          </form>
+        </section>
+      ) : null}
+      {accountCenter.profileEditingEnabled && (accountCenter.usernameEditable || accountCenter.emailChangeEnabled) ? (
+        <section className="settingsPanel">
+          <PanelTitle
+            title="Identifiers"
+            description={profile.emailVerified ? 'Verified email address' : 'Verification required'}
+          />
+          {accountCenter.usernameEditable ? (
+            <form className="formStack" onSubmit={saveProfile}>
+              <Field label="Username">
+                <TextInput
+                  autoComplete="username"
+                  onChange={(event) => setUsername(event.target.value)}
+                  value={username}
+                />
+              </Field>
+              <Button type="submit" variant="secondary">
+                Save identifiers
+              </Button>
+            </form>
+          ) : null}
+          {accountCenter.emailChangeEnabled ? (
+            <form className="formStack" onSubmit={changeEmail}>
+              <Field label="Email">
+                <TextInput
+                  autoComplete="email"
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={email}
+                />
+              </Field>
+              <Button type="submit" variant="secondary">
+                <Mail size={18} />
+                Change email
+              </Button>
+            </form>
+          ) : null}
+        </section>
+      ) : null}
+      {accountCenter.passwordChangeEnabled ? (
+        <section className="settingsPanel">
+          <PanelTitle title="Password" description="Change the password used for hosted sign-in." />
+          <form className="formStack" onSubmit={changePassword}>
+            <input autoComplete="username" hidden readOnly type="text" value={profile.email} />
+            <Field label="Current password">
+              <TextInput
+                autoComplete="current-password"
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+                type="password"
+                value={currentPassword}
               />
-            </div>
-          </div>
-          <Field label="Display name">
-            <TextInput
-              autoComplete="name"
-              onChange={(event) => setDisplayName(event.target.value)}
-              required
-              value={displayName}
-            />
-          </Field>
-          <Button type="submit">Save profile</Button>
-        </form>
-      </section>
-      <section className="settingsPanel">
-        <PanelTitle
-          title="Identifiers"
-          description={profile.emailVerified ? 'Verified email address' : 'Verification required'}
-        />
-        <form className="formStack" onSubmit={saveProfile}>
-          <Field label="Username">
-            <TextInput autoComplete="username" onChange={(event) => setUsername(event.target.value)} value={username} />
-          </Field>
-          <Button type="submit" variant="secondary">
-            Save identifiers
-          </Button>
-        </form>
-        <form className="formStack" onSubmit={changeEmail}>
-          <Field label="Email">
-            <TextInput
-              autoComplete="email"
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              type="email"
-              value={email}
-            />
-          </Field>
-          <Button type="submit" variant="secondary">
-            <Mail size={18} />
-            Change email
-          </Button>
-        </form>
-      </section>
-      <section className="settingsPanel">
-        <PanelTitle title="Password" description="Change the password used for hosted sign-in." />
-        <form className="formStack" onSubmit={changePassword}>
-          <input autoComplete="username" hidden readOnly type="text" value={profile.email} />
-          <Field label="Current password">
-            <TextInput
-              autoComplete="current-password"
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              required
-              type="password"
-              value={currentPassword}
-            />
-          </Field>
-          <Field label="New password">
-            <TextInput
-              autoComplete="new-password"
-              minLength={8}
-              onChange={(event) => setNewPassword(event.target.value)}
-              required
-              type="password"
-              value={newPassword}
-            />
-          </Field>
-          <Button type="submit" variant="secondary">
-            <KeyRound size={18} />
-            Change password
-          </Button>
-        </form>
-      </section>
+            </Field>
+            <Field label="New password">
+              <TextInput
+                autoComplete="new-password"
+                minLength={8}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+                type="password"
+                value={newPassword}
+              />
+            </Field>
+            <Button type="submit" variant="secondary">
+              <KeyRound size={18} />
+              Change password
+            </Button>
+          </form>
+        </section>
+      ) : null}
     </>
   )
 }

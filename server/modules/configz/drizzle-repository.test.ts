@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Database } from '../../db/client'
-import { brandingSetting, identityProviderConnector, signInExperience, uploadedAsset } from '../../db/schema'
+import {
+  accountCenterSetting,
+  brandingSetting,
+  identityProviderConnector,
+  signInExperience,
+  uploadedAsset,
+} from '../../db/schema'
 import { createDrizzleConfigzRepository } from './drizzle-repository'
 
 describe('createDrizzleConfigzRepository', () => {
@@ -206,6 +212,126 @@ describe('createDrizzleConfigzRepository', () => {
       },
     ])
   })
+
+  it('reads and upserts singleton account center settings with field permissions metadata', async () => {
+    const db = new FakeDb({
+      accountCenterRows: [
+        {
+          profileEditingEnabled: true,
+          passwordChangeEnabled: true,
+          connectedAccountsEnabled: true,
+          sessionsViewEnabled: true,
+          dangerZoneEnabled: false,
+          metadata: {
+            fieldPermissions: {
+              displayNameEditable: false,
+              usernameEditable: true,
+              avatarEditable: false,
+              emailChangeEnabled: true,
+            },
+          },
+        },
+      ],
+    })
+    const repository = createDrizzleConfigzRepository(db as unknown as Database)
+
+    await expect(repository.getAccountCenterSettings()).resolves.toEqual({
+      profileEditingEnabled: true,
+      displayNameEditable: false,
+      usernameEditable: true,
+      avatarEditable: false,
+      emailChangeEnabled: true,
+      passwordChangeEnabled: true,
+      connectedAccountsEnabled: true,
+      sessionsViewEnabled: true,
+      dangerZoneEnabled: false,
+    })
+
+    await repository.updateAccountCenterSettings({
+      sessionsViewEnabled: false,
+      emailChangeEnabled: false,
+    })
+
+    expect(db.writes).toEqual([
+      {
+        table: accountCenterSetting,
+        values: expect.objectContaining({
+          id: 'account_center_default',
+          applicationId: null,
+          profileEditingEnabled: true,
+          passwordChangeEnabled: true,
+          connectedAccountsEnabled: true,
+          sessionsViewEnabled: false,
+          dangerZoneEnabled: false,
+          metadata: {
+            fieldPermissions: {
+              displayNameEditable: false,
+              usernameEditable: true,
+              avatarEditable: false,
+              emailChangeEnabled: false,
+            },
+          },
+        }),
+        conflict: expect.objectContaining({
+          target: accountCenterSetting.id,
+          set: expect.objectContaining({
+            sessionsViewEnabled: false,
+            metadata: {
+              fieldPermissions: {
+                displayNameEditable: false,
+                usernameEditable: true,
+                avatarEditable: false,
+                emailChangeEnabled: false,
+              },
+            },
+          }),
+        }),
+      },
+    ])
+  })
+
+  it('defaults account center field permissions when metadata is absent and preserves metadata on section-only updates', async () => {
+    const db = new FakeDb({
+      accountCenterRows: [
+        {
+          profileEditingEnabled: true,
+          passwordChangeEnabled: true,
+          connectedAccountsEnabled: true,
+          sessionsViewEnabled: true,
+          dangerZoneEnabled: false,
+          metadata: null,
+        },
+      ],
+    })
+    const repository = createDrizzleConfigzRepository(db as unknown as Database)
+
+    await expect(repository.getAccountCenterSettings()).resolves.toEqual({
+      profileEditingEnabled: true,
+      displayNameEditable: true,
+      usernameEditable: true,
+      avatarEditable: true,
+      emailChangeEnabled: true,
+      passwordChangeEnabled: true,
+      connectedAccountsEnabled: true,
+      sessionsViewEnabled: true,
+      dangerZoneEnabled: false,
+    })
+
+    await repository.updateAccountCenterSettings({
+      passwordChangeEnabled: false,
+    })
+
+    expect(db.writes).toEqual([
+      expect.objectContaining({
+        table: accountCenterSetting,
+        conflict: expect.objectContaining({
+          set: expect.not.objectContaining({
+            metadata: expect.anything(),
+          }),
+        }),
+      }),
+    ])
+  })
 })
 
 class FakeDb {
@@ -217,6 +343,7 @@ class FakeDb {
       brandingRows?: unknown[]
       faviconRows?: unknown[]
       identityProviderRows?: unknown[]
+      accountCenterRows?: unknown[]
     } = {},
   ) {}
 
@@ -258,6 +385,7 @@ class FakeSelect {
       brandingRows?: unknown[]
       faviconRows?: unknown[]
       identityProviderRows?: unknown[]
+      accountCenterRows?: unknown[]
     },
     private readonly fields?: unknown,
   ) {}
@@ -297,6 +425,7 @@ class FakeSelect {
     if (this.table === uploadedAsset && this.fields && typeof this.fields === 'object' && 'publicUrl' in this.fields) {
       return this.rows.faviconRows ?? []
     }
+    if (this.table === accountCenterSetting) return this.rows.accountCenterRows ?? []
     if (this.table === identityProviderConnector) return this.rows.identityProviderRows ?? []
     return []
   }

@@ -46,6 +46,7 @@ import type {
   ListManagementUserPasskeysResponse,
   ListManagementUserSessionsResponse,
   ListManagementUsersResponse,
+  ManagementAccountCenterSettingsResponse,
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementCreateUserRequest,
@@ -55,6 +56,7 @@ import type {
   ManagementUserDetailResponse,
   ManagementUserListQuery,
   ManagementUserSecurityResponse,
+  UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
   UpdateManagementSignInSettingsRequest,
@@ -69,6 +71,7 @@ export const adminQueryKeys = {
   connectors: ['admin', 'connectors'] as const,
   signIn: ['admin', 'sign-in-settings'] as const,
   branding: ['admin', 'branding-settings'] as const,
+  accountCenter: ['admin', 'account-center-settings'] as const,
   security: ['admin', 'security-policy'] as const,
   organizations: ['admin', 'organizations'] as const,
   roles: ['admin', 'roles'] as const,
@@ -322,6 +325,14 @@ export function getBrandingSettings(): Promise<ManagementBrandingSettingsRespons
 
 export function updateBrandingSettings(input: UpdateManagementBrandingSettingsRequest) {
   return readRpcResponse(apiClient.api.management['branding-settings'].$patch({ json: input }))
+}
+
+export function getAccountCenterSettings(): Promise<ManagementAccountCenterSettingsResponse> {
+  return readRpcResponse(apiClient.api.management['account-center-settings'].$get())
+}
+
+export function updateAccountCenterSettings(input: UpdateManagementAccountCenterSettingsRequest) {
+  return readRpcResponse(apiClient.api.management['account-center-settings'].$patch({ json: input }))
 }
 
 export function getAdminReadiness(): Promise<ManagementReadinessResponse> {

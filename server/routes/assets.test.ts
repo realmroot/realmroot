@@ -60,6 +60,75 @@ describe('asset routes', () => {
     expect(assets.updateUserAvatar).toHaveBeenCalledWith('user-1', assetFixture())
   })
 
+  it('uses default account-center settings for account avatar uploads without a config source', async () => {
+    const assets = createAssetServiceMock()
+    const app = new Hono()
+      .use('/api/*', authContext(createAuthMock()))
+      .onError((error, c) => {
+        if (error instanceof ApiError) return handleApiError(error, c)
+        throw error
+      })
+      .route(
+        '/api/account',
+        createAccountAssetRoutes(() => assets as unknown as AssetService),
+      )
+    const response = await requestWithFile(
+      app,
+      '/api/account/avatar',
+      userHeaders(),
+      'avatar.png',
+      'image/png',
+      'avatar',
+    )
+
+    expect(response.status).toBe(201)
+    expect(assets.upload).toHaveBeenCalledWith({
+      purpose: 'avatar',
+      file: expect.objectContaining({ name: 'avatar.png', type: 'image/png' }),
+      actorUserId: 'user-1',
+    })
+  })
+
+  it('rejects account avatar uploads when account center avatar editing is disabled', async () => {
+    const assets = createAssetServiceMock()
+    const app = createRouteTestApp(assets, {
+      profileEditingEnabled: true,
+      avatarEditable: false,
+    })
+    const response = await requestWithFile(
+      app,
+      '/api/account/avatar',
+      userHeaders(),
+      'avatar.png',
+      'image/png',
+      'avatar',
+    )
+
+    expect(response.status).toBe(403)
+    expect(assets.upload).not.toHaveBeenCalled()
+    expect(assets.updateUserAvatar).not.toHaveBeenCalled()
+  })
+
+  it('rejects account avatar uploads when account center profile editing is disabled', async () => {
+    const assets = createAssetServiceMock()
+    const app = createRouteTestApp(assets, {
+      profileEditingEnabled: false,
+      avatarEditable: true,
+    })
+    const response = await requestWithFile(
+      app,
+      '/api/account/avatar',
+      userHeaders(),
+      'avatar.png',
+      'image/png',
+      'avatar',
+    )
+
+    expect(response.status).toBe(403)
+    expect(assets.upload).not.toHaveBeenCalled()
+    expect(assets.updateUserAvatar).not.toHaveBeenCalled()
+  })
+
   it('requires admin access for management uploads', async () => {
     const assets = createAssetServiceMock()
     const app = createRouteTestApp(assets)
@@ -136,7 +205,7 @@ function assetFixture() {
   }
 }
 
-function createRouteTestApp(assets: ReturnType<typeof createAssetServiceMock>) {
+function createRouteTestApp(assets: ReturnType<typeof createAssetServiceMock>, accountCenter = {}) {
   return new Hono()
     .use('/api/*', authContext(createAuthMock()))
     .onError((error, c) => {
@@ -150,7 +219,21 @@ function createRouteTestApp(assets: ReturnType<typeof createAssetServiceMock>) {
     )
     .route(
       '/api/account',
-      createAccountAssetRoutes(() => assets as unknown as AssetService),
+      createAccountAssetRoutes(
+        () => assets as unknown as AssetService,
+        async () => ({
+          profileEditingEnabled: true,
+          displayNameEditable: true,
+          usernameEditable: true,
+          avatarEditable: true,
+          emailChangeEnabled: true,
+          passwordChangeEnabled: true,
+          connectedAccountsEnabled: true,
+          sessionsViewEnabled: true,
+          dangerZoneEnabled: false,
+          ...accountCenter,
+        }),
+      ),
     )
     .route(
       '/api/management',

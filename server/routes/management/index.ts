@@ -2,15 +2,19 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { assignRoleRequestSchema } from '../../../shared/api/authorization'
 import {
+  type ManagementAccountCenterSettingsResponse,
   type ManagementBrandingSettingsResponse,
   type ManagementReadinessItem,
   type ManagementReadinessResponse,
   type ManagementSignInSettingsResponse,
+  managementAccountCenterSettingsResponseSchema,
   managementBrandingSettingsResponseSchema,
   managementReadinessResponseSchema,
   managementSignInSettingsResponseSchema,
+  type UpdateManagementAccountCenterSettingsRequest,
   type UpdateManagementBrandingSettingsRequest,
   type UpdateManagementSignInSettingsRequest,
+  updateManagementAccountCenterSettingsRequestSchema,
   updateManagementBrandingSettingsRequestSchema,
   updateManagementSignInSettingsRequestSchema,
 } from '../../../shared/api/management'
@@ -20,6 +24,7 @@ import { getAuthContext } from '../../middleware/auth-context'
 import { type ApplicationBindings, createApplicationService } from '../../modules/applications/context'
 import { type AuthorizationBindings, createAuthorizationService } from '../../modules/authorization/context'
 import { type ConfigzBindings, createConfigzService } from '../../modules/configz/context'
+import { defaultAccountCenterSettings } from '../../modules/configz/service'
 import type { SecurityRepository } from '../../modules/security/repository'
 import type { UserRepository } from '../../modules/users/repository'
 import { adminApiResourcesRoute } from '../admin/api-resources'
@@ -43,6 +48,7 @@ interface ManagementConfigz {
   links: ManagementSignInSettingsResponse['links']
   copy: ManagementSignInSettingsResponse['copy']
   branding: ManagementBrandingSettingsResponse['branding']
+  accountCenter?: ManagementAccountCenterSettingsResponse['accountCenter']
   getManagementSignInSettings?: () => Promise<ManagementSignInSettingsResponse>
   updateManagementSignInSettings?: (
     input: UpdateManagementSignInSettingsRequest,
@@ -51,6 +57,10 @@ interface ManagementConfigz {
   updateManagementBrandingSettings?: (
     input: UpdateManagementBrandingSettingsRequest,
   ) => Promise<ManagementBrandingSettingsResponse>
+  getManagementAccountCenterSettings?: () => Promise<ManagementAccountCenterSettingsResponse>
+  updateManagementAccountCenterSettings?: (
+    input: UpdateManagementAccountCenterSettingsRequest,
+  ) => Promise<ManagementAccountCenterSettingsResponse>
 }
 
 export type ManagementConfigzServiceFactory = (c: Context<{ Bindings: ConfigzBindings }>) => {
@@ -63,6 +73,10 @@ export type ManagementConfigzServiceFactory = (c: Context<{ Bindings: ConfigzBin
   updateManagementBrandingSettings?: (
     input: UpdateManagementBrandingSettingsRequest,
   ) => Promise<ManagementBrandingSettingsResponse>
+  getManagementAccountCenterSettings?: () => Promise<ManagementAccountCenterSettingsResponse>
+  updateManagementAccountCenterSettings?: (
+    input: UpdateManagementAccountCenterSettingsRequest,
+  ) => Promise<ManagementAccountCenterSettingsResponse>
 }
 
 export type ManagementApplicationServiceFactory = (c: Context<{ Bindings: ApplicationBindings }>) => {
@@ -163,6 +177,27 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
         : await managementBrandingSettingsFromConfig(await service.getConfig())
 
       return c.json(managementBrandingSettingsResponseSchema.parse(response))
+    })
+
+    app.use('/account-center-settings', requireAdmin())
+
+    app.get('/account-center-settings', async (c) => {
+      const service = configzServiceFactory(c)
+      const response = service.getManagementAccountCenterSettings
+        ? await service.getManagementAccountCenterSettings()
+        : await managementAccountCenterSettingsFromConfig(await service.getConfig())
+
+      return c.json(managementAccountCenterSettingsResponseSchema.parse(response))
+    })
+
+    app.patch('/account-center-settings', async (c) => {
+      const input = await readJson(c, updateManagementAccountCenterSettingsRequestSchema)
+      const service = configzServiceFactory(c)
+      const response = service.updateManagementAccountCenterSettings
+        ? await service.updateManagementAccountCenterSettings(input)
+        : await managementAccountCenterSettingsFromConfig(await service.getConfig())
+
+      return c.json(managementAccountCenterSettingsResponseSchema.parse(response))
     })
   }
 
@@ -308,5 +343,13 @@ async function managementBrandingSettingsFromConfig(
   return {
     branding: config.branding,
     copy: config.copy,
+  }
+}
+
+async function managementAccountCenterSettingsFromConfig(
+  config: Awaited<ReturnType<ReturnType<ManagementConfigzServiceFactory>['getConfig']>>,
+): Promise<ManagementAccountCenterSettingsResponse> {
+  return {
+    accountCenter: config.accountCenter ?? defaultAccountCenterSettings,
   }
 }

@@ -1,4 +1,5 @@
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
+import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode, StatusCode } from 'hono/utils/http-status'
 import type {
@@ -60,6 +61,7 @@ import type {
   ListManagementUserPasskeysResponse,
   ListManagementUserSessionsResponse,
   ListManagementUsersResponse,
+  ManagementAccountCenterSettingsResponse,
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementConnectorResponse,
@@ -71,6 +73,7 @@ import type {
   ManagementUserListQuery,
   ManagementUserResponse,
   ManagementUserSecurityResponse,
+  UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
   UpdateManagementSignInSettingsRequest,
@@ -90,6 +93,7 @@ import { authContext, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
 import { requireDeploymentMfa } from './middleware/security-policy'
+import type { ConfigzBindings } from './modules/configz/context'
 import type { OnboardingRepository } from './modules/onboarding/repository'
 import type { SecurityRepository } from './modules/security/repository'
 import type { UserRepository } from './modules/users/repository'
@@ -178,9 +182,23 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
           options.userRepository,
           options.securityRepository,
           options.applicationServiceFactory,
+          options.configzServiceFactory,
         ),
       )
-      app.route('/api/account', createAccountAssetRoutes(options.assetServiceFactory))
+      app.route(
+        '/api/account',
+        createAccountAssetRoutes(
+          options.assetServiceFactory,
+          options.configzServiceFactory
+            ? async (c) =>
+                (
+                  await options.configzServiceFactory!(
+                    c as unknown as Context<{ Bindings: ConfigzBindings }>,
+                  ).getConfig()
+                ).accountCenter
+            : undefined,
+        ),
+      )
     }
   }
 
@@ -380,6 +398,10 @@ type RpcSchema = {
     $get: RpcEndpoint<RpcNoInput, ManagementBrandingSettingsResponse>
     $patch: RpcEndpoint<{ json: UpdateManagementBrandingSettingsRequest }, ManagementBrandingSettingsResponse>
   }
+  '/api/management/account-center-settings': {
+    $get: RpcEndpoint<RpcNoInput, ManagementAccountCenterSettingsResponse>
+    $patch: RpcEndpoint<{ json: UpdateManagementAccountCenterSettingsRequest }, ManagementAccountCenterSettingsResponse>
+  }
   '/api/management/readiness': {
     $get: RpcEndpoint<RpcNoInput, ManagementReadinessResponse>
   }
@@ -504,9 +526,20 @@ function mountRpcRoutes(app: Hono, auth: AuthHandler, options: RpcAppOptions) {
         options.userRepository,
         options.securityRepository,
         options.applicationServiceFactory,
+        options.configzServiceFactory,
       ),
     )
-    .route('/api/account', createAccountAssetRoutes(options.assetServiceFactory))
+    .route(
+      '/api/account',
+      createAccountAssetRoutes(
+        options.assetServiceFactory,
+        options.configzServiceFactory
+          ? async (c) =>
+              (await options.configzServiceFactory!(c as unknown as Context<{ Bindings: ConfigzBindings }>).getConfig())
+                .accountCenter
+          : undefined,
+      ),
+    )
     .route(
       '/api/admin/security',
       adminSecurityRoutes(managementApi, options.userRepository, options.securityRepository, options.securityPolicy),

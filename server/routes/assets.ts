@@ -1,11 +1,17 @@
+import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { badRequest } from '../lib/errors'
+import { badRequest, forbidden } from '../lib/errors'
 import { requireAdmin, requireAuth } from '../middleware/admin'
 import { getAuthContext } from '../middleware/auth-context'
 import { type AssetBindings, createAssetService } from '../modules/assets/context'
 import type { AssetService } from '../modules/assets/service'
+import { type ConfigzBindings, createConfigzService } from '../modules/configz/context'
+import { type ConfigzAccountCenter, defaultAccountCenterSettings } from '../modules/configz/service'
 
 export type AssetServiceFactory = (c: Parameters<typeof createAssetService>[0]) => AssetService
+export type AccountCenterConfigFactory = (
+  c: Context<{ Bindings: AssetBindings & ConfigzBindings }>,
+) => Promise<ConfigzAccountCenter>
 
 export function createAssetRoutes(assetServiceFactory: AssetServiceFactory = createAssetService) {
   const app = new Hono<{ Bindings: AssetBindings }>()
@@ -26,12 +32,23 @@ export function createAssetRoutes(assetServiceFactory: AssetServiceFactory = cre
   return app
 }
 
-export function createAccountAssetRoutes(assetServiceFactory: AssetServiceFactory = createAssetService) {
-  const app = new Hono<{ Bindings: AssetBindings }>()
+export function createAccountAssetRoutes(
+  assetServiceFactory: AssetServiceFactory = createAssetService,
+  accountCenterConfigFactory?: AccountCenterConfigFactory,
+) {
+  const app = new Hono<{ Bindings: AssetBindings & ConfigzBindings }>()
 
   app.use('*', requireAuth())
 
   app.post('/avatar', async (c) => {
+    const accountCenter = c.env?.DB
+      ? await (accountCenterConfigFactory ?? defaultAccountCenterConfig)(c)
+      : accountCenterConfigFactory
+        ? await accountCenterConfigFactory(c)
+        : defaultAccountCenterSettings
+    if (!accountCenter.profileEditingEnabled || !accountCenter.avatarEditable) {
+      throw forbidden('Avatar editing is disabled for this account center.')
+    }
     const service = assetServiceFactory(c)
     const asset = await service.upload({
       purpose: 'avatar',
@@ -43,6 +60,10 @@ export function createAccountAssetRoutes(assetServiceFactory: AssetServiceFactor
   })
 
   return app
+}
+
+async function defaultAccountCenterConfig(c: Context<{ Bindings: AssetBindings & ConfigzBindings }>) {
+  return (await createConfigzService(c as unknown as Context<{ Bindings: ConfigzBindings }>).getConfig()).accountCenter
 }
 
 export function createManagementAssetRoutes(assetServiceFactory: AssetServiceFactory = createAssetService) {

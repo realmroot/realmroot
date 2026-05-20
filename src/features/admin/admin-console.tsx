@@ -100,6 +100,7 @@ import {
   deleteRole,
   deleteUser,
   deleteUserPasskey,
+  getAccountCenterSettings,
   getAdminDashboard,
   getAdminReadiness,
   getApiResource,
@@ -135,6 +136,7 @@ import {
   revokeUserSessions,
   rotateApplicationClientSecret,
   unbanUser,
+  updateAccountCenterSettings,
   updateApiPermission,
   updateApiResource,
   updateApiScope,
@@ -2190,11 +2192,7 @@ export function SignInSettingsPage() {
                     />
                     <SettingRow
                       label="Sign-up password requirement"
-                      value={form.passwordEnabled ? 'Password required' : 'Unavailable'}
-                    />
-                    <UnavailableSetting
-                      label="Custom profile collection"
-                      value="Configure supported profile fields on the Collect user profile tab."
+                      value={form.passwordEnabled ? 'Password required' : 'Password sign-in disabled'}
                     />
                   </div>
                 </SettingsSection>
@@ -2222,19 +2220,9 @@ export function SignInSettingsPage() {
                       label="Sign-in identifiers"
                       value={query.data.signIn.usernameEnabled ? 'Email and username' : 'Email'}
                     />
-                    <SettingRow
-                      label="Magic link"
-                      value={query.data.signIn.magicLinkEnabled ? 'Available from runtime' : 'Unavailable'}
-                    />
-                    <SettingRow
-                      label="Email OTP"
-                      value={query.data.signIn.emailOtpEnabled ? 'Available from runtime' : 'Unavailable'}
-                    />
-                    <SwitchRow checked={false} disabled label="Passkey sign-in" />
-                    <UnavailableSetting
-                      label="Social provider setup"
-                      value="Add enabled identity providers from Connectors before enabling social sign-in."
-                    />
+                    {query.data.signIn.magicLinkEnabled ? <SettingRow label="Magic link" value="Enabled" /> : null}
+                    {query.data.signIn.emailOtpEnabled ? <SettingRow label="Email OTP" value="Enabled" /> : null}
+                    <SettingRow label="Social provider setup" value="Managed from Connectors" />
                   </div>
                 </SettingsSection>
                 <SettingsSection
@@ -2259,10 +2247,6 @@ export function SignInSettingsPage() {
                     <SettingRow
                       label="Forgot-password verification"
                       value={query.data.signIn.emailOtpEnabled ? 'Email OTP available' : 'Email link'}
-                    />
-                    <UnavailableSetting
-                      label="Additional recovery methods"
-                      value="No additional verification methods are exposed by the current config model."
                     />
                     {validationError || updateMutation.errorMessage ? (
                       <StatusBadge
@@ -3900,7 +3884,6 @@ export function BrandingPage() {
                         value={form.backgroundColor}
                       />
                     </Field>
-                    <SwitchRow checked={false} disabled label="Dark mode" />
                     <Field label="Custom CSS">
                       <TextArea
                         onChange={(event) => setForm((value) => ({ ...value, customCss: event.target.value }))}
@@ -3962,26 +3945,10 @@ export function CollectUserProfilePage() {
   return (
     <SignInExperiencePage
       activeTab="collect-user-profile"
-      description="Review custom profile field collection for hosted sign-up and account completion."
+      description="Custom profile field collection is outside the v1 hosted auth surface."
       title="Collect user profile"
     >
       <SettingsSections>
-        <SettingsSection
-          title="Custom profile fields"
-          description="Backend support for configurable profile fields is not available in this build."
-        >
-          <EmptyState
-            action={
-              <Button disabled type="button" variant="secondary">
-                <Plus data-icon="inline-start" />
-                Add field
-              </Button>
-            }
-            description="Field label, field type, and user data key controls will become available after a management contract exists for profile field persistence."
-            framed={false}
-            title="No custom fields"
-          />
-        </SettingsSection>
         <SettingsSection
           title="Supported profile data"
           description="Current hosted auth collects the built-in user profile fields."
@@ -3999,44 +3966,123 @@ export function CollectUserProfilePage() {
 }
 
 export function AccountCenterSettingsPage() {
+  const query = useQuery({ queryKey: adminQueryKeys.accountCenter, queryFn: getAccountCenterSettings })
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    profileEditingEnabled: true,
+    displayNameEditable: true,
+    usernameEditable: true,
+    avatarEditable: true,
+    emailChangeEnabled: true,
+    passwordChangeEnabled: true,
+    connectedAccountsEnabled: true,
+    sessionsViewEnabled: true,
+    dangerZoneEnabled: false,
+  })
+  const updateMutation = useAdminMutation({
+    mutationFn: updateAccountCenterSettings,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.accountCenter }),
+  })
+
+  useEffect(() => {
+    if (query.data) setForm(query.data.accountCenter)
+  }, [query.data])
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    updateMutation.mutate({ accountCenter: form })
+  }
+
   return (
     <SignInExperiencePage
       activeTab="account-center"
       description="Configure the self-service account center exposure and review available account management surfaces."
+      error={query.error}
+      loading={query.isLoading}
+      onRetry={() => void query.refetch()}
       title="Account Center"
     >
-      <SettingsSections>
-        <SettingsSection
-          title="Account center"
-          description="The account API and prebuilt account UI are enabled by the current deployment routes."
-        >
-          <div className="grid gap-3">
-            <SettingRow label="Account API" value="/api/account" />
-            <SettingRow label="Prebuilt UI" value="/profile" />
-            <SettingRow label="Profile route" value="/profile" />
-            <SettingRow label="Security route" value="/profile/security" />
-            <SettingRow label="Sessions route" value="/profile/sessions" />
-            <Button onClick={() => window.open('/profile', '_blank', 'noopener')} type="button" variant="secondary">
-              <ExternalLink data-icon="inline-start" />
-              Open account center
-            </Button>
-          </div>
-        </SettingsSection>
-        <SettingsSection
-          title="Account field permissions"
-          description="Permissions reflect the account API surfaces currently available to users."
-        >
-          <div className="grid gap-3">
-            <SettingRow label="Profile" value="User editable" />
-            <SettingRow label="Email" value="Managed by auth flows" />
-            <SettingRow label="Password" value="Managed by recovery flows" />
-            <SettingRow label="Social accounts" value="Linked account view" />
-            <SettingRow label="MFA" value="Security view" />
-            <SettingRow label="Sessions" value="User revocable" />
-            <SettingRow label="Apps" value="Authorized apps view" />
-          </div>
-        </SettingsSection>
-      </SettingsSections>
+      {query.data ? (
+        <form onSubmit={onSubmit}>
+          <SettingsSections>
+            <SettingsSection
+              title="Visible sections"
+              description="Choose which account center sections are visible to signed-in users."
+            >
+              <div className="grid gap-3">
+                <SwitchRow
+                  checked={form.profileEditingEnabled}
+                  label="Profile section"
+                  onCheckedChange={(profileEditingEnabled) => setForm((value) => ({ ...value, profileEditingEnabled }))}
+                />
+                <SwitchRow
+                  checked={form.passwordChangeEnabled}
+                  label="Password section"
+                  onCheckedChange={(passwordChangeEnabled) => setForm((value) => ({ ...value, passwordChangeEnabled }))}
+                />
+                <SwitchRow
+                  checked={form.connectedAccountsEnabled}
+                  label="Connected accounts and apps"
+                  onCheckedChange={(connectedAccountsEnabled) =>
+                    setForm((value) => ({ ...value, connectedAccountsEnabled }))
+                  }
+                />
+                <SwitchRow
+                  checked={form.sessionsViewEnabled}
+                  label="Sessions section"
+                  onCheckedChange={(sessionsViewEnabled) => setForm((value) => ({ ...value, sessionsViewEnabled }))}
+                />
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Profile field permissions"
+              description="Control which built-in profile fields users can edit from /profile."
+            >
+              <div className="grid gap-3">
+                <SwitchRow
+                  checked={form.displayNameEditable}
+                  label="Display name"
+                  onCheckedChange={(displayNameEditable) => setForm((value) => ({ ...value, displayNameEditable }))}
+                />
+                <SwitchRow
+                  checked={form.usernameEditable}
+                  label="Username"
+                  onCheckedChange={(usernameEditable) => setForm((value) => ({ ...value, usernameEditable }))}
+                />
+                <SwitchRow
+                  checked={form.avatarEditable}
+                  label="Avatar"
+                  onCheckedChange={(avatarEditable) => setForm((value) => ({ ...value, avatarEditable }))}
+                />
+                <SwitchRow
+                  checked={form.emailChangeEnabled}
+                  label="Email changes"
+                  onCheckedChange={(emailChangeEnabled) => setForm((value) => ({ ...value, emailChangeEnabled }))}
+                />
+              </div>
+            </SettingsSection>
+            <SettingsSection title="Changes" description="Save account center visibility and field permissions.">
+              <ConsoleActionBar>
+                <Button disabled={updateMutation.isPending} type="submit">
+                  <Save data-icon="inline-start" />
+                  Save account center
+                </Button>
+                <Button onClick={() => setForm(query.data.accountCenter)} type="button" variant="ghost">
+                  <Undo2 data-icon="inline-start" />
+                  Discard
+                </Button>
+                <Button onClick={() => window.open('/profile', '_blank', 'noopener')} type="button" variant="secondary">
+                  <ExternalLink data-icon="inline-start" />
+                  Open account center
+                </Button>
+              </ConsoleActionBar>
+              {updateMutation.errorMessage ? (
+                <div className="text-sm text-destructive">{updateMutation.errorMessage}</div>
+              ) : null}
+            </SettingsSection>
+          </SettingsSections>
+        </form>
+      ) : null}
     </SignInExperiencePage>
   )
 }
@@ -4119,7 +4165,7 @@ export function ContentSettingsPage() {
   return (
     <SignInExperiencePage
       activeTab="content"
-      description="Manage hosted authentication language, page messages, and legal links."
+      description="Manage hosted authentication page messages and legal links."
       error={query.error ?? brandingQuery.error}
       loading={query.isLoading || brandingQuery.isLoading}
       onRetry={() => {
@@ -4135,15 +4181,10 @@ export function ContentSettingsPage() {
             settings={
               <SettingsSections>
                 <SettingsSection
-                  title="Language and messages"
+                  title="Hosted messages"
                   description="These strings are exposed through public hosted auth config."
                 >
                   <div className="formStack">
-                    <Field label="Language">
-                      <SelectInput disabled value="en">
-                        <option value="en">English</option>
-                      </SelectInput>
-                    </Field>
                     <Field label="Product name">
                       <TextInput
                         onChange={(event) => setForm((value) => ({ ...value, productName: event.target.value }))}
@@ -4165,14 +4206,6 @@ export function ContentSettingsPage() {
                         value={form.description}
                       />
                     </Field>
-                    <UnavailableSetting
-                      label="Password message"
-                      value="No separate password message field is exposed by configz."
-                    />
-                    <UnavailableSetting
-                      label="Account message"
-                      value="No separate account message field is exposed by configz."
-                    />
                   </div>
                 </SettingsSection>
                 <SettingsSection
@@ -4690,11 +4723,6 @@ const signInExperienceTabs: SignInExperienceTab[] = [
     value: 'sign-up-and-sign-in',
     label: 'Sign-up and sign-in',
     href: '/console/sign-in-experience/sign-up-and-sign-in',
-  },
-  {
-    value: 'collect-user-profile',
-    label: 'Collect user profile',
-    href: '/console/sign-in-experience/collect-user-profile',
   },
   { value: 'account-center', label: 'Account Center', href: '/console/sign-in-experience/account-center' },
   { value: 'content', label: 'Content', href: '/console/sign-in-experience/content' },
@@ -5746,18 +5774,6 @@ function SwitchRow({
         disabled={disabled}
         onCheckedChange={disabled ? undefined : onCheckedChange}
       />
-    </div>
-  )
-}
-
-function UnavailableSetting({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-md border border-dashed border-border bg-muted/25 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium">{label}</span>
-        <Badge variant="outline">Unavailable</Badge>
-      </div>
-      <p className="text-sm text-muted-foreground">{value}</p>
     </div>
   )
 }

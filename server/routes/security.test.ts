@@ -181,6 +181,45 @@ describe('security routes', () => {
     expect(auth.api.revokeSessions).toHaveBeenCalledWith({ headers: expect.any(Headers) })
   })
 
+  it('blocks account security session endpoints when account center sessions are disabled', async () => {
+    const auth = createAuthMock()
+    const security = createSecurityRepositoryMock()
+    const users = createUserRepositoryMock()
+    const app = createApp(auth, {
+      userRepository: users,
+      securityRepository: security,
+      securityPolicy: securityPolicy(),
+      configzServiceFactory: () => ({
+        getConfig: vi.fn().mockResolvedValue({
+          accountCenter: {
+            profileEditingEnabled: true,
+            displayNameEditable: true,
+            usernameEditable: true,
+            avatarEditable: false,
+            emailChangeEnabled: true,
+            passwordChangeEnabled: true,
+            connectedAccountsEnabled: true,
+            sessionsViewEnabled: false,
+            dangerZoneEnabled: false,
+          },
+        }),
+      }),
+    })
+    const headers = userHeaders()
+
+    const list = await app.request('/api/account/security/sessions', { headers })
+    const revokeOne = await app.request('/api/account/security/sessions/session-1', { method: 'DELETE', headers })
+    const revokeAll = await app.request('/api/account/security/sessions', { method: 'DELETE', headers })
+
+    expect(list.status).toBe(403)
+    expect(revokeOne.status).toBe(403)
+    expect(revokeAll.status).toBe(403)
+    expect(users.listSessions).not.toHaveBeenCalled()
+    expect(security.getSessionToken).not.toHaveBeenCalled()
+    expect(auth.api.revokeSession).not.toHaveBeenCalled()
+    expect(auth.api.revokeSessions).not.toHaveBeenCalled()
+  })
+
   it('revokes authorized application consent for the current account', async () => {
     const applicationService = {
       list: vi.fn().mockResolvedValue({ pagination: { total: 1 } }),
@@ -317,6 +356,40 @@ describe('security routes', () => {
     })
     expect(assetResponse.status).toBe(404)
     expect(enrollmentResponse.status).toBe(201)
+  })
+
+  it('mounts account avatar uploads with account-center config in the full RPC app', async () => {
+    const assets = {
+      upload: vi.fn().mockResolvedValue({ asset: assetFixture() }),
+      updateUserAvatar: vi.fn().mockResolvedValue(undefined),
+    }
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: createSecurityRepositoryMock(),
+      securityPolicy: securityPolicy(),
+      assetServiceFactory: () => assets as unknown as AssetService,
+      configzServiceFactory: () => ({
+        getConfig: vi.fn().mockResolvedValue({
+          accountCenter: {
+            profileEditingEnabled: true,
+            displayNameEditable: true,
+            usernameEditable: true,
+            avatarEditable: false,
+            emailChangeEnabled: true,
+            passwordChangeEnabled: true,
+            connectedAccountsEnabled: true,
+            sessionsViewEnabled: true,
+            dangerZoneEnabled: false,
+          },
+        }),
+      }),
+    })
+
+    const response = await requestWithFile(app, '/api/account/avatar', userHeaders())
+
+    expect(response.status).toBe(403)
+    expect(assets.upload).not.toHaveBeenCalled()
+    expect(assets.updateUserAvatar).not.toHaveBeenCalled()
   })
 
   it('rejects MFA disable when deployment policy requires MFA', async () => {
@@ -520,6 +593,36 @@ function createPage(page: { limit: number; offset: number }) {
     total: 10,
     ...page,
   }
+}
+
+function assetFixture() {
+  return {
+    id: 'asset-1',
+    purpose: 'avatar' as const,
+    publicUrl: 'https://auth.example.com/api/assets/asset-1',
+    contentType: 'image/png',
+    byteSize: 6,
+    checksumSha256: 'checksum-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function requestWithFile(app: ReturnType<typeof createApp>, path: string, headers: Record<string, string>) {
+  const request = new Request(`https://auth.example.com${path}`, { method: 'POST', headers })
+  Object.defineProperty(request, 'formData', {
+    value: async () => ({
+      get: (key: string) =>
+        key === 'file'
+          ? {
+              name: 'avatar.png',
+              type: 'image/png',
+              size: 6,
+              arrayBuffer: async () => new TextEncoder().encode('avatar').buffer,
+            }
+          : null,
+    }),
+  })
+  return app.fetch(request)
 }
 
 function securityPolicy(overrides: Partial<SecurityPolicy> = {}): SecurityPolicy {

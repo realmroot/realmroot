@@ -945,6 +945,69 @@
         }
       }
     },
+    "/account-center-settings": {
+      "get": {
+        "tags": [
+          "AccountCenterSettings"
+        ],
+        "summary": "Get account center settings",
+        "responses": {
+          "200": {
+            "description": "Account center settings returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCenterSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "AccountCenterSettings"
+        ],
+        "summary": "Update account center settings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAccountCenterSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account center settings updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCenterSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/branding/favicon": {
       "$ref": "#/components/pathItems/AssetUpload"
     },
@@ -5062,6 +5125,60 @@
           }
         }
       },
+      "AccountCenterConfig": {
+        "type": "object",
+        "required": [
+          "profileEditingEnabled",
+          "displayNameEditable",
+          "usernameEditable",
+          "avatarEditable",
+          "emailChangeEnabled",
+          "passwordChangeEnabled",
+          "connectedAccountsEnabled",
+          "sessionsViewEnabled",
+          "dangerZoneEnabled"
+        ],
+        "properties": {
+          "profileEditingEnabled": {
+            "type": "boolean"
+          },
+          "displayNameEditable": {
+            "type": "boolean"
+          },
+          "usernameEditable": {
+            "type": "boolean"
+          },
+          "avatarEditable": {
+            "type": "boolean"
+          },
+          "emailChangeEnabled": {
+            "type": "boolean"
+          },
+          "passwordChangeEnabled": {
+            "type": "boolean"
+          },
+          "connectedAccountsEnabled": {
+            "type": "boolean"
+          },
+          "sessionsViewEnabled": {
+            "type": "boolean"
+          },
+          "dangerZoneEnabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AccountCenterSettings": {
+        "type": "object",
+        "required": [
+          "accountCenter"
+        ],
+        "properties": {
+          "accountCenter": {
+            "$ref": "#/components/schemas/AccountCenterConfig"
+          }
+        }
+      },
       "UpdateSignInSettingsRequest": {
         "type": "object",
         "properties": {
@@ -5087,6 +5204,49 @@
           },
           "copy": {
             "$ref": "#/components/schemas/UpdateHostedCopy"
+          }
+        }
+      },
+      "UpdateAccountCenterConfig": {
+        "type": "object",
+        "properties": {
+          "profileEditingEnabled": {
+            "type": "boolean"
+          },
+          "displayNameEditable": {
+            "type": "boolean"
+          },
+          "usernameEditable": {
+            "type": "boolean"
+          },
+          "avatarEditable": {
+            "type": "boolean"
+          },
+          "emailChangeEnabled": {
+            "type": "boolean"
+          },
+          "passwordChangeEnabled": {
+            "type": "boolean"
+          },
+          "connectedAccountsEnabled": {
+            "type": "boolean"
+          },
+          "sessionsViewEnabled": {
+            "type": "boolean"
+          },
+          "dangerZoneEnabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateAccountCenterSettingsRequest": {
+        "type": "object",
+        "required": [
+          "accountCenter"
+        ],
+        "properties": {
+          "accountCenter": {
+            "$ref": "#/components/schemas/UpdateAccountCenterConfig"
           }
         }
       },

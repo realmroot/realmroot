@@ -105,23 +105,13 @@ const consoleRoutes = [
     activeNav: 'Sign-in & account',
   },
   {
-    name: 'collect-profile',
-    evidenceName: 'collect-user-profile-settings',
-    path: '/console/sign-in-experience/collect-user-profile',
-    heading: 'Collect user profile',
-    kind: 'settings',
-    journeyId: 'admin-sign-in-experience-routes',
-    sentinel: 'Custom profile fields',
-    activeNav: 'Sign-in & account',
-  },
-  {
     name: 'account-center-settings',
     evidenceName: 'account-center-settings',
     path: '/console/sign-in-experience/account-center',
     heading: 'Account Center',
     kind: 'settings',
-    journeyId: 'admin-sign-in-experience-routes',
-    sentinel: 'Account field permissions',
+    journeyId: 'admin-account-center-settings',
+    sentinel: 'Profile field permissions',
     activeNav: 'Sign-in & account',
   },
   {
@@ -131,7 +121,7 @@ const consoleRoutes = [
     heading: 'Content',
     kind: 'settings',
     journeyId: 'admin-sign-in-experience-routes',
-    sentinel: 'Language and messages',
+    sentinel: 'Hosted messages',
     activeNav: 'Sign-in & account',
   },
   {
@@ -1362,7 +1352,6 @@ const journeyAssertions: Record<
           heading: 'Sign-up and sign-in',
         },
         { path: '/console/sign-in-experience/branding', heading: 'Branding' },
-        { path: '/console/sign-in-experience/collect-user-profile', heading: 'Collect user profile' },
         { path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
         { path: '/console/sign-in-experience/content', heading: 'Content' },
       ]) {
@@ -1373,11 +1362,6 @@ const journeyAssertions: Record<
 
       for (const route of [
         { tab: 'Branding', path: '/console/sign-in-experience/branding', heading: 'Branding' },
-        {
-          tab: 'Collect user profile',
-          path: '/console/sign-in-experience/collect-user-profile',
-          heading: 'Collect user profile',
-        },
         { tab: 'Account Center', path: '/console/sign-in-experience/account-center', heading: 'Account Center' },
         { tab: 'Content', path: '/console/sign-in-experience/content', heading: 'Content' },
         {
@@ -1395,7 +1379,11 @@ const journeyAssertions: Record<
       await expect(page.getByRole('link', { exact: true, name: 'Desktop' })).toHaveCount(0)
       await expect(page.getByRole('link', { exact: true, name: 'Mobile' })).toHaveCount(0)
 
-      for (const legacyPath of ['/console/sign-in-experience/desktop', '/console/sign-in-experience/mobile']) {
+      for (const legacyPath of [
+        '/console/sign-in-experience/desktop',
+        '/console/sign-in-experience/mobile',
+        '/console/sign-in-experience/collect-user-profile',
+      ]) {
         await page.goto(legacyPath)
         await expect(page).toHaveURL(/\/console\/sign-in-experience\/sign-up-and-sign-in$/)
         await expect(page.getByRole('heading', { name: 'Sign-up and sign-in' })).toBeVisible()
@@ -1419,12 +1407,39 @@ const journeyAssertions: Record<
       await expect(page.getByRole('tab', { name: 'Mobile' })).toHaveAttribute('aria-selected', 'true')
     },
   },
+  'admin-account-center-settings': {
+    suite: 'admin management journeys',
+    assert: async ({ page, requests }) => {
+      await page.goto('/console/sign-in-experience/account-center')
+      await expect(page.getByRole('heading', { name: 'Account Center' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Profile field permissions' })).toBeVisible()
+      await page.getByRole('switch', { name: 'Sessions section' }).click()
+      await page.getByRole('switch', { name: 'Email changes' }).click()
+      await page.getByRole('button', { name: 'Save account center' }).click()
+      await expect
+        .poll(() =>
+          requests.find(
+            (request) =>
+              request.method === 'PATCH' &&
+              request.path === '/api/management/account-center-settings' &&
+              request.body?.accountCenter?.sessionsViewEnabled === false &&
+              request.body?.accountCenter?.emailChangeEnabled === false,
+          ),
+        )
+        .toBeTruthy()
+
+      await page.goto('/profile')
+      await expect(page.getByRole('heading', { name: 'Jane Stone' })).toBeVisible()
+      await expect(page.getByLabel('Session management')).toHaveCount(0)
+      await expect(page.getByLabel('Email')).toHaveCount(0)
+    },
+  },
   'admin-content-settings': {
     suite: 'admin management journeys',
     assert: async ({ page, requests }) => {
       await page.goto('/console/sign-in-experience/content')
       await expect(page.getByRole('heading', { name: 'Content' })).toBeVisible()
-      await expect(page.getByLabel('Language')).toBeDisabled()
+      await expect(page.getByLabel('Language')).toHaveCount(0)
       await page.getByLabel('Product name').fill('Northstar Content')
       await page.getByLabel('Sign-in message').fill('Sign in with content copy')
       await page.getByLabel('Sign-up message').fill('Create content identity.')
@@ -2153,6 +2168,7 @@ async function mockApi(page: Page) {
   accountApplicationRevoked = false
   accountMfaEnabled = false
   consentSessionAvailable = true
+  Object.assign(configz.accountCenter, defaultAccountCenter)
 
   await page.route('**/*', async (route) => {
     const request = route.request()
@@ -2284,6 +2300,15 @@ async function responseFor(path: string, method: string, body: unknown): Promise
     return {
       branding: configz.branding,
       copy: configz.copy,
+    }
+  }
+  if (path === '/api/management/account-center-settings') {
+    if (method === 'PATCH') {
+      const input = body as { accountCenter?: Partial<typeof configz.accountCenter> }
+      Object.assign(configz.accountCenter, input.accountCenter)
+    }
+    return {
+      accountCenter: configz.accountCenter,
     }
   }
   if (path === '/api/management/readiness') {
@@ -2551,6 +2576,18 @@ const emptyPagination = {
   total: 0,
 }
 
+const defaultAccountCenter = {
+  profileEditingEnabled: true,
+  displayNameEditable: true,
+  usernameEditable: true,
+  avatarEditable: true,
+  emailChangeEnabled: true,
+  passwordChangeEnabled: true,
+  connectedAccountsEnabled: true,
+  sessionsViewEnabled: true,
+  dangerZoneEnabled: false,
+}
+
 const configz = {
   onboarding: { required: false, href: '/onboarding' },
   signIn: {
@@ -2626,6 +2663,7 @@ const configz = {
     endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
   },
   security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
+  accountCenter: { ...defaultAccountCenter },
 }
 
 const application = {

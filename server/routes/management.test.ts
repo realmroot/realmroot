@@ -395,7 +395,7 @@ describe('management routes', () => {
     })
   })
 
-  it('updates managed sign-in and branding settings with validated runtime-safe CSS', async () => {
+  it('updates managed sign-in, branding, and account center settings with validated input', async () => {
     const service = createConfigzServiceMock()()
     const app = createApp(createAuthMock(), {
       configzServiceFactory: () => service,
@@ -429,10 +429,16 @@ describe('management routes', () => {
       headers,
       body: JSON.stringify({ branding: { customCss: '.authPanel { background: red; }' } }),
     })
+    const accountCenter = await app.request('/api/management/account-center-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ accountCenter: { sessionsViewEnabled: false, emailChangeEnabled: false } }),
+    })
 
     expect(signIn.status).toBe(200)
     expect(branding.status).toBe(200)
     expect(invalidCss.status).toBe(400)
+    expect(accountCenter.status).toBe(200)
     expect(service.updateManagementSignInSettings).toHaveBeenCalledWith({
       signIn: { passwordEnabled: false, identifierFirst: true },
       links: { supportEmail: 'help@example.com' },
@@ -446,6 +452,9 @@ describe('management routes', () => {
         backgroundColor: '#ffffff',
         customCss: '--auth-panel-radius: 8px;',
       },
+    })
+    expect(service.updateManagementAccountCenterSettings).toHaveBeenCalledWith({
+      accountCenter: { sessionsViewEnabled: false, emailChangeEnabled: false },
     })
   })
 
@@ -530,11 +539,21 @@ describe('management routes', () => {
       headers,
       body: JSON.stringify({ branding: { primaryColor: '#2563eb' } }),
     })
+    const accountCenter = await app.request('/api/management/account-center-settings', { headers })
+    const accountCenterPatch = await app.request('/api/management/account-center-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ accountCenter: { sessionsViewEnabled: false } }),
+    })
 
     expect(signIn.status).toBe(200)
     expect(branding.status).toBe(200)
+    expect(accountCenter.status).toBe(200)
+    expect(accountCenterPatch.status).toBe(200)
     await expect(signIn.json()).resolves.toMatchObject({ copy: { productName: 'FlareAuth' } })
     await expect(branding.json()).resolves.toMatchObject({ branding: { primaryColor: null } })
+    await expect(accountCenter.json()).resolves.toMatchObject({ accountCenter: { sessionsViewEnabled: true } })
+    await expect(accountCenterPatch.json()).resolves.toMatchObject({ accountCenter: { sessionsViewEnabled: true } })
   })
 
   it('exposes admin setup readiness through the management boundary', async () => {
@@ -1286,6 +1305,17 @@ function createConfigzServiceMock(
         sessionExpiresInSeconds: 0,
         passkeysEnabled: false,
       },
+      accountCenter: {
+        profileEditingEnabled: true,
+        displayNameEditable: true,
+        usernameEditable: true,
+        avatarEditable: true,
+        emailChangeEnabled: true,
+        passwordChangeEnabled: true,
+        connectedAccountsEnabled: true,
+        sessionsViewEnabled: true,
+        dangerZoneEnabled: false,
+      },
     }
     config.signIn = { ...config.signIn, ...overrides.signIn }
     if (overrides.identityProviders) {
@@ -1302,6 +1332,9 @@ function createConfigzServiceMock(
       updateManagementBrandingSettings: vi.fn().mockResolvedValue({
         branding: config.branding,
         copy: config.copy,
+      }),
+      updateManagementAccountCenterSettings: vi.fn().mockResolvedValue({
+        accountCenter: config.accountCenter,
       }),
     }
   }
