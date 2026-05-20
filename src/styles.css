@@ -431,6 +431,79 @@ main:not(.shell):not(.authShell) h1 {
   line-height: 1.6;
 }
 
+.signInExperienceLayout {
+  display: grid;
+  gap: 16px;
+}
+
+.signInExperienceSettings {
+  min-width: 0;
+}
+
+.signInExperiencePreviewPanel {
+  min-width: 0;
+}
+
+.hostedPreviewShell {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.hostedPreviewHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hostedPreviewHeader h2 {
+  margin: 2px 0 0;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.hostedAuthPreview {
+  min-height: auto;
+  padding: 18px;
+}
+
+.hostedAuthPreview-mobile {
+  max-width: 340px;
+  margin-inline: auto;
+}
+
+.hostedAuthPanel {
+  display: grid;
+  width: min(100%, 372px);
+  gap: 14px;
+  margin-inline: auto;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 10%, var(--line));
+  border-radius: var(--auth-panel-radius, 8px);
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgb(24 24 27 / 7%);
+}
+
+.hostedAuthPreview-mobile .hostedAuthPanel {
+  padding: 18px;
+}
+
+.hostedAuthPanel .authBrandPanel h2 {
+  max-width: 340px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.hostedPreviewPrompt {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 .authCardHeader h2,
 .settingsPanel h2 {
   margin: 0 0 6px;
@@ -966,6 +1039,18 @@ main:not(.shell):not(.authShell) h1 {
   position: relative;
   min-height: 208px;
   padding: 22px 0 24px;
+}
+
+@media (min-width: 1280px) {
+  .signInExperienceLayout {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+    align-items: start;
+  }
+
+  .signInExperiencePreviewPanel {
+    position: sticky;
+    top: 24px;
+  }
 }
 
 .consoleChartAxis {

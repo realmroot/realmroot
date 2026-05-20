@@ -29,7 +29,6 @@ import {
   SecurityCaptchaPage,
   SecurityGeneralPage,
   SecurityPasswordPolicyPage,
-  SignInPreviewSettingsPage,
   SignInSettingsPage,
   UsersPage,
   WebhooksPage,
@@ -485,8 +484,6 @@ describe('admin console', () => {
       ],
       ['/console/sign-in-experience/account-center', '/console/sign-in-experience/account-center', 'Account Center'],
       ['/console/sign-in-experience/content', '/console/sign-in-experience/content', 'Content'],
-      ['/console/sign-in-experience/desktop', '/console/sign-in-experience/desktop', 'Desktop'],
-      ['/console/sign-in-experience/mobile', '/console/sign-in-experience/mobile', 'Mobile'],
       ['/console/security', '/console/security/password-policy', 'Security'],
       ['/console/security/password-policy', '/console/security/password-policy', 'Security'],
       ['/console/security/captcha', '/console/security/captcha', 'CAPTCHA'],
@@ -535,8 +532,6 @@ describe('admin console', () => {
       ['Collect user profile', '/console/sign-in-experience/collect-user-profile', 'Collect user profile'],
       ['Account Center', '/console/sign-in-experience/account-center', 'Account Center'],
       ['Content', '/console/sign-in-experience/content', 'Content'],
-      ['Desktop', '/console/sign-in-experience/desktop', 'Desktop'],
-      ['Mobile', '/console/sign-in-experience/mobile', 'Mobile'],
       ['Sign-up and sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
     ] as const) {
       fireEvent.click(screen.getByRole('link', { name: label }))
@@ -545,6 +540,8 @@ describe('admin console', () => {
       expect((await screen.findAllByRole('heading', { name: heading })).length).toBeGreaterThan(0)
       expect(screen.getByRole('link', { name: label }).getAttribute('aria-current')).toBe('page')
     }
+    expect(screen.queryByRole('link', { name: 'Desktop' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Mobile' })).toBeNull()
   })
 
   it('redirects old admin links to matching Console routes', async () => {
@@ -2786,9 +2783,9 @@ describe('admin console', () => {
     fireEvent.change(screen.getByLabelText('Custom CSS'), { target: { value: '--auth-panel-radius: 16px;' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save branding' }))
 
-    expect(screen.getByText('Live preview').closest('.brandingPreview')?.getAttribute('style')).toContain(
-      '--auth-panel-radius: 16px',
-    )
+    expect(
+      screen.getByLabelText('Northstar ID hosted sign-in preview').closest('.brandingPreview')?.getAttribute('style'),
+    ).toContain('--auth-panel-radius: 16px')
     await waitFor(() =>
       expect(requests).toEqual([
         {
@@ -2845,42 +2842,136 @@ describe('admin console', () => {
 
     renderWithQuery(<BrandingPage />)
 
-    const preview = (await screen.findByText('Live preview')).closest('.brandingPreview')
+    const preview = (await screen.findByLabelText('Acme Auth hosted sign-in preview')).closest('.brandingPreview')
     expect(preview?.className).not.toContain('max-w-80')
 
     fireEvent.click(screen.getByRole('tab', { name: 'Mobile' }))
 
     expect(screen.getByRole('tab', { name: 'Mobile' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByText('Live preview').closest('.brandingPreview')?.className).toContain('max-w-80')
+    expect(screen.getByLabelText('Acme Auth hosted sign-in preview').closest('.brandingPreview')?.className).toContain(
+      'hostedAuthPreview-mobile',
+    )
   })
 
-  it('renders desktop and mobile sign-in preview settings with routed tabs and live preview actions', async () => {
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+  it('updates the hosted sign-in preview from unsaved branding edits', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return Promise.resolve(jsonResponse({}))
     })
 
-    const { unmount } = renderWithQuery(<SignInPreviewSettingsPage surface="desktop" />)
+    renderWithQuery(<BrandingPage />)
 
-    expect((await screen.findByRole('link', { name: 'Desktop' })).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('link', { name: 'Mobile' }).getAttribute('aria-current')).toBeNull()
-    const desktopPreviewButton = await screen.findByRole('button', { name: 'Live preview' })
-    expect(desktopPreviewButton.closest('.brandingPreview')?.className).not.toContain('max-w-80')
-    expect(screen.getByText('Centered panel with constrained line length')).toBeTruthy()
+    expect(await screen.findByLabelText('Acme Auth hosted sign-in preview')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: 'Northstar ID' } })
+    fireEvent.change(screen.getByLabelText('Logo URL'), {
+      target: { value: 'https://cdn.example.com/northstar-logo.svg' },
+    })
+    fireEvent.change(screen.getByLabelText('Primary color'), { target: { value: '#0f766e' } })
+    fireEvent.change(screen.getByLabelText('Background color'), { target: { value: '#f8fafc' } })
+
+    const preview = screen.getByLabelText('Northstar ID hosted sign-in preview').closest('.brandingPreview')
+    expect(document.querySelector('.hostedAuthPanel .brandLogo')?.getAttribute('src')).toBe(
+      'https://cdn.example.com/northstar-logo.svg',
+    )
+    expect(preview?.getAttribute('style')).toContain('--brand-primary: #0f766e')
+    expect(preview?.getAttribute('style')).toContain('--brand-background: #f8fafc')
+  })
+
+  it('uses runtime sign-in method settings inside branding and content previews', async () => {
+    const otpOnlySettings = {
+      ...signInSettings,
+      signIn: {
+        ...signInSettings.signIn,
+        passwordEnabled: false,
+        magicLinkEnabled: false,
+        emailOtpEnabled: true,
+        socialLoginEnabled: false,
+        signupEnabled: false,
+      },
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(otpOnlySettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<BrandingPage />)
+
+    expect(await screen.findByLabelText('Acme Auth hosted sign-in preview')).toBeTruthy()
+    expect(screen.getByText('Email OTP sign-in is available for hosted auth.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continue with identity provider' })).toBeNull()
+    expect(screen.queryByText('No account yet? Sign up')).toBeNull()
+
+    unmount()
+    renderWithQuery(<ContentSettingsPage />)
+
+    expect(await screen.findByLabelText('Acme Auth hosted sign-in preview')).toBeTruthy()
+    expect(screen.getByText('Email OTP sign-in is available for hosted auth.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continue with identity provider' })).toBeNull()
+    expect(screen.queryByText('No account yet? Sign up')).toBeNull()
+  })
+
+  it('renders hosted sign-in previews inside editable sign-in experience pages', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<SignInSettingsPage />)
+
+    const signInPreview = await screen.findByLabelText('Acme Auth hosted sign-in preview')
+    expect(signInPreview).toBeTruthy()
+    expect(signInPreview.closest('.brandingPreview')?.getAttribute('style')).toContain('--auth-panel-radius: 8px')
+    expect(signInPreview.closest('.brandingPreview')?.getAttribute('style')).toContain('--brand-primary: #2563eb')
+    expect(signInPreview.querySelector('img.brandLogo')?.getAttribute('src')).toBe('https://cdn.example.com/logo.svg')
+    expect(screen.queryByRole('link', { name: 'Desktop' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Mobile' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Password' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Magic link' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Continue with identity provider/ })).toBeTruthy()
+    expect(screen.getByText('No account yet? Sign up')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Preview changed before save' } })
+    expect(screen.getByRole('heading', { name: 'Preview changed before save' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('switch', { name: 'Password sign-in' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Social sign-in' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Identifier-first flow' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Registration' }))
+    expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Continue with identity provider/ })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Enter your identifier' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
+    expect(screen.queryByLabelText('Password')).toBeNull()
+    expect(screen.queryByText('No account yet? Sign up')).toBeNull()
+    const desktopPreviewButton = screen.getByRole('button', { name: 'Open hosted sign-in' })
     fireEvent.click(desktopPreviewButton)
     expect(open).toHaveBeenCalledWith('/sign-in', '_blank', 'noopener')
 
     unmount()
-    renderWithQuery(<SignInPreviewSettingsPage surface="mobile" />)
+    renderWithQuery(<ContentSettingsPage />)
 
-    expect((await screen.findByRole('link', { name: 'Mobile' })).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('link', { name: 'Desktop' }).getAttribute('aria-current')).toBeNull()
-    expect(
-      (await screen.findByRole('button', { name: 'Live preview' })).closest('.brandingPreview')?.className,
-    ).toContain('max-w-80')
-    expect(screen.getByText('Full-width mobile panel')).toBeTruthy()
+    const contentPreview = await screen.findByLabelText('Acme Auth hosted sign-in preview')
+    expect(contentPreview).toBeTruthy()
+    expect(contentPreview.closest('.brandingPreview')?.getAttribute('style')).toContain('--auth-panel-radius: 8px')
+    expect(contentPreview.querySelector('img.brandLogo')?.getAttribute('src')).toBe('https://cdn.example.com/logo.svg')
+    expect(screen.getByRole('link', { name: 'Terms' }).getAttribute('href')).toBe('https://example.com/terms')
+    fireEvent.change(screen.getByLabelText('Sign-in message'), { target: { value: 'Content preview changed' } })
+    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: 'Northstar Content' } })
+    fireEvent.change(screen.getByLabelText('Terms URL'), {
+      target: { value: 'https://northstar.example.com/terms' },
+    })
+    fireEvent.change(screen.getByLabelText('Support email'), { target: { value: 'content@northstar.example' } })
+    expect(screen.getByRole('heading', { name: 'Content preview changed' })).toBeTruthy()
+    expect(screen.getByLabelText('Northstar Content hosted sign-in preview')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Terms' }).getAttribute('href')).toBe('https://northstar.example.com/terms')
+    expect(screen.getByRole('link', { name: 'Support' }).getAttribute('href')).toBe('mailto:content@northstar.example')
   })
 
   it('does not apply unsafe custom CSS to the branding preview', async () => {
@@ -2894,7 +2985,9 @@ describe('admin console', () => {
 
     fireEvent.change(await screen.findByLabelText('Custom CSS'), { target: { value: 'display: none;' } })
 
-    expect(screen.getByText('Live preview').closest('.brandingPreview')?.getAttribute('style')).not.toContain('display')
+    expect(
+      screen.getByLabelText('Acme Auth hosted sign-in preview').closest('.brandingPreview')?.getAttribute('style'),
+    ).not.toContain('display')
   })
 
   it('renders branding validation errors without sending invalid custom CSS', async () => {
@@ -4377,7 +4470,7 @@ describe('admin console', () => {
         component: <BrandingPage />,
         matches: (url: string) => url === '/api/management/branding-settings',
         success: brandingSettings,
-        text: 'Hosted sign-in preview',
+        text: 'Live preview',
       },
       {
         component: <MfaPage />,
@@ -4438,7 +4531,7 @@ describe('admin console', () => {
 
     expect(screen.getByRole('heading', { name: 'Branding' })).toBeTruthy()
     expect(await screen.findByDisplayValue('Acme Auth')).toBeTruthy()
-    expect(screen.getByText('Hosted sign-in preview')).toBeTruthy()
+    expect(screen.getByText('Live preview')).toBeTruthy()
 
     unmount()
     renderWithQuery(<DeploymentSettingsPage />)
