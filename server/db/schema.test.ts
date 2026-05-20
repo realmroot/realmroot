@@ -51,6 +51,8 @@ import {
   userRoleAssignment,
   userRoleAssignmentRelations,
   verification,
+  webhookDeliveryRequest,
+  webhookEndpoint,
 } from './schema'
 
 function columnNames(table: Parameters<typeof getTableConfig>[0]) {
@@ -244,6 +246,46 @@ describe('database schema', () => {
     expect(columnNames(deploymentSetting)).toEqual(expect.arrayContaining(['environment', 'base_url', 'issuer_path']))
   })
 
+  it('models webhook endpoint and delivery request persistence explicitly', () => {
+    expect(columnNames(webhookEndpoint)).toEqual(
+      expect.arrayContaining(['url', 'events', 'enabled', 'signing_secret', 'secret_prefix', 'created_by_user_id']),
+    )
+    expect(indexNames(webhookEndpoint)).toEqual(
+      expect.arrayContaining(['webhookEndpoint_enabled_idx', 'webhookEndpoint_createdByUserId_idx']),
+    )
+    expect(foreignKeyReferences(webhookEndpoint)).toContainEqual({
+      columns: ['created_by_user_id'],
+      foreignColumns: ['id'],
+      foreignTable: 'user',
+      onDelete: 'set null',
+    })
+
+    expect(columnNames(webhookDeliveryRequest)).toEqual(
+      expect.arrayContaining([
+        'endpoint_id',
+        'event',
+        'status',
+        'attempt_count',
+        'request_body',
+        'response_body',
+        'next_attempt_at',
+      ]),
+    )
+    expect(indexNames(webhookDeliveryRequest)).toEqual(
+      expect.arrayContaining([
+        'webhookDeliveryRequest_endpointId_idx',
+        'webhookDeliveryRequest_status_idx',
+        'webhookDeliveryRequest_createdAt_idx',
+      ]),
+    )
+    expect(foreignKeyReferences(webhookDeliveryRequest)).toContainEqual({
+      columns: ['endpoint_id'],
+      foreignColumns: ['id'],
+      foreignTable: 'webhook_endpoint',
+      onDelete: 'cascade',
+    })
+  })
+
   it('defines relation graphs for auth, organization, application, and authorization records', () => {
     expect(relationKeys(userRelations)).toEqual(
       expect.arrayContaining([
@@ -309,7 +351,7 @@ describe('database schema', () => {
       .filter((column) => column.onUpdateFn)
       .map((column) => column.onUpdateFn?.())
 
-    expect(updateValues).toHaveLength(19)
+    expect(updateValues).toHaveLength(21)
     for (const value of updateValues) {
       expect(value).toBeInstanceOf(Date)
     }
@@ -351,6 +393,8 @@ const schemaTables = [
   accountCenterSetting,
   deploymentSetting,
   customDomain,
+  webhookEndpoint,
+  webhookDeliveryRequest,
 ]
 
 function relationKeys(relationsObject: { config: (helpers: never) => Record<string, unknown> }) {

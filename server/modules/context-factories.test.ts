@@ -68,6 +68,27 @@ describe('module context factories', () => {
     expect(createConnectorRepository).toHaveBeenCalledWith(db)
     expect(ConnectorService).toHaveBeenCalledWith(repository)
   })
+
+  it('creates webhook services from the request database binding', async () => {
+    const db = { kind: 'db' }
+    const repository = { kind: 'webhooks' }
+    const service = { kind: 'webhook-service' }
+    const createDb = vi.fn().mockReturnValue(db)
+    const createWebhookRepository = vi.fn().mockReturnValue(repository)
+    const WebhookService = vi.fn(function WebhookService() {
+      return service
+    })
+    vi.doMock('../db/client', () => ({ createDb }))
+    vi.doMock('./webhooks/repository', () => ({ createWebhookRepository }))
+    vi.doMock('./webhooks/service', () => ({ WebhookService }))
+
+    const { createWebhookService } = await import('./webhooks/context')
+
+    expect(createWebhookService(context('https://auth.example.com/api/management/webhooks/endpoints'))).toBe(service)
+    expect(createDb).toHaveBeenCalledWith('database-binding')
+    expect(createWebhookRepository).toHaveBeenCalledWith(db)
+    expect(WebhookService).toHaveBeenCalledWith(repository)
+  })
 })
 
 function context(url: string) {

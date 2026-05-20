@@ -1073,6 +1073,7 @@ const journeyAssertions: Record<
       await expect(revokeSessionsDialog).toBeVisible()
       await revokeSessionsDialog.getByRole('button', { name: 'Revoke sessions' }).click()
       await page.getByRole('tab', { name: 'Security' }).click()
+      await expect(page.getByText('MacBook Touch ID')).toBeVisible()
       await page.getByRole('button', { name: 'Delete', exact: true }).click()
       await page.getByRole('button', { name: 'Delete passkey' }).click()
       await page.getByRole('tab', { name: 'Operations' }).click()
