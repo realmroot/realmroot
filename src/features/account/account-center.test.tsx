@@ -39,7 +39,12 @@ describe('account center', () => {
     expect(screen.getByRole('heading', { name: 'Linked social accounts' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Sessions and devices' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Authorized apps' })).toBeTruthy()
-    expect(document.querySelectorAll('.accountSectionStack > .settingsPanel')).toHaveLength(8)
+    expect(document.querySelectorAll('.accountPanelGroup')).toHaveLength(4)
+    expect(document.querySelectorAll('.accountPanelGroup .settingsPanel')).toHaveLength(8)
+    expect(screen.getByRole('region', { name: 'Profile settings' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Security settings' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Social and app access' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Session management' })).toBeTruthy()
 
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Jane Stone'))
     expect(document.querySelector('img.assetPreview')?.getAttribute('width')).toBe('48')
@@ -348,14 +353,14 @@ describe('account center', () => {
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Chrome on macOS')).toBeTruthy()
     clickAndConfirm('Revoke other sessions', 'Revoke sessions')
-    clickAndConfirm('Revoke', 'Revoke session')
+    clickAndConfirm('Revoke', 'Revoke session', 1)
 
     cleanup()
     render(<AccountCenter />)
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Customer Portal')).toBeTruthy()
     expect(screen.getByText(/openid, email/)).toBeTruthy()
-    clickAndConfirm('Revoke', 'Revoke access', 1)
+    clickAndConfirm('Revoke', 'Revoke access')
 
     await waitFor(() => {
       expect(requests).toEqual(

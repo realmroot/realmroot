@@ -828,7 +828,7 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Admin console' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'admin-console' } })
-    fireEvent.change(screen.getByLabelText('Client type'), { target: { value: 'confidential_web' } })
+    fireEvent.click(screen.getByRole('button', { name: /Traditional web app/ }))
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://app.example.com/callback' },
     })
@@ -944,7 +944,7 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Server app' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'server-app' } })
-    fireEvent.change(screen.getByLabelText('Client type'), { target: { value: 'confidential_web' } })
+    fireEvent.click(screen.getByRole('button', { name: /Traditional web app/ }))
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://server.example.com/callback' },
     })
@@ -4427,6 +4427,7 @@ describe('admin console', () => {
     expect(screen.getByDisplayValue('customer-portal')).toBeTruthy()
     expect(screen.getByLabelText('Application name')).toHaveProperty('value', 'Customer portal')
     expect(screen.getByLabelText('Slug')).toHaveProperty('value', 'customer-portal')
+    expect(screen.getByRole('button', { name: /Single-page app/ }).getAttribute('aria-pressed')).toBe('true')
     fireEvent.change(await screen.findByLabelText('Application name'), { target: { value: 'Review app' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'review-app' } })
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {

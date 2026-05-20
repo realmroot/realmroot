@@ -1971,7 +1971,10 @@ async function expectAccountSinglePageSections(page: Page) {
     await expect(page.getByRole('heading', { name: section })).toBeVisible()
   }
 
-  await expect(page.locator('.accountSectionStack > .settingsPanel')).toHaveCount(accountSections.length)
+  for (const group of ['Profile settings', 'Security settings', 'Social and app access', 'Session management']) {
+    await expect(page.locator(`.accountPanelGroup[aria-label="${group}"]`)).toHaveCount(1)
+  }
+  await expect(page.locator('.accountPanelGroup .settingsPanel')).toHaveCount(accountSections.length)
 }
 
 async function mockApi(page: Page) {
