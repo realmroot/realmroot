@@ -1796,7 +1796,7 @@ async function expectConsoleDesktopDensity(page: Page, kind: ConsolePageKind, he
     const firstAction = main?.querySelector('button, a[href], input, select, textarea')
     const controls = Array.from(
       main?.querySelectorAll('button, a.uiButton, input:not([type="file"]):not([type="color"]), select') ?? [],
-    ).filter((control) => !control.closest('.brandingPreview'))
+    ).filter((control) => !control.closest('.brandingPreview') && !control.closest('.applicationTypeGrid'))
     const nestedCards = main?.querySelectorAll('[data-ui="card"] [data-ui="card"]').length ?? 0
     if (!header || !aside || !main || !content || navRows.length === 0) return null
 

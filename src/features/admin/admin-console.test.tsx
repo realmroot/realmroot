@@ -4428,6 +4428,8 @@ describe('admin console', () => {
     expect(screen.getByLabelText('Application name')).toHaveProperty('value', 'Customer portal')
     expect(screen.getByLabelText('Slug')).toHaveProperty('value', 'customer-portal')
     expect(screen.getByRole('button', { name: /Single-page app/ }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: /Native app/ }))
+    expect(screen.getByRole('button', { name: /Native app/ }).getAttribute('aria-pressed')).toBe('true')
     fireEvent.change(await screen.findByLabelText('Application name'), { target: { value: 'Review app' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'review-app' } })
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
@@ -4442,7 +4444,7 @@ describe('admin console', () => {
           body: {
             name: 'Review app',
             slug: 'review-app',
-            clientType: 'public_spa',
+            clientType: 'public_native',
             firstParty: true,
             redirectUris: ['http://localhost:4173/oidc/callback'],
           },
