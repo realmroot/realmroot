@@ -5555,8 +5555,8 @@ function CreateApplicationDialog({
   )
 }
 
-function ApplicationTypeCards({ onChange, value }: { onChange: (clientType: string) => void; value?: string }) {
-  const selected = value || 'public_spa'
+function ApplicationTypeCards({ onChange, value }: { onChange: (clientType: string) => void; value: string }) {
+  const selected = value
   return (
     <fieldset className="applicationTypeGrid">
       <legend>Application type</legend>
