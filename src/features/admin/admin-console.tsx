@@ -644,7 +644,6 @@ export function ApplicationDetailPage({
                     <form
                       className="formStack"
                       id="application-redirect-uris-form"
-                      key={application.updatedAt}
                       onSubmit={(event) => {
                         event.preventDefault()
                         const form = new FormData(event.currentTarget)
