@@ -2140,9 +2140,10 @@ describe('admin console', () => {
     expect(screen.queryByLabelText('Provider ID')).toBeNull()
     expect(screen.queryByLabelText('Provider type')).toBeNull()
     expect(screen.queryByLabelText('Issuer')).toBeNull()
+    expect(screen.queryByLabelText('Display name')).toBeNull()
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-id' } })
     fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GITHUB_SECRET' } })
-    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'read:user user:email' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
@@ -2156,7 +2157,7 @@ describe('admin console', () => {
             providerType: 'social',
             clientId: 'client-id',
             clientSecretBinding: 'GITHUB_SECRET',
-            scopes: ['read:user', 'user:email'],
+            scopes: ['openid', 'email', 'profile'],
           },
         },
       ])
@@ -2217,11 +2218,13 @@ describe('admin console', () => {
 
   it('shows connector details, saves edits, displays readiness, and deletes connectors', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
+    let readinessRequests = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       if (url === '/api/management/connectors/connector-1/readiness') {
+        readinessRequests += 1
         return Promise.resolve(
           jsonResponse({
             connectorId: 'connector-1',
@@ -2258,21 +2261,32 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Actions for Google'))
-    fireEvent.click(await screen.findByText('View details'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Test setup/ }))
+    expect(await screen.findByText('Secret binding available')).toBeTruthy()
+    const readinessRequestsBeforeRun = readinessRequests
+    fireEvent.click(screen.getByRole('button', { name: 'Run test' }))
+    await waitFor(() => {
+      expect(readinessRequests).toBeGreaterThan(readinessRequestsBeforeRun)
+    })
+    expect(screen.queryByLabelText('Display name')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    cleanup()
+    renderWithQuery(<ConnectorsPage />)
+    expect(await screen.findByText('Google')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for Google'))
+    fireEvent.click(await screen.findByText('Edit connector'))
     expect(await screen.findByText('Secret binding available')).toBeTruthy()
     expect(screen.getByText('Connector identity')).toBeTruthy()
     expect(screen.getByText('Deployment credentials')).toBeTruthy()
     expect(screen.queryByText('OAuth endpoints')).toBeNull()
+    expect(screen.queryByLabelText('Slug')).toBeNull()
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
+    expect(screen.queryByLabelText('Provider metadata JSON')).toBeNull()
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Workspace' } })
-    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'google-workspace' } })
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'false' } })
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'workspace-client' } })
     fireEvent.change(screen.getByLabelText('Client secret binding'), { target: { value: 'GOOGLE_WORKSPACE_SECRET' } })
-    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid email profile' } })
-    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '[]' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(await screen.findByText('Provider metadata must be a JSON object.')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Provider metadata JSON'), { target: { value: '{"prompt":"consent"}' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -2285,14 +2299,17 @@ describe('admin console', () => {
           displayName: 'Google Workspace',
           enabled: false,
           issuer: 'https://accounts.google.com',
-          providerMetadata: { prompt: 'consent' },
-          scopes: ['openid', 'email', 'profile'],
-          slug: 'google-workspace',
+          providerMetadata: { prompt: 'select_account' },
+          scopes: ['openid', 'email'],
         }),
       })
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Google' })).toBeNull()
+    })
+
     cleanup()
     renderWithQuery(<ConnectorsPage />)
     expect(await screen.findByText('Google')).toBeTruthy()
@@ -2447,7 +2464,7 @@ describe('admin console', () => {
     })
 
     fireEvent.click(screen.getByLabelText('Actions for Generic OAuth'))
-    fireEvent.click(await screen.findByText('View details'))
+    fireEvent.click(await screen.findByText('Edit connector'))
     expect(await screen.findByText('Ready')).toBeTruthy()
     expect(screen.getByText(/generic OAuth connector configuration/)).toBeTruthy()
     expect(screen.getByText('Client ID configured')).toBeTruthy()
@@ -2503,12 +2520,12 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Actions for Google'))
-    fireEvent.click(await screen.findByText('View details'))
+    fireEvent.click(await screen.findByText('Edit connector'))
     expect(await screen.findByText('Needs attention')).toBeTruthy()
     expect(screen.getByText('Readiness checks have not reported for this connector.')).toBeTruthy()
     expect(screen.getByLabelText('Client ID')).toHaveProperty('value', '')
     expect(screen.getByLabelText('Client secret binding')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', '')
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Google Draft' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByRole('button', { name: 'Saving...' })).toHaveProperty('disabled', true)
@@ -2554,7 +2571,7 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Actions for Google'))
-    fireEvent.click(await screen.findByText('View details'))
+    fireEvent.click(await screen.findByText('Edit connector'))
 
     expect(await screen.findByRole('heading', { name: 'Connector details' })).toBeTruthy()
     expect(await screen.findByText('Connector detail unavailable.')).toBeTruthy()
@@ -2568,6 +2585,9 @@ describe('admin console', () => {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(connector, 201))
       }
+      if (url === '/api/management/connectors/templates') {
+        return Promise.resolve(jsonResponse(connectorTemplates))
+      }
       if (url === '/api/management/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       }
@@ -2578,10 +2598,10 @@ describe('admin console', () => {
 
     expect(await screen.findByText('Google')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Add social connector' }))
-    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'GitHub' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Google/ }).at(-1)!)
     fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
 
-    expect(await screen.findByText('Invalid input: expected string, received undefined')).toBeTruthy()
+    expect(await screen.findByText('clientId is required.')).toBeTruthy()
     expect(requests).toEqual([])
   })
 
@@ -2603,8 +2623,10 @@ describe('admin console', () => {
 
     expect(screen.queryByLabelText('Provider ID')).toBeNull()
     expect(screen.queryByLabelText('Provider type')).toBeNull()
-    expect(screen.getByLabelText('Scopes')).toHaveProperty('value', 'openid email profile')
-    expect(screen.getByLabelText('Display name')).toHaveProperty('value', 'Google')
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
+    expect(screen.queryByLabelText('Display name')).toBeNull()
+    expect(screen.getByLabelText('Client ID')).toBeTruthy()
+    expect(screen.getByLabelText('Client secret binding')).toBeTruthy()
   })
 
   it('renders sign-in settings and security policy surfaces', async () => {
@@ -2669,10 +2691,10 @@ describe('admin console', () => {
 
     cleanup()
     renderWithQuery(<PasswordlessConnectorsPage />)
-    expect(await screen.findByText('Email and SMS connectors')).toBeTruthy()
+    expect(await screen.findByText('Email connector')).toBeTruthy()
     expect(screen.getByText('Cloudflare Email')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Managed' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('button', { name: 'Setup SMS' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Inspect' })).toHaveProperty('disabled', false)
+    expect(screen.queryByText('SMS connector')).toBeNull()
 
     cleanup()
     renderWithQuery(<DeploymentSettingsPage />)
@@ -2680,7 +2702,7 @@ describe('admin console', () => {
     expect(screen.getByRole('button', { name: 'Rotate key' })).toHaveProperty('disabled', true)
   })
 
-  it('derives built-in Cloudflare Email readiness and keeps SMS setup fixed in the passwordless connector view', async () => {
+  it('derives built-in Cloudflare Email readiness and exposes inspectable passwordless email details', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
@@ -2707,7 +2729,7 @@ describe('admin console', () => {
 
     renderWithQuery(<PasswordlessConnectorsPage />)
 
-    expect(await screen.findByText('Email and SMS connectors')).toBeTruthy()
+    expect(await screen.findByText('Email connector')).toBeTruthy()
     expect(screen.getByText('Cloudflare Email')).toBeTruthy()
     expect(
       screen.getByText(
@@ -2716,16 +2738,16 @@ describe('admin console', () => {
     ).toBeTruthy()
     expect(screen.getByText('Built-in')).toBeTruthy()
     expect(screen.getByText('Configured')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Managed' })).toHaveProperty('disabled', true)
-    expect(screen.getByText('SMS connector')).toBeTruthy()
-    expect(screen.getByText('Configurable')).toBeTruthy()
+    expect(screen.queryByText('SMS connector')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect' }))
+    expect(screen.getByRole('heading', { name: 'Cloudflare Email connector' })).toBeTruthy()
+    expect(screen.getByText('EMAIL')).toBeTruthy()
+    expect(screen.getByText('EMAIL_FROM')).toBeTruthy()
     expect(
       screen.getByText(
-        'SMS remains a configurable delivery connector. Add provider credentials when SMS persistence is enabled for this environment.',
+        'Email binding and sender settings are needed for verification, OTP, magic link, and reset flows.',
       ),
     ).toBeTruthy()
-    expect(screen.getByText('Unconfigured')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Setup SMS' })).toHaveProperty('disabled', true)
   })
 
   it('renders MFA and password policy compact controls as read-only', async () => {
@@ -3189,6 +3211,8 @@ describe('admin console', () => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/management/connectors')
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       return Promise.resolve(jsonResponse({}))
     })
 
@@ -3203,7 +3227,7 @@ describe('admin console', () => {
     expect(screen.queryByRole('link', { name: 'Mobile' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Password' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Magic link' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Continue with identity provider/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Continue with Google' })).toBeTruthy()
     expect(screen.getByText('No account yet? Sign up')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Preview changed before save' } })
     expect(screen.getByRole('heading', { name: 'Preview changed before save' })).toBeTruthy()
@@ -3212,7 +3236,7 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Identifier-first flow' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Registration' }))
     expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
-    expect(screen.queryByRole('button', { name: /Continue with identity provider/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continue with Google' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Enter your identifier' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
     expect(screen.queryByLabelText('Password')).toBeNull()

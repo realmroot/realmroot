@@ -1269,14 +1269,16 @@ const journeyAssertions: Record<
         'page',
       )
       await expect(page.getByText('Cloudflare Email', { exact: true }).first()).toBeVisible()
-      await expect(page.getByText('Email and SMS connectors')).toBeVisible()
-      await expect(page.getByText('SMS connector', { exact: true }).first()).toBeVisible()
+      await expect(page.getByText('Email connector')).toBeVisible()
       await expect(page.getByText('Runtime state')).toBeVisible()
       await expect(page.getByText('Magic link', { exact: true })).toBeVisible()
       await expect(page.getByText('Email code', { exact: true })).toBeVisible()
       await expect(page.getByText('EMAIL binding and EMAIL_FROM sender must be present.')).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Managed' })).toBeDisabled()
-      await expect(page.getByRole('button', { name: 'Setup SMS' })).toBeDisabled()
+      await page.getByRole('button', { name: 'Inspect' }).click()
+      const emailDialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Cloudflare Email connector' }) })
+      await expect(emailDialog).toBeVisible()
+      await expect(emailDialog.getByText('EMAIL_FROM')).toBeVisible()
+      await expect(page.getByText('SMS connector', { exact: true })).toHaveCount(0)
     },
   },
   'admin-social-connector-inventory': {
@@ -1399,7 +1401,7 @@ const journeyAssertions: Record<
         await expect(previewPanel).toBeVisible()
         await expect(previewPanel.getByText('Live preview')).toBeVisible()
         await expect(previewPanel.getByRole('heading', { name: 'Hosted sign-in' })).toBeVisible()
-        await expect(previewPanel.getByRole('button', { name: 'Continue with identity provider' })).toBeVisible()
+        await expect(previewPanel.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
         await expect(previewPanel.getByText('No account yet? Sign up')).toBeVisible()
       }
 
@@ -1535,8 +1537,14 @@ const journeyAssertions: Record<
         },
       })
       await page.getByLabel('Actions for GitHub').click()
-      await page.getByText('View details').click()
+      await page.getByText('Test setup').click()
       await expect(page.getByText('Secret binding available')).toBeVisible()
+      await expect(page.getByLabel('Display name')).toHaveCount(0)
+      await page.getByRole('button', { name: 'Close' }).click()
+      await page.goto('/console/connectors/social')
+      await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
+      await page.getByLabel('Actions for GitHub').click()
+      await page.getByText('Edit connector').click()
       await page.getByLabel('Display name').fill('GitHub Enterprise')
       await page.getByRole('button', { name: 'Save changes' }).click()
       expect(requests).toContainEqual({
