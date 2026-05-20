@@ -819,7 +819,8 @@ describe('admin console', () => {
     expect(screen.getByRole('tab', { name: 'My apps' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('tab', { name: 'Third-party apps' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Application name' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'App ID' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Client ID' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Ownership' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Type' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Search applications'), { target: { value: 'missing' } })
     expect(await screen.findByText('No applications found')).toBeTruthy()
@@ -1026,15 +1027,10 @@ describe('admin console', () => {
     resolveCreate(jsonResponse(application, 201))
   })
 
-  it('uploads third-party application logos through the applications list', async () => {
-    const requests: Array<{ url: string; body: string }> = []
+  it('renders application list rows with compact client metadata', async () => {
     const thirdPartyApplication = { ...application, id: 'app-2', firstParty: false, name: 'Partner app' }
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
-      if (url === '/api/management/applications/app-2/logo' && init?.method === 'POST') {
-        requests.push({ url, body: init.body instanceof FormData ? '[form-data]' : String(init.body) })
-        return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
-      }
       if (url === '/api/management/applications') {
         return Promise.resolve(jsonResponse({ applications: [application, thirdPartyApplication], pagination }))
       }
@@ -1044,15 +1040,15 @@ describe('admin console', () => {
     renderWithQuery(<ApplicationsPage />)
 
     expect(await screen.findByText('Customer portal')).toBeTruthy()
+    expect(screen.getByText('My app')).toBeTruthy()
+    expect(screen.getByText('client-1')).toBeTruthy()
+    expect(screen.getByText('Public SPA')).toBeTruthy()
+    expect(screen.queryByLabelText('Upload logo for Customer portal')).toBeNull()
+
     fireEvent.click(screen.getByRole('tab', { name: 'Third-party apps' }))
     expect(await screen.findByText('Partner app')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Upload logo for Partner app'), {
-      target: { files: [new File(['logo'], 'partner.png', { type: 'image/png' })] },
-    })
-
-    await waitFor(() =>
-      expect(requests).toEqual([{ url: '/api/management/applications/app-2/logo', body: '[form-data]' }]),
-    )
+    expect(screen.getByText('Third-party')).toBeTruthy()
+    expect(screen.queryByLabelText('Upload logo for Partner app')).toBeNull()
   })
 
   it('renders application detail lifecycle, redirect URI, and integration controls', async () => {
@@ -4358,6 +4354,7 @@ describe('admin console', () => {
       if (url === '/api/management/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
+      if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/management/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
@@ -4365,7 +4362,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    renderWithQuery(<ApplicationsPage />)
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="branding" />)
     fireEvent.change(await screen.findByLabelText('Upload logo for Customer portal'), {
       target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
     })

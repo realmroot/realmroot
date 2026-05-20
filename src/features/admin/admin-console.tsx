@@ -394,10 +394,6 @@ export function ApplicationsPage() {
       ])
     },
   })
-  const logoMutation = useAdminMutation({
-    mutationFn: ({ id, file }: { id: string; file: File }) => uploadApplicationLogo(id, file),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
-  })
   const applications = query.data?.applications ?? []
   const visibleApplications = applications.filter((application) => {
     const matchesTab = selectedTab === 'my-apps' ? application.firstParty : !application.firstParty
@@ -444,7 +440,7 @@ export function ApplicationsPage() {
       onRetry={() => query.refetch()}
     >
       <Tabs setValue={(value) => setSelectedTab(value as 'my-apps' | 'third-party')} value={selectedTab}>
-        <ConsoleToolbar className="border-b border-border p-3">
+        <ListToolbar>
           <TabsList aria-label="Application lists">
             <TabsTrigger value="my-apps">My apps</TabsTrigger>
             <TabsTrigger value="third-party">Third-party apps</TabsTrigger>
@@ -455,7 +451,7 @@ export function ApplicationsPage() {
             placeholder="Search applications"
             value={search}
           />
-        </ConsoleToolbar>
+        </ListToolbar>
         <TabsContent value="my-apps">
           <ApplicationsTableContent
             applications={visibleApplications}
@@ -466,7 +462,6 @@ export function ApplicationsPage() {
             }
             emptyTitle={search ? 'No applications found' : 'No applications in this tab'}
             hasApplications={applications.length > 0}
-            onLogoFile={(id, file) => logoMutation.mutate({ id, file })}
             onToggleDisabled={(application) =>
               updateApplication(application.id, { disabled: !application.disabled }).then(() =>
                 queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
@@ -484,7 +479,6 @@ export function ApplicationsPage() {
             }
             emptyTitle={search ? 'No applications found' : 'No applications in this tab'}
             hasApplications={applications.length > 0}
-            onLogoFile={(id, file) => logoMutation.mutate({ id, file })}
             onToggleDisabled={(application) =>
               updateApplication(application.id, { disabled: !application.disabled }).then(() =>
                 queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications }),
@@ -493,7 +487,6 @@ export function ApplicationsPage() {
           />
         </TabsContent>
       </Tabs>
-      {logoMutation.errorMessage ? <p className="p-4 text-sm text-destructive">{logoMutation.errorMessage}</p> : null}
     </ResourcePage>
   )
 }
@@ -866,14 +859,12 @@ function ApplicationsTableContent({
   emptyDescription,
   emptyTitle,
   hasApplications,
-  onLogoFile,
   onToggleDisabled,
 }: {
   applications: ApplicationResponse[]
   emptyDescription: string
   emptyTitle: string
   hasApplications: boolean
-  onLogoFile: (id: string, file: File) => void
   onToggleDisabled: (application: ApplicationResponse) => void
 }) {
   if (!applications.length && hasApplications) {
@@ -882,13 +873,15 @@ function ApplicationsTableContent({
         <TableHeader>
           <TableRow>
             <TableHead>Application name</TableHead>
-            <TableHead>App ID</TableHead>
+            <TableHead>Ownership</TableHead>
+            <TableHead>Client ID</TableHead>
             <TableHead>Type</TableHead>
+            <TableHead>Status</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmptyRow colSpan={4} description={emptyDescription} title={emptyTitle} />
+          <TableEmptyRow colSpan={6} description={emptyDescription} title={emptyTitle} />
         </TableBody>
       </Table>
     )
@@ -899,8 +892,10 @@ function ApplicationsTableContent({
       <TableHeader>
         <TableRow>
           <TableHead>Application name</TableHead>
-          <TableHead>App ID</TableHead>
+          <TableHead>Ownership</TableHead>
+          <TableHead>Client ID</TableHead>
           <TableHead>Type</TableHead>
+          <TableHead>Status</TableHead>
           <TableHead />
         </TableRow>
       </TableHeader>
@@ -913,24 +908,19 @@ function ApplicationsTableContent({
                   {application.name}
                 </a>
                 <div className="text-xs text-muted-foreground">{application.slug}</div>
-                <div className="mt-2">
-                  <AssetUploadControl
-                    accept="image/png,image/jpeg,image/webp"
-                    label={`Upload logo for ${application.name}`}
-                    onFile={(file) => onLogoFile(application.id, file)}
-                    previewUrl={application.iconUrl}
-                  />
-                </div>
               </TableCell>
+              <TableCell>{application.firstParty ? 'My app' : 'Third-party'}</TableCell>
               <TableCell>
                 <code className="text-xs">{application.clientId}</code>
               </TableCell>
               <TableCell>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline">{clientTypeLabel(application.clientType)}</Badge>
-                  <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">{application.allowedGrantTypes.join(', ')}</div>
+              </TableCell>
+              <TableCell>
+                <StatusBadge active={!application.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
               </TableCell>
               <TableCell className="text-right">
                 <DropdownMenu>
@@ -950,7 +940,7 @@ function ApplicationsTableContent({
           ))
         ) : (
           <TableEmptyRow
-            colSpan={4}
+            colSpan={6}
             description={
               hasApplications
                 ? emptyDescription
@@ -1162,7 +1152,7 @@ export function UsersPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <div className="grid gap-2 sm:grid-cols-[1fr_10rem_10rem]">
+        <ListToolbar>
           <TextInput
             aria-label="Search users"
             onChange={(event) => {
@@ -1196,7 +1186,7 @@ export function UsersPage() {
             <option value="false">Active</option>
             <option value="true">Banned</option>
           </SelectInput>
-        </div>
+        </ListToolbar>
       }
     >
       <div className="grid gap-3">
@@ -2702,15 +2692,14 @@ export function OrganizationsPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">Search tenant organizations by name, slug, or display name.</p>
+        <ListToolbar>
           <TextInput
             aria-label="Search organizations"
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search organizations"
             value={search}
           />
-        </div>
+        </ListToolbar>
       }
     >
       <Table>
@@ -2940,28 +2929,21 @@ export function RolesPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">Search roles and filter by assignment scope.</p>
-          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[20rem_11rem]">
-            <TextInput
-              aria-label="Search roles"
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search roles"
-              value={search}
-            />
-            <SelectInput
-              aria-label="Filter role scope"
-              onChange={(event) => setScope(event.target.value)}
-              value={scope}
-            >
-              <option value="">Any scope</option>
-              <option value="global">Global</option>
-              <option value="application">Application</option>
-              <option value="organization">Organization</option>
-              <option value="resource">API resource</option>
-            </SelectInput>
-          </div>
-        </div>
+        <ListToolbar>
+          <TextInput
+            aria-label="Search roles"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search roles"
+            value={search}
+          />
+          <SelectInput aria-label="Filter role scope" onChange={(event) => setScope(event.target.value)} value={scope}>
+            <option value="">Any scope</option>
+            <option value="global">Global</option>
+            <option value="application">Application</option>
+            <option value="organization">Organization</option>
+            <option value="resource">API resource</option>
+          </SelectInput>
+        </ListToolbar>
       }
     >
       <Table>
@@ -3325,15 +3307,14 @@ export function ApiResourcesPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">Search protected APIs by name, identifier, or audience.</p>
+        <ListToolbar>
           <TextInput
             aria-label="Search API resources"
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search API resources"
             value={search}
           />
-        </div>
+        </ListToolbar>
       }
     >
       <Table>
@@ -4438,15 +4419,12 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
         </Button>
       }
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">Filter webhook endpoints by URL, event, or delivery status.</p>
-          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[20rem_10rem]">
-            <TextInput aria-label="Search webhooks" disabled placeholder="Search endpoints" />
-            <SelectInput aria-label="Filter webhook status" disabled value="">
-              <option value="">Any status</option>
-            </SelectInput>
-          </div>
-        </div>
+        <ListToolbar>
+          <TextInput aria-label="Search webhooks" disabled placeholder="Search endpoints" />
+          <SelectInput aria-label="Filter webhook status" disabled value="">
+            <option value="">Any status</option>
+          </SelectInput>
+        </ListToolbar>
       }
     >
       <div className="consoleDetailStack">
@@ -4548,17 +4526,12 @@ export function AuditLogsPage() {
       title="Audit logs"
       description="Inspect available activity signals without claiming enterprise audit immutability."
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">
-            Filter audit events by actor, resource, and date when the API is available.
-          </p>
-          <div className="grid w-full gap-2 md:w-auto md:grid-cols-4">
-            <TextInput aria-label="Search audit logs" disabled placeholder="Search events" />
-            <TextInput aria-label="Actor" disabled placeholder="Actor" />
-            <TextInput aria-label="Resource" disabled placeholder="Resource" />
-            <TextInput aria-label="Date" disabled type="date" />
-          </div>
-        </div>
+        <ListToolbar>
+          <TextInput aria-label="Search audit logs" disabled placeholder="Search events" />
+          <TextInput aria-label="Actor" disabled placeholder="Actor" />
+          <TextInput aria-label="Resource" disabled placeholder="Resource" />
+          <TextInput aria-label="Date" disabled type="date" />
+        </ListToolbar>
       }
     >
       <Table>
@@ -4887,6 +4860,14 @@ function ResourcePage({
       {!loading && !error && !empty && !framed ? children : null}
       {auxiliary}
     </>
+  )
+}
+
+function ListToolbar({ children }: { children: ReactNode }) {
+  return (
+    <ConsoleToolbar className="rounded-lg border border-border bg-background p-3">
+      <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col sm:auto-cols-max">{children}</div>
+    </ConsoleToolbar>
   )
 }
 
