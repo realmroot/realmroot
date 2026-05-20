@@ -55,10 +55,10 @@ const hostedAuthRoutes = [
 const accountRoutes = [
   { name: 'account-home', path: '/account', heading: 'Jane Stone' },
   { name: 'account-profile', path: '/account/profile', heading: 'Jane Stone' },
-  { name: 'account-security', path: '/account/security', heading: 'MFA' },
-  { name: 'account-linked-accounts', path: '/account/linked-accounts', heading: 'Linked social accounts' },
-  { name: 'account-sessions', path: '/account/sessions', heading: 'Sessions and devices' },
-  { name: 'account-authorized-apps', path: '/account/authorized-apps', heading: 'Authorized apps' },
+  { name: 'account-security', path: '/account/security', heading: 'Jane Stone' },
+  { name: 'account-linked-accounts', path: '/account/linked-accounts', heading: 'Jane Stone' },
+  { name: 'account-sessions', path: '/account/sessions', heading: 'Jane Stone' },
+  { name: 'account-authorized-apps', path: '/account/authorized-apps', heading: 'Jane Stone' },
 ] as const
 
 const consoleRoutes = [

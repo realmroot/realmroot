@@ -313,12 +313,12 @@ main:not(.shell):not(.authShell) h1 {
   align-items: center;
   justify-content: center;
   min-height: 100dvh;
-  padding: 40px 20px;
+  padding: 32px 20px;
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--brand-background) 8%, white),
-      color-mix(in srgb, var(--brand-background) 18%, white)
+      color-mix(in srgb, var(--brand-background) 6%, white),
+      color-mix(in srgb, var(--brand-background) 14%, white)
     ),
     var(--brand-background);
 }
@@ -344,22 +344,22 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .authPanel {
-  width: min(100%, 400px);
-  padding: 22px;
+  width: min(100%, 388px);
+  padding: 20px;
   border: 1px solid color-mix(in srgb, var(--brand-primary) 12%, var(--line));
   border-radius: 8px;
-  background: rgb(255 255 255 / 94%);
-  box-shadow: 0 16px 48px rgb(24 24 27 / 10%);
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 12px 32px rgb(24 24 27 / 8%);
 }
 
 .authContent {
-  margin-top: 18px;
+  margin-top: 16px;
 }
 
 .authBrandPanel {
   display: grid;
   justify-items: center;
-  gap: 10px;
+  gap: 8px;
   text-align: center;
 }
 
@@ -369,11 +369,18 @@ main:not(.shell):not(.authShell) h1 {
   font-size: 14px;
 }
 
+.authBrandPanel .brandMark,
+.authBrandPanel .brandLogo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
 .authBrandPanel h1 {
   max-width: 420px;
   margin: 0;
-  font-size: 22px;
-  line-height: 1.18;
+  font-size: 20px;
+  line-height: 1.2;
 }
 
 .authBrandPanel p:not(.eyebrow) {
@@ -601,6 +608,20 @@ main:not(.shell):not(.authShell) h1 {
 
 .authPanel .uiButton {
   width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.authPanel .textInput,
+.accountContent .textInput {
+  min-height: 40px;
+}
+
+.accountContent .uiButton {
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
 }
 
 .uiButton-primary {
@@ -645,16 +666,16 @@ main:not(.shell):not(.authShell) h1 {
 
 .segmented {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: 4px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   padding: 4px;
   border-radius: 8px;
   background: #f4f4f5;
 }
 
 .segmented button {
-  min-height: 36px;
+  min-height: 40px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -818,19 +839,23 @@ main:not(.shell):not(.authShell) h1 {
 
 .accountShell {
   min-height: 100dvh;
-  padding: 32px;
-  background: var(--soft);
+  padding: 28px;
+  background: #f6f7f9;
 }
 
 .accountChrome {
   display: grid;
-  gap: 22px;
-  max-width: 820px;
+  gap: 16px;
+  max-width: 900px;
   margin: 0 auto;
 }
 
 .accountContent {
   min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
 }
 
 .accountHeader,
@@ -843,7 +868,7 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .accountHeader {
-  margin-bottom: 18px;
+  margin-bottom: 4px;
 }
 
 .accountGrid {
@@ -854,16 +879,20 @@ main:not(.shell):not(.authShell) h1 {
 
 .accountSectionStack {
   display: grid;
-  gap: 12px;
+  gap: 0;
 }
 
 .accountContent .settingsPanel {
   min-width: 0;
-  padding: 16px;
+  padding: 18px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
 }
 
 .accountContent .settingsPanel h2 {
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .accountContent .settingsPanel > p {
@@ -991,9 +1020,10 @@ main:not(.shell):not(.authShell) h1 {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
+  background: #ffffff;
 }
 
 .itemRow > div {
@@ -1113,7 +1143,7 @@ main:not(.shell):not(.authShell) h1 {
   }
 
   .authShell {
-    padding: 56px 18px 24px;
+    padding: 52px 16px 22px;
   }
 
   .authBackLink {
@@ -1126,7 +1156,7 @@ main:not(.shell):not(.authShell) h1 {
   }
 
   .accountShell {
-    padding: 20px;
+    padding: 16px;
   }
 
   .accountGrid,
