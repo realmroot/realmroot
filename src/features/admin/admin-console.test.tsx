@@ -2833,6 +2833,23 @@ describe('admin console', () => {
     expect(requests).toEqual([])
   })
 
+  it('renders polished branding upload controls', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<BrandingPage />)
+
+    const logoInput = await screen.findByLabelText('Upload branding logo')
+    const faviconInput = screen.getByLabelText('Upload favicon')
+    expect(logoInput.className).toBe('assetUploadInput')
+    expect(faviconInput.className).toBe('assetUploadInput')
+    expect(screen.getAllByText('Choose file')).toHaveLength(2)
+    expect(document.querySelectorAll('img.assetPreview')).toHaveLength(2)
+  })
+
   it('switches the hosted sign-in preview between desktop and mobile viewports', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
@@ -2877,6 +2894,28 @@ describe('admin console', () => {
     )
     expect(preview?.getAttribute('style')).toContain('--brand-primary: #0f766e')
     expect(preview?.getAttribute('style')).toContain('--brand-background: #f8fafc')
+  })
+
+  it('falls back to a brand mark when the hosted preview logo cannot load', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<BrandingPage />)
+
+    fireEvent.change(await screen.findByLabelText('Product name'), { target: { value: 'Northstar ID' } })
+    fireEvent.change(screen.getByLabelText('Logo URL'), {
+      target: { value: 'https://cdn.example.com/missing-logo.svg' },
+    })
+
+    const logo = document.querySelector('.hostedAuthPanel img.brandLogo')
+    expect(logo?.getAttribute('src')).toBe('https://cdn.example.com/missing-logo.svg')
+    fireEvent.error(logo as Element)
+
+    await waitFor(() => expect(document.querySelector('.hostedAuthPanel img.brandLogo')).toBeNull())
+    expect(document.querySelector('.hostedAuthPanel .brandMark')?.textContent).toBe('N')
   })
 
   it('uses runtime sign-in method settings inside branding and content previews', async () => {

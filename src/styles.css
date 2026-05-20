@@ -616,10 +616,62 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .assetUploadRow {
+  position: relative;
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
+}
+
+.assetUploadField {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.assetUploadLabel {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.assetUploadButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  max-width: 100%;
+  min-height: 40px;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease;
+}
+
+.assetUploadButton:hover,
+.assetUploadRow:focus-within .assetUploadButton {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 14%, transparent);
+  color: var(--brand-primary);
+}
+
+.assetUploadInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .assetPreview {

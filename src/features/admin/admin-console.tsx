@@ -51,7 +51,7 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react'
-import { type CSSProperties, createElement, type FormEvent, type ReactNode, useEffect, useState } from 'react'
+import { type CSSProperties, createElement, type FormEvent, type ReactNode, useEffect, useId, useState } from 'react'
 import type { z } from 'zod'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -4596,11 +4596,7 @@ function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState }) {
         <section className="hostedAuthPanel" aria-label={`${productName} hosted sign-in preview`}>
           <div className="authBrandPanel">
             <div className="brand brandLink">
-              {preview.logoUrl ? (
-                <img className="brandLogo" src={preview.logoUrl} alt="" width="36" height="36" />
-              ) : (
-                <span className="brandMark">{productName.slice(0, 1).toUpperCase()}</span>
-              )}
+              <PreviewBrandMark logoUrl={preview.logoUrl} productName={productName} />
               <span>{productName}</span>
             </div>
             <p className="eyebrow">Hosted sign-in</p>
@@ -4671,6 +4667,27 @@ function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState }) {
       </Button>
     </div>
   )
+}
+
+function PreviewBrandMark({ logoUrl, productName }: { logoUrl?: string | null; productName: string }) {
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null)
+  const brandInitial = productName.trim().slice(0, 1).toUpperCase() || 'F'
+  const showLogo = Boolean(logoUrl && failedLogoUrl !== logoUrl)
+
+  if (showLogo && logoUrl) {
+    return (
+      <img
+        className="brandLogo"
+        src={logoUrl}
+        alt=""
+        width="36"
+        height="36"
+        onError={() => setFailedLogoUrl(logoUrl)}
+      />
+    )
+  }
+
+  return <span className="brandMark">{brandInitial}</span>
 }
 
 function hostedAuthMethods(preview: HostedAuthPreviewState) {
@@ -4841,19 +4858,22 @@ function AssetUploadControl({
   onFile: (file: File) => void
   previewUrl: string | null
 }) {
+  const inputId = useId()
+
   return (
     <div className="assetUploadRow">
-      {previewUrl ? (
-        <img alt="" className="assetPreview" src={previewUrl} width="64" height="64" />
-      ) : (
-        <div className="assetPreview text-muted-foreground">
-          <ImageUp size={18} />
-        </div>
-      )}
-      <Field label={label}>
-        <TextInput
+      <AssetUploadPreview previewUrl={previewUrl} />
+      <div className="assetUploadField">
+        <span className="assetUploadLabel">{label}</span>
+        <label className="assetUploadButton" htmlFor={inputId}>
+          <ImageUp data-icon="inline-start" size={16} />
+          Choose file
+        </label>
+        <input
           accept={accept}
           aria-label={label}
+          className="assetUploadInput"
+          id={inputId}
           onChange={(event) => {
             const file = event.currentTarget.files?.[0]
             if (file) onFile(file)
@@ -4861,7 +4881,31 @@ function AssetUploadControl({
           }}
           type="file"
         />
-      </Field>
+      </div>
+    </div>
+  )
+}
+
+function AssetUploadPreview({ previewUrl }: { previewUrl: string | null }) {
+  const [failedPreviewUrl, setFailedPreviewUrl] = useState<string | null>(null)
+  const showPreview = Boolean(previewUrl && failedPreviewUrl !== previewUrl)
+
+  if (showPreview && previewUrl) {
+    return (
+      <img
+        alt=""
+        className="assetPreview"
+        src={previewUrl}
+        width="64"
+        height="64"
+        onError={() => setFailedPreviewUrl(previewUrl)}
+      />
+    )
+  }
+
+  return (
+    <div className="assetPreview text-muted-foreground">
+      <ImageUp size={18} />
     </div>
   )
 }
