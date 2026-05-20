@@ -597,7 +597,7 @@ function readCallbackState(search: string): { loading: false; message: string; h
   return {
     loading: false,
     message: 'Sign-in complete.',
-    href: safeRedirectPath(params.get('return_to')) ?? '/account',
+    href: safeRedirectPath(params.get('return_to')) ?? '/profile',
   }
 }
 
@@ -685,7 +685,7 @@ function navigateAfterAuth(response: unknown, callback: string | undefined) {
 }
 
 export function resolveAuthRedirect(response: unknown, callback: string | undefined) {
-  return readRedirectUrl(response) ?? safeRedirectPath(callback) ?? '/account'
+  return readRedirectUrl(response) ?? safeRedirectPath(callback) ?? '/profile'
 }
 
 function readRedirectUrl(response: unknown, options: { allowExternal?: boolean } = {}): string | null {

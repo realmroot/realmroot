@@ -3793,11 +3793,11 @@ export function AccountCenterSettingsPage() {
         >
           <div className="grid gap-3">
             <SettingRow label="Account API" value="/api/account" />
-            <SettingRow label="Prebuilt UI" value="/account" />
-            <SettingRow label="Profile route" value="/account/profile" />
-            <SettingRow label="Security route" value="/account/security" />
-            <SettingRow label="Sessions route" value="/account/sessions" />
-            <Button onClick={() => window.open('/account', '_blank', 'noopener')} type="button" variant="secondary">
+            <SettingRow label="Prebuilt UI" value="/profile" />
+            <SettingRow label="Profile route" value="/profile" />
+            <SettingRow label="Security route" value="/profile/security" />
+            <SettingRow label="Sessions route" value="/profile/sessions" />
+            <Button onClick={() => window.open('/profile', '_blank', 'noopener')} type="button" variant="secondary">
               <ExternalLink data-icon="inline-start" />
               Open account center
             </Button>

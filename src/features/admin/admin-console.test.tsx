@@ -231,7 +231,7 @@ describe('admin console', () => {
     expect(requestedUrls).not.toContain('/api/management/readiness')
   })
 
-  it('redirects signed-out account routes to sign-in before rendering account controls', async () => {
+  it('redirects signed-out profile route to sign-in before rendering account controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
@@ -240,25 +240,13 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    for (const path of [
-      '/account',
-      '/account/profile',
-      '/account/security',
-      '/account/linked-accounts',
-      '/account/sessions',
-      '/account/authorized-apps',
-    ]) {
-      window.history.pushState(null, '', path)
-      render(<AppRouter />)
+    window.history.pushState(null, '', '/profile')
+    render(<AppRouter />)
 
-      expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
-      await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
-      expect(new URLSearchParams(window.location.search).get('return_to')).toBe(path)
-      expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
-
-      cleanup()
-      queryClient.clear()
-    }
+    expect(await screen.findByRole('heading', { name: 'Sign in to Acme.' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
+    expect(new URLSearchParams(window.location.search).get('return_to')).toBe('/profile')
+    expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
   })
 
   it('renders the top-level profile entry route and redirects legacy profile sections', async () => {
@@ -289,12 +277,12 @@ describe('admin console', () => {
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ error: 'Profile unavailable.' }, 503))
       return Promise.resolve(jsonResponse({}))
     })
-    window.history.pushState(null, '', '/account/security')
+    window.history.pushState(null, '', '/profile')
 
     render(<AppRouter />)
 
     expect(await screen.findByText('Profile unavailable.')).toBeTruthy()
-    expect(window.location.pathname).toBe('/account/security')
+    expect(window.location.pathname).toBe('/profile')
   })
 
   it('redirects fresh deployments from product routes to first-admin onboarding', async () => {
@@ -325,15 +313,7 @@ describe('admin console', () => {
       return Promise.resolve(jsonResponse({}))
     })
 
-    for (const path of [
-      '/',
-      '/sign-in',
-      '/sign-up',
-      '/account',
-      '/account/security',
-      '/console',
-      '/console/applications',
-    ]) {
+    for (const path of ['/', '/sign-in', '/sign-up', '/profile', '/account', '/console', '/console/applications']) {
       window.history.pushState(null, '', path)
       render(<AppRouter />)
 
@@ -369,17 +349,17 @@ describe('admin console', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/console/onboarding'))
   })
 
-  it('renders account root as the profile page', async () => {
+  it('redirects account root to the canonical profile page', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(accountRouteFetch)
     window.history.pushState(null, '', '/account')
 
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
-    await waitFor(() => expect(window.location.pathname).toBe('/account'))
+    await waitFor(() => expect(window.location.pathname).toBe('/profile'))
   })
 
-  it('redirects legacy account section routes to the flat account page', async () => {
+  it('redirects legacy account section routes to the canonical profile page', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(accountRouteFetch)
 
     for (const path of [
@@ -393,7 +373,7 @@ describe('admin console', () => {
       render(<AppRouter />)
 
       expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
-      await waitFor(() => expect(window.location.pathname).toBe('/account'))
+      await waitFor(() => expect(window.location.pathname).toBe('/profile'))
       expect(screen.queryByRole('navigation', { name: 'Account center' })).toBeNull()
       expect(screen.getByRole('heading', { name: 'MFA' })).toBeTruthy()
       expect(screen.getByRole('heading', { name: 'Linked social accounts' })).toBeTruthy()
@@ -3045,7 +3025,7 @@ describe('admin console', () => {
     const { unmount } = renderWithQuery(<AccountCenterSettingsPage />)
 
     expect(screen.getByRole('link', { name: 'Account Center' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByText('/account/sessions')).toBeTruthy()
+    expect(screen.getByText('/profile/sessions')).toBeTruthy()
     expect(screen.getByText('Authorized apps view')).toBeTruthy()
 
     unmount()
@@ -3085,7 +3065,7 @@ describe('admin console', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open account center' }))
 
-    expect(open).toHaveBeenCalledWith('/account', '_blank', 'noopener')
+    expect(open).toHaveBeenCalledWith('/profile', '_blank', 'noopener')
   })
 
   it('saves content settings through the sign-in management boundary', async () => {

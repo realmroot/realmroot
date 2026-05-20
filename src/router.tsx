@@ -127,7 +127,9 @@ const oidcStartRoute = createRoute({
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account',
-  beforeLoad: async ({ location }) => loadAccountAccess(location.href),
+  beforeLoad: () => {
+    throw redirect({ to: '/profile' })
+  },
   component: () => <Outlet />,
 })
 
@@ -140,41 +142,26 @@ const accountIndexRoute = createRoute({
 const accountProfileRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/profile',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const accountSecurityRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/security',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const accountLinkedAccountsRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/linked-accounts',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const accountSessionsRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/sessions',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const accountAuthorizedAppsRoute = createRoute({
   getParentRoute: () => accountRoute,
   path: '/authorized-apps',
-  beforeLoad: () => {
-    throw redirect({ to: '/account' })
-  },
 })
 
 const profileRoute = createRoute({

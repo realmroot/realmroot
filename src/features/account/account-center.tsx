@@ -212,6 +212,24 @@ export function AccountCenter() {
           {message ? <Status tone="success">{message}</Status> : null}
           {!loading && data.profile ? (
             <div className="accountSectionStack">
+              <section className="accountIdentityBlock" aria-label="Profile summary">
+                {data.profile.image ? (
+                  <img alt="" className="accountHeaderAvatar" src={data.profile.image} width="64" height="64" />
+                ) : (
+                  <div className="accountHeaderAvatar" aria-hidden="true">
+                    <UserRound size={30} />
+                  </div>
+                )}
+                <div className="accountHeaderMeta">
+                  <p className="accountHeaderName">{data.profile.displayName}</p>
+                  <p>{data.profile.email}</p>
+                  <div className="accountHeaderBadges">
+                    <span>{data.profile.emailVerified ? 'Verified email' : 'Email verification required'}</span>
+                    <span>{data.security?.mfa.enabled ? 'MFA enabled' : 'MFA not enrolled'}</span>
+                    <span>{data.passkeys.length} passkeys</span>
+                  </div>
+                </div>
+              </section>
               <section className="accountPanelGroup" aria-label="Profile settings">
                 <ProfileSections profile={data.profile} mutate={mutate} />
               </section>
@@ -295,7 +313,7 @@ function ProfileSections({ profile, mutate }: { profile: UserProfile; mutate: Mu
   return (
     <>
       <section className="settingsPanel">
-        <h2>Profile</h2>
+        <PanelTitle title="Profile" description="Public identity and avatar shown across trusted applications." />
         <form className="formStack" onSubmit={saveProfile}>
           <div className="assetUploadRow">
             {avatarPreview ? (
@@ -325,8 +343,10 @@ function ProfileSections({ profile, mutate }: { profile: UserProfile; mutate: Mu
         </form>
       </section>
       <section className="settingsPanel">
-        <h2>Identifiers</h2>
-        <p className="muted">{profile.emailVerified ? 'Verified email address' : 'Verification required'}</p>
+        <PanelTitle
+          title="Identifiers"
+          description={profile.emailVerified ? 'Verified email address' : 'Verification required'}
+        />
         <form className="formStack" onSubmit={saveProfile}>
           <Field label="Username">
             <TextInput autoComplete="username" onChange={(event) => setUsername(event.target.value)} value={username} />
@@ -352,7 +372,7 @@ function ProfileSections({ profile, mutate }: { profile: UserProfile; mutate: Mu
         </form>
       </section>
       <section className="settingsPanel">
-        <h2>Password</h2>
+        <PanelTitle title="Password" description="Change the password used for hosted sign-in." />
         <form className="formStack" onSubmit={changePassword}>
           <input autoComplete="username" hidden readOnly type="text" value={profile.email} />
           <Field label="Current password">
@@ -404,8 +424,10 @@ function SecuritySections({
   return (
     <>
       <section className="settingsPanel">
-        <h2>MFA</h2>
-        <p className="muted">{data.security?.mfa.enabled ? 'Enabled' : 'No factor enrolled'}</p>
+        <PanelTitle
+          title="MFA"
+          description={data.security?.mfa.enabled ? 'Enabled' : 'No authenticator factor enrolled'}
+        />
         <form
           className="formStack"
           onSubmit={(event) => {
@@ -466,7 +488,7 @@ function SecuritySections({
         </Button>
       </section>
       <section className="settingsPanel">
-        <h2>Passkeys</h2>
+        <PanelTitle title="Passkeys" description="Manage hardware-backed sign-in credentials." />
         <form
           className="formStack"
           onSubmit={(event) => {
@@ -522,7 +544,7 @@ function ConnectionsSection({
 }) {
   return (
     <section className="settingsPanel">
-      <h2>Linked social accounts</h2>
+      <PanelTitle title="Linked social accounts" description="External identities connected to this account." />
       <ItemList
         empty="No linked social accounts."
         items={accounts.map((account) => ({
@@ -564,7 +586,7 @@ function SessionsSection({
   return (
     <section className="settingsPanel">
       <div className="panelHeader">
-        <h2>Sessions and devices</h2>
+        <PanelTitle title="Sessions and devices" description="Active browser sessions for this account." />
         <Button
           onClick={() =>
             confirm({
@@ -619,7 +641,7 @@ function ApplicationsSection({
 }) {
   return (
     <section className="settingsPanel">
-      <h2>Authorized apps</h2>
+      <PanelTitle title="Authorized apps" description="Applications with consent to access this account." />
       <ItemList
         empty="No application consents."
         items={applications.map((application) => ({
@@ -646,6 +668,15 @@ function ApplicationsSection({
         }))}
       />
     </section>
+  )
+}
+
+function PanelTitle({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="panelTitle">
+      <h2>{title}</h2>
+      <p>{description}</p>
+    </div>
   )
 }
 

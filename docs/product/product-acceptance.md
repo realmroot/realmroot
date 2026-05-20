@@ -103,12 +103,12 @@ FlareAuth 1.0 is production ready only when all of these are true:
 
 | Route | 1.0 requirement | Gate |
 | --- | --- | --- |
-| `/account` | Redirect to `/account/profile`. | Signed-in user required. |
-| `/account/profile` | Profile, username, avatar, primary email, and password management. | Signed-in user required. |
-| `/account/security` | Security hub for MFA, TOTP, passkeys, and policy state. | Signed-in user required. |
-| `/account/linked-accounts` | Linked social identities with unlink action. | Signed-in user required. |
-| `/account/sessions` | Active sessions and device revocation. | Signed-in user required plus sensitive-action verification when implemented. |
-| `/account/authorized-apps` | Authorized apps and grant revocation. | Signed-in user required plus sensitive-action verification when implemented. |
+| `/profile` | Profile, username, avatar, primary email, password, MFA, passkeys, linked social accounts, sessions, and authorized app management. | Signed-in user required. |
+| `/profile/security` | Redirect to `/profile`. | Signed-in user required. |
+| `/profile/linked-accounts` | Redirect to `/profile`. | Signed-in user required. |
+| `/profile/sessions` | Redirect to `/profile`. | Signed-in user required. |
+| `/profile/authorized-apps` | Redirect to `/profile`. | Signed-in user required. |
+| `/account` and legacy `/account/*` paths | Redirect to `/profile`. | Signed-in user required. |
 
 ### Admin Console
 
@@ -231,7 +231,7 @@ Admin setup readiness is protected and read from `/api/management/readiness`:
 | Recovery and verification | Request and completion steps are separate, user-visible, reload-safe, and backed by configured email flows. |
 | OAuth consent | Shows client name, redirect URI context, requested scopes, approve/deny actions, and records consent against the application. |
 | OIDC integration | Discovery, authorize, token, JWKS, userinfo, and end-session endpoints use production issuer metadata and validate redirect URI/client constraints. Product apps integrate with standard OIDC authorization code plus PKCE and do not call FlareAuth management or account APIs. |
-| Account Center profile | Loads from account APIs, saves display name/username/avatar, requests email changes, changes password, and keeps `/account/profile` reload-safe. |
+| Account Center profile | Loads from account APIs, saves display name/username/avatar, requests email changes, changes password, and keeps `/profile` reload-safe. |
 | Account Center security | Shows MFA policy, supports TOTP enrollment, passkey registration, and 2-step state where enabled. |
 | Account Center linked accounts | Lists social identities and unlinks a connected account without leaving the section route. |
 | Account Center sessions | Lists active sessions and supports single-session and all-session revocation. |
@@ -285,8 +285,8 @@ must include the review-environment acceptance path:
 
 ## Reviewer Acceptance Path
 
-1. Fresh/no-admin state: visit `/`, `/sign-in`, `/sign-up`, `/account`,
-   `/account/security`, `/admin`, and `/admin/applications`; each route should
+1. Fresh/no-admin state: visit `/`, `/sign-in`, `/sign-up`, `/profile`,
+   `/account`, `/admin`, and `/admin/applications`; each route should
    reach `/onboarding`.
 2. Create the first admin at `/onboarding`; the form locks and routes the user
    toward sign-in for `/admin/onboarding`.
@@ -296,10 +296,11 @@ must include the review-environment acceptance path:
 4. Create the first OIDC client from `/admin/onboarding`.
 5. With setup complete, visit `/onboarding` and `/admin/onboarding`; both should
    land on `/admin`.
-6. Visit `/account`; it should redirect to `/account/profile`.
-7. Visit `/account/profile`, `/account/security`, `/account/linked-accounts`,
-   `/account/sessions`, and `/account/authorized-apps` directly; reload and
-   browser back/forward should preserve the selected section through the URL.
+6. Visit `/profile`; it should render the account surface and remain on `/profile`.
+7. Visit `/account`, `/account/profile`, `/account/security`,
+   `/account/linked-accounts`, `/account/sessions`, and
+   `/account/authorized-apps` directly; each route should redirect to
+   `/profile`.
 8. Visit `/admin/applications`; create or choose an application, open
    `/admin/applications/{id}`, edit redirect URIs, disable and re-enable the
    client, copy the standard OIDC integration details, and verify confidential

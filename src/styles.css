@@ -843,13 +843,13 @@ main:not(.shell):not(.authShell) h1 {
 .accountChrome {
   display: grid;
   gap: 14px;
-  max-width: 840px;
+  max-width: 980px;
   margin: 0 auto;
 }
 
 .accountContent {
   min-width: 0;
-  padding: 18px;
+  padding: 20px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -866,7 +866,19 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .accountHeader {
-  margin-bottom: 4px;
+  margin-bottom: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.accountHeader h1 {
+  margin: 2px 0 2px;
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.accountHeader .eyebrow {
+  margin: 0;
 }
 
 .accountGrid {
@@ -880,6 +892,70 @@ main:not(.shell):not(.authShell) h1 {
   gap: 12px;
 }
 
+.accountIdentityBlock {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 7%, #ffffff), #ffffff 72%),
+    #ffffff;
+}
+
+.accountHeaderAvatar {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 16%, var(--line));
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--brand-primary);
+  object-fit: cover;
+}
+
+.accountHeaderMeta {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.accountHeaderMeta .accountHeaderName {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.accountHeaderMeta p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.accountHeaderBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.accountHeaderBadges span {
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #52525b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .accountPanelGroup {
   display: grid;
   gap: 0;
@@ -891,7 +967,7 @@ main:not(.shell):not(.authShell) h1 {
 
 .accountContent .settingsPanel {
   min-width: 0;
-  padding: 16px;
+  padding: 14px 16px;
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;
@@ -902,16 +978,53 @@ main:not(.shell):not(.authShell) h1 {
   border-top: 0;
 }
 
-.accountContent .settingsPanel h2 {
-  font-size: 16px;
+.panelTitle {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  margin-bottom: 12px;
 }
 
-.accountContent .settingsPanel > p {
-  margin-bottom: 14px;
+.panelTitle h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.panelTitle p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.panelHeader .panelTitle {
+  margin-bottom: 0;
 }
 
 .accountContent .settingsPanel > .formStack + .formStack {
   margin-top: 12px;
+}
+
+.accountContent .field {
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 6px 14px;
+  align-items: start;
+}
+
+.accountContent .field label {
+  padding-top: 9px;
+  color: #3f3f46;
+  font-size: 13px;
+}
+
+.accountContent .field small {
+  grid-column: 2;
+}
+
+.accountContent .formStack > .uiButton {
+  justify-self: start;
+  margin-left: 146px;
 }
 
 .itemList {
@@ -1373,6 +1486,46 @@ main:not(.shell):not(.authShell) h1 {
   .assetUploadRow {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .accountIdentityBlock {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .accountHeaderAvatar {
+    width: 52px;
+    height: 52px;
+  }
+
+  .accountContent .settingsPanel {
+    padding: 12px;
+  }
+
+  .accountContent .field {
+    grid-template-columns: 1fr;
+  }
+
+  .accountContent .field label {
+    padding-top: 0;
+  }
+
+  .accountContent .field small {
+    grid-column: auto;
+  }
+
+  .accountContent .formStack > .uiButton {
+    justify-self: stretch;
+    margin-left: 0;
+  }
+
+  .accountContent .panelTitle {
+    margin-bottom: 8px;
+  }
+
+  .accountContent .panelTitle p {
+    display: none;
   }
 
   .segmented,

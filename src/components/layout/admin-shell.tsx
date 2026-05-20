@@ -166,7 +166,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <a
               aria-label="Open account center"
               className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-              href="/account"
+              href="/profile"
             >
               <span className="grid size-6 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
                 AC
@@ -202,7 +202,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <div className="border-t border-border/70 p-4">
             <a
               className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-              href="/account"
+              href="/profile"
             >
               <span className="grid size-6 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
                 AC
