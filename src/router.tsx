@@ -206,6 +206,18 @@ const consoleApplicationsRoute = createRoute({
   component: ApplicationsPage,
 })
 
+const consoleApplicationsMyAppsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/applications/my-apps',
+  component: () => <ApplicationsPage section="my-apps" />,
+})
+
+const consoleApplicationsThirdPartyRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/applications/third-party',
+  component: () => <ApplicationsPage section="third-party" />,
+})
+
 const consoleApplicationDetailRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/applications/{$applicationId}',
@@ -698,6 +710,8 @@ const routeTree = rootRoute.addChildren([
   consoleRoute.addChildren([
     consoleIndexRoute,
     consoleApplicationsRoute,
+    consoleApplicationsMyAppsRoute,
+    consoleApplicationsThirdPartyRoute,
     consoleApplicationDetailRoute,
     consoleApplicationDetailSettingsRoute,
     consoleApplicationDetailBrandingRoute,

@@ -166,6 +166,7 @@ const optionalAuthorizationFieldNames = new Set([
 ])
 
 type DetailTab = { value: string; label: string }
+type ApplicationSection = 'my-apps' | 'third-party'
 type ApplicationDetailSection = 'settings' | 'branding'
 type UserDetailSection = 'profile' | 'security' | 'sessions' | 'linked-accounts' | 'applications' | 'operations'
 type OrganizationDetailSection = 'settings' | 'authorization'
@@ -374,13 +375,15 @@ export function AdminDashboardPage() {
   )
 }
 
-export function ApplicationsPage() {
+export function ApplicationsPage({ section = 'my-apps' }: { section?: ApplicationSection }) {
   const query = useQuery({ queryKey: adminQueryKeys.applications, queryFn: listApplications })
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [selectedTab, setSelectedTab] = useState<'my-apps' | 'third-party'>('my-apps')
+  const [selectedTab, setSelectedTab] = useState<ApplicationSection>(section)
   const [search, setSearch] = useState('')
   const [createdSecret, setCreatedSecret] = useState<{ clientId: string; clientSecret: string } | null>(null)
+  useEffect(() => setSelectedTab(section), [section])
   const createMutation = useAdminMutation({
     mutationFn: createApplication,
     onSuccess: (application) => {
@@ -443,7 +446,14 @@ export function ApplicationsPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
     >
-      <Tabs setValue={(value) => setSelectedTab(value as 'my-apps' | 'third-party')} value={selectedTab}>
+      <Tabs
+        setValue={(value) => {
+          const next = value as ApplicationSection
+          setSelectedTab(next)
+          navigateConsoleTab(navigate, `/console/applications/${next}`)
+        }}
+        value={selectedTab}
+      >
         <ConsoleToolbar className="border-b border-border p-3">
           <TabsList aria-label="Application lists">
             <TabsTrigger value="my-apps">My apps</TabsTrigger>
@@ -510,6 +520,7 @@ export function ApplicationDetailPage({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [rotatedSecret, setRotatedSecret] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<ApplicationDetailSection>(section)
+  const [redirectUrisValue, setRedirectUrisValue] = useState('')
   useEffect(() => setSelectedTab(section), [section])
   const query = useQuery({
     queryKey: [...adminQueryKeys.applications, applicationId],
@@ -530,7 +541,10 @@ export function ApplicationDetailPage({
   const redirectMutation = useMutation({
     mutationFn: (input: z.infer<typeof replaceRedirectUrisRequestSchema>) =>
       replaceApplicationRedirectUris(applicationId, input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.applications, applicationId] }),
+    onSuccess: (_response, input) => {
+      setRedirectUrisValue(input.redirectUris.join('\n'))
+      return queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.applications, applicationId] })
+    },
   })
   const rotateMutation = useMutation({
     mutationFn: () => rotateApplicationClientSecret(applicationId),
@@ -562,6 +576,11 @@ export function ApplicationDetailPage({
   })
 
   const application = query.data
+  const applicationIdForRedirects = application?.id
+  const applicationRedirectUrisValue = application?.redirectUris.join('\n') ?? ''
+  useEffect(() => {
+    if (applicationIdForRedirects) setRedirectUrisValue(applicationRedirectUrisValue)
+  }, [applicationIdForRedirects, applicationRedirectUrisValue])
 
   return (
     <ResourcePage
@@ -650,7 +669,6 @@ export function ApplicationDetailPage({
                   <CardContent>
                     <form
                       className="formStack"
-                      key={application.updatedAt}
                       onSubmit={(event) => {
                         event.preventDefault()
                         const form = new FormData(event.currentTarget)
@@ -662,13 +680,15 @@ export function ApplicationDetailPage({
                           }),
                         )
                       }}
+                      onReset={() => setRedirectUrisValue(application.redirectUris.join('\n'))}
                     >
                       <Field label="Redirect URIs" help="One URI per line.">
                         <TextArea
-                          defaultValue={application.redirectUris.join('\n')}
                           name="redirectUris"
+                          onChange={(event) => setRedirectUrisValue(event.target.value)}
                           required
                           rows={5}
+                          value={redirectUrisValue}
                         />
                       </Field>
                       <Field label="Post sign-out redirect URIs" help="Pending API support.">
@@ -1161,7 +1181,10 @@ export function UsersPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <div className="grid gap-2 sm:grid-cols-[1fr_10rem_10rem]">
+        <ListToolbar
+          controlsClassName="sm:grid-cols-[minmax(12rem,1fr)_10rem_10rem]"
+          description="Search users and filter by role or account status."
+        >
           <TextInput
             aria-label="Search users"
             onChange={(event) => {
@@ -1195,7 +1218,7 @@ export function UsersPage() {
             <option value="false">Active</option>
             <option value="true">Banned</option>
           </SelectInput>
-        </div>
+        </ListToolbar>
       }
     >
       <div className="grid gap-3">
@@ -2724,15 +2747,14 @@ export function OrganizationsPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">Search tenant organizations by name, slug, or display name.</p>
+        <ListToolbar description="Search tenant organizations by name, slug, or display name.">
           <TextInput
             aria-label="Search organizations"
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search organizations"
             value={search}
           />
-        </div>
+        </ListToolbar>
       }
     >
       <Table>
@@ -2962,28 +2984,24 @@ export function RolesPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">Search roles and filter by assignment scope.</p>
-          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[20rem_11rem]">
-            <TextInput
-              aria-label="Search roles"
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search roles"
-              value={search}
-            />
-            <SelectInput
-              aria-label="Filter role scope"
-              onChange={(event) => setScope(event.target.value)}
-              value={scope}
-            >
-              <option value="">Any scope</option>
-              <option value="global">Global</option>
-              <option value="application">Application</option>
-              <option value="organization">Organization</option>
-              <option value="resource">API resource</option>
-            </SelectInput>
-          </div>
-        </div>
+        <ListToolbar
+          controlsClassName="sm:grid-cols-[minmax(12rem,20rem)_10rem]"
+          description="Search roles and filter by assignment scope."
+        >
+          <TextInput
+            aria-label="Search roles"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search roles"
+            value={search}
+          />
+          <SelectInput aria-label="Filter role scope" onChange={(event) => setScope(event.target.value)} value={scope}>
+            <option value="">Any scope</option>
+            <option value="global">Global</option>
+            <option value="application">Application</option>
+            <option value="organization">Organization</option>
+            <option value="resource">API resource</option>
+          </SelectInput>
+        </ListToolbar>
       }
     >
       <Table>
@@ -3347,15 +3365,14 @@ export function ApiResourcesPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">Search protected APIs by name, identifier, or audience.</p>
+        <ListToolbar description="Search protected APIs by name, identifier, or audience.">
           <TextInput
             aria-label="Search API resources"
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search API resources"
             value={search}
           />
-        </div>
+        </ListToolbar>
       }
     >
       <Table>
@@ -4484,7 +4501,6 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
     <ResourcePage
       title="Webhooks"
       description="Prepare event endpoint configuration. Delivery workers and persistence are not available in this build."
-      framed={false}
       action={
         <Button disabled type="button">
           <Plus data-icon="inline-start" />
@@ -4492,18 +4508,18 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
         </Button>
       }
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">Filter webhook endpoints by URL, event, or delivery status.</p>
-          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[20rem_10rem]">
-            <TextInput aria-label="Search webhooks" disabled placeholder="Search endpoints" />
-            <SelectInput aria-label="Filter webhook status" disabled value="">
-              <option value="">Any status</option>
-            </SelectInput>
-          </div>
-        </div>
+        <ListToolbar
+          controlsClassName="sm:grid-cols-[minmax(12rem,20rem)_10rem]"
+          description="Filter webhook endpoints by URL, event, or delivery status."
+        >
+          <TextInput aria-label="Search webhooks" disabled placeholder="Search endpoints" />
+          <SelectInput aria-label="Filter webhook status" disabled value="">
+            <option value="">Any status</option>
+          </SelectInput>
+        </ListToolbar>
       }
     >
-      <div className="consoleDetailStack">
+      <div className="border-b border-border p-3">
         <DetailTabs
           label="Webhook sections"
           onChange={(value) => {
@@ -4514,84 +4530,45 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
           tabs={webhooksTabs()}
           value={selectedTab}
         />
-        {selectedTab === 'endpoints' ? (
-          <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-            <Card>
-              <CardHeader>
-                <CardTitle>Create endpoint</CardTitle>
-                <CardDescription>Endpoint creation is disabled until webhook delivery storage exists.</CardDescription>
-              </CardHeader>
-              <CardContent className="formStack">
-                <Field label="Endpoint URL">
-                  <TextInput disabled placeholder="https://example.com/webhooks/auth" type="url" />
-                </Field>
-                <Field label="Events">
-                  <TextInput disabled placeholder="user.created, session.revoked" />
-                </Field>
-                <Field label="Signing secret">
-                  <TextInput disabled placeholder="Generated when endpoint creation is supported" />
-                </Field>
-                <Button disabled type="button" variant="secondary">
-                  <Plus data-icon="inline-start" />
-                  Create endpoint
-                </Button>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Endpoints</CardTitle>
-                <CardDescription>Endpoint rows appear here after webhook delivery storage exists.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Endpoint</TableHead>
-                      <TableHead>Events</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableEmptyRow
-                      colSpan={4}
-                      description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
-                      title="Webhook delivery unavailable"
-                    />
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
-        ) : null}
-        {selectedTab === 'requests' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent requests</CardTitle>
-              <CardDescription>Delivery request persistence is not available in this build.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Request</TableHead>
-                    <TableHead>Endpoint</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableEmptyRow
-                    colSpan={4}
-                    description="Webhook request views will show signed delivery attempts after endpoint persistence and dispatch workers exist."
-                    title="No webhook requests"
-                  />
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ) : null}
       </div>
+      {selectedTab === 'endpoints' ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Endpoint</TableHead>
+              <TableHead>Events</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableEmptyRow
+              colSpan={4}
+              description="Webhook event delivery requires endpoint persistence, signing secret storage, and a dispatcher before Console can create live endpoints."
+              title="Webhook delivery unavailable"
+            />
+          </TableBody>
+        </Table>
+      ) : null}
+      {selectedTab === 'requests' ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Request</TableHead>
+              <TableHead>Endpoint</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableEmptyRow
+              colSpan={4}
+              description="Webhook request views will show signed delivery attempts after endpoint persistence and dispatch workers exist."
+              title="No webhook requests"
+            />
+          </TableBody>
+        </Table>
+      ) : null}
     </ResourcePage>
   )
 }
@@ -4602,17 +4579,15 @@ export function AuditLogsPage() {
       title="Audit logs"
       description="Inspect available activity signals without claiming enterprise audit immutability."
       toolbar={
-        <div className="consoleToolbar rounded-lg border border-border bg-background p-3">
-          <p className="text-sm text-muted-foreground">
-            Filter audit events by actor, resource, and date when the API is available.
-          </p>
-          <div className="grid w-full gap-2 md:w-auto md:grid-cols-4">
-            <TextInput aria-label="Search audit logs" disabled placeholder="Search events" />
-            <TextInput aria-label="Actor" disabled placeholder="Actor" />
-            <TextInput aria-label="Resource" disabled placeholder="Resource" />
-            <TextInput aria-label="Date" disabled type="date" />
-          </div>
-        </div>
+        <ListToolbar
+          controlsClassName="md:grid-cols-[minmax(10rem,1fr)_minmax(8rem,10rem)_minmax(8rem,10rem)_9rem]"
+          description="Filter audit events by actor, resource, and date when the API is available."
+        >
+          <TextInput aria-label="Search audit logs" disabled placeholder="Search events" />
+          <TextInput aria-label="Actor" disabled placeholder="Actor" />
+          <TextInput aria-label="Resource" disabled placeholder="Resource" />
+          <TextInput aria-label="Date" disabled type="date" />
+        </ListToolbar>
       }
     >
       <Table>
@@ -4919,23 +4894,45 @@ function ResourcePage({
         eyebrow="Console"
         title={title}
       />
-      {toolbar ? <div>{toolbar}</div> : null}
-      {loading ? <LoadingState label={`Loading ${title.toLowerCase()}`} /> : null}
-      {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
+      {loading && !framed ? <LoadingState label={`Loading ${title.toLowerCase()}`} /> : null}
+      {error && !framed ? <ErrorState error={error} onRetry={onRetry} /> : null}
       {!loading && !error && empty && !framed ? (
         <EmptyState
           description={emptyDescription ?? `Create a ${title.toLowerCase()} item to populate this page.`}
           title={emptyTitle ?? `No ${title.toLowerCase()} yet`}
         />
       ) : null}
-      {!loading && !error && framed ? (
+      {framed ? (
         <Card>
-          <CardContent className="p-0">{children}</CardContent>
+          <CardContent className="p-0">
+            {toolbar}
+            {loading ? <LoadingState label={`Loading ${title.toLowerCase()}`} /> : null}
+            {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
+            {!loading && !error ? children : null}
+          </CardContent>
         </Card>
       ) : null}
+      {!loading && !error && !framed && toolbar ? toolbar : null}
       {!loading && !error && !empty && !framed ? children : null}
       {auxiliary}
     </>
+  )
+}
+
+function ListToolbar({
+  children,
+  controlsClassName = 'sm:grid-cols-[minmax(12rem,20rem)]',
+  description,
+}: {
+  children: ReactNode
+  controlsClassName?: string
+  description: string
+}) {
+  return (
+    <ConsoleToolbar className="border-b border-border p-3">
+      <p className="text-sm text-muted-foreground">{description}</p>
+      <div className={cn('grid w-full gap-2 sm:w-auto', controlsClassName)}>{children}</div>
+    </ConsoleToolbar>
   )
 }
 

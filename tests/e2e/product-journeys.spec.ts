@@ -1146,6 +1146,14 @@ const journeyAssertions: Record<
       await redirectUrisInput.fill('https://new.example.com/callback')
       await expect(redirectUrisInput).toHaveValue('https://new.example.com/callback')
       await page.getByRole('button', { name: 'Save redirect URIs' }).click()
+      await expect
+        .poll(() =>
+          requests.some(
+            (request) =>
+              request.method === 'PUT' && request.path === '/api/management/applications/app-1/redirect-uris',
+          ),
+        )
+        .toBe(true)
       await page.getByRole('button', { name: 'Disable application' }).click()
       await page.getByRole('button', { name: 'Enable application' }).click()
       await page.goto('/console/applications/confidential-app')

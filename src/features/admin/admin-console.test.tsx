@@ -464,6 +464,8 @@ describe('admin console', () => {
     for (const [path, finalPath, heading] of [
       ['/console', '/console', 'Tenant health'],
       ['/console/applications', '/console/applications', 'Applications'],
+      ['/console/applications/my-apps', '/console/applications/my-apps', 'Applications'],
+      ['/console/applications/third-party', '/console/applications/third-party', 'Applications'],
       ['/console/sign-in-experience', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
       [
         '/console/sign-in-experience/sign-up-and-sign-in',
@@ -897,6 +899,37 @@ describe('admin console', () => {
     await waitFor(() => {
       expect(requests).toEqual([{ url: '/api/management/applications/app-2', body: { disabled: true } }])
     })
+  })
+
+  it('uses route-backed application list tabs', async () => {
+    const thirdPartyApplication = { ...application, id: 'app-2', name: 'Partner app', firstParty: false }
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: adminAccountProfile }))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url.includes('/api/management/readiness')) {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/applications') {
+        return Promise.resolve(jsonResponse({ applications: [application, thirdPartyApplication], pagination }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/console/applications/third-party')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Applications' })).toBeTruthy()
+    expect(await screen.findByText('Partner app')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Third-party apps' }).getAttribute('aria-selected')).toBe('true')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'My apps' }))
+
+    await waitFor(() => expect(window.location.pathname).toBe('/console/applications/my-apps'))
+    expect(await screen.findByText('Customer portal')).toBeTruthy()
   })
 
   it('shows one-time secret material when creating a confidential application', async () => {
@@ -4051,10 +4084,13 @@ describe('admin console', () => {
     ]
 
     for (const page of pages) {
-      renderWithQuery(page.component)
+      const view = renderWithQuery(page.component)
 
       expect(await screen.findByRole('heading', { name: page.heading })).toBeTruthy()
-      expect(await screen.findByLabelText(page.searchLabel)).toBeTruthy()
+      const searchControl = await screen.findByLabelText(page.searchLabel)
+      expect(searchControl).toBeTruthy()
+      expect(searchControl.closest('.consoleToolbar')?.closest('[data-ui="card"]')).toBeTruthy()
+      expect(view.container.querySelectorAll('[data-ui="card"] [data-ui="card"]')).toHaveLength(0)
       if (page.action) expect(screen.getAllByRole('button', { name: page.action }).length).toBeGreaterThan(0)
 
       cleanup()
