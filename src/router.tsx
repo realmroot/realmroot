@@ -777,7 +777,11 @@ function isRedirect(error: unknown) {
 }
 
 export async function loadConsoleAccess(location: { href: string; pathname: string }) {
-  await loadConsoleAccount(location.href)
+  const profile = await loadConsoleAccount(location.href)
+
+  if (profile.user.role !== 'admin') {
+    throw redirect({ to: '/sign-in', search: { return_to: location.href } })
+  }
 
   try {
     await queryClient.fetchQuery({ queryKey: adminQueryKeys.signIn, queryFn: getSignInSettings })
@@ -796,7 +800,7 @@ export async function loadConsoleAccess(location: { href: string; pathname: stri
 
 async function loadConsoleAccount(returnTo: string) {
   try {
-    await queryClient.fetchQuery({ queryKey: ['account', 'profile'], queryFn: getAccountProfile })
+    return await queryClient.fetchQuery({ queryKey: ['account', 'profile'], queryFn: getAccountProfile })
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 401) {
       throw redirect({ to: '/sign-in', search: { return_to: returnTo } })
