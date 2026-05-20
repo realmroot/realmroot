@@ -3558,6 +3558,7 @@ describe('admin console', () => {
     await screen.findByText('whsec_created_secret')
     fireEvent.click(screen.getByRole('button', { name: 'Copy secret' }))
     expect(writeText).toHaveBeenCalledWith('whsec_created_secret')
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(requests).toContainEqual({
       url: '/api/management/webhooks/endpoints',
       method: 'POST',
@@ -3587,6 +3588,7 @@ describe('admin console', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }))
     await screen.findByText('whsec_rotated_secret')
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     await waitFor(() =>
       expect(
@@ -3607,6 +3609,7 @@ describe('admin console', () => {
     expect(screen.getByText('Server error')).toBeTruthy()
     expect(screen.getByText('Request body')).toBeTruthy()
     expect(screen.getByText('Response body')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
