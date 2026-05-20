@@ -75,7 +75,7 @@ describe('composed UI primitives', () => {
     )
 
     expect(screen.getByText('Card footer')).toBeTruthy()
-    expect(screen.getByText('Card title').parentElement?.className).toContain('p-4')
+    expect(screen.getByText('Card title').parentElement?.className).toContain('p-5')
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByRole('dialog').parentElement?.className).toContain('overscroll-contain')
     expect(screen.getByText('Dialog title').parentElement?.className).toContain('p-4')
@@ -109,8 +109,8 @@ describe('composed UI primitives', () => {
 
     const section = screen.getByRole('region', { name: 'Normal section' })
     expect(section.querySelectorAll('[data-ui="card"]')).toHaveLength(1)
-    expect(section.querySelector('[data-ui="card"]')?.className).toContain('rounded-md')
-    expect(screen.getByText('Normal section').parentElement?.className).toContain('p-4')
+    expect(section.querySelector('[data-ui="card"]')?.className).toContain('rounded-2xl')
+    expect(screen.getByText('Normal section').parentElement?.className).toContain('p-5')
     expect(screen.getByRole('button', { name: 'Search' }).parentElement?.className).toContain('consoleToolbar')
   })
 
@@ -139,9 +139,9 @@ describe('composed UI primitives', () => {
     expect(screen.getByRole('alert').hasAttribute('aria-live')).toBe(false)
     expect(screen.getByRole('alert').className).toContain('status-error')
     expect(screen.getByRole('table').parentElement?.className).toContain('overflow-x-auto')
-    expect(screen.getByRole('table').className).toContain('min-w-[44rem]')
-    expect(screen.getByRole('columnheader', { name: 'Name' }).className).toContain('h-9')
-    expect(screen.getByRole('cell', { name: 'Customer portal' }).className).toContain('h-11')
+    expect(screen.getByRole('table').className).toContain('min-w-[35rem]')
+    expect(screen.getByRole('columnheader', { name: 'Name' }).className).toContain('h-10')
+    expect(screen.getByRole('cell', { name: 'Customer portal' }).className).toContain('h-12')
   })
 
   it('renders compact table empty rows inside table bodies', () => {
@@ -236,8 +236,8 @@ describe('composed UI primitives', () => {
     const securityTab = screen.getByRole('tab', { name: 'Security' })
     const panel = screen.getByRole('tabpanel')
     expect(panel.textContent).toBe('Profile panel')
-    expect(profileTab.parentElement?.className).toContain('h-8')
-    expect(profileTab.className).toContain('h-7')
+    expect(profileTab.parentElement?.className).toContain('h-9')
+    expect(profileTab.className).toContain('h-9')
     expect(profileTab.getAttribute('aria-controls')).toBe(panel.id)
     expect(panel.getAttribute('aria-labelledby')).toBe(profileTab.id)
     expect(screen.queryByText('Security panel')).toBeNull()

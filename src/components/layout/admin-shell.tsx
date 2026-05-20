@@ -125,7 +125,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="consoleShell text-foreground">
-      <header className="consoleTopbar">
+      <header className="consoleTopbar lg:hidden">
         <div className="flex h-16 items-center justify-between gap-3 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
@@ -193,12 +193,15 @@ export function AdminShell({ children }: { children: ReactNode }) {
       ) : null}
       <div className="consoleBody lg:flex">
         <aside className="consoleRail hidden lg:flex">
-          <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Console">
+          <div className="px-4 pb-4 pt-4">
+            <ConsoleBrand />
+          </div>
+          <nav className="min-h-0 flex-1 overflow-y-auto px-4 pb-4" aria-label="Console">
             <AdminNavigation pathname={pathname} />
           </nav>
-          <div className="border-t border-border p-3">
+          <div className="border-t border-border/70 p-4">
             <a
-              className="flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
               href="/account"
             >
               <span className="grid size-6 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
@@ -218,8 +221,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
 function ConsoleBrand() {
   return (
-    <a className="flex h-16 min-w-0 items-center gap-2.5 text-foreground" href="/console">
-      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
+    <a className="flex h-10 min-w-0 items-center gap-2.5 text-foreground" href="/console">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
         F
       </span>
       <div className="min-w-0">
@@ -232,10 +235,10 @@ function ConsoleBrand() {
 
 function AdminNavigation({ onNavigate, pathname }: { onNavigate?: () => void; pathname: string }) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3">
       {adminNavGroups.map((group) => (
         <div className="grid gap-1" key={group.label}>
-          <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-normal text-muted-foreground">
+          <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-normal text-muted-foreground">
             {group.label}
           </p>
           {group.items.map((item) => {
@@ -244,8 +247,8 @@ function AdminNavigation({ onNavigate, pathname }: { onNavigate?: () => void; pa
               <Link
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'group flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                  active && 'bg-primary/10 text-foreground hover:bg-primary/10 hover:text-foreground',
+                  'group flex h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                  active && 'bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary',
                 )}
                 key={item.href}
                 onClick={onNavigate}
@@ -267,6 +270,6 @@ function getItemMatchPath(item: ConsoleNavItem) {
 }
 
 function isActive(pathname: string, href: string) {
-  if (href === '/console') return pathname === href
+  if (href === '/console') return pathname === href || pathname === '/console/dashboard'
   return pathname === href || pathname.startsWith(`${href}/`)
 }

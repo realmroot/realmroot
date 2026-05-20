@@ -64,7 +64,7 @@ const accountRoutes = [
 const consoleRoutes = [
   {
     name: 'dashboard',
-    path: '/console',
+    path: '/console/dashboard',
     heading: 'Tenant health',
     kind: 'shell',
     journeyId: 'admin-dashboard',
@@ -1141,6 +1141,7 @@ const journeyAssertions: Record<
       await expect(applicationLogoInput).toBeVisible()
       await page.getByRole('tab', { name: 'Settings' }).click()
       await expect(page).toHaveURL(/\/console\/applications\/app-1\/settings$/)
+      await page.waitForLoadState('networkidle')
       const redirectUrisInput = page.getByRole('textbox', { name: 'Redirect URIs', exact: true })
       await expect(redirectUrisInput).toHaveValue('http://localhost:4173/oidc/callback')
       await redirectUrisInput.fill('https://new.example.com/callback')
@@ -1755,7 +1756,7 @@ async function expectConsoleRouteContent(page: Page, route: ConsoleVisualRoute) 
   await expect(main.getByRole('heading', { name: route.heading, level: 1 })).toBeVisible()
   await expect(main.getByText(route.sentinel, { exact: false }).first()).toBeVisible()
   await expect(main.getByRole('heading', { level: 1 })).toHaveCount(1)
-  if (route.path !== '/console') await expect(main.getByText('Setup progress')).toHaveCount(0)
+  if (route.name !== 'dashboard') await expect(main.getByText('Setup progress')).toHaveCount(0)
 
   if (route.activeNav) {
     const consoleNav = page.getByRole('navigation', { name: 'Console' })
@@ -1795,7 +1796,7 @@ async function expectConsoleDesktopDensity(page: Page, kind: ConsolePageKind, he
     const firstAction = main?.querySelector('button, a[href], input, select, textarea')
     const controls = Array.from(
       main?.querySelectorAll('button, a.uiButton, input:not([type="file"]):not([type="color"]), select') ?? [],
-    )
+    ).filter((control) => !control.closest('.brandingPreview'))
     const nestedCards = main?.querySelectorAll('[data-ui="card"] [data-ui="card"]').length ?? 0
     if (!header || !aside || !main || !content || navRows.length === 0) return null
 
@@ -1837,21 +1838,21 @@ async function expectConsoleDesktopDensity(page: Page, kind: ConsolePageKind, he
   }, heading)
 
   expect(metrics).not.toBeNull()
-  expect(metrics?.topbarHeight).toBe(64)
+  expect(metrics?.topbarHeight).toBe(0)
   expect(metrics?.sidebarWidth).toBe(248)
   expect(metrics?.navRowHeights.every((height) => height <= 36)).toBe(true)
   expect(metrics?.mainStartX).toBe(248)
-  expect(metrics?.mainStartY).toBe(64)
-  expect(metrics?.contentWidth).toBeLessThanOrEqual(1040)
-  expect(metrics?.contentStartX).toBeLessThanOrEqual(380)
-  expect(metrics?.contentInlineOffset).toBeLessThanOrEqual(124)
+  expect(metrics?.mainStartY).toBe(0)
+  expect(metrics?.contentWidth).toBeLessThanOrEqual(1300)
+  expect(metrics?.contentStartX).toBe(256)
+  expect(metrics?.contentInlineOffset).toBe(8)
   expect(metrics?.contentStartY).toBeLessThanOrEqual(97)
   expect(metrics?.headingTop).toBeLessThanOrEqual(150)
   expect(metrics?.headingFontSize).toBeLessThanOrEqual(24)
   expect(metrics?.firstPanelTop).toBeLessThanOrEqual(300)
   if (kind === 'shell' || kind === 'list') expect(metrics?.firstPanelHeight).toBeLessThanOrEqual(400)
   expect(metrics?.nestedCards).toBe(0)
-  expect(metrics?.controlHeights.every((height) => height <= 64)).toBe(true)
+  expect(metrics?.controlHeights.every((height) => height <= 48)).toBe(true)
   expect(metrics?.scrollRatio).toBeLessThanOrEqual(kind === 'detail' ? 3.8 : 3.2)
   if (kind === 'list') expect(metrics?.firstTableTop).toBeLessThanOrEqual(320)
   if (kind === 'settings' || kind === 'detail') expect(metrics?.firstActionBottom).toBeLessThanOrEqual(720)

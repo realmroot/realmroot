@@ -8,6 +8,7 @@
   --line: #e5e7eb;
   --surface: #ffffff;
   --soft: #f8fafc;
+  --console-canvas: #f0eef8;
   --background: #ffffff;
   --foreground: #18181b;
   --card: #ffffff;
@@ -96,7 +97,8 @@ textarea {
 .consoleShell {
   height: 100dvh;
   overflow: hidden;
-  background: #f6f7f9;
+  background: var(--console-canvas);
+  font-size: 14px;
 }
 
 .consoleTopbar {
@@ -119,11 +121,11 @@ textarea {
 
 .consoleRail {
   width: 248px;
-  height: calc(100dvh - 64px);
+  height: 100dvh;
   flex-shrink: 0;
   flex-direction: column;
-  border-right: 1px solid var(--border);
-  background: var(--surface);
+  border-right: 0;
+  background: var(--console-canvas);
 }
 
 .consoleMain {
@@ -131,17 +133,18 @@ textarea {
   min-width: 0;
   flex: 1;
   overflow-y: auto;
-  background: #f6f7f9;
+  background: var(--console-canvas);
 }
 
 .consoleContent {
   display: flex;
-  width: 100%;
-  max-width: 1040px;
+  width: calc(100% - 8px);
+  min-width: 560px;
+  max-width: 1300px;
   flex-direction: column;
-  gap: 20px;
-  margin: 0 auto;
-  padding: 32px;
+  gap: 16px;
+  margin: 0 auto 0 8px;
+  padding: 68px 24px 24px 0;
 }
 
 .shell {
@@ -473,7 +476,7 @@ main:not(.shell):not(.authShell) h1 {
 
 .textInput {
   width: 100%;
-  min-height: 38px;
+  min-height: 40px;
   padding: 8px 10px;
   border: 1px solid #d4d4d8;
   border-radius: 8px;
@@ -568,11 +571,11 @@ main:not(.shell):not(.authShell) h1 {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 0 11px;
+  min-height: 40px;
+  padding: 0 14px;
   border: 1px solid transparent;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   transition:
     border-color 150ms ease,
@@ -583,15 +586,15 @@ main:not(.shell):not(.authShell) h1 {
 
 .uiButton-sm,
 .uiButton-icon {
-  min-height: 30px;
+  min-height: 36px;
 }
 
 .uiButton-sm {
-  padding: 0 9px;
+  padding: 0 12px;
 }
 
 .uiButton-icon {
-  width: 30px;
+  width: 36px;
   padding: 0;
 }
 
@@ -909,21 +912,21 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .consoleToolbar {
-  gap: 12px;
+  gap: 8px;
 }
 
 .consoleToolbar.rounded-lg {
-  border-radius: 8px;
+  border-radius: 16px;
 }
 
 .consoleToolbar .textInput {
   width: min(100%, 320px);
-  min-height: 36px;
-  padding-block: 7px;
+  min-height: 40px;
+  padding-block: 8px;
 }
 
 .consoleDetailStack {
-  gap: 14px;
+  gap: 16px;
 }
 
 .consoleBackLink {
@@ -973,8 +976,8 @@ main:not(.shell):not(.authShell) h1 {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  margin: 8px -16px -16px;
-  padding: 10px 16px;
+  margin: 8px -20px -20px;
+  padding: 12px 20px;
   border-top: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(8px);
@@ -1134,6 +1137,7 @@ main:not(.shell):not(.authShell) h1 {
 
 @media (max-width: 860px) {
   .consoleContent {
+    min-width: 0;
     gap: 16px;
     padding: 16px;
   }
@@ -1162,6 +1166,12 @@ main:not(.shell):not(.authShell) h1 {
   .accountGrid,
   .featureGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1024px) {
+  .consoleBody {
+    height: 100dvh;
   }
 }
 

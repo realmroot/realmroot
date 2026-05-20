@@ -200,6 +200,12 @@ const consoleIndexRoute = createRoute({
   component: AdminDashboardPage,
 })
 
+const consoleDashboardRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: 'dashboard',
+  component: AdminDashboardPage,
+})
+
 const consoleApplicationsRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/applications',
@@ -697,6 +703,7 @@ const routeTree = rootRoute.addChildren([
   ]),
   consoleRoute.addChildren([
     consoleIndexRoute,
+    consoleDashboardRoute,
     consoleApplicationsRoute,
     consoleApplicationDetailRoute,
     consoleApplicationDetailSettingsRoute,

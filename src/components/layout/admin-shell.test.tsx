@@ -43,6 +43,7 @@ describe('AdminShell', () => {
     expect(screen.getByText('Dashboard content')).toBeTruthy()
     expect(screen.getByText('Dashboard content').closest('.consoleShell')).toBeTruthy()
     expect(document.querySelector('header')?.className).toContain('consoleTopbar')
+    expect(document.querySelector('header')?.className).toContain('lg:hidden')
     expect(document.querySelector('aside')?.className).toContain('consoleRail')
     expect(document.querySelector('main')?.className).toContain('consoleMain')
     expect(screen.getByText('Dashboard content').closest('.consoleContent')).toBeTruthy()
@@ -53,6 +54,15 @@ describe('AdminShell', () => {
     expect(screen.queryByText('Tenant health')).toBeNull()
     expect(screen.queryByText('OIDC clients')).toBeNull()
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
+  })
+
+  it('marks the dashboard alias active for local visual review', () => {
+    pathname = '/console/dashboard'
+
+    render(<AdminShell>Dashboard content</AdminShell>)
+
+    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].getAttribute('aria-current')).toBe('page')
+    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('bg-primary/10')
   })
 
   it('renders the expected grouped Console navigation rhythm', () => {
