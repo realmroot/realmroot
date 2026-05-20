@@ -290,6 +290,42 @@ describe('createDrizzleConfigzRepository', () => {
     ])
   })
 
+  it('uses default account center field permissions when metadata is incomplete or absent', async () => {
+    const repository = createDrizzleConfigzRepository(
+      new FakeDb({
+        accountCenterRows: [
+          {
+            profileEditingEnabled: false,
+            passwordChangeEnabled: true,
+            connectedAccountsEnabled: false,
+            sessionsViewEnabled: true,
+            dangerZoneEnabled: false,
+            metadata: {
+              fieldPermissions: {
+                displayNameEditable: 'not-boolean',
+                usernameEditable: 'not-boolean',
+                avatarEditable: 'not-boolean',
+                emailChangeEnabled: 'not-boolean',
+              },
+            },
+          },
+        ],
+      }) as unknown as Database,
+    )
+
+    await expect(repository.getAccountCenterSettings()).resolves.toMatchObject({
+      profileEditingEnabled: false,
+      displayNameEditable: true,
+      usernameEditable: true,
+      avatarEditable: true,
+      emailChangeEnabled: true,
+      passwordChangeEnabled: true,
+      connectedAccountsEnabled: false,
+      sessionsViewEnabled: true,
+      dangerZoneEnabled: false,
+    })
+  })
+
   it('defaults account center field permissions when metadata is absent and preserves metadata on section-only updates', async () => {
     const db = new FakeDb({
       accountCenterRows: [
@@ -331,6 +367,37 @@ describe('createDrizzleConfigzRepository', () => {
         }),
       }),
     ])
+  })
+
+  it('upserts account center section settings from default settings when no row exists', async () => {
+    const db = new FakeDb()
+    const repository = createDrizzleConfigzRepository(db as unknown as Database)
+
+    await expect(repository.getAccountCenterSettings()).resolves.toBeNull()
+    await repository.updateAccountCenterSettings({
+      sessionsViewEnabled: false,
+    })
+
+    expect(db.writes[0]).toMatchObject({
+      table: accountCenterSetting,
+      values: expect.objectContaining({
+        sessionsViewEnabled: false,
+        metadata: {
+          fieldPermissions: {
+            displayNameEditable: true,
+            usernameEditable: true,
+            avatarEditable: true,
+            emailChangeEnabled: true,
+          },
+        },
+      }),
+      conflict: expect.objectContaining({
+        target: accountCenterSetting.id,
+        set: expect.objectContaining({
+          sessionsViewEnabled: false,
+        }),
+      }),
+    })
   })
 })
 

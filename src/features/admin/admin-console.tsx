@@ -418,6 +418,9 @@ export function ApplicationDetailPage({
   })
 
   const application = query.data
+  const redirectUris = listValue(application?.redirectUris, '\n')
+  const postLogoutRedirectUris = listValue(application?.postLogoutRedirectUris, '\n')
+  const corsOrigins = listValue(application?.corsOrigins, '\n')
 
   return (
     <ResourcePage
@@ -524,16 +527,11 @@ export function ApplicationDetailPage({
                       }}
                     >
                       <Field label="Redirect URIs" help="One URI per line.">
-                        <TextArea
-                          defaultValue={application.redirectUris.join('\n')}
-                          name="redirectUris"
-                          required
-                          rows={5}
-                        />
+                        <TextArea defaultValue={redirectUris} name="redirectUris" required rows={5} />
                       </Field>
                       <Field label="Post sign-out redirect URIs" help="One URI per line.">
                         <TextArea
-                          defaultValue={application.postLogoutRedirectUris.join('\n')}
+                          defaultValue={postLogoutRedirectUris}
                           name="postLogoutRedirectUris"
                           placeholder="https://app.example.com/signed-out"
                           rows={3}
@@ -541,7 +539,7 @@ export function ApplicationDetailPage({
                       </Field>
                       <Field label="CORS origins" help="One origin per line. Include scheme, host, and optional port.">
                         <TextArea
-                          defaultValue={application.corsOrigins.join('\n')}
+                          defaultValue={corsOrigins}
                           name="corsOrigins"
                           placeholder="https://app.example.com"
                           rows={3}
@@ -5784,9 +5782,9 @@ function clientConfig(application: ApplicationResponse, clientSecret: string | n
       issuer: application.oidc.issuer,
       discoveryUrl: `${application.oidc.issuer}/.well-known/openid-configuration`,
       clientId: application.clientId,
-      redirectUris: application.redirectUris,
-      postLogoutRedirectUris: application.postLogoutRedirectUris,
-      corsOrigins: application.corsOrigins,
+      redirectUris: listItems(application.redirectUris),
+      postLogoutRedirectUris: listItems(application.postLogoutRedirectUris),
+      corsOrigins: listItems(application.corsOrigins),
       scopes: application.allowedScopes.join(' '),
       tokenEndpointAuthMethod: application.tokenEndpointAuthMethod,
       customData: application.customData,
@@ -5795,6 +5793,14 @@ function clientConfig(application: ApplicationResponse, clientSecret: string | n
     null,
     2,
   )
+}
+
+function listItems(value: readonly string[] | undefined) {
+  return Array.isArray(value) ? [...value] : []
+}
+
+function listValue(value: readonly string[] | undefined, separator: string) {
+  return listItems(value).join(separator)
 }
 
 function clientTypeLabel(value: ApplicationResponse['clientType']) {
@@ -5882,7 +5888,7 @@ function CreateApplicationDialog({
             ) : (
               <SettingRow label="Client secret" value="No secret for public clients" />
             )}
-            <SettingRow label="Redirect URIs" value={createdApplication.redirectUris.join(', ')} />
+            <SettingRow label="Redirect URIs" value={listValue(createdApplication.redirectUris, ', ')} />
             <SettingRow label="Next step" value="Review redirects, origins, and client metadata." />
           </div>
           <DialogFooter className="m-0">

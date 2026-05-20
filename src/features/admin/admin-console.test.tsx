@@ -1376,6 +1376,36 @@ describe('admin console', () => {
     expect(requests.filter((url) => url === '/api/management/applications/app-1')).toHaveLength(2)
   })
 
+  it('keeps application detail rendering stable when optional list fields are absent from the API response', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/applications/app-1') {
+        const {
+          corsOrigins: _corsOrigins,
+          postLogoutRedirectUris: _postLogoutRedirectUris,
+          redirectUris: _redirectUris,
+          ...partial
+        } = application
+        return Promise.resolve(jsonResponse(partial))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
+    expect(screen.getByLabelText('Redirect URIs')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Post sign-out redirect URIs')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('CORS origins')).toHaveProperty('value', '')
+  })
+
   it('renders application detail mutation errors at the operation boundary', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

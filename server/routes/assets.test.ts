@@ -5,9 +5,20 @@ import { authContext } from '../middleware/auth-context'
 import type { AssetService } from '../modules/assets/service'
 import { createAccountAssetRoutes, createAssetRoutes, createManagementAssetRoutes } from './assets'
 
+const createConfigzServiceMock = vi.hoisted(() => vi.fn())
+
+vi.mock('../modules/configz/context', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../modules/configz/context')>()
+  return {
+    ...actual,
+    createConfigzService: createConfigzServiceMock,
+  }
+})
+
 describe('asset routes', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    createConfigzServiceMock.mockReset()
   })
 
   it('requires an authenticated account session before avatar uploads', async () => {
@@ -129,6 +140,87 @@ describe('asset routes', () => {
     expect(assets.updateUserAvatar).not.toHaveBeenCalled()
   })
 
+  it('uses the injected account center config when D1 bindings are present', async () => {
+    const assets = createAssetServiceMock()
+    const accountCenterConfig = vi.fn().mockResolvedValue({
+      profileEditingEnabled: true,
+      displayNameEditable: true,
+      usernameEditable: true,
+      avatarEditable: true,
+      emailChangeEnabled: true,
+      passwordChangeEnabled: true,
+      connectedAccountsEnabled: true,
+      sessionsViewEnabled: true,
+      dangerZoneEnabled: false,
+    })
+    const app = new Hono()
+      .use('/api/*', authContext(createAuthMock()))
+      .onError((error, c) => {
+        if (error instanceof ApiError) return handleApiError(error, c)
+        throw error
+      })
+      .route(
+        '/api/account',
+        createAccountAssetRoutes(() => assets as unknown as AssetService, accountCenterConfig),
+      )
+    const response = await requestWithFile(
+      app,
+      '/api/account/avatar',
+      userHeaders(),
+      'avatar.png',
+      'image/png',
+      'avatar',
+      { DB: createD1Mock() },
+    )
+
+    expect(response.status).toBe(201)
+    expect(accountCenterConfig).toHaveBeenCalled()
+    expect(assets.upload).toHaveBeenCalled()
+  })
+
+  it('uses the default account center config reader when D1 bindings are present', async () => {
+    const assets = createAssetServiceMock()
+    const getConfig = vi.fn().mockResolvedValue({
+      accountCenter: {
+        profileEditingEnabled: true,
+        displayNameEditable: true,
+        usernameEditable: true,
+        avatarEditable: true,
+        emailChangeEnabled: true,
+        passwordChangeEnabled: true,
+        connectedAccountsEnabled: true,
+        sessionsViewEnabled: true,
+        dangerZoneEnabled: false,
+      },
+    })
+    createConfigzServiceMock.mockReturnValue({ getConfig })
+    const app = new Hono()
+      .use('/api/*', authContext(createAuthMock()))
+      .onError((error, c) => {
+        if (error instanceof ApiError) return handleApiError(error, c)
+        throw error
+      })
+      .route(
+        '/api/account',
+        createAccountAssetRoutes(() => assets as unknown as AssetService),
+      )
+
+    const response = await requestWithFile(
+      app,
+      '/api/account/avatar',
+      userHeaders(),
+      'avatar.png',
+      'image/png',
+      'avatar',
+      { DB: createD1Mock() },
+    )
+
+    expect(response.status).toBe(201)
+    expect(createConfigzServiceMock).toHaveBeenCalled()
+    expect(getConfig).toHaveBeenCalled()
+    expect(assets.upload).toHaveBeenCalled()
+  })
+
   it('requires admin access for management uploads', async () => {
     const assets = createAssetServiceMock()
     const app = createRouteTestApp(assets)
@@ -248,6 +340,7 @@ function requestWithFile(
   filename: string,
   contentType: string,
   content: string,
+  env?: object,
 ) {
   const request = new Request(`https://auth.example.com${path}`, { method: 'POST', headers })
   Object.defineProperty(request, 'formData', {
@@ -263,7 +356,7 @@ function requestWithFile(
           : null,
     }),
   })
-  return app.fetch(request)
+  return app.fetch(request, env)
 }
 
 function createAuthMock() {
@@ -300,5 +393,13 @@ function userHeaders() {
   return {
     'x-user-id': 'user-1',
     'x-user-role': 'user',
+  }
+}
+
+function createD1Mock() {
+  return {
+    prepare: () => {
+      throw new Error('Unexpected D1 query')
+    },
   }
 }

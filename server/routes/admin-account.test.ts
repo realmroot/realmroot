@@ -384,6 +384,43 @@ describe('admin and account routes', () => {
     expect(users.listSessions).not.toHaveBeenCalled()
   })
 
+  it('enforces account center username and avatar field permissions independently', async () => {
+    const users = createUserRepositoryMock()
+    const app = createApp(createAuthMock(), {
+      userRepository: users,
+      configzServiceFactory: () => ({
+        getConfig: vi.fn().mockResolvedValue({
+          accountCenter: {
+            profileEditingEnabled: true,
+            displayNameEditable: true,
+            usernameEditable: false,
+            avatarEditable: false,
+            emailChangeEnabled: true,
+            passwordChangeEnabled: true,
+            connectedAccountsEnabled: true,
+            sessionsViewEnabled: true,
+            dangerZoneEnabled: false,
+          },
+        }),
+      }),
+    })
+
+    const username = await app.request('/api/account/profile', {
+      method: 'PATCH',
+      headers: userHeaders(),
+      body: JSON.stringify({ username: 'grace' }),
+    })
+    const avatar = await app.request('/api/account/profile', {
+      method: 'PATCH',
+      headers: userHeaders(),
+      body: JSON.stringify({ avatarAssetId: 'asset-1' }),
+    })
+
+    expect(username.status).toBe(403)
+    expect(avatar.status).toBe(403)
+    expect(users.updateProfile).not.toHaveBeenCalled()
+  })
+
   it('requires profile editing before allowing account email changes', async () => {
     const auth = createAuthMock()
     const response = await createApp(auth, {
