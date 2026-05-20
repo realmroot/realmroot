@@ -1,7 +1,13 @@
 import type { SQL } from 'drizzle-orm'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { brandingSetting, identityProviderConnector, signInExperience, uploadedAsset } from '../../db/schema'
+import {
+  accountCenterSetting,
+  brandingSetting,
+  identityProviderConnector,
+  signInExperience,
+  uploadedAsset,
+} from '../../db/schema'
 import { connectorTemplates } from '../connectors/provider-templates'
 import type {
   ConfigzIdentityProvider,
@@ -10,9 +16,11 @@ import type {
   UpdateConfigzBrandingInput,
   UpdateConfigzSettingsInput,
 } from './service'
+import { defaultAccountCenterSettings } from './service'
 
 const settingsId = 'default'
 const globalBrandingId = 'branding_default'
+const accountCenterSettingsId = 'account_center_default'
 
 export function createDrizzleConfigzRepository(db: Database): ConfigzRepository {
   return {
@@ -45,6 +53,38 @@ export function createDrizzleConfigzRepository(db: Database): ConfigzRepository 
         .values({ id: globalBrandingId, ...patch })
         .onConflictDoUpdate({
           target: brandingSetting.id,
+          set: patch,
+        })
+    },
+
+    async getAccountCenterSettings() {
+      const rows = await db
+        .select()
+        .from(accountCenterSetting)
+        .where(eq(accountCenterSetting.id, accountCenterSettingsId))
+        .limit(1)
+      return rows[0] ? toAccountCenterSettings(rows[0]) : null
+    },
+
+    async updateAccountCenterSettings(input) {
+      const current = (await this.getAccountCenterSettings()) ?? defaultAccountCenterSettings
+      const next = { ...current, ...input }
+      const patch = toAccountCenterPatch(input, current)
+      await db
+        .insert(accountCenterSetting)
+        .values({
+          id: accountCenterSettingsId,
+          applicationId: null,
+          profileEditingEnabled: next.profileEditingEnabled,
+          passwordChangeEnabled: next.passwordChangeEnabled,
+          connectedAccountsEnabled: next.connectedAccountsEnabled,
+          sessionsViewEnabled: next.sessionsViewEnabled,
+          dangerZoneEnabled: next.dangerZoneEnabled,
+          metadata: accountCenterMetadata(next),
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: accountCenterSetting.id,
           set: patch,
         })
     },
@@ -147,6 +187,39 @@ function toBrandingPatch(input: UpdateConfigzBrandingInput) {
   })
 }
 
+function toAccountCenterPatch(
+  input: Partial<typeof defaultAccountCenterSettings>,
+  current: typeof defaultAccountCenterSettings,
+) {
+  const profileMetadata = accountCenterMetadata({ ...current, ...input })
+  return withoutUndefined({
+    profileEditingEnabled: input.profileEditingEnabled,
+    passwordChangeEnabled: input.passwordChangeEnabled,
+    connectedAccountsEnabled: input.connectedAccountsEnabled,
+    sessionsViewEnabled: input.sessionsViewEnabled,
+    dangerZoneEnabled: input.dangerZoneEnabled,
+    metadata:
+      input.displayNameEditable === undefined &&
+      input.usernameEditable === undefined &&
+      input.avatarEditable === undefined &&
+      input.emailChangeEnabled === undefined
+        ? undefined
+        : profileMetadata,
+    updatedAt: new Date(),
+  })
+}
+
+function accountCenterMetadata(settings: typeof defaultAccountCenterSettings) {
+  return {
+    fieldPermissions: {
+      displayNameEditable: settings.displayNameEditable,
+      usernameEditable: settings.usernameEditable,
+      avatarEditable: settings.avatarEditable,
+      emailChangeEnabled: settings.emailChangeEnabled,
+    },
+  }
+}
+
 function readCopyMetadata(metadata: Record<string, unknown> | null) {
   return metadata && typeof metadata.copy === 'object' && metadata.copy !== null
     ? (metadata.copy as Record<string, unknown>)
@@ -161,6 +234,7 @@ function withoutUndefined<T extends Record<string, unknown>>(input: T) {
 
 type SignInExperienceRow = typeof signInExperience.$inferSelect
 type IdentityProviderConnectorRow = typeof identityProviderConnector.$inferSelect
+type AccountCenterSettingRow = typeof accountCenterSetting.$inferSelect
 
 function toSettings(row: SignInExperienceRow): ConfigzSettings {
   return {
@@ -184,5 +258,43 @@ function toIdentityProvider(row: IdentityProviderConnectorRow): ConfigzIdentityP
     providerId: row.providerId,
     displayName: row.displayName,
     icon: connectorTemplates.find((template) => template.providerId === row.providerId)?.icon ?? 'oauth',
+  }
+}
+
+function toAccountCenterSettings(row: AccountCenterSettingRow): typeof defaultAccountCenterSettings {
+  const fieldPermissions = readFieldPermissions(row.metadata)
+  return {
+    profileEditingEnabled: row.profileEditingEnabled,
+    displayNameEditable: fieldPermissions.displayNameEditable,
+    usernameEditable: fieldPermissions.usernameEditable,
+    avatarEditable: fieldPermissions.avatarEditable,
+    emailChangeEnabled: fieldPermissions.emailChangeEnabled,
+    passwordChangeEnabled: row.passwordChangeEnabled,
+    connectedAccountsEnabled: row.connectedAccountsEnabled,
+    sessionsViewEnabled: row.sessionsViewEnabled,
+    dangerZoneEnabled: row.dangerZoneEnabled,
+  }
+}
+
+function readFieldPermissions(metadata: Record<string, unknown> | null) {
+  const value =
+    metadata && typeof metadata.fieldPermissions === 'object' && metadata.fieldPermissions !== null
+      ? (metadata.fieldPermissions as Record<string, unknown>)
+      : {}
+  return {
+    displayNameEditable:
+      typeof value.displayNameEditable === 'boolean'
+        ? value.displayNameEditable
+        : defaultAccountCenterSettings.displayNameEditable,
+    usernameEditable:
+      typeof value.usernameEditable === 'boolean'
+        ? value.usernameEditable
+        : defaultAccountCenterSettings.usernameEditable,
+    avatarEditable:
+      typeof value.avatarEditable === 'boolean' ? value.avatarEditable : defaultAccountCenterSettings.avatarEditable,
+    emailChangeEnabled:
+      typeof value.emailChangeEnabled === 'boolean'
+        ? value.emailChangeEnabled
+        : defaultAccountCenterSettings.emailChangeEnabled,
   }
 }

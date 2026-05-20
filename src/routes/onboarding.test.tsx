@@ -96,5 +96,16 @@ function configz() {
     auth: {},
     oidc: {},
     security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
+    accountCenter: {
+      profileEditingEnabled: true,
+      displayNameEditable: true,
+      usernameEditable: true,
+      avatarEditable: true,
+      emailChangeEnabled: true,
+      passwordChangeEnabled: true,
+      connectedAccountsEnabled: true,
+      sessionsViewEnabled: true,
+      dangerZoneEnabled: false,
+    },
   }
 }

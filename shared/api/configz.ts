@@ -35,6 +35,18 @@ export const configzIdentityProviderSchema = z.object({
   icon: z.string(),
 })
 
+export const configzAccountCenterSchema = z.object({
+  profileEditingEnabled: z.boolean(),
+  displayNameEditable: z.boolean(),
+  usernameEditable: z.boolean(),
+  avatarEditable: z.boolean(),
+  emailChangeEnabled: z.boolean(),
+  passwordChangeEnabled: z.boolean(),
+  connectedAccountsEnabled: z.boolean(),
+  sessionsViewEnabled: z.boolean(),
+  dangerZoneEnabled: z.boolean(),
+})
+
 export const configzConfigResponseSchema = z.object({
   onboarding: z.object({
     required: z.boolean(),
@@ -88,6 +100,7 @@ export const configzConfigResponseSchema = z.object({
     sessionExpiresInSeconds: z.number(),
     passkeysEnabled: z.boolean(),
   }),
+  accountCenter: configzAccountCenterSchema,
 })
 
 export type ConfigzConfigResponse = z.infer<typeof configzConfigResponseSchema>

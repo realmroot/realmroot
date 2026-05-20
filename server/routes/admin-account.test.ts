@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../app'
+import type { AssetService } from '../modules/assets/service'
 import type { UserRepository } from '../modules/users/repository'
 
 describe('admin and account routes', () => {
@@ -327,6 +328,198 @@ describe('admin and account routes', () => {
     })
   })
 
+  it('enforces account center settings at the account API boundary', async () => {
+    const auth = createAuthMock()
+    const users = createUserRepositoryMock()
+    const app = createApp(auth, {
+      userRepository: users,
+      configzServiceFactory: () => ({
+        getConfig: vi.fn().mockResolvedValue({
+          accountCenter: {
+            profileEditingEnabled: true,
+            displayNameEditable: false,
+            usernameEditable: false,
+            avatarEditable: false,
+            emailChangeEnabled: false,
+            passwordChangeEnabled: false,
+            connectedAccountsEnabled: false,
+            sessionsViewEnabled: false,
+            dangerZoneEnabled: false,
+          },
+        }),
+      }),
+    })
+    const headers = userHeaders()
+
+    const profile = await app.request('/api/account/profile', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ displayName: 'Grace Hopper' }),
+    })
+    const email = await app.request('/api/account/email/change', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email: 'grace@example.com' }),
+    })
+    const password = await app.request('/api/account/password/change', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ currentPassword: 'old-password', newPassword: 'new-password' }),
+    })
+    const linkedAccounts = await app.request('/api/account/linked-accounts', { headers })
+    const applications = await app.request('/api/account/applications', { headers })
+    const sessions = await app.request('/api/account/sessions', { headers })
+
+    expect(profile.status).toBe(403)
+    expect(email.status).toBe(403)
+    expect(password.status).toBe(403)
+    expect(linkedAccounts.status).toBe(403)
+    expect(applications.status).toBe(403)
+    expect(sessions.status).toBe(403)
+    expect(users.updateProfile).not.toHaveBeenCalled()
+    expect(auth.api.changeEmail).not.toHaveBeenCalled()
+    expect(auth.api.changePassword).not.toHaveBeenCalled()
+    expect(users.listLinkedAccounts).not.toHaveBeenCalled()
+    expect(users.listConsentedApplications).not.toHaveBeenCalled()
+    expect(users.listSessions).not.toHaveBeenCalled()
+  })
+
+  it('enforces account center username and avatar field permissions independently', async () => {
+    const users = createUserRepositoryMock()
+    const app = createApp(createAuthMock(), {
+      userRepository: users,
+      configzServiceFactory: () => ({
+        getConfig: vi.fn().mockResolvedValue({
+          accountCenter: {
+            profileEditingEnabled: true,
+            displayNameEditable: true,
+            usernameEditable: false,
+            avatarEditable: false,
+            emailChangeEnabled: true,
+            passwordChangeEnabled: true,
+            connectedAccountsEnabled: true,
+            sessionsViewEnabled: true,
+            dangerZoneEnabled: false,
+          },
+        }),
+      }),
+    })
+
+    const username = await app.request('/api/account/profile', {
+      method: 'PATCH',
+      headers: userHeaders(),
+      body: JSON.stringify({ username: 'grace' }),
+    })
+    const avatar = await app.request('/api/account/profile', {
+      method: 'PATCH',
+      headers: userHeaders(),
+      body: JSON.stringify({ avatarAssetId: 'asset-1' }),
+    })
+
+    expect(username.status).toBe(403)
+    expect(avatar.status).toBe(403)
+    expect(users.updateProfile).not.toHaveBeenCalled()
+  })
+
+  it('requires profile editing before allowing account email changes', async () => {
+    const auth = createAuthMock()
+    const response = await createApp(auth, {
+      userRepository: createUserRepositoryMock(),
+      configzServiceFactory: () => ({
+        getConfig: vi.fn().mockResolvedValue({
+          accountCenter: {
+            profileEditingEnabled: false,
+            displayNameEditable: true,
+            usernameEditable: true,
+            avatarEditable: true,
+            emailChangeEnabled: true,
+            passwordChangeEnabled: true,
+            connectedAccountsEnabled: true,
+            sessionsViewEnabled: true,
+            dangerZoneEnabled: false,
+          },
+        }),
+      }),
+    }).request('/api/account/email/change', {
+      method: 'POST',
+      headers: userHeaders(),
+      body: JSON.stringify({ email: 'grace@example.com' }),
+    })
+
+    expect(response.status).toBe(403)
+    expect(auth.api.changeEmail).not.toHaveBeenCalled()
+  })
+
+  it('mounts account avatar uploads with account-center config in the standard app', async () => {
+    const assets = {
+      upload: vi.fn().mockResolvedValue({ asset: assetFixture() }),
+      updateUserAvatar: vi.fn().mockResolvedValue(undefined),
+    }
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      assetServiceFactory: () => assets as unknown as AssetService,
+      configzServiceFactory: () => ({
+        getConfig: vi.fn().mockResolvedValue({
+          accountCenter: {
+            profileEditingEnabled: false,
+            displayNameEditable: true,
+            usernameEditable: true,
+            avatarEditable: true,
+            emailChangeEnabled: true,
+            passwordChangeEnabled: true,
+            connectedAccountsEnabled: true,
+            sessionsViewEnabled: true,
+            dangerZoneEnabled: false,
+          },
+        }),
+      }),
+    })
+
+    const response = await requestWithFile(app, '/api/account/avatar', userHeaders())
+
+    expect(response.status).toBe(403)
+    expect(assets.upload).not.toHaveBeenCalled()
+    expect(assets.updateUserAvatar).not.toHaveBeenCalled()
+  })
+
+  it('enforces individual account profile field permissions', async () => {
+    const users = createUserRepositoryMock()
+    const app = createApp(createAuthMock(), {
+      userRepository: users,
+      configzServiceFactory: () => ({
+        getConfig: vi.fn().mockResolvedValue({
+          accountCenter: {
+            profileEditingEnabled: true,
+            displayNameEditable: true,
+            usernameEditable: false,
+            avatarEditable: false,
+            emailChangeEnabled: true,
+            passwordChangeEnabled: true,
+            connectedAccountsEnabled: true,
+            sessionsViewEnabled: true,
+            dangerZoneEnabled: false,
+          },
+        }),
+      }),
+    })
+    const headers = userHeaders()
+
+    const username = await app.request('/api/account/profile', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ username: 'grace' }),
+    })
+    const avatar = await app.request('/api/account/profile', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ avatarAssetId: 'asset-1' }),
+    })
+
+    expect(username.status).toBe(403)
+    expect(avatar.status).toBe(403)
+    expect(users.updateProfile).not.toHaveBeenCalled()
+  })
+
   it('serves account read APIs from the current end-user session', async () => {
     const users = createUserRepositoryMock()
     const app = createApp(createAuthMock(), { userRepository: users })
@@ -498,6 +691,36 @@ function createPage(page: { limit: number; offset: number }) {
     total: 10,
     ...page,
   }
+}
+
+function assetFixture() {
+  return {
+    id: 'asset-1',
+    purpose: 'avatar' as const,
+    publicUrl: 'https://auth.example.com/api/assets/asset-1',
+    contentType: 'image/png',
+    byteSize: 6,
+    checksumSha256: 'checksum-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function requestWithFile(app: ReturnType<typeof createApp>, path: string, headers: Record<string, string>) {
+  const request = new Request(`https://auth.example.com${path}`, { method: 'POST', headers })
+  Object.defineProperty(request, 'formData', {
+    value: async () => ({
+      get: (key: string) =>
+        key === 'file'
+          ? {
+              name: 'avatar.png',
+              type: 'image/png',
+              size: 6,
+              arrayBuffer: async () => new TextEncoder().encode('avatar').buffer,
+            }
+          : null,
+    }),
+  })
+  return app.fetch(request)
 }
 
 function adminHeaders() {

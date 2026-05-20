@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type ConfigzRepository, ConfigzService } from './service'
+import { type ConfigzRepository, ConfigzService, defaultAccountCenterSettings } from './service'
 
 describe('ConfigzService', () => {
   it('composes hosted auth config from defaults without leaking connector secrets', async () => {
@@ -77,6 +77,7 @@ describe('ConfigzService', () => {
         sessionExpiresInSeconds: 0,
         passkeysEnabled: false,
       },
+      accountCenter: defaultAccountCenterSettings,
     })
   })
 
@@ -322,6 +323,38 @@ describe('ConfigzService', () => {
     })
   })
 
+  it('updates management account center settings and returns the normalized resource', async () => {
+    let accountCenter = {
+      ...defaultAccountCenterSettings,
+      sessionsViewEnabled: true,
+      emailChangeEnabled: true,
+    }
+    const updates: unknown[] = []
+    const service = new ConfigzService(
+      createRepository({
+        getAccountCenterSettings: async () => accountCenter,
+        updateAccountCenterSettings: async (input) => {
+          updates.push(input)
+          accountCenter = { ...accountCenter, ...input }
+        },
+      }),
+      defaultOptions(),
+    )
+
+    const response = await service.updateManagementAccountCenterSettings({
+      accountCenter: { sessionsViewEnabled: false, emailChangeEnabled: false },
+    })
+
+    expect(updates).toEqual([{ sessionsViewEnabled: false, emailChangeEnabled: false }])
+    expect(response).toEqual({
+      accountCenter: {
+        ...defaultAccountCenterSettings,
+        sessionsViewEnabled: false,
+        emailChangeEnabled: false,
+      },
+    })
+  })
+
   it('drops unsafe legacy custom CSS from public runtime branding', async () => {
     const service = new ConfigzService(
       createRepository({
@@ -398,9 +431,11 @@ function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository 
   return {
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => overrides.branding ?? null,
+    getAccountCenterSettings: overrides.getAccountCenterSettings ?? (async () => overrides.accountCenter ?? null),
     listEnabledIdentityProviders: async () => overrides.identityProviders ?? [],
     updateSettings: overrides.updateSettings ?? (async () => undefined),
     updateBranding: overrides.updateBranding ?? (async () => undefined),
+    updateAccountCenterSettings: overrides.updateAccountCenterSettings ?? (async () => undefined),
   }
 }
 
@@ -408,6 +443,9 @@ type MockData = {
   settings: NonNullable<Awaited<ReturnType<ConfigzRepository['getSettings']>>>
   branding: NonNullable<Awaited<ReturnType<ConfigzRepository['getBranding']>>>
   identityProviders: Awaited<ReturnType<ConfigzRepository['listEnabledIdentityProviders']>>
+  accountCenter: NonNullable<Awaited<ReturnType<ConfigzRepository['getAccountCenterSettings']>>>
+  getAccountCenterSettings: ConfigzRepository['getAccountCenterSettings']
   updateSettings: ConfigzRepository['updateSettings']
   updateBranding: ConfigzRepository['updateBranding']
+  updateAccountCenterSettings: ConfigzRepository['updateAccountCenterSettings']
 }

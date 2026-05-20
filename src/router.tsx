@@ -10,7 +10,6 @@ import {
   ApplicationDetailPage,
   ApplicationsPage,
   BrandingPage,
-  CollectUserProfilePage,
   ConnectorsPage,
   ContentSettingsPage,
   CustomizeJwtPage,
@@ -383,7 +382,9 @@ const consoleSignInBrandingRoute = createRoute({
 const consoleSignInCollectUserProfileRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/sign-in-experience/collect-user-profile',
-  component: CollectUserProfilePage,
+  beforeLoad: () => {
+    throw redirect({ to: '/console/sign-in-experience/sign-up-and-sign-in' })
+  },
 })
 
 const consoleSignInAccountCenterRoute = createRoute({

@@ -51,6 +51,75 @@ describe('account center', () => {
     expect(document.querySelector('img.assetPreview')?.getAttribute('height')).toBe('56')
   })
 
+  it('reflects account center visibility and field permissions from configz', async () => {
+    mockAccountFetch(
+      {},
+      {
+        accountCenter: {
+          profileEditingEnabled: true,
+          displayNameEditable: false,
+          usernameEditable: false,
+          avatarEditable: false,
+          emailChangeEnabled: false,
+          passwordChangeEnabled: false,
+          connectedAccountsEnabled: false,
+          sessionsViewEnabled: false,
+          dangerZoneEnabled: false,
+        },
+      },
+    )
+
+    render(<AccountCenterPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    const fetchedPaths = vi.mocked(window.fetch).mock.calls.map(([input]) => String(input))
+    expect(fetchedPaths).not.toContain('/api/account/linked-accounts')
+    expect(fetchedPaths).not.toContain('/api/account/applications')
+    expect(fetchedPaths).not.toContain('/api/account/sessions')
+    expect(screen.getByRole('heading', { name: 'Profile' })).toBeTruthy()
+    expect(screen.queryByLabelText('Display name')).toBeNull()
+    expect(screen.queryByLabelText('Avatar image')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Identifiers' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Password' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Linked social accounts' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Authorized apps' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Sessions and devices' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'MFA' })).toBeTruthy()
+  })
+
+  it('keeps password changes visible when profile editing is disabled independently', async () => {
+    mockAccountFetch(
+      {},
+      {
+        accountCenter: {
+          ...defaultAccountCenterSettings,
+          profileEditingEnabled: false,
+          passwordChangeEnabled: true,
+        },
+      },
+    )
+
+    render(<AccountCenterPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Profile' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Identifiers' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Password' })).toBeTruthy()
+  })
+
+  it('surfaces config loading errors before account requests run', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      if (String(input) === '/api/configz') return Promise.reject(new Error('Config unavailable.'))
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<AccountCenterPage />)
+
+    expect(await screen.findByText('Config unavailable.')).toBeTruthy()
+    const fetchedPaths = vi.mocked(window.fetch).mock.calls.map(([input]) => String(input))
+    expect(fetchedPaths).toEqual(['/api/configz'])
+  })
+
   it('updates profile, email, and password from the profile section', async () => {
     const user = userEvent.setup()
     const requests = mockAccountFetch()
@@ -121,6 +190,7 @@ describe('account center', () => {
     render(<AccountCenterPage />)
 
     const avatarInput = (await screen.findByLabelText('Avatar image')) as HTMLInputElement
+    fireEvent.click(screen.getByRole('button', { name: 'Upload image' }))
     const requestsBeforeEmptySelection = requests.length
     fireEvent.change(avatarInput, {
       target: { files: [] },
@@ -545,14 +615,17 @@ function clickAndConfirm(triggerName: string, confirmName: string, index = 0) {
   fireEvent.click(buttons.at(-1) as HTMLButtonElement)
 }
 
-function mockAccountFetch(profileOverrides: Partial<MockProfile> = {}, options: { signOutFailure?: unknown } = {}) {
+function mockAccountFetch(
+  profileOverrides: Partial<MockProfile> = {},
+  options: { accountCenter?: ReturnType<typeof configz>['accountCenter']; signOutFailure?: unknown } = {},
+) {
   const requests: RequestRecord[] = []
   vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
     const path = String(input)
     const method = init?.method ?? 'GET'
     const body = init?.body instanceof FormData ? '[form-data]' : init?.body ? JSON.parse(String(init.body)) : null
     if (method !== 'GET') requests.push({ path, method, body })
-    if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
+    if (path === '/api/configz') return Promise.resolve(jsonResponse(configz(options.accountCenter)))
     if (path === '/api/account/profile')
       return Promise.resolve(jsonResponse({ user: { ...profile(), ...profileOverrides } }))
     if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts() }))
@@ -603,7 +676,7 @@ function mockAccountFetch(profileOverrides: Partial<MockProfile> = {}, options: 
   return requests
 }
 
-function configz() {
+function configz(accountCenter: typeof defaultAccountCenterSettings = defaultAccountCenterSettings) {
   return {
     onboarding: { required: false, href: '/onboarding' },
     signIn: {
@@ -657,7 +730,20 @@ function configz() {
       endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
     },
     security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
+    accountCenter,
   }
+}
+
+const defaultAccountCenterSettings = {
+  profileEditingEnabled: true,
+  displayNameEditable: true,
+  usernameEditable: true,
+  avatarEditable: true,
+  emailChangeEnabled: true,
+  passwordChangeEnabled: true,
+  connectedAccountsEnabled: true,
+  sessionsViewEnabled: true,
+  dangerZoneEnabled: false,
 }
 
 function profile() {

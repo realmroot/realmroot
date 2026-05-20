@@ -69,6 +69,17 @@ describe('configz routes', () => {
             sessionExpiresInSeconds: 0,
             passkeysEnabled: false,
           },
+          accountCenter: {
+            profileEditingEnabled: true,
+            displayNameEditable: true,
+            usernameEditable: true,
+            avatarEditable: true,
+            emailChangeEnabled: true,
+            passwordChangeEnabled: true,
+            connectedAccountsEnabled: true,
+            sessionsViewEnabled: true,
+            dangerZoneEnabled: false,
+          },
         }),
       }),
     })

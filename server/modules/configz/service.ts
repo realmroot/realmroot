@@ -1,7 +1,9 @@
 import { type ConfigzConfigResponse, hostedCustomCssSchema } from '../../../shared/api/configz'
 import type {
+  ManagementAccountCenterSettingsResponse,
   ManagementBrandingSettingsResponse,
   ManagementSignInSettingsResponse,
+  UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementSignInSettingsRequest,
 } from '../../../shared/api/management'
@@ -46,12 +48,16 @@ export interface ConfigzApplication {
   disabled: boolean
 }
 
+export type ConfigzAccountCenter = ConfigzConfigResponse['accountCenter']
+
 export interface ConfigzRepository {
   getSettings(): Promise<ConfigzSettings | null>
   getBranding(applicationId: string | null): Promise<ConfigzBranding | null>
+  getAccountCenterSettings(): Promise<ConfigzAccountCenter | null>
   listEnabledIdentityProviders(): Promise<ConfigzIdentityProvider[]>
   updateSettings(input: UpdateConfigzSettingsInput): Promise<void>
   updateBranding(input: UpdateConfigzBrandingInput): Promise<void>
+  updateAccountCenterSettings(input: Partial<ConfigzAccountCenter>): Promise<void>
 }
 
 export type UpdateConfigzSettingsInput = {
@@ -86,6 +92,18 @@ const defaultCopy = {
   description: 'Use your account to continue securely.',
 }
 
+export const defaultAccountCenterSettings: ConfigzAccountCenter = {
+  profileEditingEnabled: true,
+  displayNameEditable: true,
+  usernameEditable: true,
+  avatarEditable: true,
+  emailChangeEnabled: true,
+  passwordChangeEnabled: true,
+  connectedAccountsEnabled: true,
+  sessionsViewEnabled: true,
+  dangerZoneEnabled: false,
+}
+
 export class ConfigzService {
   constructor(
     private readonly repository: ConfigzRepository,
@@ -95,6 +113,7 @@ export class ConfigzService {
   async getConfig(): Promise<ConfigzConfigResponse> {
     const settings = await this.repository.getSettings()
     const branding = await this.repository.getBranding(settings?.defaultApplicationId ?? null)
+    const accountCenter = await this.repository.getAccountCenterSettings()
     const identityProviders = await this.repository.listEnabledIdentityProviders()
     const copy = readCopy(settings?.metadata)
     const passwordEnabled = settings?.passwordEnabled ?? true
@@ -175,6 +194,7 @@ export class ConfigzService {
         sessionExpiresInSeconds: this.options.securityPolicy?.sessions.expiresInSeconds ?? 0,
         passkeysEnabled: this.options.securityPolicy?.passkeys.enabled ?? false,
       },
+      accountCenter: accountCenter ?? defaultAccountCenterSettings,
     }
   }
 
@@ -221,6 +241,20 @@ export class ConfigzService {
     })
 
     return this.getManagementBrandingSettings()
+  }
+
+  async getManagementAccountCenterSettings(): Promise<ManagementAccountCenterSettingsResponse> {
+    const config = await this.getConfig()
+    return {
+      accountCenter: config.accountCenter,
+    }
+  }
+
+  async updateManagementAccountCenterSettings(
+    input: UpdateManagementAccountCenterSettingsRequest,
+  ): Promise<ManagementAccountCenterSettingsResponse> {
+    await this.repository.updateAccountCenterSettings(input.accountCenter)
+    return this.getManagementAccountCenterSettings()
   }
 }
 

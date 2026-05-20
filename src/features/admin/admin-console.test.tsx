@@ -12,7 +12,6 @@ import {
   ApplicationDetailPage,
   ApplicationsPage,
   BrandingPage,
-  CollectUserProfilePage,
   ConnectorsPage,
   ConsolePlaceholderPage,
   ContentSettingsPage,
@@ -462,8 +461,8 @@ describe('admin console', () => {
       ['/console/sign-in-experience/branding', '/console/sign-in-experience/branding', 'Branding'],
       [
         '/console/sign-in-experience/collect-user-profile',
-        '/console/sign-in-experience/collect-user-profile',
-        'Collect user profile',
+        '/console/sign-in-experience/sign-up-and-sign-in',
+        'Sign-up and sign-in',
       ],
       ['/console/sign-in-experience/account-center', '/console/sign-in-experience/account-center', 'Account Center'],
       ['/console/sign-in-experience/content', '/console/sign-in-experience/content', 'Content'],
@@ -511,7 +510,6 @@ describe('admin console', () => {
 
     for (const [label, path, heading] of [
       ['Branding', '/console/sign-in-experience/branding', 'Branding'],
-      ['Collect user profile', '/console/sign-in-experience/collect-user-profile', 'Collect user profile'],
       ['Account Center', '/console/sign-in-experience/account-center', 'Account Center'],
       ['Content', '/console/sign-in-experience/content', 'Content'],
       ['Sign-up and sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
@@ -1375,6 +1373,36 @@ describe('admin console', () => {
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
     expect(requests.filter((url) => url === '/api/management/applications/app-1')).toHaveLength(2)
+  })
+
+  it('keeps application detail rendering stable when optional list fields are absent from the API response', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/readiness') {
+        return Promise.resolve(
+          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+        )
+      }
+      if (url === '/api/management/applications/app-1') {
+        const {
+          corsOrigins: _corsOrigins,
+          postLogoutRedirectUris: _postLogoutRedirectUris,
+          redirectUris: _redirectUris,
+          ...partial
+        } = application
+        return Promise.resolve(jsonResponse(partial))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
+    expect(screen.getByLabelText('Redirect URIs')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Post sign-out redirect URIs')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('CORS origins')).toHaveProperty('value', '')
   })
 
   it('renders application detail mutation errors at the operation boundary', async () => {
@@ -2592,7 +2620,7 @@ describe('admin console', () => {
     expect(await screen.findByText('Sign-in methods')).toBeTruthy()
     expect(screen.getByLabelText('Default redirect URI')).toHaveProperty('value', 'https://app.example.com/callback')
     expect(screen.getByLabelText('Support email')).toHaveProperty('value', 'support@example.com')
-    expect(screen.getByRole('switch', { name: 'Passkey sign-in' })).toHaveProperty('disabled', true)
+    expect(screen.queryByRole('switch', { name: 'Passkey sign-in' })).toBeNull()
 
     unmount()
     renderWithQuery(<MfaPage />)
@@ -2927,7 +2955,7 @@ describe('admin console', () => {
     expect(await screen.findByText('Sign-in save failed.')).toBeTruthy()
   })
 
-  it('renders unavailable sign-in method states from runtime config', async () => {
+  it('hides excluded sign-in method rows from runtime config', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') {
@@ -2950,10 +2978,10 @@ describe('admin console', () => {
     renderWithQuery(<SignInSettingsPage />)
 
     expect(await screen.findByText('Sign-in methods')).toBeTruthy()
-    expect(screen.getByText('Sign-up password requirement').nextSibling?.textContent).toBe('Unavailable')
+    expect(screen.getByText('Sign-up password requirement').nextSibling?.textContent).toBe('Password sign-in disabled')
     expect(screen.getAllByText('Email').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getByText('Magic link').nextSibling?.textContent).toBe('Unavailable')
-    expect(screen.getByText('Email OTP').nextSibling?.textContent).toBe('Available from runtime')
+    expect(screen.queryByText('Magic link')).toBeNull()
+    expect(screen.getByText('Email OTP').nextSibling?.textContent).toBe('Enabled')
     expect(screen.getByText('Forgot-password verification').nextSibling?.textContent).toBe('Email OTP available')
   })
 
@@ -2983,7 +3011,7 @@ describe('admin console', () => {
     })
     fireEvent.change(screen.getByLabelText('Primary color'), { target: { value: '#0f766e' } })
     fireEvent.change(screen.getByLabelText('Background color'), { target: { value: '#f8fafc' } })
-    expect(screen.getByRole('switch', { name: 'Dark mode' })).toHaveProperty('disabled', true)
+    expect(screen.queryByRole('switch', { name: 'Dark mode' })).toBeNull()
     fireEvent.change(screen.getByLabelText('Product name'), { target: { value: 'Northstar ID' } })
     fireEvent.change(screen.getByLabelText('Custom CSS'), { target: { value: '--auth-panel-radius: 16px;' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save branding' }))
@@ -3339,38 +3367,83 @@ describe('admin console', () => {
     expect(screen.getByLabelText('Custom CSS')).toHaveProperty('value', '')
   })
 
-  it('renders sign-in and account configuration tabs with unsupported settings disabled', async () => {
+  it('renders sign-in and account configuration tabs without v1 dead-end controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/account-center-settings') {
+        return Promise.resolve(jsonResponse(accountCenterSettings))
+      }
       return Promise.resolve(jsonResponse({}))
     })
 
-    const { unmount } = renderWithQuery(<CollectUserProfilePage />)
-
-    expect(screen.getByRole('link', { name: 'Collect user profile' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('button', { name: 'Add field' })).toHaveProperty('disabled', true)
-    expect(screen.getByText(/Field label, field type, and user data key controls/)).toBeTruthy()
-
-    unmount()
     renderWithQuery(<AccountCenterSettingsPage />)
 
-    expect(screen.getByRole('link', { name: 'Account Center' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByText('/api/account')).toBeTruthy()
-    expect(screen.getByText('Authorized apps view')).toBeTruthy()
+    expect((await screen.findByRole('link', { name: 'Account Center' })).getAttribute('aria-current')).toBe('page')
+    expect(screen.queryByRole('link', { name: 'Collect user profile' })).toBeNull()
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    await screen.findByRole('switch', { name: 'Profile section' })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Profile section' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Password section' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Connected accounts and apps' }))
+    fireEvent.click(await screen.findByRole('switch', { name: 'Sessions section' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Display name' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Username' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Avatar' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Email changes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open account center' }))
+    expect(openSpy).toHaveBeenCalledWith('/profile', '_blank', 'noopener')
+    fireEvent.click(screen.getByRole('button', { name: 'Save account center' }))
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/management/account-center-settings',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: expect.stringContaining('"sessionsViewEnabled":false'),
+        }),
+      ),
+    )
+
+    cleanup()
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings') {
+        return Promise.resolve(
+          jsonResponse({
+            ...signInSettings,
+            signIn: {
+              ...signInSettings.signIn,
+              passwordEnabled: false,
+              magicLinkEnabled: true,
+              emailOtpEnabled: true,
+            },
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    renderWithQuery(<SignInSettingsPage />)
+
+    expect(await screen.findByText('Password sign-in disabled')).toBeTruthy()
+    expect(screen.getAllByText('Magic link').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Email OTP').length).toBeGreaterThan(0)
 
     cleanup()
     renderWithQuery(<ContentSettingsPage />)
 
     expect((await screen.findByRole('link', { name: 'Content' })).getAttribute('aria-current')).toBe('page')
-    expect(await screen.findByLabelText('Language')).toHaveProperty('disabled', true)
-    expect(screen.getByLabelText('Sign-in message')).toHaveProperty('value', 'Sign in to Acme Auth')
+    expect(screen.queryByLabelText('Language')).toBeNull()
+    expect(await screen.findByLabelText('Sign-in message')).toHaveProperty('value', 'Sign in to Acme Auth')
   })
 
   it('renders routed connector, account, tenant, and webhook settings tabs with active states', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/account-center-settings') {
+        return Promise.resolve(jsonResponse(accountCenterSettings))
+      }
       if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       if (url === '/api/management/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
@@ -3381,9 +3454,9 @@ describe('admin console', () => {
 
     const { unmount } = renderWithQuery(<AccountCenterSettingsPage />)
 
-    expect(screen.getByRole('link', { name: 'Account Center' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByText('/profile/sessions')).toBeTruthy()
-    expect(screen.getByText('Authorized apps view')).toBeTruthy()
+    expect((await screen.findByRole('link', { name: 'Account Center' })).getAttribute('aria-current')).toBe('page')
+    expect(await screen.findByRole('heading', { name: 'Profile field permissions' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open account center' })).toBeTruthy()
 
     unmount()
     renderWithQuery(<PasswordlessConnectorsPage />)
@@ -3415,12 +3488,26 @@ describe('admin console', () => {
     expect(screen.getAllByText('Cookie cache').length).toBeGreaterThan(1)
   })
 
-  it('opens account center from the account configuration tab', () => {
+  it('opens account center from the account configuration tab', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    let accountCenterRequests = 0
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/account-center-settings') {
+        accountCenterRequests += 1
+        if (accountCenterRequests === 1) {
+          return Promise.resolve(jsonResponse({ error: { message: 'Account center unavailable.' } }, 503))
+        }
+        return Promise.resolve(jsonResponse(accountCenterSettings))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
 
     renderWithQuery(<AccountCenterSettingsPage />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open account center' }))
+    expect(await screen.findByText('Account center unavailable.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Open account center' }))
 
     expect(open).toHaveBeenCalledWith('/profile', '_blank', 'noopener')
   })
@@ -4996,7 +5083,7 @@ describe('admin console', () => {
         component: <ContentSettingsPage />,
         matches: (url: string) => url === '/api/management/sign-in-settings',
         success: signInSettings,
-        text: 'Language and messages',
+        text: 'Hosted messages',
       },
       {
         component: <BrandingPage />,
@@ -5252,6 +5339,7 @@ function consoleRouteFetch(input: RequestInfo | URL) {
   if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
   if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
   if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+  if (url === '/api/management/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
   if (url === '/api/management/readiness') {
     return Promise.resolve(
       jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
@@ -5572,6 +5660,20 @@ const brandingSettings = {
   copy: signInSettings.copy,
 }
 
+const accountCenterSettings = {
+  accountCenter: {
+    profileEditingEnabled: true,
+    displayNameEditable: true,
+    usernameEditable: true,
+    avatarEditable: true,
+    emailChangeEnabled: true,
+    passwordChangeEnabled: true,
+    connectedAccountsEnabled: true,
+    sessionsViewEnabled: true,
+    dangerZoneEnabled: false,
+  },
+}
+
 const securityPolicy = {
   policy: {
     mfa: { mode: 'required' },
@@ -5740,4 +5842,5 @@ const configz = {
     endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
   },
   security: { mfaRequired: false, sessionExpiresInSeconds: 3600, passkeysEnabled: true },
+  accountCenter: accountCenterSettings.accountCenter,
 }

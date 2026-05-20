@@ -12,7 +12,12 @@ import {
   rolePermissionsResponseSchema,
   roleResponseSchema,
 } from './authorization'
-import { configzBrandingSchema, configzMethodSchema, hostedCustomCssSchema } from './configz'
+import {
+  configzAccountCenterSchema,
+  configzBrandingSchema,
+  configzMethodSchema,
+  hostedCustomCssSchema,
+} from './configz'
 import {
   connectorResponseSchema,
   createConnectorRequestSchema,
@@ -122,6 +127,14 @@ export const updateManagementBrandingSettingsRequestSchema = z.object({
     .partial()
     .optional(),
   copy: updateManagementSignInSettingsRequestSchema.shape.copy,
+})
+
+export const managementAccountCenterSettingsResponseSchema = z.object({
+  accountCenter: configzAccountCenterSchema,
+})
+
+export const updateManagementAccountCenterSettingsRequestSchema = z.object({
+  accountCenter: configzAccountCenterSchema.partial(),
 })
 
 export const managementReadinessItemIdSchema = z.enum([
@@ -326,6 +339,10 @@ export type ManagementSignInSettingsResponse = z.infer<typeof managementSignInSe
 export type UpdateManagementSignInSettingsRequest = z.infer<typeof updateManagementSignInSettingsRequestSchema>
 export type ManagementBrandingSettingsResponse = z.infer<typeof managementBrandingSettingsResponseSchema>
 export type UpdateManagementBrandingSettingsRequest = z.infer<typeof updateManagementBrandingSettingsRequestSchema>
+export type ManagementAccountCenterSettingsResponse = z.infer<typeof managementAccountCenterSettingsResponseSchema>
+export type UpdateManagementAccountCenterSettingsRequest = z.infer<
+  typeof updateManagementAccountCenterSettingsRequestSchema
+>
 export type ManagementReadinessItem = z.infer<typeof managementReadinessItemSchema>
 export type ManagementReadinessResponse = z.infer<typeof managementReadinessResponseSchema>
 export type ManagementConnectorResponse = z.infer<typeof managementConnectorResponseSchema>
