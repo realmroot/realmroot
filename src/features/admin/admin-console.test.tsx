@@ -29,6 +29,7 @@ import {
   SecurityCaptchaPage,
   SecurityGeneralPage,
   SecurityPasswordPolicyPage,
+  SignInPreviewSettingsPage,
   SignInSettingsPage,
   UsersPage,
   WebhooksPage,
@@ -478,15 +479,17 @@ describe('admin console', () => {
       ],
       ['/console/sign-in-experience/account-center', '/console/sign-in-experience/account-center', 'Account Center'],
       ['/console/sign-in-experience/content', '/console/sign-in-experience/content', 'Content'],
+      ['/console/sign-in-experience/desktop', '/console/sign-in-experience/desktop', 'Desktop'],
+      ['/console/sign-in-experience/mobile', '/console/sign-in-experience/mobile', 'Mobile'],
       ['/console/security', '/console/security/password-policy', 'Security'],
       ['/console/security/password-policy', '/console/security/password-policy', 'Security'],
       ['/console/security/captcha', '/console/security/captcha', 'CAPTCHA'],
       ['/console/security/blocklist', '/console/security/blocklist', 'Blocklist'],
       ['/console/security/general', '/console/security/general', 'General security'],
-      ['/console/mfa', '/console/mfa', 'Multi-factor auth'],
-      ['/console/connectors', '/console/connectors/passwordless', 'Passwordless connectors'],
-      ['/console/connectors/passwordless', '/console/connectors/passwordless', 'Passwordless connectors'],
-      ['/console/connectors/social', '/console/connectors/social', 'Social connectors'],
+      ['/console/mfa', '/console/mfa', 'Multi-factor authentication'],
+      ['/console/connectors', '/console/connectors/passwordless', 'Connectors'],
+      ['/console/connectors/passwordless', '/console/connectors/passwordless', 'Connectors'],
+      ['/console/connectors/social', '/console/connectors/social', 'Connectors'],
       ['/console/organization-template', '/console/organization-template/organization-roles', 'Organization roles'],
       [
         '/console/organization-template/organization-roles',
@@ -498,8 +501,8 @@ describe('admin console', () => {
       ['/console/webhooks/endpoints', '/console/webhooks/endpoints', 'Webhooks'],
       ['/console/webhooks/requests', '/console/webhooks/requests', 'Webhooks'],
       ['/console/audit-logs', '/console/audit-logs', 'Audit logs'],
-      ['/console/tenant-settings', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
-      ['/console/tenant-settings/oidc-configs', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
+      ['/console/tenant-settings', '/console/tenant-settings/oidc-configs', 'Settings'],
+      ['/console/tenant-settings/oidc-configs', '/console/tenant-settings/oidc-configs', 'Settings'],
     ] as const) {
       window.history.pushState(null, '', path)
       render(<AppRouter />)
@@ -526,6 +529,8 @@ describe('admin console', () => {
       ['Collect user profile', '/console/sign-in-experience/collect-user-profile', 'Collect user profile'],
       ['Account Center', '/console/sign-in-experience/account-center', 'Account Center'],
       ['Content', '/console/sign-in-experience/content', 'Content'],
+      ['Desktop', '/console/sign-in-experience/desktop', 'Desktop'],
+      ['Mobile', '/console/sign-in-experience/mobile', 'Mobile'],
       ['Sign-up and sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
     ] as const) {
       fireEvent.click(screen.getByRole('link', { name: label }))
@@ -542,9 +547,9 @@ describe('admin console', () => {
     for (const [path, finalPath, heading] of [
       ['/admin/sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
       ['/admin/branding', '/console/sign-in-experience/branding', 'Branding'],
-      ['/admin/connectors', '/console/connectors/passwordless', 'Passwordless connectors'],
+      ['/admin/connectors', '/console/connectors/passwordless', 'Connectors'],
       ['/admin/security', '/console/security/password-policy', 'Security'],
-      ['/admin/deployment', '/console/tenant-settings/oidc-configs', 'OIDC configs'],
+      ['/admin/deployment', '/console/tenant-settings/oidc-configs', 'Settings'],
       ['/admin/applications/app-1', '/console/applications/app-1/settings', 'Customer portal'],
     ] as const) {
       window.history.pushState(null, '', path)
@@ -2443,7 +2448,7 @@ describe('admin console', () => {
     expect(await screen.findByText('Factors')).toBeTruthy()
     expect(screen.getByText('Passkeys')).toBeTruthy()
     expect(screen.getByText('Authenticator app')).toBeTruthy()
-    expect(screen.getByText('SMS code')).toBeTruthy()
+    expect(screen.getByText('SMS verification code')).toBeTruthy()
     expect(screen.getByLabelText('Prompt policy')).toHaveProperty('value', 'required')
     expect(screen.getByLabelText('Prompt policy')).toHaveProperty('disabled', true)
 
@@ -2468,8 +2473,8 @@ describe('admin console', () => {
     cleanup()
     renderWithQuery(<SecurityPasswordPolicyPage />)
     expect(screen.getByLabelText('Minimum length')).toHaveProperty('disabled', true)
-    expect(screen.getByText('Compromised-password rejection')).toBeTruthy()
-    expect(screen.getByText('Required character types')).toBeTruthy()
+    expect(screen.getByText('Reject compromised passwords')).toBeTruthy()
+    expect(screen.getByText('1 required character type')).toBeTruthy()
 
     cleanup()
     renderWithQuery(<SecurityCaptchaPage />)
@@ -2483,15 +2488,44 @@ describe('admin console', () => {
 
     cleanup()
     renderWithQuery(<PasswordlessConnectorsPage />)
-    expect(
-      await screen.findByText('Email delivery is limited to the configured runtime email service binding.'),
-    ).toBeTruthy()
+    expect(await screen.findByText('Email and SMS connectors')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Setup SMS' })).toHaveProperty('disabled', true)
 
     cleanup()
     renderWithQuery(<DeploymentSettingsPage />)
     expect(await screen.findByText('Signing keys')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Rotate key' })).toHaveProperty('disabled', true)
+  })
+
+  it('renders MFA and password policy compact controls as read-only', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<MfaPage />)
+
+    for (const label of [
+      'Passkeys',
+      'Authenticator app',
+      'SMS verification code',
+      'Email verification code',
+      'Backup codes',
+    ] as const) {
+      expect(await screen.findByLabelText(label)).toHaveProperty('disabled', true)
+    }
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Discard' })).toHaveProperty('disabled', true)
+
+    unmount()
+    renderWithQuery(<SecurityPasswordPolicyPage />)
+
+    expect(screen.getAllByRole('radio')).toHaveLength(4)
+    for (const radio of screen.getAllByRole('radio')) expect(radio).toHaveProperty('disabled', true)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(4)
+    for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).toHaveProperty('disabled', true)
+    expect(screen.getByText('Password hashing and reset flows')).toBeTruthy()
   })
 
   it('retries new security, connector, and OIDC surface load errors', async () => {
@@ -2814,6 +2848,35 @@ describe('admin console', () => {
     expect(screen.getByText('Live preview').closest('.brandingPreview')?.className).toContain('max-w-80')
   })
 
+  it('renders desktop and mobile sign-in preview settings with routed tabs and live preview actions', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<SignInPreviewSettingsPage surface="desktop" />)
+
+    expect((await screen.findByRole('link', { name: 'Desktop' })).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Mobile' }).getAttribute('aria-current')).toBeNull()
+    const desktopPreviewButton = await screen.findByRole('button', { name: 'Live preview' })
+    expect(desktopPreviewButton.closest('.brandingPreview')?.className).not.toContain('max-w-80')
+    expect(screen.getByText('Centered panel with constrained line length')).toBeTruthy()
+    fireEvent.click(desktopPreviewButton)
+    expect(open).toHaveBeenCalledWith('/sign-in', '_blank', 'noopener')
+
+    unmount()
+    renderWithQuery(<SignInPreviewSettingsPage surface="mobile" />)
+
+    expect((await screen.findByRole('link', { name: 'Mobile' })).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Desktop' }).getAttribute('aria-current')).toBeNull()
+    expect(
+      (await screen.findByRole('button', { name: 'Live preview' })).closest('.brandingPreview')?.className,
+    ).toContain('max-w-80')
+    expect(screen.getByText('Full-width mobile panel')).toBeTruthy()
+  })
+
   it('does not apply unsafe custom CSS to the branding preview', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
@@ -2959,6 +3022,54 @@ describe('admin console', () => {
     expect((await screen.findByRole('link', { name: 'Content' })).getAttribute('aria-current')).toBe('page')
     expect(await screen.findByLabelText('Language')).toHaveProperty('disabled', true)
     expect(screen.getByLabelText('Sign-in message')).toHaveProperty('value', 'Sign in to Acme Auth')
+  })
+
+  it('renders routed connector, account, tenant, and webhook settings tabs with active states', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      }
+      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      return Promise.resolve(jsonResponse({}))
+    })
+
+    const { unmount } = renderWithQuery(<AccountCenterSettingsPage />)
+
+    expect(screen.getByRole('link', { name: 'Account Center' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByText('/account/sessions')).toBeTruthy()
+    expect(screen.getByText('Authorized apps view')).toBeTruthy()
+
+    unmount()
+    renderWithQuery(<PasswordlessConnectorsPage />)
+
+    expect((await screen.findByRole('link', { name: 'Passwordless' })).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Social' }).getAttribute('aria-current')).toBeNull()
+
+    cleanup()
+    renderWithQuery(<ConnectorsPage />)
+
+    expect((await screen.findByRole('link', { name: 'Social' })).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Passwordless' }).getAttribute('aria-current')).toBeNull()
+
+    cleanup()
+    renderWithQuery(<WebhooksPage section="requests" />)
+
+    expect(screen.getByRole('link', { name: 'Requests' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Endpoints' }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByLabelText('Search webhooks')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Filter webhook status')).toHaveProperty('disabled', true)
+
+    cleanup()
+    renderWithQuery(<DeploymentSettingsPage />)
+
+    expect((await screen.findByRole('link', { name: 'OIDC configs' })).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('tab', { name: 'Private key' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.click(screen.getByRole('tab', { name: 'Cookie key' }))
+    expect(screen.getByRole('tab', { name: 'Cookie key' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getAllByText('Cookie cache').length).toBeGreaterThan(1)
   })
 
   it('opens account center from the account configuration tab', () => {
@@ -3920,7 +4031,7 @@ describe('admin console', () => {
     cleanup()
     renderWithQuery(<MfaPage />)
     expect(await screen.findByText('Passkeys')).toBeTruthy()
-    expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
+    expect(screen.getByRole('switch', { name: 'Passkeys' }).getAttribute('aria-checked')).toBe('false')
 
     cleanup()
     renderWithQuery(<OrganizationsPage />)
@@ -4037,7 +4148,7 @@ describe('admin console', () => {
       {
         action: 'Add social connector',
         component: <ConnectorsPage />,
-        heading: 'Social connectors',
+        heading: 'Connectors',
         searchLabel: 'Search social connectors',
       },
       {
@@ -4326,7 +4437,7 @@ describe('admin console', () => {
     unmount()
     renderWithQuery(<DeploymentSettingsPage />)
 
-    expect(screen.getByRole('heading', { name: 'OIDC configs' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy()
     expect(await screen.findByText('Cloudflare Workers')).toBeTruthy()
     expect(screen.getByText('/api/management')).toBeTruthy()
   })
