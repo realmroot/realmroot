@@ -420,6 +420,7 @@ const journeyAssertions: Record<
       await expect(page.getByRole('button', { name: 'Password', exact: true })).toBeVisible()
       await expect(page.getByRole('button', { name: 'OTP' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Continue with Example SSO' })).toBeVisible()
     },
   },
   'oidc-hosted-sign-in-context': {
@@ -1726,6 +1727,10 @@ test('hosted auth account and branding screenshot evidence', async ({ page }, te
       await test.step(`${viewport.name} ${route.name}`, async () => {
         await page.goto(route.path)
         await expect(page.getByRole('heading', { name: route.heading })).toBeVisible()
+        if (route.path === '/sign-in') {
+          await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
+          await expect(page.getByRole('button', { name: 'Continue with Example SSO' })).toBeVisible()
+        }
         if (route.path.startsWith('/profile')) await expectAccountSinglePageSections(page)
         if (
           route.path === '/sign-in' ||
@@ -1935,14 +1940,16 @@ async function expectHostedAuthCompactShell(page: Page) {
     const brandPanel = document.querySelector('.authBrandPanel')
     const content = document.querySelector('.authContent')
     const heading = document.querySelector('.authBrandPanel h1')
+    const footer = document.querySelector('.authPoweredBy')
     const inputs = Array.from(document.querySelectorAll('.authPanel input'))
     const buttons = Array.from(document.querySelectorAll('.authPanel button, .authPanel .uiButton'))
-    if (!shell || !panel || !brandPanel || !content || !heading) return null
+    if (!shell || !panel || !brandPanel || !content || !heading || !footer) return null
 
     const shellBox = shell.getBoundingClientRect()
     const panelBox = panel.getBoundingClientRect()
     const brandPanelBox = brandPanel.getBoundingClientRect()
     const contentBox = content.getBoundingClientRect()
+    const footerBox = footer.getBoundingClientRect()
     const panelStyle = window.getComputedStyle(panel)
     const headingStyle = window.getComputedStyle(heading)
 
@@ -1956,7 +1963,13 @@ async function expectHostedAuthCompactShell(page: Page) {
       panelBoxShadow: panelStyle.boxShadow,
       panelHasVisualBoundary: Number.parseFloat(panelStyle.borderTopWidth) > 0 || panelStyle.boxShadow !== 'none',
       headingFontSize: Number.parseFloat(headingStyle.fontSize),
+      headerStartX: brandPanelBox.x,
       brandToContentGap: contentBox.y - brandPanelBox.bottom,
+      contentBottom: contentBox.bottom,
+      footerStartX: footerBox.x,
+      footerTop: footerBox.y,
+      footerBottom: footerBox.bottom,
+      footerCenterOffset: Math.abs(footerBox.x + footerBox.width / 2 - (panelBox.x + panelBox.width / 2)),
       inputHeights: inputs.map((input) => input.getBoundingClientRect().height),
       buttonHeights: buttons.map((button) => button.getBoundingClientRect().height),
       heroCount: shell.querySelectorAll('.hero').length,
@@ -1979,6 +1992,10 @@ async function expectHostedAuthCompactShell(page: Page) {
   expect(metrics?.panelHasVisualBoundary).toBe(true)
   expect(metrics?.headingFontSize).toBeLessThanOrEqual(24)
   expect(metrics?.brandToContentGap).toBeLessThanOrEqual(28)
+  expect(metrics?.footerTop).toBeGreaterThanOrEqual((metrics?.contentBottom ?? 0) - 1)
+  expect(metrics?.footerBottom).toBeLessThanOrEqual((metrics?.panelBottom ?? 0) + 1)
+  expect(Math.abs((metrics?.footerStartX ?? 0) - (metrics?.headerStartX ?? 0))).toBeLessThanOrEqual(2)
+  expect(metrics?.footerCenterOffset).toBeLessThanOrEqual(2)
   expect(metrics?.inputHeights.every((height) => height >= 38 && height <= 44)).toBe(true)
   expect(metrics?.buttonHeights.every((height) => height >= 32 && height <= 44)).toBe(true)
   expect(metrics?.heroCount).toBe(0)
@@ -2451,6 +2468,13 @@ const configz = {
       providerId: 'github',
       displayName: 'GitHub',
       icon: 'github',
+    },
+    {
+      slug: 'demo-sso',
+      providerType: 'generic_oauth',
+      providerId: 'demo-sso',
+      displayName: 'Example SSO',
+      icon: 'oauth',
     },
   ],
   links: {

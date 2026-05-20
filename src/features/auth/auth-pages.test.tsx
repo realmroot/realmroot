@@ -36,6 +36,13 @@ const configz = {
       displayName: 'GitHub',
       icon: 'github',
     },
+    {
+      slug: 'demo-sso',
+      providerType: 'generic_oauth',
+      providerId: 'demo-sso',
+      displayName: 'Example SSO',
+      icon: 'oauth',
+    },
   ],
   links: {
     termsUri: null,
@@ -125,6 +132,7 @@ describe('hosted auth pages', () => {
     expect(screen.getByRole('button', { name: 'OTP' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign in' }).className).toContain('uiButton-primary')
     expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Continue with Example SSO' })).toBeTruthy()
     expect(screen.getByText('Powered by Acme ID')).toBeTruthy()
     expect(screen.queryByText('Authenticator verification')).toBeNull()
   })
@@ -571,6 +579,37 @@ describe('hosted auth pages', () => {
           url: '/api/auth/sign-in/social',
           body: {
             provider: 'github',
+            callbackURL:
+              '/api/auth/oauth2/authorize?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+          },
+        },
+      ])
+    })
+  })
+
+  it('posts representative demo social sign-in with hosted callback context', async () => {
+    window.history.pushState(
+      null,
+      '',
+      '/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null })
+      return Promise.resolve(jsonResponse({ url: 'https://example.com/oauth/authorize?state=demo-state' }))
+    })
+
+    render(<SignInPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with Example SSO' }))
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          url: '/api/auth/sign-in/social',
+          body: {
+            provider: 'demo-sso',
             callbackURL:
               '/api/auth/oauth2/authorize?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
           },
