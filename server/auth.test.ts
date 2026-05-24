@@ -29,7 +29,7 @@ describe('createAuth OAuth Provider metadata', () => {
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
       grant_types_supported: ['authorization_code', 'client_credentials', 'refresh_token'],
       code_challenge_methods_supported: ['S256'],
-      scopes_supported: ['openid', 'profile', 'email', 'offline_access'],
+      scopes_supported: ['openid', 'profile', 'email', 'offline_access', 'management:read', 'management:write'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
     })
     expect(metadata.token_endpoint_auth_methods_supported).not.toContain('none')
@@ -158,6 +158,46 @@ describe('createAuth OAuth Provider metadata', () => {
       dynamicAccessControl: {
         enabled: true,
       },
+    })
+  })
+
+  it('limits management userinfo claims to the system CLI client', () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+    const oauth = findPlugin<OAuthProviderPluginOptions>(auth, 'oauth-provider').options
+    const user = { ...createUser(), role: 'admin' }
+    const jwt = {
+      scope: 'openid management:read',
+      authorization: { roles: ['admin'] },
+      roles: ['admin'],
+    }
+
+    expect(oauth.clientRegistrationAllowedScopes).toEqual(['openid', 'profile', 'email', 'offline_access'])
+    expect(
+      oauth.customUserInfoClaims({
+        user,
+        scopes: ['openid', 'management:read'],
+        jwt: { ...jwt, client_id: 'customer-client' },
+      }),
+    ).toEqual({})
+    expect(
+      oauth.customUserInfoClaims({
+        user,
+        scopes: ['openid', 'management:read'],
+        jwt: { ...jwt, azp: 'flareauth-cli' },
+      }),
+    ).toEqual({
+      role: 'admin',
+      scope: 'openid management:read',
+      client_id: 'flareauth-cli',
+      authorization: { roles: ['admin'] },
+      roles: ['admin'],
     })
   })
 
@@ -589,6 +629,15 @@ type TwoFactorPluginOptions = {
   allowPasswordless: boolean
   otpOptions?: unknown
   totpOptions?: unknown
+}
+
+type OAuthProviderPluginOptions = {
+  clientRegistrationAllowedScopes: readonly string[]
+  customUserInfoClaims: (input: {
+    user: unknown
+    scopes: string[]
+    jwt: Record<string, unknown>
+  }) => Record<string, unknown>
 }
 
 function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {

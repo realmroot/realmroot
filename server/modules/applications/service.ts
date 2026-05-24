@@ -7,13 +7,33 @@ import {
   type CreateConsentRequest,
   type ListApplicationsResponse,
   type ListClientSecretsResponse,
+  managementApplicationScopes,
   type PaginationMetadata,
   type PaginationQuery,
   type ReplaceRedirectUrisRequest,
   type RotateClientSecretResponse,
+  systemCliClientId,
   type UpdateApplicationRequest,
 } from '../../../shared/api/applications'
 import { badRequest, notFound } from '../../lib/errors'
+
+export const systemCliApplication = {
+  id: 'app_flareauth_cli',
+  slug: 'flareauth-cli',
+  name: 'FlareAuth CLI',
+  clientId: systemCliClientId,
+  redirectUris: ['http://127.0.0.1:8484/callback', 'http://localhost:8484/callback'],
+  allowedGrantTypes: ['authorization_code', 'refresh_token'],
+  allowedScopes: ['openid', 'profile', 'email', 'offline_access', 'management:read', 'management:write'],
+} as const satisfies {
+  id: string
+  slug: string
+  name: string
+  clientId: string
+  redirectUris: string[]
+  allowedGrantTypes: ApplicationResponse['allowedGrantTypes']
+  allowedScopes: ApplicationResponse['allowedScopes']
+}
 
 export interface ApplicationAggregate {
   id: string
@@ -27,6 +47,7 @@ export interface ApplicationAggregate {
   public: boolean
   firstParty: boolean
   trusted: boolean
+  systemManaged: boolean
   disabled: boolean
   disabledReason: string | null
   redirectUris: string[]
@@ -69,6 +90,7 @@ export interface ApplicationRepository {
     application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
     clientSecret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'> | null
   }): Promise<ApplicationAggregate>
+  upsertSystem(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>): Promise<ApplicationAggregate>
   list(pagination: PaginationQuery): Promise<PaginatedResult<ApplicationAggregate>>
   findById(id: string): Promise<ApplicationAggregate | null>
   findByClientId(clientId: string): Promise<ApplicationAggregate | null>
@@ -127,6 +149,7 @@ export class ApplicationService {
         public: input.clientType !== 'confidential_web',
         firstParty: input.firstParty ?? false,
         trusted: input.trusted ?? false,
+        systemManaged: false,
         disabled: false,
         disabledReason: null,
         redirectUris: settings.redirectUris,
@@ -169,6 +192,45 @@ export class ApplicationService {
     }
   }
 
+  async ensureSystemClients() {
+    await this.ensureCliApplication()
+  }
+
+  async ensureCliApplication(): Promise<ApplicationResponse> {
+    const settings = normalizeClientSettings(
+      'public_native',
+      [...systemCliApplication.redirectUris],
+      [...systemCliApplication.allowedGrantTypes],
+      [...systemCliApplication.allowedScopes],
+      { allowManagementScopes: true },
+    )
+    const application = await this.repository.upsertSystem({
+      id: systemCliApplication.id,
+      slug: systemCliApplication.slug,
+      name: systemCliApplication.name,
+      description: 'System-managed public native OAuth client for Restish and CLI Management API access.',
+      homepageUrl: null,
+      iconUrl: null,
+      clientId: systemCliApplication.clientId,
+      clientType: 'public_native',
+      public: true,
+      firstParty: true,
+      trusted: false,
+      systemManaged: true,
+      disabled: false,
+      disabledReason: null,
+      redirectUris: settings.redirectUris,
+      postLogoutRedirectUris: [],
+      corsOrigins: [],
+      customData: {},
+      allowedGrantTypes: settings.allowedGrantTypes,
+      allowedScopes: settings.allowedScopes,
+      requirePkce: true,
+      tokenEndpointAuthMethod: 'none',
+    })
+    return this.toResponse(application, [])
+  }
+
   async get(id: string): Promise<ApplicationResponse> {
     const application = await this.requireApplication(id)
     return this.toResponse(application, (await this.repository.listSecrets(id, defaultPagination())).items)
@@ -176,6 +238,9 @@ export class ApplicationService {
 
   async update(id: string, input: UpdateApplicationRequest): Promise<ApplicationResponse> {
     const application = await this.requireApplication(id)
+    if (application.systemManaged) {
+      throw badRequest('System-managed applications cannot be modified.')
+    }
     const settings =
       input.redirectUris || input.allowedGrantTypes || input.allowedScopes
         ? normalizeClientSettings(
@@ -214,6 +279,9 @@ export class ApplicationService {
 
   async replaceRedirectUris(id: string, input: ReplaceRedirectUrisRequest): Promise<ApplicationResponse> {
     const application = await this.requireApplication(id)
+    if (application.systemManaged) {
+      throw badRequest('System-managed applications cannot be modified.')
+    }
     const settings = normalizeClientSettings(
       application.clientType,
       input.redirectUris,
@@ -225,7 +293,10 @@ export class ApplicationService {
   }
 
   async delete(id: string): Promise<void> {
-    await this.requireApplication(id)
+    const application = await this.requireApplication(id)
+    if (application.systemManaged) {
+      throw badRequest('System-managed applications cannot be deleted.')
+    }
     await this.repository.delete(id)
   }
 
@@ -363,6 +434,7 @@ export class ApplicationService {
       public: application.public,
       firstParty: application.firstParty,
       trusted: application.trusted,
+      systemManaged: application.systemManaged,
       disabled: application.disabled,
       disabledReason: application.disabledReason,
       redirectUris: application.redirectUris,
@@ -401,6 +473,7 @@ function normalizeClientSettings(
   redirectUris: string[],
   grantTypes: ApplicationResponse['allowedGrantTypes'] = ['authorization_code', 'refresh_token'],
   scopes: ApplicationResponse['allowedScopes'] = ['openid', 'profile', 'email'],
+  options: { allowManagementScopes?: boolean } = {},
 ) {
   const normalizedGrantTypes = dedupe(grantTypes)
   const normalizedScopes = dedupe(scopes)
@@ -415,6 +488,12 @@ function normalizeClientSettings(
   for (const scope of normalizedScopes) {
     if (!applicationScopes.includes(scope)) {
       throw badRequest(`Unsupported scope: ${scope}`)
+    }
+    if (
+      !options.allowManagementScopes &&
+      managementApplicationScopes.includes(scope as (typeof managementApplicationScopes)[number])
+    ) {
+      throw badRequest('Management scopes are reserved for the system CLI client.')
     }
   }
   for (const grantType of normalizedGrantTypes) {

@@ -2,11 +2,15 @@ import { z } from 'zod'
 
 export const applicationClientTypes = ['public_spa', 'public_native', 'confidential_web'] as const
 export const applicationGrantTypes = ['authorization_code', 'refresh_token', 'client_credentials'] as const
-export const applicationScopes = ['openid', 'profile', 'email', 'offline_access'] as const
+export const systemCliClientId = 'flareauth-cli'
+export const managementApplicationScopes = ['management:read', 'management:write'] as const
+export const userConfigurableApplicationScopes = ['openid', 'profile', 'email', 'offline_access'] as const
+export const applicationScopes = [...userConfigurableApplicationScopes, ...managementApplicationScopes] as const
 
 export const applicationClientTypeSchema = z.enum(applicationClientTypes)
 export const applicationGrantTypeSchema = z.enum(applicationGrantTypes)
 export const applicationScopeSchema = z.enum(applicationScopes)
+export const userConfigurableApplicationScopeSchema = z.enum(userConfigurableApplicationScopes)
 
 const nonEmptyString = z.string().trim().min(1)
 const optionalUrl = z.url().optional()
@@ -57,6 +61,7 @@ export const applicationResponseSchema = z
     public: z.boolean(),
     firstParty: z.boolean(),
     trusted: z.boolean(),
+    systemManaged: z.boolean(),
     disabled: z.boolean(),
     disabledReason: z.string().nullable(),
     redirectUris: z.array(z.string()),
@@ -92,7 +97,7 @@ export const createApplicationRequestSchema = z.object({
   clientType: applicationClientTypeSchema,
   redirectUris: z.array(nonEmptyString).min(1),
   allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
-  allowedScopes: z.array(applicationScopeSchema).min(1).optional(),
+  allowedScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
   firstParty: z.boolean().optional(),
   trusted: z.boolean().optional(),
 })
@@ -113,7 +118,7 @@ export const updateApplicationRequestSchema = z.object({
   corsOrigins: z.array(nonEmptyString).optional(),
   customData: customDataSchema.optional(),
   allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
-  allowedScopes: z.array(applicationScopeSchema).min(1).optional(),
+  allowedScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
   firstParty: z.boolean().optional(),
   trusted: z.boolean().optional(),
   disabled: z.boolean().optional(),

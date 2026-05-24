@@ -122,7 +122,255 @@ describe('management routes', () => {
     })
   })
 
-  it('delegates management user collection requests through the stable management path', async () => {
+  it('accepts Management API Bearer tokens from the CLI client for admin users', async () => {
+    const auth = createAuthMock()
+    auth.api.oauth2UserInfo.mockResolvedValue({
+      sub: 'admin-1',
+      email: 'admin-1@example.com',
+      role: 'admin',
+      client_id: 'flareauth-cli',
+      scope: 'openid management:read management:write',
+    })
+
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users?limit=10&offset=20',
+      { headers: bearerHeaders('valid-admin-token') },
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      users: [],
+      pagination: {
+        limit: 10,
+        offset: 20,
+      },
+    })
+    expect(auth.api.oauth2UserInfo).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      asResponse: false,
+    })
+    expect(auth.api.listUsers).toHaveBeenCalledWith({
+      query: expect.objectContaining({
+        limit: 10,
+        offset: 20,
+      }),
+      headers: expect.any(Headers),
+    })
+  })
+
+  it('rejects non-admin Management API Bearer tokens with 403', async () => {
+    const auth = createAuthMock()
+    auth.api.oauth2UserInfo.mockResolvedValue({
+      sub: 'user-1',
+      email: 'user-1@example.com',
+      role: 'user',
+      client_id: 'flareauth-cli',
+      scope: 'openid management:read management:write',
+    })
+
+    const app = createApp(auth, { userRepository: createUserRepositoryMock() })
+    const response = await app.request('/api/management/users', { headers: bearerHeaders('valid-user-token') })
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'forbidden',
+        message: 'Admin access is required.',
+      },
+    })
+    expect(auth.api.listUsers).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid Management API Bearer tokens with 401', async () => {
+    const auth = createAuthMock()
+    auth.api.oauth2UserInfo.mockRejectedValue(new Error('token expired'))
+
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users',
+      {
+        headers: bearerHeaders('expired-token'),
+      },
+    )
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'unauthorized',
+        message: 'Invalid bearer token.',
+      },
+    })
+    expect(auth.api.listUsers).not.toHaveBeenCalled()
+  })
+
+  it('rejects Management API Bearer tokens when token verification is unavailable', async () => {
+    const auth = createAuthMock()
+    auth.api.oauth2UserInfo = undefined as never
+
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users',
+      {
+        headers: bearerHeaders('valid-admin-token'),
+      },
+    )
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'unauthorized',
+        message: 'Invalid bearer token.',
+      },
+    })
+    expect(auth.api.listUsers).not.toHaveBeenCalled()
+  })
+
+  it('rejects Management API Bearer tokens from non-CLI OAuth clients', async () => {
+    const auth = createAuthMock()
+    auth.api.oauth2UserInfo.mockResolvedValue({
+      sub: 'admin-1',
+      email: 'admin-1@example.com',
+      role: 'admin',
+      client_id: 'browser-admin',
+      scope: 'openid management:read management:write',
+    })
+
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users',
+      {
+        headers: bearerHeaders('wrong-client-token'),
+      },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'forbidden',
+      },
+    })
+    expect(auth.api.listUsers).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed Management API Bearer authorization headers with 401', async () => {
+    const auth = createAuthMock()
+
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users',
+      {
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer',
+        },
+      },
+    )
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'unauthorized',
+        message: 'Invalid bearer token.',
+      },
+    })
+    expect(auth.api.oauth2UserInfo).not.toHaveBeenCalled()
+    expect(auth.api.listUsers).not.toHaveBeenCalled()
+  })
+
+  it('requires management write scope for mutating Bearer-token requests', async () => {
+    const auth = createAuthMock()
+    auth.api.oauth2UserInfo.mockResolvedValue({
+      sub: 'admin-1',
+      email: 'admin-1@example.com',
+      role: 'admin',
+      client_id: 'flareauth-cli',
+      scope: 'openid management:read',
+    })
+
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users',
+      {
+        method: 'POST',
+        headers: bearerHeaders('read-only-token'),
+        body: JSON.stringify({
+          email: 'new-user@example.com',
+          password: 'Sup3rSecurePass!',
+          name: 'New User',
+          role: 'user',
+        }),
+      },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'forbidden',
+      },
+    })
+    expect(auth.api.createUser).not.toHaveBeenCalled()
+  })
+
+  it('accepts CLI Bearer tokens when admin access comes from OAuth roles claims', async () => {
+    const auth = createAuthMock()
+    auth.api.oauth2UserInfo.mockResolvedValue({
+      sub: 'admin-1',
+      email: 'admin-1@example.com',
+      client_id: 'flareauth-cli',
+      scope: 'openid management:read',
+      authorization: {
+        roles: ['admin'],
+      },
+    })
+
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users',
+      {
+        headers: bearerHeaders('roles-admin-token'),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(auth.api.listUsers).toHaveBeenCalledOnce()
+  })
+
+  it('does not promote Management permission strings without an admin role claim', async () => {
+    const auth = createAuthMock()
+    auth.api.oauth2UserInfo.mockResolvedValue({
+      sub: 'user-1',
+      email: 'user-1@example.com',
+      client_id: 'flareauth-cli',
+      scope: 'openid management:read',
+      authorization: {
+        permissions: ['management:write'],
+      },
+    })
+
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+      '/api/management/users',
+      {
+        headers: bearerHeaders('permissions-admin-token'),
+      },
+    )
+
+    expect(response.status).toBe(403)
+    expect(auth.api.listUsers).not.toHaveBeenCalled()
+  })
+
+  it('does not accept Management Bearer tokens on legacy admin routes', async () => {
+    const auth = createAuthMock()
+    auth.api.oauth2UserInfo.mockResolvedValue({
+      sub: 'admin-1',
+      email: 'admin-1@example.com',
+      role: 'admin',
+      client_id: 'flareauth-cli',
+      scope: 'openid management:read management:write',
+    })
+
+    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request('/api/admin/users', {
+      headers: bearerHeaders('valid-admin-token'),
+    })
+
+    expect(response.status).toBe(401)
+    expect(auth.api.oauth2UserInfo).not.toHaveBeenCalled()
+  })
+
+  it('preserves existing admin-session auth behavior on management routes', async () => {
     const auth = createAuthMock()
     const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
       '/api/management/users?limit=10&offset=20&banned=false',
@@ -149,6 +397,11 @@ describe('management routes', () => {
       }),
       headers: expect.any(Headers),
     })
+    expect(auth.api.getSession).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      asResponse: false,
+    })
+    expect(auth.api.oauth2UserInfo).not.toHaveBeenCalled()
   })
 
   it('enforces managed password and blocklist policy for management user creation', async () => {
@@ -1152,6 +1405,7 @@ function createAuthMock() {
           },
         }
       }),
+      oauth2UserInfo: vi.fn(),
       listUsers: vi.fn().mockResolvedValue({ users: [], total: 0 }),
       getUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
       createUser: vi.fn().mockResolvedValue({ user: { id: 'user-1' } }),
@@ -1827,6 +2081,7 @@ function applicationFixture() {
     clientId: 'client-1',
     clientType: 'public_spa',
     redirectUris: ['https://app.example.com/callback'],
+    systemManaged: false,
     disabled: false,
   }
 }
@@ -1852,5 +2107,12 @@ function userHeaders() {
     'content-type': 'application/json',
     'x-user-id': 'user-1',
     'x-user-role': 'user',
+  }
+}
+
+function bearerHeaders(token: string) {
+  return {
+    'content-type': 'application/json',
+    authorization: `Bearer ${token}`,
   }
 }

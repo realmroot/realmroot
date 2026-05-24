@@ -18,6 +18,7 @@ type OAuthClientRow = typeof oauthClient.$inferSelect
 const corsOriginsMetadataKey = 'corsOrigins'
 const customDataMetadataKey = 'customData'
 const iconUrlMetadataKey = 'iconUrl'
+const systemManagedMetadataKey = 'systemManaged'
 
 export function createDrizzleApplicationRepository(db: Database): ApplicationRepository {
   return {
@@ -44,6 +45,67 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       await db.batch(statements)
       return {
         ...input.application,
+        createdAt: now,
+        updatedAt: now,
+      }
+    },
+
+    async upsertSystem(input) {
+      const now = new Date()
+      await db.batch([
+        db
+          .insert(oauthClient)
+          .values(toOAuthClientInsert(input, null, now))
+          .onConflictDoUpdate({
+            target: oauthClient.clientId,
+            set: {
+              clientSecret: null,
+              disabled: input.disabled,
+              skipConsent: input.trusted,
+              name: input.name,
+              uri: input.homepageUrl,
+              icon: input.iconUrl,
+              redirectUris: serializeList(input.redirectUris),
+              postLogoutRedirectUris: serializeList(input.postLogoutRedirectUris),
+              tokenEndpointAuthMethod: input.tokenEndpointAuthMethod,
+              grantTypes: serializeList(input.allowedGrantTypes),
+              responseTypes: serializeList(['code']),
+              public: input.public,
+              type: input.clientType,
+              requirePKCE: input.requirePkce,
+              scopes: serializeList(input.allowedScopes),
+              metadata: JSON.stringify({ applicationId: input.id }),
+              updatedAt: now,
+            },
+          }),
+        db
+          .insert(application)
+          .values(toApplicationInsert(input, now))
+          .onConflictDoUpdate({
+            target: application.id,
+            set: {
+              oauthClientId: input.clientId,
+              slug: input.slug,
+              name: input.name,
+              description: input.description,
+              homepageUrl: input.homepageUrl,
+              firstParty: input.firstParty,
+              trusted: input.trusted,
+              disabled: input.disabled,
+              disabledReason: input.disabledReason,
+              metadata: writeApplicationMetadata(null, {
+                iconUrl: input.iconUrl,
+                corsOrigins: input.corsOrigins,
+                customData: input.customData,
+                systemManaged: input.systemManaged,
+              }),
+              updatedAt: now,
+            },
+          }),
+        db.insert(applicationClientMetadata).values({ applicationId: input.id }).onConflictDoNothing(),
+      ])
+      return {
+        ...input,
         createdAt: now,
         updatedAt: now,
       }
@@ -316,7 +378,12 @@ function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt' | 'up
     trusted: input.trusted,
     disabled: input.disabled,
     disabledReason: input.disabledReason,
-    metadata: input.iconUrl ? { iconUrl: input.iconUrl } : undefined,
+    metadata: writeApplicationMetadata(null, {
+      iconUrl: input.iconUrl,
+      corsOrigins: input.corsOrigins.length > 0 ? input.corsOrigins : undefined,
+      customData: Object.keys(input.customData).length > 0 ? input.customData : undefined,
+      systemManaged: input.systemManaged,
+    }),
     createdAt: now,
     updatedAt: now,
   }
@@ -364,6 +431,7 @@ function toAggregate(app: ApplicationRow, client: OAuthClientRow): ApplicationAg
     public: client.public ?? false,
     firstParty: app.firstParty,
     trusted: app.trusted,
+    systemManaged: readSystemManaged(app.metadata),
     disabled: app.disabled || !!client.disabled,
     disabledReason: app.disabledReason,
     redirectUris: parseList(client.redirectUris),
@@ -436,6 +504,15 @@ function readCustomData(metadata: unknown) {
   return {}
 }
 
+function readSystemManaged(metadata: unknown) {
+  return Boolean(
+    typeof metadata === 'object' &&
+      metadata !== null &&
+      systemManagedMetadataKey in metadata &&
+      metadata[systemManagedMetadataKey] === true,
+  )
+}
+
 function readStringListMetadata(metadata: unknown, key: string) {
   if (typeof metadata !== 'object' || metadata === null || !(key in metadata)) return []
   const value = (metadata as Record<string, unknown>)[key]
@@ -448,6 +525,7 @@ function writeApplicationMetadata(
     iconUrl?: string | null
     corsOrigins?: string[]
     customData?: Record<string, unknown>
+    systemManaged?: boolean
   },
 ) {
   const next = { ...(current ?? {}) }
@@ -457,6 +535,10 @@ function writeApplicationMetadata(
   }
   if (patch.corsOrigins !== undefined) next[corsOriginsMetadataKey] = patch.corsOrigins
   if (patch.customData !== undefined) next[customDataMetadataKey] = patch.customData
+  if (patch.systemManaged !== undefined) {
+    if (patch.systemManaged) next[systemManagedMetadataKey] = true
+    else delete next[systemManagedMetadataKey]
+  }
   return Object.keys(next).length ? next : null
 }
 
@@ -475,5 +557,12 @@ function isGrantType(value: string): value is ApplicationAggregate['allowedGrant
 }
 
 function isScope(value: string): value is ApplicationAggregate['allowedScopes'][number] {
-  return value === 'openid' || value === 'profile' || value === 'email' || value === 'offline_access'
+  return (
+    value === 'openid' ||
+    value === 'profile' ||
+    value === 'email' ||
+    value === 'offline_access' ||
+    value === 'management:read' ||
+    value === 'management:write'
+  )
 }

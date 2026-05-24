@@ -17,6 +17,14 @@ Feature: Admin Console
     Then /api/management/openapi.json returns the OpenAPI 3.1 contract
     And Management API responses advertise the contract with Restish-compatible Link headers
 
+  Scenario: Restish authenticates to the Management API with PKCE
+    Given the system-managed FlareAuth CLI OAuth client exists
+    When Restish signs in through Authorization Code with PKCE
+    Then the client uses client_id "flareauth-cli" without a client secret
+    And the callback redirects to http://127.0.0.1:8484/callback or http://localhost:8484/callback
+    And Management API requests with an administrator Bearer token are accepted
+    And Management API requests with a non-admin Bearer token are rejected
+
   @journey:admin-signed-out-redirect
   Scenario: Signed-out Console routes redirect before data loads
     Given I am signed out

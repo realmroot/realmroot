@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  createApplicationRequestSchema,
   createApplicationResponseSchema,
   listApplicationsResponseSchema,
   listClientSecretsResponseSchema,
   listRedirectUrisResponseSchema,
   paginationQuerySchema,
+  updateApplicationRequestSchema,
 } from './applications'
 
 describe('application API pagination contracts', () => {
@@ -49,6 +51,7 @@ describe('application API pagination contracts', () => {
       public: false,
       firstParty: false,
       trusted: false,
+      systemManaged: false,
       disabled: false,
       disabledReason: null,
       redirectUris: ['https://app.example.com/callback'],
@@ -76,6 +79,22 @@ describe('application API pagination contracts', () => {
     expect(createApplicationResponseSchema.parse(response).clientSecret).toBe('fas_secret')
     expect(() =>
       listApplicationsResponseSchema.parse({ applications: [response], pagination: pagination(1) }),
+    ).toThrow()
+  })
+
+  it('keeps management scopes out of user-configurable application requests', () => {
+    expect(() =>
+      createApplicationRequestSchema.parse({
+        name: 'Customer app',
+        clientType: 'public_spa',
+        redirectUris: ['http://localhost:5173/callback'],
+        allowedScopes: ['openid', 'management:read'],
+      }),
+    ).toThrow()
+    expect(() =>
+      updateApplicationRequestSchema.parse({
+        allowedScopes: ['openid', 'management:write'],
+      }),
     ).toThrow()
   })
 })

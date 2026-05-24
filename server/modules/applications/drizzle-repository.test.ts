@@ -255,6 +255,82 @@ describe('createDrizzleApplicationRepository', () => {
     expect(db.inserts[1]?.values).toMatchObject({ metadata: { iconUrl: 'https://admin.example.com/icon.png' } })
   })
 
+  it('upserts system-managed CLI application records with conflict updates and no secrets', async () => {
+    const db = new FakeDb()
+    const repository = createDrizzleApplicationRepository(db as unknown as Database)
+
+    const created = await repository.upsertSystem({
+      ...applicationInput(),
+      id: 'app_flareauth_cli',
+      slug: 'flareauth-cli',
+      name: 'FlareAuth CLI',
+      description: 'System-managed public native OAuth client for Restish and CLI access.',
+      homepageUrl: null,
+      clientId: 'flareauth-cli',
+      clientType: 'public_native',
+      public: true,
+      firstParty: true,
+      systemManaged: true,
+      redirectUris: ['http://127.0.0.1:8484/callback', 'http://localhost:8484/callback'],
+      corsOrigins: ['http://localhost:8484'],
+      customData: { channel: 'stable' },
+      allowedGrantTypes: ['authorization_code', 'refresh_token'],
+      allowedScopes: ['openid', 'management:read', 'management:write'],
+      requirePkce: true,
+      tokenEndpointAuthMethod: 'none',
+    })
+
+    expect(created).toMatchObject({
+      id: 'app_flareauth_cli',
+      clientId: 'flareauth-cli',
+      systemManaged: true,
+      public: true,
+      tokenEndpointAuthMethod: 'none',
+      createdAt: expect.any(Date),
+      updatedAt: expect.any(Date),
+    })
+    expect(db.inserts.map((insert) => insert.table)).toEqual([oauthClient, application, applicationClientMetadata])
+    expect(db.inserts[0]).toMatchObject({
+      table: oauthClient,
+      values: {
+        clientId: 'flareauth-cli',
+        clientSecret: null,
+        public: true,
+        type: 'public_native',
+        requirePKCE: true,
+        tokenEndpointAuthMethod: 'none',
+        grantTypes: '["authorization_code","refresh_token"]',
+        scopes: '["openid","management:read","management:write"]',
+      },
+      conflict: {
+        type: 'update',
+      },
+    })
+    expect(db.inserts[1]).toMatchObject({
+      table: application,
+      values: {
+        id: 'app_flareauth_cli',
+        metadata: {
+          corsOrigins: ['http://localhost:8484'],
+          customData: { channel: 'stable' },
+          systemManaged: true,
+        },
+      },
+      conflict: {
+        type: 'update',
+      },
+    })
+    expect(db.inserts[2]).toMatchObject({
+      table: applicationClientMetadata,
+      values: {
+        applicationId: 'app_flareauth_cli',
+      },
+      conflict: {
+        type: 'nothing',
+      },
+    })
+  })
+
   it('updates application and OAuth client records without a D1 transaction', async () => {
     const db = new FakeDb({
       application: [{ id: 'app-1', oauthClientId: 'client-1' }],
@@ -600,6 +676,7 @@ function applicationInput() {
     public: false,
     firstParty: false,
     trusted: false,
+    systemManaged: false,
     disabled: false,
     disabledReason: null,
     redirectUris: ['https://admin.example.com/callback'],
@@ -665,7 +742,11 @@ function oauthClientRow() {
 }
 
 class FakeDb {
-  readonly inserts: Array<{ table: unknown; values: unknown }> = []
+  readonly inserts: Array<{
+    table: unknown
+    values: unknown
+    conflict?: { type: 'update' | 'nothing'; config?: unknown }
+  }> = []
   readonly updates: Array<{ table: unknown; set: unknown }> = []
   readonly deletes: Array<{ table: unknown }> = []
 
@@ -680,8 +761,23 @@ class FakeDb {
 
   insert(table: unknown) {
     return {
-      values: async (values: unknown) => {
-        this.inserts.push({ table, values })
+      values: (values: unknown) => {
+        const record: { table: unknown; values: unknown; conflict?: { type: 'update' | 'nothing'; config?: unknown } } =
+          {
+            table,
+            values,
+          }
+        this.inserts.push(record)
+        return {
+          onConflictDoUpdate: (config: unknown) => {
+            record.conflict = { type: 'update', config }
+            return Promise.resolve(undefined)
+          },
+          onConflictDoNothing: (config?: unknown) => {
+            record.conflict = { type: 'nothing', config }
+            return Promise.resolve(undefined)
+          },
+        }
       },
     }
   }

@@ -107,7 +107,7 @@ import type {
 import type { Auth } from './auth'
 import { forbidden, handleApiError, notFound } from './lib/errors'
 import { accessLog } from './middleware/access-log'
-import { authContext, type SessionReader } from './middleware/auth-context'
+import { authContext, managementBearerAuth, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
@@ -644,6 +644,8 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
     .route('/api/assets', createAssetRoutes(options.assetServiceFactory))
     .use('/api/management', managementOpenApiDiscoveryHeader())
     .use('/api/management/*', managementOpenApiDiscoveryHeader())
+    .use('/api/management', managementBearerAuth(auth))
+    .use('/api/management/*', managementBearerAuth(auth))
     .get(managementOpenApiPath, (c) => c.json(managementOpenApi))
     .route('/api/management', createManagementAssetRoutes(options.assetServiceFactory))
     .route(

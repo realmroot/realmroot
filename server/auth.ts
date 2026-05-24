@@ -10,6 +10,11 @@ import { organization } from 'better-auth/plugins/organization'
 import { username } from 'better-auth/plugins/username'
 import { verifyMessage } from 'viem'
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
+import {
+  managementApplicationScopes,
+  systemCliClientId,
+  userConfigurableApplicationScopes,
+} from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 import type { SecurityPolicy } from '../shared/api/security'
 import { betterAuthTranslations } from './auth-i18n'
@@ -21,7 +26,7 @@ import { createDrizzleAuthorizationRepository } from './modules/authorization/dr
 import { AuthorizationService, type AuthorizationTokenClaimInput } from './modules/authorization/service'
 import type { AuthConnectorConfig } from './modules/connectors/service'
 
-const oauthScopes = ['openid', 'profile', 'email', 'offline_access']
+const oauthScopes = ['openid', 'profile', 'email', 'offline_access', ...managementApplicationScopes]
 const organizationAccessControl = createAccessControl({
   organization: ['create', 'read', 'update', 'delete'],
   member: ['create', 'read', 'update', 'delete'],
@@ -308,11 +313,22 @@ export function createAuth(
         consentPage: '/oauth/consent',
         scopes: oauthScopes,
         customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(authorization, input),
+        customUserInfoClaims: ({ user, scopes, jwt }) => {
+          const clientId = readString(jwt, 'client_id') ?? readString(jwt, 'azp')
+          if (clientId !== systemCliClientId || !hasManagementScope(scopes)) return {}
+          return {
+            role: readUserRole(user),
+            scope: jwt.scope,
+            client_id: clientId,
+            authorization: jwt.authorization,
+            roles: jwt.roles,
+          }
+        },
         customIdTokenClaims: ({ metadata }) => ({
           ...(readString(metadata, 'applicationId') ? { application_id: readString(metadata, 'applicationId') } : {}),
         }),
         clientRegistrationDefaultScopes: ['openid', 'profile', 'email'],
-        clientRegistrationAllowedScopes: oauthScopes,
+        clientRegistrationAllowedScopes: [...userConfigurableApplicationScopes],
         storeClientSecret: 'hashed',
         storeTokens: 'hashed',
         silenceWarnings: {
@@ -451,4 +467,15 @@ export function buildOAuthAccessTokenClaims(
 function readString(metadata: Record<string, unknown> | undefined, key: string) {
   const value = metadata?.[key]
   return typeof value === 'string' ? value : undefined
+}
+
+function hasManagementScope(scopes: Iterable<string>) {
+  for (const scope of scopes) {
+    if (managementApplicationScopes.includes(scope as (typeof managementApplicationScopes)[number])) return true
+  }
+  return false
+}
+
+function readUserRole(user: unknown) {
+  return typeof user === 'object' && user !== null && 'role' in user && typeof user.role === 'string' ? user.role : null
 }

@@ -4211,7 +4211,7 @@
       },
       "managementOAuth2": {
         "type": "oauth2",
-        "description": "Planned Management API OAuth 2.0 authorization code flow with PKCE. Runtime bearer token acceptance is implemented separately; administrator sessions remain supported.",
+        "description": "Management API OAuth 2.0 authorization code flow with PKCE for the built-in public native FlareAuth CLI client. Bearer token requests must come from an administrator or equivalent management authorization claim; administrator sessions remain supported.",
         "flows": {
           "authorizationCode": {
             "authorizationUrl": "/api/auth/oauth2/authorize",
@@ -4753,6 +4753,7 @@
           "public",
           "firstParty",
           "trusted",
+          "systemManaged",
           "disabled",
           "disabledReason",
           "redirectUris",
@@ -4820,6 +4821,10 @@
           "trusted": {
             "type": "boolean"
           },
+          "systemManaged": {
+            "type": "boolean",
+            "description": "True for system-managed applications such as the built-in FlareAuth CLI client."
+          },
           "disabled": {
             "type": "boolean"
           },
@@ -4872,7 +4877,9 @@
                 "openid",
                 "profile",
                 "email",
-                "offline_access"
+                "offline_access",
+                "management:read",
+                "management:write"
               ]
             }
           },
@@ -5022,7 +5029,9 @@
                 "openid",
                 "profile",
                 "email",
-                "offline_access"
+                "offline_access",
+                "management:read",
+                "management:write"
               ]
             }
           },

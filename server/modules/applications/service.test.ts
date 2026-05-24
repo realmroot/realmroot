@@ -6,6 +6,7 @@ import {
   ApplicationService,
   type ClientSecretRecord,
   type ConsentRecord,
+  systemCliApplication,
 } from './service'
 
 describe('ApplicationService', () => {
@@ -87,6 +88,49 @@ describe('ApplicationService', () => {
     await expect(service.rotateSecret(created.id, 'admin-1')).rejects.toMatchObject({
       status: 400,
       message: 'Public clients do not have client secrets.',
+    })
+  })
+
+  it('upserts the system-managed CLI public native client without a secret', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+
+    await service.ensureSystemClients()
+    const created = await service.ensureCliApplication()
+    const updated = await service.ensureCliApplication()
+
+    expect(created).toMatchObject({
+      id: systemCliApplication.id,
+      slug: systemCliApplication.slug,
+      name: systemCliApplication.name,
+      clientId: systemCliApplication.clientId,
+      clientType: 'public_native',
+      public: true,
+      firstParty: true,
+      trusted: false,
+      systemManaged: true,
+      requirePkce: true,
+      tokenEndpointAuthMethod: 'none',
+      redirectUris: systemCliApplication.redirectUris,
+      allowedGrantTypes: ['authorization_code', 'refresh_token'],
+      allowedScopes: ['openid', 'profile', 'email', 'offline_access', 'management:read', 'management:write'],
+      secretMetadata: [],
+    })
+    expect(updated.id).toBe(created.id)
+    expect(repository.applicationCount()).toBe(1)
+    await expect(service.update(systemCliApplication.id, { disabled: true })).rejects.toMatchObject({
+      status: 400,
+      message: 'System-managed applications cannot be modified.',
+    })
+    await expect(
+      service.replaceRedirectUris(systemCliApplication.id, { redirectUris: ['http://localhost:8484/callback'] }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'System-managed applications cannot be modified.',
+    })
+    await expect(service.delete(systemCliApplication.id)).rejects.toMatchObject({
+      status: 400,
+      message: 'System-managed applications cannot be deleted.',
     })
   })
 
@@ -328,6 +372,20 @@ describe('ApplicationService', () => {
     await expect(
       service.create(
         {
+          name: 'Reserved Management Scope',
+          clientType: 'public_spa',
+          redirectUris: ['http://localhost:5173/callback'],
+          allowedScopes: ['openid', 'management:read' as 'openid'],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Management scopes are reserved for the system CLI client.',
+    })
+    await expect(
+      service.create(
+        {
           name: 'Unsupported Grant',
           clientType: 'confidential_web',
           redirectUris: ['https://app.example.com/callback'],
@@ -537,6 +595,23 @@ class InMemoryApplicationRepository implements ApplicationRepository {
       this.secrets.set(application.id, [{ ...input.clientSecret, createdAt: now, expiresAt: null, revokedAt: null }])
     }
     return application
+  }
+
+  async upsertSystem(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>) {
+    const existing = this.applications.get(input.id)
+    const now = new Date('2026-05-18T12:30:00.000Z')
+    const application = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    }
+    this.applications.set(application.id, application)
+    this.secrets.delete(application.id)
+    return application
+  }
+
+  applicationCount() {
+    return this.applications.size
   }
 
   async list(pagination: { limit: number; offset: number }) {

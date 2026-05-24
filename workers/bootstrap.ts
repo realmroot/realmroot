@@ -2,6 +2,8 @@ import { createApp } from '../server/app'
 import { type Auth, createAuth } from '../server/auth'
 import { createDb } from '../server/db/client'
 import { createEmailSender } from '../server/lib/email/sender'
+import { createDrizzleApplicationRepository } from '../server/modules/applications/drizzle-repository'
+import { ApplicationService } from '../server/modules/applications/service'
 import { createConfigzService } from '../server/modules/configz/context'
 import { createDrizzleConfigzRepository } from '../server/modules/configz/drizzle-repository'
 import { defaultBuiltInProviders } from '../server/modules/configz/service'
@@ -18,6 +20,7 @@ let cachedAuth: Auth | null = null
 let cachedKey: string | null = null
 let cachedDb: D1Database | null = null
 let cachedEmail: Env['EMAIL'] | null = null
+let cachedSystemClientDb: D1Database | null = null
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -25,6 +28,7 @@ export default {
     const db = createDb(env.DB)
     const securityRepository = createSecurityRepository(db, config.securityPolicy)
     const securityPolicy = await securityRepository.getPolicy()
+    await ensureSystemClients(env.DB, db, config.baseURL)
     const auth = await getAuth(env, { ...config, securityPolicy })
     return createApp(auth, {
       trustedOrigins: config.trustedOrigins,
@@ -36,6 +40,12 @@ export default {
       configzServiceFactory: createConfigzService,
     }).fetch(request, env, ctx)
   },
+}
+
+async function ensureSystemClients(rawDb: D1Database, db: ReturnType<typeof createDb>, issuer: string) {
+  if (cachedSystemClientDb === rawDb) return
+  await new ApplicationService(createDrizzleApplicationRepository(db), { issuer }).ensureSystemClients()
+  cachedSystemClientDb = rawDb
 }
 
 async function getAuth(env: Env, config: RuntimeConfig): Promise<Auth> {
