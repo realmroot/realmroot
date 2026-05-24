@@ -116,6 +116,7 @@ import type { OnboardingRepository } from './modules/onboarding/repository'
 import type { SecurityRepository } from './modules/security/repository'
 import type { UserRepository } from './modules/users/repository'
 import type { WalletRepository } from './modules/wallets/repository'
+import { managementOpenApi, managementOpenApiLinkHeader, managementOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
 import { adminApiResourcesRoute } from './routes/admin/api-resources'
 import { adminApplicationsRoute } from './routes/admin/applications'
@@ -641,6 +642,9 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
       createConfigzRoutes(options.configzServiceFactory, options.onboardingRepository, options.securityPolicy),
     )
     .route('/api/assets', createAssetRoutes(options.assetServiceFactory))
+    .use('/api/management', managementOpenApiDiscoveryHeader())
+    .use('/api/management/*', managementOpenApiDiscoveryHeader())
+    .get(managementOpenApiPath, (c) => c.json(managementOpenApi))
     .route('/api/management', createManagementAssetRoutes(options.assetServiceFactory))
     .route(
       '/api/management',
@@ -661,6 +665,13 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
   }
 
   return api
+}
+
+function managementOpenApiDiscoveryHeader() {
+  return async (c: Context, next: () => Promise<void>) => {
+    await next()
+    c.header('Link', managementOpenApiLinkHeader)
+  }
 }
 
 function mountRpcRoutes(app: Hono, auth: AuthHandler, options: RpcAppOptions) {

@@ -8,6 +8,24 @@ The Management API is mounted at:
 /api/management
 ```
 
+The runtime OpenAPI 3.1 contract is served at:
+
+```text
+/api/management/openapi.json
+```
+
+Management API responses include Restish-compatible discovery links:
+
+```text
+Link: </api/management/openapi.json>; rel="service-desc"; type="application/openapi+json", </api/management/openapi.json>; rel="describedby"; type="application/openapi+json"
+```
+
+Restish can load the contract directly:
+
+```bash
+restish api configure flareauth /api/management/openapi.json
+```
+
 The older `/api/admin/*` routes remain available for the operator UI and compatibility, but `/api/management/*` is the public v1.0 contract.
 
 Product applications should not use this API for sign-in, session, or profile
@@ -16,9 +34,9 @@ authorization code with PKCE under `/api/auth/*`.
 
 ## Authentication And Authorization
 
-Every Management API route requires an authenticated administrator session. Requests without a session return `401`; authenticated non-admin users return `403`.
+Every protected Management API route requires an authenticated administrator session. Requests without a session return `401`; authenticated non-admin users return `403`. The OpenAPI discovery document is public so API clients can discover the service before authenticating.
 
-Future machine-to-machine management tokens should preserve the same authorization boundary: callers need a management role or scope that is equivalent to administrator access for the requested resource.
+The OpenAPI contract advertises the planned OAuth 2.0 authorization code with PKCE Management API scheme. Task 2 will add bearer token acceptance; administrator sessions remain supported by the current runtime.
 
 ## Error Shape
 

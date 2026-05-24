@@ -25,7 +25,26 @@ describe('management routes', () => {
 
     expect(openApiOperations()).toEqual(mountedManagementOperations(app))
 
+    const operationIds = openApiOperationObjects().map((operation) => operation.operationId)
+    expect(operationIds).not.toContain(undefined)
+    expect(new Set(operationIds).size).toBe(operationIds.length)
+    expect(managementOpenApi.security).toEqual([{ adminSession: [] }, { managementOAuth2: [] }])
+    expect(managementOpenApi.components.securitySchemes.managementOAuth2).toMatchObject({
+      type: 'oauth2',
+      flows: {
+        authorizationCode: {
+          authorizationUrl: '/api/auth/oauth2/authorize',
+          tokenUrl: '/api/auth/oauth2/token',
+        },
+      },
+    })
+
     for (const operation of openApiOperationObjects()) {
+      if (operation.key === managementOpenApiOperationKey) {
+        expect(operation.security).toEqual([])
+        continue
+      }
+
       expect(operation.responses, operation.key).toHaveProperty('401')
       expect(operation.responses, operation.key).toHaveProperty('403')
       expect(operation.declaredPathParameters, operation.key).toEqual(operation.pathParameters)
@@ -50,6 +69,26 @@ describe('management routes', () => {
         expect(() => assertConstrainedOpenApiSchema(schema, operation.key)).not.toThrow()
       }
     }
+  })
+
+  it('serves the Management OpenAPI contract with Restish discovery headers', async () => {
+    const app = createApp(createAuthMock(), {
+      userRepository: createUserRepositoryMock(),
+      securityRepository: createSecurityRepositoryMock(),
+      securityPolicy: securityPolicy(),
+    })
+
+    const contract = await app.request('/api/management/openapi.json')
+    const protectedResponse = await app.request('/api/management/users')
+
+    expect(contract.status).toBe(200)
+    expect(contract.headers.get('content-type')).toContain('application/json')
+    expect(contract.headers.get('link')).toContain('</api/management/openapi.json>; rel="service-desc"')
+    expect(contract.headers.get('link')).toContain('</api/management/openapi.json>; rel="describedby"')
+    await expect(contract.json()).resolves.toEqual(managementOpenApi)
+
+    expect(protectedResponse.status).toBe(401)
+    expect(protectedResponse.headers.get('link')).toContain('</api/management/openapi.json>; rel="service-desc"')
   })
 
   it('mounts the documented management collections behind the admin boundary', async () => {
@@ -1209,8 +1248,10 @@ function openApiOperationObjects() {
           method: method.toUpperCase(),
           pathParameters: pathParameterNames(path),
           declaredPathParameters: declaredPathParameterNames(resolvedPathItem, resolvedOperation),
+          operationId: resolvedOperation.operationId,
           requestBody: resolvedOperation.requestBody,
           responses: resolvedOperation.responses,
+          security: resolvedOperation.security,
           jsonResponseSchemas: Object.values(resolvedOperation.responses)
             .map((response) => openApiJsonResponseSchema(response))
             .filter((schema) => schema !== null),
@@ -1378,6 +1419,7 @@ function isManagementOpenApiMethod(method: string): method is ManagementOpenApiM
 
 const managementOpenApiMethods = ['get', 'post', 'put', 'patch', 'delete'] as const
 type ManagementOpenApiMethod = (typeof managementOpenApiMethods)[number]
+const managementOpenApiOperationKey = 'GET /openapi.json'
 const methodsWithJsonRequestBody = new Set(['POST', 'PUT', 'PATCH'])
 const operationsWithoutRequestBody = new Set([
   'POST /applications/{param}/client-secrets',
@@ -1392,9 +1434,11 @@ interface HonoRoute {
 }
 
 interface OpenApiOperation {
+  operationId?: string
   parameters?: unknown
   requestBody?: unknown
   responses: Record<string, unknown>
+  security?: unknown
 }
 
 interface OpenApiParameter {

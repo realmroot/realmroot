@@ -13,6 +13,9 @@
   "security": [
     {
       "adminSession": []
+    },
+    {
+      "managementOAuth2": []
     }
   ],
   "paths": {
@@ -47,7 +50,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listApiResources"
       },
       "post": {
         "tags": [
@@ -84,7 +88,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createApiResource"
       }
     },
     "/api-resources/{id}": {
@@ -124,7 +129,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "getApiResource"
       },
       "patch": {
         "tags": [
@@ -175,7 +181,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateApiResource"
       },
       "delete": {
         "tags": [
@@ -206,7 +213,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteApiResource"
       }
     },
     "/api-resources/{id}/permissions": {
@@ -249,7 +257,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listApiResourcePermissions"
       },
       "post": {
         "tags": [
@@ -297,7 +306,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createApiResourcePermission"
       }
     },
     "/api-resources/{id}/permissions/{permissionId}": {
@@ -359,7 +369,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateApiResourcePermission"
       },
       "delete": {
         "tags": [
@@ -399,7 +410,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteApiResourcePermission"
       }
     },
     "/api-resources/{id}/scopes": {
@@ -442,7 +454,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listApiResourceScopes"
       },
       "post": {
         "tags": [
@@ -490,7 +503,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createApiResourceScope"
       }
     },
     "/api-resources/{id}/scopes/{scopeId}": {
@@ -552,7 +566,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateApiResourceScope"
       },
       "delete": {
         "tags": [
@@ -592,11 +607,43 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteApiResourceScope"
       }
     },
     "/application-role-assignments": {
-      "$ref": "#/components/pathItems/RoleAssignmentCollection"
+      "post": {
+        "tags": [
+          "RoleAssignments"
+        ],
+        "summary": "Create or replace a role assignment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Role assignment applied."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "parameters": [],
+        "operationId": "assignApplicationRole"
+      }
     },
     "/applications": {
       "$ref": "#/components/pathItems/ApplicationCollection"
@@ -638,7 +685,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "getApplication"
       },
       "patch": {
         "tags": [
@@ -689,7 +737,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateApplication"
       },
       "delete": {
         "tags": [
@@ -720,7 +769,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteApplication"
       }
     },
     "/applications/{id}/client-secrets": {
@@ -785,7 +835,8 @@
               "minLength": 1
             }
           }
-        ]
+        ],
+        "operationId": "uploadApplicationLogo"
       }
     },
     "/applications/{id}/redirect-uris": {
@@ -828,7 +879,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listRedirectUris"
       },
       "put": {
         "tags": [
@@ -879,7 +931,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "replaceRedirectUris"
       }
     },
     "/branding-settings": {
@@ -905,7 +958,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "getBrandingSettings"
       },
       "patch": {
         "tags": [
@@ -942,7 +996,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "updateBrandingSettings"
       }
     },
     "/account-center-settings": {
@@ -968,7 +1023,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "getAccountCenterSettings"
       },
       "patch": {
         "tags": [
@@ -1005,14 +1061,113 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "updateAccountCenterSettings"
       }
     },
     "/branding/favicon": {
-      "$ref": "#/components/pathItems/AssetUpload"
+      "post": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Upload and assign an asset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Asset uploaded and assigned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadedAssetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "operationId": "uploadBrandingFavicon"
+      }
     },
     "/branding/logo": {
-      "$ref": "#/components/pathItems/AssetUpload"
+      "post": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Upload and assign an asset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Asset uploaded and assigned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadedAssetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "operationId": "uploadBrandingLogo"
+      }
     },
     "/connectors": {
       "get": {
@@ -1045,7 +1200,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listConnectors"
       },
       "post": {
         "tags": [
@@ -1082,7 +1238,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createConnector"
       }
     },
     "/connectors/{id}": {
@@ -1116,7 +1273,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "getConnector"
       },
       "patch": {
         "tags": [
@@ -1156,7 +1314,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateConnector"
       },
       "delete": {
         "tags": [
@@ -1176,7 +1335,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteConnector"
       }
     },
     "/connectors/{id}/readiness": {
@@ -1210,7 +1370,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "listConnectorReadiness"
       }
     },
     "/connectors/templates": {
@@ -1236,11 +1397,43 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listConnectorTemplates"
       }
     },
     "/member-role-assignments": {
-      "$ref": "#/components/pathItems/RoleAssignmentCollection"
+      "post": {
+        "tags": [
+          "RoleAssignments"
+        ],
+        "summary": "Create or replace a role assignment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Role assignment applied."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "parameters": [],
+        "operationId": "assignMemberRole"
+      }
     },
     "/organizations": {
       "get": {
@@ -1273,7 +1466,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listOrganizations"
       },
       "post": {
         "tags": [
@@ -1310,7 +1504,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createOrganization"
       }
     },
     "/organizations/{id}": {
@@ -1350,7 +1545,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "getOrganization"
       },
       "patch": {
         "tags": [
@@ -1401,7 +1597,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateOrganization"
       },
       "delete": {
         "tags": [
@@ -1432,7 +1629,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteOrganization"
       }
     },
     "/organizations/{id}/invitations": {
@@ -1475,7 +1673,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listOrganizationInvitations"
       },
       "post": {
         "tags": [
@@ -1523,7 +1722,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createOrganizationInvitation"
       }
     },
     "/organizations/{id}/invitations/{invitationId}": {
@@ -1565,7 +1765,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteOrganizationInvitation"
       }
     },
     "/organizations/{id}/logo": {
@@ -1627,7 +1828,8 @@
               "minLength": 1
             }
           }
-        ]
+        ],
+        "operationId": "uploadOrganizationLogo"
       }
     },
     "/organizations/{id}/members": {
@@ -1670,7 +1872,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listOrganizationMembers"
       },
       "post": {
         "tags": [
@@ -1718,7 +1921,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createOrganizationMember"
       }
     },
     "/organizations/{id}/members/{memberId}": {
@@ -1780,7 +1984,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateOrganizationMember"
       },
       "delete": {
         "tags": [
@@ -1820,7 +2025,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteOrganizationMember"
       }
     },
     "/readiness": {
@@ -1846,7 +2052,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "getReadiness"
       }
     },
     "/roles": {
@@ -1880,7 +2087,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listRoles"
       },
       "post": {
         "tags": [
@@ -1917,7 +2125,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createRole"
       }
     },
     "/roles/{id}": {
@@ -1957,7 +2166,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "getRole"
       },
       "patch": {
         "tags": [
@@ -2008,7 +2218,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateRole"
       },
       "delete": {
         "tags": [
@@ -2039,7 +2250,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteRole"
       }
     },
     "/roles/{id}/permissions": {
@@ -2079,7 +2291,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "listRolePermissions"
       },
       "put": {
         "tags": [
@@ -2120,17 +2333,111 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "replaceRolePermissions"
       }
     },
     "/roles/assignments/applications": {
-      "$ref": "#/components/pathItems/RoleAssignmentCompatibilityCollection"
+      "post": {
+        "tags": [
+          "RoleAssignments"
+        ],
+        "summary": "Create or replace a role assignment using the compatibility route",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Request completed with no response body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": true,
+        "operationId": "assignApplicationRoleCompatibility"
+      }
     },
     "/roles/assignments/members": {
-      "$ref": "#/components/pathItems/RoleAssignmentCompatibilityCollection"
+      "post": {
+        "tags": [
+          "RoleAssignments"
+        ],
+        "summary": "Create or replace a role assignment using the compatibility route",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Request completed with no response body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": true,
+        "operationId": "assignMemberRoleCompatibility"
+      }
     },
     "/roles/assignments/users": {
-      "$ref": "#/components/pathItems/RoleAssignmentCompatibilityCollection"
+      "post": {
+        "tags": [
+          "RoleAssignments"
+        ],
+        "summary": "Create or replace a role assignment using the compatibility route",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Request completed with no response body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": true,
+        "operationId": "assignUserRoleCompatibility"
+      }
     },
     "/security/policy": {
       "get": {
@@ -2155,7 +2462,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "getSecurityPolicy"
       },
       "patch": {
         "tags": [
@@ -2192,7 +2500,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "updateSecurityPolicy"
       }
     },
     "/security/users/{id}": {
@@ -2223,7 +2532,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "getSecurityUser"
       }
     },
     "/security/users/{id}/passkeys": {
@@ -2266,7 +2576,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listSecurityUserPasskeys"
       }
     },
     "/security/users/{id}/passkeys/{passkeyId}": {
@@ -2315,7 +2626,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteSecurityUserPasskey"
       }
     },
     "/security/users/{id}/sessions": {
@@ -2358,7 +2670,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listSecurityUserSessions"
       },
       "delete": {
         "tags": [
@@ -2396,7 +2709,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteSecurityUserSessions"
       }
     },
     "/security/users/{id}/sessions/{sessionId}": {
@@ -2445,7 +2759,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteSecurityUserSession"
       }
     },
     "/sign-in-settings": {
@@ -2471,7 +2786,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "getSignInSettings"
       },
       "patch": {
         "tags": [
@@ -2508,11 +2824,43 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "updateSignInSettings"
       }
     },
     "/user-role-assignments": {
-      "$ref": "#/components/pathItems/RoleAssignmentCollection"
+      "post": {
+        "tags": [
+          "RoleAssignments"
+        ],
+        "summary": "Create or replace a role assignment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Role assignment applied."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "parameters": [],
+        "operationId": "assignUserRole"
+      }
     },
     "/users": {
       "get": {
@@ -2579,7 +2927,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listUsers"
       },
       "post": {
         "tags": [
@@ -2616,7 +2965,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createUser"
       }
     },
     "/users/{id}": {
@@ -2656,7 +3006,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "getUser"
       },
       "patch": {
         "tags": [
@@ -2707,7 +3058,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateUser"
       },
       "delete": {
         "tags": [
@@ -2745,7 +3097,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteUser"
       }
     },
     "/users/{id}/applications": {
@@ -2788,7 +3141,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listUserApplications"
       }
     },
     "/users/{id}/ban": {
@@ -2839,7 +3193,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "banUserCompatibility"
       },
       "put": {
         "tags": [
@@ -2887,7 +3242,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "banUser"
       },
       "delete": {
         "tags": [
@@ -2925,7 +3281,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "unbanUser"
       }
     },
     "/users/{id}/linked-accounts": {
@@ -2968,7 +3325,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listUserLinkedAccounts"
       }
     },
     "/users/{id}/passkeys": {
@@ -3014,7 +3372,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "listUserPasskeys"
       }
     },
     "/users/{id}/passkeys/{passkeyId}": {
@@ -3056,7 +3415,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteUserPasskey"
       }
     },
     "/users/{id}/password-reset-requests": {
@@ -3109,7 +3469,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "createUserPasswordResetRequestById"
       }
     },
     "/users/{id}/security": {
@@ -3149,7 +3510,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "getUserSecurity"
       }
     },
     "/users/{id}/sessions": {
@@ -3192,7 +3554,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listUserSessions"
       },
       "delete": {
         "tags": [
@@ -3230,7 +3593,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteUserSessions"
       }
     },
     "/users/{id}/sessions/{sessionId}": {
@@ -3279,7 +3643,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteUserSession"
       }
     },
     "/users/{id}/unban": {
@@ -3320,7 +3685,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "unbanUserCompatibility"
       }
     },
     "/users/password-reset": {
@@ -3360,7 +3726,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "requestUserPasswordResetCompatibility"
       }
     },
     "/users/password-reset-requests": {
@@ -3399,7 +3766,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createUserPasswordResetRequest"
       }
     },
     "/webhooks/endpoints": {
@@ -3451,7 +3819,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listWebhookEndpoints"
       },
       "post": {
         "tags": [
@@ -3488,7 +3857,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "createWebhookEndpoint"
       }
     },
     "/webhooks/endpoints/{id}": {
@@ -3528,7 +3898,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "getWebhookEndpoint"
       },
       "patch": {
         "tags": [
@@ -3579,7 +3950,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "updateWebhookEndpoint"
       },
       "delete": {
         "tags": [
@@ -3610,7 +3982,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "deleteWebhookEndpoint"
       }
     },
     "/webhooks/endpoints/{id}/secrets": {
@@ -3650,7 +4023,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "rotateWebhookEndpointSecret"
       }
     },
     "/webhooks/requests": {
@@ -3710,7 +4084,8 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           }
-        }
+        },
+        "operationId": "listWebhookRequests"
       }
     },
     "/webhooks/requests/{id}": {
@@ -3750,7 +4125,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "operationId": "getWebhookRequest"
       }
     },
     "/webhooks/requests/{id}/retries": {
@@ -3793,6 +4169,34 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
+        },
+        "operationId": "retryWebhookRequest"
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "summary": "Get the Management OpenAPI contract",
+        "operationId": "getManagementOpenApi",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Management OpenAPI contract returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagementOpenApiDocument"
+                }
+              },
+              "application/openapi+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagementOpenApiDocument"
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -3804,6 +4208,20 @@
         "in": "cookie",
         "name": "better-auth.session_token",
         "description": "Authenticated administrator session."
+      },
+      "managementOAuth2": {
+        "type": "oauth2",
+        "description": "Planned Management API OAuth 2.0 authorization code flow with PKCE. Runtime bearer token acceptance is implemented separately; administrator sessions remain supported.",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "/api/auth/oauth2/authorize",
+            "tokenUrl": "/api/auth/oauth2/token",
+            "scopes": {
+              "management:read": "Read Management API resources.",
+              "management:write": "Create, update, and delete Management API resources."
+            }
+          }
+        }
       }
     },
     "parameters": {
@@ -3927,7 +4345,8 @@
             "404": {
               "$ref": "#/components/responses/NotFound"
             }
-          }
+          },
+          "operationId": "uploadBrandingLogo"
         }
       },
       "ApplicationCollection": {
@@ -3957,7 +4376,8 @@
             "403": {
               "$ref": "#/components/responses/Forbidden"
             }
-          }
+          },
+          "operationId": "listApplications"
         },
         "post": {
           "requestBody": {
@@ -3990,7 +4410,8 @@
             "403": {
               "$ref": "#/components/responses/Forbidden"
             }
-          }
+          },
+          "operationId": "createApplication"
         }
       },
       "ClientSecretCollection": {
@@ -4029,7 +4450,8 @@
             "403": {
               "$ref": "#/components/responses/Forbidden"
             }
-          }
+          },
+          "operationId": "listClientSecrets"
         },
         "post": {
           "responses": {
@@ -4063,7 +4485,8 @@
                 "minLength": 1
               }
             }
-          ]
+          ],
+          "operationId": "rotateClientSecret"
         }
       },
       "RoleAssignmentCollection": {
@@ -4096,7 +4519,8 @@
               "$ref": "#/components/responses/Forbidden"
             }
           },
-          "parameters": []
+          "parameters": [],
+          "operationId": "assignUserRole"
         }
       },
       "RoleAssignmentCompatibilityCollection": {
@@ -4129,7 +4553,8 @@
               "$ref": "#/components/responses/Forbidden"
             }
           },
-          "deprecated": true
+          "deprecated": true,
+          "operationId": "assignUserRoleCompatibility"
         }
       }
     },
@@ -7830,6 +8255,319 @@
             "$ref": "#/components/schemas/Pagination"
           }
         }
+      },
+      "ManagementOpenApiDocument": {
+        "type": "object",
+        "required": [
+          "openapi",
+          "info",
+          "paths"
+        ],
+        "properties": {
+          "openapi": {
+            "type": "string",
+            "pattern": "^3\\.1\\."
+          },
+          "info": {
+            "type": "object",
+            "required": [
+              "title",
+              "version"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "servers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "security": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "paths": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "get": {
+                  "type": "object",
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "post": {
+                  "type": "object",
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "put": {
+                  "type": "object",
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "patch": {
+                  "type": "object",
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "delete": {
+                  "type": "object",
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "components": {
+            "type": "object",
+            "properties": {
+              "schemas": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "$ref": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "securitySchemes": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     }
   }
