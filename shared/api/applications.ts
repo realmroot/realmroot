@@ -96,6 +96,8 @@ export const createApplicationRequestSchema = z.object({
   iconUrl: optionalUrl,
   clientType: applicationClientTypeSchema,
   redirectUris: z.array(nonEmptyString).min(1),
+  postLogoutRedirectUris: z.array(nonEmptyString).optional(),
+  corsOrigins: z.array(nonEmptyString).optional(),
   allowedGrantTypes: z.array(applicationGrantTypeSchema).min(1).optional(),
   allowedScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
   firstParty: z.boolean().optional(),

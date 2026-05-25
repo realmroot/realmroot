@@ -62,6 +62,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
               clientSecret: null,
               disabled: input.disabled,
               skipConsent: input.trusted,
+              enableEndSession: true,
               name: input.name,
               uri: input.homepageUrl,
               icon: input.iconUrl,
@@ -184,7 +185,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         ...(patch.trusted !== undefined ? { skipConsent: patch.trusted } : {}),
         ...(patch.redirectUris !== undefined ? { redirectUris: serializeList(patch.redirectUris) } : {}),
         ...(patch.postLogoutRedirectUris !== undefined
-          ? { postLogoutRedirectUris: serializeList(patch.postLogoutRedirectUris) }
+          ? { postLogoutRedirectUris: serializeList(patch.postLogoutRedirectUris), enableEndSession: true }
           : {}),
         ...(patch.allowedGrantTypes !== undefined ? { grantTypes: serializeList(patch.allowedGrantTypes) } : {}),
         ...(patch.allowedScopes !== undefined ? { scopes: serializeList(patch.allowedScopes) } : {}),
@@ -400,6 +401,7 @@ function toOAuthClientInsert(
     clientSecret,
     disabled: input.disabled,
     skipConsent: input.trusted,
+    enableEndSession: true,
     name: input.name,
     uri: input.homepageUrl,
     icon: input.iconUrl,

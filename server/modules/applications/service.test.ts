@@ -19,6 +19,8 @@ describe('ApplicationService', () => {
         name: 'Admin Portal',
         clientType: 'confidential_web',
         redirectUris: ['https://app.example.com/callback'],
+        postLogoutRedirectUris: ['https://app.example.com/signed-out', 'https://app.example.com/signed-out'],
+        corsOrigins: ['https://app.example.com', 'http://localhost:4173'],
         allowedGrantTypes: ['authorization_code'],
         allowedScopes: ['openid', 'profile'],
         trusted: true,
@@ -36,6 +38,11 @@ describe('ApplicationService', () => {
       tokenEndpointAuthMethod: 'client_secret_basic',
       requirePkce: false,
       redirectUris: ['https://app.example.com/callback'],
+      postLogoutRedirectUris: ['https://app.example.com/signed-out'],
+      corsOrigins: ['https://app.example.com', 'http://localhost:4173'],
+      oidc: {
+        endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
+      },
     })
 
     await expect(service.list({ limit: 50, offset: 0 })).resolves.toMatchObject({
@@ -414,9 +421,31 @@ describe('ApplicationService', () => {
       }),
     ).rejects.toMatchObject({ status: 400, message: 'Post sign-out redirect URIs must not include fragments.' })
     await expect(
+      service.create(
+        {
+          name: 'Bad SPA',
+          clientType: 'public_spa',
+          redirectUris: ['https://spa.example.com/callback'],
+          postLogoutRedirectUris: ['https://spa.example.com/signed-out#fragment'],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({ status: 400, message: 'Post sign-out redirect URIs must not include fragments.' })
+    await expect(
       service.update(created.id, {
         corsOrigins: ['not an origin'],
       }),
+    ).rejects.toMatchObject({ status: 400, message: 'CORS origins must be absolute origins.' })
+    await expect(
+      service.create(
+        {
+          name: 'Bad SPA',
+          clientType: 'public_spa',
+          redirectUris: ['https://spa.example.com/callback'],
+          corsOrigins: ['not an origin'],
+        },
+        'admin-1',
+      ),
     ).rejects.toMatchObject({ status: 400, message: 'CORS origins must be absolute origins.' })
     await expect(
       service.update(created.id, {

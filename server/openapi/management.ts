@@ -33,6 +33,7 @@ import {
   listOrganizationsResponseSchema,
   listRolesResponseSchema,
   organizationResponseSchema,
+  replaceRolePermissionsRequestSchema,
   rolePermissionsResponseSchema,
   roleResponseSchema,
   updateApiPermissionRequestSchema,
@@ -674,8 +675,8 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/roles/{id}/permissions',
     operationId: 'replaceRolePermissions',
     summary: 'Replace role permissions',
-    request: { params: idParam, body: jsonBody(rolePermissionsResponseSchema) },
-    response: rolePermissionsResponseSchema,
+    request: { params: idParam, body: jsonBody(replaceRolePermissionsRequestSchema) },
+    noBody: true,
   },
   ...assignmentRoutes(),
 

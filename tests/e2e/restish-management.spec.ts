@@ -52,10 +52,19 @@ test('Restish OAuth token can manage Management API resources', async ({ page },
       slug: appSlug,
       clientType: 'public_spa',
       redirectUris: [`${baseURL}/oidc/callback`],
+      postLogoutRedirectUris: [`${baseURL}/signed-out`],
+      corsOrigins: [baseURL],
       firstParty: true,
       trusted: true,
     })
-    expect(created).toMatchObject({ slug: appSlug, name: 'Restish E2E Application' })
+    expect(created).toMatchObject({
+      slug: appSlug,
+      name: 'Restish E2E Application',
+      postLogoutRedirectUris: [`${baseURL}/signed-out`],
+      corsOrigins: [baseURL],
+    })
+    expect(created.clientId).toEqual(expect.any(String))
+    expect(created.clientSecret).toBeUndefined()
 
     const updated = await restishJson(restishHome, ['update-application', created.id, ...headers], {
       name: 'Restish E2E Application Updated',

@@ -132,6 +132,8 @@ export class ApplicationService {
       input.allowedGrantTypes,
       input.allowedScopes,
     )
+    const postLogoutRedirectUris = normalizePostLogoutRedirectUris(input.clientType, input.postLogoutRedirectUris ?? [])
+    const corsOrigins = normalizeCorsOrigins(input.corsOrigins ?? [])
     const clientSecret = input.clientType === 'confidential_web' ? createClientSecret() : null
     const secretHash = clientSecret ? await hashProviderSecret(clientSecret) : null
     const secretPrefix = clientSecret ? clientSecret.slice(0, 12) : null
@@ -153,8 +155,8 @@ export class ApplicationService {
         disabled: false,
         disabledReason: null,
         redirectUris: settings.redirectUris,
-        postLogoutRedirectUris: [],
-        corsOrigins: [],
+        postLogoutRedirectUris,
+        corsOrigins,
         customData: {},
         allowedGrantTypes: settings.allowedGrantTypes,
         allowedScopes: settings.allowedScopes,
@@ -452,7 +454,7 @@ export class ApplicationService {
         tokenEndpoint: `${issuer}/api/auth/oauth2/token`,
         jwksUri: `${issuer}/api/auth/jwks`,
         userInfoEndpoint: `${issuer}/api/auth/oauth2/userinfo`,
-        endSessionEndpoint: `${issuer}/api/auth/oauth2/logout`,
+        endSessionEndpoint: `${issuer}/api/auth/oauth2/end-session`,
       },
       createdAt: application.createdAt.toISOString(),
       updatedAt: application.updatedAt.toISOString(),

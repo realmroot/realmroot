@@ -185,6 +185,10 @@ export const assignRoleRequestSchema = z.object({
   expiresAt: z.iso.datetime().nullable().optional(),
 })
 
+export const replaceRolePermissionsRequestSchema = z.object({
+  permissionIds: z.array(z.string()).default([]),
+})
+
 export const listOrganizationsResponseSchema = z.object({
   organizations: z.array(organizationResponseSchema),
   pagination: paginationMetadataSchema,
@@ -254,3 +258,4 @@ export type RoleResponse = z.infer<typeof roleResponseSchema>
 export type CreateRoleRequest = z.infer<typeof createRoleRequestSchema>
 export type UpdateRoleRequest = z.infer<typeof updateRoleRequestSchema>
 export type AssignRoleRequest = z.infer<typeof assignRoleRequestSchema>
+export type ReplaceRolePermissionsRequest = z.infer<typeof replaceRolePermissionsRequestSchema>

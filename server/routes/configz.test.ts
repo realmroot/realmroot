@@ -72,7 +72,7 @@ describe('configz routes', () => {
             tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
             jwksUri: 'https://auth.example.com/api/auth/jwks',
             userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
-            endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+            endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
           },
           security: {
             mfaRequired: false,

@@ -69,7 +69,7 @@ describe('application API pagination contracts', () => {
         tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
         jwksUri: 'https://auth.example.com/api/auth/jwks',
         userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
-        endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+        endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
       },
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
@@ -96,6 +96,26 @@ describe('application API pagination contracts', () => {
         allowedScopes: ['openid', 'management:write'],
       }),
     ).toThrow()
+  })
+
+  it('accepts setup-time post sign-out and CORS origin lists without caller-provided credentials', () => {
+    const request = createApplicationRequestSchema.parse({
+      name: 'Customer app',
+      clientType: 'public_spa',
+      redirectUris: ['http://localhost:5173/callback'],
+      postLogoutRedirectUris: ['http://localhost:5173/signed-out'],
+      corsOrigins: ['http://localhost:5173'],
+      clientId: 'caller-client',
+      clientSecret: 'caller-secret',
+    })
+
+    expect(request).toEqual({
+      name: 'Customer app',
+      clientType: 'public_spa',
+      redirectUris: ['http://localhost:5173/callback'],
+      postLogoutRedirectUris: ['http://localhost:5173/signed-out'],
+      corsOrigins: ['http://localhost:5173'],
+    })
   })
 })
 

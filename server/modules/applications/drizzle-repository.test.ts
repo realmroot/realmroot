@@ -229,7 +229,11 @@ describe('createDrizzleApplicationRepository', () => {
       applicationClientMetadata,
       applicationClientSecret,
     ])
-    expect(db.inserts[0]?.values).toMatchObject({ clientId: 'client-1', clientSecret: 'hash-1' })
+    expect(db.inserts[0]?.values).toMatchObject({
+      clientId: 'client-1',
+      clientSecret: 'hash-1',
+      enableEndSession: true,
+    })
     expect(db.inserts[3]?.values).toMatchObject({
       id: 'secret-1',
       applicationId: 'app-1',
@@ -295,6 +299,7 @@ describe('createDrizzleApplicationRepository', () => {
       values: {
         clientId: 'flareauth-cli',
         clientSecret: null,
+        enableEndSession: true,
         public: true,
         type: 'public_native',
         requirePKCE: true,
@@ -377,6 +382,7 @@ describe('createDrizzleApplicationRepository', () => {
         disabled: true,
         redirectUris: '["https://admin.example.com/callback"]',
         postLogoutRedirectUris: '["https://admin.example.com/signed-out"]',
+        enableEndSession: true,
         grantTypes: '["authorization_code"]',
         scopes: '["openid","profile"]',
         updatedAt: expect.any(Date),

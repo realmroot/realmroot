@@ -100,6 +100,30 @@ describe('management routes', () => {
     expect(protectedResponse.headers.get('link')).toContain('</api/management/openapi.json>; rel="service-desc"')
   })
 
+  it('documents application setup fields and role permission replacement request bodies', () => {
+    const createApplication = openApiOperationObjects().find((operation) => operation.key === 'POST /applications')
+    const createApplicationSchema = openApiSchemaObject(requestBodyContent(createApplication?.requestBody).schema)
+    const createApplicationProperties = openApiRecord(createApplicationSchema.properties)
+
+    expect(createApplicationProperties).toHaveProperty('postLogoutRedirectUris')
+    expect(createApplicationProperties).toHaveProperty('corsOrigins')
+    expect(createApplicationProperties).not.toHaveProperty('clientId')
+    expect(createApplicationProperties).not.toHaveProperty('clientSecret')
+
+    const replaceRolePermissions = openApiOperationObjects().find(
+      (operation) => operation.key === 'PUT /roles/{param}/permissions',
+    )
+    const replaceRolePermissionsSchema = openApiSchemaObject(
+      requestBodyContent(replaceRolePermissions?.requestBody).schema,
+    )
+    const replaceRolePermissionsProperties = openApiRecord(replaceRolePermissionsSchema.properties)
+
+    expect(replaceRolePermissionsProperties).toHaveProperty('permissionIds')
+    expect(replaceRolePermissionsProperties).not.toHaveProperty('permissions')
+    expect(replaceRolePermissions?.responses).toHaveProperty('204')
+    expect(replaceRolePermissions?.responses).not.toHaveProperty('200')
+  })
+
   it('mounts the documented management collections behind the admin boundary', async () => {
     const app = createApp(createAuthMock(), { userRepository: createUserRepositoryMock() })
 
@@ -1689,6 +1713,12 @@ function requestBodyContent(value: unknown) {
   return openApiRecord(mediaType)
 }
 
+function openApiSchemaObject(value: unknown) {
+  const schema = openApiRecord(value)
+  const ref = schema.$ref
+  return typeof ref === 'string' ? openApiRecord(resolveOpenApiSchemaRef(ref)) : schema
+}
+
 function schemaReference(value: unknown) {
   const ref = openApiRecord(value).$ref
   return typeof ref === 'string' ? ref : null
@@ -1975,7 +2005,7 @@ function createConfigzServiceMock(
         tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
         jwksUri: 'https://auth.example.com/api/auth/jwks',
         userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
-        endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+        endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
       },
       security: {
         mfaRequired: false,

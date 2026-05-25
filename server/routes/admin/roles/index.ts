@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { z } from 'zod'
 import {
   assignRoleRequestSchema,
   createRoleRequestSchema,
   paginationQuerySchema,
+  replaceRolePermissionsRequestSchema,
   updateRoleRequestSchema,
 } from '../../../../shared/api/authorization'
 import { requireAdmin } from '../../../middleware/admin'
@@ -11,10 +11,6 @@ import { getAuthContext } from '../../../middleware/auth-context'
 import type { AuthorizationBindings } from '../../../modules/authorization/context'
 import { createAuthorizationService } from '../../../modules/authorization/context'
 import { readJson, readQuery } from '../../validation'
-
-const replacePermissionsRequestSchema = z.object({
-  permissionIds: z.array(z.string()).default([]),
-})
 
 export const adminRolesRoute = new Hono<{ Bindings: AuthorizationBindings }>()
 
@@ -46,7 +42,7 @@ adminRolesRoute.get('/:roleId/permissions', async (c) =>
 )
 
 adminRolesRoute.put('/:roleId/permissions', async (c) => {
-  const body = await readJson(c, replacePermissionsRequestSchema)
+  const body = await readJson(c, replaceRolePermissionsRequestSchema)
   await createAuthorizationService(c).replaceRolePermissions(c.req.param('roleId'), body.permissionIds)
   return c.body(null, 204)
 })

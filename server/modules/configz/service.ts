@@ -253,7 +253,7 @@ export class ConfigzService {
         tokenEndpoint: `${issuer}/api/auth/oauth2/token`,
         jwksUri: `${issuer}/api/auth/jwks`,
         userInfoEndpoint: `${issuer}/api/auth/oauth2/userinfo`,
-        endSessionEndpoint: `${issuer}/api/auth/oauth2/logout`,
+        endSessionEndpoint: `${issuer}/api/auth/oauth2/end-session`,
       },
       security: {
         mfaRequired: this.options.securityPolicy?.mfa.mode === 'required',

@@ -62,6 +62,7 @@ describe('createApp', () => {
       token_endpoint: 'https://auth.example.com/api/auth/oauth2/token',
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
       userinfo_endpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
+      end_session_endpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
       response_types_supported: ['code'],
       scopes_supported: ['openid', 'profile', 'email'],
       subject_types_supported: ['public'],
@@ -82,6 +83,7 @@ describe('createApp', () => {
     await expect(response.json()).resolves.toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
       userinfo_endpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
+      end_session_endpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
     })
     expect(getOpenIdConfig).toHaveBeenCalledWith({
       request: expect.any(Request),
@@ -487,7 +489,7 @@ function applicationResponse(overrides: Record<string, unknown> = {}) {
       tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
       jwksUri: 'https://auth.example.com/api/auth/jwks',
       userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
-      endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/logout',
+      endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
     },
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
