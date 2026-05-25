@@ -1,3 +1,4 @@
+import { agentAuth } from '@better-auth/agent-auth'
 import { i18n } from '@better-auth/i18n'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
@@ -24,10 +25,14 @@ import type { Database } from './db/client'
 import * as schema from './db/schema'
 import type { TransactionalEmailSender } from './lib/email/sender'
 import { hashPassword, verifyPassword } from './lib/password'
+import { agentCapabilities, areKnownAgentCapabilities } from './modules/agents/capabilities'
+import { createDrizzleAgentRepository } from './modules/agents/repository'
+import { AgentService } from './modules/agents/service'
 import { createDrizzleApplicationRepository } from './modules/applications/drizzle-repository'
 import { createDrizzleAuthorizationRepository } from './modules/authorization/drizzle-repository'
 import { AuthorizationService, type AuthorizationTokenClaimInput } from './modules/authorization/service'
 import type { AuthConnectorConfig } from './modules/connectors/service'
+import { createUserRepository } from './modules/users/repository'
 
 const oauthScopes = ['openid', 'profile', 'email', 'offline_access', ...managementApplicationScopes]
 const organizationAccessControl = createAccessControl({
@@ -83,6 +88,7 @@ export function createAuth(
 ) {
   const authorization = new AuthorizationService(createDrizzleAuthorizationRepository(db))
   const applications = createDrizzleApplicationRepository(db)
+  const agents = new AgentService(createUserRepository(db), createDrizzleAgentRepository(db))
 
   return betterAuth({
     appName: 'FlareAuth',
@@ -217,6 +223,20 @@ export function createAuth(
           residentKey: 'preferred',
           userVerification: 'preferred',
         },
+      }),
+      agentAuth({
+        providerName: 'FlareAuth',
+        providerDescription: 'Delegated FlareAuth account access for approved agents.',
+        modes: ['delegated'],
+        approvalMethods: ['device_authorization'],
+        deviceAuthorizationPage: '/agent/approve',
+        allowDynamicHostRegistration: true,
+        defaultHostCapabilities: [],
+        requireAuthForCapabilities: false,
+        capabilities: agentCapabilities,
+        validateCapabilities: areKnownAgentCapabilities,
+        onExecute: ({ capability, arguments: args, agentSession }) =>
+          agents.executeReadOnlyCapability({ capability, arguments: args, agentSession }),
       }),
       emailOTP({
         otpLength: options.builtInProviders?.email.otpLength,

@@ -175,3 +175,15 @@ Feature: Admin Console
     Given an application has organization membership, roles, permissions, and API scopes
     When OIDC claims are configured for access tokens, ID tokens, and userinfo
     Then issued access tokens, ID tokens, and userinfo include only the configured claims
+
+  Scenario: AgentAuth discovery exposes a narrow delegated protocol surface
+    When an agent client requests /.well-known/agent-configuration
+    Then FlareAuth advertises delegated mode and device authorization approval
+    And the advertised capabilities are limited to read-only account data
+    And generated Management API capabilities are not exposed
+
+  Scenario: Admins can inspect delegated agent protocol records without granting broad mutations
+    Given delegated AgentAuth hosts, agents, grants, and approval requests exist
+    When Console reads the agent protocol inventory
+    Then FlareAuth presents host, agent, grant, and approval state from its agent module
+    And no autonomous agent mode or broad admin mutation capability is enabled

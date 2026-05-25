@@ -1,3 +1,4 @@
+import { agentAuthClient } from '@better-auth/agent-auth/client'
 import { oauthProviderClient } from '@better-auth/oauth-provider/client'
 import { passkeyClient } from '@better-auth/passkey/client'
 import { adminClient, emailOTPClient, usernameClient } from 'better-auth/client/plugins'
@@ -6,7 +7,14 @@ import { ApiRequestError } from './api'
 import { i18n } from './i18n'
 
 export const authClient = createAuthClient({
-  plugins: [adminClient(), emailOTPClient(), oauthProviderClient(), passkeyClient(), usernameClient()],
+  plugins: [
+    adminClient(),
+    agentAuthClient(),
+    emailOTPClient(),
+    oauthProviderClient(),
+    passkeyClient(),
+    usernameClient(),
+  ],
 })
 
 type NativeAuthResult = {
@@ -123,6 +131,15 @@ export function signInWithOneTap(input: { idToken: string }) {
 
 export function verifySignInTotp(input: { code: string; trustDevice?: boolean }) {
   return nativeAuth('/two-factor/verify-totp', input)
+}
+
+export function approveAgentCapability(input: { agentId: string; userCode: string; capabilities?: string[] }) {
+  return nativeAuth('/agent/approve-capability', {
+    agent_id: input.agentId,
+    user_code: input.userCode,
+    action: 'approve',
+    ...(input.capabilities ? { capabilities: input.capabilities } : {}),
+  })
 }
 
 export function verifyEmailOtp(input: { email: string; otp: string }) {

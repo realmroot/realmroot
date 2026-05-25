@@ -4,6 +4,12 @@ import {
   account,
   accountCenterSetting,
   accountRelations,
+  agent,
+  agentCapabilityGrant,
+  agentCapabilityGrantRelations,
+  agentHost,
+  agentHostRelations,
+  agentRelations,
   apiPermission,
   apiPermissionRelations,
   apiResource,
@@ -17,6 +23,8 @@ import {
   applicationRelations,
   applicationRoleAssignment,
   applicationRoleAssignmentRelations,
+  approvalRequest,
+  approvalRequestRelations,
   brandingSetting,
   customDomain,
   deploymentSetting,
@@ -202,6 +210,113 @@ describe('database schema', () => {
     )
   })
 
+  it('keeps Better Auth AgentAuth plugin tables compatible with delegated mode', () => {
+    expect(getTableConfig(agentHost).name).toBe('agent_host')
+    expect(columnNames(agentHost)).toEqual(
+      expect.arrayContaining([
+        'id',
+        'name',
+        'user_id',
+        'default_capabilities',
+        'public_key',
+        'kid',
+        'jwks_url',
+        'enrollment_token_hash',
+        'enrollment_token_expires_at',
+        'status',
+        'activated_at',
+        'expires_at',
+        'last_used_at',
+        'created_at',
+        'updated_at',
+      ]),
+    )
+    expect(indexNames(agentHost)).toEqual(
+      expect.arrayContaining([
+        'agentHost_userId_idx',
+        'agentHost_kid_idx',
+        'agentHost_enrollmentTokenHash_idx',
+        'agentHost_status_idx',
+      ]),
+    )
+
+    expect(getTableConfig(agent).name).toBe('agent')
+    expect(columnNames(agent)).toEqual(
+      expect.arrayContaining([
+        'id',
+        'name',
+        'user_id',
+        'host_id',
+        'status',
+        'mode',
+        'public_key',
+        'kid',
+        'jwks_url',
+        'last_used_at',
+        'activated_at',
+        'expires_at',
+        'metadata',
+        'created_at',
+        'updated_at',
+      ]),
+    )
+    expect(foreignKeyReferences(agent)).toContainEqual({
+      columns: ['host_id'],
+      foreignColumns: ['id'],
+      foreignTable: 'agent_host',
+      onDelete: 'cascade',
+    })
+
+    expect(getTableConfig(agentCapabilityGrant).name).toBe('agent_capability_grant')
+    expect(columnNames(agentCapabilityGrant)).toEqual(
+      expect.arrayContaining([
+        'id',
+        'agent_id',
+        'capability',
+        'denied_by',
+        'granted_by',
+        'expires_at',
+        'created_at',
+        'updated_at',
+        'status',
+        'reason',
+        'constraints',
+      ]),
+    )
+    expect(indexNames(agentCapabilityGrant)).toEqual(
+      expect.arrayContaining([
+        'agentCapabilityGrant_agentId_idx',
+        'agentCapabilityGrant_capability_idx',
+        'agentCapabilityGrant_grantedBy_idx',
+        'agentCapabilityGrant_status_idx',
+      ]),
+    )
+
+    expect(getTableConfig(approvalRequest).name).toBe('approval_request')
+    expect(columnNames(approvalRequest)).toEqual(
+      expect.arrayContaining([
+        'id',
+        'method',
+        'agent_id',
+        'host_id',
+        'user_id',
+        'capabilities',
+        'status',
+        'user_code_hash',
+        'login_hint',
+        'binding_message',
+        'client_notification_token',
+        'client_notification_endpoint',
+        'delivery_mode',
+        'interval',
+        'last_polled_at',
+        'expires_at',
+        'created_at',
+        'updated_at',
+      ]),
+    )
+  })
+
   it('keeps FlareAuth product settings and OAuth token tables explicit', () => {
     expect(columnNames(account)).toEqual(expect.arrayContaining(['account_id', 'provider_id', 'user_id']))
     expect(columnNames(verification)).toEqual(expect.arrayContaining(['identifier', 'value', 'expires_at']))
@@ -304,6 +419,12 @@ describe('database schema', () => {
     )
     expect(relationKeys(twoFactorRelations)).toEqual(['user'])
     expect(relationKeys(passkeyRelations)).toEqual(['user'])
+    expect(relationKeys(agentHostRelations)).toEqual(expect.arrayContaining(['user', 'agents', 'approvalRequests']))
+    expect(relationKeys(agentRelations)).toEqual(expect.arrayContaining(['user', 'host', 'grants', 'approvalRequests']))
+    expect(relationKeys(agentCapabilityGrantRelations)).toEqual(
+      expect.arrayContaining(['agent', 'grantedByUser', 'deniedByUser']),
+    )
+    expect(relationKeys(approvalRequestRelations)).toEqual(expect.arrayContaining(['agent', 'host', 'user']))
     expect(relationKeys(sessionRelations)).toEqual(['user'])
     expect(relationKeys(accountRelations)).toEqual(['user'])
     expect(relationKeys(organizationRelations)).toEqual(
@@ -370,6 +491,10 @@ const schemaTables = [
   oauthRefreshToken,
   oauthAccessToken,
   oauthConsent,
+  agentHost,
+  agent,
+  agentCapabilityGrant,
+  approvalRequest,
   uploadedAsset,
   organization,
   member,

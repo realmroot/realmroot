@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccountRoute } from './account'
+import { AgentApproveRoute } from './agent-approve'
 import { AuthCallbackRoute } from './auth-callback'
 import { EmailVerificationRoute } from './email-verification'
 import { ForgotPasswordRoute } from './forgot-password'
@@ -23,6 +24,10 @@ vi.mock('@/features/auth/consent-page', () => ({
   ConsentPage: () => <div>Consent route</div>,
 }))
 
+vi.mock('@/lib/auth-client', () => ({
+  approveAgentCapability: vi.fn(),
+}))
+
 afterEach(() => {
   cleanup()
 })
@@ -36,6 +41,7 @@ describe('route wrappers', () => {
         <EmailVerificationRoute />
         <AuthCallbackRoute />
         <AccountRoute />
+        <AgentApproveRoute />
         <OAuthConsentRoute />
       </>,
     )
@@ -45,6 +51,7 @@ describe('route wrappers', () => {
     expect(screen.getByText('Email verification route')).toBeTruthy()
     expect(screen.getByText('Auth callback route')).toBeTruthy()
     expect(screen.getByText('Account center route')).toBeTruthy()
+    expect(screen.getByText('Approve account access')).toBeTruthy()
     expect(screen.getByText('Consent route')).toBeTruthy()
   })
 })

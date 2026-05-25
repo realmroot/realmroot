@@ -119,6 +119,7 @@ import type { UserRepository } from './modules/users/repository'
 import type { WalletRepository } from './modules/wallets/repository'
 import { managementOpenApiForRequest, managementOpenApiLinkHeader, managementOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
+import { adminAgentsRoute } from './routes/admin/agents'
 import { adminApiResourcesRoute } from './routes/admin/api-resources'
 import { adminApplicationsRoute } from './routes/admin/applications'
 import { adminConnectorsRoute } from './routes/admin/connectors'
@@ -148,7 +149,15 @@ type AuthHandler = Pick<Auth, 'handler'> & {
   api: {
     getOAuthServerConfig: (context: { request: Request; asResponse: false }) => Promise<unknown>
     getOpenIdConfig: (context: { request: Request; asResponse: false }) => Promise<unknown>
+    getAgentConfiguration?: (context: { request: Request; asResponse: false }) => Promise<AgentConfiguration>
   } & SessionReader['api']
+}
+
+type AgentConfiguration = {
+  issuer: string
+  default_location: string
+  endpoints: Record<string, string>
+  [key: string]: unknown
 }
 
 export interface AppOptions {
@@ -235,6 +244,12 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
 
   app.get('/api/auth/.well-known/openid-configuration', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))
   app.get('/.well-known/openid-configuration/api/auth', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))
+  app.get('/.well-known/agent-configuration', (c) => {
+    if (!auth.api.getAgentConfiguration) throw notFound('Agent configuration is not available.')
+    return auth.api
+      .getAgentConfiguration({ request: c.req.raw, asResponse: false })
+      .then((configuration) => c.json(mountAgentConfiguration(configuration)))
+  })
   app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
     if (options.onboardingRepository) {
       await requireOnboardingComplete(options.onboardingRepository)
@@ -251,6 +266,30 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
   app.get('/.well-known/oauth-authorization-server/api/auth', (c) => oauthProviderAuthServerMetadata(auth)(c.req.raw))
 
   return app
+}
+
+function mountAgentConfiguration(configuration: AgentConfiguration): AgentConfiguration {
+  const issuer = mountAgentIssuer(configuration.issuer)
+  return {
+    ...configuration,
+    issuer,
+    default_location: mountAgentUrl(configuration.default_location, issuer),
+    endpoints: Object.fromEntries(
+      Object.entries(configuration.endpoints).map(([key, value]) => [key, mountAgentUrl(value, issuer)]),
+    ),
+  }
+}
+
+function mountAgentIssuer(issuer: string) {
+  const url = new URL(issuer)
+  if (url.pathname === '/api/auth' || url.pathname.endsWith('/api/auth')) return issuer
+  return `${issuer.replace(/\/$/, '')}/api/auth`
+}
+
+function mountAgentUrl(value: string, issuer: string) {
+  const url = new URL(value)
+  const path = url.pathname.startsWith('/api/auth/') ? url.pathname.slice('/api/auth'.length) : url.pathname
+  return `${issuer}${path}${url.search}`
 }
 
 function oauthClientCorsOrigins(options: AppOptions) {
@@ -675,6 +714,7 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
       }),
     )
     .route('/api/admin/applications', adminApplicationsRoute)
+    .route('/api/admin/agents', adminAgentsRoute)
     .route('/api/admin/api-resources', adminApiResourcesRoute)
     .route('/api/admin/connectors', adminConnectorsRoute)
     .route('/api/admin/organizations', adminOrganizationsRoute)

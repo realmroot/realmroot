@@ -91,6 +91,71 @@ describe('createApp', () => {
     })
   })
 
+  it('forwards root AgentAuth discovery to the mounted Better Auth issuer', async () => {
+    const getAgentConfiguration = vi.fn().mockResolvedValue({
+      issuer: 'https://auth.example.com',
+      default_location: 'https://auth.example.com/capability/execute',
+      modes: ['delegated'],
+      approval_methods: ['device_authorization'],
+      endpoints: {
+        register: 'https://auth.example.com/agent/register',
+        execute: 'https://auth.example.com/capability/execute',
+        status: 'https://auth.example.com/api/auth/agent/status',
+      },
+    })
+    const auth = {
+      api: {
+        getOAuthServerConfig: vi.fn(),
+        getOpenIdConfig: vi.fn(),
+        getAgentConfiguration,
+        getSession: vi.fn().mockResolvedValue(null),
+      },
+      handler: async () => new Response(null, { status: 204 }),
+    }
+
+    const response = await createApp(auth).request('https://tenant.example.net/.well-known/agent-configuration')
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      issuer: 'https://auth.example.com/api/auth',
+      default_location: 'https://auth.example.com/api/auth/capability/execute',
+      modes: ['delegated'],
+      approval_methods: ['device_authorization'],
+      endpoints: {
+        register: 'https://auth.example.com/api/auth/agent/register',
+        execute: 'https://auth.example.com/api/auth/capability/execute',
+        status: 'https://auth.example.com/api/auth/agent/status',
+      },
+    })
+    expect(getAgentConfiguration).toHaveBeenCalledWith({
+      request: expect.any(Request),
+      asResponse: false,
+    })
+  })
+
+  it('returns not found when AgentAuth discovery is not installed', async () => {
+    const auth = {
+      api: {
+        getOAuthServerConfig: vi.fn(),
+        getOpenIdConfig: vi.fn(),
+        getSession: vi.fn().mockResolvedValue(null),
+      },
+      handler: async () => new Response(null, { status: 204 }),
+    }
+    const response = await createApp(auth).request('/.well-known/agent-configuration', {
+      headers: { 'cf-ray': 'request-1' },
+    })
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'not_found',
+        message: 'Agent configuration is not available.',
+        requestId: 'request-1',
+      },
+    })
+  })
+
   it('returns consistent JSON errors from the boundary', async () => {
     const response = await createApp(createAuthMock()).request('/api/missing', {
       headers: {
@@ -384,6 +449,7 @@ function createAuthMock() {
     api: {
       getOAuthServerConfig: vi.fn(),
       getOpenIdConfig: vi.fn(),
+      getAgentConfiguration: vi.fn(),
       getSession: vi.fn().mockImplementation(({ headers }: { headers: Headers }) => {
         const id = headers.get('x-user-id')
         if (!id) return null

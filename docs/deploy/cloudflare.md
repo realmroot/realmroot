@@ -114,6 +114,10 @@ The `ASSET_BUCKET` R2 binding stores uploaded avatars, organization logos, appli
 
 Uploaded assets are served through the Worker at `/api/assets/{assetId}`. This keeps R2 buckets private while still giving hosted UI and OAuth metadata stable same-origin public URLs. Do not expose the R2 bucket directly unless a future deployment intentionally moves asset delivery behind a public custom domain.
 
+### AgentAuth Foundation Limitation
+
+The delegated AgentAuth foundation is an integration milestone, not a production-ready delegated-agent launch gate. `@better-auth/agent-auth@0.5.1` stores JWT replay `jti` entries and fetched JWKS documents in process memory unless Better Auth is configured with shared `secondaryStorage`. Cloudflare Workers memory is isolate-local, so replay protection and JWKS caching are not durable across isolates. This milestone also allows dynamic host registration for delegated protocol compatibility; production enablement must pair that with an explicit host trust policy. Before enabling AgentAuth for production traffic, add a shared secondary storage adapter suitable for Workers, preferably Durable Object-backed or D1-backed storage with strong enough consistency for replay checks.
+
 SVG uploads are intentionally rejected because asset URLs are served from the auth origin.
 
 Keep staging and production buckets separate to avoid leaking preview assets into production.

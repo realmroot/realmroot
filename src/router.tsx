@@ -33,6 +33,7 @@ import { ApiRequestError, getConfigz } from '@/lib/api'
 import { getAccountProfile } from '@/lib/api/account'
 import { adminQueryKeys, getAdminReadiness, getSignInSettings } from '@/lib/api/management'
 import { AccountRoute } from '@/routes/account'
+import { AgentApproveRoute } from '@/routes/agent-approve'
 import { AuthCallbackRoute } from '@/routes/auth-callback'
 import { EmailVerificationRoute } from '@/routes/email-verification'
 import { ForgotPasswordRoute } from '@/routes/forgot-password'
@@ -100,6 +101,13 @@ const oauthConsentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/oauth/consent',
   component: OAuthConsentRoute,
+})
+
+const agentApproveRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/agent/approve',
+  beforeLoad: async ({ location }) => loadAccountAccess(location.href),
+  component: AgentApproveRoute,
 })
 
 const onboardingRoute = createRoute({
@@ -709,6 +717,7 @@ const routeTree = rootRoute.addChildren([
   emailVerificationRoute,
   authCallbackRoute,
   oauthConsentRoute,
+  agentApproveRoute,
   profileRoute,
   profileSecurityRoute,
   profileLinkedAccountsRoute,

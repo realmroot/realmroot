@@ -6,6 +6,10 @@ vi.mock('@/routes/account', () => ({
   AccountRoute: () => <h1>Profile route</h1>,
 }))
 
+vi.mock('@/routes/agent-approve', () => ({
+  AgentApproveRoute: () => <h1>Agent approval route</h1>,
+}))
+
 vi.mock('@/routes/onboarding', () => ({
   OnboardingRoute: () => <h1>First-admin onboarding</h1>,
 }))
@@ -85,6 +89,26 @@ describe('root route', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in route' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
     expect(new URLSearchParams(window.location.search).get('return_to')).toBe('/profile')
+  })
+
+  it('preserves return_to on protected AgentAuth approval routes', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz(false)))
+      if (url === '/api/account/profile') {
+        return Promise.resolve(jsonResponse({ error: 'Authentication is required.' }, 401))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    window.history.pushState(null, '', '/agent/approve?agent_id=agent-1&code=ABCD-1234')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Sign in route' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/sign-in'))
+    expect(new URLSearchParams(window.location.search).get('return_to')).toBe(
+      '/agent/approve?agent_id=agent-1&code=ABCD-1234',
+    )
   })
 })
 

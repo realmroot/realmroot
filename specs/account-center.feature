@@ -97,3 +97,9 @@ Feature: Account Center
     Given I have granted an application access
     When I revoke the grant
     Then the application is removed from authorized apps
+
+  Scenario: Delegated agents can request read-only account access
+    Given an agent requests delegated access through AgentAuth device authorization
+    When I approve account profile, session list, and authorized app list capabilities
+    Then the agent receives a delegated identity scoped to those read-only account capabilities
+    And account mutations remain unavailable through AgentAuth capabilities

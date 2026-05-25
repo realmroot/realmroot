@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiRequestError } from './api'
 import {
+  approveAgentCapability,
   nativeAuth,
   requestEmailOtp,
   requestEmailOtpPasswordReset,
@@ -124,6 +125,7 @@ describe('native auth client', () => {
     })
     await signInWithOneTap({ idToken: 'id-token-1' })
     await verifySignInTotp({ code: '123456', trustDevice: true })
+    await approveAgentCapability({ agentId: 'agent-1', userCode: 'ABCD-1234' })
 
     expect(requests.map((request) => request.url)).toEqual([
       '/api/auth/sign-in/email',
@@ -144,7 +146,13 @@ describe('native auth client', () => {
       '/api/auth/siwe/verify',
       '/api/auth/one-tap/callback',
       '/api/auth/two-factor/verify-totp',
+      '/api/auth/agent/approve-capability',
     ])
+    expect(requests.at(-1)?.body).toEqual({
+      agent_id: 'agent-1',
+      user_code: 'ABCD-1234',
+      action: 'approve',
+    })
   })
 
   it('falls back to plain response text for non-JSON native errors', async () => {

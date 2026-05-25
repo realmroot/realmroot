@@ -156,11 +156,81 @@ describe('createAuth OAuth Provider metadata', () => {
         'signInUsername',
         'isUsernameAvailable',
         'createInvitation',
+        'getAgentConfiguration',
+        'register',
+        'requestCapability',
+        'approveCapability',
+        'executeCapability',
       ]),
     )
     expect(Object.keys(auth.api)).not.toEqual(
       expect.arrayContaining(['createTeam', 'listOrganizationTeams', 'setActiveTeam', 'addTeamMember']),
     )
+  })
+
+  it('configures AgentAuth as delegated-only with read-only account capabilities', async () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com/api/auth',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+    const agentAuthPlugin = findPlugin<AgentAuthPluginOptions>(auth, 'agent-auth')
+
+    expect(agentAuthPlugin.options).toMatchObject({
+      providerName: 'FlareAuth',
+      modes: ['delegated'],
+      approvalMethods: ['device_authorization'],
+      deviceAuthorizationPage: '/agent/approve',
+      allowDynamicHostRegistration: true,
+      defaultHostCapabilities: [],
+      requireAuthForCapabilities: false,
+    })
+    expect(agentAuthPlugin.options.capabilities.map((capability) => capability.name)).toEqual([
+      'account.profile.read',
+      'account.sessions.list',
+      'account.authorized_apps.list',
+    ])
+    expect(agentAuthPlugin.options.validateCapabilities(['account.profile.read'])).toBe(true)
+    expect(agentAuthPlugin.options.validateCapabilities(['management.users.delete'])).toBe(false)
+    expect(agentAuthPlugin.options.resolveAutonomousUser).toBeUndefined()
+  })
+
+  it('serves mounted AgentAuth discovery and capability catalog without Management API generation', async () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+    const app = createApp(auth)
+
+    const discovery = await app.request('https://auth.example.com/.well-known/agent-configuration')
+    expect(discovery.status).toBe(200)
+    await expect(discovery.json()).resolves.toMatchObject({
+      issuer: 'https://auth.example.com/api/auth',
+      default_location: 'https://auth.example.com/api/auth/capability/execute',
+      modes: ['delegated'],
+      approval_methods: ['device_authorization'],
+      endpoints: {
+        register: 'https://auth.example.com/api/auth/agent/register',
+        execute: 'https://auth.example.com/api/auth/capability/execute',
+      },
+    })
+
+    const capabilitiesResponse = await app.request('https://auth.example.com/api/auth/capability/list')
+    expect(capabilitiesResponse.status).toBe(200)
+    const capabilities = (await capabilitiesResponse.json()) as { capabilities: Array<{ name: string }> }
+    expect(capabilities.capabilities.map((capability) => capability.name)).toEqual([
+      'account.profile.read',
+      'account.sessions.list',
+      'account.authorized_apps.list',
+    ])
+    expect(capabilities.capabilities.map((capability) => capability.name).join(' ')).not.toContain('management')
   })
 
   it('configures organization access control with teams disabled', () => {
@@ -748,6 +818,19 @@ type OAuthProviderPluginOptions = {
     scopes: string[]
     jwt: Record<string, unknown>
   }) => Promise<Record<string, unknown>>
+}
+
+type AgentAuthPluginOptions = {
+  providerName: string
+  modes: string[]
+  approvalMethods: string[]
+  deviceAuthorizationPage: string
+  allowDynamicHostRegistration: boolean
+  defaultHostCapabilities: string[]
+  requireAuthForCapabilities: boolean
+  capabilities: Array<{ name: string }>
+  validateCapabilities: (capabilities: string[]) => boolean
+  resolveAutonomousUser?: unknown
 }
 
 function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {
