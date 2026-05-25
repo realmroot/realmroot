@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import type { ContentfulStatusCode, StatusCode } from 'hono/utils/http-status'
 import { getAddress } from 'viem'
 import type {
+  AccountAgentsResponse,
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
   AccountPasswordChangeInput,
@@ -69,6 +70,7 @@ import type {
   ListManagementUserSessionsResponse,
   ListManagementUsersResponse,
   ManagementAccountCenterSettingsResponse,
+  ManagementAgentInventoryResponse,
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementConnectorResponse,
@@ -480,6 +482,15 @@ type RpcSchema = {
   '/api/account/sessions': {
     $get: RpcEndpoint<RpcNoInput, AccountSessionsResponse>
   }
+  '/api/account/agents': {
+    $get: RpcEndpoint<{ query?: Partial<Record<keyof PaginationQuery, string>> }, AccountAgentsResponse>
+  }
+  '/api/account/agents/:agentId': {
+    $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
+  }
+  '/api/account/agent-capability-grants/:grantId': {
+    $delete: RpcEndpoint<{ param: { grantId: string } }, EmptyResponse, 204>
+  }
   '/api/account/security': {
     $get: RpcEndpoint<RpcNoInput, AccountSecurityResponse>
   }
@@ -633,6 +644,18 @@ type RpcSchema = {
   }
   '/api/management/readiness': {
     $get: RpcEndpoint<RpcNoInput, ManagementReadinessResponse>
+  }
+  '/api/management/agents/protocol-inventory': {
+    $get: RpcEndpoint<{ query?: Partial<Record<keyof PaginationQuery, string>> }, ManagementAgentInventoryResponse>
+  }
+  '/api/management/agents/:agentId': {
+    $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
+  }
+  '/api/management/agent-hosts/:hostId': {
+    $delete: RpcEndpoint<{ param: { hostId: string } }, EmptyResponse, 204>
+  }
+  '/api/management/agent-capability-grants/:grantId': {
+    $delete: RpcEndpoint<{ param: { grantId: string } }, EmptyResponse, 204>
   }
   '/api/management/security/policy': {
     $get: RpcEndpoint<RpcNoInput, { policy: SecurityPolicy }>

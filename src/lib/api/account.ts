@@ -1,4 +1,5 @@
 import type {
+  AccountAgentsResponse,
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
   AccountPasswordChangeInput,
@@ -100,6 +101,18 @@ export function revokeApplicationConsent(consentId: string) {
 
 export function listAccountSessions() {
   return readRpcResponse(apiClient.api.account.sessions.$get())
+}
+
+export function listAccountAgents(): Promise<AccountAgentsResponse> {
+  return readRpcResponse(apiClient.api.account.agents.$get())
+}
+
+export function revokeAccountAgent(agentId: string) {
+  return readRpcResponse(apiClient.api.account.agents[':agentId'].$delete({ param: { agentId } }))
+}
+
+export function revokeAccountAgentCapabilityGrant(grantId: string) {
+  return readRpcResponse(apiClient.api.account['agent-capability-grants'][':grantId'].$delete({ param: { grantId } }))
 }
 
 export function getAccountSecurity() {

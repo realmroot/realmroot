@@ -93,3 +93,5 @@ export type AccountSecurityResponse = {
     }
   }
 }
+
+export type { AccountAgent, AccountAgentGrant, AccountAgentsResponse } from './agents'

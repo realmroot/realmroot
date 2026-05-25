@@ -1,4 +1,5 @@
 import type { AgentSession } from '@better-auth/agent-auth'
+import type { AccountAgent, AccountAgentsResponse } from '../../../shared/api/agents'
 import { type PaginationInput, paginationMetadata, paginationQuerySchema } from '../../../shared/api/pagination'
 import { badRequest } from '../../lib/errors'
 import type { UserRepository } from '../users/repository'
@@ -48,6 +49,69 @@ export class AgentService {
 
   listApprovalRequests(page: PaginationInput) {
     return this.agents.listApprovalRequests(page)
+  }
+
+  async listAccountAgents(userId: string, page: PaginationInput): Promise<AccountAgentsResponse> {
+    const agents = await this.agents.listAgentsForUser(userId, page)
+    const [hosts, grants] = await Promise.all([
+      this.agents.listHostsForAgents([...new Set(agents.items.map((agent) => agent.hostId))]),
+      this.agents.listCapabilityGrantsForUser(userId),
+    ])
+    return {
+      agents: agents.items.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        hostId: agent.hostId,
+        host: hostSummary(hosts.find((host) => host.id === agent.hostId)!),
+        status: agent.status,
+        mode: agent.mode,
+        lastUsedAt: agent.lastUsedAt,
+        activatedAt: agent.activatedAt,
+        expiresAt: agent.expiresAt,
+        createdAt: agent.createdAt,
+        updatedAt: agent.updatedAt,
+        capabilityGrants: grants
+          .filter((grant) => grant.agentId === agent.id)
+          .map((grant) => ({
+            id: grant.id,
+            agentId: grant.agentId,
+            capability: grant.capability,
+            status: grant.status,
+            expiresAt: grant.expiresAt,
+            createdAt: grant.createdAt,
+            updatedAt: grant.updatedAt,
+          })),
+      })) satisfies AccountAgent[],
+      pagination: paginationMetadata(agents),
+    }
+  }
+
+  revokeAccountAgent(agentId: string, userId: string) {
+    return this.agents.revokeAgentForUser(agentId, userId)
+  }
+
+  revokeAccountCapabilityGrant(grantId: string, userId: string) {
+    return this.agents.revokeCapabilityGrantForUser(grantId, userId)
+  }
+
+  revokeAgent(agentId: string) {
+    return this.agents.revokeAgent(agentId)
+  }
+
+  revokeHost(hostId: string) {
+    return this.agents.revokeHost(hostId)
+  }
+
+  revokeCapabilityGrant(grantId: string) {
+    return this.agents.revokeCapabilityGrant(grantId)
+  }
+}
+
+function hostSummary(host: Awaited<ReturnType<AgentRepository['listHostsForAgents']>>[number]) {
+  return {
+    id: host.id,
+    name: host.name,
+    status: host.status,
   }
 }
 

@@ -61,6 +61,10 @@ describe('management API client', () => {
     await management.getBrandingSettings()
     await management.updateBrandingSettings({ branding: { primaryColor: '#2563eb' } })
     await management.getAdminReadiness()
+    await management.getAgentInventory()
+    await management.revokeAgent('agent-1')
+    await management.revokeAgentHost('host-1')
+    await management.revokeAgentCapabilityGrant('grant-1')
     await management.getSecurityPolicy()
     await management.updateSecurityPolicy({ policy: { mfa: { mode: 'required' } } })
     await management.listOrganizations()
@@ -173,6 +177,10 @@ describe('management API client', () => {
       ['branding.get'],
       ['branding.patch', { json: { branding: { primaryColor: '#2563eb' } } }],
       ['readiness.get'],
+      ['agentInventory.get'],
+      ['agent.delete', { param: { agentId: 'agent-1' } }],
+      ['agentHost.delete', { param: { hostId: 'host-1' } }],
+      ['agentCapabilityGrant.delete', { param: { grantId: 'grant-1' } }],
       ['security.get'],
       ['security.patch', { json: { policy: { mfa: { mode: 'required' } } } }],
       ['organizations.get'],
@@ -322,6 +330,16 @@ async function loadManagementApi() {
           'sign-in-settings': { $get: endpoint('signIn.get'), $patch: endpoint('signIn.patch') },
           'branding-settings': { $get: endpoint('branding.get'), $patch: endpoint('branding.patch') },
           readiness: { $get: endpoint('readiness.get') },
+          agents: {
+            'protocol-inventory': { $get: endpoint('agentInventory.get') },
+            ':agentId': { $delete: endpoint('agent.delete') },
+          },
+          'agent-hosts': {
+            ':hostId': { $delete: endpoint('agentHost.delete') },
+          },
+          'agent-capability-grants': {
+            ':grantId': { $delete: endpoint('agentCapabilityGrant.delete') },
+          },
           security: { policy: { $get: endpoint('security.get'), $patch: endpoint('security.patch') } },
           organizations: {
             $get: endpoint('organizations.get'),

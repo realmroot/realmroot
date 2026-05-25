@@ -86,8 +86,12 @@ describe('account center', () => {
     expect(screen.queryByText('credential')).toBeNull()
     expect(screen.getByRole('heading', { name: 'Active sessions' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Authorized apps' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Delegated agents' })).toBeTruthy()
+    expect(screen.getByText('Desktop Agent')).toBeTruthy()
+    expect(screen.getByText(/Desktop Host/)).toBeTruthy()
+    expect(screen.getAllByText(/account.profile.read/).length).toBeGreaterThan(0)
     expect(document.querySelectorAll('.accountPanelGroup')).toHaveLength(4)
-    expect(document.querySelectorAll('.accountPanelGroup .settingsPanel')).toHaveLength(8)
+    expect(document.querySelectorAll('.accountPanelGroup .settingsPanel')).toHaveLength(9)
     expect(screen.getByRole('region', { name: 'Profile settings' })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Security settings' })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Social and app access' })).toBeTruthy()
@@ -545,6 +549,8 @@ describe('account center', () => {
       if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
       if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts() }))
       if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: applications() }))
+      if (path === '/api/account/agents')
+        return Promise.resolve(jsonResponse({ agents: accountAgents(), pagination: pagination() }))
       if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: sessions() }))
       if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security: security() }))
       if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: passkeys() }))
@@ -608,7 +614,7 @@ describe('account center', () => {
     await screen.findByRole('heading', { name: 'Jane Stone' })
     expect(screen.getByText('Chrome on macOS')).toBeTruthy()
     clickAndConfirm('Revoke other sessions', 'Revoke sessions')
-    clickAndConfirm('Revoke', 'Revoke session', 1)
+    clickAndConfirm('Revoke', 'Revoke session', 3)
 
     cleanup()
     render(<AccountCenterOnlyWithToaster />)
@@ -616,6 +622,17 @@ describe('account center', () => {
     expect(screen.getByText('Customer Portal')).toBeTruthy()
     expect(screen.getByText(/openid, email/)).toBeTruthy()
     clickAndConfirm('Revoke', 'Revoke access')
+
+    cleanup()
+    render(<AccountCenterOnlyWithToaster />)
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    expect(screen.getByText('Desktop Agent')).toBeTruthy()
+    clickAndConfirm('Revoke', 'Revoke access', 2)
+
+    cleanup()
+    render(<AccountCenterOnlyWithToaster />)
+    await screen.findByRole('heading', { name: 'Jane Stone' })
+    clickAndConfirm('Revoke', 'Revoke grant', 1)
 
     await waitFor(() => {
       expect(requests).toEqual(
@@ -640,6 +657,8 @@ describe('account center', () => {
           { path: '/api/account/security/sessions', method: 'DELETE', body: null },
           { path: '/api/account/security/sessions/session-1', method: 'DELETE', body: null },
           { path: '/api/account/applications/consent-1', method: 'DELETE', body: null },
+          { path: '/api/account/agents/agent-1', method: 'DELETE', body: null },
+          { path: '/api/account/agent-capability-grants/grant-1', method: 'DELETE', body: null },
         ]),
       )
     })
@@ -668,6 +687,7 @@ describe('account center', () => {
       if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
       if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
       if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
+      if (path === '/api/account/agents') return Promise.resolve(jsonResponse({ agents: [], pagination: pagination() }))
       if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))
       if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security: security() }))
       if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
@@ -706,6 +726,7 @@ describe('account center', () => {
       }
       if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
       if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
+      if (path === '/api/account/agents') return Promise.resolve(jsonResponse({ agents: [], pagination: pagination() }))
       if (path === '/api/account/sessions') {
         return Promise.resolve(jsonResponse({ sessions: [{ ...sessions()[0], ipAddress: null, userAgent: null }] }))
       }
@@ -862,6 +883,8 @@ function mockAccountFetch(
     }
     if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts() }))
     if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: applications() }))
+    if (path === '/api/account/agents')
+      return Promise.resolve(jsonResponse({ agents: accountAgents(), pagination: pagination() }))
     if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: sessions() }))
     if (path === '/api/account/security')
       return Promise.resolve(jsonResponse({ security: options.security ?? security() }))
@@ -1037,6 +1060,39 @@ function applications() {
       expiresAt: null,
     },
   ]
+}
+
+function accountAgents() {
+  return [
+    {
+      id: 'agent-1',
+      name: 'Desktop Agent',
+      hostId: 'host-1',
+      host: { id: 'host-1', name: 'Desktop Host', status: 'active' },
+      status: 'active',
+      mode: 'delegated',
+      lastUsedAt: null,
+      activatedAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      capabilityGrants: [
+        {
+          id: 'grant-1',
+          agentId: 'agent-1',
+          capability: 'account.profile.read',
+          status: 'active',
+          expiresAt: null,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    },
+  ]
+}
+
+function pagination() {
+  return { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null }
 }
 
 function sessions() {

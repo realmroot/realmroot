@@ -98,8 +98,17 @@ Feature: Account Center
     When I revoke the grant
     Then the application is removed from authorized apps
 
+  @journey:agent-approval
   Scenario: Delegated agents can request read-only account access
     Given an agent requests delegated access through AgentAuth device authorization
     When I approve account profile, session list, and authorized app list capabilities
     Then the agent receives a delegated identity scoped to those read-only account capabilities
     And account mutations remain unavailable through AgentAuth capabilities
+
+  @journey:account-agent-management
+  Scenario: Delegated agent access can be managed from Account Center
+    Given I have active delegated agents and capability grants
+    When I open Account Center
+    Then I can inspect the active agents, hosts, and granted capabilities
+    When I revoke an agent or a selected capability grant
+    Then that delegated access is no longer active for my account

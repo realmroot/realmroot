@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { AgentProtocolInventoryResponse } from './agents'
 import { applicationResponseSchema, listApplicationsResponseSchema, paginationMetadataSchema } from './applications'
 import {
   apiResourceResponseSchema,
@@ -213,6 +214,8 @@ export const managementReadinessResponseSchema = z.object({
     missing: z.array(managementReadinessItemIdSchema),
   }),
 })
+
+export type ManagementAgentInventoryResponse = AgentProtocolInventoryResponse
 
 export const managementConnectorResponseSchema = connectorResponseSchema
 export const listManagementConnectorsResponseSchema = listConnectorsResponseSchema

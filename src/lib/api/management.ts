@@ -47,6 +47,7 @@ import type {
   ListManagementUserSessionsResponse,
   ListManagementUsersResponse,
   ManagementAccountCenterSettingsResponse,
+  ManagementAgentInventoryResponse,
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementCreateUserRequest,
@@ -90,6 +91,7 @@ export const adminQueryKeys = {
   webhookEndpoints: ['admin', 'webhooks', 'endpoints'] as const,
   webhookRequests: ['admin', 'webhooks', 'requests'] as const,
   readiness: ['admin', 'readiness'] as const,
+  agents: ['admin', 'agents'] as const,
 }
 
 export type AdminDashboard = {
@@ -350,6 +352,24 @@ export function updateAccountCenterSettings(input: UpdateManagementAccountCenter
 
 export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
   return readRpcResponse(apiClient.api.management.readiness.$get())
+}
+
+export function getAgentInventory(): Promise<ManagementAgentInventoryResponse> {
+  return readRpcResponse(apiClient.api.management.agents['protocol-inventory'].$get())
+}
+
+export function revokeAgent(agentId: string) {
+  return readRpcResponse(apiClient.api.management.agents[':agentId'].$delete({ param: { agentId } }))
+}
+
+export function revokeAgentHost(hostId: string) {
+  return readRpcResponse(apiClient.api.management['agent-hosts'][':hostId'].$delete({ param: { hostId } }))
+}
+
+export function revokeAgentCapabilityGrant(grantId: string) {
+  return readRpcResponse(
+    apiClient.api.management['agent-capability-grants'][':grantId'].$delete({ param: { grantId } }),
+  )
 }
 
 export function listWebhookEndpoints(

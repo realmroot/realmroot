@@ -103,6 +103,67 @@ describe('AgentService', () => {
     await expect(service.listApprovalRequests(page)).resolves.toMatchObject({ items: [{ id: 'approval-1' }] })
   })
 
+  it('maps account-owned agents with capability grants and delegates revokes', async () => {
+    const repository = createAgentRepositoryMock()
+    repository.listAgentsForUser.mockResolvedValue({
+      items: [
+        {
+          id: 'agent-1',
+          name: 'Desktop Agent',
+          hostId: 'host-1',
+          status: 'active',
+          mode: 'delegated',
+          lastUsedAt: null,
+          activatedAt: null,
+          expiresAt: null,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ],
+      total: 1,
+      limit: 10,
+      offset: 0,
+    })
+    repository.listCapabilityGrantsForUser.mockResolvedValue([
+      {
+        id: 'grant-1',
+        agentId: 'agent-1',
+        capability: 'account.profile.read',
+        status: 'active',
+        expiresAt: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    ])
+    repository.listHostsForAgents.mockResolvedValue([{ id: 'host-1', name: 'Desktop Host', status: 'active' }])
+    const service = new AgentService(createUserRepositoryMock() as never, repository as never)
+
+    await expect(service.listAccountAgents('user-1', { limit: 10, offset: 0 })).resolves.toMatchObject({
+      agents: [
+        {
+          id: 'agent-1',
+          host: { id: 'host-1', name: 'Desktop Host', status: 'active' },
+          capabilityGrants: [{ id: 'grant-1', capability: 'account.profile.read' }],
+        },
+      ],
+      pagination: { limit: 10, offset: 0, total: 1 },
+    })
+    await service.revokeAccountAgent('agent-1', 'user-1')
+    await service.revokeAccountCapabilityGrant('grant-1', 'user-1')
+    await service.revokeAgent('agent-1')
+    await service.revokeHost('host-1')
+    await service.revokeCapabilityGrant('grant-1')
+
+    expect(repository.listAgentsForUser).toHaveBeenCalledWith('user-1', { limit: 10, offset: 0 })
+    expect(repository.listHostsForAgents).toHaveBeenCalledWith(['host-1'])
+    expect(repository.listCapabilityGrantsForUser).toHaveBeenCalledWith('user-1')
+    expect(repository.revokeAgentForUser).toHaveBeenCalledWith('agent-1', 'user-1')
+    expect(repository.revokeCapabilityGrantForUser).toHaveBeenCalledWith('grant-1', 'user-1')
+    expect(repository.revokeAgent).toHaveBeenCalledWith('agent-1')
+    expect(repository.revokeHost).toHaveBeenCalledWith('host-1')
+    expect(repository.revokeCapabilityGrant).toHaveBeenCalledWith('grant-1')
+  })
+
   it('declares only the narrow MVP capability catalog', () => {
     expect(agentCapabilities.map((capability) => capability.name)).toEqual([
       'account.profile.read',
@@ -138,6 +199,14 @@ function createAgentRepositoryMock() {
     listAgents: vi.fn(),
     listCapabilityGrants: vi.fn(),
     listApprovalRequests: vi.fn(),
+    listAgentsForUser: vi.fn(),
+    listHostsForAgents: vi.fn(),
+    listCapabilityGrantsForUser: vi.fn(),
+    revokeAgentForUser: vi.fn(),
+    revokeCapabilityGrantForUser: vi.fn(),
+    revokeAgent: vi.fn(),
+    revokeHost: vi.fn(),
+    revokeCapabilityGrant: vi.fn(),
   }
 }
 

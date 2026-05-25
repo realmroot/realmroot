@@ -15,6 +15,8 @@ import { paginationMetadata, paginationQuerySchema } from '../../../shared/api/p
 import { badRequest, forbidden } from '../../lib/errors'
 import { requireAuth } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
+import { type AgentBindings, createAgentService } from '../../modules/agents/context'
+import type { AgentService } from '../../modules/agents/service'
 import { type ApplicationBindings, createApplicationService } from '../../modules/applications/context'
 import { type ConfigzBindings, createConfigzService } from '../../modules/configz/context'
 import { type ConfigzAccountCenter, defaultAccountCenterSettings } from '../../modules/configz/service'
@@ -31,6 +33,7 @@ import { accountSecurityRoutes } from './security'
 export type AccountApplicationServiceFactory = (c: Context<{ Bindings: ApplicationBindings }>) => {
   revokeConsent: (consentId: string, userId: string) => Promise<void>
 }
+export type AccountAgentServiceFactory = (c: Context<{ Bindings: AgentBindings }>) => AgentService
 
 export function accountRoutes(
   authApi: ManagementAuthApi,
@@ -39,8 +42,9 @@ export function accountRoutes(
   applicationServiceFactory: AccountApplicationServiceFactory = createApplicationService,
   configzServiceFactory?: ConfigzServiceFactory,
   wallets?: WalletRepository,
+  agentServiceFactory: AccountAgentServiceFactory = createAgentService,
 ) {
-  const app = new Hono<{ Bindings: ApplicationBindings & ConfigzBindings }>()
+  const app = new Hono<{ Bindings: ApplicationBindings & ConfigzBindings & AgentBindings }>()
 
   app.use('*', requireAuth())
 
@@ -323,6 +327,23 @@ export function accountRoutes(
       sessions: page.items.map((session) => ({ ...session, current: session.id === currentSessionId })),
       pagination: paginationMetadata(page),
     })
+  })
+
+  app.get('/agents', async (c) => {
+    const authContext = getAuthContext(c)
+    return c.json(
+      await agentServiceFactory(c).listAccountAgents(authContext.user!.id, readQuery(c, paginationQuerySchema)),
+    )
+  })
+
+  app.delete('/agents/:agentId', async (c) => {
+    await agentServiceFactory(c).revokeAccountAgent(c.req.param('agentId'), getAuthContext(c).user!.id)
+    return c.body(null, 204)
+  })
+
+  app.delete('/agent-capability-grants/:grantId', async (c) => {
+    await agentServiceFactory(c).revokeAccountCapabilityGrant(c.req.param('grantId'), getAuthContext(c).user!.id)
+    return c.body(null, 204)
   })
 
   if (security) {

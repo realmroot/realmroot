@@ -6,6 +6,7 @@ import {
   AccountCenterSettingsPage,
   AdminDashboardPage,
   AdminOnboardingPage,
+  AgentsPage,
   ApiResourceDetailPage,
   ApiResourcesPage,
   ApplicationDetailPage,
@@ -266,6 +267,12 @@ const consoleUsersRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: '/users',
   component: UsersPage,
+})
+
+const consoleAgentsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/agents',
+  component: AgentsPage,
 })
 
 const consoleUserDetailRoute = createRoute({
@@ -646,6 +653,11 @@ const adminCompatibilityUsersRoute = createRoute({
   path: '/users',
 })
 
+const adminCompatibilityAgentsRoute = createRoute({
+  getParentRoute: () => adminCompatibilityRoute,
+  path: '/agents',
+})
+
 const adminCompatibilityUserDetailRoute = createRoute({
   getParentRoute: () => adminCompatibilityRoute,
   path: '/users/{$userId}',
@@ -739,6 +751,7 @@ const routeTree = rootRoute.addChildren([
     consoleApplicationDetailSettingsRoute,
     consoleApplicationDetailBrandingRoute,
     consoleUsersRoute,
+    consoleAgentsRoute,
     consoleUserDetailRoute,
     consoleUserDetailProfileRoute,
     consoleUserDetailSecurityRoute,
@@ -791,6 +804,7 @@ const routeTree = rootRoute.addChildren([
     adminCompatibilityApplicationsRoute,
     adminCompatibilityApplicationDetailRoute,
     adminCompatibilityUsersRoute,
+    adminCompatibilityAgentsRoute,
     adminCompatibilityUserDetailRoute,
     adminCompatibilityConnectorsRoute,
     adminCompatibilitySignInRoute,

@@ -257,6 +257,96 @@ export function seedAuthorizedApplication(input: {
   `)
 }
 
+export function seedAgentAccess(userId: string) {
+  const now = Date.now()
+  sql(`
+    INSERT INTO agent_host (
+      id,
+      name,
+      user_id,
+      default_capabilities,
+      status,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      'host_e2e_agent',
+      'E2E Agent Host',
+      ${sqlString(userId)},
+      'account.profile.read account.sessions.list account.authorized_apps.list',
+      'active',
+      ${now},
+      ${now}
+    );
+    INSERT INTO agent (
+      id,
+      name,
+      user_id,
+      host_id,
+      status,
+      mode,
+      public_key,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      'agent_e2e_desktop',
+      'E2E Desktop Agent',
+      ${sqlString(userId)},
+      'host_e2e_agent',
+      'active',
+      'delegated',
+      'public-key',
+      ${now},
+      ${now}
+    );
+    INSERT INTO agent_capability_grant (
+      id,
+      agent_id,
+      capability,
+      granted_by,
+      status,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      'grant_e2e_profile',
+      'agent_e2e_desktop',
+      'account.profile.read',
+      ${sqlString(userId)},
+      'active',
+      ${now},
+      ${now}
+    );
+    INSERT INTO approval_request (
+      id,
+      method,
+      agent_id,
+      host_id,
+      user_id,
+      capabilities,
+      status,
+      interval,
+      expires_at,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      'approval_e2e_agent',
+      'device_authorization',
+      'agent_e2e_desktop',
+      'host_e2e_agent',
+      ${sqlString(userId)},
+      'account.profile.read account.sessions.list account.authorized_apps.list',
+      'approved',
+      5,
+      ${now + 3600000},
+      ${now},
+      ${now}
+    );
+  `)
+}
+
 export function resetLocalData() {
   sql(`
     PRAGMA foreign_keys = OFF;
@@ -292,6 +382,10 @@ export function resetLocalData() {
     DELETE FROM account_center_setting;
     DELETE FROM branding_setting;
     DELETE FROM uploaded_asset;
+    DELETE FROM approval_request;
+    DELETE FROM agent_capability_grant;
+    DELETE FROM agent;
+    DELETE FROM agent_host;
     DELETE FROM organization;
     PRAGMA foreign_keys = ON;
   `)

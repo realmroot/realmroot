@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import {
+  Bot,
   Fingerprint,
   KeyRound,
   Laptop,
@@ -42,11 +43,14 @@ import {
   getAccountSecurity,
   linkAccount,
   linkWalletAddress,
+  listAccountAgents,
   listAccountSessions,
   listConsentedApplications,
   listLinkedAccounts,
   listPasskeys,
   requestAccountEmailChange,
+  revokeAccountAgent,
+  revokeAccountAgentCapabilityGrant,
   revokeApplicationConsent,
   revokeOtherSessions,
   revokeSession,
@@ -99,6 +103,33 @@ type UserSessionDevice = {
   userAgent: string | null
   current?: boolean
 }
+type AccountAgentGrant = {
+  id: string
+  agentId: string
+  capability: string
+  status: string
+  expiresAt: string | Date | null
+  createdAt: string | Date
+  updatedAt: string | Date
+}
+type AccountAgent = {
+  id: string
+  name: string
+  hostId: string
+  host: {
+    id: string
+    name: string | null
+    status: string
+  }
+  status: string
+  mode: string
+  lastUsedAt: string | Date | null
+  activatedAt: string | Date | null
+  expiresAt: string | Date | null
+  createdAt: string | Date
+  updatedAt: string | Date
+  capabilityGrants: AccountAgentGrant[]
+}
 type SecurityState = {
   mfa: {
     enabled: boolean
@@ -139,6 +170,7 @@ type AccountData = {
   profile: UserProfile | null
   linkedAccounts: LinkedAccount[]
   applications: ConsentedApplication[]
+  agents: AccountAgent[]
   sessions: UserSessionDevice[]
   security: SecurityState | null
   passkeys: Passkey[]
@@ -147,6 +179,7 @@ const emptyAccountData: AccountData = {
   profile: null,
   linkedAccounts: [],
   applications: [],
+  agents: [],
   sessions: [],
   security: null,
   passkeys: [],
@@ -167,7 +200,7 @@ export function AccountCenter() {
     if (!config) return
     setLoading(true)
     try {
-      const [profile, linkedAccounts, applications, sessions, security, passkeys] = await Promise.all([
+      const [profile, linkedAccounts, applications, agents, sessions, security, passkeys] = await Promise.all([
         getAccountProfile(),
         accountCenter.connectedAccountsEnabled
           ? listLinkedAccounts()
@@ -179,6 +212,7 @@ export function AccountCenter() {
           : Promise.resolve({
               applications: [],
             }),
+        listAccountAgents(),
         accountCenter.sessionsViewEnabled
           ? listAccountSessions()
           : Promise.resolve({
@@ -191,6 +225,7 @@ export function AccountCenter() {
         profile: profile.user,
         linkedAccounts: linkedAccounts.accounts,
         applications: applications.applications,
+        agents: agents.agents,
         sessions: sessions.sessions,
         security: security.security,
         passkeys: passkeys.passkeys,
@@ -341,6 +376,7 @@ export function AccountCenter() {
                       walletProvider={config?.builtInProviders.web3Wallet}
                     />
                     <ApplicationsSection applications={data.applications} confirm={setConfirmation} mutate={mutate} />
+                    <AgentsSection agents={data.agents} confirm={setConfirmation} mutate={mutate} />
                   </section>
                 ) : null}
                 {accountCenter.sessionsViewEnabled ? (
@@ -1299,6 +1335,77 @@ function ApplicationsSection({
     </section>
   )
 }
+function AgentsSection({
+  agents,
+  confirm,
+  mutate,
+}: {
+  agents: AccountAgent[]
+  confirm: ConfirmDestructiveHandler
+  mutate: MutationHandler
+}) {
+  return (
+    <section className="settingsPanel">
+      <SubsectionTitle title={tt('Delegated agents')} description={tt('Agents approved to access this account.')} />
+      <ItemList
+        empty={tt('No delegated agents yet.')}
+        items={agents.map((agent) => ({
+          id: agent.id,
+          icon: <Bot size={16} />,
+          title: agent.name,
+          meta: `${tt('Host:')} ${agent.host.name ?? agent.host.id} ${tt('/ Status:')} ${agent.status} ${tt('/ Capabilities:')} ${agent.capabilityGrants.map((grant) => grant.capability).join(', ') || tt('None')}`,
+          action: (
+            <Button
+              onClick={() =>
+                confirm({
+                  title: tt('Revoke agent access'),
+                  description: tt('{{agentName}} will lose delegated access to this account.', {
+                    agentName: agent.name,
+                  }),
+                  actionLabel: tt('Revoke access'),
+                  onConfirm: () => mutate('Agent access revoked.', () => revokeAccountAgent(agent.id)),
+                })
+              }
+              type="button"
+              variant="ghost"
+            >
+              {tt('Revoke')}
+            </Button>
+          ),
+          children: agent.capabilityGrants.length ? (
+            <div className="mt-3 grid gap-2">
+              {agent.capabilityGrants.map((grant) => (
+                <div
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted px-3 py-2"
+                  key={grant.id}
+                >
+                  <span className="font-mono text-xs text-foreground">{grant.capability}</span>
+                  <Button
+                    onClick={() =>
+                      confirm({
+                        title: tt('Revoke capability grant'),
+                        description: tt('{{capability}} will no longer be available to this agent.', {
+                          capability: grant.capability,
+                        }),
+                        actionLabel: tt('Revoke grant'),
+                        onConfirm: () =>
+                          mutate('Capability grant revoked.', () => revokeAccountAgentCapabilityGrant(grant.id)),
+                      })
+                    }
+                    type="button"
+                    variant="ghost"
+                  >
+                    {tt('Revoke')}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null,
+        }))}
+      />
+    </section>
+  )
+}
 function SubsectionTitle({ title, description }: { title: string; description: string }) {
   return (
     <div className="subsectionTitle">
@@ -1428,6 +1535,7 @@ type ListItem = {
   meta: string
   action?: ReactNode
   status?: string
+  children?: ReactNode
 }
 function ItemList({
   empty,
@@ -1450,19 +1558,22 @@ function ItemList({
       ) : (
         items.map((item) => (
           <article className="itemRow" key={item.id}>
-            <div className="itemRowMain">
-              {item.icon ? (
-                <div className="itemRowIcon" aria-hidden="true">
-                  {item.icon}
+            <div className="grid min-w-0 flex-1 gap-1">
+              <div className="itemRowMain">
+                {item.icon ? (
+                  <div className="itemRowIcon" aria-hidden="true">
+                    {item.icon}
+                  </div>
+                ) : null}
+                <div>
+                  <div className="itemRowTitle">
+                    <h3>{item.title}</h3>
+                    {item.status ? <span>{item.status}</span> : null}
+                  </div>
+                  <p>{item.meta}</p>
                 </div>
-              ) : null}
-              <div>
-                <div className="itemRowTitle">
-                  <h3>{item.title}</h3>
-                  {item.status ? <span>{item.status}</span> : null}
-                </div>
-                <p>{item.meta}</p>
               </div>
+              {item.children}
             </div>
             {item.action}
           </article>

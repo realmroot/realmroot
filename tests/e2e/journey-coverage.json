@@ -47,6 +47,9 @@
     { "id": "linked-account-unlink", "name": "Account center connects and unlinks social/OAuth accounts" },
     { "id": "session-revocation", "name": "Account center revokes all and single sessions" },
     { "id": "authorized-app-revoke", "name": "Account center revokes authorized application access" },
+    { "id": "agent-discovery", "name": "Agent clients discover delegated AgentAuth configuration" },
+    { "id": "agent-approval", "name": "Agent approval route approves delegated read-only account access" },
+    { "id": "account-agent-management", "name": "Account center lists and revokes delegated agent access" },
     { "id": "admin-dashboard", "name": "Admin dashboard loads tenant health" },
     { "id": "admin-signed-out-redirect", "name": "Signed-out Console routes redirect without management API requests" },
     { "id": "admin-setup-gate", "name": "Admin routes redirect to setup onboarding when no OIDC client exists" },
@@ -73,10 +76,11 @@
     { "id": "admin-authorization-inventory", "name": "Admin authorization pages list organizations, roles, and API resources" },
     { "id": "admin-branding-settings", "name": "Admin updates branding settings and hosted auth renders them" },
     { "id": "admin-deployment-settings", "name": "Admin deployment page shows Cloudflare runtime settings" },
+    { "id": "admin-agent-inventory", "name": "Admin console lists and revokes delegated agent inventory" },
     { "id": "management-openapi-discovery", "name": "Management API clients discover the generated OpenAPI contract" },
     { "id": "management-restish-oauth-auth", "name": "Restish authenticates to the Management API with OAuth PKCE" },
     { "id": "management-restish-oauth-crud", "name": "Restish OAuth token manages applications through the Management API" },
     { "id": "oauth-consent-account-switch", "name": "OAuth consent can switch accounts without losing the request" }
   ],
-  "waivers": []
+  "waivers": ["agent-approval"]
 }

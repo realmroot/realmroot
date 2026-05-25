@@ -15,7 +15,11 @@ afterEach(() => {
 
 describe('AgentApproveRoute', () => {
   it('approves delegated account capabilities from the device authorization query', async () => {
-    window.history.pushState(null, '', '/agent/approve?agent_id=agent-1&code=ABCD-1234')
+    window.history.pushState(
+      null,
+      '',
+      '/agent/approve?agent_id=agent-1&code=ABCD-1234&host=cli-host&capability=account.profile.read',
+    )
 
     render(<AgentApproveRoute />)
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
@@ -24,9 +28,11 @@ describe('AgentApproveRoute', () => {
       expect(approveAgentCapability).toHaveBeenCalledWith({
         agentId: 'agent-1',
         userCode: 'ABCD-1234',
-        capabilities: ['account.profile.read', 'account.sessions.list', 'account.authorized_apps.list'],
+        capabilities: ['account.profile.read'],
       }),
     )
+    expect(screen.getByText('cli-host')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Requested capabilities' })).toBeTruthy()
     expect(await screen.findByText('Agent access approved.')).toBeTruthy()
   })
 
@@ -34,6 +40,7 @@ describe('AgentApproveRoute', () => {
     render(<AgentApproveRoute />)
 
     expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Deny' })).toBeNull()
   })
 
   it('surfaces delegated approval failures', async () => {

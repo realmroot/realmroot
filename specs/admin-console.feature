@@ -176,14 +176,18 @@ Feature: Admin Console
     When OIDC claims are configured for access tokens, ID tokens, and userinfo
     Then issued access tokens, ID tokens, and userinfo include only the configured claims
 
+  @journey:agent-discovery
   Scenario: AgentAuth discovery exposes a narrow delegated protocol surface
     When an agent client requests /.well-known/agent-configuration
     Then FlareAuth advertises delegated mode and device authorization approval
     And the advertised capabilities are limited to read-only account data
     And generated Management API capabilities are not exposed
 
-  Scenario: Admins can inspect delegated agent protocol records without granting broad mutations
+  @journey:admin-agent-inventory
+  Scenario: Admins can inspect and revoke delegated agent protocol records
     Given delegated AgentAuth hosts, agents, grants, and approval requests exist
     When Console reads the agent protocol inventory
-    Then FlareAuth presents host, agent, grant, and approval state from its agent module
+    Then FlareAuth presents host, agent, user, grant, capability, and approval state from its agent module
+    When an admin revokes an agent, host, or capability grant
+    Then the revoked protocol record is no longer active
     And no autonomous agent mode or broad admin mutation capability is enabled

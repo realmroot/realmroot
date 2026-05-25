@@ -3,6 +3,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import {
   AppWindow,
   BellRing,
+  Bot,
   Boxes,
   Building2,
   Cable,
@@ -131,6 +132,11 @@ const adminNavGroups: ConsoleNavGroup[] = [
         href: '/console/users',
         labelKey: 'User management',
         icon: UsersRound,
+      },
+      {
+        href: '/console/agents',
+        labelKey: 'Delegated agents',
+        icon: Bot,
       },
     ],
   },

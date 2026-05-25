@@ -22,6 +22,7 @@ import {
 import type { SecurityPolicy } from '../../../shared/api/security'
 import { requireAdmin } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
+import type { AgentBindings } from '../../modules/agents/context'
 import { type ApplicationBindings, createApplicationService } from '../../modules/applications/context'
 import { type AuthorizationBindings, createAuthorizationService } from '../../modules/authorization/context'
 import { type ConfigzBindings, createConfigzService } from '../../modules/configz/context'
@@ -36,10 +37,11 @@ import { adminSecurityRoutes } from '../admin/security'
 import { adminUserRoutes } from '../admin/users'
 import type { ManagementAuthApi } from '../auth-api'
 import { readJson } from '../validation'
+import { managementAgentsRoute } from './agents'
 import { type ConnectorServiceFactory, createManagementConnectorRoutes } from './connectors'
 import { createManagementWebhookRoutes, type WebhookServiceFactory } from './webhooks'
 
-interface ManagementBindings extends AuthorizationBindings, ConfigzBindings, ApplicationBindings {
+interface ManagementBindings extends AuthorizationBindings, ConfigzBindings, ApplicationBindings, AgentBindings {
   EMAIL?: unknown
   EMAIL_FROM?: string
 }
@@ -101,6 +103,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
 
   app.route('/applications', adminApplicationsRoute)
   app.route('/api-resources', adminApiResourcesRoute)
+  app.route('/', managementAgentsRoute)
   app.route('/organizations', adminOrganizationsRoute)
   app.route('/roles', adminRolesRoute)
   app.post('/user-role-assignments', requireAdmin(), async (c) => {
