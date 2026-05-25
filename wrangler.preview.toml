@@ -25,8 +25,8 @@ bucket_name = "flareauth-assets-staging"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "flareauth-staging"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "flareauth-db-staging"
+database_id = "a6aa476d-5866-4911-b8ff-b95fb1ace362"
 migrations_dir = "./migrations"
 
 [[queues.producers]]
