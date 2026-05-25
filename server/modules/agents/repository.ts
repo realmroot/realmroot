@@ -47,11 +47,11 @@ async function list<TTable extends { $inferSelect: unknown }>(
     .orderBy(orderBy as never)
     .limit(page.limit)
     .offset(page.offset)
-  const totalRows = (await db.select({ total: count() }).from(table as never)) as Array<{ total: number }>
+  const [{ total }] = (await db.select({ total: count() }).from(table as never)) as unknown as [{ total: number }]
 
   return {
     items: rows as TTable['$inferSelect'][],
-    total: totalRows[0]?.total ?? 0,
+    total,
     ...page,
   }
 }

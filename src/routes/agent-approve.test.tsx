@@ -35,4 +35,14 @@ describe('AgentApproveRoute', () => {
 
     expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('surfaces delegated approval failures', async () => {
+    vi.mocked(approveAgentCapability).mockRejectedValueOnce(new Error('Invalid user code'))
+    window.history.pushState(null, '', '/agent/approve?agent_id=agent-1&code=BAD-CODE')
+
+    render(<AgentApproveRoute />)
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(await screen.findByText('Invalid user code')).toBeTruthy()
+  })
 })

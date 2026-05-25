@@ -239,6 +239,12 @@ describe('database schema', () => {
         'agentHost_status_idx',
       ]),
     )
+    expect(foreignKeyReferences(agentHost)).toContainEqual({
+      columns: ['user_id'],
+      foreignColumns: ['id'],
+      foreignTable: 'user',
+      onDelete: 'cascade',
+    })
 
     expect(getTableConfig(agent).name).toBe('agent')
     expect(columnNames(agent)).toEqual(
@@ -291,6 +297,28 @@ describe('database schema', () => {
         'agentCapabilityGrant_status_idx',
       ]),
     )
+    expect(foreignKeyReferences(agentCapabilityGrant)).toEqual(
+      expect.arrayContaining([
+        {
+          columns: ['agent_id'],
+          foreignColumns: ['id'],
+          foreignTable: 'agent',
+          onDelete: 'cascade',
+        },
+        {
+          columns: ['denied_by'],
+          foreignColumns: ['id'],
+          foreignTable: 'user',
+          onDelete: 'cascade',
+        },
+        {
+          columns: ['granted_by'],
+          foreignColumns: ['id'],
+          foreignTable: 'user',
+          onDelete: 'cascade',
+        },
+      ]),
+    )
 
     expect(getTableConfig(approvalRequest).name).toBe('approval_request')
     expect(columnNames(approvalRequest)).toEqual(
@@ -313,6 +341,28 @@ describe('database schema', () => {
         'expires_at',
         'created_at',
         'updated_at',
+      ]),
+    )
+    expect(foreignKeyReferences(approvalRequest)).toEqual(
+      expect.arrayContaining([
+        {
+          columns: ['agent_id'],
+          foreignColumns: ['id'],
+          foreignTable: 'agent',
+          onDelete: 'cascade',
+        },
+        {
+          columns: ['host_id'],
+          foreignColumns: ['id'],
+          foreignTable: 'agent_host',
+          onDelete: 'cascade',
+        },
+        {
+          columns: ['user_id'],
+          foreignColumns: ['id'],
+          foreignTable: 'user',
+          onDelete: 'cascade',
+        },
       ]),
     )
   })
