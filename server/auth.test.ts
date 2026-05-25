@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 import { createApp } from './app'
-import { buildOAuthAccessTokenClaims, createAuth } from './auth'
+import { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, buildOAuthUserInfoClaims, createAuth } from './auth'
 import type { Database } from './db/client'
 
 describe('createAuth OAuth Provider metadata', () => {
@@ -185,7 +185,7 @@ describe('createAuth OAuth Provider metadata', () => {
     })
   })
 
-  it('limits management userinfo claims to the system CLI client', () => {
+  it('limits management userinfo claims to the system CLI client', async () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
@@ -203,20 +203,20 @@ describe('createAuth OAuth Provider metadata', () => {
     }
 
     expect(oauth.clientRegistrationAllowedScopes).toEqual(['openid', 'profile', 'email', 'offline_access'])
-    expect(
+    await expect(
       oauth.customUserInfoClaims({
         user,
         scopes: ['openid', 'management:read'],
-        jwt: { ...jwt, client_id: 'customer-client' },
+        jwt,
       }),
-    ).toEqual({})
-    expect(
+    ).resolves.toEqual({})
+    await expect(
       oauth.customUserInfoClaims({
         user,
         scopes: ['openid', 'management:read'],
         jwt: { ...jwt, azp: 'flareauth-cli' },
       }),
-    ).toEqual({
+    ).resolves.toEqual({
       role: 'admin',
       scope: 'openid management:read',
       client_id: 'flareauth-cli',
@@ -257,6 +257,92 @@ describe('createAuth OAuth Provider metadata', () => {
       organizationId: 'org-1',
       resource: 'https://api.example.com/contacts',
       scopes: ['openid', 'contacts:read'],
+      destination: 'access_token',
+      claimSelection: {
+        authorization: true,
+        roles: true,
+        permissions: true,
+      },
+    })
+  })
+
+  it('maps configured OAuth provider context into ID token claims', async () => {
+    const authorization = {
+      buildTokenClaims: vi.fn().mockResolvedValue({
+        roles: ['admin'],
+      }),
+    }
+
+    await expect(
+      buildOAuthIdTokenClaims(authorization, {
+        user: { id: 'user-1' },
+        scopes: ['openid', 'contacts:read'],
+        metadata: {
+          applicationId: 'app-1',
+          oidcClaims: {
+            accessToken: {},
+            idToken: { roles: true },
+            userInfo: {},
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      application_id: 'app-1',
+      roles: ['admin'],
+    })
+
+    expect(authorization.buildTokenClaims).toHaveBeenCalledWith({
+      userId: 'user-1',
+      applicationId: 'app-1',
+      scopes: ['openid', 'contacts:read'],
+      destination: 'id_token',
+      claimSelection: { roles: true },
+    })
+  })
+
+  it('maps configured OAuth provider context into customer userinfo claims', async () => {
+    const authorization = {
+      buildTokenClaims: vi.fn().mockResolvedValue({
+        roles: ['member'],
+        permissions: ['contacts.read'],
+        organization_name: 'Acme',
+      }),
+    }
+    const applications = {
+      findByClientId: vi.fn().mockResolvedValue({
+        id: 'app-1',
+        oidcClaims: {
+          accessToken: {},
+          idToken: {},
+          userInfo: { roles: true, permissions: true, organizationName: true },
+        },
+      }),
+    }
+
+    await expect(
+      buildOAuthUserInfoClaims(authorization, applications, {
+        clientId: 'client-1',
+        user: { id: 'user-1' },
+        scopes: ['openid', 'contacts:read'],
+        jwt: {
+          organization_id: 'org-1',
+          aud: 'https://api.example.com/contacts',
+        },
+      }),
+    ).resolves.toEqual({
+      roles: ['member'],
+      permissions: ['contacts.read'],
+      organization_name: 'Acme',
+    })
+
+    expect(authorization.buildTokenClaims).toHaveBeenCalledWith({
+      userId: 'user-1',
+      applicationId: 'app-1',
+      organizationId: 'org-1',
+      resource: 'https://api.example.com/contacts',
+      scopes: ['openid', 'contacts:read'],
+      destination: 'userinfo',
+      claimSelection: { roles: true, permissions: true, organizationName: true },
     })
   })
 
@@ -661,7 +747,7 @@ type OAuthProviderPluginOptions = {
     user: unknown
     scopes: string[]
     jwt: Record<string, unknown>
-  }) => Record<string, unknown>
+  }) => Promise<Record<string, unknown>>
 }
 
 function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {

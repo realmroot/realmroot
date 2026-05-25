@@ -473,6 +473,15 @@ function createApplicationServiceDouble() {
     allowedScopes: ['openid', 'profile', 'email'],
     requirePkce: false,
     tokenEndpointAuthMethod: 'client_secret_basic',
+    oidcClaims: {
+      accessToken: {
+        authorization: true,
+        roles: true,
+        permissions: true,
+      },
+      idToken: {},
+      userInfo: {},
+    },
     secretMetadata: [
       {
         id: 'secret-1',

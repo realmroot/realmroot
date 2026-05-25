@@ -28,6 +28,11 @@ describe('createDrizzleApplicationRepository', () => {
           iconUrl: 'https://cdn.example.com/icon.png',
           corsOrigins: ['https://app.example.com'],
           customData: { plan: 'enterprise' },
+          oidcClaims: {
+            accessToken: { authorization: true, scopes: true, roles: true, permissions: true },
+            idToken: { organizationId: true, organizationName: true },
+            userInfo: { permissions: true },
+          },
           clientType: 'public_spa',
           allowedGrantTypes: ['authorization_code', 'refresh_token'],
           allowedScopes: ['openid', 'email'],
@@ -51,12 +56,13 @@ describe('createDrizzleApplicationRepository', () => {
         iconUrl: 'https://cdn.example.com/metadata-icon.png',
         corsOrigins: ['https://metadata.example.com'],
         customData: { plan: 'growth' },
+        systemManaged: true,
       },
     }
     const invalidMetadataApp = {
       ...applicationRow(),
       id: 'app-3',
-      metadata: { iconUrl: 42, corsOrigins: 'not-array', customData: [] },
+      metadata: { iconUrl: 42, corsOrigins: 'not-array', customData: [], oidcClaims: { accessToken: [] } },
       disabled: true,
     }
     const db = new FakeDb({
@@ -114,6 +120,7 @@ describe('createDrizzleApplicationRepository', () => {
           redirectUris: [],
           corsOrigins: ['https://metadata.example.com'],
           customData: { plan: 'growth' },
+          systemManaged: true,
           allowedGrantTypes: [],
           allowedScopes: [],
           requirePkce: false,
@@ -693,6 +700,15 @@ function applicationInput() {
     allowedScopes: ['openid' as const],
     requirePkce: false,
     tokenEndpointAuthMethod: 'client_secret_basic' as const,
+    oidcClaims: {
+      accessToken: {
+        authorization: true,
+        roles: true,
+        permissions: true,
+      },
+      idToken: {},
+      userInfo: {},
+    },
   }
 }
 
@@ -716,6 +732,11 @@ function applicationRow() {
       iconUrl: 'https://cdn.example.com/icon.png',
       corsOrigins: ['https://app.example.com'],
       customData: { plan: 'enterprise' },
+      oidcClaims: {
+        accessToken: { authorization: true, scopes: true, roles: true, permissions: true },
+        idToken: { organizationId: true, organizationName: true },
+        userInfo: { permissions: true },
+      },
     },
     createdAt: date(),
     updatedAt: date(),

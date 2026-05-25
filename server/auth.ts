@@ -11,6 +11,8 @@ import { username } from 'better-auth/plugins/username'
 import { verifyMessage } from 'viem'
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
 import {
+  type ApplicationOidcClaims,
+  defaultApplicationOidcClaims,
   managementApplicationScopes,
   systemCliClientId,
   userConfigurableApplicationScopes,
@@ -22,6 +24,7 @@ import type { Database } from './db/client'
 import * as schema from './db/schema'
 import type { TransactionalEmailSender } from './lib/email/sender'
 import { hashPassword, verifyPassword } from './lib/password'
+import { createDrizzleApplicationRepository } from './modules/applications/drizzle-repository'
 import { createDrizzleAuthorizationRepository } from './modules/authorization/drizzle-repository'
 import { AuthorizationService, type AuthorizationTokenClaimInput } from './modules/authorization/service'
 import type { AuthConnectorConfig } from './modules/connectors/service'
@@ -79,6 +82,7 @@ export function createAuth(
   } = {},
 ) {
   const authorization = new AuthorizationService(createDrizzleAuthorizationRepository(db))
+  const applications = createDrizzleApplicationRepository(db)
 
   return betterAuth({
     appName: 'FlareAuth',
@@ -315,9 +319,12 @@ export function createAuth(
         scopes: oauthScopes,
         validAudiences: options.validAudiences,
         customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(authorization, input),
-        customUserInfoClaims: ({ user, scopes, jwt }) => {
+        customUserInfoClaims: async ({ user, scopes, jwt }) => {
           const clientId = readString(jwt, 'client_id') ?? readString(jwt, 'azp')
-          if (clientId !== systemCliClientId || !hasManagementScope(scopes)) return {}
+          if (clientId !== systemCliClientId) {
+            return buildOAuthUserInfoClaims(authorization, applications, { clientId, user, scopes, jwt })
+          }
+          if (!hasManagementScope(scopes)) return {}
           return {
             role: readUserRole(user),
             scope: jwt.scope,
@@ -326,9 +333,7 @@ export function createAuth(
             roles: jwt.roles,
           }
         },
-        customIdTokenClaims: ({ metadata }) => ({
-          ...(readString(metadata, 'applicationId') ? { application_id: readString(metadata, 'applicationId') } : {}),
-        }),
+        customIdTokenClaims: (input) => buildOAuthIdTokenClaims(authorization, input),
         clientRegistrationDefaultScopes: ['openid', 'profile', 'email'],
         clientRegistrationAllowedScopes: [...userConfigurableApplicationScopes],
         storeClientSecret: 'hashed',
@@ -447,28 +452,120 @@ async function sendSmsOtp(
   throw new Error(`Unsupported SMS provider: ${config.smsProvider}`)
 }
 
-export function buildOAuthAccessTokenClaims(
+export async function buildOAuthUserInfoClaims(
+  authorization: Pick<AuthorizationService, 'buildTokenClaims'>,
+  applications: {
+    findByClientId(clientId: string): Promise<{ id: string; oidcClaims: ApplicationOidcClaims } | null>
+  },
+  input: {
+    clientId?: string
+    user: unknown
+    scopes: Iterable<string>
+    jwt: Record<string, unknown>
+  },
+): Promise<Record<string, unknown>> {
+  if (!input.clientId) return {}
+  const application = await applications.findByClientId(input.clientId)
+  if (!application) return {}
+  return authorization.buildTokenClaims({
+    userId: readUserId(input.user),
+    applicationId: application.id,
+    organizationId:
+      readAuthorizationString(input.jwt, 'organization_id') ?? readJwtString(input.jwt, 'organization_id'),
+    resource: readString(input.jwt, 'aud'),
+    scopes: [...input.scopes],
+    destination: 'userinfo',
+    claimSelection: application.oidcClaims.userInfo,
+  })
+}
+
+export async function buildOAuthAccessTokenClaims(
   authorization: Pick<AuthorizationService, 'buildTokenClaims'>,
   input: {
-    user?: { id?: string } | null
+    user?: ({ id?: string } & Record<string, unknown>) | null
     scopes: Iterable<string>
     resource?: string
     referenceId?: string
     metadata?: Record<string, unknown>
   },
 ): Promise<Record<string, unknown>> {
-  return authorization.buildTokenClaims({
+  const oidcClaims = readOidcClaims(input.metadata)
+  const claims = await authorization.buildTokenClaims({
     userId: input.user?.id,
     applicationId: readString(input.metadata, 'applicationId'),
     organizationId: input.referenceId,
     resource: input.resource,
     scopes: [...input.scopes],
+    destination: 'access_token',
+    claimSelection: oidcClaims.accessToken,
   } satisfies AuthorizationTokenClaimInput)
+  return claims
+}
+
+export async function buildOAuthIdTokenClaims(
+  authorization: Pick<AuthorizationService, 'buildTokenClaims'>,
+  input: {
+    user?: ({ id?: string } & Record<string, unknown>) | null
+    scopes?: Iterable<string>
+    metadata?: Record<string, unknown>
+  },
+): Promise<Record<string, unknown>> {
+  const applicationId = readString(input.metadata, 'applicationId')
+  const oidcClaims = readOidcClaims(input.metadata)
+  return {
+    ...(applicationId ? { application_id: applicationId } : {}),
+    ...(await authorization.buildTokenClaims({
+      userId: input.user?.id,
+      applicationId,
+      scopes: input.scopes ? [...input.scopes] : [],
+      destination: 'id_token',
+      claimSelection: oidcClaims.idToken,
+    })),
+  }
+}
+
+function readOidcClaims(metadata: Record<string, unknown> | undefined): ApplicationOidcClaims {
+  const value = metadata?.oidcClaims
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return defaultApplicationOidcClaims
+  return {
+    accessToken: readClaimSelection((value as Record<string, unknown>).accessToken),
+    idToken: readClaimSelection((value as Record<string, unknown>).idToken),
+    userInfo: readClaimSelection((value as Record<string, unknown>).userInfo),
+  }
+}
+
+function readClaimSelection(value: unknown): ApplicationOidcClaims['accessToken'] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  const input = value as Record<string, unknown>
+  return {
+    ...(input.authorization === true ? { authorization: true } : {}),
+    ...(input.scopes === true ? { scopes: true } : {}),
+    ...(input.roles === true ? { roles: true } : {}),
+    ...(input.permissions === true ? { permissions: true } : {}),
+    ...(input.organizationId === true ? { organizationId: true } : {}),
+    ...(input.organizationName === true ? { organizationName: true } : {}),
+  }
+}
+
+function readAuthorizationString(jwt: Record<string, unknown>, key: string) {
+  const authorization = jwt.authorization
+  if (typeof authorization !== 'object' || authorization === null || !(key in authorization)) return undefined
+  const value = (authorization as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function readJwtString(jwt: Record<string, unknown>, key: string) {
+  const value = jwt[key]
+  return typeof value === 'string' ? value : undefined
 }
 
 function readString(metadata: Record<string, unknown> | undefined, key: string) {
   const value = metadata?.[key]
   return typeof value === 'string' ? value : undefined
+}
+
+function readUserId(user: unknown) {
+  return typeof user === 'object' && user !== null && 'id' in user && typeof user.id === 'string' ? user.id : undefined
 }
 
 function hasManagementScope(scopes: Iterable<string>) {

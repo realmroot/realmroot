@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, isNull, or } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNull, or } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -189,6 +189,19 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .offset(pagination.offset)
       const total = await totalRows(db, apiScope, eq(apiScope.resourceId, resourceId))
       return { items: rows.map(toScope), pagination: toPagination(pagination, total) }
+    },
+
+    async listScopesByValues(resourceId, values) {
+      if (values.length === 0) return []
+      const rows = await db
+        .select()
+        .from(apiScope)
+        .where(
+          resourceId
+            ? and(eq(apiScope.resourceId, resourceId), inArray(apiScope.value, values))
+            : inArray(apiScope.value, values),
+        )
+      return rows.map(toScope)
     },
 
     async findScope(id) {

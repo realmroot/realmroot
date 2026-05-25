@@ -48,6 +48,35 @@ export const oidcEndpointMetadataSchema = z.object({
   endSessionEndpoint: z.string(),
 })
 
+const oidcClaimSelectionSchema = z
+  .object({
+    authorization: z.boolean().optional(),
+    scopes: z.boolean().optional(),
+    roles: z.boolean().optional(),
+    permissions: z.boolean().optional(),
+    organizationId: z.boolean().optional(),
+    organizationName: z.boolean().optional(),
+  })
+  .strict()
+
+export const applicationOidcClaimsSchema = z
+  .object({
+    accessToken: oidcClaimSelectionSchema,
+    idToken: oidcClaimSelectionSchema,
+    userInfo: oidcClaimSelectionSchema,
+  })
+  .strict()
+
+export const defaultApplicationOidcClaims = {
+  accessToken: {
+    authorization: true,
+    roles: true,
+    permissions: true,
+  },
+  idToken: {},
+  userInfo: {},
+}
+
 export const applicationResponseSchema = z
   .object({
     id: z.string(),
@@ -74,6 +103,7 @@ export const applicationResponseSchema = z
     tokenEndpointAuthMethod: z.enum(['none', 'client_secret_basic', 'client_secret_post']),
     secretMetadata: z.array(applicationSecretMetadataSchema),
     oidc: oidcEndpointMetadataSchema,
+    oidcClaims: applicationOidcClaimsSchema,
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -102,6 +132,7 @@ export const createApplicationRequestSchema = z.object({
   allowedScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
   firstParty: z.boolean().optional(),
   trusted: z.boolean().optional(),
+  oidcClaims: applicationOidcClaimsSchema.optional(),
 })
 
 export const updateApplicationRequestSchema = z.object({
@@ -125,6 +156,7 @@ export const updateApplicationRequestSchema = z.object({
   trusted: z.boolean().optional(),
   disabled: z.boolean().optional(),
   disabledReason: z.string().trim().max(500).nullable().optional(),
+  oidcClaims: applicationOidcClaimsSchema.optional(),
 })
 
 export const replaceRedirectUrisRequestSchema = z.object({
@@ -189,6 +221,7 @@ export const createConsentRequestSchema = z.object({
 export const hostedConsentApprovalRequestSchema = createConsentRequestSchema.omit({ permissions: true }).strict()
 
 export type ApplicationResponse = z.infer<typeof applicationResponseSchema>
+export type ApplicationOidcClaims = z.infer<typeof applicationOidcClaimsSchema>
 export type CreateApplicationResponse = z.infer<typeof createApplicationResponseSchema>
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>
 export type PaginationMetadata = z.infer<typeof paginationMetadataSchema>

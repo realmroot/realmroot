@@ -5710,6 +5710,15 @@ const application = {
     userInfoEndpoint: 'https://auth.example.com/userinfo',
     endSessionEndpoint: 'https://auth.example.com/logout',
   },
+  oidcClaims: {
+    accessToken: {
+      authorization: true,
+      roles: true,
+      permissions: true,
+    },
+    idToken: {},
+    userInfo: {},
+  },
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 }

@@ -1,10 +1,12 @@
 import {
+  type ApplicationOidcClaims,
   type ApplicationResponse,
   applicationGrantTypes,
   applicationScopes,
   type CreateApplicationRequest,
   type CreateApplicationResponse,
   type CreateConsentRequest,
+  defaultApplicationOidcClaims,
   type ListApplicationsResponse,
   type ListClientSecretsResponse,
   managementApplicationScopes,
@@ -58,6 +60,7 @@ export interface ApplicationAggregate {
   allowedScopes: ApplicationResponse['allowedScopes']
   requirePkce: boolean
   tokenEndpointAuthMethod: ApplicationResponse['tokenEndpointAuthMethod']
+  oidcClaims: ApplicationOidcClaims
   createdAt: Date
   updatedAt: Date
 }
@@ -162,6 +165,7 @@ export class ApplicationService {
         allowedScopes: settings.allowedScopes,
         requirePkce: input.clientType !== 'confidential_web',
         tokenEndpointAuthMethod: input.clientType === 'confidential_web' ? 'client_secret_basic' : 'none',
+        oidcClaims: input.oidcClaims ?? defaultApplicationOidcClaims,
       },
       clientSecret: secretHash
         ? {
@@ -229,6 +233,7 @@ export class ApplicationService {
       allowedScopes: settings.allowedScopes,
       requirePkce: true,
       tokenEndpointAuthMethod: 'none',
+      oidcClaims: defaultApplicationOidcClaims,
     })
     return this.toResponse(application, [])
   }
@@ -274,6 +279,7 @@ export class ApplicationService {
       customData: input.customData,
       allowedGrantTypes: settings?.allowedGrantTypes,
       allowedScopes: settings?.allowedScopes,
+      oidcClaims: input.oidcClaims,
     })
 
     return this.get(id)
@@ -456,6 +462,7 @@ export class ApplicationService {
         userInfoEndpoint: `${issuer}/api/auth/oauth2/userinfo`,
         endSessionEndpoint: `${issuer}/api/auth/oauth2/end-session`,
       },
+      oidcClaims: application.oidcClaims,
       createdAt: application.createdAt.toISOString(),
       updatedAt: application.updatedAt.toISOString(),
     }

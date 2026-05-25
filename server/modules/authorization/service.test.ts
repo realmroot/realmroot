@@ -81,6 +81,111 @@ describe('AuthorizationService', () => {
     })
   })
 
+  it('emits configured destination claims and honors scope token flags', async () => {
+    const repository = new InMemoryAuthorizationRepository()
+    const service = new AuthorizationService(repository)
+    const organization = await service.createOrganization({
+      slug: 'acme',
+      name: 'Acme',
+      displayName: 'Acme Inc.',
+    })
+    const member = await service.addMember(organization.id, {
+      userId: 'user-1',
+      role: 'member',
+    })
+    const resource = await service.createResource({
+      identifier: 'contacts-api',
+      name: 'Contacts API',
+      audience: 'https://api.example.com/contacts',
+    })
+    const accessOnlyScope = await service.createScope(resource.id, {
+      value: 'contacts:read',
+      includeInAccessToken: true,
+      includeInIdToken: false,
+    })
+    const idOnlyScope = await service.createScope(resource.id, {
+      value: 'contacts:profile',
+      includeInAccessToken: false,
+      includeInIdToken: true,
+    })
+    const permission = await service.createPermission(resource.id, {
+      scopeId: accessOnlyScope.id,
+      key: 'contacts.read',
+    })
+    const role = await service.createRole({
+      key: 'contacts-admin',
+      name: 'Contacts Admin',
+      resourceId: resource.id,
+      organizationId: organization.id,
+      tokenClaimName: 'contacts_role',
+    })
+
+    await service.replaceRolePermissions(role.id, [permission.id])
+    await service.assignMemberRole({ roleId: role.id, subjectId: member.id, tokenClaims: { tier: 'gold' } }, 'admin-1')
+
+    await expect(
+      service.buildTokenClaims({
+        userId: 'user-1',
+        organizationId: organization.id,
+        resource: 'https://api.example.com/contacts',
+        scopes: ['openid', accessOnlyScope.value, idOnlyScope.value],
+        destination: 'access_token',
+        claimSelection: { authorization: true, scopes: true, roles: true, permissions: true, organizationName: true },
+      }),
+    ).resolves.toMatchObject({
+      authorization: {
+        scopes: ['openid', 'contacts:read'],
+        organization_id: organization.id,
+        organization_name: 'Acme Inc.',
+      },
+      scope: 'openid contacts:read',
+      roles: ['contacts-admin'],
+      permissions: ['contacts.read'],
+      organization_name: 'Acme Inc.',
+    })
+
+    await expect(
+      service.buildTokenClaims({
+        userId: 'user-1',
+        organizationId: organization.id,
+        resource: 'https://api.example.com/contacts',
+        scopes: ['openid', accessOnlyScope.value, idOnlyScope.value],
+        destination: 'id_token',
+        claimSelection: { scopes: true, organizationId: true, organizationName: true },
+      }),
+    ).resolves.toEqual({
+      scope: 'openid contacts:profile',
+      organization_id: organization.id,
+      organization_name: 'Acme Inc.',
+    })
+
+    await expect(
+      service.buildTokenClaims({
+        userId: 'user-1',
+        organizationId: organization.id,
+        resource: 'https://api.example.com/contacts',
+        scopes: ['openid', accessOnlyScope.value],
+        destination: 'access_token',
+        claimSelection: { roles: true },
+      }),
+    ).resolves.toEqual({
+      roles: ['contacts-admin'],
+    })
+
+    await expect(
+      service.buildTokenClaims({
+        userId: 'user-1',
+        organizationId: organization.id,
+        resource: 'https://api.example.com/contacts',
+        scopes: ['openid', accessOnlyScope.value, idOnlyScope.value],
+        destination: 'userinfo',
+        claimSelection: { scopes: true },
+      }),
+    ).resolves.toEqual({
+      scope: 'openid contacts:read contacts:profile',
+    })
+  })
+
   it('rejects assignments to missing roles and protects system roles from deletion', async () => {
     const service = new AuthorizationService(new InMemoryAuthorizationRepository())
     const systemRole = await service.createRole({
@@ -698,6 +803,12 @@ class InMemoryAuthorizationRepository implements AuthorizationRepository {
     return page(
       [...this.scopes.values()].filter((scope) => scope.resourceId === resourceId),
       pagination,
+    )
+  }
+
+  async listScopesByValues(resourceId: string | undefined, values: string[]) {
+    return [...this.scopes.values()].filter(
+      (scope) => (!resourceId || scope.resourceId === resourceId) && values.includes(scope.value),
     )
   }
 

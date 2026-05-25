@@ -43,6 +43,15 @@ describe('ApplicationService', () => {
       oidc: {
         endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
       },
+      oidcClaims: {
+        accessToken: {
+          authorization: true,
+          roles: true,
+          permissions: true,
+        },
+        idToken: {},
+        userInfo: {},
+      },
     })
 
     await expect(service.list({ limit: 50, offset: 0 })).resolves.toMatchObject({
@@ -196,6 +205,46 @@ describe('ApplicationService', () => {
       redirectUris: ['https://spa.example.com/callback'],
       oidc: {
         issuer: 'https://auth.example.com/api/auth',
+      },
+    })
+  })
+
+  it('round-trips OIDC claim configuration on create and update', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const created = await service.create(
+      {
+        name: 'Claims App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+        oidcClaims: {
+          accessToken: { authorization: true, roles: true, scopes: true },
+          idToken: { organizationId: true, organizationName: true },
+          userInfo: { roles: true, permissions: true },
+        },
+      },
+      'admin-1',
+    )
+
+    expect(created.oidcClaims).toEqual({
+      accessToken: { authorization: true, roles: true, scopes: true },
+      idToken: { organizationId: true, organizationName: true },
+      userInfo: { roles: true, permissions: true },
+    })
+
+    await expect(
+      service.update(created.id, {
+        oidcClaims: {
+          accessToken: { permissions: true },
+          idToken: { roles: true },
+          userInfo: { authorization: true, organizationName: true },
+        },
+      }),
+    ).resolves.toMatchObject({
+      oidcClaims: {
+        accessToken: { permissions: true },
+        idToken: { roles: true },
+        userInfo: { authorization: true, organizationName: true },
       },
     })
   })

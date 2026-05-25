@@ -71,6 +71,11 @@ describe('application API pagination contracts', () => {
         userInfoEndpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
         endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
       },
+      oidcClaims: {
+        accessToken: { authorization: true, roles: true, permissions: true },
+        idToken: { organizationId: true },
+        userInfo: { roles: true, permissions: true },
+      },
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       clientSecret: 'fas_secret',
@@ -116,6 +121,34 @@ describe('application API pagination contracts', () => {
       postLogoutRedirectUris: ['http://localhost:5173/signed-out'],
       corsOrigins: ['http://localhost:5173'],
     })
+  })
+
+  it('validates per-application OIDC claim configuration at API boundaries', () => {
+    expect(
+      createApplicationRequestSchema.parse({
+        name: 'Customer app',
+        clientType: 'public_spa',
+        redirectUris: ['http://localhost:5173/callback'],
+        oidcClaims: {
+          accessToken: { authorization: true, scopes: true },
+          idToken: { organizationId: true, organizationName: true },
+          userInfo: { roles: true, permissions: true },
+        },
+      }).oidcClaims,
+    ).toEqual({
+      accessToken: { authorization: true, scopes: true },
+      idToken: { organizationId: true, organizationName: true },
+      userInfo: { roles: true, permissions: true },
+    })
+    expect(() =>
+      updateApplicationRequestSchema.parse({
+        oidcClaims: {
+          accessToken: { unknownClaim: true },
+          idToken: {},
+          userInfo: {},
+        },
+      }),
+    ).toThrow()
   })
 })
 

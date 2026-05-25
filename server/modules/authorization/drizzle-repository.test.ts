@@ -56,6 +56,13 @@ describe('createDrizzleAuthorizationRepository', () => {
     await expect(repository.listScopes('resource-1', { limit: 10, offset: 0 })).resolves.toMatchObject({
       items: [{ id: 'scope-1', value: 'contacts.read' }],
     })
+    await expect(repository.listScopesByValues('resource-1', ['contacts.read'])).resolves.toMatchObject([
+      { id: 'scope-1', value: 'contacts.read' },
+    ])
+    await expect(repository.listScopesByValues(undefined, ['contacts.read'])).resolves.toMatchObject([
+      { id: 'scope-1', value: 'contacts.read' },
+    ])
+    await expect(repository.listScopesByValues('resource-1', [])).resolves.toEqual([])
     await expect(repository.findScope('scope-1')).resolves.toMatchObject({ id: 'scope-1' })
     await expect(repository.listPermissions('resource-1', { limit: 10, offset: 0 })).resolves.toMatchObject({
       items: [{ id: 'permission-1', key: 'contacts.read' }],

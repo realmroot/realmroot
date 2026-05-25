@@ -163,3 +163,8 @@ Feature: Admin Console
     Given I authenticate the Restish CLI through the built-in OAuth client
     When I create, update, list, and delete an application with Restish
     Then the Management API applies each application change
+
+  Scenario: Applications configure OIDC claim emission per token destination
+    Given an application has organization membership, roles, permissions, and API scopes
+    When I configure OIDC claims for access tokens, ID tokens, and userinfo
+    Then issued access tokens, ID tokens, and userinfo include only the configured claims

@@ -1,5 +1,6 @@
 import { and, count, desc, eq, isNull } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
+import { type ApplicationOidcClaims, defaultApplicationOidcClaims } from '../../../shared/api/applications'
 import type { Database } from '../../db/client'
 import {
   application,
@@ -18,6 +19,7 @@ type OAuthClientRow = typeof oauthClient.$inferSelect
 const corsOriginsMetadataKey = 'corsOrigins'
 const customDataMetadataKey = 'customData'
 const iconUrlMetadataKey = 'iconUrl'
+const oidcClaimsMetadataKey = 'oidcClaims'
 const systemManagedMetadataKey = 'systemManaged'
 
 export function createDrizzleApplicationRepository(db: Database): ApplicationRepository {
@@ -75,7 +77,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
               type: input.clientType,
               requirePKCE: input.requirePkce,
               scopes: serializeList(input.allowedScopes),
-              metadata: JSON.stringify({ applicationId: input.id }),
+              metadata: JSON.stringify({ applicationId: input.id, oidcClaims: input.oidcClaims }),
               updatedAt: now,
             },
           }),
@@ -98,6 +100,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
                 iconUrl: input.iconUrl,
                 corsOrigins: input.corsOrigins,
                 customData: input.customData,
+                oidcClaims: input.oidcClaims,
                 systemManaged: input.systemManaged,
               }),
               updatedAt: now,
@@ -161,12 +164,16 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.description !== undefined ? { description: patch.description } : {}),
         ...(patch.homepageUrl !== undefined ? { homepageUrl: patch.homepageUrl } : {}),
-        ...(patch.iconUrl !== undefined || patch.corsOrigins !== undefined || patch.customData !== undefined
+        ...(patch.iconUrl !== undefined ||
+        patch.corsOrigins !== undefined ||
+        patch.customData !== undefined ||
+        patch.oidcClaims !== undefined
           ? {
               metadata: writeApplicationMetadata(current.metadata, {
                 iconUrl: patch.iconUrl,
                 corsOrigins: patch.corsOrigins,
                 customData: patch.customData,
+                oidcClaims: patch.oidcClaims,
               }),
             }
           : {}),
@@ -189,6 +196,9 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           : {}),
         ...(patch.allowedGrantTypes !== undefined ? { grantTypes: serializeList(patch.allowedGrantTypes) } : {}),
         ...(patch.allowedScopes !== undefined ? { scopes: serializeList(patch.allowedScopes) } : {}),
+        ...(patch.oidcClaims !== undefined
+          ? { metadata: JSON.stringify({ applicationId: id, oidcClaims: patch.oidcClaims }) }
+          : {}),
         updatedAt: now,
       }
       await db.batch([
@@ -383,6 +393,7 @@ function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt' | 'up
       iconUrl: input.iconUrl,
       corsOrigins: input.corsOrigins.length > 0 ? input.corsOrigins : undefined,
       customData: Object.keys(input.customData).length > 0 ? input.customData : undefined,
+      oidcClaims: input.oidcClaims,
       systemManaged: input.systemManaged,
     }),
     createdAt: now,
@@ -414,7 +425,7 @@ function toOAuthClientInsert(
     type: input.clientType,
     requirePKCE: input.requirePkce,
     scopes: serializeList(input.allowedScopes),
-    metadata: JSON.stringify({ applicationId: input.id }),
+    metadata: JSON.stringify({ applicationId: input.id, oidcClaims: input.oidcClaims }),
     createdAt: now,
     updatedAt: now,
   }
@@ -440,6 +451,7 @@ function toAggregate(app: ApplicationRow, client: OAuthClientRow): ApplicationAg
     postLogoutRedirectUris: parseList(client.postLogoutRedirectUris),
     corsOrigins: readCorsOrigins(app.metadata),
     customData: readCustomData(app.metadata),
+    oidcClaims: readOidcClaims(app.metadata),
     allowedGrantTypes: parseList(client.grantTypes).filter(isGrantType),
     allowedScopes: parseList(client.scopes).filter(isScope),
     requirePkce: client.requirePKCE ?? false,
@@ -506,6 +518,25 @@ function readCustomData(metadata: unknown) {
   return {}
 }
 
+function readOidcClaims(metadata: unknown): ApplicationOidcClaims {
+  if (
+    typeof metadata !== 'object' ||
+    metadata === null ||
+    !(oidcClaimsMetadataKey in metadata) ||
+    typeof metadata[oidcClaimsMetadataKey] !== 'object' ||
+    metadata[oidcClaimsMetadataKey] === null ||
+    Array.isArray(metadata[oidcClaimsMetadataKey])
+  ) {
+    return defaultApplicationOidcClaims
+  }
+  const value = metadata[oidcClaimsMetadataKey] as Record<string, unknown>
+  return {
+    accessToken: readClaimSelection(value.accessToken),
+    idToken: readClaimSelection(value.idToken),
+    userInfo: readClaimSelection(value.userInfo),
+  }
+}
+
 function readSystemManaged(metadata: unknown) {
   return Boolean(
     typeof metadata === 'object' &&
@@ -513,6 +544,19 @@ function readSystemManaged(metadata: unknown) {
       systemManagedMetadataKey in metadata &&
       metadata[systemManagedMetadataKey] === true,
   )
+}
+
+function readClaimSelection(value: unknown): ApplicationOidcClaims['accessToken'] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  const input = value as Record<string, unknown>
+  return {
+    ...(input.authorization === true ? { authorization: true } : {}),
+    ...(input.scopes === true ? { scopes: true } : {}),
+    ...(input.roles === true ? { roles: true } : {}),
+    ...(input.permissions === true ? { permissions: true } : {}),
+    ...(input.organizationId === true ? { organizationId: true } : {}),
+    ...(input.organizationName === true ? { organizationName: true } : {}),
+  }
 }
 
 function readStringListMetadata(metadata: unknown, key: string) {
@@ -527,6 +571,7 @@ function writeApplicationMetadata(
     iconUrl?: string | null
     corsOrigins?: string[]
     customData?: Record<string, unknown>
+    oidcClaims?: ApplicationOidcClaims
     systemManaged?: boolean
   },
 ) {
@@ -537,6 +582,7 @@ function writeApplicationMetadata(
   }
   if (patch.corsOrigins !== undefined) next[corsOriginsMetadataKey] = patch.corsOrigins
   if (patch.customData !== undefined) next[customDataMetadataKey] = patch.customData
+  if (patch.oidcClaims !== undefined) next[oidcClaimsMetadataKey] = patch.oidcClaims
   if (patch.systemManaged !== undefined) {
     if (patch.systemManaged) next[systemManagedMetadataKey] = true
     else delete next[systemManagedMetadataKey]
