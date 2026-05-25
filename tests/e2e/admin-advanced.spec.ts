@@ -59,18 +59,57 @@ test('Console route-backed navigation and compatibility redirects use persistent
   await attachCoverage(testInfo, ['admin-route-backed-navigation', 'admin-sign-in-experience-routes'])
 })
 
-test('admin application detail loads settings and branding tabs', async ({ page }, testInfo) => {
+test('admin application detail loads settings, branding, and OIDC claim controls', async ({ page }, testInfo) => {
   await signIn(page)
   const application = await createOidcApplication(page, 'Detail Application')
 
   await page.goto(`/console/applications/${application.id}/settings`)
   await expect(page.getByRole('heading', { name: 'Detail Application' })).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Settings' })).toBeVisible()
+  await expect(page.getByRole('switch', { name: 'Access token roles' })).toBeChecked()
+  await expect(page.getByRole('switch', { name: 'ID token roles' })).not.toBeChecked()
+  await page.getByRole('switch', { name: 'Access token organization ID' }).click()
+  await page.getByRole('switch', { name: 'ID token roles' }).click()
+  await page.getByRole('switch', { name: 'ID token permissions' }).click()
+  await page.getByRole('switch', { name: 'UserInfo organization name' }).click()
+  const claimsUpdate = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/api/management/applications/${application.id}`) &&
+      response.request().method() === 'PATCH',
+  )
+  await page.getByRole('button', { name: 'Save OIDC claims' }).click()
+  expect((await claimsUpdate).status()).toBe(200)
+  await expect(page.getByRole('switch', { name: 'Access token organization ID' })).toBeChecked()
+  await page.reload()
+  await expect(page.getByRole('switch', { name: 'Access token organization ID' })).toBeChecked()
+  await expect(page.getByRole('switch', { name: 'ID token roles' })).toBeChecked()
+  await expect(page.getByRole('switch', { name: 'ID token permissions' })).toBeChecked()
+  await expect(page.getByRole('switch', { name: 'UserInfo organization name' })).toBeChecked()
+  const updated = await page.request.get(`/api/management/applications/${application.id}`)
+  const updatedBody = await updated.json()
+  expect(updated.status()).toBe(200)
+  expect(updatedBody).toMatchObject({
+    oidcClaims: {
+      accessToken: {
+        authorization: true,
+        roles: true,
+        permissions: true,
+        organizationId: true,
+      },
+      idToken: {
+        roles: true,
+        permissions: true,
+      },
+      userInfo: {
+        organizationName: true,
+      },
+    },
+  })
   await page.goto(`/console/applications/${application.id}/branding`)
   await expect(page.getByRole('heading', { name: 'Detail Application' })).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Branding' })).toBeVisible()
 
-  await attachCoverage(testInfo, ['admin-application-detail'])
+  await attachCoverage(testInfo, ['admin-application-detail', 'admin-application-oidc-claims'])
 })
 
 test('admin creates organizations, roles, and API resources from split Console pages', async ({ page }, testInfo) => {

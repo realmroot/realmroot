@@ -58,6 +58,7 @@
     { "id": "admin-user-detail", "name": "Admin user detail updates profile, resets password, and revokes sessions" },
     { "id": "admin-create-application", "name": "Admin applications page creates an OIDC client" },
     { "id": "admin-application-detail", "name": "Admin applications detail edits lifecycle, redirect URIs, integration details, and confidential secret rotation" },
+    { "id": "admin-application-oidc-claims", "name": "Admin application detail saves and reloads OIDC claim settings" },
     { "id": "admin-create-connector", "name": "Admin social connectors page creates a connector" },
     { "id": "admin-connector-inventory", "name": "Admin passwordless connectors page lists email and SMS setup state" },
     { "id": "admin-social-connector-inventory", "name": "Admin social connectors page lists provider settings and availability" },

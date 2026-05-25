@@ -1,4 +1,5 @@
 import {
+  type ApplicationOidcClaims,
   type ApplicationResponse,
   createApplicationRequestSchema,
   updateApplicationRequestSchema,
@@ -689,6 +690,13 @@ export function ApplicationDetailPage({
                   </CardContent>
                 </Card>
 
+                <ApplicationOidcClaimsForm
+                  claims={application.oidcClaims}
+                  error={updateMutation.error}
+                  onSave={(oidcClaims) => updateMutation.mutate({ oidcClaims })}
+                  pending={updateMutation.isPending}
+                />
+
                 <Card className="applicationSettingsPanel">
                   <CardHeader>
                     <CardTitle>{tt('Client secrets')}</CardTitle>
@@ -874,6 +882,97 @@ export function ApplicationDetailPage({
         pending={deleteMutation.isPending}
       />
     </ResourcePage>
+  )
+}
+type OidcClaimDestination = keyof ApplicationOidcClaims
+type OidcClaimKey = keyof ApplicationOidcClaims[OidcClaimDestination]
+
+const oidcClaimDestinations: Array<{ key: OidcClaimDestination; label: string }> = [
+  { key: 'accessToken', label: 'Access token' },
+  { key: 'idToken', label: 'ID token' },
+  { key: 'userInfo', label: 'UserInfo' },
+]
+
+const oidcClaimControls: Array<{ key: OidcClaimKey; label: string }> = [
+  { key: 'organizationId', label: 'organization ID' },
+  { key: 'organizationName', label: 'organization name' },
+  { key: 'authorization', label: 'authorization claim' },
+  { key: 'roles', label: 'roles' },
+  { key: 'permissions', label: 'permissions' },
+  { key: 'scopes', label: 'OAuth scopes' },
+]
+
+function ApplicationOidcClaimsForm({
+  claims,
+  error,
+  onSave,
+  pending,
+}: {
+  claims: ApplicationOidcClaims
+  error: unknown
+  onSave: (claims: ApplicationOidcClaims) => void
+  pending: boolean
+}) {
+  const [form, setForm] = useState<ApplicationOidcClaims>(claims)
+  useEffect(() => setForm(claims), [claims])
+
+  return (
+    <Card className="applicationSettingsPanel">
+      <CardHeader>
+        <CardTitle>{tt('OIDC claims')}</CardTitle>
+        <CardDescription>
+          {tt('Choose which organization and authorization claims are emitted to each token destination.')}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="formStack"
+          onSubmit={(event) => {
+            event.preventDefault()
+            onSave(form)
+          }}
+        >
+          <div className="oidcClaimsGrid">
+            {oidcClaimDestinations.map((destination) => (
+              <div className="oidcClaimsColumn" key={destination.key}>
+                <h3 className="text-xs font-semibold uppercase leading-5 text-muted-foreground">
+                  {tt(destination.label)}
+                </h3>
+                <div className="grid gap-2">
+                  {oidcClaimControls.map((control) => (
+                    <SwitchRow
+                      checked={form[destination.key][control.key] === true}
+                      disabled={pending}
+                      key={`${destination.key}-${control.key}`}
+                      label={tt(`${destination.label} ${control.label}`)}
+                      onCheckedChange={(checked) =>
+                        setForm((current) => ({
+                          ...current,
+                          [destination.key]: {
+                            ...current[destination.key],
+                            [control.key]: checked,
+                          },
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <ConsoleActionBar>
+            <Button disabled={pending} type="submit">
+              <Save data-icon="inline-start" /> {tt('Save OIDC claims')}{' '}
+            </Button>
+            <Button disabled={pending} onClick={() => setForm(claims)} type="reset" variant="secondary">
+              {' '}
+              {tt('Discard')}{' '}
+            </Button>
+          </ConsoleActionBar>
+          <MutationError error={error} />
+        </form>
+      </CardContent>
+    </Card>
   )
 }
 function ApplicationsTableContent({

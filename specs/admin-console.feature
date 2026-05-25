@@ -164,7 +164,14 @@ Feature: Admin Console
     When I create, update, list, and delete an application with Restish
     Then the Management API applies each application change
 
-  Scenario: Applications configure OIDC claim emission per token destination
+  @journey:admin-application-oidc-claims
+  Scenario: Application detail configures OIDC claim settings
+    Given an application exists
+    When I configure organization and RBAC claims for access tokens, ID tokens, and userinfo
+    Then the Console saves the claim settings through the Management API
+    And the application detail shows the saved claim settings after reload
+
+  Scenario: Applications apply configured OIDC claim emission per token destination
     Given an application has organization membership, roles, permissions, and API scopes
-    When I configure OIDC claims for access tokens, ID tokens, and userinfo
+    When OIDC claims are configured for access tokens, ID tokens, and userinfo
     Then issued access tokens, ID tokens, and userinfo include only the configured claims

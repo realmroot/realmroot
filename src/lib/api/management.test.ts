@@ -12,7 +12,14 @@ describe('management API client', () => {
     await management.listApplications()
     await management.createApplication({ name: 'Portal', clientType: 'public_spa', redirectUris: [] })
     await management.getApplication('app-1')
-    await management.updateApplication('app-1', { disabled: true })
+    await management.updateApplication('app-1', {
+      disabled: true,
+      oidcClaims: {
+        accessToken: { authorization: true, roles: true, permissions: true, organizationId: true },
+        idToken: { roles: true },
+        userInfo: { organizationName: true },
+      },
+    })
     await management.deleteApplication('app-1')
     await management.listApplicationRedirectUris('app-1', { limit: 10, offset: 20 })
     await management.replaceApplicationRedirectUris('app-1', { redirectUris: ['https://app.example.com/callback'] })
@@ -106,7 +113,20 @@ describe('management API client', () => {
       ['applications.get'],
       ['applications.post', { json: { name: 'Portal', clientType: 'public_spa', redirectUris: [] } }],
       ['application.get', { param: { id: 'app-1' } }],
-      ['applications.patch', { param: { id: 'app-1' }, json: { disabled: true } }],
+      [
+        'applications.patch',
+        {
+          param: { id: 'app-1' },
+          json: {
+            disabled: true,
+            oidcClaims: {
+              accessToken: { authorization: true, roles: true, permissions: true, organizationId: true },
+              idToken: { roles: true },
+              userInfo: { organizationName: true },
+            },
+          },
+        },
+      ],
       ['applications.delete', { param: { id: 'app-1' } }],
       ['redirectUris.get', { param: { id: 'app-1' }, query: { limit: '10', offset: '20' } }],
       ['redirectUris.put', { param: { id: 'app-1' }, json: { redirectUris: ['https://app.example.com/callback'] } }],

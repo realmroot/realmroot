@@ -1286,6 +1286,11 @@ describe('admin console', () => {
     expect(screen.getByText('https://auth.example.com/token')).toBeTruthy()
     expect(screen.getByText('https://auth.example.com/userinfo')).toBeTruthy()
     expect(screen.getByText('https://auth.example.com/jwks')).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Access token roles' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('switch', { name: 'ID token roles' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('switch', { name: 'UserInfo organization name' }).getAttribute('aria-checked')).toBe(
+      'false',
+    )
     expect(screen.getByText('No client secret is issued for public clients.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Application name'), {
       target: { value: 'Customer portal updated' },
@@ -1383,6 +1388,39 @@ describe('admin console', () => {
       })
     })
 
+    fireEvent.click(screen.getByRole('switch', { name: 'Access token organization ID' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'ID token roles' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'ID token permissions' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'UserInfo organization name' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save OIDC claims' }))
+    await waitFor(() => {
+      expect(requests).toContainEqual({
+        url: '/api/management/applications/app-1',
+        method: 'PATCH',
+        body: {
+          oidcClaims: {
+            accessToken: {
+              authorization: true,
+              roles: true,
+              permissions: true,
+              organizationId: true,
+            },
+            idToken: {
+              roles: true,
+              permissions: true,
+            },
+            userInfo: {
+              organizationName: true,
+            },
+          },
+        },
+      })
+    })
+    expect(screen.getByRole('switch', { name: 'Access token organization ID' }).getAttribute('aria-checked')).toBe(
+      'true',
+    )
+    expect(screen.queryByLabelText('Client secret')).toBeNull()
+
     fireEvent.change(screen.getByLabelText('Custom data JSON'), {
       target: { value: '{"plan":"discarded"}' },
     })
@@ -1433,6 +1471,27 @@ describe('admin console', () => {
           url: '/api/management/applications/app-1',
           method: 'PATCH',
           body: { customData: {} },
+        },
+        {
+          url: '/api/management/applications/app-1',
+          method: 'PATCH',
+          body: {
+            oidcClaims: {
+              accessToken: {
+                authorization: true,
+                roles: true,
+                permissions: true,
+                organizationId: true,
+              },
+              idToken: {
+                roles: true,
+                permissions: true,
+              },
+              userInfo: {
+                organizationName: true,
+              },
+            },
+          },
         },
         {
           url: '/api/management/applications/app-1/logo',

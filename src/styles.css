@@ -1993,6 +1993,22 @@ main:not(.shell):not(.authShell) h1 {
   padding-block: 14px;
 }
 
+.oidcClaimsGrid {
+  display: grid;
+  gap: 12px;
+}
+
+.oidcClaimsColumn {
+  display: grid;
+  gap: 8px;
+}
+
+@media (min-width: 960px) {
+  .oidcClaimsGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .applicationCreateForm {
   gap: 12px;
 }
