@@ -25,6 +25,7 @@ describe('auth.test 1', () => {
     expect(response.status).toBe(200)
     const metadata = (await response.json()) as {
       token_endpoint_auth_methods_supported: string[]
+      grant_types_supported: string[]
     }
 
     expect(metadata).toMatchObject({
@@ -38,6 +39,37 @@ describe('auth.test 1', () => {
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
     })
     expect(metadata.token_endpoint_auth_methods_supported).not.toContain('none')
+    expect(metadata).not.toHaveProperty('device_authorization_endpoint')
+    expect(metadata.grant_types_supported).not.toContain('urn:ietf:params:oauth:grant-type:device_code')
+  })
+
+  it('does not accept device-code grants at the OAuth Provider token endpoint', async () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+
+    const response = await createApp(auth).request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        client_id: 'native-client',
+        device_code: 'device-code-1',
+      }),
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: expect.stringContaining(
+        '[body.grant_type] Invalid option: expected one of "authorization_code"|"client_credentials"|"refresh_token"',
+      ),
+    })
   })
 
   it('passes mounted authorize query parameters to Better Auth', async () => {

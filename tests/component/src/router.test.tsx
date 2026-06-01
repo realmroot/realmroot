@@ -99,6 +99,20 @@ describe('root route', () => {
     })
   })
 
+  it('renders the device code entry route without account authentication', async () => {
+    const fetchSpy = vi
+      .spyOn(window, 'fetch')
+      .mockImplementation((input) =>
+        Promise.resolve(String(input) === '/api/configz' ? jsonResponse(configz) : jsonResponse({ user })),
+      )
+    window.history.pushState(null, '', '/device?user_code=ABCD-1234')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Device approval route' })).toBeTruthy()
+    expect(fetchSpy.mock.calls.map(([input]) => String(input))).toEqual(['/api/configz'])
+  })
+
   it('preserves device approval return path when signed out', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse({ error: 'unauthorized' }, 401)))
     window.history.pushState(null, '', '/device/approve?user_code=ABCD-1234')
@@ -131,6 +145,11 @@ const user = {
   displayName: 'Jane Stone',
   username: 'jane',
   role: 'user',
+}
+
+const configz = {
+  branding: { logoUrl: null, faviconUrl: null, primaryColor: null, backgroundColor: null, customCss: null },
+  copy: { productName: 'FlareAuth' },
 }
 
 function jsonResponse(body: unknown, status = 200) {

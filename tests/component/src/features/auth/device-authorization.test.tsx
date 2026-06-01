@@ -47,4 +47,44 @@ describe('DeviceVerification', () => {
     await waitFor(() => expect(denyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD2345' }))
     expect(await screen.findByText('Device denied.')).toBeTruthy()
   })
+
+  it('keeps approval actions disabled when no user code is available', () => {
+    render(<DeviceVerification mode="approval" />)
+
+    expect(screen.getByText('Missing code')).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Deny' }).disabled).toBe(true)
+    expect(verifyDeviceCode).not.toHaveBeenCalled()
+  })
+
+  it('surfaces device verification failures before approval', async () => {
+    vi.mocked(verifyDeviceCode).mockRejectedValueOnce(new Error('Device code expired.'))
+
+    render(<DeviceVerification mode="approval" userCode="EXPIRED1" />)
+
+    expect(await screen.findByText('Device code expired.')).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve' }).disabled).toBe(true)
+  })
+
+  it('surfaces approval failures and allows retry', async () => {
+    vi.mocked(approveDeviceCode).mockRejectedValueOnce(new Error('Approval failed.'))
+    render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+
+    await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD-2345' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(await screen.findByText('Approval failed.')).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve' }).disabled).toBe(false)
+  })
+
+  it('surfaces denial failures and allows retry', async () => {
+    vi.mocked(denyDeviceCode).mockRejectedValueOnce(new Error('Denial failed.'))
+    render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+
+    await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD-2345' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+
+    expect(await screen.findByText('Denial failed.')).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Deny' }).disabled).toBe(false)
+  })
 })
