@@ -142,6 +142,22 @@ export function approveAgentCapability(input: { agentId: string; userCode: strin
   })
 }
 
+export function verifyDeviceCode(input: { userCode: string }) {
+  const params = new URLSearchParams({ user_code: input.userCode })
+  return nativeAuth(`/device?${params.toString()}`, undefined, 'GET') as Promise<{
+    user_code: string
+    status: 'pending' | 'approved' | 'denied'
+  }>
+}
+
+export function approveDeviceCode(input: { userCode: string }) {
+  return nativeAuth('/device/approve', { userCode: input.userCode }) as Promise<{ success: boolean }>
+}
+
+export function denyDeviceCode(input: { userCode: string }) {
+  return nativeAuth('/device/deny', { userCode: input.userCode }) as Promise<{ success: boolean }>
+}
+
 export function verifyEmailOtp(input: { email: string; otp: string }) {
   return nativeAuth('/email-otp/verify-email', input)
 }

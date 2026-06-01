@@ -2,6 +2,7 @@ import {
   type ApplicationResponse,
   applicationGrantTypes,
   applicationScopes,
+  deviceCodeGrantType,
   managementApplicationScopes,
   type PaginationQuery,
 } from '../../../shared/api/applications'
@@ -29,6 +30,9 @@ export function normalizeClientSettings(
 
   if (clientType !== 'confidential_web' && normalizedGrantTypes.includes('client_credentials')) {
     throw badRequest('Public clients cannot use the client_credentials grant.')
+  }
+  if (normalizedGrantTypes.includes(deviceCodeGrantType) && clientType !== 'public_native') {
+    throw badRequest('Only public native clients can use the device-code grant.')
   }
   if (normalizedGrantTypes.includes('refresh_token') && !normalizedScopes.includes('offline_access')) {
     normalizedScopes.push('offline_access')

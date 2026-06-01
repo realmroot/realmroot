@@ -1,10 +1,13 @@
-import { buildOAuthUserInfoClaims, createAuth } from '@server/auth'
+import { buildOAuthUserInfoClaims, createAuth, createDeviceAuthorizationOptions } from '@server/auth'
 import type {
+  DeviceAuthorizationPluginOptions,
   PasskeyPluginOptions,
   TwoFactorPluginOptions,
   UsernamePluginOptions,
 } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
+import type { ApplicationAggregate } from '@server/modules/applications/service'
+import { deviceCodeGrantType } from '@shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -97,6 +100,65 @@ describe('auth.test 3', () => {
     expect(plugin.options.maxUsernameLength).toBe(64)
     expect(plugin.options.usernameValidator('ada_lovelace-1')).toBe(true)
     expect(plugin.options.usernameValidator('not allowed')).toBe(false)
+  })
+
+  it('installs device authorization with the hosted verification page', () => {
+    const auth = createAuth(
+      {} as Database,
+      '01234567890123456789012345678901',
+      'https://auth.example.com',
+      ['https://auth.example.com'],
+      createEmailSenderMock(),
+      createSecurityPolicy(),
+    )
+
+    expect(findPlugin<DeviceAuthorizationPluginOptions>(auth, 'device-authorization').options).toMatchObject({
+      verificationUri: '/device',
+    })
+  })
+
+  it('rejects ineligible clients and disallowed scopes in device authorization options', async () => {
+    const nativeClient = deviceApplication({ clientId: 'native-client' })
+    const repository = {
+      findByClientId: vi.fn(async (clientId: string) => {
+        const applications: Record<string, ApplicationAggregate> = {
+          'native-client': nativeClient,
+          spa: deviceApplication({ clientId: 'spa', clientType: 'public_spa' }),
+          confidential: deviceApplication({
+            clientId: 'confidential',
+            clientType: 'confidential_web',
+            public: false,
+          }),
+          disabled: deviceApplication({ clientId: 'disabled', disabled: true }),
+          'missing-grant': deviceApplication({
+            clientId: 'missing-grant',
+            allowedGrantTypes: ['authorization_code'],
+          }),
+        }
+        return applications[clientId] ?? null
+      }),
+    }
+    const options = createDeviceAuthorizationOptions(repository)
+
+    await expect(options.validateClient('native-client')).resolves.toBe(true)
+    await expect(options.validateClient('spa')).resolves.toBe(false)
+    await expect(options.validateClient('confidential')).resolves.toBe(false)
+    await expect(options.validateClient('disabled')).resolves.toBe(false)
+    await expect(options.validateClient('missing-grant')).resolves.toBe(false)
+    await expect(options.onDeviceAuthRequest('native-client', 'openid email')).resolves.toBeUndefined()
+    await expect(options.onDeviceAuthRequest('native-client', 'openid management:read')).rejects.toMatchObject({
+      status: 'BAD_REQUEST',
+      body: {
+        error: 'invalid_request',
+        error_description: 'Scope is not allowed for this client: management:read',
+      },
+    })
+    await expect(options.onDeviceAuthRequest('disabled', 'openid')).rejects.toMatchObject({
+      status: 'BAD_REQUEST',
+      body: {
+        error: 'invalid_client',
+      },
+    })
   })
 
   it('configures deployment security policy for sessions and passkeys', () => {
@@ -351,6 +413,41 @@ function _jsonResponse(body: unknown, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' },
   })
+}
+
+function deviceApplication(overrides: Partial<ApplicationAggregate> = {}): ApplicationAggregate {
+  return {
+    id: 'app-1',
+    slug: 'native-client',
+    name: 'Native Client',
+    description: null,
+    homepageUrl: null,
+    iconUrl: null,
+    clientId: 'native-client',
+    clientType: 'public_native',
+    public: true,
+    firstParty: false,
+    trusted: false,
+    systemManaged: false,
+    disabled: false,
+    disabledReason: null,
+    redirectUris: ['com.example.native:/callback'],
+    postLogoutRedirectUris: [],
+    corsOrigins: [],
+    customData: {},
+    allowedGrantTypes: ['authorization_code', deviceCodeGrantType],
+    allowedScopes: ['openid', 'profile', 'email'],
+    requirePkce: true,
+    tokenEndpointAuthMethod: 'none',
+    oidcClaims: {
+      accessToken: {},
+      idToken: {},
+      userInfo: {},
+    },
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    ...overrides,
+  }
 }
 
 function findPlugin<TOptions extends object>(auth: ReturnType<typeof createAuth>, id: string) {

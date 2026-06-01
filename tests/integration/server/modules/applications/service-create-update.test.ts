@@ -6,7 +6,7 @@ import {
   type ConsentRecord,
   systemCliApplication,
 } from '@server/modules/applications/service'
-import type { ApplicationResponse } from '@shared/api/applications'
+import { type ApplicationResponse, deviceCodeGrantType } from '@shared/api/applications'
 import { describe, expect, it } from 'vitest'
 
 describe('service.test 1', () => {
@@ -147,6 +147,60 @@ describe('service.test 1', () => {
     await expect(service.delete(systemCliApplication.id)).rejects.toMatchObject({
       status: 400,
       message: 'System-managed applications cannot be deleted.',
+    })
+  })
+
+  it('allows the device-code grant only for public native clients', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+
+    await expect(
+      service.create(
+        {
+          name: 'CLI App',
+          clientType: 'public_native',
+          redirectUris: ['com.example.cli:/callback'],
+          allowedGrantTypes: ['authorization_code', deviceCodeGrantType],
+        },
+        'admin-1',
+      ),
+    ).resolves.toMatchObject({
+      clientType: 'public_native',
+      public: true,
+      allowedGrantTypes: ['authorization_code', deviceCodeGrantType],
+      oidc: {
+        tokenEndpoint: 'https://auth.example.com/api/auth/oauth2/token',
+      },
+    })
+
+    await expect(
+      service.create(
+        {
+          name: 'Browser App',
+          clientType: 'public_spa',
+          redirectUris: ['https://spa.example.com/callback'],
+          allowedGrantTypes: [deviceCodeGrantType],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Only public native clients can use the device-code grant.',
+    })
+
+    await expect(
+      service.create(
+        {
+          name: 'Server App',
+          clientType: 'confidential_web',
+          redirectUris: ['https://server.example.com/callback'],
+          allowedGrantTypes: [deviceCodeGrantType],
+        },
+        'admin-1',
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Only public native clients can use the device-code grant.',
     })
   })
 

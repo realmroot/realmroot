@@ -1,7 +1,13 @@
 import { z } from 'zod'
 
 export const applicationClientTypes = ['public_spa', 'public_native', 'confidential_web'] as const
-export const applicationGrantTypes = ['authorization_code', 'refresh_token', 'client_credentials'] as const
+export const deviceCodeGrantType = 'urn:ietf:params:oauth:grant-type:device_code'
+export const applicationGrantTypes = [
+  'authorization_code',
+  'refresh_token',
+  'client_credentials',
+  deviceCodeGrantType,
+] as const
 export const systemCliClientId = 'flareauth-cli'
 export const managementApplicationScopes = ['management:read', 'management:write'] as const
 export const userConfigurableApplicationScopes = ['openid', 'profile', 'email', 'offline_access'] as const

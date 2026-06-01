@@ -112,6 +112,13 @@ Feature: Hosted authentication
     When I deny consent
     Then FlareAuth redirects to the client callback with a denial result
 
+  @entrypoint:product-ui @journey:oauth-device-approval
+  Scenario: Device login requires a signed-in browser session before approval
+    Given a public native OIDC application requests device authorization
+    When I open the device verification link while signed out
+    Then hosted sign-in preserves the device verification return path
+    And approving or denying the device code requires the signed-in browser session
+
   @entrypoint:product-ui @journey:oidc-client-callback
   Scenario: OIDC client callback lands on the local callback page
     Given an OIDC callback response is produced

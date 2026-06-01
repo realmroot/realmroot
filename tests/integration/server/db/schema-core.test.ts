@@ -16,6 +16,7 @@ import {
   brandingSetting,
   customDomain,
   deploymentSetting,
+  deviceCode,
   emailServiceConfig,
   identityProviderConnector,
   invitation,
@@ -187,6 +188,33 @@ describe('schema.test 1', () => {
   it('stores Better Auth JWT key metadata required by generated JWKs', () => {
     expect(columnNames(jwks)).toEqual(
       expect.arrayContaining(['id', 'public_key', 'private_key', 'alg', 'crv', 'created_at', 'expires_at']),
+    )
+  })
+
+  it('stores Better Auth device authorization requests', () => {
+    expect(getTableConfig(deviceCode).name).toBe('device_code')
+    expect(columnNames(deviceCode)).toEqual(
+      expect.arrayContaining([
+        'id',
+        'device_code',
+        'user_code',
+        'user_id',
+        'expires_at',
+        'status',
+        'last_polled_at',
+        'polling_interval',
+        'client_id',
+        'scope',
+      ]),
+    )
+    expect(indexNames(deviceCode)).toEqual(
+      expect.arrayContaining([
+        'deviceCode_deviceCode_idx',
+        'deviceCode_userCode_idx',
+        'deviceCode_clientId_idx',
+        'deviceCode_userId_idx',
+        'deviceCode_expiresAt_idx',
+      ]),
     )
   })
 

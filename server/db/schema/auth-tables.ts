@@ -282,3 +282,26 @@ export const oauthConsent = sqliteTable(
     index('oauthConsent_referenceId_idx').on(table.referenceId),
   ],
 )
+
+export const deviceCode = sqliteTable(
+  'device_code',
+  {
+    id: text('id').primaryKey(),
+    deviceCode: text('device_code').notNull().unique(),
+    userCode: text('user_code').notNull().unique(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    status: text('status').notNull(),
+    lastPolledAt: integer('last_polled_at', { mode: 'timestamp_ms' }),
+    pollingInterval: integer('polling_interval'),
+    clientId: text('client_id').references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    scope: text('scope'),
+  },
+  (table) => [
+    index('deviceCode_deviceCode_idx').on(table.deviceCode),
+    index('deviceCode_userCode_idx').on(table.userCode),
+    index('deviceCode_clientId_idx').on(table.clientId),
+    index('deviceCode_userId_idx').on(table.userId),
+    index('deviceCode_expiresAt_idx').on(table.expiresAt),
+  ],
+)

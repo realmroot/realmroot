@@ -2,9 +2,18 @@ import { agentAuth } from '@better-auth/agent-auth'
 import { i18n } from '@better-auth/i18n'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
-import { betterAuth } from 'better-auth'
+import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { admin, genericOAuth, jwt, oneTap, phoneNumber, siwe, twoFactor } from 'better-auth/plugins'
+import {
+  admin,
+  deviceAuthorization,
+  genericOAuth,
+  jwt,
+  oneTap,
+  phoneNumber,
+  siwe,
+  twoFactor,
+} from 'better-auth/plugins'
 import { createAccessControl } from 'better-auth/plugins/access'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { organization } from 'better-auth/plugins/organization'
@@ -12,6 +21,7 @@ import { username } from 'better-auth/plugins/username'
 import { verifyMessage } from 'viem'
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
 import {
+  deviceCodeGrantType,
   managementApplicationScopes,
   systemCliClientId,
   userConfigurableApplicationScopes,
@@ -39,6 +49,7 @@ import { agentCapabilities, areKnownAgentCapabilities } from './modules/agents/c
 import { createDrizzleAgentRepository } from './modules/agents/repository'
 import { AgentService } from './modules/agents/service'
 import { createDrizzleApplicationRepository } from './modules/applications/drizzle-repository'
+import type { ApplicationRepository } from './modules/applications/service'
 import { createDrizzleAuthorizationRepository } from './modules/authorization/drizzle-repository'
 import { AuthorizationService } from './modules/authorization/service'
 import type { AuthConnectorConfig } from './modules/connectors/service'
@@ -251,6 +262,11 @@ export function createAuth(
         onExecute: ({ capability, arguments: args, agentSession }) =>
           agents.executeReadOnlyCapability({ capability, arguments: args, agentSession }),
       }),
+      deviceAuthorization({
+        verificationUri: '/device',
+        schema: {},
+        ...createDeviceAuthorizationOptions(applications),
+      }),
       emailOTP({
         otpLength: options.builtInProviders?.email.otpLength,
         expiresIn: options.builtInProviders?.email.expiresInSeconds,
@@ -381,3 +397,43 @@ export function createAuth(
 }
 
 export type Auth = ReturnType<typeof createAuth>
+
+export function createDeviceAuthorizationOptions(applications: Pick<ApplicationRepository, 'findByClientId'>) {
+  return {
+    validateClient: async (clientId: string) => {
+      const application = await applications.findByClientId(clientId)
+      return (
+        !!application &&
+        !application.disabled &&
+        application.public &&
+        application.clientType === 'public_native' &&
+        application.allowedGrantTypes.includes(deviceCodeGrantType)
+      )
+    },
+    onDeviceAuthRequest: async (clientId: string, scope: string | undefined) => {
+      const application = await applications.findByClientId(clientId)
+      if (
+        !application ||
+        application.disabled ||
+        !application.public ||
+        application.clientType !== 'public_native' ||
+        !application.allowedGrantTypes.includes(deviceCodeGrantType)
+      ) {
+        throw new APIError('BAD_REQUEST', {
+          error: 'invalid_client',
+          error_description: 'Invalid client ID',
+        })
+      }
+
+      const requestedScopes = (scope || 'openid').split(/\s+/).filter(Boolean)
+      for (const requestedScope of requestedScopes) {
+        if (!application.allowedScopes.includes(requestedScope as (typeof application.allowedScopes)[number])) {
+          throw new APIError('BAD_REQUEST', {
+            error: 'invalid_request',
+            error_description: `Scope is not allowed for this client: ${requestedScope}`,
+          })
+        }
+      }
+    },
+  }
+}

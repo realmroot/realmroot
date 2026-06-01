@@ -30,6 +30,10 @@ vi.mock('../../../src/features/auth/pages/sign-up', () => ({
   SignUpPage: () => <h1>Sign up route</h1>,
 }))
 
+vi.mock('../../../src/features/auth/device-authorization', () => ({
+  DeviceVerification: () => <h1>Device approval route</h1>,
+}))
+
 afterEach(() => {
   cleanup()
   queryClient.clear()
@@ -79,6 +83,30 @@ describe('root route', () => {
       headers: expect.any(Headers),
       method: 'GET',
     })
+  })
+
+  it('authenticates device approval before rendering it', async () => {
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse({ user })))
+    window.history.pushState(null, '', '/device/approve?user_code=ABCD-1234')
+
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Device approval route' })).toBeTruthy()
+    expect(fetchSpy).toHaveBeenCalledWith('/api/account/profile', {
+      body: undefined,
+      headers: expect.any(Headers),
+      method: 'GET',
+    })
+  })
+
+  it('preserves device approval return path when signed out', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse({ error: 'unauthorized' }, 401)))
+    window.history.pushState(null, '', '/device/approve?user_code=ABCD-1234')
+
+    render(<AppRouter />)
+
+    await waitFor(() => expect(window.location.pathname).toBe('/auth/sign-in'))
+    expect(window.location.search).toBe('?return_to=%2Fdevice%2Fapprove%3Fuser_code%3DABCD-1234')
   })
 
   it('serves hosted auth from /auth routes only', async () => {

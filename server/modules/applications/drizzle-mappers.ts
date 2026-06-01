@@ -1,4 +1,8 @@
-import { type ApplicationOidcClaims, defaultApplicationOidcClaims } from '../../../shared/api/applications'
+import {
+  type ApplicationOidcClaims,
+  defaultApplicationOidcClaims,
+  deviceCodeGrantType,
+} from '../../../shared/api/applications'
 import type { application, applicationConsent, oauthClient } from '../../db/schema'
 import type { ApplicationAggregate, ConsentRecord } from './service'
 
@@ -234,7 +238,12 @@ export function toTokenEndpointAuthMethod(value: string | null): ApplicationAggr
 }
 
 export function isGrantType(value: string): value is ApplicationAggregate['allowedGrantTypes'][number] {
-  return value === 'authorization_code' || value === 'refresh_token' || value === 'client_credentials'
+  return (
+    value === 'authorization_code' ||
+    value === 'refresh_token' ||
+    value === 'client_credentials' ||
+    value === deviceCodeGrantType
+  )
 }
 
 export function isScope(value: string): value is ApplicationAggregate['allowedScopes'][number] {

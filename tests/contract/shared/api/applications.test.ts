@@ -1,6 +1,7 @@
 import {
   createApplicationRequestSchema,
   createApplicationResponseSchema,
+  deviceCodeGrantType,
   listApplicationsResponseSchema,
   listClientSecretsResponseSchema,
   listRedirectUrisResponseSchema,
@@ -85,6 +86,17 @@ describe('application API pagination contracts', () => {
     expect(() =>
       listApplicationsResponseSchema.parse({ applications: [response], pagination: pagination(1) }),
     ).toThrow()
+  })
+
+  it('accepts the standard device-code grant in application contracts', () => {
+    expect(
+      createApplicationRequestSchema.parse({
+        name: 'Native app',
+        clientType: 'public_native',
+        redirectUris: ['com.example.native:/callback'],
+        allowedGrantTypes: [deviceCodeGrantType],
+      }).allowedGrantTypes,
+    ).toEqual([deviceCodeGrantType])
   })
 
   it('keeps management scopes out of user-configurable application requests', () => {

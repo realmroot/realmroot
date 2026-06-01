@@ -73,3 +73,9 @@ export type AgentAuthPluginOptions = {
   validateCapabilities: (capabilities: string[]) => boolean
   resolveAutonomousUser?: unknown
 }
+
+export type DeviceAuthorizationPluginOptions = {
+  verificationUri: string
+  validateClient: (clientId: string) => Promise<boolean> | boolean
+  onDeviceAuthRequest: (clientId: string, scope?: string) => Promise<void> | void
+}

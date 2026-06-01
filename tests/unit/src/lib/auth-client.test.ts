@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiRequestError } from '@/lib/api'
 import {
   approveAgentCapability,
+  approveDeviceCode,
+  denyDeviceCode,
   nativeAuth,
   requestEmailOtp,
   requestEmailOtpPasswordReset,
@@ -19,6 +21,7 @@ import {
   signInWithWallet,
   signOut,
   signUp,
+  verifyDeviceCode,
   verifyEmail,
   verifyEmailOtp,
   verifyPhoneNumber,
@@ -131,6 +134,9 @@ describe('native auth client', () => {
       userCode: 'WXYZ-9876',
       capabilities: ['account.profile.read'],
     })
+    await verifyDeviceCode({ userCode: 'ABCD-1234' })
+    await approveDeviceCode({ userCode: 'ABCD-1234' })
+    await denyDeviceCode({ userCode: 'ABCD-1234' })
 
     expect(requests.map((request) => request.url)).toEqual([
       '/api/auth/sign-in/email',
@@ -153,14 +159,19 @@ describe('native auth client', () => {
       '/api/auth/two-factor/verify-totp',
       '/api/auth/agent/approve-capability',
       '/api/auth/agent/approve-capability',
+      '/api/auth/device?user_code=ABCD-1234',
+      '/api/auth/device/approve',
+      '/api/auth/device/deny',
     ])
-    expect(requests.at(-1)?.body).toEqual({
+    expect(requests.at(-1)?.body).toEqual({ userCode: 'ABCD-1234' })
+    expect(requests.at(-2)?.body).toEqual({ userCode: 'ABCD-1234' })
+    expect(requests.at(-4)?.body).toEqual({
       agent_id: 'agent-2',
       user_code: 'WXYZ-9876',
       action: 'approve',
       capabilities: ['account.profile.read'],
     })
-    expect(requests.at(-2)?.body).toEqual({
+    expect(requests.at(-5)?.body).toEqual({
       agent_id: 'agent-1',
       user_code: 'ABCD-1234',
       action: 'approve',
