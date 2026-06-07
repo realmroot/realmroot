@@ -11,6 +11,7 @@ import { createConnectorRepository } from '../server/modules/connectors/reposito
 import { loadAuthConnectorConfig } from '../server/modules/connectors/service'
 import { createOnboardingRepository } from '../server/modules/onboarding/repository'
 import { createSecurityRepository } from '../server/modules/security/repository'
+import { createTokenExchangeService } from '../server/modules/token-exchange/context'
 import { createUserRepository } from '../server/modules/users/repository'
 import { createWalletRepository } from '../server/modules/wallets/repository'
 import { managementBuiltInProviderSettingsSchema } from '../shared/api/management'
@@ -38,6 +39,7 @@ export default {
       onboardingRepository: createOnboardingRepository(env.DB),
       securityPolicy,
       configzServiceFactory: createConfigzService,
+      tokenExchangeServiceFactory: createTokenExchangeService,
     }).fetch(request, env, ctx)
   },
 }

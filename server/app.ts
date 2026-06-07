@@ -20,6 +20,8 @@ import { requireSecurityPolicy } from './middleware/security-policy'
 import type { ConfigzBindings } from './modules/configz/context'
 import type { OnboardingRepository } from './modules/onboarding/repository'
 import type { SecurityRepository } from './modules/security/repository'
+import { createTokenExchangeService, type TokenExchangeBindings } from './modules/token-exchange/context'
+import { parseBasicClientAuthorization, tokenExchangeGrantType } from './modules/token-exchange/service'
 import type { UserRepository } from './modules/users/repository'
 import type { WalletRepository } from './modules/wallets/repository'
 import { managementOpenApiForRequest, managementOpenApiLinkHeader, managementOpenApiPath } from './openapi/management'
@@ -69,7 +71,10 @@ export interface AppOptions {
   connectorServiceFactory?: ConnectorServiceFactory
   webhookServiceFactory?: WebhookServiceFactory
   assetServiceFactory?: AssetServiceFactory
+  tokenExchangeServiceFactory?: TokenExchangeServiceFactory
 }
+
+export type TokenExchangeServiceFactory = typeof createTokenExchangeService
 
 interface RpcAppOptions extends AppOptions {
   userRepository: UserRepository
@@ -157,6 +162,9 @@ export function createApp(auth: AuthHandler, options: AppOptions = {}) {
       await requireLinkedSiweWallet(c, options.walletRepository)
     }
 
+    const tokenExchangeResponse = await maybeHandleTokenExchange(c, options.tokenExchangeServiceFactory)
+    if (tokenExchangeResponse) return tokenExchangeResponse
+
     return auth.handler(c.req.raw)
   })
   app.get('/.well-known/oauth-authorization-server/api/auth', (c) => oauthProviderAuthServerMetadata(auth)(c.req.raw))
@@ -202,6 +210,7 @@ function mountCoreApiRoutes(app: Hono, auth: AuthHandler, options: AppOptions) {
         applicationServiceFactory: options.applicationServiceFactory,
         connectorServiceFactory: options.connectorServiceFactory,
         webhookServiceFactory: options.webhookServiceFactory,
+        tokenExchangeServiceFactory: options.tokenExchangeServiceFactory,
       }),
     )
 
@@ -251,4 +260,57 @@ async function requireOnboardingComplete(onboarding: OnboardingRepository) {
   if (!(await onboarding.hasUsers())) {
     throw forbidden('Complete first-admin onboarding before using auth flows.')
   }
+}
+
+async function maybeHandleTokenExchange(c: Context, factory: TokenExchangeServiceFactory = createTokenExchangeService) {
+  if (c.req.method !== 'POST') return null
+  if (c.req.path !== '/api/auth/oauth2/token' && c.req.path !== '/api/auth/oauth2/introspect') return null
+
+  const form = await c.req.raw
+    .clone()
+    .formData()
+    .catch(() => null)
+  if (!form) return null
+
+  if (c.req.path === '/api/auth/oauth2/token' && formString(form, 'grant_type') !== tokenExchangeGrantType) return null
+
+  const client = readClientAuthentication(c.req.raw.headers, form)
+  if (!client) {
+    return c.json({ error: 'invalid_client', error_description: 'Client authentication is required.' }, 401, {
+      'WWW-Authenticate': 'Basic realm="FlareAuth token endpoint"',
+    })
+  }
+
+  const service = factory(c as unknown as Context<{ Bindings: TokenExchangeBindings }>)
+  if (c.req.path === '/api/auth/oauth2/token') {
+    const response = await service.exchange(
+      {
+        grantType: formString(form, 'grant_type') ?? '',
+        subjectToken: formString(form, 'subject_token') ?? '',
+        subjectTokenType: formString(form, 'subject_token_type') ?? '',
+        audience: formString(form, 'audience') ?? '',
+        scope: formString(form, 'scope') ?? undefined,
+        requestedTokenType: formString(form, 'requested_token_type') ?? undefined,
+      },
+      client,
+    )
+    return c.json(response)
+  }
+
+  const introspection = await service.introspect(formString(form, 'token') ?? '', client)
+  if (!introspection.active) return null
+  return c.json(introspection)
+}
+
+function readClientAuthentication(headers: Headers, form: FormData) {
+  const basic = parseBasicClientAuthorization(headers.get('authorization'))
+  if (basic) return basic
+  const clientId = formString(form, 'client_id')
+  const clientSecret = formString(form, 'client_secret')
+  return clientId && clientSecret ? { clientId, clientSecret } : null
+}
+
+function formString(form: FormData, key: string) {
+  const value = form.get(key)
+  return typeof value === 'string' ? value : null
 }

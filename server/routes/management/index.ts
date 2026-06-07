@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { assignRoleRequestSchema } from '../../../shared/api/authorization'
 import type { SecurityPolicy } from '../../../shared/api/security'
+import type { TokenExchangeServiceFactory } from '../../app'
 import { requireAdmin } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
 import type { AgentBindings } from '../../modules/agents/context'
@@ -20,6 +21,7 @@ import { createManagementReadinessRoute, type ManagementApplicationServiceFactor
 import { managementRolesRoute } from './roles'
 import { managementSecurityRoutes } from './security'
 import { createManagementSettingsRoutes, type ManagementConfigzServiceFactory } from './settings'
+import { createTrustedIssuerRoutes } from './trusted-issuers'
 import { managementUserRoutes } from './users'
 import { createManagementWebhookRoutes, type WebhookServiceFactory } from './webhooks'
 
@@ -40,6 +42,7 @@ interface ManagementRoutesOptions {
   applicationServiceFactory?: ManagementApplicationServiceFactory
   connectorServiceFactory?: ConnectorServiceFactory
   webhookServiceFactory?: WebhookServiceFactory
+  tokenExchangeServiceFactory?: TokenExchangeServiceFactory
 }
 
 export function createManagementRoutes(options: ManagementRoutesOptions) {
@@ -50,6 +53,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)
+  app.route('/trusted-issuers', createTrustedIssuerRoutes(options.tokenExchangeServiceFactory))
   app.post('/user-role-assignments', requireAdmin(), async (c) => {
     const { user } = getAuthContext(c)
     await createAuthorizationService(c).assignUserRole(await readJson(c, assignRoleRequestSchema), user!.id)

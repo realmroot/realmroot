@@ -49,7 +49,10 @@ export {
 export { connectorReadinessResponseSchema, listConnectorTemplatesResponseSchema } from '../../../shared/api/connectors'
 export {
   createManagementConnectorRequestSchema,
+  createManagementTrustedIssuerRequestSchema,
+  createManagementTrustedIssuerResponseSchema,
   listManagementConnectorsResponseSchema,
+  listManagementTrustedIssuersResponseSchema,
   listManagementUserApplicationsResponseSchema,
   listManagementUserLinkedAccountsResponseSchema,
   listManagementUserPasskeysResponseSchema,

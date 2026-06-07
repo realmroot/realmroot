@@ -2,6 +2,7 @@ import {
   type ApplicationOidcClaims,
   defaultApplicationOidcClaims,
   deviceCodeGrantType,
+  tokenExchangeGrantType,
 } from '../../../shared/api/applications'
 import type { application, applicationConsent, oauthClient } from '../../db/schema'
 import type { ApplicationAggregate, ConsentRecord } from './service'
@@ -242,7 +243,8 @@ export function isGrantType(value: string): value is ApplicationAggregate['allow
     value === 'authorization_code' ||
     value === 'refresh_token' ||
     value === 'client_credentials' ||
-    value === deviceCodeGrantType
+    value === deviceCodeGrantType ||
+    value === tokenExchangeGrantType
   )
 }
 

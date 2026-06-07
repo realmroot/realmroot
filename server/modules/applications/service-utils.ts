@@ -34,6 +34,12 @@ export function normalizeClientSettings(
   if (normalizedGrantTypes.includes(deviceCodeGrantType) && clientType !== 'public_native') {
     throw badRequest('Only public native clients can use the device-code grant.')
   }
+  if (
+    normalizedGrantTypes.includes('urn:ietf:params:oauth:grant-type:token-exchange') &&
+    clientType !== 'confidential_web'
+  ) {
+    throw badRequest('Only confidential clients can use the token-exchange grant.')
+  }
   if (normalizedGrantTypes.includes('refresh_token') && !normalizedScopes.includes('offline_access')) {
     normalizedScopes.push('offline_access')
   }

@@ -222,6 +222,38 @@ export const listManagementConnectorsResponseSchema = listConnectorsResponseSche
 export const createManagementConnectorRequestSchema = createConnectorRequestSchema
 export const updateManagementConnectorRequestSchema = updateConnectorRequestSchema
 
+export const managementTrustedIssuerResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  issuer: z.string(),
+  jwksUrl: z.string().nullable(),
+  sharedSecretConfigured: z.boolean(),
+  allowedAudiences: z.array(z.string()),
+  enabled: z.boolean(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const listManagementTrustedIssuersResponseSchema = z.object({
+  issuers: z.array(managementTrustedIssuerResponseSchema),
+})
+
+export const createManagementTrustedIssuerRequestSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    issuer: z.url(),
+    jwksUrl: z.url().nullable().optional(),
+    sharedSecret: z.string().trim().min(16).nullable().optional(),
+    allowedAudiences: z.array(z.string().trim().min(1)).nullable().optional(),
+    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  })
+  .strict()
+
+export const createManagementTrustedIssuerResponseSchema = z.object({
+  issuer: managementTrustedIssuerResponseSchema,
+})
+
 export const managementUserResponseSchema = z.object({
   id: z.string(),
   email: z.string().optional(),
@@ -342,6 +374,7 @@ export const managementResourceSchemas = {
   brandingSettings: managementBrandingSettingsResponseSchema,
   readiness: managementReadinessResponseSchema,
   connectors: managementConnectorResponseSchema,
+  trustedIssuers: managementTrustedIssuerResponseSchema,
 } as const
 
 export const managementCollectionSchemas = {
@@ -352,6 +385,7 @@ export const managementCollectionSchemas = {
   apiScopes: listApiScopesResponseSchema,
   roles: listRolesResponseSchema,
   connectors: listManagementConnectorsResponseSchema,
+  trustedIssuers: listManagementTrustedIssuersResponseSchema,
 } as const
 
 export const managementUserListQuerySchema = adminUserListQuerySchema
@@ -367,6 +401,7 @@ export const managementCollectionRoutes = [
   '/roles',
   '/api-resources',
   '/connectors',
+  '/trusted-issuers',
 ] as const
 
 export { paginationQuerySchema }
@@ -399,3 +434,7 @@ export type ManagementConnectorResponse = z.infer<typeof managementConnectorResp
 export type ListManagementConnectorsResponse = z.infer<typeof listManagementConnectorsResponseSchema>
 export type CreateManagementConnectorRequest = z.infer<typeof createManagementConnectorRequestSchema>
 export type UpdateManagementConnectorRequest = z.infer<typeof updateManagementConnectorRequestSchema>
+export type ManagementTrustedIssuerResponse = z.infer<typeof managementTrustedIssuerResponseSchema>
+export type ListManagementTrustedIssuersResponse = z.infer<typeof listManagementTrustedIssuersResponseSchema>
+export type CreateManagementTrustedIssuerRequest = z.infer<typeof createManagementTrustedIssuerRequestSchema>
+export type CreateManagementTrustedIssuerResponse = z.infer<typeof createManagementTrustedIssuerResponseSchema>

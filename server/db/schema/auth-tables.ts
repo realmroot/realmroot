@@ -258,6 +258,60 @@ export const oauthAccessToken = sqliteTable(
   ],
 )
 
+export const trustedExternalIssuer = sqliteTable(
+  'trusted_external_issuer',
+  {
+    id: text('id').primaryKey(),
+    issuer: text('issuer').notNull(),
+    name: text('name').notNull(),
+    jwksUrl: text('jwks_url'),
+    sharedSecret: text('shared_secret'),
+    allowedAudiences: text('allowed_audiences', { mode: 'json' }).$type<string[]>(),
+    enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('trustedExternalIssuer_issuer_unique').on(table.issuer),
+    index('trustedExternalIssuer_enabled_idx').on(table.enabled),
+  ],
+)
+
+export const tokenExchangeAccessToken = sqliteTable(
+  'token_exchange_access_token',
+  {
+    id: text('id').primaryKey(),
+    tokenHash: text('token_hash').notNull().unique(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    issuerId: text('issuer_id')
+      .notNull()
+      .references(() => trustedExternalIssuer.id, { onDelete: 'cascade' }),
+    subject: text('subject').notNull(),
+    subjectTokenIssuer: text('subject_token_issuer').notNull(),
+    audience: text('audience').notNull(),
+    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    claims: text('claims', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    index('tokenExchangeAccessToken_clientId_idx').on(table.clientId),
+    index('tokenExchangeAccessToken_issuerId_idx').on(table.issuerId),
+    index('tokenExchangeAccessToken_expiresAt_idx').on(table.expiresAt),
+  ],
+)
+
 export const oauthConsent = sqliteTable(
   'oauth_consent',
   {
