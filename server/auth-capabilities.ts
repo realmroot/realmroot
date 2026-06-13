@@ -43,18 +43,6 @@ export const agentCapabilities = [
   },
 ] as const satisfies Capability[]
 
-export const agentCapabilityNames = agentCapabilities.map((capability) => capability.name)
-
-const agentCapabilityNameSet = new Set<string>(agentCapabilityNames)
-
-export function isKnownAgentCapability(capability: string) {
-  return agentCapabilityNameSet.has(capability)
-}
-
-export function areKnownAgentCapabilities(capabilities: string[]) {
-  return capabilities.every(isKnownAgentCapability)
-}
-
 function paginationInputSchema() {
   return {
     type: 'object',

@@ -6,6 +6,7 @@ import type { TransactionalEmailSender } from '@server/adapters/gateways/email/s
 import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
+import { AgentService } from '@server/usecases/agents'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
@@ -33,6 +34,7 @@ import {
 } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 import type { SecurityPolicy } from '../shared/api/security'
+import { agentCapabilities } from './auth-capabilities'
 import {
   buildOAuthAccessTokenClaims,
   buildOAuthIdTokenClaims,
@@ -48,9 +50,8 @@ import {
 import { betterAuthTranslations } from './auth-i18n'
 import type { Database } from './db/client'
 import * as schema from './db/schema'
+import { areKnownAgentCapabilities } from './domain/agents/capabilities'
 import { hashPassword, verifyPassword } from './domain/password'
-import { agentCapabilities, areKnownAgentCapabilities } from './modules/agents/capabilities'
-import { AgentService } from './modules/agents/service'
 import type { ApplicationRepository } from './modules/applications/service'
 import { AuthorizationService } from './modules/authorization/service'
 

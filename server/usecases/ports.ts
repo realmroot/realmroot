@@ -297,3 +297,91 @@ export interface ConnectorRepository {
   update(id: string, input: Partial<ConnectorRecordInput>): Promise<ConnectorRecord | null>
   delete(id: string): Promise<void>
 }
+
+// --- agents -----------------------------------------------------------------
+
+export interface AgentHostRecord {
+  id: string
+  name: string | null
+  userId: string | null
+  defaultCapabilities: string | null
+  publicKey: string | null
+  kid: string | null
+  jwksUrl: string | null
+  enrollmentTokenHash: string | null
+  enrollmentTokenExpiresAt: Date | null
+  status: string
+  activatedAt: Date | null
+  expiresAt: Date | null
+  lastUsedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AgentRecord {
+  id: string
+  name: string
+  userId: string | null
+  hostId: string
+  status: string
+  mode: string
+  publicKey: string
+  kid: string | null
+  jwksUrl: string | null
+  lastUsedAt: Date | null
+  activatedAt: Date | null
+  expiresAt: Date | null
+  metadata: Record<string, unknown> | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AgentCapabilityGrantRecord {
+  id: string
+  agentId: string
+  capability: string
+  deniedBy: string | null
+  grantedBy: string | null
+  expiresAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+  status: string
+  reason: string | null
+  constraints: Record<string, unknown> | null
+}
+
+export interface ApprovalRequestRecord {
+  id: string
+  method: string
+  agentId: string | null
+  hostId: string | null
+  userId: string | null
+  capabilities: string | null
+  status: string
+  userCodeHash: string | null
+  loginHint: string | null
+  bindingMessage: string | null
+  clientNotificationToken: string | null
+  clientNotificationEndpoint: string | null
+  deliveryMode: string | null
+  interval: number
+  lastPolledAt: Date | null
+  expiresAt: Date
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AgentRepository {
+  listHosts(page: PaginationInput): Promise<PaginatedResult<AgentHostRecord>>
+  listAgents(page: PaginationInput): Promise<PaginatedResult<AgentRecord>>
+  listCapabilityGrants(page: PaginationInput): Promise<PaginatedResult<AgentCapabilityGrantRecord>>
+  listApprovalRequests(page: PaginationInput): Promise<PaginatedResult<ApprovalRequestRecord>>
+  listAgentsForUser(userId: string, page: PaginationInput): Promise<PaginatedResult<AgentRecord>>
+  listHostsForAgents(hostIds: string[]): Promise<AgentHostRecord[]>
+  listCapabilityGrantsForUser(userId: string): Promise<AgentCapabilityGrantRecord[]>
+  revokeAgentForUser(agentId: string, userId: string): Promise<void>
+  revokeCapabilityGrantForUser(grantId: string, userId: string): Promise<void>
+  revokeAgent(agentId: string): Promise<void>
+  revokeHost(hostId: string): Promise<void>
+  revokeCapabilityGrant(grantId: string): Promise<void>
+}

@@ -1,4 +1,5 @@
 import { notFound } from '@server/domain/errors'
+import type { AgentRepository } from '@server/usecases/ports'
 import { and, count, desc, eq, inArray } from 'drizzle-orm'
 import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
 import type { Database } from '../../db/client'
@@ -8,21 +9,6 @@ export type AgentHostRecord = typeof agentHost.$inferSelect
 export type AgentRecord = typeof agent.$inferSelect
 export type AgentCapabilityGrantRecord = typeof agentCapabilityGrant.$inferSelect
 export type ApprovalRequestRecord = typeof approvalRequest.$inferSelect
-
-export interface AgentRepository {
-  listHosts(page: PaginationInput): Promise<PaginatedResult<AgentHostRecord>>
-  listAgents(page: PaginationInput): Promise<PaginatedResult<AgentRecord>>
-  listCapabilityGrants(page: PaginationInput): Promise<PaginatedResult<AgentCapabilityGrantRecord>>
-  listApprovalRequests(page: PaginationInput): Promise<PaginatedResult<ApprovalRequestRecord>>
-  listAgentsForUser(userId: string, page: PaginationInput): Promise<PaginatedResult<AgentRecord>>
-  listHostsForAgents(hostIds: string[]): Promise<AgentHostRecord[]>
-  listCapabilityGrantsForUser(userId: string): Promise<AgentCapabilityGrantRecord[]>
-  revokeAgentForUser(agentId: string, userId: string): Promise<void>
-  revokeCapabilityGrantForUser(grantId: string, userId: string): Promise<void>
-  revokeAgent(agentId: string): Promise<void>
-  revokeHost(hostId: string): Promise<void>
-  revokeCapabilityGrant(grantId: string): Promise<void>
-}
 
 export function createDrizzleAgentRepository(db: Database): AgentRepository {
   return {

@@ -1,6 +1,7 @@
 import type { AgentSession } from '@better-auth/agent-auth'
-import { agentCapabilities, areKnownAgentCapabilities } from '@server/modules/agents/capabilities'
-import { AgentService } from '@server/modules/agents/service'
+import { agentCapabilities } from '@server/auth-capabilities'
+import { areKnownAgentCapabilities } from '@server/domain/agents/capabilities'
+import { AgentService } from '@server/usecases/agents'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('AgentService', () => {
