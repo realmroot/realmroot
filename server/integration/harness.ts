@@ -70,6 +70,7 @@ export interface Harness {
   app: ReturnType<typeof createApp>
   request: (input: string, init?: RequestInit) => Promise<Response>
   db: ReturnType<typeof createDb>
+  deps: ReturnType<typeof createDeps>
 }
 
 /**
@@ -104,6 +105,7 @@ export async function createHarness(): Promise<Harness> {
     app,
     request: async (input, init) => app.request(new URL(input, baseURL).toString(), init),
     db,
+    deps,
   }
 }
 
