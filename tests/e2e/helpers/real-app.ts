@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { expect, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { e2eFetch } from './http'
 
 export const admin = {
@@ -64,21 +64,6 @@ export async function signOut(page: Page) {
   await page.getByRole('button', { name: 'Account menu' }).click()
   await page.getByRole('menuitem', { name: 'Sign out' }).click()
   await page.waitForURL(/\/auth\/sign-in/)
-}
-
-export async function createOidcApplication(page: Page, name = 'E2E Application') {
-  const response = await page.request.post('/api/management/applications', {
-    data: {
-      name,
-      slug: slugify(name),
-      clientType: 'public_spa',
-      redirectUris: [`${baseURL}/oidc/callback`],
-      firstParty: true,
-      trusted: true,
-    },
-  })
-  expect(response.status(), await response.text()).toBe(201)
-  return response.json()
 }
 
 export function resetLocalData() {
@@ -146,11 +131,4 @@ function run(command: string, args: string[]) {
     cwd: repoRoot,
     encoding: 'utf8',
   })
-}
-
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, '-')
-    .replaceAll(/^-|-$/g, '')
 }
