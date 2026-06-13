@@ -1,10 +1,10 @@
+import type { TransactionalEmailSender } from '@server/adapters/gateways/email/sender'
 import {
   type ApplicationOidcClaims,
   defaultApplicationOidcClaims,
   managementApplicationScopes,
 } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
-import type { TransactionalEmailSender } from './lib/email/sender'
 import type { AuthorizationService, AuthorizationTokenClaimInput } from './modules/authorization/service'
 
 export function siweDomain(baseURL: string, configuredDomain: string) {

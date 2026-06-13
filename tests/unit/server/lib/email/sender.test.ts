@@ -1,5 +1,5 @@
-import { createEmailSender } from '@server/lib/email/sender'
-import { renderEmailTemplate } from '@server/lib/email/templates'
+import { createEmailSender } from '@server/adapters/gateways/email/sender'
+import { renderEmailTemplate } from '@server/adapters/gateways/email/templates'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('createEmailSender', () => {

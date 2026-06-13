@@ -1,4 +1,4 @@
-import type { EmailMessageBuilder, SendEmail } from '../../../shared/env'
+import type { EmailMessageBuilder, SendEmail } from '@shared/env'
 import { type EmailTemplate, renderEmailTemplate } from './templates'
 
 export interface EmailSenderConfig {
