@@ -1,4 +1,4 @@
-import { hashPassword, verifyPassword } from '@server/lib/password'
+import { hashPassword, verifyPassword } from '@server/domain/password'
 import { describe, expect, it } from 'vitest'
 
 describe('password hashing', () => {

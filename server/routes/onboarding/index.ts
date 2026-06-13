@@ -1,7 +1,7 @@
+import { hashPassword } from '@server/domain/password'
 import { Hono } from 'hono'
 import { onboardingAdminRequestSchema } from '../../../shared/api/onboarding'
 import { forbidden } from '../../lib/errors'
-import { hashPassword } from '../../lib/password'
 import type { OnboardingRepository } from '../../modules/onboarding/repository'
 import { readJson } from '../validation'
 

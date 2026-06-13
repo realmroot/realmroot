@@ -3,7 +3,7 @@ import { account, applicationConsent, session, uploadedAsset, user } from '@serv
 import { createUserRepository } from '@server/modules/users/repository'
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../../../../server/lib/password', () => ({
+vi.mock('@server/domain/password', () => ({
   hashPassword: vi.fn().mockResolvedValue('hashed-password'),
 }))
 

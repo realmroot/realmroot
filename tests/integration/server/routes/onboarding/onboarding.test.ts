@@ -1,5 +1,5 @@
+import * as password from '@server/domain/password'
 import { handleApiError } from '@server/lib/errors'
-import * as password from '@server/lib/password'
 import type { OnboardingRepository } from '@server/modules/onboarding/repository'
 import { onboardingRoutes } from '@server/routes/onboarding'
 import { Hono } from 'hono'

@@ -1,3 +1,4 @@
+import { hashPassword } from '@server/domain/password'
 import { and, asc, count, desc, eq, isNull, like, type SQL } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { AccountProfileUpdateInput } from '../../../shared/api/account'
@@ -6,7 +7,6 @@ import type { AdminCreateUserInput, AdminUpdateUserInput, AdminUserListQuery } f
 import type { Database } from '../../db/client'
 import { account, application, applicationConsent, session, uploadedAsset, user } from '../../db/schema'
 import { badRequest, notFound } from '../../lib/errors'
-import { hashPassword } from '../../lib/password'
 
 export interface UserProfile {
   id: string
