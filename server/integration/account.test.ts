@@ -3,7 +3,7 @@ import { verification } from '@server/db/schema'
 import { privateKeyToAccount } from 'viem/accounts'
 import { createSiweMessage } from 'viem/siwe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, createUser, type Harness, signIn, signInAdmin } from './harness'
+import { baseURL, bootstrapAdmin, createHarness, createUser, type Harness, signIn, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -35,7 +35,31 @@ describe('account self-service over real D1', () => {
     expect((await harness.request('/api/account/profile')).status).toBe(401)
   })
 
-  it('reads and updates the profile through real SQL', async () => {
+  it('completes hosted sign-up, sign-in, and account center as one real journey [spec: hosted-auth/normal-signup-signin-account]', async () => {
+    // Bootstrap the first admin so the deployment is past first-run onboarding,
+    // then run public hosted sign-up -> sign-in -> account center over real D1.
+    await bootstrapAdmin(harness)
+
+    const signUp = await harness.request('/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: baseURL },
+      body: JSON.stringify({
+        email: 'newcomer@example.com',
+        name: 'New Comer',
+        username: 'newcomer',
+        password: 'newcomer-password-2026',
+      }),
+    })
+    expect(signUp.status, await signUp.clone().text()).toBe(200)
+
+    const cookie = await signIn(harness, 'newcomer@example.com', 'newcomer-password-2026')
+
+    const profile = await harness.request('/api/account/profile', { headers: { cookie } })
+    expect(profile.status).toBe(200)
+    expect(((await profile.json()) as { user: { email: string } }).user.email).toBe('newcomer@example.com')
+  })
+
+  it('reads and updates the profile through real SQL [spec: account-center/profile-update]', async () => {
     const { cookie } = await signedInUser(harness)
 
     const profile = await harness.request('/api/account/profile', { headers: { cookie } })
