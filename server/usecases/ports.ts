@@ -243,3 +243,57 @@ export interface OnboardingRepository {
   hasUsers(): Promise<boolean>
   createBootstrapAdmin(input: BootstrapAdminInput): Promise<{ id: string; email: string; role: string | null }>
 }
+
+// --- connectors -------------------------------------------------------------
+
+export interface ConnectorRecord {
+  id: string
+  slug: string
+  providerType: string
+  providerId: string
+  displayName: string
+  enabled: boolean
+  clientId: string | null
+  clientSecret: string | null
+  issuer: string | null
+  authorizationEndpoint: string | null
+  tokenEndpoint: string | null
+  userInfoEndpoint: string | null
+  jwksEndpoint: string | null
+  scopes: string[] | null
+  attributeMapping: Record<string, string> | null
+  providerMetadata: Record<string, unknown> | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ConnectorRecordInput {
+  id: string
+  slug: string
+  providerType: string
+  providerId: string
+  displayName: string
+  enabled?: boolean
+  clientId?: string | null
+  clientSecret?: string | null
+  issuer?: string | null
+  authorizationEndpoint?: string | null
+  tokenEndpoint?: string | null
+  userInfoEndpoint?: string | null
+  jwksEndpoint?: string | null
+  scopes?: string[] | null
+  attributeMapping?: Record<string, string> | null
+  providerMetadata?: Record<string, unknown> | null
+  createdAt?: Date
+  updatedAt?: Date
+}
+
+export interface ConnectorRepository {
+  list(page: PaginationInput): Promise<{ items: ConnectorRecord[]; total: number }>
+  listEnabled(): Promise<ConnectorRecord[]>
+  findById(id: string): Promise<ConnectorRecord | null>
+  findByProviderId(providerId: string): Promise<ConnectorRecord | null>
+  create(input: ConnectorRecordInput): Promise<ConnectorRecord>
+  update(id: string, input: Partial<ConnectorRecordInput>): Promise<ConnectorRecord | null>
+  delete(id: string): Promise<void>
+}

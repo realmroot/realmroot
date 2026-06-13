@@ -1,20 +1,10 @@
+import type { ConnectorRepository } from '@server/usecases/ports'
 import { count, desc, eq } from 'drizzle-orm'
-import type { PaginationInput } from '../../../shared/api/pagination'
 import type { Database } from '../../db/client'
 import { identityProviderConnector } from '../../db/schema'
 
 export type ConnectorRow = typeof identityProviderConnector.$inferSelect
 export type ConnectorInsert = typeof identityProviderConnector.$inferInsert
-
-export interface ConnectorRepository {
-  list(page: PaginationInput): Promise<{ items: ConnectorRow[]; total: number }>
-  listEnabled(): Promise<ConnectorRow[]>
-  findById(id: string): Promise<ConnectorRow | null>
-  findByProviderId(providerId: string): Promise<ConnectorRow | null>
-  create(input: ConnectorInsert): Promise<ConnectorRow>
-  update(id: string, input: Partial<ConnectorInsert>): Promise<ConnectorRow | null>
-  delete(id: string): Promise<void>
-}
 
 export function createConnectorRepository(db: Database): ConnectorRepository {
   return {

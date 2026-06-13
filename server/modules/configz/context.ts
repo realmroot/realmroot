@@ -1,10 +1,10 @@
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
+import { loadAuthConnectorConfig } from '@server/usecases/connectors'
 import type { OnboardingRepository } from '@server/usecases/ports'
 import type { Context } from 'hono'
 import type { SecurityPolicy } from '../../../shared/api/security'
 import { createDb } from '../../db/client'
-import { loadAuthConnectorConfig } from '../connectors/service'
 import { ConfigzService } from './service'
 
 export interface ConfigzBindings {

@@ -1,20 +1,37 @@
-import type { ConnectorRepository, ConnectorRow } from '@server/adapters/repos/connectors'
 import { connectorTemplates, isSupportedProvider } from '@server/domain/connectors/provider-templates'
-import type { GenericOAuthConfig } from 'better-auth/plugins'
+import { badRequest, notFound } from '@server/domain/errors'
+import type { ConnectorRecord, ConnectorRepository } from '@server/usecases/ports'
 import type {
   ConnectorProviderType,
   ConnectorReadinessResponse,
   ConnectorResponse,
   CreateConnectorRequest,
   UpdateConnectorRequest,
-} from '../../../shared/api/connectors'
-import { paginationMetadata } from '../../../shared/api/pagination'
-import { badRequest, notFound } from '../../lib/errors'
+} from '@shared/api/connectors'
+import { paginationMetadata } from '@shared/api/pagination'
+
+/**
+ * Minimal mirror of better-auth's GenericOAuthProviderConfig, capturing only the
+ * fields this usecase populates. Kept framework-free so usecases stay clear of
+ * better-auth; the values remain structurally assignable to better-auth's type
+ * at the server/auth.ts boundary.
+ */
+export interface GenericOAuthProviderConfig {
+  providerId: string
+  clientId: string
+  clientSecret?: string
+  issuer?: string
+  discoveryUrl?: string
+  authorizationUrl?: string
+  tokenUrl?: string
+  userInfoUrl?: string
+  scopes?: string[]
+}
 
 export interface AuthConnectorConfig {
   trustedProviders: string[]
   socialProviders: Record<string, Record<string, unknown>>
-  genericOAuthProviders: GenericOAuthConfig[]
+  genericOAuthProviders: GenericOAuthProviderConfig[]
   cacheKey: string
 }
 
@@ -111,7 +128,7 @@ export class ConnectorService {
 export async function loadAuthConnectorConfig(repository: ConnectorRepository): Promise<AuthConnectorConfig> {
   const connectors = await repository.listEnabled()
   const socialProviders: Record<string, Record<string, unknown>> = {}
-  const genericOAuthProviders: GenericOAuthConfig[] = []
+  const genericOAuthProviders: GenericOAuthProviderConfig[] = []
   const trustedProviders: string[] = []
 
   for (const connector of connectors) {
@@ -177,7 +194,7 @@ function assertSupportedProvider(providerType: ConnectorProviderType, providerId
   }
 }
 
-function assertComplete(connector: ConnectorRow) {
+function assertComplete(connector: ConnectorRecord) {
   if (!connector.enabled) return
   if (!connector.clientId) throw badRequest('Enabled connector requires clientId.')
   if (!connector.clientSecret) throw badRequest('Enabled connector requires clientSecret.')
@@ -191,7 +208,7 @@ async function assertProviderAvailable(repository: ConnectorRepository, provider
   if (existing) throw badRequest('Connector provider is already configured.')
 }
 
-function assertSocialProviderComplete(connector: ConnectorRow) {
+function assertSocialProviderComplete(connector: ConnectorRecord) {
   if (connector.providerId !== 'cognito') return
 
   const metadata = connector.providerMetadata ?? {}
@@ -202,7 +219,7 @@ function assertSocialProviderComplete(connector: ConnectorRow) {
   }
 }
 
-function assertGenericOAuthComplete(connector: ConnectorRow) {
+function assertGenericOAuthComplete(connector: ConnectorRecord) {
   if (connector.issuer && hasAnyExplicitEndpoint(connector)) {
     throw badRequest('Enabled generic OAuth connector uses either issuer discovery or explicit endpoints, not both.')
   }
@@ -214,7 +231,7 @@ function assertGenericOAuthComplete(connector: ConnectorRow) {
   }
 }
 
-function canLoadAuthConnector(connector: ConnectorRow) {
+function canLoadAuthConnector(connector: ConnectorRecord) {
   if (connector.providerType !== 'social' && connector.providerType !== 'generic_oauth') return false
   const providerType = connector.providerType
   if (!isSupportedProvider(providerType, connector.providerId)) return false
@@ -223,7 +240,7 @@ function canLoadAuthConnector(connector: ConnectorRow) {
   return canLoadGenericOAuth(connector)
 }
 
-function canLoadSocialProvider(connector: ConnectorRow) {
+function canLoadSocialProvider(connector: ConnectorRecord) {
   if (connector.providerId !== 'cognito') return true
 
   const metadata = connector.providerMetadata ?? {}
@@ -232,13 +249,13 @@ function canLoadSocialProvider(connector: ConnectorRow) {
   )
 }
 
-function canLoadGenericOAuth(connector: ConnectorRow) {
+function canLoadGenericOAuth(connector: ConnectorRecord) {
   if (connector.issuer && hasAnyExplicitEndpoint(connector)) return false
   if (!connector.issuer && !connector.authorizationEndpoint) return false
   return Boolean(connector.issuer || connector.tokenEndpoint)
 }
 
-function connectorReadinessChecks(connector: ConnectorRow) {
+function connectorReadinessChecks(connector: ConnectorRecord) {
   const checks = [
     {
       key: 'enabled',
@@ -280,13 +297,13 @@ function connectorReadinessChecks(connector: ConnectorRow) {
   return checks
 }
 
-function hasAnyExplicitEndpoint(connector: ConnectorRow): boolean {
+function hasAnyExplicitEndpoint(connector: ConnectorRecord): boolean {
   return Boolean(
     connector.authorizationEndpoint || connector.tokenEndpoint || connector.userInfoEndpoint || connector.jwksEndpoint,
   )
 }
 
-function toResponse(row: ConnectorRow): ConnectorResponse {
+function toResponse(row: ConnectorRecord): ConnectorResponse {
   return {
     id: row.id,
     slug: row.slug,

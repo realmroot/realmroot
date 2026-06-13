@@ -1,5 +1,6 @@
-import type { ConnectorRepository, ConnectorRow } from '@server/adapters/repos/connectors'
-import { ConnectorService, loadAuthConnectorConfig } from '@server/modules/connectors/service'
+import type { ConnectorRow } from '@server/adapters/repos/connectors'
+import { ConnectorService, loadAuthConnectorConfig } from '@server/usecases/connectors'
+import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 1', () => {

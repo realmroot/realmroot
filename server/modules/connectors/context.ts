@@ -1,8 +1,8 @@
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
+import { ConnectorService } from '@server/usecases/connectors'
 import type { Context } from 'hono'
 import { createDb } from '../../db/client'
 import type { ApplicationBindings } from '../applications/context'
-import { ConnectorService } from './service'
 
 export type ConnectorBindings = ApplicationBindings
 

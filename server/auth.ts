@@ -6,6 +6,7 @@ import type { TransactionalEmailSender } from '@server/adapters/gateways/email/s
 import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
+import type { AuthConnectorConfig } from '@server/usecases/connectors'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import {
@@ -52,7 +53,6 @@ import { agentCapabilities, areKnownAgentCapabilities } from './modules/agents/c
 import { AgentService } from './modules/agents/service'
 import type { ApplicationRepository } from './modules/applications/service'
 import { AuthorizationService } from './modules/authorization/service'
-import type { AuthConnectorConfig } from './modules/connectors/service'
 
 export { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, buildOAuthUserInfoClaims } from './auth-helpers'
 

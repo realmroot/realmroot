@@ -63,7 +63,7 @@ describe('module context factories', () => {
     })
     vi.doMock('../../../../server/db/client', () => ({ createDb }))
     vi.doMock('@server/adapters/repos/connectors', () => ({ createConnectorRepository }))
-    vi.doMock('../../../../server/modules/connectors/service', () => ({ ConnectorService }))
+    vi.doMock('@server/usecases/connectors', () => ({ ConnectorService }))
 
     const { createConnectorService } = await import('@server/modules/connectors/context')
 
