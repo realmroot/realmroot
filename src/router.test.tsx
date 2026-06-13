@@ -2,35 +2,35 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRouter, queryClient } from '@/router'
 
-vi.mock('../../../src/features/account/account-center', () => ({
+vi.mock('@/features/account/account-center', () => ({
   AccountConnectionsPage: () => <h1>Profile route</h1>,
   AccountProfilePage: () => <h1>Profile route</h1>,
   AccountSecurityPage: () => <h1>Profile route</h1>,
 }))
 
-vi.mock('../../../src/features/agents/agent-approval', () => ({
+vi.mock('@/features/agents/agent-approval', () => ({
   AgentApproval: () => <h1>Agent approval route</h1>,
 }))
 
-vi.mock('../../../src/features/auth/onboarding-page', () => ({
+vi.mock('@/features/auth/onboarding-page', () => ({
   OnboardingRoute: () => <h1>First-admin onboarding</h1>,
 }))
 
-vi.mock('../../../src/features/auth/pages/recovery', () => ({
+vi.mock('@/features/auth/pages/recovery', () => ({
   AuthCallbackPage: () => <h1>Auth callback route</h1>,
   EmailVerificationPage: () => <h1>Email verification route</h1>,
   ForgotPasswordPage: () => <h1>Forgot password route</h1>,
 }))
 
-vi.mock('../../../src/features/auth/pages/sign-in', () => ({
+vi.mock('@/features/auth/pages/sign-in', () => ({
   SignInPage: () => <h1>Sign in route</h1>,
 }))
 
-vi.mock('../../../src/features/auth/pages/sign-up', () => ({
+vi.mock('@/features/auth/pages/sign-up', () => ({
   SignUpPage: () => <h1>Sign up route</h1>,
 }))
 
-vi.mock('../../../src/features/auth/device-authorization', () => ({
+vi.mock('@/features/auth/device-authorization', () => ({
   DeviceVerification: () => <h1>Device approval route</h1>,
 }))
 

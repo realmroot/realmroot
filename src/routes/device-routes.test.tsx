@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Route as DeviceRoute } from '@/routes/device'
 import { Route as DeviceApprovalRoute } from '@/routes/device/approve'
 
-vi.mock('../../../../src/components/layout/auth-layout', () => ({
+vi.mock('@/components/layout/auth-layout', () => ({
   AuthLayout: ({ children, title }: { children: React.ReactNode; title: string }) => (
     <main>
       <h1>{title}</h1>
@@ -13,13 +13,13 @@ vi.mock('../../../../src/components/layout/auth-layout', () => ({
   ),
 }))
 
-vi.mock('../../../../src/features/auth/device-authorization', () => ({
+vi.mock('@/features/auth/device-authorization', () => ({
   DeviceVerification: ({ mode, userCode }: { mode: string; userCode?: string }) => (
     <div data-mode={mode}>Device verification {userCode}</div>
   ),
 }))
 
-vi.mock('../../../../src/features/auth/hooks', () => ({
+vi.mock('@/features/auth/hooks', () => ({
   useConfigz: () => ({ data: null }),
 }))
 

@@ -95,7 +95,7 @@ async function loadAccountApi() {
       return Promise.resolve({ key, input })
     })
 
-  vi.doMock('../../../../../src/lib/api', () => ({
+  vi.doMock('@/lib/api', () => ({
     apiClient: {
       api: {
         account: {

@@ -2,7 +2,7 @@ import path from 'node:path'
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 const alias = {
   '@': path.resolve(__dirname, './src'),
@@ -41,12 +41,8 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           fileParallelism: false,
-          include: [
-            'tests/unit/server/**/*.test.ts',
-            'tests/unit/workers/**/*.test.ts',
-            'tests/contract/shared/**/*.test.ts',
-            'tests/integration/server/**/*.test.ts',
-          ],
+          include: ['server/**/*.test.ts', 'shared/**/*.test.ts'],
+          exclude: [...configDefaults.exclude, 'server/integration/**'],
         },
       },
       {
@@ -69,12 +65,7 @@ export default defineConfig({
           // `waitFor` window under load; a bounded retry keeps the suite
           // deterministic without masking real regressions.
           retry: 2,
-          include: [
-            'tests/component/**/*.test.ts',
-            'tests/component/**/*.test.tsx',
-            'tests/unit/src/**/*.test.ts',
-            'tests/contract/src/**/*.test.ts',
-          ],
+          include: ['src/**/*.test.{ts,tsx}'],
         },
       },
       {

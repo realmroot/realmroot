@@ -88,7 +88,20 @@ module.exports = {
     // `server/integration/` is the test crown — its harness wires real adapters,
     // schema, and migrations on purpose (nothing is faked there), so it sits
     // outside the production dependency rules, like the `.test.ts` files it serves.
-    exclude: { path: ['\\.(test|spec)\\.[jt]sx?$', '\\.gen\\.[jt]s$', '\\.d\\.ts$', '^server/integration/'] },
+    exclude: {
+      path: [
+        '\\.(test|spec)\\.[jt]sx?$',
+        '\\.gen\\.[jt]s$',
+        '\\.d\\.ts$',
+        '^server/integration/',
+        // Co-located test-support files live beside source but are not production
+        // code; they are excluded from the architecture cruise like the tests they serve.
+        'test-deps\\.ts$',
+        '\\.test-utils\\.[jt]sx?$',
+        '\\.test-fixtures\\.ts$',
+        '\\.settings-fixtures\\.ts$',
+      ],
+    },
     tsConfig: { fileName: 'tsconfig.server.json' },
     tsPreCompilationDeps: true,
   },

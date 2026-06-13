@@ -13,13 +13,7 @@
       "scripts/**/*.mjs",
       "src/**/*.ts",
       "src/**/*.tsx",
-      "tests/component/**/*.ts",
-      "tests/component/**/*.tsx",
-      "tests/contract/**/*.ts",
-      "tests/e2e/**/*.ts",
-      "tests/integration/**/*.ts",
-      "tests/unit/**/*.ts",
-      "tests/unit/**/*.tsx"
+      "tests/e2e/**/*.ts"
     ],
     "ignoreUnknown": true
   },

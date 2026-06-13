@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentApproval } from '@/features/agents/agent-approval'
 import { approveAgentCapability } from '@/lib/auth-client'
 
-vi.mock('../../../../../src/lib/auth-client', () => ({
+vi.mock('@/lib/auth-client', () => ({
   approveAgentCapability: vi.fn().mockResolvedValue({ status: 'approved' }),
 }))
 

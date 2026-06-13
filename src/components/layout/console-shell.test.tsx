@@ -28,7 +28,7 @@ vi.mock('@tanstack/react-router', () => ({
     select({ location: { pathname } }),
 }))
 
-vi.mock('../../../../../src/lib/auth-client', () => ({
+vi.mock('@/lib/auth-client', () => ({
   signOut: () => signOut(),
 }))
 

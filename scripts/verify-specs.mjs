@@ -11,11 +11,13 @@ import { fileURLToPath } from 'node:url'
 //      breadcrumb, where <id> is `<feature-stem>/<journey>`.
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const specsDir = join(repoRoot, 'specs')
-const testsDir = join(repoRoot, 'tests')
+// Tests are co-located beside source (server/, src/, shared/) and the Playwright
+// crown lives in tests/; breadcrumbs can appear in any of them.
+const breadcrumbDirs = ['tests', 'server', 'src', 'shared'].map((dir) => join(repoRoot, dir))
 
 const supportedEntrypoints = new Set(['product-ui', 'restish'])
 const scenarios = readScenarios(specsDir)
-const breadcrumbs = readBreadcrumbs(testsDir)
+const breadcrumbs = readBreadcrumbs(breadcrumbDirs)
 const errors = []
 
 for (const scenario of scenarios) {
@@ -83,14 +85,16 @@ function readScenarios(directory) {
   return scenarios
 }
 
-function readBreadcrumbs(directory) {
+function readBreadcrumbs(directories) {
   const ids = new Set()
   const pattern = /\[spec:\s*([a-z0-9-]+\/[a-z0-9-]+)\]/g
-  for (const file of readdirSync(directory, { recursive: true })) {
-    if (typeof file !== 'string' || !/\.(test|spec)\.[jt]sx?$/.test(file)) continue
-    const source = readFileSync(join(directory, file), 'utf8')
-    for (const match of source.matchAll(pattern)) {
-      ids.add(match[1])
+  for (const directory of directories) {
+    for (const file of readdirSync(directory, { recursive: true })) {
+      if (typeof file !== 'string' || !/\.(test|spec)\.[jt]sx?$/.test(file)) continue
+      const source = readFileSync(join(directory, file), 'utf8')
+      for (const match of source.matchAll(pattern)) {
+        ids.add(match[1])
+      }
     }
   }
   return ids

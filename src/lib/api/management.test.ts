@@ -268,7 +268,7 @@ async function loadManagementApi() {
       return Promise.resolve({ key, input })
     })
 
-  vi.doMock('../../../../../src/lib/api', () => ({
+  vi.doMock('@/lib/api', () => ({
     apiClient: {
       api: {
         management: {

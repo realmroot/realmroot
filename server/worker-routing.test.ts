@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import previewConfig from '../../../wrangler.preview.toml?raw'
-import productionConfig from '../../../wrangler.toml?raw'
+import previewConfig from '../wrangler.preview.toml?raw'
+import productionConfig from '../wrangler.toml?raw'
 
 const wranglerConfigs = [
   ['wrangler.toml', productionConfig],

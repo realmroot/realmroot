@@ -5,5 +5,16 @@
     "types": ["@cloudflare/workers-types", "node", "vite/client", "vitest/globals"],
     "noEmit": true
   },
-  "include": ["tests/unit/**/*.ts", "tests/unit/**/*.tsx", "tests/component/**/*.ts", "tests/component/**/*.tsx", "tests/contract/**/*.ts", "tests/integration/**/*.ts"]
+  "include": [
+    "server/**/*.test.ts",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "shared/**/*.test.ts",
+    "server/http/test-deps.ts",
+    "server/http/routes/management.test-utils.ts",
+    "src/features/console/console.test-utils.tsx",
+    "src/features/console/console.test-fixtures.ts",
+    "src/features/console/console.settings-fixtures.ts"
+  ],
+  "exclude": ["server/integration/**"]
 }

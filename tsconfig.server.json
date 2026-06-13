@@ -4,5 +4,11 @@
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["server", "shared"],
-  "exclude": ["server/integration"]
+  "exclude": [
+    "server/integration",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "server/http/test-deps.ts",
+    "server/http/routes/management.test-utils.ts"
+  ]
 }

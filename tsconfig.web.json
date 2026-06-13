@@ -4,5 +4,12 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
-  "include": ["src", "shared"]
+  "include": ["src", "shared"],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "src/features/console/console.test-utils.tsx",
+    "src/features/console/console.test-fixtures.ts",
+    "src/features/console/console.settings-fixtures.ts"
+  ]
 }

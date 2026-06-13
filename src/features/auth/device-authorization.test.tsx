@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DeviceVerification } from '@/features/auth/device-authorization'
 import { approveDeviceCode, denyDeviceCode, verifyDeviceCode } from '@/lib/auth-client'
 
-vi.mock('../../../../../src/lib/auth-client', () => ({
+vi.mock('@/lib/auth-client', () => ({
   approveDeviceCode: vi.fn().mockResolvedValue({ success: true }),
   denyDeviceCode: vi.fn().mockResolvedValue({ success: true }),
   verifyDeviceCode: vi.fn().mockResolvedValue({ user_code: 'ABCD2345', status: 'pending' }),

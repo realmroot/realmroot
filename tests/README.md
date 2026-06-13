@@ -6,19 +6,24 @@ behaviour-first source of truth is `../specs/*.feature` (Gherkin docs, no
 runner) — tests reference scenarios via `[spec: <feature>/<journey>]`
 breadcrumbs.
 
+Vitest tests are co-located beside the source they cover (`server/**/*.test.ts`,
+`shared/**/*.test.ts`, `src/**/*.test.{ts,tsx}`); only the Playwright crown lives
+under this directory (`e2e/`).
+
 ## Vitest
 
-- `unit`: server domain/usecases/adapters over fake ports, shared contracts, and
-  faked server flows. **Coverage is collected here**, and this is where business
-  branches are exhausted.
-- `component`: React component and routed-page tests. Mocked API responses are
-  allowed here (MSW / fetch spies), but these tests are not E2E.
-- `contract`: shared schema and API client contract tests.
+- `unit` (`server/**` + `shared/**`, excluding `server/integration/`): server
+  domain/usecases/adapters over fake ports, shared contracts, and faked server
+  flows. **Coverage is collected here**, and this is where business branches are
+  exhausted.
+- `web` (`src/**`): React component and routed-page tests, the browser auth
+  client, and shared/API client contract tests. Mocked API responses are allowed
+  here (MSW / fetch spies), but these tests are not E2E.
 - `integration`: the real-D1 crown (`server/integration/`) — full `app.fetch`
   flows in workerd. Per resource: happy path + 401 + 403 + one validation
   failure, not the usecase branch matrix.
 
-Do not put browser journey specs in these directories. If a behaviour is a
+Do not put browser journey specs in the Vitest suites. If a behaviour is a
 genuinely cross-stack, hermetic journey, document it in `../specs` and cover it
 with Playwright in `e2e`.
 
