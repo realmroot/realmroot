@@ -1,4 +1,4 @@
-import { createConfigzService } from '@server/modules/configz/context'
+import { createConfigzService } from '@server/composition'
 import { ConfigzService } from '@server/usecases/configz'
 import { describe, expect, it } from 'vitest'
 

@@ -1,9 +1,9 @@
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
 import type { Auth } from '@server/auth'
+import type { ConfigzBindings } from '@server/composition'
+import { createTokenExchangeService, type TokenExchangeBindings } from '@server/composition'
 import { forbidden, notFound } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
-import type { ConfigzBindings } from '@server/modules/configz/context'
-import { createTokenExchangeService, type TokenExchangeBindings } from '@server/modules/token-exchange/context'
 import type { OnboardingRepository, SecurityRepository, UserRepository, WalletRepository } from '@server/usecases/ports'
 import {
   parseBasicClientAuthorization,

@@ -1,4 +1,4 @@
-import { type ConfigzBindings, createConfigzService } from '@server/modules/configz/context'
+import { type ConfigzBindings, createConfigzService } from '@server/composition'
 import { defaultAccountCenterSettings } from '@server/usecases/configz'
 import {
   type ManagementAccountCenterSettingsResponse,

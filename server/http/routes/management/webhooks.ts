@@ -1,4 +1,4 @@
-import { createWebhookService, type WebhookBindings } from '@server/modules/webhooks/context'
+import { createWebhookService, type WebhookBindings } from '@server/composition'
 import {
   type CreateWebhookEndpointRequest,
   createWebhookEndpointRequestSchema,

@@ -27,7 +27,7 @@ describe('createManagementWebhookRoutes', () => {
     vi.doMock('@server/http/middleware/admin', () => ({
       requireAdmin: () => async (_c: unknown, next: () => Promise<void>) => next(),
     }))
-    vi.doMock('../../../../../server/modules/webhooks/context', () => ({ createWebhookService }))
+    vi.doMock('@server/composition', () => ({ createWebhookService }))
 
     const { createManagementWebhookRoutes } = await import('@server/http/routes/management/webhooks')
     const app = createManagementWebhookRoutes()

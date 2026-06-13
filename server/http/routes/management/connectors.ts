@@ -1,4 +1,4 @@
-import { type ConnectorBindings, createConnectorService } from '@server/modules/connectors/context'
+import { type ConnectorBindings, createConnectorService } from '@server/composition'
 import { connectorReadinessResponseSchema, listConnectorTemplatesResponseSchema } from '@shared/api/connectors'
 import {
   createManagementConnectorRequestSchema,

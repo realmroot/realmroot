@@ -1,5 +1,5 @@
 name = "flareauth"
-main = "./workers/bootstrap.ts"
+main = "./server/worker.ts"
 compatibility_date = "2026-04-12"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true

@@ -1,4 +1,4 @@
-import { type ApplicationBindings, createApplicationService } from '@server/modules/applications/context'
+import { type ApplicationBindings, createApplicationService } from '@server/composition'
 import {
   createApplicationRequestSchema,
   paginationQuerySchema,

@@ -1,4 +1,4 @@
-import { createAssetService } from '@server/modules/assets/context'
+import { createAssetService } from '@server/composition'
 import { describe, expect, it } from 'vitest'
 
 describe('createAssetService', () => {

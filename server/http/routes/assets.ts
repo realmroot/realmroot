@@ -1,6 +1,5 @@
+import { type AssetBindings, type ConfigzBindings, createAssetService, createConfigzService } from '@server/composition'
 import { badRequest, forbidden } from '@server/domain/errors'
-import { type AssetBindings, createAssetService } from '@server/modules/assets/context'
-import { type ConfigzBindings, createConfigzService } from '@server/modules/configz/context'
 import type { AssetService } from '@server/usecases/assets'
 import { defaultAccountCenterSettings } from '@server/usecases/configz'
 import type { ConfigzAccountCenter } from '@server/usecases/ports'

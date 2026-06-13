@@ -19,8 +19,7 @@
       "tests/e2e/**/*.ts",
       "tests/integration/**/*.ts",
       "tests/unit/**/*.ts",
-      "tests/unit/**/*.tsx",
-      "workers/**/*.ts"
+      "tests/unit/**/*.tsx"
     ],
     "ignoreUnknown": true
   },

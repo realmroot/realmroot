@@ -2,20 +2,15 @@ import { createEmailSender } from '@server/adapters/gateways/email/sender'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
-import { createOnboardingRepository } from '@server/adapters/repos/onboarding'
-import { createSecurityRepository } from '@server/adapters/repos/security'
-import { createUserRepository } from '@server/adapters/repos/users'
-import { createWalletRepository } from '@server/adapters/repos/wallets'
+import { type Auth, createAuth } from '@server/auth'
+import { createConfigzService, createDeps, createTokenExchangeService } from '@server/composition'
+import { createDb } from '@server/db/client'
 import { createApp } from '@server/http/app'
-import { type Auth, createAuth } from '../server/auth'
-import { createDb } from '../server/db/client'
-import { createConfigzService } from '../server/modules/configz/context'
-import { createTokenExchangeService } from '../server/modules/token-exchange/context'
-import { ApplicationService } from '../server/usecases/applications'
-import { defaultBuiltInProviders } from '../server/usecases/configz'
-import { loadAuthConnectorConfig } from '../server/usecases/connectors'
-import { managementBuiltInProviderSettingsSchema } from '../shared/api/management'
-import { type Env, type RuntimeConfig, validateEnv } from '../shared/env'
+import { ApplicationService } from '@server/usecases/applications'
+import { defaultBuiltInProviders } from '@server/usecases/configz'
+import { loadAuthConnectorConfig } from '@server/usecases/connectors'
+import { managementBuiltInProviderSettingsSchema } from '@shared/api/management'
+import { type Env, type RuntimeConfig, validateEnv } from '@shared/env'
 
 let cachedAuth: Auth | null = null
 let cachedKey: string | null = null
@@ -26,17 +21,16 @@ let cachedSystemClientDb: D1Database | null = null
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const config = validateEnv(env, request.url)
-    const db = createDb(env.DB)
-    const securityRepository = createSecurityRepository(db, config.securityPolicy)
-    const securityPolicy = await securityRepository.getPolicy()
-    await ensureSystemClients(env.DB, db, config.baseURL)
+    const deps = createDeps(env, config)
+    const securityPolicy = await deps.security.getPolicy()
+    await ensureSystemClients(env.DB, createDb(env.DB), config.baseURL)
     const auth = await getAuth(env, { ...config, securityPolicy })
     return createApp(auth, {
       trustedOrigins: config.trustedOrigins,
-      userRepository: createUserRepository(db),
-      walletRepository: createWalletRepository(db),
-      securityRepository,
-      onboardingRepository: createOnboardingRepository(env.DB),
+      userRepository: deps.users,
+      walletRepository: deps.wallets,
+      securityRepository: deps.security,
+      onboardingRepository: deps.onboarding,
       securityPolicy,
       configzServiceFactory: createConfigzService,
       tokenExchangeServiceFactory: createTokenExchangeService,

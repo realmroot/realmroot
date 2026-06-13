@@ -148,7 +148,8 @@ describe('management resource routes', () => {
 
 async function loadAppRoutes() {
   const applicationService = applicationServiceMock()
-  vi.doMock('../../../../server/modules/applications/context', () => ({
+  vi.doMock('@server/composition', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@server/composition')>()),
     createApplicationService: () => applicationService,
   }))
   const { managementApplicationsRoute } = await import('@server/http/routes/management/applications')
@@ -159,7 +160,8 @@ async function loadAppRoutes() {
 
 async function loadAuthorizationRoutes() {
   const authorizationService = authorizationServiceMock()
-  vi.doMock('../../../../server/modules/authorization/context', () => ({
+  vi.doMock('@server/composition', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@server/composition')>()),
     createAuthorizationService: () => authorizationService,
   }))
   const { managementApiResourcesRoute } = await import('@server/http/routes/management/api-resources')
@@ -176,7 +178,8 @@ async function loadAuthorizationRoutes() {
 
 async function loadConnectorRoutes() {
   const connectorService = connectorServiceMock()
-  vi.doMock('../../../../server/modules/connectors/context', () => ({
+  vi.doMock('@server/composition', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@server/composition')>()),
     createConnectorService: () => connectorService,
   }))
   const { createManagementConnectorRoutes } = await import('@server/http/routes/management/connectors')

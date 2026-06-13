@@ -1,6 +1,6 @@
+import type { ConfigzBindings } from '@server/composition'
+import { createApplicationService } from '@server/composition'
 import { forbidden } from '@server/domain/errors'
-import { createApplicationService } from '@server/modules/applications/context'
-import type { ConfigzBindings } from '@server/modules/configz/context'
 import type { WalletRepository } from '@server/usecases/ports'
 import type { Context } from 'hono'
 import { getAddress } from 'viem'

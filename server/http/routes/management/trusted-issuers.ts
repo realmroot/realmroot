@@ -1,4 +1,4 @@
-import { createTokenExchangeService, type TokenExchangeBindings } from '@server/modules/token-exchange/context'
+import { createTokenExchangeService, type TokenExchangeBindings } from '@server/composition'
 import {
   createManagementTrustedIssuerRequestSchema,
   createManagementTrustedIssuerResponseSchema,

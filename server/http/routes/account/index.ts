@@ -1,8 +1,13 @@
+import {
+  type AgentBindings,
+  type ApplicationBindings,
+  type ConfigzBindings,
+  createAgentService,
+  createApplicationService,
+  createConfigzService,
+} from '@server/composition'
 import { badRequest, forbidden } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
-import { type AgentBindings, createAgentService } from '@server/modules/agents/context'
-import { type ApplicationBindings, createApplicationService } from '@server/modules/applications/context'
-import { type ConfigzBindings, createConfigzService } from '@server/modules/configz/context'
 import type { AgentService } from '@server/usecases/agents'
 import { defaultAccountCenterSettings } from '@server/usecases/configz'
 import type { ConfigzAccountCenter, SecurityRepository, UserRepository, WalletRepository } from '@server/usecases/ports'

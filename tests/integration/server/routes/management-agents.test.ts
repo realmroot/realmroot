@@ -28,7 +28,7 @@ describe('management agent routes', () => {
         ]),
       ),
     }
-    vi.doMock('../../../../server/modules/agents/context', () => ({
+    vi.doMock('@server/composition', () => ({
       createAgentService: () => service,
     }))
     const { managementAgentsRoute } = await import('@server/http/routes/management/agents')

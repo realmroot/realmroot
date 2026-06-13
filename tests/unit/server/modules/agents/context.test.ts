@@ -19,7 +19,7 @@ describe('createAgentService', () => {
     vi.doMock('@server/adapters/repos/agents', () => ({ createDrizzleAgentRepository }))
     vi.doMock('@server/usecases/agents', () => ({ AgentService }))
 
-    const { createAgentService } = await import('@server/modules/agents/context')
+    const { createAgentService } = await import('@server/composition')
     createAgentService({ env: { DB: 'database-binding' } } as never)
 
     expect(createDb).toHaveBeenCalledWith('database-binding')

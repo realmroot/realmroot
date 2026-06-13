@@ -1,4 +1,4 @@
-import { type AgentBindings, createAgentService } from '@server/modules/agents/context'
+import { type AgentBindings, createAgentService } from '@server/composition'
 import type {
   AgentCapabilityGrantRecord,
   AgentHostRecord,

@@ -1,5 +1,5 @@
-import type { AuthorizationBindings } from '@server/modules/authorization/context'
-import { createAuthorizationService } from '@server/modules/authorization/context'
+import type { AuthorizationBindings } from '@server/composition'
+import { createAuthorizationService } from '@server/composition'
 import {
   addMemberRequestSchema,
   createInvitationRequestSchema,

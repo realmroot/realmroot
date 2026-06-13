@@ -21,7 +21,7 @@ describe('module context factories', () => {
     }))
     vi.doMock('@server/usecases/applications', () => ({ ApplicationService }))
 
-    const { createApplicationService } = await import('@server/modules/applications/context')
+    const { createApplicationService } = await import('@server/composition')
 
     expect(createApplicationService(context('https://auth.example.com/api/management/applications'))).toBe(service)
     expect(createDb).toHaveBeenCalledWith('database-binding')
@@ -44,7 +44,7 @@ describe('module context factories', () => {
     }))
     vi.doMock('@server/usecases/authorization', () => ({ AuthorizationService }))
 
-    const { createAuthorizationService } = await import('@server/modules/authorization/context')
+    const { createAuthorizationService } = await import('@server/composition')
 
     expect(createAuthorizationService(context('https://auth.example.com/api/management/roles'))).toBe(service)
     expect(createDb).toHaveBeenCalledWith('database-binding')
@@ -65,7 +65,7 @@ describe('module context factories', () => {
     vi.doMock('@server/adapters/repos/connectors', () => ({ createConnectorRepository }))
     vi.doMock('@server/usecases/connectors', () => ({ ConnectorService }))
 
-    const { createConnectorService } = await import('@server/modules/connectors/context')
+    const { createConnectorService } = await import('@server/composition')
 
     expect(createConnectorService(context('https://auth.example.com/api/management/connectors'))).toBe(service)
     expect(createDb).toHaveBeenCalledWith('database-binding')
@@ -86,7 +86,7 @@ describe('module context factories', () => {
     vi.doMock('@server/adapters/repos/webhooks', () => ({ createWebhookRepository }))
     vi.doMock('@server/usecases/webhooks', () => ({ WebhookService }))
 
-    const { createWebhookService } = await import('@server/modules/webhooks/context')
+    const { createWebhookService } = await import('@server/composition')
 
     expect(createWebhookService(context('https://auth.example.com/api/management/webhooks/endpoints'))).toBe(service)
     expect(createDb).toHaveBeenCalledWith('database-binding')

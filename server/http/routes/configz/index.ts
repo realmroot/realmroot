@@ -1,4 +1,4 @@
-import { type ConfigzBindings, type ConfigzRuntimeOptions, createConfigzService } from '@server/modules/configz/context'
+import { type ConfigzBindings, type ConfigzRuntimeOptions, createConfigzService } from '@server/composition'
 import type { ConfigzService } from '@server/usecases/configz'
 import type { OnboardingRepository } from '@server/usecases/ports'
 import { configzConfigResponseSchema } from '@shared/api/configz'

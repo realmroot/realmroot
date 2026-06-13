@@ -1,5 +1,9 @@
-import { type ApplicationBindings, createApplicationService } from '@server/modules/applications/context'
-import { type ConfigzBindings, createConfigzService } from '@server/modules/configz/context'
+import {
+  type ApplicationBindings,
+  type ConfigzBindings,
+  createApplicationService,
+  createConfigzService,
+} from '@server/composition'
 import type { ListApplicationsResponse } from '@shared/api/applications'
 import {
   type ManagementReadinessItem,

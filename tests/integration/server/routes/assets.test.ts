@@ -8,8 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const createConfigzServiceMock = vi.hoisted(() => vi.fn())
 
-vi.mock('../../../../server/modules/configz/context', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@server/modules/configz/context')>()
+vi.mock('@server/composition', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@server/composition')>()
   return {
     ...actual,
     createConfigzService: createConfigzServiceMock,
