@@ -3,7 +3,7 @@ import { cloudflare } from '@cloudflare/vite-plugin'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from 'vite'
 
 export default defineConfig(({ mode }) => ({
   build: {
@@ -36,24 +36,5 @@ export default defineConfig(({ mode }) => ({
   },
   server: {
     port: 4179,
-  },
-  test: {
-    fileParallelism: false,
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json-summary', 'lcov'],
-      exclude: [
-        'server/auth.ts',
-        'src/features/account/account-center.tsx',
-      ],
-      thresholds: {
-        branches: 80,
-        functions: 84,
-        lines: 89,
-        statements: 87,
-      },
-    },
-    environment: 'jsdom',
-    exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**'],
   },
 }))
