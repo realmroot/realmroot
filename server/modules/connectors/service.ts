@@ -1,4 +1,5 @@
 import type { ConnectorRepository, ConnectorRow } from '@server/adapters/repos/connectors'
+import { connectorTemplates, isSupportedProvider } from '@server/domain/connectors/provider-templates'
 import type { GenericOAuthConfig } from 'better-auth/plugins'
 import type {
   ConnectorProviderType,
@@ -9,7 +10,6 @@ import type {
 } from '../../../shared/api/connectors'
 import { paginationMetadata } from '../../../shared/api/pagination'
 import { badRequest, notFound } from '../../lib/errors'
-import { connectorTemplates, isSupportedProvider } from './provider-templates'
 
 export interface AuthConnectorConfig {
   trustedProviders: string[]

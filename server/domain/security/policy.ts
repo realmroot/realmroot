@@ -1,5 +1,5 @@
 import type { SecurityPolicy } from '../../../shared/api/security'
-import { badRequest } from '../../lib/errors'
+import { badRequest } from '../errors'
 
 export function validatePasswordPolicy(
   password: string,

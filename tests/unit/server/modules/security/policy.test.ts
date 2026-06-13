@@ -1,4 +1,4 @@
-import { validateEmailPolicy, validatePasswordPolicy } from '@server/modules/security/policy'
+import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
 import { captchaPolicySchema, type SecurityPolicy } from '@shared/api/security'
 import { describe, expect, it } from 'vitest'
 
