@@ -55,6 +55,10 @@ interface RpcAppOptions extends AppOptions {
 }
 
 export function createApp(auth: AuthHandler, options: AppOptions = {}) {
+  // Registration order is load-bearing: middleware only guards routes registered
+  // after it (public routes like /api/health stay public by registering before the
+  // auth/security walls), and static paths must precede parameter paths. Preserve
+  // this sequence when adding or moving routes.
   const app = new Hono()
 
   app.use('*', requestContext())

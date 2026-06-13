@@ -68,10 +68,12 @@ module.exports = {
     },
     {
       name: 'frontend-not-into-server',
-      comment: 'The SPA talks to the server over HTTP only.',
+      comment:
+        'The SPA talks to the server over HTTP only. The single exception is the hono RPC ' +
+        'client (src/lib/api), which imports the AppType contract from server/http/app.',
       severity: 'error',
       from: { path: '^src' },
-      to: { path: '^server' },
+      to: { path: '^server', pathNot: '^server/http/app\\.ts$' },
     },
     {
       name: 'server-not-into-frontend',
