@@ -85,7 +85,10 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: ['\\.(test|spec)\\.[jt]sx?$', '\\.gen\\.[jt]s$', '\\.d\\.ts$'] },
+    // `server/integration/` is the test crown — its harness wires real adapters,
+    // schema, and migrations on purpose (nothing is faked there), so it sits
+    // outside the production dependency rules, like the `.test.ts` files it serves.
+    exclude: { path: ['\\.(test|spec)\\.[jt]sx?$', '\\.gen\\.[jt]s$', '\\.d\\.ts$', '^server/integration/'] },
     tsConfig: { fileName: 'tsconfig.server.json' },
     tsPreCompilationDeps: true,
   },
