@@ -1,5 +1,6 @@
-import type { WebhookEndpointRow, WebhookRepository, WebhookRequestRow } from '@server/adapters/repos/webhooks'
-import { paginationMetadata } from '../../../shared/api/pagination'
+import { badRequest, notFound } from '@server/domain/errors'
+import type { WebhookEndpointRecord, WebhookRepository, WebhookRequestRecord } from '@server/usecases/ports'
+import { paginationMetadata } from '@shared/api/pagination'
 import type {
   CreateWebhookEndpointRequest,
   ListWebhookEndpointsQuery,
@@ -9,8 +10,7 @@ import type {
   WebhookEndpointSecretResponse,
   WebhookEvent,
   WebhookRequest,
-} from '../../../shared/api/webhooks'
-import { badRequest, notFound } from '../../lib/errors'
+} from '@shared/api/webhooks'
 
 export class WebhookService {
   constructor(private readonly repository: WebhookRepository) {}
@@ -111,7 +111,7 @@ function assertEvents(events: WebhookEvent[]) {
   if (new Set(events).size !== events.length) throw badRequest('Webhook events must be unique.')
 }
 
-function toEndpointResponse(row: WebhookEndpointRow): WebhookEndpoint {
+function toEndpointResponse(row: WebhookEndpointRecord): WebhookEndpoint {
   return {
     id: row.id,
     url: row.url,
@@ -123,7 +123,7 @@ function toEndpointResponse(row: WebhookEndpointRow): WebhookEndpoint {
   }
 }
 
-function toRequestResponse(row: WebhookRequestRow): WebhookRequest {
+function toRequestResponse(row: WebhookRequestRecord): WebhookRequest {
   return {
     id: row.id,
     endpointId: row.endpointId,

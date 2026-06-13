@@ -84,7 +84,7 @@ describe('module context factories', () => {
     })
     vi.doMock('../../../../server/db/client', () => ({ createDb }))
     vi.doMock('@server/adapters/repos/webhooks', () => ({ createWebhookRepository }))
-    vi.doMock('../../../../server/modules/webhooks/service', () => ({ WebhookService }))
+    vi.doMock('@server/usecases/webhooks', () => ({ WebhookService }))
 
     const { createWebhookService } = await import('@server/modules/webhooks/context')
 

@@ -1,11 +1,11 @@
 import type {
   WebhookEndpointInsert,
   WebhookEndpointRow,
-  WebhookRepository,
   WebhookRequestInsert,
   WebhookRequestRow,
 } from '@server/adapters/repos/webhooks'
-import { WebhookService } from '@server/modules/webhooks/service'
+import type { WebhookRepository } from '@server/usecases/ports'
+import { WebhookService } from '@server/usecases/webhooks'
 import type { ListWebhookEndpointsQuery, ListWebhookRequestsQuery } from '@shared/api/webhooks'
 import { describe, expect, it } from 'vitest'
 
