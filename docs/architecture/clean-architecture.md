@@ -83,13 +83,15 @@ The layers collapse into runtimes via vitest `projects` (`vitest.config.ts`):
   Auth sessions over real D1, faking nothing but the outward email/R2 gateways. Per
   resource: happy path + 401 + 403 + one validation failure (not the usecase branch matrix).
 
-`pnpm test` runs all three. Cross-stack journeys live in `specs/` + Cucumber e2e
-(`pnpm run test:e2e`, governed by `pnpm run spec:check`).
+`pnpm test` runs all three. The cross-stack crown is **Playwright** (`pnpm run e2e`),
+scoped to a handful of hermetic journeys — real SPA + Worker + isolated local D1 +
+auth, no external dependency (onboarding, auth/session/cookies, routing, admin config
+CRUD that only writes D1). The specs in `specs/*.feature` are behaviour-first Gherkin
+docs (no runner); `pnpm run spec:check` is a governance lint that ties every `@e2e`
+scenario to a `[spec: <feature>/<journey>]` breadcrumb in `tests/`.
 
 ## Deliberate adaptations from the skill
 
-- **Product specs** stay in `specs/` with the Cucumber e2e runner the repo's own
-  AGENTS.md mandates, rather than the skill's runner-less BDD-lite `spec/` convention.
 - **No `db:generate` migration-drift CI guard**: the repo uses hand-written D1
   migrations (the drizzle snapshot is intentionally frozen), so `db:generate` is not the
   source of truth here. Adopting generated migrations would mean re-baselining applied

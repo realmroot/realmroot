@@ -18,17 +18,36 @@ Better Auth, Drizzle, React, Vite, Vitest, Biome, Wrangler, and Cloudflare D1.
 - Keep errors surfaced through the existing boundary handling instead of adding
   scattered try/catch blocks.
 
-## Workflow: Specs First
+## Workflow: Behaviour-first specs
 
-Product-facing behavior starts in `specs/`. For new or changed product
-behavior:
+`specs/*.feature` are behaviour-first **documentation** (Gherkin, no runner).
+They describe what the product does; tests reference them via
+`[spec: <feature>/<journey>]` breadcrumbs. Tests follow the layered taxonomy —
+the architecture layers are the test taxonomy:
+
+- **unit** (node, fake ports): server domain/usecases/adapters + shared. This is
+  where business-logic branches are exhausted; coverage is collected here.
+- **web** (jsdom, MSW): the React SPA — components, hooks, the api client.
+- **integration** (workerd + real D1): the crown in `server/integration/` —
+  full `app.fetch` flows; per resource happy path + 401 + 403 + one validation
+  failure, not the usecase branch matrix.
+- **e2e** (Playwright, real stack): a handful of hermetic cross-stack journeys
+  only (onboarding, auth/session/cookies, routing, admin config CRUD that only
+  writes D1). No external dependency. A separate CI job from `pnpm test`.
+
+For new or changed product behavior:
 
 1. Update or add the relevant `.feature` scenario first.
-2. Add `@entrypoint:<id>` and `@journey:<id>` to the scenario.
-3. Add `@e2e` and the journey id to `specs/e2e-coverage.json` when automated
-   Cucumber verification is required.
-4. Implement or update Cucumber steps in `tests/e2e`.
-5. Run `pnpm run spec:check`.
+2. Add `@journey:<id>` and exactly one `@entrypoint:<id>` to the scenario.
+3. Cover it at the cheapest meaningful layer. Carry a `[spec: <feature>/<journey>]`
+   breadcrumb in the home test's name.
+4. Add `@e2e` and a Playwright spec only when the behaviour is a genuinely
+   cross-stack, hermetic journey.
+5. Run `pnpm run spec:check` (governance lint: every scenario tagged, every
+   `@e2e` scenario traced to a breadcrumb).
+
+Commands: `pnpm test`, `pnpm run test:coverage`, `pnpm run spec:check`,
+`pnpm run e2e`.
 
 If implementation reveals a new user-facing behavior, update the spec before
 continuing.

@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   journeys:
-    name: Cucumber E2E
+    name: Playwright E2E
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -37,28 +37,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Restish
-        run: |
-          version=0.21.2
-          archive="restish-${version}-linux-amd64.tar.gz"
-          curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${version}/${archive}" -o "$archive"
-          curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${version}/checksums.txt" -o checksums.txt
-          grep "  ${archive}$" checksums.txt | sha256sum --check -
-          tar -xzf "$archive"
-          sudo install restish /usr/local/bin/restish
-          restish --version
+      - name: Verify specs
+        run: pnpm run spec:check
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Cucumber E2E
-        run: pnpm run test:e2e
+      - name: Playwright E2E
+        run: pnpm run e2e
 
-      - name: Upload Cucumber evidence
+      - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cucumber-evidence
+          name: playwright-report
           path: |
-            cucumber-report
+            playwright-report
+            test-results
           if-no-files-found: ignore

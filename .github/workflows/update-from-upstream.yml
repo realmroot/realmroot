@@ -22,7 +22,7 @@ on:
           - "false"
           - "true"
       run_e2e:
-        description: "Run Cucumber E2E before opening the PR."
+        description: "Run Playwright E2E before opening the PR."
         required: true
         default: "false"
         type: choice
@@ -198,7 +198,11 @@ jobs:
         if: steps.merge.outputs.changed == 'true'
         run: pnpm run build
 
-      - name: Cucumber E2E
+      - name: Install Playwright browsers
+        if: steps.merge.outputs.changed == 'true' && steps.merge.outputs.run_e2e == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Playwright E2E
         if: steps.merge.outputs.changed == 'true' && steps.merge.outputs.run_e2e == 'true'
         run: pnpm run test:e2e
 
