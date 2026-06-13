@@ -54,7 +54,7 @@ describe('admin console applications-detail-a', () => {
     expect(screen.queryByLabelText('Upload logo for Partner app')).toBeNull()
   })
 
-  it('renders application detail lifecycle, redirect/origin/custom-data editing, and integration controls', async () => {
+  it('renders application detail lifecycle, redirect/origin/custom-data editing, and integration controls [spec: admin-console/admin-application-detail] [spec: admin-console/admin-application-oidc-claims]', async () => {
     const requests: Array<{ url: string; body: unknown; method: string }> = []
     const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
     Object.defineProperty(navigator, 'clipboard', {

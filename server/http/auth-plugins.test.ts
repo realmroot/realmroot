@@ -13,7 +13,7 @@ describe('auth.test 2', () => {
     vi.restoreAllMocks()
   })
 
-  it('serves mounted AgentAuth discovery and capability catalog without Management API generation', async () => {
+  it('serves mounted AgentAuth discovery and capability catalog without Management API generation [spec: admin-console/agent-discovery]', async () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',

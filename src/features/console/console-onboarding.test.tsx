@@ -107,7 +107,7 @@ describe('console onboarding', () => {
     })
   })
 
-  it('creates the first OIDC client from admin onboarding and copies integration details', async () => {
+  it('creates the first OIDC client from admin onboarding and copies integration details [spec: admin-console/admin-onboarding]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
     Object.defineProperty(navigator, 'clipboard', {

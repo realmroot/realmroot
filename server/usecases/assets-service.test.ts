@@ -17,7 +17,7 @@ function depsWith(assets: AssetRepository, assetStorage: AssetStorage): Deps {
 }
 
 describe('AssetService', () => {
-  it('validates uploads, writes R2 objects, and stores D1 metadata', async () => {
+  it('validates uploads, writes R2 objects, and stores D1 metadata [spec: account-center/profile-avatar-upload]', async () => {
     const repository = createRepository()
     const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
     const deps = depsWith(repository, storage)

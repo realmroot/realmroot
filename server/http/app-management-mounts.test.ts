@@ -128,7 +128,7 @@ describe('app.test 2', () => {
     expect(response.status).toBe(403)
   })
 
-  it('blocks password auth endpoints when hosted password auth is disabled', async () => {
+  it('blocks password auth endpoints when hosted password auth is disabled [spec: hosted-auth/passwordless-linkage]', async () => {
     const auth = createAuthMock()
     mockConfig({
       signIn: { passwordEnabled: false, signupEnabled: true, socialLoginEnabled: true, emailOtpEnabled: true },
@@ -147,7 +147,7 @@ describe('app.test 2', () => {
     expect(auth.handler).not.toHaveBeenCalled()
   })
 
-  it('blocks email OTP sign-in while allowing email verification when email code sign-in is disabled', async () => {
+  it('blocks email OTP sign-in while allowing email verification when email code sign-in is disabled [spec: hosted-auth/email-otp] [spec: connectors-and-methods/connectors-email]', async () => {
     const auth = createAuthMock()
     mockConfig({
       signIn: { passwordEnabled: true, signupEnabled: true, socialLoginEnabled: true, emailOtpEnabled: false },
@@ -182,7 +182,7 @@ describe('app.test 2', () => {
     expect(auth.handler).toHaveBeenCalledTimes(2)
   })
 
-  it('blocks SIWE sign-in before Better Auth can create an unlinked wallet account', async () => {
+  it('blocks SIWE sign-in before Better Auth can create an unlinked wallet account [spec: connectors-and-methods/provider-disabled-endpoint-enforcement]', async () => {
     const auth = createAuthMock()
     const wallets = createWalletRepositoryMock({ linked: false })
     mockConfig()
@@ -202,7 +202,7 @@ describe('app.test 2', () => {
     expect(auth.handler).not.toHaveBeenCalled()
   })
 
-  it('allows SIWE sign-in for an already linked wallet', async () => {
+  it('allows SIWE sign-in for an already linked wallet [spec: account-center/web3-wallet-sign-in]', async () => {
     const auth = createAuthMock()
     const wallets = createWalletRepositoryMock({ linked: true })
     mockConfig()

@@ -36,7 +36,7 @@ import {
 } from './console.test-utils'
 
 describe('admin console users-list', () => {
-  it('creates users with optional credentials and toggles admin role', async () => {
+  it('creates users with optional credentials and toggles admin role [spec: admin-console/admin-create-user]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -168,7 +168,7 @@ describe('admin console users-list', () => {
     })
   })
 
-  it('applies user list filters and pagination controls', async () => {
+  it('applies user list filters and pagination controls [spec: admin-console/admin-user-inventory]', async () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -216,7 +216,7 @@ describe('admin console users-list', () => {
     expect(screen.queryByText('Send password reset')).toBeNull()
   })
 
-  it('renders user detail data and sends scoped admin actions', async () => {
+  it('renders user detail data and sends scoped admin actions [spec: admin-console/admin-user-detail]', async () => {
     const requests: Array<{ method: string; url: string; body: unknown }> = []
     const fetches: Array<{ method: string; url: string }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

@@ -53,7 +53,7 @@ describe('authorization management over real D1', () => {
     expect(response.status).toBe(400)
   })
 
-  it('runs the full api-resource / scope / permission lifecycle through real SQL', async () => {
+  it('runs the full api-resource / scope / permission lifecycle through real SQL [spec: management-api/management-restish-api-resource-crud]', async () => {
     const cookie = await signInAdmin(harness)
 
     const resource = (await (
@@ -141,7 +141,7 @@ describe('authorization management over real D1', () => {
     ).toBe(204)
   })
 
-  it('manages roles, role permissions, and a user role assignment through real SQL', async () => {
+  it('manages roles, role permissions, and a user role assignment through real SQL [spec: management-api/management-restish-role-crud]', async () => {
     const cookie = await signInAdmin(harness)
     const userId = await createUser(harness, cookie, {
       email: 'assignee@example.com',
@@ -219,7 +219,7 @@ describe('authorization management over real D1', () => {
     ).toBe(204)
   })
 
-  it('runs the organization / member / invitation lifecycle through real SQL', async () => {
+  it('runs the organization / member / invitation lifecycle through real SQL [spec: management-api/management-restish-organization-crud]', async () => {
     const cookie = await signInAdmin(harness)
     const memberUserId = await createUser(harness, cookie, {
       email: 'org-member@example.com',

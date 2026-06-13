@@ -206,7 +206,7 @@ describe('hosted auth pages 3', () => {
     expect(screen.queryByText(/client-1/)).toBeNull()
   })
 
-  it('submits password and OTP sign-in through native auth endpoints', async () => {
+  it('submits password and OTP sign-in through native auth endpoints [spec: hosted-auth/email-otp-sign-in]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -247,7 +247,7 @@ describe('hosted auth pages 3', () => {
     })
   })
 
-  it('submits phone sign-in through native auth endpoints when Phone is enabled', async () => {
+  it('submits phone sign-in through native auth endpoints when Phone is enabled [spec: connectors-and-methods/phone-sign-in]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -330,7 +330,7 @@ describe('hosted auth pages 3', () => {
     expect(await screen.findByText('This wallet network is not enabled. Switch to chain 1.')).toBeTruthy()
   })
 
-  it('surfaces One Tap configuration errors before invoking Google Identity Services', async () => {
+  it('surfaces One Tap configuration errors before invoking Google Identity Services [spec: connectors-and-methods/onetap-flow]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') {

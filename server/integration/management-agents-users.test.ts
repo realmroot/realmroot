@@ -128,7 +128,7 @@ describe('user management over real D1', () => {
     expect((await harness.request('/api/management/users', { headers: { cookie: memberCookie } })).status).toBe(403)
   })
 
-  it('runs the bearer-authenticated admin user CRUD through the user repository (real SQL)', async () => {
+  it('runs the bearer-authenticated admin user CRUD through the user repository (real SQL) [spec: management-api/management-restish-user-crud]', async () => {
     const bearer = await signInManagementBearer(harness)
 
     const created = await harness.request('/api/management/users', {

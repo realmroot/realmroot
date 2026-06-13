@@ -95,7 +95,7 @@ describe('management routes 1', () => {
     }
   })
 
-  it('serves the Management OpenAPI contract with Restish discovery headers', async () => {
+  it('serves the Management OpenAPI contract with Restish discovery headers [spec: management-api/management-openapi-discovery]', async () => {
     const app = createApp(
       createAuthMock(),
       createTestDeps({
@@ -174,7 +174,7 @@ describe('management routes 1', () => {
     })
   })
 
-  it('accepts Management API Bearer tokens from the CLI client for admin users', async () => {
+  it('accepts Management API Bearer tokens from the CLI client for admin users [spec: management-api/management-restish-oauth-auth]', async () => {
     const auth = createAuthMock()
     auth.api.oauth2UserInfo.mockResolvedValue({
       sub: 'admin-1',

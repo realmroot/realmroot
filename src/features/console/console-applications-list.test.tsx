@@ -27,7 +27,7 @@ import {
 } from './console.test-utils'
 
 describe('admin console applications-list', () => {
-  it('renders application rows and posts validated create input', async () => {
+  it('renders application rows and posts validated create input [spec: admin-console/admin-application-inventory]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

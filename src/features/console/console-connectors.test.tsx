@@ -64,7 +64,7 @@ describe('admin console connectors', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Google' })).toBeNull())
   })
 
-  it('renders Better Auth provider-specific connector fields', async () => {
+  it('renders Better Auth provider-specific connector fields [spec: admin-console/admin-create-connector]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -155,7 +155,7 @@ describe('admin console connectors', () => {
     expect(await screen.findByText('3600s')).toBeTruthy()
   })
 
-  it('renders independent MFA, security, connector, and OIDC settings surfaces', async () => {
+  it('renders independent MFA, security, connector, and OIDC settings surfaces [spec: admin-console/admin-connector-inventory] [spec: admin-console/admin-security-policy]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))

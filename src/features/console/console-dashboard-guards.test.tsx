@@ -38,7 +38,7 @@ import {
 } from './console.test-utils'
 
 describe('console dashboard guards', () => {
-  it('renders dashboard metrics and recent operational state', async () => {
+  it('renders dashboard metrics and recent operational state [spec: admin-console/admin-dashboard]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/management/applications') {
@@ -175,7 +175,7 @@ describe('console dashboard guards', () => {
     expect(window.location.pathname).toBe('/profile')
   })
 
-  it('redirects signed-out Console routes before management requests start', async () => {
+  it('redirects signed-out Console routes before management requests start [spec: admin-console/admin-signed-out-redirect]', async () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

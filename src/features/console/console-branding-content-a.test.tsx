@@ -31,7 +31,7 @@ import {
 } from './console.test-utils'
 
 describe('admin console branding-content-a', () => {
-  it('updates the hosted sign-in preview from unsaved branding edits', async () => {
+  it('updates the hosted sign-in preview from unsaved branding edits [spec: admin-console/admin-branding-settings]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
@@ -79,7 +79,7 @@ describe('admin console branding-content-a', () => {
     expect(document.querySelector('.hostedAuthPanel .brandMark')?.textContent).toBe('N')
   })
 
-  it('uses runtime sign-in method settings inside branding and content previews', async () => {
+  it('uses runtime sign-in method settings inside branding and content previews [spec: connectors-and-methods/hosted-preview-consistency]', async () => {
     const otpOnlySettings = {
       ...signInSettings,
       signIn: {

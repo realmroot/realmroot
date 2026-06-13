@@ -155,7 +155,7 @@ describe('hosted auth pages 2', () => {
     expect(screen.queryByRole('link', { name: 'Create account' })).toBeNull()
   })
 
-  it('starts with an identifier step when identifier-first sign-in is enabled', async () => {
+  it('starts with an identifier step when identifier-first sign-in is enabled [spec: hosted-auth/identifier-first-sign-in]', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(
       jsonResponse({
         ...configz,
@@ -251,7 +251,7 @@ describe('hosted auth pages 2', () => {
     })
   })
 
-  it('shows user-facing OIDC destination context without raw client identifiers', async () => {
+  it('shows user-facing OIDC destination context without raw client identifiers [spec: hosted-auth/oidc-hosted-sign-in-context]', async () => {
     window.history.pushState(
       null,
       '',
@@ -304,7 +304,7 @@ describe('hosted auth pages 2', () => {
     })
   })
 
-  it('does not render self-service registration when sign-up is disabled', async () => {
+  it('does not render self-service registration when sign-up is disabled [spec: hosted-auth/sign-up-disabled]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') {

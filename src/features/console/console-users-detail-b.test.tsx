@@ -29,7 +29,7 @@ import {
 } from './console.test-utils'
 
 describe('admin console users-detail-b', () => {
-  it('renders the provider catalog and configures social providers from the drawer', async () => {
+  it('renders the provider catalog and configures social providers from the drawer [spec: admin-console/admin-social-connector-inventory]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard })

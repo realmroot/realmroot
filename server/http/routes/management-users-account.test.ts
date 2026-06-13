@@ -232,7 +232,7 @@ describe('management users and account routes', () => {
     })
   })
 
-  it('updates account profile at the request boundary and delegates email and password flows', async () => {
+  it('updates account profile at the request boundary and delegates email and password flows [spec: account-center/email-update] [spec: account-center/password-update] [spec: account-center/linked-account-unlink]', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
     const app = createApp(auth, createTestDeps({ users }))

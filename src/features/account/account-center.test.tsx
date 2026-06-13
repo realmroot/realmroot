@@ -54,7 +54,7 @@ describe('account pages', () => {
     expect(formatSessionDevice('Mozilla/5.0 (Mac OS X) Chrome/120')).toBe('Chrome on macOS')
   })
 
-  it('profile page only loads profile-owned account data', async () => {
+  it('profile page only loads profile-owned account data [spec: account-center/account-section-routes]', async () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountProfilePage />)
 

@@ -203,7 +203,7 @@ describe('hosted auth pages 1', () => {
     expect(authRequestContext('sign-in')).toEqual({})
   })
 
-  it('renders a product-focused sign-in form and social connectors from configz', async () => {
+  it('renders a product-focused sign-in form and social connectors from configz [spec: hosted-auth/public-sign-in]', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
     const user = userEvent.setup()
 

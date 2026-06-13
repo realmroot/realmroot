@@ -85,7 +85,7 @@ describe('admin console branding-content-b', () => {
     expect(screen.getByLabelText('Custom CSS')).toHaveProperty('value', '')
   })
 
-  it('renders sign-in and account configuration tabs without v1 dead-end controls', async () => {
+  it('renders sign-in and account configuration tabs without v1 dead-end controls [spec: admin-console/admin-account-center-settings]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
@@ -349,7 +349,7 @@ describe('admin console branding-content-b', () => {
     expect(screen.queryByLabelText('Search audit logs')).toBeNull()
   })
 
-  it('saves content settings through the sign-in management boundary', async () => {
+  it('saves content settings through the sign-in management boundary [spec: admin-console/admin-content-settings]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

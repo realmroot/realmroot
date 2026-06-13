@@ -199,7 +199,7 @@ describe('console authorization dashboard', () => {
     expect(screen.queryByRole('heading', { name: 'Create API resource' })).toBeNull()
   })
 
-  it('creates native applications with device login enabled from the applications page', async () => {
+  it('creates native applications with device login enabled from the applications page [spec: admin-console/admin-create-application]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

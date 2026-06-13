@@ -11,7 +11,7 @@ describe('app.test 1', () => {
     vi.restoreAllMocks()
   })
 
-  it('serves health status', async () => {
+  it('serves health status [spec: platform-onboarding/api-health-smoke]', async () => {
     const auth = createAuthMock()
     const response = await createApp(auth, createTestDeps()).request('/api/health')
 

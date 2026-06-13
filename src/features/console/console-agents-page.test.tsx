@@ -11,7 +11,7 @@ afterEach(() => {
 })
 
 describe('console delegated agents page', () => {
-  it('renders AgentAuth inventory and revokes records through management RPCs', async () => {
+  it('renders AgentAuth inventory and revokes records through management RPCs [spec: admin-console/admin-agent-inventory]', async () => {
     const requests: Array<{ url: string; method: string }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = input instanceof Request ? input : null

@@ -42,7 +42,7 @@ import {
 } from './console.test-utils'
 
 describe('console route navigation', () => {
-  it('allows protected Console routes while setup checklist is incomplete', async () => {
+  it('allows protected Console routes while setup checklist is incomplete [spec: admin-console/admin-setup-gate]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
@@ -67,7 +67,7 @@ describe('console route navigation', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/console/applications'))
   })
 
-  it('renders canonical Console routes and current nested defaults', async () => {
+  it('renders canonical Console routes and current nested defaults [spec: admin-console/admin-route-backed-navigation]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
 
     for (const [path, finalPath, heading] of [
@@ -113,7 +113,7 @@ describe('console route navigation', () => {
     }
   })
 
-  it('navigates sign-in experience tabs through routable tab links', async () => {
+  it('navigates sign-in experience tabs through routable tab links [spec: admin-console/admin-sign-in-experience-routes]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
     window.history.pushState(null, '', '/console/sign-in-experience/sign-up-and-sign-in')
 

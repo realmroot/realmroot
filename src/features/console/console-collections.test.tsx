@@ -107,7 +107,7 @@ describe('console collections', () => {
     }
   })
 
-  it('filters changed admin resource lists and shows filter-specific empty states', async () => {
+  it('filters changed admin resource lists and shows filter-specific empty states [spec: admin-console/admin-authorization-inventory]', async () => {
     const githubConnector = {
       ...connector,
       id: 'connector-2',
@@ -346,7 +346,7 @@ describe('console collections', () => {
     }
   })
 
-  it('renders editable branding and tenant settings pages', async () => {
+  it('renders editable branding and tenant settings pages [spec: admin-console/admin-deployment-settings]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))

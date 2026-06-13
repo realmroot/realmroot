@@ -136,7 +136,7 @@ afterEach(() => {
 })
 
 describe('hosted auth pages 5', () => {
-  it('posts OAuth consent approval and returns to the authorization endpoint', async () => {
+  it('posts OAuth consent approval and returns to the authorization endpoint [spec: hosted-auth/oauth-consent]', async () => {
     window.history.pushState(
       null,
       '',
@@ -171,7 +171,7 @@ describe('hosted auth pages 5', () => {
     })
   })
 
-  it('signs out from OAuth consent before switching accounts', async () => {
+  it('signs out from OAuth consent before switching accounts [spec: hosted-auth/oauth-consent-account-switch]', async () => {
     window.history.pushState(
       null,
       '',
@@ -199,7 +199,7 @@ describe('hosted auth pages 5', () => {
     })
   })
 
-  it('surfaces OAuth consent load and approval failures', async () => {
+  it('surfaces OAuth consent load and approval failures [spec: hosted-auth/oauth-consent-deny]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
@@ -256,7 +256,7 @@ describe('hosted auth pages 5', () => {
     expect(await screen.findByText('Consent approval failed.')).toBeTruthy()
   })
 
-  it('requests an OTP password reset code before OTP reset completion', async () => {
+  it('requests an OTP password reset code before OTP reset completion [spec: hosted-auth/password-recovery]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -296,7 +296,7 @@ describe('hosted auth pages 5', () => {
     })
   })
 
-  it('creates accounts through native sign-up and removes password fields after success', async () => {
+  it('creates accounts through native sign-up and removes password fields after success [spec: hosted-auth/sign-up]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

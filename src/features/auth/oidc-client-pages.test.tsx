@@ -9,7 +9,7 @@ afterEach(() => {
 })
 
 describe('OidcCallbackRoute', () => {
-  it('validates code and state from the local OIDC callback', () => {
+  it('validates code and state from the local OIDC callback [spec: hosted-auth/oidc-client-callback]', () => {
     window.sessionStorage.setItem('flareauth.oidc.state', 'state-1')
     window.history.pushState(null, '', '/oidc/callback?code=code-1&state=state-1')
 

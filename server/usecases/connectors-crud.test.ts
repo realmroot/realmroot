@@ -86,7 +86,7 @@ describe('service.test 2', () => {
     })
   })
 
-  it('omits unsupported and incomplete enabled connector rows from auth config', async () => {
+  it('omits unsupported and incomplete enabled connector rows from auth config [spec: connectors-and-methods/social-login]', async () => {
     const deps = { connectors: createRepository() } as unknown as Deps
 
     await expect(

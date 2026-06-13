@@ -13,7 +13,7 @@ type TestAuth = {
 }
 
 describe('auth device authorization endpoints', () => {
-  it('issues Better Auth device codes only for eligible public native clients', async () => {
+  it('issues Better Auth device codes only for eligible public native clients [spec: management-api/management-native-device-approval]', async () => {
     const auth = createDeviceAuth({
       clients: {
         native: deviceApplication({ clientId: 'native' }),

@@ -104,7 +104,7 @@ describe('admin console webhooks-content', () => {
     expect(screen.getByLabelText('Support email')).toHaveProperty('value', '')
   })
 
-  it('creates organizations, roles, and API resources from admin dialogs', async () => {
+  it('creates organizations, roles, and API resources from admin dialogs [spec: admin-console/admin-create-organization] [spec: admin-console/admin-create-role] [spec: admin-console/admin-create-api-resource]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

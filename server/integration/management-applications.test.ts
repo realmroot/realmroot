@@ -71,7 +71,7 @@ describe('applications management over real D1', () => {
     expect(response.status).toBe(400)
   })
 
-  it('creates, reads, updates, and deletes an application through real SQL', async () => {
+  it('creates, reads, updates, and deletes an application through real SQL [spec: management-api/management-restish-oauth-crud]', async () => {
     const cookie = await signInAdmin(harness)
     const created = await createApplication(harness, cookie)
 

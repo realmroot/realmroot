@@ -114,7 +114,7 @@ describe('management security user routes', () => {
     expect(security.updatePolicy).toHaveBeenCalledWith(body)
   })
 
-  it('enforces password, blocklist, and CAPTCHA policy before delegated account flows', async () => {
+  it('enforces password, blocklist, and CAPTCHA policy before delegated account flows [spec: account-center/password-policy-native-change]', async () => {
     const auth = createAuthMock()
     const policy = securityPolicy({
       password: {

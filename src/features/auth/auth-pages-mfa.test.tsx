@@ -240,7 +240,7 @@ describe('hosted auth pages 4', () => {
     expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).toBeNull()
   })
 
-  it('does not show an empty-method warning when only Phone sign-in is enabled', async () => {
+  it('does not show an empty-method warning when only Phone sign-in is enabled [spec: connectors-and-methods/sign-in-method-availability]', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(
       jsonResponse({
         ...configz,

@@ -9,7 +9,7 @@ afterEach(() => {
 })
 
 describe('account agent routes', () => {
-  it('lists and revokes delegated agents for the signed-in account', async () => {
+  it('lists and revokes delegated agents for the signed-in account [spec: account-center/account-agent-management]', async () => {
     const agents = {
       listAccountAgents: vi.fn().mockResolvedValue({
         agents: [

@@ -28,7 +28,7 @@ describe('DeviceVerification', () => {
     expect(assign).toHaveBeenCalledWith('/device/approve?user_code=ABCD2345')
   })
 
-  it('claims and approves a verified device code', async () => {
+  it('claims and approves a verified device code [spec: hosted-auth/better-auth-device-approval]', async () => {
     render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
 
     await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD-2345' }))

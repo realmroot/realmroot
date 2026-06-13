@@ -14,7 +14,7 @@ afterEach(() => {
 })
 
 describe('AgentApproveRoute', () => {
-  it('approves delegated account capabilities from the device authorization query', async () => {
+  it('approves delegated account capabilities from the device authorization query [spec: account-center/agent-approval]', async () => {
     window.history.pushState(
       null,
       '',

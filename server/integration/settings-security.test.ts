@@ -53,7 +53,7 @@ describe('management settings over real D1', () => {
     ).toBe(403)
   })
 
-  it('reads and writes sign-in, branding, and account-center settings through real SQL', async () => {
+  it('reads and writes sign-in, branding, and account-center settings through real SQL [spec: management-api/management-restish-settings-update]', async () => {
     const cookie = await signInAdmin(harness)
 
     const signInRead = await harness.request('/api/management/sign-in-settings', { headers: { cookie } })

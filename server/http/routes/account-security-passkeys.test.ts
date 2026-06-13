@@ -15,7 +15,7 @@ describe('account security passkey routes', () => {
     vi.restoreAllMocks()
   })
 
-  it('serves account security state and delegates MFA enrollment APIs to Better Auth', async () => {
+  it('serves account security state and delegates MFA enrollment APIs to Better Auth [spec: account-center/totp-flow]', async () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock(securityPolicy({ mfa: { mode: 'required' } }))
     const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock(), security }), {
@@ -58,7 +58,7 @@ describe('account security passkey routes', () => {
     })
   })
 
-  it('serves account MFA/passkey resources and delegates backup code and passkey management', async () => {
+  it('serves account MFA/passkey resources and delegates backup code and passkey management [spec: account-center/passkey-flow]', async () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock()
     const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock(), security }), {
@@ -140,7 +140,7 @@ describe('account security passkey routes', () => {
     expect(auth.api.enableTwoFactor).not.toHaveBeenCalled()
   })
 
-  it('revokes account sessions by resolving the user-owned session token', async () => {
+  it('revokes account sessions by resolving the user-owned session token [spec: account-center/session-revocation]', async () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock()
     const users = createUserRepositoryMock()
@@ -206,7 +206,7 @@ describe('account security passkey routes', () => {
     expect(auth.api.revokeOtherSessions).not.toHaveBeenCalled()
   })
 
-  it('revokes authorized application consent for the current account', async () => {
+  it('revokes authorized application consent for the current account [spec: account-center/authorized-app-revoke]', async () => {
     const deps = createTestDeps({
       users: createUserRepositoryMock(),
       security: createSecurityRepositoryMock(),

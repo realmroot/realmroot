@@ -100,7 +100,7 @@ describe('account security policy routes', () => {
     })
   })
 
-  it('enforces required MFA for protected APIs while allowing enrollment routes', async () => {
+  it('enforces required MFA for protected APIs while allowing enrollment routes [spec: account-center/mfa-policy-enforcement]', async () => {
     const policy = securityPolicy({ mfa: { mode: 'required' } })
     const security = createSecurityRepositoryMock(policy, { mfaEnabled: false })
     const app = createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock(), security }), {

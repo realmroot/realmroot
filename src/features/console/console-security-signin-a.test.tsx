@@ -367,7 +367,7 @@ describe('admin console security-signin-a', () => {
     )
   })
 
-  it('saves sign-in settings through the management boundary', async () => {
+  it('saves sign-in settings through the management boundary [spec: admin-console/admin-sign-in-settings]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

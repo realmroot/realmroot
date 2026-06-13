@@ -135,7 +135,7 @@ afterEach(() => {
 })
 
 describe('hosted auth pages 6', () => {
-  it('requests and verifies email with OTP through native auth endpoints', async () => {
+  it('requests and verifies email with OTP through native auth endpoints [spec: hosted-auth/email-verification]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -186,7 +186,7 @@ describe('hosted auth pages 6', () => {
     })
   })
 
-  it('renders callback errors, consent handoff, and safe account continuation', async () => {
+  it('renders callback errors, consent handoff, and safe account continuation [spec: hosted-auth/hosted-auth-error-flow]', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse(configz))
 
     window.history.pushState(null, '', '/auth/callback?error=access_denied&error_description=Denied')
