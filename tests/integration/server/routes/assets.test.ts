@@ -1,7 +1,7 @@
 import { ApiError, handleApiError, notFound } from '@server/lib/errors'
 import { authContext } from '@server/middleware/auth-context'
-import type { AssetService } from '@server/modules/assets/service'
 import { createAccountAssetRoutes, createAssetRoutes, createManagementAssetRoutes } from '@server/routes/assets'
+import type { AssetService } from '@server/usecases/assets'
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 

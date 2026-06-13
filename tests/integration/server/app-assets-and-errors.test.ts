@@ -1,5 +1,5 @@
 import { createApp } from '@server/app'
-import type { AssetService } from '@server/modules/assets/service'
+import type { AssetService } from '@server/usecases/assets'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('app.test 3', () => {

@@ -1,5 +1,6 @@
-import type { AssetPurpose, UploadedAssetResponse } from '../../../shared/api/assets'
-import { badRequest, notFound } from '../../lib/errors'
+import { badRequest, notFound } from '@server/domain/errors'
+import type { AssetRepository, AssetStorage, UploadedAssetRecord } from '@server/usecases/ports'
+import type { AssetPurpose, UploadedAssetResponse } from '@shared/api/assets'
 
 const allowedContentTypes: Record<AssetPurpose, readonly string[]> = {
   avatar: ['image/png', 'image/jpeg', 'image/webp'],
@@ -15,32 +16,6 @@ const maxByteSizes: Record<AssetPurpose, number> = {
   organization_logo: 2 * 1024 * 1024,
   branding_logo: 2 * 1024 * 1024,
   favicon: 512 * 1024,
-}
-
-export interface UploadedAssetRecord {
-  id: string
-  purpose: AssetPurpose
-  storageKey: string
-  publicUrl: string
-  contentType: string
-  byteSize: number
-  checksumSha256: string
-  createdByUserId: string | null
-  createdAt: Date
-}
-
-export interface AssetRepository {
-  createAsset(input: Omit<UploadedAssetRecord, 'createdAt'>): Promise<UploadedAssetRecord>
-  findAsset(id: string): Promise<UploadedAssetRecord | null>
-  updateUserAvatar(userId: string, assetId: string, publicUrl: string): Promise<void>
-  updateApplicationLogo(applicationId: string, assetId: string, publicUrl: string): Promise<void>
-  updateOrganizationLogo(organizationId: string, assetId: string, publicUrl: string): Promise<void>
-  updateBrandingAsset(kind: 'logo' | 'favicon', assetId: string): Promise<void>
-}
-
-export interface AssetStorage {
-  put(key: string, value: ArrayBuffer, options: { httpMetadata: { contentType: string } }): Promise<unknown>
-  get(key: string): Promise<R2ObjectBody | null>
 }
 
 export class AssetService {

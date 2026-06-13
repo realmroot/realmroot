@@ -1,7 +1,7 @@
 import { createDrizzleAssetRepository } from '@server/adapters/repos/assets'
+import { AssetService } from '@server/usecases/assets'
 import type { Context } from 'hono'
 import { createDb } from '../../db/client'
-import { AssetService } from './service'
 
 export interface AssetBindings {
   ASSET_BUCKET: R2Bucket

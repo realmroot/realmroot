@@ -1,5 +1,5 @@
-import type { AssetRepository } from '@server/modules/assets/service'
-import { AssetService } from '@server/modules/assets/service'
+import { AssetService } from '@server/usecases/assets'
+import type { AssetRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('AssetService', () => {

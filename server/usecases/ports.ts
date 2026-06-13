@@ -5,7 +5,36 @@
  * never reference the drizzle schema, so this file stays inside the usecase
  * layer's dependency budget.
  */
+import type { AssetPurpose } from '@shared/api/assets'
 import type { ListWebhookEndpointsQuery, ListWebhookRequestsQuery } from '@shared/api/webhooks'
+
+// --- assets -----------------------------------------------------------------
+
+export interface UploadedAssetRecord {
+  id: string
+  purpose: AssetPurpose
+  storageKey: string
+  publicUrl: string
+  contentType: string
+  byteSize: number
+  checksumSha256: string
+  createdByUserId: string | null
+  createdAt: Date
+}
+
+export interface AssetRepository {
+  createAsset(input: Omit<UploadedAssetRecord, 'createdAt'>): Promise<UploadedAssetRecord>
+  findAsset(id: string): Promise<UploadedAssetRecord | null>
+  updateUserAvatar(userId: string, assetId: string, publicUrl: string): Promise<void>
+  updateApplicationLogo(applicationId: string, assetId: string, publicUrl: string): Promise<void>
+  updateOrganizationLogo(organizationId: string, assetId: string, publicUrl: string): Promise<void>
+  updateBrandingAsset(kind: 'logo' | 'favicon', assetId: string): Promise<void>
+}
+
+export interface AssetStorage {
+  put(key: string, value: ArrayBuffer, options: { httpMetadata: { contentType: string } }): Promise<unknown>
+  get(key: string): Promise<R2ObjectBody | null>
+}
 
 // --- webhooks ---------------------------------------------------------------
 

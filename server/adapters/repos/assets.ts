@@ -1,5 +1,5 @@
 import { notFound } from '@server/domain/errors'
-import type { AssetRepository, UploadedAssetRecord } from '@server/modules/assets/service'
+import type { AssetRepository, UploadedAssetRecord } from '@server/usecases/ports'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { application, brandingSetting, oauthClient, organization, uploadedAsset, user } from '../../db/schema'

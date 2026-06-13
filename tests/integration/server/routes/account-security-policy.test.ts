@@ -2,7 +2,7 @@ import type { SecurityRepository } from '@server/adapters/repos/security'
 import type { UserRepository } from '@server/adapters/repos/users'
 import { createApp } from '@server/app'
 import { notFound } from '@server/lib/errors'
-import type { AssetService } from '@server/modules/assets/service'
+import type { AssetService } from '@server/usecases/assets'
 import type { SecurityPolicy } from '@shared/api/security'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 

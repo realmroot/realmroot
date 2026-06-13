@@ -1,10 +1,10 @@
+import type { AssetService } from '@server/usecases/assets'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { badRequest, forbidden } from '../lib/errors'
 import { requireAdmin, requireAuth } from '../middleware/admin'
 import { getAuthContext } from '../middleware/auth-context'
 import { type AssetBindings, createAssetService } from '../modules/assets/context'
-import type { AssetService } from '../modules/assets/service'
 import { type ConfigzBindings, createConfigzService } from '../modules/configz/context'
 import { type ConfigzAccountCenter, defaultAccountCenterSettings } from '../modules/configz/service'
 
