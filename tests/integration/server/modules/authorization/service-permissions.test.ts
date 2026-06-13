@@ -1,45 +1,64 @@
-import { AuthorizationService } from '@server/usecases/authorization'
+import {
+  addMember,
+  assignApplicationRole,
+  assignMemberRole,
+  assignUserRole,
+  cancelInvitation,
+  createInvitation,
+  createOrganization,
+  createPermission,
+  createResource,
+  createRole,
+  createScope,
+  deletePermission,
+  deleteScope,
+  removeMember,
+  replaceRolePermissions,
+  updateMember,
+  updatePermission,
+  updateScope,
+} from '@server/usecases/authorization'
+import type { Deps } from '@server/usecases/deps'
 import type { AuthorizationRepository, RoleAssignmentRecord } from '@server/usecases/ports'
 import type { PaginationQuery } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('service.test 4', () => {
   it('rejects cross-resource permission wiring and incompatible scoped assignments', async () => {
-    const repository = new InMemoryAuthorizationRepository()
-    const service = new AuthorizationService(repository)
-    const organization = await service.createOrganization({ slug: 'acme-workspace', name: 'Acme Workspace' })
-    const otherOrganization = await service.createOrganization({ slug: 'other-workspace', name: 'Other Workspace' })
-    const member = await service.addMember(organization.id, { userId: 'user-1', role: 'member' })
-    const contactsResource = await service.createResource({
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
+    const organization = await createOrganization(deps, { slug: 'acme-workspace', name: 'Acme Workspace' })
+    const otherOrganization = await createOrganization(deps, { slug: 'other-workspace', name: 'Other Workspace' })
+    const member = await addMember(deps, organization.id, { userId: 'user-1', role: 'member' })
+    const contactsResource = await createResource(deps, {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
     })
-    const billingResource = await service.createResource({
+    const billingResource = await createResource(deps, {
       identifier: 'billing-api',
       name: 'Billing API',
       audience: 'https://api.example.com/billing',
     })
-    const contactsScope = await service.createScope(contactsResource.id, { value: 'contacts:read' })
-    const billingPermission = await service.createPermission(billingResource.id, { key: 'billing.read' })
-    const contactsRole = await service.createRole({
+    const contactsScope = await createScope(deps, contactsResource.id, { value: 'contacts:read' })
+    const billingPermission = await createPermission(deps, billingResource.id, { key: 'billing.read' })
+    const contactsRole = await createRole(deps, {
       key: 'contacts-reader',
       name: 'Contacts Reader',
       resourceId: contactsResource.id,
     })
-    const otherOrgRole = await service.createRole({
+    const otherOrgRole = await createRole(deps, {
       key: 'other-org-admin',
       name: 'Other Org Admin',
       organizationId: otherOrganization.id,
     })
-    const appRole = await service.createRole({
+    const appRole = await createRole(deps, {
       key: 'contacts-client',
       name: 'Contacts Client',
       applicationId: 'app-1',
     })
 
     await expect(
-      service.createPermission(billingResource.id, {
+      createPermission(deps, billingResource.id, {
         key: 'billing.contacts-scope',
         scopeId: contactsScope.id,
       }),
@@ -47,24 +66,24 @@ describe('service.test 4', () => {
       status: 400,
       message: 'API scope must belong to the same API resource as the permission.',
     })
-    await expect(service.replaceRolePermissions(contactsRole.id, [billingPermission.id])).rejects.toMatchObject({
+    await expect(replaceRolePermissions(deps, contactsRole.id, [billingPermission.id])).rejects.toMatchObject({
       status: 400,
       message: 'Role permissions must belong to the same API resource as the role.',
     })
     await expect(
-      service.assignUserRole({ roleId: otherOrgRole.id, subjectId: 'user-1' }, 'admin-1'),
+      assignUserRole(deps, { roleId: otherOrgRole.id, subjectId: 'user-1' }, 'admin-1'),
     ).rejects.toMatchObject({
       status: 400,
       message: 'User role assignments must use global roles.',
     })
     await expect(
-      service.assignMemberRole({ roleId: otherOrgRole.id, subjectId: member.id }, 'admin-1'),
+      assignMemberRole(deps, { roleId: otherOrgRole.id, subjectId: member.id }, 'admin-1'),
     ).rejects.toMatchObject({
       status: 400,
       message: 'Member role assignments must use global roles or roles scoped to the same organization.',
     })
     await expect(
-      service.assignApplicationRole({ roleId: appRole.id, subjectId: 'app-2' }, 'admin-1'),
+      assignApplicationRole(deps, { roleId: appRole.id, subjectId: 'app-2' }, 'admin-1'),
     ).rejects.toMatchObject({
       status: 400,
       message: 'Application role assignments must use global roles or roles scoped to the same application.',
@@ -72,55 +91,56 @@ describe('service.test 4', () => {
   })
 
   it('rejects nested mutation URLs when child resources belong to another parent', async () => {
-    const service = new AuthorizationService(new InMemoryAuthorizationRepository())
-    const organization = await service.createOrganization({ slug: 'acme-workspace', name: 'Acme Workspace' })
-    const otherOrganization = await service.createOrganization({ slug: 'other-workspace', name: 'Other Workspace' })
-    const member = await service.addMember(organization.id, { userId: 'user-1', role: 'member' })
-    const invitation = await service.createInvitation(
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
+    const organization = await createOrganization(deps, { slug: 'acme-workspace', name: 'Acme Workspace' })
+    const otherOrganization = await createOrganization(deps, { slug: 'other-workspace', name: 'Other Workspace' })
+    const member = await addMember(deps, organization.id, { userId: 'user-1', role: 'member' })
+    const invitation = await createInvitation(
+      deps,
       organization.id,
       { email: 'user@example.com', role: 'member' },
       'admin-1',
     )
-    const resource = await service.createResource({
+    const resource = await createResource(deps, {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
     })
-    const otherResource = await service.createResource({
+    const otherResource = await createResource(deps, {
       identifier: 'billing-api',
       name: 'Billing API',
       audience: 'https://api.example.com/billing',
     })
-    const scope = await service.createScope(resource.id, { value: 'contacts:read' })
-    const permission = await service.createPermission(resource.id, { key: 'contacts.read' })
+    const scope = await createScope(deps, resource.id, { value: 'contacts:read' })
+    const permission = await createPermission(deps, resource.id, { key: 'contacts.read' })
 
-    await expect(service.updateMember(otherOrganization.id, member.id, { title: 'Owner' })).rejects.toMatchObject({
+    await expect(updateMember(deps, otherOrganization.id, member.id, { title: 'Owner' })).rejects.toMatchObject({
       status: 404,
       message: 'Organization member was not found.',
     })
-    await expect(service.removeMember(otherOrganization.id, member.id)).rejects.toMatchObject({
+    await expect(removeMember(deps, otherOrganization.id, member.id)).rejects.toMatchObject({
       status: 404,
       message: 'Organization member was not found.',
     })
-    await expect(service.cancelInvitation(otherOrganization.id, invitation.id)).rejects.toMatchObject({
+    await expect(cancelInvitation(deps, otherOrganization.id, invitation.id)).rejects.toMatchObject({
       status: 404,
       message: 'Organization invitation was not found.',
     })
-    await expect(service.updateScope(otherResource.id, scope.id, { description: 'bad parent' })).rejects.toMatchObject({
+    await expect(updateScope(deps, otherResource.id, scope.id, { description: 'bad parent' })).rejects.toMatchObject({
       status: 404,
       message: 'API scope was not found.',
     })
-    await expect(service.deleteScope(otherResource.id, scope.id)).rejects.toMatchObject({
+    await expect(deleteScope(deps, otherResource.id, scope.id)).rejects.toMatchObject({
       status: 404,
       message: 'API scope was not found.',
     })
     await expect(
-      service.updatePermission(otherResource.id, permission.id, { description: 'bad parent' }),
+      updatePermission(deps, otherResource.id, permission.id, { description: 'bad parent' }),
     ).rejects.toMatchObject({
       status: 404,
       message: 'API permission was not found.',
     })
-    await expect(service.deletePermission(otherResource.id, permission.id)).rejects.toMatchObject({
+    await expect(deletePermission(deps, otherResource.id, permission.id)).rejects.toMatchObject({
       status: 404,
       message: 'API permission was not found.',
     })

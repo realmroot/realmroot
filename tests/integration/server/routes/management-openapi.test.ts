@@ -1,7 +1,10 @@
 import { createApp } from '@server/http/app'
+import * as connectorsUsecase from '@server/usecases/connectors'
+import * as webhooksUsecase from '@server/usecases/webhooks'
 import { listManagementConnectorsResponseSchema, managementConnectorResponseSchema } from '@shared/api/management'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createTestDeps } from '../test-deps'
 import {
   adminHeaders,
   connectorFixture,
@@ -13,16 +16,79 @@ import {
   webhookRequestResponse,
 } from './management.test-utils'
 
+function spyConnectors() {
+  const service = createConnectorServiceMock()
+  const list = vi.spyOn(connectorsUsecase, 'listConnectors').mockImplementation(service.list)
+  const listTemplates = vi.spyOn(connectorsUsecase, 'listConnectorTemplates').mockImplementation(service.listTemplates)
+  const create = vi
+    .spyOn(connectorsUsecase, 'createConnector')
+    .mockImplementation((_deps, input) => service.create(input))
+  const get = vi.spyOn(connectorsUsecase, 'getConnector').mockImplementation((_deps, id) => service.get(id))
+  const readiness = vi
+    .spyOn(connectorsUsecase, 'connectorReadiness')
+    .mockImplementation((_deps, id) => service.readiness(id))
+  const update = vi
+    .spyOn(connectorsUsecase, 'updateConnector')
+    .mockImplementation((_deps, id, input) => service.update(id, input))
+  const remove = vi.spyOn(connectorsUsecase, 'deleteConnector').mockImplementation((_deps, id) => service.delete(id))
+  return { service, list, listTemplates, create, get, readiness, update, remove }
+}
+
+function spyWebhooks() {
+  const service = createWebhookServiceMock()
+  const listEndpoints = vi
+    .spyOn(webhooksUsecase, 'listWebhookEndpoints')
+    .mockImplementation((_deps, query) => service.listEndpoints(query))
+  const createEndpoint = vi
+    .spyOn(webhooksUsecase, 'createWebhookEndpoint')
+    .mockImplementation((_deps, input, actorUserId) => service.createEndpoint(input, actorUserId))
+  const getEndpoint = vi
+    .spyOn(webhooksUsecase, 'getWebhookEndpoint')
+    .mockImplementation((_deps, id) => service.getEndpoint(id))
+  const updateEndpoint = vi
+    .spyOn(webhooksUsecase, 'updateWebhookEndpoint')
+    .mockImplementation((_deps, id, input) => service.updateEndpoint(id, input))
+  const deleteEndpoint = vi
+    .spyOn(webhooksUsecase, 'deleteWebhookEndpoint')
+    .mockImplementation((_deps, id) => service.deleteEndpoint(id))
+  const rotateSecret = vi
+    .spyOn(webhooksUsecase, 'rotateWebhookSecret')
+    .mockImplementation((_deps, id) => service.rotateSecret(id))
+  const listRequests = vi
+    .spyOn(webhooksUsecase, 'listWebhookRequests')
+    .mockImplementation((_deps, query) => service.listRequests(query))
+  const getRequest = vi
+    .spyOn(webhooksUsecase, 'getWebhookRequest')
+    .mockImplementation((_deps, id) => service.getRequest(id))
+  const retryRequest = vi
+    .spyOn(webhooksUsecase, 'retryWebhookRequest')
+    .mockImplementation((_deps, id) => service.retryRequest(id))
+  return {
+    service,
+    listEndpoints,
+    createEndpoint,
+    getEndpoint,
+    updateEndpoint,
+    deleteEndpoint,
+    rotateSecret,
+    listRequests,
+    getRequest,
+    retryRequest,
+  }
+}
+
 describe('management routes 4', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('exposes management connector config CRUD with pagination', async () => {
-    const connectors = createConnectorServiceMock()
-    const app = createApp(createAuthMock(), {
-      connectorServiceFactory: () => connectors,
-    })
+    const connectors = spyConnectors()
+    const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
     const list = await app.request('/api/management/connectors?limit=1&offset=0', { headers })
@@ -90,6 +156,7 @@ describe('management routes 4', () => {
     )
     expect(deleted.status).toBe(204)
     expect(connectors.create).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({
         slug: 'google',
         providerType: 'social',
@@ -97,15 +164,16 @@ describe('management routes 4', () => {
         scopes: ['openid', 'email', 'profile'],
       }),
     )
-    expect(connectors.update).toHaveBeenCalledWith('connector-1', { enabled: false, displayName: 'Google Workspace' })
-    expect(connectors.delete).toHaveBeenCalledWith('connector-1')
+    expect(connectors.update).toHaveBeenCalledWith(expect.anything(), 'connector-1', {
+      enabled: false,
+      displayName: 'Google Workspace',
+    })
+    expect(connectors.remove).toHaveBeenCalledWith(expect.anything(), 'connector-1')
   })
 
   it('stores connector client secrets without returning secret values', async () => {
-    const connectors = createConnectorServiceMock()
-    const app = createApp(createAuthMock(), {
-      connectorServiceFactory: () => connectors,
-    })
+    const connectors = spyConnectors()
+    const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
     const created = await app.request('/api/management/connectors', {
@@ -137,18 +205,20 @@ describe('management routes 4', () => {
     await expect(updated.json()).resolves.toMatchObject({ clientSecretConfigured: true })
     expect(list.status).toBe(200)
     expect(templates.status).toBe(200)
-    expect(connectors.create).toHaveBeenCalledWith(expect.objectContaining({ clientSecret: 'REVIEW_CLIENT_SECRET' }))
+    expect(connectors.create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ clientSecret: 'REVIEW_CLIENT_SECRET' }),
+    )
     expect(connectors.update).toHaveBeenCalledWith(
+      expect.anything(),
       'connector-1',
       expect.objectContaining({ clientSecret: 'REVIEW_CLIENT_SECRET' }),
     )
   })
 
   it('rejects unsupported connector provider types at the request boundary', async () => {
-    const connectors = createConnectorServiceMock()
-    const response = await createApp(createAuthMock(), {
-      connectorServiceFactory: () => connectors,
-    }).request('/api/management/connectors', {
+    const connectors = spyConnectors()
+    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/management/connectors', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({
@@ -166,10 +236,8 @@ describe('management routes 4', () => {
   })
 
   it('reuses connector contracts for generic OAuth request validation', async () => {
-    const connectors = createConnectorServiceMock()
-    const response = await createApp(createAuthMock(), {
-      connectorServiceFactory: () => connectors,
-    }).request('/api/management/connectors', {
+    const connectors = spyConnectors()
+    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/management/connectors', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({
@@ -187,8 +255,8 @@ describe('management routes 4', () => {
   })
 
   it('exposes webhook endpoint and request resources through the management boundary', async () => {
-    const webhooks = createWebhookServiceMock()
-    const app = createApp(createAuthMock(), { webhookServiceFactory: () => webhooks })
+    const webhooks = spyWebhooks()
+    const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
     const list = await app.request('/api/management/webhooks/endpoints?limit=10&offset=5&search=auth&status=enabled', {
@@ -243,27 +311,28 @@ describe('management routes 4', () => {
     await expect(retried.json()).resolves.toEqual({ ...webhookRequestResponse(), status: 'pending' })
     expect(deleted.status).toBe(204)
 
-    expect(webhooks.listEndpoints).toHaveBeenCalledWith({
+    expect(webhooks.listEndpoints).toHaveBeenCalledWith(expect.anything(), {
       limit: 10,
       offset: 5,
       search: 'auth',
       status: 'enabled',
     })
     expect(webhooks.createEndpoint).toHaveBeenCalledWith(
+      expect.anything(),
       { url: 'https://events.example.com/flareauth', events: ['user.created'], enabled: true },
       'admin-1',
     )
-    expect(webhooks.updateEndpoint).toHaveBeenCalledWith('wh_1', { enabled: false })
-    expect(webhooks.rotateSecret).toHaveBeenCalledWith('wh_1')
-    expect(webhooks.listRequests).toHaveBeenCalledWith({ limit: 2, offset: 4, status: 'failed' })
-    expect(webhooks.getRequest).toHaveBeenCalledWith('whr_1')
-    expect(webhooks.retryRequest).toHaveBeenCalledWith('whr_1')
-    expect(webhooks.deleteEndpoint).toHaveBeenCalledWith('wh_1')
+    expect(webhooks.updateEndpoint).toHaveBeenCalledWith(expect.anything(), 'wh_1', { enabled: false })
+    expect(webhooks.rotateSecret).toHaveBeenCalledWith(expect.anything(), 'wh_1')
+    expect(webhooks.listRequests).toHaveBeenCalledWith(expect.anything(), { limit: 2, offset: 4, status: 'failed' })
+    expect(webhooks.getRequest).toHaveBeenCalledWith(expect.anything(), 'whr_1')
+    expect(webhooks.retryRequest).toHaveBeenCalledWith(expect.anything(), 'whr_1')
+    expect(webhooks.deleteEndpoint).toHaveBeenCalledWith(expect.anything(), 'wh_1')
   })
 
   it('protects and validates webhook management requests', async () => {
-    const webhooks = createWebhookServiceMock()
-    const app = createApp(createAuthMock(), { webhookServiceFactory: () => webhooks })
+    const webhooks = spyWebhooks()
+    const app = createApp(createAuthMock(), createTestDeps())
 
     const unauthenticated = await app.request('/api/management/webhooks/endpoints')
     const nonAdmin = await app.request('/api/management/webhooks/endpoints', { headers: userHeaders() })

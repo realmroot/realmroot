@@ -1,6 +1,5 @@
 import { badRequest } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
-import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import { listManagementUsersResponseSchema } from '@shared/api/management'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import {
@@ -15,25 +14,22 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { requireAdmin } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
+import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
 import { readJson, readQuery } from '../validation'
 
 interface ManagementUserRoutesOptions {
   normalizeListResponse?: boolean
-  securityRepository?: SecurityRepository
 }
 
-export function managementUserRoutes(
-  authApi: ManagementAuthApi,
-  users: UserRepository,
-  options: ManagementUserRoutesOptions = {},
-) {
+export function managementUserRoutes(authApi: ManagementAuthApi, options: ManagementUserRoutesOptions = {}) {
   const app = new Hono()
 
   app.use('*', requireAdmin())
 
   app.get('/', async (c) => {
+    const users = getDeps(c).users
     const query = readQuery(c, adminUserListQuerySchema)
 
     if (getAuthContext(c).bearer) {
@@ -71,18 +67,17 @@ export function managementUserRoutes(
   })
 
   app.post('/', async (c) => {
+    const users = getDeps(c).users
     const body = await readJson(c, adminCreateUserSchema)
     await users.assertAdminAvatarReference(body.avatarAssetId)
-    if (options.securityRepository) {
-      const policy = await options.securityRepository.getPolicy()
-      validateEmailPolicy(body.email, policy.blocklist)
-      if (body.password) {
-        validatePasswordPolicy(body.password, policy.password, {
-          email: body.email,
-          name: body.displayName,
-          username: body.username ?? null,
-        })
-      }
+    const policy = await getDeps(c).security.getPolicy()
+    validateEmailPolicy(body.email, policy.blocklist)
+    if (body.password) {
+      validatePasswordPolicy(body.password, policy.password, {
+        email: body.email,
+        name: body.displayName,
+        username: body.username ?? null,
+      })
     }
 
     if (getAuthContext(c).bearer) {
@@ -132,11 +127,11 @@ export function managementUserRoutes(
   app.post('/password-reset', requestPasswordReset)
   app.post('/password-reset-requests', requestPasswordReset)
 
-  app.get('/:id', async (c) => c.json({ user: await users.getUser(c.req.param('id')) }))
+  app.get('/:id', async (c) => c.json({ user: await getDeps(c).users.getUser(c.req.param('id')) }))
 
   app.post('/:id/password-reset-requests', async (c) => {
     const body = await readJson(c, adminPasswordResetSchema.pick({ redirectTo: true }))
-    const user = await users.getUser(c.req.param('id'))
+    const user = await getDeps(c).users.getUser(c.req.param('id'))
 
     try {
       return c.json(
@@ -154,35 +149,34 @@ export function managementUserRoutes(
   })
 
   app.get('/:id/linked-accounts', async (c) => {
-    const page = await users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    const page = await getDeps(c).users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
   })
 
   app.get('/:id/applications', async (c) => {
-    const page = await users.listConsentedApplications(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    const page = await getDeps(c).users.listConsentedApplications(
+      c.req.param('id'),
+      readQuery(c, paginationQuerySchema),
+    )
     return c.json({ applications: page.items, pagination: paginationMetadata(page) })
   })
 
-  if (options.securityRepository) {
-    app.get('/:id/security', async (c) =>
-      c.json({ security: await options.securityRepository!.getSecurityState(c.req.param('id')) }),
-    )
+  app.get('/:id/security', async (c) =>
+    c.json({ security: await getDeps(c).security.getSecurityState(c.req.param('id')) }),
+  )
 
-    app.get('/:id/passkeys', async (c) => {
-      const page = await options.securityRepository!.listPasskeys(
-        c.req.param('id'),
-        readQuery(c, paginationQuerySchema),
-      )
-      return c.json({ passkeys: page.items, pagination: paginationMetadata(page) })
-    })
+  app.get('/:id/passkeys', async (c) => {
+    const page = await getDeps(c).security.listPasskeys(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    return c.json({ passkeys: page.items, pagination: paginationMetadata(page) })
+  })
 
-    app.delete('/:id/passkeys/:passkeyId', async (c) => {
-      await options.securityRepository!.deletePasskey(c.req.param('id'), c.req.param('passkeyId'))
-      return c.body(null, 204)
-    })
-  }
+  app.delete('/:id/passkeys/:passkeyId', async (c) => {
+    await getDeps(c).security.deletePasskey(c.req.param('id'), c.req.param('passkeyId'))
+    return c.body(null, 204)
+  })
 
   app.patch('/:id', async (c) => {
+    const users = getDeps(c).users
     const body = await readJson(c, adminUpdateUserSchema)
     await users.assertAdminAvatarReference(body.avatarAssetId)
 
@@ -252,7 +246,7 @@ export function managementUserRoutes(
       if (actor?.id === userId) {
         throw badRequest('You cannot remove yourself.')
       }
-      await users.deleteManagedUser(userId)
+      await getDeps(c).users.deleteManagedUser(userId)
       return c.body(null, 204)
     }
 
@@ -264,7 +258,7 @@ export function managementUserRoutes(
   })
 
   app.get('/:id/sessions', async (c) => {
-    const page = await users.listSessions(c.req.param('id'), readQuery(c, paginationQuerySchema))
+    const page = await getDeps(c).users.listSessions(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
   })
 
@@ -279,7 +273,7 @@ export function managementUserRoutes(
   })
 
   app.delete('/:id/sessions/:sessionId', async (c) => {
-    const token = await users.getSessionToken(c.req.param('id'), c.req.param('sessionId'))
+    const token = await getDeps(c).users.getSessionToken(c.req.param('id'), c.req.param('sessionId'))
 
     try {
       return c.json(await authApi.revokeUserSession({ body: { sessionToken: token }, headers: c.req.raw.headers }))

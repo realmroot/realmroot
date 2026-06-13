@@ -1,13 +1,21 @@
 import type { ConnectorRow } from '@server/adapters/repos/connectors'
-import { ConnectorService, loadAuthConnectorConfig } from '@server/usecases/connectors'
+import {
+  connectorReadiness,
+  createConnector,
+  deleteConnector,
+  getConnector,
+  listConnectors,
+  listConnectorTemplates,
+  loadAuthConnectorConfig,
+  updateConnector,
+} from '@server/usecases/connectors'
+import type { Deps } from '@server/usecases/deps'
 import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 1', () => {
   it('returns connector templates without secret values', () => {
-    const service = new ConnectorService(createRepository())
-
-    expect(service.listTemplates().templates).toEqual(
+    expect(listConnectorTemplates().templates).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           providerType: 'social',
@@ -91,10 +99,10 @@ describe('service.test 1', () => {
 
   it('stores enabled connector writes with the supplied client secret', async () => {
     const repository = createRepository()
-    const service = new ConnectorService(repository)
+    const deps = { connectors: repository } as unknown as Deps
 
     await expect(
-      service.create({
+      createConnector(deps, {
         providerType: 'social',
         providerId: 'github',
         displayName: 'GitHub',
@@ -112,9 +120,9 @@ describe('service.test 1', () => {
       clientSecret: null,
     })
     const repository = createRepository({ byId: current, updateResult: { ...current, enabled: false } })
-    const service = new ConnectorService(repository)
+    const deps = { connectors: repository } as unknown as Deps
 
-    await expect(service.update('idp_github', { enabled: false })).resolves.toMatchObject({
+    await expect(updateConnector(deps, 'idp_github', { enabled: false })).resolves.toMatchObject({
       id: 'idp_github',
       enabled: false,
     })
@@ -132,9 +140,9 @@ describe('service.test 1', () => {
       clientSecret: null,
     })
     const repository = createRepository({ byId: current })
-    const service = new ConnectorService(repository)
+    const deps = { connectors: repository } as unknown as Deps
 
-    await expect(service.update('idp_github', { enabled: true })).rejects.toMatchObject({
+    await expect(updateConnector(deps, 'idp_github', { enabled: true })).rejects.toMatchObject({
       status: 400,
       message: 'Enabled connector requires clientSecret.',
     })
@@ -143,10 +151,10 @@ describe('service.test 1', () => {
 
   it('rejects enabled Cognito writes missing required provider metadata', async () => {
     const repository = createRepository()
-    const service = new ConnectorService(repository)
+    const deps = { connectors: repository } as unknown as Deps
 
     await expect(
-      service.create({
+      createConnector(deps, {
         providerType: 'social',
         providerId: 'cognito',
         displayName: 'Cognito',
@@ -163,10 +171,10 @@ describe('service.test 1', () => {
 
   it('rejects enabled generic OAuth writes missing endpoint requirements', async () => {
     const repository = createRepository()
-    const service = new ConnectorService(repository)
+    const deps = { connectors: repository } as unknown as Deps
 
     await expect(
-      service.create({
+      createConnector(deps, {
         providerType: 'generic_oauth',
         providerId: 'missing-authorization',
         displayName: 'Missing authorization',
@@ -180,7 +188,7 @@ describe('service.test 1', () => {
     })
 
     await expect(
-      service.create({
+      createConnector(deps, {
         providerType: 'generic_oauth',
         providerId: 'missing-token',
         displayName: 'Missing token',
@@ -198,10 +206,10 @@ describe('service.test 1', () => {
   it('rejects duplicate provider configuration before inserting', async () => {
     const existing = connector({ providerType: 'generic_oauth', providerId: 'github' })
     const repository = createRepository({ existingProvider: existing })
-    const service = new ConnectorService(repository)
+    const deps = { connectors: repository } as unknown as Deps
 
     await expect(
-      service.create({
+      createConnector(deps, {
         providerType: 'social',
         providerId: 'github',
         displayName: 'GitHub',
@@ -223,14 +231,14 @@ describe('service.test 1', () => {
       createResult: created,
       updateResult: { ...created, enabled: false },
     })
-    const service = new ConnectorService(repository)
+    const deps = { connectors: repository } as unknown as Deps
 
-    await expect(service.list({ limit: 25, offset: 0 })).resolves.toMatchObject({
+    await expect(listConnectors(deps, { limit: 25, offset: 0 })).resolves.toMatchObject({
       connectors: [],
       pagination: { limit: 25, offset: 0, total: 0, hasMore: false, nextOffset: null },
     })
     await expect(
-      service.create({
+      createConnector(deps, {
         providerType: 'social',
         providerId: 'github',
         displayName: 'GitHub',
@@ -245,12 +253,12 @@ describe('service.test 1', () => {
       scopes: [],
       providerMetadata: {},
     })
-    await expect(service.get('idp_github')).resolves.toMatchObject({ id: 'idp_github' })
-    await expect(service.update('idp_github', { enabled: false })).resolves.toMatchObject({
+    await expect(getConnector(deps, 'idp_github')).resolves.toMatchObject({ id: 'idp_github' })
+    await expect(updateConnector(deps, 'idp_github', { enabled: false })).resolves.toMatchObject({
       id: 'idp_github',
       enabled: false,
     })
-    await expect(service.delete('idp_github')).resolves.toBeUndefined()
+    await expect(deleteConnector(deps, 'idp_github')).resolves.toBeUndefined()
     expect(repository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         providerId: 'github',
@@ -267,22 +275,25 @@ describe('service.test 1', () => {
   })
 
   it('returns not found for missing connector reads, updates, and deletes', async () => {
-    const service = new ConnectorService(createRepository())
+    const deps = { connectors: createRepository() } as unknown as Deps
 
-    await expect(service.get('missing')).rejects.toMatchObject({ status: 404, message: 'Connector not found.' })
-    await expect(service.update('missing', { enabled: false })).rejects.toMatchObject({
+    await expect(getConnector(deps, 'missing')).rejects.toMatchObject({ status: 404, message: 'Connector not found.' })
+    await expect(updateConnector(deps, 'missing', { enabled: false })).rejects.toMatchObject({
       status: 404,
       message: 'Connector not found.',
     })
-    await expect(service.delete('missing')).rejects.toMatchObject({ status: 404, message: 'Connector not found.' })
+    await expect(deleteConnector(deps, 'missing')).rejects.toMatchObject({
+      status: 404,
+      message: 'Connector not found.',
+    })
   })
 
   it('validates update candidates before persisting enabled connectors', async () => {
     const current = connector({ id: 'idp_google', providerId: 'google' })
     const repository = createRepository({ byId: current })
-    const service = new ConnectorService(repository)
+    const deps = { connectors: repository } as unknown as Deps
 
-    await expect(service.update('idp_google', { clientSecret: null })).rejects.toMatchObject({
+    await expect(updateConnector(deps, 'idp_google', { clientSecret: null })).rejects.toMatchObject({
       status: 400,
       message: 'Enabled connector requires clientSecret.',
     })
@@ -309,7 +320,7 @@ describe('service.test 1', () => {
   it('accepts disabled incomplete connectors and generic OAuth endpoint configuration', async () => {
     const disabled = connector({ enabled: false, clientId: null, clientSecret: null })
     const repository = createRepository({ createResult: disabled })
-    const service = new ConnectorService(repository)
+    const deps = { connectors: repository } as unknown as Deps
     const endpointConfigured = connector({
       providerType: 'generic_oauth',
       providerId: 'generic-oauth',
@@ -321,7 +332,7 @@ describe('service.test 1', () => {
       scopes: null,
     })
     await expect(
-      service.create({
+      createConnector(deps, {
         providerType: 'social',
         providerId: 'google',
         displayName: 'Google',
@@ -342,16 +353,16 @@ describe('service.test 1', () => {
 
   it('reports configuration readiness without exposing secret values', async () => {
     const connectorRow = connector({ id: 'idp_google', providerId: 'google', clientSecret: 'GOOGLE_SECRET' })
-    const service = new ConnectorService(createRepository({ byId: connectorRow }))
+    const deps = { connectors: createRepository({ byId: connectorRow }) } as unknown as Deps
 
-    await expect(service.readiness('idp_google')).resolves.toEqual({
+    await expect(connectorReadiness(deps, 'idp_google')).resolves.toEqual({
       connectorId: 'idp_google',
       ready: true,
       checks: expect.arrayContaining([expect.objectContaining({ key: 'clientSecret', ok: true })]),
     })
 
-    const disabledService = new ConnectorService(
-      createRepository({
+    const disabledDeps = {
+      connectors: createRepository({
         byId: connector({
           id: 'idp_disabled',
           enabled: false,
@@ -359,8 +370,8 @@ describe('service.test 1', () => {
           clientSecret: null,
         }),
       }),
-    )
-    await expect(disabledService.readiness('idp_disabled')).resolves.toMatchObject({
+    } as unknown as Deps
+    await expect(connectorReadiness(disabledDeps, 'idp_disabled')).resolves.toMatchObject({
       connectorId: 'idp_disabled',
       ready: false,
       checks: expect.arrayContaining([
@@ -387,9 +398,9 @@ describe('service.test 1', () => {
       issuer: 'https://idp.example.com',
       userInfoEndpoint: 'https://idp.example.com/userinfo',
     })
-    const service = new ConnectorService(createRepository({ byId: connectorRow }))
+    const deps = { connectors: createRepository({ byId: connectorRow }) } as unknown as Deps
 
-    await expect(service.readiness('idp_generic')).resolves.toEqual({
+    await expect(connectorReadiness(deps, 'idp_generic')).resolves.toEqual({
       connectorId: 'idp_generic',
       ready: false,
       checks: expect.arrayContaining([

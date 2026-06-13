@@ -1,14 +1,28 @@
-import { AssetService } from '@server/usecases/assets'
-import type { AssetRepository } from '@server/usecases/ports'
+import {
+  getAssetObject,
+  updateApplicationLogo,
+  updateBrandingAsset,
+  updateOrganizationLogo,
+  updateUserAvatar,
+  uploadAsset,
+} from '@server/usecases/assets'
+import type { Deps } from '@server/usecases/deps'
+import type { AssetRepository, AssetStorage } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
+
+const origin = 'https://auth.example.com'
+
+function depsWith(assets: AssetRepository, assetStorage: AssetStorage): Deps {
+  return { assets, assetStorage } as unknown as Deps
+}
 
 describe('AssetService', () => {
   it('validates uploads, writes R2 objects, and stores D1 metadata', async () => {
     const repository = createRepository()
     const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
-    const service = new AssetService(repository, storage, 'https://auth.example.com')
+    const deps = depsWith(repository, storage)
 
-    const response = await service.upload({
+    const response = await uploadAsset(deps, origin, {
       purpose: 'avatar',
       file: new File([pngBytes()], 'Ada Lovelace.png', { type: 'image/png' }),
       actorUserId: 'user-1',
@@ -38,10 +52,10 @@ describe('AssetService', () => {
   })
 
   it('fails fast for unsupported content types, mismatched bytes, and oversized favicons', async () => {
-    const service = new AssetService(createRepository(), { put: vi.fn(), get: vi.fn() }, 'https://auth.example.com')
+    const deps = depsWith(createRepository(), { put: vi.fn(), get: vi.fn() })
 
     await expect(
-      service.upload({
+      uploadAsset(deps, origin, {
         purpose: 'application_logo',
         file: new File(['<svg />'], 'logo.svg', { type: 'image/svg+xml' }),
         actorUserId: 'admin-1',
@@ -49,7 +63,7 @@ describe('AssetService', () => {
     ).rejects.toMatchObject({ status: 400, message: 'Unsupported file type for application_logo.' })
 
     await expect(
-      service.upload({
+      uploadAsset(deps, origin, {
         purpose: 'application_logo',
         file: new File(['<svg />'], 'logo.png', { type: 'image/png' }),
         actorUserId: 'admin-1',
@@ -57,7 +71,7 @@ describe('AssetService', () => {
     ).rejects.toMatchObject({ status: 400, message: 'Unsupported file type for application_logo.' })
 
     await expect(
-      service.upload({
+      uploadAsset(deps, origin, {
         purpose: 'favicon',
         file: new File([new Uint8Array(512 * 1024 + 1)], 'favicon.png', { type: 'image/png' }),
         actorUserId: 'admin-1',
@@ -68,9 +82,9 @@ describe('AssetService', () => {
   it('canonicalizes Microsoft icon uploads to the stored content type', async () => {
     const repository = createRepository()
     const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
-    const service = new AssetService(repository, storage, 'https://auth.example.com')
+    const deps = depsWith(repository, storage)
 
-    const response = await service.upload({
+    const response = await uploadAsset(deps, origin, {
       purpose: 'favicon',
       file: new File([icoBytes()], 'favicon.ico', { type: 'image/vnd.microsoft.icon' }),
       actorUserId: 'admin-1',
@@ -85,14 +99,14 @@ describe('AssetService', () => {
 
   it('accepts JPEG and WebP uploads when signatures match their declared types', async () => {
     const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
-    const service = new AssetService(createRepository(), storage, 'https://auth.example.com')
+    const deps = depsWith(createRepository(), storage)
 
-    await service.upload({
+    await uploadAsset(deps, origin, {
       purpose: 'avatar',
       file: new File([jpegBytes()], 'avatar.jpg', { type: 'image/jpeg' }),
       actorUserId: 'user-1',
     })
-    await service.upload({
+    await uploadAsset(deps, origin, {
       purpose: 'application_logo',
       file: new File([webpBytes()], 'logo.webp', { type: 'image/webp' }),
       actorUserId: 'admin-1',
@@ -120,17 +134,17 @@ describe('AssetService', () => {
       createdByUserId: 'user-1',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     })
-    const service = new AssetService(repository, storage, 'https://auth.example.com')
+    const deps = depsWith(repository, storage)
 
     await expect(
-      service.upload({
+      uploadAsset(deps, origin, {
         purpose: 'avatar',
         file: new File([], 'avatar.png', { type: 'image/png' }),
         actorUserId: 'user-1',
       }),
     ).rejects.toMatchObject({ status: 400, message: 'Upload file is required.' })
 
-    await expect(service.getObject('asset-1')).rejects.toMatchObject({
+    await expect(getAssetObject(deps, 'asset-1')).rejects.toMatchObject({
       status: 404,
       message: 'Asset object was not found.',
     })
@@ -151,17 +165,13 @@ describe('AssetService', () => {
     const repository = createRepository()
     repository.findAsset = vi.fn().mockResolvedValue(asset)
     const object = { body: 'logo' } as unknown as R2ObjectBody
-    const service = new AssetService(
-      repository,
-      { put: vi.fn(), get: vi.fn().mockResolvedValue(object) },
-      'https://auth.example.com',
-    )
+    const deps = depsWith(repository, { put: vi.fn(), get: vi.fn().mockResolvedValue(object) })
 
-    await expect(service.getObject('asset-1')).resolves.toEqual({ asset, object })
-    await service.updateUserAvatar('user-1', responseAsset())
-    await service.updateApplicationLogo('app-1', responseAsset())
-    await service.updateOrganizationLogo('org-1', responseAsset())
-    await service.updateBrandingAsset('logo', responseAsset())
+    await expect(getAssetObject(deps, 'asset-1')).resolves.toEqual({ asset, object })
+    await updateUserAvatar(deps, 'user-1', responseAsset())
+    await updateApplicationLogo(deps, 'app-1', responseAsset())
+    await updateOrganizationLogo(deps, 'org-1', responseAsset())
+    await updateBrandingAsset(deps, 'logo', responseAsset())
 
     expect(repository.updateUserAvatar).toHaveBeenCalledWith('user-1', 'asset-1', '/api/assets/asset-1')
     expect(repository.updateApplicationLogo).toHaveBeenCalledWith('app-1', 'asset-1', '/api/assets/asset-1')
@@ -171,9 +181,9 @@ describe('AssetService', () => {
 
   it('surfaces missing asset metadata before reading R2', async () => {
     const storage = { put: vi.fn(), get: vi.fn() }
-    const service = new AssetService(createRepository(), storage, 'https://auth.example.com')
+    const deps = depsWith(createRepository(), storage)
 
-    await expect(service.getObject('missing')).rejects.toMatchObject({
+    await expect(getAssetObject(deps, 'missing')).rejects.toMatchObject({
       status: 404,
       message: 'Asset was not found.',
     })

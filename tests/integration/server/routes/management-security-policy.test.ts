@@ -2,6 +2,7 @@ import { createApp } from '@server/http/app'
 import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../test-deps'
 
 describe('management security policy routes', () => {
   beforeEach(() => {
@@ -24,11 +25,14 @@ describe('management security policy routes', () => {
         secretBinding: 'TURNSTILE_SECRET',
       },
     })
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(policy),
-      securityPolicy: policy,
-    })
+    const app = createApp(
+      createAuthMock(),
+      createTestDeps({
+        users: createUserRepositoryMock(),
+        security: createSecurityRepositoryMock(policy),
+      }),
+      { securityPolicy: policy },
+    )
 
     const missing = await app.request('/api/auth/sign-in/email', {
       method: 'POST',

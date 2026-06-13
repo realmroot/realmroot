@@ -1,19 +1,24 @@
 import { createApp } from '@server/http/app'
+import * as configz from '@server/usecases/configz'
 import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { createTestDeps } from '../test-deps'
 
 describe('account security passkey routes', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('serves account security state and delegates MFA enrollment APIs to Better Auth', async () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock(securityPolicy({ mfa: { mode: 'required' } }))
-    const app = createApp(auth, {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: security,
+    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock(), security }), {
       securityPolicy: securityPolicy(),
     })
     const headers = userHeaders()
@@ -56,9 +61,7 @@ describe('account security passkey routes', () => {
   it('serves account MFA/passkey resources and delegates backup code and passkey management', async () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock()
-    const app = createApp(auth, {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: security,
+    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock(), security }), {
       securityPolicy: securityPolicy(),
     })
     const headers = userHeaders()
@@ -120,9 +123,7 @@ describe('account security passkey routes', () => {
         },
       }),
     )
-    const app = createApp(auth, {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: security,
+    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock(), security }), {
       securityPolicy: securityPolicy(),
     })
 
@@ -143,9 +144,7 @@ describe('account security passkey routes', () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock()
     const users = createUserRepositoryMock()
-    const app = createApp(auth, {
-      userRepository: users,
-      securityRepository: security,
+    const app = createApp(auth, createTestDeps({ users, security }), {
       securityPolicy: securityPolicy(),
     })
 
@@ -176,25 +175,21 @@ describe('account security passkey routes', () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock()
     const users = createUserRepositoryMock()
-    const app = createApp(auth, {
-      userRepository: users,
-      securityRepository: security,
+    vi.spyOn(configz, 'getConfig').mockResolvedValue({
+      accountCenter: {
+        profileEditingEnabled: true,
+        displayNameEditable: true,
+        usernameEditable: true,
+        avatarEditable: false,
+        emailChangeEnabled: true,
+        passwordChangeEnabled: true,
+        connectedAccountsEnabled: true,
+        sessionsViewEnabled: false,
+        dangerZoneEnabled: false,
+      },
+    } as Awaited<ReturnType<typeof configz.getConfig>>)
+    const app = createApp(auth, createTestDeps({ users, security }), {
       securityPolicy: securityPolicy(),
-      configzServiceFactory: () => ({
-        getConfig: vi.fn().mockResolvedValue({
-          accountCenter: {
-            profileEditingEnabled: true,
-            displayNameEditable: true,
-            usernameEditable: true,
-            avatarEditable: false,
-            emailChangeEnabled: true,
-            passwordChangeEnabled: true,
-            connectedAccountsEnabled: true,
-            sessionsViewEnabled: false,
-            dangerZoneEnabled: false,
-          },
-        }),
-      }),
     })
     const headers = userHeaders()
 
@@ -212,16 +207,11 @@ describe('account security passkey routes', () => {
   })
 
   it('revokes authorized application consent for the current account', async () => {
-    const applicationService = {
-      list: vi.fn().mockResolvedValue({ pagination: { total: 1 } }),
-      revokeConsent: vi.fn().mockResolvedValue(undefined),
-    }
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(),
-      securityPolicy: securityPolicy(),
-      applicationServiceFactory: () => applicationService,
+    const deps = createTestDeps({
+      users: createUserRepositoryMock(),
+      security: createSecurityRepositoryMock(),
     })
+    const app = createApp(createAuthMock(), deps, { securityPolicy: securityPolicy() })
 
     const response = await app.request('/api/account/applications/consent-1', {
       method: 'DELETE',
@@ -229,7 +219,7 @@ describe('account security passkey routes', () => {
     })
 
     expect(response.status).toBe(204)
-    expect(applicationService.revokeConsent).toHaveBeenCalledWith('consent-1', 'user-1')
+    expect(deps.applications.revokeConsent).toHaveBeenCalledWith('consent-1', 'user-1')
   })
 })
 

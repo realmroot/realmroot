@@ -1,47 +1,58 @@
-import { AuthorizationService } from '@server/usecases/authorization'
+import {
+  addMember,
+  assignApplicationRole,
+  assignMemberRole,
+  assignUserRole,
+  buildTokenClaims,
+  createOrganization,
+  createPermission,
+  createResource,
+  createRole,
+  replaceRolePermissions,
+} from '@server/usecases/authorization'
+import type { Deps } from '@server/usecases/deps'
 import type { AuthorizationRepository, RoleAssignmentRecord } from '@server/usecases/ports'
 import type { PaginationQuery } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('service.test 6', () => {
   it('combines application and member assignments into resource token claims while filtering unrelated roles', async () => {
-    const repository = new InMemoryAuthorizationRepository()
-    const service = new AuthorizationService(repository)
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
 
-    const organization = await service.createOrganization({
+    const organization = await createOrganization(deps, {
       slug: 'acme-workspace',
       name: 'Acme Workspace',
     })
-    const member = await service.addMember(organization.id, {
+    const member = await addMember(deps, organization.id, {
       userId: 'user-1',
       role: 'member',
     })
-    const contactsResource = await service.createResource({
+    const contactsResource = await createResource(deps, {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
       tokenClaimsNamespace: 'https://claims.example.com/contacts',
     })
-    const billingResource = await service.createResource({
+    const billingResource = await createResource(deps, {
       identifier: 'billing-api',
       name: 'Billing API',
       audience: 'https://api.example.com/billing',
     })
-    const contactsPermission = await service.createPermission(contactsResource.id, {
+    const contactsPermission = await createPermission(deps, contactsResource.id, {
       key: 'contacts.read',
     })
-    const memberPermission = await service.createPermission(contactsResource.id, {
+    const memberPermission = await createPermission(deps, contactsResource.id, {
       key: 'contacts.manage',
     })
-    const billingPermission = await service.createPermission(billingResource.id, {
+    const billingPermission = await createPermission(deps, billingResource.id, {
       key: 'billing.read',
     })
-    const globalRole = await service.createRole({
+    const globalRole = await createRole(deps, {
       key: 'workspace-auditor',
       name: 'Workspace Auditor',
       tokenClaimName: 'workspace_role',
     })
-    const applicationRole = await service.createRole({
+    const applicationRole = await createRole(deps, {
       key: 'contacts-client',
       name: 'Contacts Client',
       resourceId: contactsResource.id,
@@ -49,32 +60,33 @@ describe('service.test 6', () => {
       tokenClaimName: 'contacts_role',
       tokenClaimValue: 'client',
     })
-    const memberRole = await service.createRole({
+    const memberRole = await createRole(deps, {
       key: 'contacts-member-admin',
       name: 'Contacts Member Admin',
       resourceId: contactsResource.id,
       organizationId: organization.id,
       tokenClaimName: 'member_role',
     })
-    const unrelatedRole = await service.createRole({
+    const unrelatedRole = await createRole(deps, {
       key: 'billing-reader',
       name: 'Billing Reader',
       resourceId: billingResource.id,
       tokenClaimName: 'billing_role',
     })
 
-    await service.replaceRolePermissions(applicationRole.id, [contactsPermission.id])
-    await service.replaceRolePermissions(memberRole.id, [memberPermission.id])
-    await service.replaceRolePermissions(unrelatedRole.id, [billingPermission.id])
-    await service.assignUserRole({ roleId: globalRole.id, subjectId: 'user-1' }, 'admin-1')
-    await service.assignApplicationRole(
+    await replaceRolePermissions(deps, applicationRole.id, [contactsPermission.id])
+    await replaceRolePermissions(deps, memberRole.id, [memberPermission.id])
+    await replaceRolePermissions(deps, unrelatedRole.id, [billingPermission.id])
+    await assignUserRole(deps, { roleId: globalRole.id, subjectId: 'user-1' }, 'admin-1')
+    await assignApplicationRole(
+      deps,
       { roleId: applicationRole.id, subjectId: 'app-1', tokenClaims: { client_tier: 'internal' } },
       'admin-1',
     )
-    await service.assignMemberRole({ roleId: memberRole.id, subjectId: member.id }, 'admin-1')
-    await service.assignUserRole({ roleId: unrelatedRole.id, subjectId: 'user-1' }, 'admin-1')
+    await assignMemberRole(deps, { roleId: memberRole.id, subjectId: member.id }, 'admin-1')
+    await assignUserRole(deps, { roleId: unrelatedRole.id, subjectId: 'user-1' }, 'admin-1')
 
-    const claims = await service.buildTokenClaims({
+    const claims = await buildTokenClaims(deps, {
       userId: 'user-1',
       applicationId: 'app-1',
       organizationId: organization.id,
@@ -103,18 +115,15 @@ describe('service.test 6', () => {
     expect(claims.roles).not.toContain('billing-reader')
     expect(claims.permissions).not.toContain('billing.read')
 
-    const planRole = await service.createRole({
+    const planRole = await createRole(deps, {
       key: 'plan-role',
       name: 'Plan Role',
       tokenClaimName: 'plan',
       tokenClaimValue: 'computed',
     })
-    await service.assignUserRole(
-      { roleId: planRole.id, subjectId: 'user-1', tokenClaims: { plan: 'custom' } },
-      'admin-1',
-    )
+    await assignUserRole(deps, { roleId: planRole.id, subjectId: 'user-1', tokenClaims: { plan: 'custom' } }, 'admin-1')
     await expect(
-      service.buildTokenClaims({
+      buildTokenClaims(deps, {
         userId: 'user-1',
         scopes: ['openid'],
       }),
@@ -122,7 +131,7 @@ describe('service.test 6', () => {
       plan: 'computed',
     })
 
-    const unknownResourceClaims = await service.buildTokenClaims({
+    const unknownResourceClaims = await buildTokenClaims(deps, {
       userId: 'user-1',
       applicationId: 'app-1',
       organizationId: organization.id,
@@ -141,7 +150,7 @@ describe('service.test 6', () => {
       permissions: [],
     })
 
-    const anonymousClaims = await service.buildTokenClaims({
+    const anonymousClaims = await buildTokenClaims(deps, {
       scopes: ['openid'],
     })
 
@@ -155,7 +164,7 @@ describe('service.test 6', () => {
       permissions: [],
     })
 
-    const missingMemberClaims = await service.buildTokenClaims({
+    const missingMemberClaims = await buildTokenClaims(deps, {
       userId: 'missing-user',
       organizationId: organization.id,
       scopes: ['openid'],

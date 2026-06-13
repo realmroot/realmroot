@@ -4,6 +4,7 @@ import { onboardingRoutes } from '@server/http/routes/onboarding'
 import type { OnboardingRepository } from '@server/usecases/ports'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../../test-deps'
 
 describe('onboardingRoutes', () => {
   beforeEach(() => {
@@ -80,8 +81,13 @@ describe('onboardingRoutes', () => {
 
 function createTestApp(onboarding: OnboardingRepository) {
   const app = new Hono()
+  const deps = createTestDeps({ onboarding })
   app.onError((error, c) => handleApiError(error, c))
-  app.route('/api/onboarding', onboardingRoutes(onboarding))
+  app.use('*', async (c, next) => {
+    c.set('deps', deps)
+    await next()
+  })
+  app.route('/api/onboarding', onboardingRoutes())
   return app
 }
 

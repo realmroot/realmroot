@@ -1,31 +1,15 @@
-import { type ConfigzBindings, type ConfigzRuntimeOptions, createConfigzService } from '@server/composition'
-import type { ConfigzService } from '@server/usecases/configz'
-import type { OnboardingRepository } from '@server/usecases/ports'
+import { getConfig } from '@server/usecases/configz'
 import { configzConfigResponseSchema } from '@shared/api/configz'
 import type { SecurityPolicy } from '@shared/api/security'
-import { type Context, Hono } from 'hono'
+import { Hono } from 'hono'
+import { configzOptions } from '../../app-config'
+import { getDeps } from '../../middleware/deps'
 
-export type ConfigzServiceFactory = (
-  c: Context<{ Bindings: ConfigzBindings }>,
-  options?: ConfigzRuntimeOptions,
-) => Pick<ConfigzService, 'getConfig'>
-
-export function createConfigzRoutes(
-  createService: ConfigzServiceFactory = createConfigzService,
-  onboardingRepository?: OnboardingRepository,
-  securityPolicy?: SecurityPolicy,
-) {
-  const app = new Hono<{ Bindings: ConfigzBindings }>()
+export function createConfigzRoutes(securityPolicy?: SecurityPolicy) {
+  const app = new Hono()
 
   app.get('/', async (c) =>
-    c.json(
-      configzConfigResponseSchema.parse(
-        await createService(c, {
-          onboardingRepository,
-          securityPolicy,
-        }).getConfig(),
-      ),
-    ),
+    c.json(configzConfigResponseSchema.parse(await getConfig(getDeps(c), configzOptions(c, securityPolicy)))),
   )
 
   return app

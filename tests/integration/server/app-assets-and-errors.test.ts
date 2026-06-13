@@ -1,6 +1,33 @@
 import { createApp } from '@server/http/app'
-import type { AssetService } from '@server/usecases/assets'
+import * as assets from '@server/usecases/assets'
+import * as configz from '@server/usecases/configz'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { createTestDeps } from './test-deps'
+
+type ConfigzConfig = Awaited<ReturnType<typeof configz.getConfig>>
+
+function mockConfig() {
+  return vi.spyOn(configz, 'getConfig').mockResolvedValue(configFixture() as ConfigzConfig)
+}
+
+function mockUpload() {
+  const uploadAsset = vi.spyOn(assets, 'uploadAsset').mockResolvedValue({ asset: assetFixture() })
+  const updateUserAvatar = vi.spyOn(assets, 'updateUserAvatar').mockResolvedValue(undefined)
+  return { uploadAsset, updateUserAvatar }
+}
+
+function assetFixture() {
+  return {
+    id: 'asset-1',
+    purpose: 'avatar' as const,
+    publicUrl: 'https://auth.example.com/api/assets/asset-1',
+    contentType: 'image/png',
+    byteSize: 6,
+    checksumSha256: 'checksum-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }
+}
 
 describe('app.test 3', () => {
   beforeEach(() => {
@@ -12,19 +39,15 @@ describe('app.test 3', () => {
   })
 
   it('mounts account avatar uploads with the injected account center config reader', async () => {
-    const configzService = createConfigzServiceMock()
-    const assets = createAssetServiceMock()
+    const getConfig = mockConfig()
+    const { uploadAsset } = mockUpload()
     const response = await requestWithFile(
-      createApp(createAuthMock(), {
-        userRepository: createUserRepositoryMock(),
-        assetServiceFactory: () => assets as unknown as AssetService,
-        configzServiceFactory: () => configzService,
-      }),
+      createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() })),
     )
 
     expect(response.status).toBe(201)
-    expect(configzService.getConfig).toHaveBeenCalled()
-    expect(assets.upload).toHaveBeenCalledWith({
+    expect(getConfig).toHaveBeenCalled()
+    expect(uploadAsset).toHaveBeenCalledWith(expect.anything(), expect.any(String), {
       purpose: 'avatar',
       file: expect.objectContaining({ name: 'avatar.png', type: 'image/png' }),
       actorUserId: 'user-1',
@@ -32,21 +55,26 @@ describe('app.test 3', () => {
   })
 
   it('mounts RPC account avatar uploads with the injected account center config reader', async () => {
-    const configzService = createConfigzServiceMock()
-    const assets = createAssetServiceMock()
+    const getConfig = mockConfig()
+    const { uploadAsset } = mockUpload()
     const response = await requestWithFile(
-      createApp(createAuthMock(), {
-        userRepository: createUserRepositoryMock(),
-        securityRepository: createSecurityRepositoryMock(),
-        securityPolicy: securityPolicy(),
-        assetServiceFactory: () => assets as unknown as AssetService,
-        configzServiceFactory: () => configzService,
-      }),
+      createApp(
+        createAuthMock(),
+        createTestDeps({
+          users: createUserRepositoryMock(),
+          security: createSecurityRepositoryMock(),
+        }),
+        { securityPolicy: securityPolicy() },
+      ),
     )
 
     expect(response.status).toBe(201)
-    expect(configzService.getConfig).toHaveBeenCalled()
-    expect(assets.upload).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: 'user-1' }))
+    expect(getConfig).toHaveBeenCalled()
+    expect(uploadAsset).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.objectContaining({ actorUserId: 'user-1' }),
+    )
   })
 })
 
@@ -74,46 +102,44 @@ function createAuthMock() {
   }
 }
 
-function createConfigzServiceMock(overrides: Record<string, unknown> = {}) {
+function configFixture(overrides: Record<string, unknown> = {}) {
   return {
-    getConfig: vi.fn().mockResolvedValue({
-      signIn: {
-        passwordEnabled: true,
-        signupEnabled: true,
-        socialLoginEnabled: true,
-        emailOtpEnabled: true,
-        usernameEnabled: true,
-        identifierFirst: false,
+    signIn: {
+      passwordEnabled: true,
+      signupEnabled: true,
+      socialLoginEnabled: true,
+      emailOtpEnabled: true,
+      usernameEnabled: true,
+      identifierFirst: false,
+    },
+    builtInProviders: {
+      email: { enabled: true },
+      phone: { enabled: false },
+      web3Wallet: { enabled: true, chains: [1], allowSignUp: true },
+      passkey: { allowSignUp: true },
+      oneTap: {
+        enabled: false,
+        clientId: '',
+        autoSelect: false,
+        cancelOnTapOutside: true,
+        uxMode: 'popup',
+        context: 'signin',
+        promptBaseDelayMs: 1000,
+        promptMaxAttempts: 5,
       },
-      builtInProviders: {
-        email: { enabled: true },
-        phone: { enabled: false },
-        web3Wallet: { enabled: true, chains: [1], allowSignUp: true },
-        passkey: { allowSignUp: true },
-        oneTap: {
-          enabled: false,
-          clientId: '',
-          autoSelect: false,
-          cancelOnTapOutside: true,
-          uxMode: 'popup',
-          context: 'signin',
-          promptBaseDelayMs: 1000,
-          promptMaxAttempts: 5,
-        },
-      },
-      accountCenter: {
-        profileEditingEnabled: true,
-        displayNameEditable: true,
-        usernameEditable: true,
-        avatarEditable: true,
-        emailChangeEnabled: true,
-        passwordChangeEnabled: true,
-        connectedAccountsEnabled: true,
-        sessionsViewEnabled: true,
-        dangerZoneEnabled: false,
-      },
-      ...overrides,
-    }),
+    },
+    accountCenter: {
+      profileEditingEnabled: true,
+      displayNameEditable: true,
+      usernameEditable: true,
+      avatarEditable: true,
+      emailChangeEnabled: true,
+      passwordChangeEnabled: true,
+      connectedAccountsEnabled: true,
+      sessionsViewEnabled: true,
+      dangerZoneEnabled: false,
+    },
+    ...overrides,
   }
 }
 
@@ -190,7 +216,7 @@ function _createWalletRepositoryMock({ linked }: { linked: boolean }) {
   }
 }
 
-function createAssetServiceMock() {
+function _createAssetServiceMock() {
   return {
     upload: vi.fn().mockResolvedValue({
       asset: {

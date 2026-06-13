@@ -1,65 +1,81 @@
-import { AuthorizationService } from '@server/usecases/authorization'
+import {
+  addMember,
+  createOrganization,
+  createPermission,
+  createResource,
+  createRole,
+  createScope,
+  deletePermission,
+  deleteRole,
+  deleteScope,
+  removeMember,
+  updateMember,
+  updatePermission,
+  updateRole,
+  updateScope,
+} from '@server/usecases/authorization'
+import type { Deps } from '@server/usecases/deps'
 import type { AuthorizationRepository, RoleAssignmentRecord } from '@server/usecases/ports'
 import type { PaginationQuery } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('service.test 5', () => {
   it('updates and deletes nested authorization resources when parent ownership matches', async () => {
-    const service = new AuthorizationService(new InMemoryAuthorizationRepository())
-    const organization = await service.createOrganization({ slug: 'acme-workspace', name: 'Acme Workspace' })
-    const member = await service.addMember(organization.id, { userId: 'user-1', role: 'member' })
-    const resource = await service.createResource({
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
+    const organization = await createOrganization(deps, { slug: 'acme-workspace', name: 'Acme Workspace' })
+    const member = await addMember(deps, organization.id, { userId: 'user-1', role: 'member' })
+    const resource = await createResource(deps, {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
     })
-    const scope = await service.createScope(resource.id, { value: 'contacts:read' })
-    const permission = await service.createPermission(resource.id, { key: 'contacts.read' })
-    const role = await service.createRole({ key: 'auditor', name: 'Auditor' })
+    const scope = await createScope(deps, resource.id, { value: 'contacts:read' })
+    const permission = await createPermission(deps, resource.id, { key: 'contacts.read' })
+    const role = await createRole(deps, { key: 'auditor', name: 'Auditor' })
 
-    await expect(service.updateMember(organization.id, member.id, { title: 'Owner' })).resolves.toMatchObject({
+    await expect(updateMember(deps, organization.id, member.id, { title: 'Owner' })).resolves.toMatchObject({
       id: member.id,
       title: 'Owner',
     })
-    await expect(service.updateScope(resource.id, scope.id, { description: 'Read contacts' })).resolves.toMatchObject({
+    await expect(updateScope(deps, resource.id, scope.id, { description: 'Read contacts' })).resolves.toMatchObject({
       id: scope.id,
       description: 'Read contacts',
     })
     await expect(
-      service.updatePermission(resource.id, permission.id, { description: 'Read contacts' }),
+      updatePermission(deps, resource.id, permission.id, { description: 'Read contacts' }),
     ).resolves.toMatchObject({
       id: permission.id,
       description: 'Read contacts',
     })
-    await expect(service.updateRole(role.id, { name: 'Workspace Auditor' })).resolves.toMatchObject({
+    await expect(updateRole(deps, role.id, { name: 'Workspace Auditor' })).resolves.toMatchObject({
       id: role.id,
       name: 'Workspace Auditor',
     })
-    await expect(service.deleteRole(role.id)).resolves.toBeUndefined()
-    await expect(service.removeMember(organization.id, member.id)).resolves.toBeUndefined()
-    await expect(service.deleteScope(resource.id, scope.id)).resolves.toBeUndefined()
-    await expect(service.deletePermission(resource.id, permission.id)).resolves.toBeUndefined()
+    await expect(deleteRole(deps, role.id)).resolves.toBeUndefined()
+    await expect(removeMember(deps, organization.id, member.id)).resolves.toBeUndefined()
+    await expect(deleteScope(deps, resource.id, scope.id)).resolves.toBeUndefined()
+    await expect(deletePermission(deps, resource.id, permission.id)).resolves.toBeUndefined()
   })
 
   it('reports missing nested authorization children', async () => {
-    const service = new AuthorizationService(new InMemoryAuthorizationRepository())
-    const organization = await service.createOrganization({ slug: 'acme-workspace', name: 'Acme Workspace' })
-    const resource = await service.createResource({
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
+    const organization = await createOrganization(deps, { slug: 'acme-workspace', name: 'Acme Workspace' })
+    const resource = await createResource(deps, {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
     })
 
-    await expect(service.updateMember(organization.id, 'missing', { title: 'Owner' })).rejects.toMatchObject({
+    await expect(updateMember(deps, organization.id, 'missing', { title: 'Owner' })).rejects.toMatchObject({
       status: 404,
       message: 'Organization member was not found.',
     })
-    await expect(service.updateScope(resource.id, 'missing', { description: 'Read contacts' })).rejects.toMatchObject({
+    await expect(updateScope(deps, resource.id, 'missing', { description: 'Read contacts' })).rejects.toMatchObject({
       status: 404,
       message: 'API scope was not found.',
     })
     await expect(
-      service.updatePermission(resource.id, 'missing', { description: 'Read contacts' }),
+      updatePermission(deps, resource.id, 'missing', { description: 'Read contacts' }),
     ).rejects.toMatchObject({
       status: 404,
       message: 'API permission was not found.',

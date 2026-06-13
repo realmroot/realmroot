@@ -1,15 +1,15 @@
 import { createEmailSender } from '@server/adapters/gateways/email/sender'
-import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
 import { type Auth, createAuth } from '@server/auth'
-import { createConfigzService, createDeps, createTokenExchangeService } from '@server/composition'
+import { createDeps } from '@server/composition'
 import { createDb } from '@server/db/client'
 import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp } from '@server/http/app'
-import { ApplicationService } from '@server/usecases/applications'
+import { ensureSystemClients as ensureSystemClientsUsecase } from '@server/usecases/applications'
 import { defaultBuiltInProviders } from '@server/usecases/configz'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
+import type { Deps } from '@server/usecases/deps'
 import { managementBuiltInProviderSettingsSchema } from '@shared/api/management'
 
 let cachedAuth: Auth | null = null
@@ -23,24 +23,18 @@ export default {
     const config = validateEnv(env, request.url)
     const deps = createDeps(env, config)
     const securityPolicy = await deps.security.getPolicy()
-    await ensureSystemClients(env.DB, createDb(env.DB), config.baseURL)
+    await ensureSystemClients(env.DB, deps, config.baseURL)
     const auth = await getAuth(env, { ...config, securityPolicy })
-    return createApp(auth, {
+    return createApp(auth, deps, {
       trustedOrigins: config.trustedOrigins,
-      userRepository: deps.users,
-      walletRepository: deps.wallets,
-      securityRepository: deps.security,
-      onboardingRepository: deps.onboarding,
       securityPolicy,
-      configzServiceFactory: createConfigzService,
-      tokenExchangeServiceFactory: createTokenExchangeService,
     }).fetch(request, env, ctx)
   },
 }
 
-async function ensureSystemClients(rawDb: D1Database, db: ReturnType<typeof createDb>, issuer: string) {
+async function ensureSystemClients(rawDb: D1Database, deps: Deps, issuer: string) {
   if (cachedSystemClientDb === rawDb) return
-  await new ApplicationService(createDrizzleApplicationRepository(db), { issuer }).ensureSystemClients()
+  await ensureSystemClientsUsecase(deps, issuer)
   cachedSystemClientDb = rawDb
 }
 

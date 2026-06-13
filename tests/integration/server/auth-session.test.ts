@@ -8,6 +8,7 @@ import type { Database } from '@server/db/client'
 import { createApp } from '@server/http/app'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from './test-deps'
 
 describe('auth.test 1', () => {
   it('serves OIDC discovery from the mounted Better Auth issuer', async () => {
@@ -20,7 +21,7 @@ describe('auth.test 1', () => {
       createSecurityPolicy(),
     )
 
-    const response = await createApp(auth).request('/api/auth/.well-known/openid-configuration')
+    const response = await createApp(auth, createTestDeps()).request('/api/auth/.well-known/openid-configuration')
 
     expect(response.status).toBe(200)
     const metadata = (await response.json()) as {
@@ -57,7 +58,7 @@ describe('auth.test 1', () => {
       createSecurityPolicy(),
     )
 
-    const response = await createApp(auth).request('/api/auth/oauth2/token', {
+    const response = await createApp(auth, createTestDeps()).request('/api/auth/oauth2/token', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -91,7 +92,7 @@ describe('auth.test 1', () => {
       code_challenge: 'challenge-1',
       code_challenge_method: 'S256',
     })
-    const response = await createApp(auth).request(`/api/auth/oauth2/authorize?${query}`)
+    const response = await createApp(auth, createTestDeps()).request(`/api/auth/oauth2/authorize?${query}`)
 
     expect(response.headers.get('location') ?? (await response.text())).not.toContain('client_id is required')
   })

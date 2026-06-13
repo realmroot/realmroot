@@ -1,4 +1,11 @@
-import { ApplicationService } from '@server/usecases/applications'
+import {
+  createApplication,
+  createConsent,
+  loadConsentRequest,
+  revokeConsent,
+  updateApplication,
+} from '@server/usecases/applications'
+import type { Deps } from '@server/usecases/deps'
 import type {
   ApplicationAggregate,
   ApplicationRepository,
@@ -11,8 +18,11 @@ import { describe, expect, it } from 'vitest'
 describe('service.test 3', () => {
   it('revokes consent for the owning user and rejects missing consent', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
-    const created = await service.create(
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Consent App',
         clientType: 'public_spa',
@@ -20,10 +30,10 @@ describe('service.test 3', () => {
       },
       'admin-1',
     )
-    const consent = await service.createConsent({ clientId: created.clientId, scopes: ['openid'] }, 'user-1')
+    const consent = await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1')
 
-    await expect(service.revokeConsent(consent.id, 'user-1')).resolves.toBeUndefined()
-    await expect(service.revokeConsent(consent.id, 'user-1')).rejects.toMatchObject({
+    await expect(revokeConsent(deps, consent.id, 'user-1')).resolves.toBeUndefined()
+    await expect(revokeConsent(deps, consent.id, 'user-1')).rejects.toMatchObject({
       status: 404,
       message: 'Application consent was not found.',
     })
@@ -31,8 +41,11 @@ describe('service.test 3', () => {
 
   it('handles OAuth consent defaults and rejects disabled or missing clients', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
-    const created = await service.create(
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Consent Defaults App',
         clientType: 'public_spa',
@@ -42,7 +55,9 @@ describe('service.test 3', () => {
     )
 
     await expect(
-      service.loadConsentRequest(
+      loadConsentRequest(
+        deps,
+        issuer,
         {
           clientId: created.clientId,
           redirectUri: 'https://spa.example.com/callback',
@@ -55,10 +70,12 @@ describe('service.test 3', () => {
       state: null,
     })
 
-    await service.update(created.id, { disabled: true })
+    await updateApplication(deps, issuer, created.id, { disabled: true })
 
     await expect(
-      service.loadConsentRequest(
+      loadConsentRequest(
+        deps,
+        issuer,
         {
           clientId: created.clientId,
           redirectUri: 'https://spa.example.com/callback',
@@ -67,10 +84,12 @@ describe('service.test 3', () => {
       ),
     ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
     await expect(
-      service.createConsent({ clientId: created.clientId, scopes: ['openid'] }, 'user-1'),
+      createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1'),
     ).rejects.toMatchObject({ status: 404, message: 'OAuth client was not found.' })
     await expect(
-      service.loadConsentRequest(
+      loadConsentRequest(
+        deps,
+        issuer,
         {
           clientId: 'missing-client',
           redirectUri: 'https://spa.example.com/callback',

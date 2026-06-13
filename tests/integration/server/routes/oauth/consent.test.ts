@@ -1,11 +1,17 @@
 import { handleApiError } from '@server/http/errors'
 import { createOAuthConsentRoute } from '@server/http/routes/oauth/consent'
+import * as applicationsUsecase from '@server/usecases/applications'
 import { Hono } from 'hono'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../../test-deps'
 
 describe('OAuth consent routes', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('requires authentication before creating consent', async () => {
@@ -87,7 +93,15 @@ describe('OAuth consent routes', () => {
 })
 
 function createTestApp(service: ReturnType<typeof createConsentServiceMock>) {
+  vi.spyOn(applicationsUsecase, 'loadConsentRequest').mockImplementation((_d, _i, input, user) =>
+    service.loadConsentRequest(input, user),
+  )
+  vi.spyOn(applicationsUsecase, 'createConsent').mockImplementation((_d, body, userId) =>
+    service.createConsent(body, userId),
+  )
+
   const app = new Hono()
+  const deps = createTestDeps()
   app.onError((error, c) => handleApiError(error, c))
   app.use('/api/*', async (c, next) => {
     const userId = c.req.header('x-user-id')
@@ -97,12 +111,10 @@ function createTestApp(service: ReturnType<typeof createConsentServiceMock>) {
         ? { id: userId, email: 'jane@example.com', name: 'Jane Stone', image: 'https://auth.example.com/avatar.png' }
         : null,
     })
+    c.set('deps', deps)
     await next()
   })
-  app.route(
-    '/api/oauth/consent',
-    createOAuthConsentRoute(() => service),
-  )
+  app.route('/api/oauth/consent', createOAuthConsentRoute())
   return app
 }
 

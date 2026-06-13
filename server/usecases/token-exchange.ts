@@ -1,5 +1,6 @@
 import { badRequest, unauthorized } from '@server/domain/errors'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
+import type { Deps } from '@server/usecases/deps'
 import type {
   JwksGateway,
   OAuthClientRecord,
@@ -66,171 +67,175 @@ export interface IntrospectionResponse {
   [key: string]: unknown
 }
 
-export class TokenExchangeService {
-  constructor(
-    private readonly repository: TokenExchangeRepository,
-    private readonly jwks: JwksGateway,
-  ) {}
+export async function exchangeToken(
+  deps: Deps,
+  input: TokenExchangeRequest,
+  client: { clientId: string; clientSecret: string | null },
+) {
+  if (input.grantType !== tokenExchangeGrantType) {
+    throw badRequest('Unsupported grant_type.')
+  }
+  if (input.subjectTokenType !== jwtTokenType) {
+    throw badRequest('Only JWT subject_token_type is supported.')
+  }
+  if (input.requestedTokenType && input.requestedTokenType !== accessTokenType) {
+    throw badRequest('Only access_token requested_token_type is supported.')
+  }
 
-  async exchange(input: TokenExchangeRequest, client: { clientId: string; clientSecret: string | null }) {
-    if (input.grantType !== tokenExchangeGrantType) {
-      throw badRequest('Unsupported grant_type.')
-    }
-    if (input.subjectTokenType !== jwtTokenType) {
-      throw badRequest('Only JWT subject_token_type is supported.')
-    }
-    if (input.requestedTokenType && input.requestedTokenType !== accessTokenType) {
-      throw badRequest('Only access_token requested_token_type is supported.')
-    }
+  const oauthClient = await authenticateClient(deps, client.clientId, client.clientSecret)
+  const allowedGrantTypes = parseList(oauthClient.grantTypes)
+  if (!allowedGrantTypes.includes(tokenExchangeGrantType)) {
+    throw unauthorized('Client is not allowed to use token exchange.')
+  }
 
-    const oauthClient = await this.authenticateClient(client.clientId, client.clientSecret)
-    const allowedGrantTypes = parseList(oauthClient.grantTypes)
-    if (!allowedGrantTypes.includes(tokenExchangeGrantType)) {
-      throw unauthorized('Client is not allowed to use token exchange.')
-    }
+  const scopes = normalizeScopes(input.scope, parseList(oauthClient.scopes))
+  if (scopes.includes('offline_access') && !allowedGrantTypes.includes(refreshTokenGrantType)) {
+    throw badRequest('Client is not allowed to issue refresh tokens.')
+  }
+  const assertion = parseJwt(input.subjectToken)
+  const issuerValue = readString(assertion.payload.iss)
+  const subject = readString(assertion.payload.sub)
+  if (!issuerValue || !subject) throw unauthorized('Subject token is missing required claims.')
 
-    const scopes = normalizeScopes(input.scope, parseList(oauthClient.scopes))
-    if (scopes.includes('offline_access') && !allowedGrantTypes.includes(refreshTokenGrantType)) {
-      throw badRequest('Client is not allowed to issue refresh tokens.')
-    }
-    const assertion = parseJwt(input.subjectToken)
-    const issuerValue = readString(assertion.payload.iss)
-    const subject = readString(assertion.payload.sub)
-    if (!issuerValue || !subject) throw unauthorized('Subject token is missing required claims.')
+  const issuer = await deps.tokenExchange.findTrustedIssuer(issuerValue)
+  if (!issuer?.enabled) throw unauthorized('Subject token issuer is not trusted.')
+  if (issuer.allowedAudiences?.length && !issuer.allowedAudiences.includes(input.audience)) {
+    throw unauthorized('Audience is not allowed for this issuer.')
+  }
 
-    const issuer = await this.repository.findTrustedIssuer(issuerValue)
-    if (!issuer?.enabled) throw unauthorized('Subject token issuer is not trusted.')
-    if (issuer.allowedAudiences?.length && !issuer.allowedAudiences.includes(input.audience)) {
-      throw unauthorized('Audience is not allowed for this issuer.')
-    }
+  await verifySubjectToken(input.subjectToken, assertion, issuer, input.audience, deps.jwks)
 
-    await verifySubjectToken(input.subjectToken, assertion, issuer, input.audience, this.jwks)
+  const expiresIn = defaultExpiresInSeconds
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + expiresIn * 1000)
+  const accessToken = `fatx_${base64Url(randomBytes(32))}`
+  const claims = tokenClaims(assertion.payload)
+  await deps.tokenExchange.storeAccessToken({
+    id: createId('tex'),
+    tokenHash: await hashProviderSecret(accessToken),
+    clientId: oauthClient.clientId,
+    issuerId: issuer.id,
+    subject,
+    subjectTokenIssuer: issuer.issuer,
+    audience: input.audience,
+    scopes,
+    claims,
+    expiresAt,
+  })
 
-    const expiresIn = defaultExpiresInSeconds
-    const now = new Date()
-    const expiresAt = new Date(now.getTime() + expiresIn * 1000)
-    const accessToken = `fatx_${base64Url(randomBytes(32))}`
-    const claims = tokenClaims(assertion.payload)
-    await this.repository.storeAccessToken({
-      id: createId('tex'),
-      tokenHash: await hashProviderSecret(accessToken),
-      clientId: oauthClient.clientId,
+  const response: TokenExchangeResponse = {
+    access_token: accessToken,
+    issued_token_type: accessTokenType,
+    token_type: 'Bearer',
+    expires_in: expiresIn,
+    scope: scopes.join(' '),
+  }
+  if (scopes.includes('offline_access')) {
+    response.refresh_token = await issueRefreshToken(oauthClient, {
       issuerId: issuer.id,
       subject,
       subjectTokenIssuer: issuer.issuer,
       audience: input.audience,
       scopes,
       claims,
-      expiresAt,
     })
+  }
+  return response
+}
 
-    const response: TokenExchangeResponse = {
-      access_token: accessToken,
-      issued_token_type: accessTokenType,
-      token_type: 'Bearer',
-      expires_in: expiresIn,
-      scope: scopes.join(' '),
-    }
-    if (scopes.includes('offline_access')) {
-      response.refresh_token = await issueRefreshToken(oauthClient, {
-        issuerId: issuer.id,
-        subject,
-        subjectTokenIssuer: issuer.issuer,
-        audience: input.audience,
-        scopes,
-        claims,
-      })
-    }
-    return response
+export async function refreshToken(deps: Deps, input: TokenRefreshRequest) {
+  if (input.grantType !== refreshTokenGrantType) {
+    throw badRequest('Unsupported grant_type.')
+  }
+  const oauthClient = await authenticateRefreshClient(deps, input.refreshToken)
+  if (!parseList(oauthClient.grantTypes).includes(refreshTokenGrantType)) {
+    throw unauthorized('Client is not allowed to use refresh tokens.')
   }
 
-  async refresh(input: TokenRefreshRequest) {
-    if (input.grantType !== refreshTokenGrantType) {
-      throw badRequest('Unsupported grant_type.')
-    }
-    const oauthClient = await this.authenticateRefreshClient(input.refreshToken)
-    if (!parseList(oauthClient.grantTypes).includes(refreshTokenGrantType)) {
-      throw unauthorized('Client is not allowed to use refresh tokens.')
-    }
-
-    const payload = await verifyRefreshToken(input.refreshToken, oauthClient)
-    if (payload.clientId !== oauthClient.clientId) {
-      throw unauthorized('Refresh token client does not match.')
-    }
-    const requestedScopes = input.scope ? normalizeScopes(input.scope, payload.scopes) : payload.scopes
-    const expiresIn = defaultExpiresInSeconds
-    const now = new Date()
-    const expiresAt = new Date(now.getTime() + expiresIn * 1000)
-    const accessToken = `fatx_${base64Url(randomBytes(32))}`
-    await this.repository.storeAccessToken({
-      id: createId('tex'),
-      tokenHash: await hashProviderSecret(accessToken),
-      clientId: oauthClient.clientId,
-      issuerId: payload.issuerId,
-      subject: payload.subject,
-      subjectTokenIssuer: payload.subjectTokenIssuer,
-      audience: payload.audience,
-      scopes: requestedScopes,
-      claims: payload.claims,
-      expiresAt,
-    })
-
-    return {
-      access_token: accessToken,
-      issued_token_type: accessTokenType,
-      token_type: 'Bearer',
-      expires_in: expiresIn,
-      scope: requestedScopes.join(' '),
-    } satisfies TokenExchangeResponse
+  const payload = await verifyRefreshToken(input.refreshToken, oauthClient)
+  if (payload.clientId !== oauthClient.clientId) {
+    throw unauthorized('Refresh token client does not match.')
   }
+  const requestedScopes = input.scope ? normalizeScopes(input.scope, payload.scopes) : payload.scopes
+  const expiresIn = defaultExpiresInSeconds
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + expiresIn * 1000)
+  const accessToken = `fatx_${base64Url(randomBytes(32))}`
+  await deps.tokenExchange.storeAccessToken({
+    id: createId('tex'),
+    tokenHash: await hashProviderSecret(accessToken),
+    clientId: oauthClient.clientId,
+    issuerId: payload.issuerId,
+    subject: payload.subject,
+    subjectTokenIssuer: payload.subjectTokenIssuer,
+    audience: payload.audience,
+    scopes: requestedScopes,
+    claims: payload.claims,
+    expiresAt,
+  })
 
-  async introspect(token: string, client: { clientId: string; clientSecret: string | null }) {
-    await this.authenticateClient(client.clientId, client.clientSecret)
-    const row = await this.repository.findAccessTokenByHash(await hashProviderSecret(token))
-    if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) {
-      return { active: false } satisfies IntrospectionResponse
-    }
-    return {
-      active: true,
-      iss: row.subjectTokenIssuer,
-      sub: row.subject,
-      aud: row.audience,
-      client_id: row.clientId,
-      scope: row.scopes.join(' '),
-      exp: Math.floor(row.expiresAt.getTime() / 1000),
-      iat: Math.floor(row.createdAt.getTime() / 1000),
-      token_type: 'Bearer',
-      ...row.claims,
-    } satisfies IntrospectionResponse
-  }
+  return {
+    access_token: accessToken,
+    issued_token_type: accessTokenType,
+    token_type: 'Bearer',
+    expires_in: expiresIn,
+    scope: requestedScopes.join(' '),
+  } satisfies TokenExchangeResponse
+}
 
-  async createTrustedIssuer(input: Parameters<TokenExchangeRepository['createTrustedIssuer']>[0]) {
-    if (!input.jwksUrl && !input.sharedSecret) {
-      throw badRequest('Trusted issuers require either jwksUrl or sharedSecret.')
-    }
-    return this.repository.createTrustedIssuer(input)
+export async function introspectToken(
+  deps: Deps,
+  token: string,
+  client: { clientId: string; clientSecret: string | null },
+) {
+  await authenticateClient(deps, client.clientId, client.clientSecret)
+  const row = await deps.tokenExchange.findAccessTokenByHash(await hashProviderSecret(token))
+  if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) {
+    return { active: false } satisfies IntrospectionResponse
   }
+  return {
+    active: true,
+    iss: row.subjectTokenIssuer,
+    sub: row.subject,
+    aud: row.audience,
+    client_id: row.clientId,
+    scope: row.scopes.join(' '),
+    exp: Math.floor(row.expiresAt.getTime() / 1000),
+    iat: Math.floor(row.createdAt.getTime() / 1000),
+    token_type: 'Bearer',
+    ...row.claims,
+  } satisfies IntrospectionResponse
+}
 
-  listTrustedIssuers() {
-    return this.repository.listTrustedIssuers()
+export async function createTrustedIssuer(
+  deps: Deps,
+  input: Parameters<TokenExchangeRepository['createTrustedIssuer']>[0],
+) {
+  if (!input.jwksUrl && !input.sharedSecret) {
+    throw badRequest('Trusted issuers require either jwksUrl or sharedSecret.')
   }
+  return deps.tokenExchange.createTrustedIssuer(input)
+}
 
-  private async authenticateClient(clientId: string, clientSecret: string | null) {
-    if (!clientId || !clientSecret) throw unauthorized('Client authentication is required.')
-    const client = await this.repository.findClient(clientId)
-    if (!client || client.disabled) throw unauthorized('Invalid client credentials.')
-    if (!client.clientSecret || client.clientSecret !== (await hashProviderSecret(clientSecret))) {
-      throw unauthorized('Invalid client credentials.')
-    }
-    return client
-  }
+export function listTrustedIssuers(deps: Deps) {
+  return deps.tokenExchange.listTrustedIssuers()
+}
 
-  private async authenticateRefreshClient(refreshToken: string) {
-    const payload = readUnsignedRefreshPayload(refreshToken)
-    const client = await this.repository.findClient(payload.clientId)
-    if (!client || client.disabled || !client.clientSecret) throw unauthorized('Invalid refresh token.')
-    return client
+async function authenticateClient(deps: Deps, clientId: string, clientSecret: string | null) {
+  if (!clientId || !clientSecret) throw unauthorized('Client authentication is required.')
+  const client = await deps.tokenExchange.findClient(clientId)
+  if (!client || client.disabled) throw unauthorized('Invalid client credentials.')
+  if (!client.clientSecret || client.clientSecret !== (await hashProviderSecret(clientSecret))) {
+    throw unauthorized('Invalid client credentials.')
   }
+  return client
+}
+
+async function authenticateRefreshClient(deps: Deps, refreshTokenValue: string) {
+  const payload = readUnsignedRefreshPayload(refreshTokenValue)
+  const client = await deps.tokenExchange.findClient(payload.clientId)
+  if (!client || client.disabled || !client.clientSecret) throw unauthorized('Invalid refresh token.')
+  return client
 }
 
 export function parseBasicClientAuthorization(header: string | null) {

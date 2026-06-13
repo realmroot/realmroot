@@ -1,34 +1,43 @@
 import { createApp } from '@server/http/app'
-import type { AssetService } from '@server/usecases/assets'
+import * as assets from '@server/usecases/assets'
+import * as configz from '@server/usecases/configz'
 import type { UserRepository } from '@server/usecases/ports'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { createTestDeps } from '../test-deps'
+
+type ConfigzConfig = Awaited<ReturnType<typeof configz.getConfig>>
+
+function mockConfig(config: Record<string, unknown>) {
+  return vi.spyOn(configz, 'getConfig').mockResolvedValue(config as ConfigzConfig)
+}
 
 describe('management account settings routes', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('enforces account center settings at the account API boundary', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
-    const app = createApp(auth, {
-      userRepository: users,
-      configzServiceFactory: () => ({
-        getConfig: vi.fn().mockResolvedValue({
-          accountCenter: {
-            profileEditingEnabled: true,
-            displayNameEditable: false,
-            usernameEditable: false,
-            avatarEditable: false,
-            emailChangeEnabled: false,
-            passwordChangeEnabled: false,
-            connectedAccountsEnabled: false,
-            sessionsViewEnabled: false,
-            dangerZoneEnabled: false,
-          },
-        }),
-      }),
+    mockConfig({
+      accountCenter: {
+        profileEditingEnabled: true,
+        displayNameEditable: false,
+        usernameEditable: false,
+        avatarEditable: false,
+        emailChangeEnabled: false,
+        passwordChangeEnabled: false,
+        connectedAccountsEnabled: false,
+        sessionsViewEnabled: false,
+        dangerZoneEnabled: false,
+      },
     })
+    const app = createApp(auth, createTestDeps({ users }))
     const headers = userHeaders()
 
     const profile = await app.request('/api/account/profile', {
@@ -66,24 +75,20 @@ describe('management account settings routes', () => {
 
   it('enforces account center username and avatar field permissions independently', async () => {
     const users = createUserRepositoryMock()
-    const app = createApp(createAuthMock(), {
-      userRepository: users,
-      configzServiceFactory: () => ({
-        getConfig: vi.fn().mockResolvedValue({
-          accountCenter: {
-            profileEditingEnabled: true,
-            displayNameEditable: true,
-            usernameEditable: false,
-            avatarEditable: false,
-            emailChangeEnabled: true,
-            passwordChangeEnabled: true,
-            connectedAccountsEnabled: true,
-            sessionsViewEnabled: true,
-            dangerZoneEnabled: false,
-          },
-        }),
-      }),
+    mockConfig({
+      accountCenter: {
+        profileEditingEnabled: true,
+        displayNameEditable: true,
+        usernameEditable: false,
+        avatarEditable: false,
+        emailChangeEnabled: true,
+        passwordChangeEnabled: true,
+        connectedAccountsEnabled: true,
+        sessionsViewEnabled: true,
+        dangerZoneEnabled: false,
+      },
     })
+    const app = createApp(createAuthMock(), createTestDeps({ users }))
 
     const username = await app.request('/api/account/profile', {
       method: 'PATCH',
@@ -103,85 +108,73 @@ describe('management account settings routes', () => {
 
   it('requires profile editing before allowing account email changes', async () => {
     const auth = createAuthMock()
-    const response = await createApp(auth, {
-      userRepository: createUserRepositoryMock(),
-      configzServiceFactory: () => ({
-        getConfig: vi.fn().mockResolvedValue({
-          accountCenter: {
-            profileEditingEnabled: false,
-            displayNameEditable: true,
-            usernameEditable: true,
-            avatarEditable: true,
-            emailChangeEnabled: true,
-            passwordChangeEnabled: true,
-            connectedAccountsEnabled: true,
-            sessionsViewEnabled: true,
-            dangerZoneEnabled: false,
-          },
-        }),
-      }),
-    }).request('/api/account/email/change', {
-      method: 'POST',
-      headers: userHeaders(),
-      body: JSON.stringify({ email: 'grace@example.com' }),
+    mockConfig({
+      accountCenter: {
+        profileEditingEnabled: false,
+        displayNameEditable: true,
+        usernameEditable: true,
+        avatarEditable: true,
+        emailChangeEnabled: true,
+        passwordChangeEnabled: true,
+        connectedAccountsEnabled: true,
+        sessionsViewEnabled: true,
+        dangerZoneEnabled: false,
+      },
     })
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
+      '/api/account/email/change',
+      {
+        method: 'POST',
+        headers: userHeaders(),
+        body: JSON.stringify({ email: 'grace@example.com' }),
+      },
+    )
 
     expect(response.status).toBe(403)
     expect(auth.api.changeEmail).not.toHaveBeenCalled()
   })
 
   it('mounts account avatar uploads with account-center config in the standard app', async () => {
-    const assets = {
-      upload: vi.fn().mockResolvedValue({ asset: assetFixture() }),
-      updateUserAvatar: vi.fn().mockResolvedValue(undefined),
-    }
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      assetServiceFactory: () => assets as unknown as AssetService,
-      configzServiceFactory: () => ({
-        getConfig: vi.fn().mockResolvedValue({
-          accountCenter: {
-            profileEditingEnabled: false,
-            displayNameEditable: true,
-            usernameEditable: true,
-            avatarEditable: true,
-            emailChangeEnabled: true,
-            passwordChangeEnabled: true,
-            connectedAccountsEnabled: true,
-            sessionsViewEnabled: true,
-            dangerZoneEnabled: false,
-          },
-        }),
-      }),
+    const uploadAsset = vi.spyOn(assets, 'uploadAsset').mockResolvedValue({ asset: assetFixture() })
+    const updateUserAvatar = vi.spyOn(assets, 'updateUserAvatar').mockResolvedValue(undefined)
+    mockConfig({
+      accountCenter: {
+        profileEditingEnabled: false,
+        displayNameEditable: true,
+        usernameEditable: true,
+        avatarEditable: true,
+        emailChangeEnabled: true,
+        passwordChangeEnabled: true,
+        connectedAccountsEnabled: true,
+        sessionsViewEnabled: true,
+        dangerZoneEnabled: false,
+      },
     })
+    const app = createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() }))
 
     const response = await requestWithFile(app, '/api/account/avatar', userHeaders())
 
     expect(response.status).toBe(403)
-    expect(assets.upload).not.toHaveBeenCalled()
-    expect(assets.updateUserAvatar).not.toHaveBeenCalled()
+    expect(uploadAsset).not.toHaveBeenCalled()
+    expect(updateUserAvatar).not.toHaveBeenCalled()
   })
 
   it('enforces individual account profile field permissions', async () => {
     const users = createUserRepositoryMock()
-    const app = createApp(createAuthMock(), {
-      userRepository: users,
-      configzServiceFactory: () => ({
-        getConfig: vi.fn().mockResolvedValue({
-          accountCenter: {
-            profileEditingEnabled: true,
-            displayNameEditable: true,
-            usernameEditable: false,
-            avatarEditable: false,
-            emailChangeEnabled: true,
-            passwordChangeEnabled: true,
-            connectedAccountsEnabled: true,
-            sessionsViewEnabled: true,
-            dangerZoneEnabled: false,
-          },
-        }),
-      }),
+    mockConfig({
+      accountCenter: {
+        profileEditingEnabled: true,
+        displayNameEditable: true,
+        usernameEditable: false,
+        avatarEditable: false,
+        emailChangeEnabled: true,
+        passwordChangeEnabled: true,
+        connectedAccountsEnabled: true,
+        sessionsViewEnabled: true,
+        dangerZoneEnabled: false,
+      },
     })
+    const app = createApp(createAuthMock(), createTestDeps({ users }))
     const headers = userHeaders()
 
     const username = await app.request('/api/account/profile', {
@@ -202,7 +195,7 @@ describe('management account settings routes', () => {
 
   it('serves account read APIs from the current end-user session', async () => {
     const users = createUserRepositoryMock()
-    const app = createApp(createAuthMock(), { userRepository: users })
+    const app = createApp(createAuthMock(), createTestDeps({ users }))
     const headers = userHeaders()
 
     await app.request('/api/account/profile', { headers })
@@ -254,7 +247,7 @@ describe('management account settings routes', () => {
       message: 'User not found.',
     })
 
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/account/email/change',
       {
         method: 'POST',
@@ -275,7 +268,7 @@ describe('management account settings routes', () => {
   it('validates account profile updates only at the request boundary', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
-    const response = await createApp(auth, { userRepository: users }).request('/api/account/profile', {
+    const response = await createApp(auth, createTestDeps({ users })).request('/api/account/profile', {
       method: 'PATCH',
       headers: userHeaders(),
       body: JSON.stringify({ username: 'no spaces' }),
@@ -286,18 +279,8 @@ describe('management account settings routes', () => {
   })
 
   it('validates connector configuration before management route persistence', async () => {
-    const response = await createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      connectorServiceFactory: () => ({
-        create: vi.fn(),
-        delete: vi.fn(),
-        get: vi.fn(),
-        list: vi.fn(),
-        listTemplates: vi.fn(),
-        readiness: vi.fn(),
-        update: vi.fn(),
-      }),
-    }).request('/api/management/connectors', {
+    const deps = createTestDeps({ users: createUserRepositoryMock() })
+    const response = await createApp(createAuthMock(), deps).request('/api/management/connectors', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({
@@ -314,6 +297,7 @@ describe('management account settings routes', () => {
         message: expect.stringContaining('clientSecret is required.'),
       },
     })
+    expect(deps.connectors.create).not.toHaveBeenCalled()
   })
 })
 

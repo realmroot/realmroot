@@ -1,16 +1,25 @@
-import { ConfigzService, defaultAccountCenterSettings } from '@server/usecases/configz'
-import type { ConfigzRepository } from '@server/usecases/ports'
+import type { ConfigzOptions } from '@server/usecases/configz'
+import {
+  defaultAccountCenterSettings,
+  getConfig,
+  updateManagementAccountCenterSettings,
+  updateManagementBrandingSettings,
+  updateManagementSignInSettings,
+} from '@server/usecases/configz'
+import type { Deps } from '@server/usecases/deps'
+import type { ConfigzRepository, ConnectorRecord } from '@server/usecases/ports'
 import { describe, expect, it } from 'vitest'
 
 describe('ConfigzService', () => {
   it('composes hosted auth config without leaking connector secrets', async () => {
-    const service = new ConfigzService(createRepository(), {
+    const deps = createDeps(createRepository(), { onboardingHasUsers: true })
+    const options = {
       issuer: 'https://auth.example.com',
       emailOtpEnabled: true,
       usernameEnabled: true,
-    })
+    }
 
-    await expect(service.getConfig()).resolves.toEqual({
+    await expect(getConfig(deps, options)).resolves.toEqual({
       onboarding: {
         required: false,
         href: '/onboarding',
@@ -98,7 +107,7 @@ describe('ConfigzService', () => {
   })
 
   it('returns configured methods, branding, legal links, copy, and IdP summaries', async () => {
-    const service = new ConfigzService(
+    const deps = createDeps(
       createRepository({
         settings: {
           passwordEnabled: false,
@@ -135,14 +144,10 @@ describe('ConfigzService', () => {
           },
         ],
       }),
-      {
-        issuer: 'https://auth.example.com',
-        emailOtpEnabled: true,
-        usernameEnabled: true,
-      },
+      { onboardingHasUsers: true, enabledConnectors: [enabledConnector('google')] },
     )
 
-    await expect(service.getConfig()).resolves.toMatchObject({
+    await expect(getConfig(deps, defaultOptions())).resolves.toMatchObject({
       signIn: {
         passwordEnabled: false,
         signupEnabled: false,
@@ -174,7 +179,7 @@ describe('ConfigzService', () => {
   })
 
   it('hides identity providers when social login is disabled', async () => {
-    const service = new ConfigzService(
+    const deps = createDeps(
       createRepository({
         settings: {
           ...defaultSettings(),
@@ -190,10 +195,10 @@ describe('ConfigzService', () => {
           },
         ],
       }),
-      defaultOptions(),
+      { onboardingHasUsers: true, enabledConnectors: [enabledConnector('google')] },
     )
 
-    await expect(service.getConfig()).resolves.toMatchObject({
+    await expect(getConfig(deps, defaultOptions())).resolves.toMatchObject({
       signIn: {
         socialLoginEnabled: false,
       },
@@ -202,7 +207,7 @@ describe('ConfigzService', () => {
   })
 
   it('only exposes identity providers that are available to the auth runtime', async () => {
-    const service = new ConfigzService(
+    const deps = createDeps(
       createRepository({
         identityProviders: [
           {
@@ -221,13 +226,10 @@ describe('ConfigzService', () => {
           },
         ],
       }),
-      {
-        ...defaultOptions(),
-        availableIdentityProviderIds: async () => new Set(['google']),
-      },
+      { onboardingHasUsers: true, enabledConnectors: [enabledConnector('google')] },
     )
 
-    await expect(service.getConfig()).resolves.toMatchObject({
+    await expect(getConfig(deps, defaultOptions())).resolves.toMatchObject({
       identityProviders: [
         {
           slug: 'google',
@@ -240,17 +242,17 @@ describe('ConfigzService', () => {
   })
 
   it('reports effective passwordless method availability when signup is disabled', async () => {
-    const service = new ConfigzService(
+    const deps = createDeps(
       createRepository({
         settings: {
           ...defaultSettings(),
           signupEnabled: false,
         },
       }),
-      defaultOptions(),
+      { onboardingHasUsers: true },
     )
 
-    await expect(service.getConfig()).resolves.toMatchObject({
+    await expect(getConfig(deps, defaultOptions())).resolves.toMatchObject({
       signIn: {
         signupEnabled: false,
         emailOtpEnabled: true,
@@ -259,15 +261,9 @@ describe('ConfigzService', () => {
   })
 
   it('reports first-run onboarding when no admin exists', async () => {
-    const service = new ConfigzService(createRepository(), {
-      ...defaultOptions(),
-      onboardingRepository: {
-        hasUsers: async () => false,
-        createBootstrapAdmin: async () => ({ id: 'user-1', email: 'admin@example.com', role: 'admin' }),
-      },
-    })
+    const deps = createDeps(createRepository(), { onboardingHasUsers: false })
 
-    await expect(service.getConfig()).resolves.toMatchObject({
+    await expect(getConfig(deps, defaultOptions())).resolves.toMatchObject({
       onboarding: {
         required: true,
         href: '/onboarding',
@@ -277,7 +273,7 @@ describe('ConfigzService', () => {
 
   it('updates management sign-in settings and returns the normalized resource', async () => {
     const updates: unknown[] = []
-    const service = new ConfigzService(
+    const deps = createDeps(
       createRepository({
         settings: {
           ...defaultSettings(),
@@ -293,10 +289,10 @@ describe('ConfigzService', () => {
           updates.push(input)
         },
       }),
-      defaultOptions(),
+      { onboardingHasUsers: true },
     )
 
-    const response = await service.updateManagementSignInSettings({
+    const response = await updateManagementSignInSettings(deps, defaultOptions(), {
       signIn: { passwordEnabled: false, identifierFirst: true },
       links: { supportEmail: 'support@example.com' },
       copy: { productName: 'Acme ID' },
@@ -324,7 +320,7 @@ describe('ConfigzService', () => {
 
   it('updates management branding settings and returns public branding', async () => {
     const updates: unknown[] = []
-    const service = new ConfigzService(
+    const deps = createDeps(
       createRepository({
         branding: {
           logoUrl: null,
@@ -339,10 +335,10 @@ describe('ConfigzService', () => {
           updates.push(input)
         },
       }),
-      defaultOptions(),
+      { onboardingHasUsers: true },
     )
 
-    const response = await service.updateManagementBrandingSettings({
+    const response = await updateManagementBrandingSettings(deps, defaultOptions(), {
       branding: {
         logoUrl: 'https://cdn.example.com/logo.svg',
         customCss: '--auth-panel-radius: 8px;',
@@ -373,7 +369,7 @@ describe('ConfigzService', () => {
       emailChangeEnabled: true,
     }
     const updates: unknown[] = []
-    const service = new ConfigzService(
+    const deps = createDeps(
       createRepository({
         getAccountCenterSettings: async () => accountCenter,
         updateAccountCenterSettings: async (input) => {
@@ -381,10 +377,10 @@ describe('ConfigzService', () => {
           accountCenter = { ...accountCenter, ...input }
         },
       }),
-      defaultOptions(),
+      { onboardingHasUsers: true },
     )
 
-    const response = await service.updateManagementAccountCenterSettings({
+    const response = await updateManagementAccountCenterSettings(deps, defaultOptions(), {
       accountCenter: { sessionsViewEnabled: false, emailChangeEnabled: false },
     })
 
@@ -399,7 +395,7 @@ describe('ConfigzService', () => {
   })
 
   it('drops unsafe legacy custom CSS from public runtime branding', async () => {
-    const service = new ConfigzService(
+    const deps = createDeps(
       createRepository({
         branding: {
           logoUrl: null,
@@ -411,10 +407,10 @@ describe('ConfigzService', () => {
           customCss: '.authPanel { display: none; }',
         },
       }),
-      defaultOptions(),
+      { onboardingHasUsers: true },
     )
 
-    await expect(service.getConfig()).resolves.toMatchObject({
+    await expect(getConfig(deps, defaultOptions())).resolves.toMatchObject({
       branding: {
         customCss: null,
       },
@@ -422,7 +418,7 @@ describe('ConfigzService', () => {
   })
 
   it('drops invalid legacy color values from public runtime branding', async () => {
-    const service = new ConfigzService(
+    const deps = createDeps(
       createRepository({
         branding: {
           logoUrl: null,
@@ -434,10 +430,10 @@ describe('ConfigzService', () => {
           customCss: null,
         },
       }),
-      defaultOptions(),
+      { onboardingHasUsers: true },
     )
 
-    await expect(service.getConfig()).resolves.toMatchObject({
+    await expect(getConfig(deps, defaultOptions())).resolves.toMatchObject({
       branding: {
         primaryColor: null,
         backgroundColor: null,
@@ -446,7 +442,7 @@ describe('ConfigzService', () => {
   })
 })
 
-function defaultOptions() {
+function defaultOptions(): ConfigzOptions {
   return {
     issuer: 'https://auth.example.com',
     emailOtpEnabled: true,
@@ -464,6 +460,41 @@ function defaultSettings() {
     privacyUri: null,
     supportEmail: null,
     metadata: null,
+  }
+}
+
+function createDeps(
+  repository: ConfigzRepository,
+  options: { onboardingHasUsers: boolean; enabledConnectors?: ConnectorRecord[] },
+): Deps {
+  return {
+    configz: repository,
+    onboarding: { hasUsers: async () => options.onboardingHasUsers },
+    connectors: { listEnabled: async () => options.enabledConnectors ?? [] },
+  } as unknown as Deps
+}
+
+function enabledConnector(providerId: string): ConnectorRecord {
+  const now = new Date('2026-05-18T00:00:00.000Z')
+  return {
+    id: `idp_${providerId}`,
+    slug: providerId,
+    providerType: 'social',
+    providerId,
+    displayName: providerId,
+    enabled: true,
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+    issuer: null,
+    authorizationEndpoint: null,
+    tokenEndpoint: null,
+    userInfoEndpoint: null,
+    jwksEndpoint: null,
+    scopes: null,
+    attributeMapping: null,
+    providerMetadata: null,
+    createdAt: now,
+    updatedAt: now,
   }
 }
 

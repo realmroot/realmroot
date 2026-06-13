@@ -1,9 +1,6 @@
-import type {
-  ConfigzAccountCenter,
-  ConfigzBranding,
-  ConfigzRepository,
-  OnboardingRepository,
-} from '@server/usecases/ports'
+import { loadAuthConnectorConfig } from '@server/usecases/connectors'
+import type { Deps } from '@server/usecases/deps'
+import type { ConfigzAccountCenter, ConfigzBranding } from '@server/usecases/ports'
 import { type ConfigzConfigResponse, hostedCustomCssSchema } from '@shared/api/configz'
 import type {
   ManagementAccountCenterSettingsResponse,
@@ -15,13 +12,11 @@ import type {
 } from '@shared/api/management'
 import type { SecurityPolicy } from '@shared/api/security'
 
-export interface ConfigzServiceOptions {
+export interface ConfigzOptions {
   issuer: string
-  emailOtpEnabled: boolean
-  usernameEnabled: boolean
-  onboardingRepository?: OnboardingRepository
+  emailOtpEnabled?: boolean
+  usernameEnabled?: boolean
   securityPolicy?: SecurityPolicy
-  availableIdentityProviderIds?: () => Promise<ReadonlySet<string>>
 }
 
 const defaultCopy = {
@@ -88,186 +83,190 @@ export const defaultAccountCenterSettings: ConfigzAccountCenter = {
   dangerZoneEnabled: false,
 }
 
-export class ConfigzService {
-  constructor(
-    private readonly repository: ConfigzRepository,
-    private readonly options: ConfigzServiceOptions,
-  ) {}
+export async function getConfig(deps: Deps, options: ConfigzOptions): Promise<ConfigzConfigResponse> {
+  const settings = await deps.configz.getSettings()
+  const branding = await deps.configz.getBranding(null)
+  const accountCenter = await deps.configz.getAccountCenterSettings()
+  const identityProviders = await deps.configz.listEnabledIdentityProviders()
+  const availableIdentityProviderIds = new Set((await loadAuthConnectorConfig(deps.connectors)).trustedProviders)
+  const copy = readCopy(settings?.metadata)
+  const builtInProviders = readBuiltInProviders(settings?.metadata, options.emailOtpEnabled ?? true)
+  const passwordEnabled = settings?.passwordEnabled ?? true
+  const signupEnabled = settings?.signupEnabled ?? true
+  const issuer = options.issuer.replace(/\/$/, '')
 
-  async getConfig(): Promise<ConfigzConfigResponse> {
-    const settings = await this.repository.getSettings()
-    const branding = await this.repository.getBranding(null)
-    const accountCenter = await this.repository.getAccountCenterSettings()
-    const identityProviders = await this.repository.listEnabledIdentityProviders()
-    const availableIdentityProviderIds = this.options.availableIdentityProviderIds
-      ? await this.options.availableIdentityProviderIds()
-      : null
-    const copy = readCopy(settings?.metadata)
-    const builtInProviders = readBuiltInProviders(settings?.metadata, this.options.emailOtpEnabled)
-    const passwordEnabled = settings?.passwordEnabled ?? true
-    const signupEnabled = settings?.signupEnabled ?? true
-    const issuer = this.options.issuer.replace(/\/$/, '')
-
-    return {
-      onboarding: {
-        required: this.options.onboardingRepository ? !(await this.options.onboardingRepository.hasUsers()) : false,
-        href: '/onboarding',
+  return {
+    onboarding: {
+      required: !(await deps.onboarding.hasUsers()),
+      href: '/onboarding',
+    },
+    signIn: {
+      passwordEnabled,
+      signupEnabled,
+      socialLoginEnabled: settings?.socialLoginEnabled ?? true,
+      emailOtpEnabled: builtInProviders.email.enabled,
+      usernameEnabled: options.usernameEnabled ?? true,
+      identifierFirst: settings?.identifierFirst ?? false,
+    },
+    builtInProviders: {
+      email: { enabled: builtInProviders.email.enabled },
+      phone: { enabled: builtInProviders.phone.enabled },
+      web3Wallet: {
+        enabled: builtInProviders.web3Wallet.enabled,
+        chains: builtInProviders.web3Wallet.chains,
+        allowSignUp: builtInProviders.web3Wallet.allowSignUp,
       },
-      signIn: {
-        passwordEnabled,
-        signupEnabled,
-        socialLoginEnabled: settings?.socialLoginEnabled ?? true,
-        emailOtpEnabled: builtInProviders.email.enabled,
-        usernameEnabled: this.options.usernameEnabled,
-        identifierFirst: settings?.identifierFirst ?? false,
+      passkey: { allowSignUp: builtInProviders.passkey.allowSignUp },
+      oneTap: {
+        enabled: builtInProviders.oneTap.enabled,
+        clientId: builtInProviders.oneTap.clientId,
+        autoSelect: builtInProviders.oneTap.autoSelect,
+        cancelOnTapOutside: builtInProviders.oneTap.cancelOnTapOutside,
+        uxMode: builtInProviders.oneTap.uxMode,
+        context: builtInProviders.oneTap.context,
+        promptBaseDelayMs: builtInProviders.oneTap.promptBaseDelayMs,
+        promptMaxAttempts: builtInProviders.oneTap.promptMaxAttempts,
       },
-      builtInProviders: {
-        email: { enabled: builtInProviders.email.enabled },
-        phone: { enabled: builtInProviders.phone.enabled },
-        web3Wallet: {
-          enabled: builtInProviders.web3Wallet.enabled,
-          chains: builtInProviders.web3Wallet.chains,
-          allowSignUp: builtInProviders.web3Wallet.allowSignUp,
+    },
+    branding: branding
+      ? toPublicBranding(branding)
+      : {
+          logoUrl: null,
+          faviconUrl: null,
+          primaryColor: null,
+          backgroundColor: null,
+          customCss: null,
         },
-        passkey: { allowSignUp: builtInProviders.passkey.allowSignUp },
-        oneTap: {
-          enabled: builtInProviders.oneTap.enabled,
-          clientId: builtInProviders.oneTap.clientId,
-          autoSelect: builtInProviders.oneTap.autoSelect,
-          cancelOnTapOutside: builtInProviders.oneTap.cancelOnTapOutside,
-          uxMode: builtInProviders.oneTap.uxMode,
-          context: builtInProviders.oneTap.context,
-          promptBaseDelayMs: builtInProviders.oneTap.promptBaseDelayMs,
-          promptMaxAttempts: builtInProviders.oneTap.promptMaxAttempts,
-        },
-      },
-      branding: branding
-        ? toPublicBranding(branding)
-        : {
-            logoUrl: null,
-            faviconUrl: null,
-            primaryColor: null,
-            backgroundColor: null,
-            customCss: null,
-          },
-      identityProviders:
-        (settings?.socialLoginEnabled ?? true)
-          ? identityProviders
-              .filter(
-                (provider) => !availableIdentityProviderIds || availableIdentityProviderIds.has(provider.providerId),
-              )
-              .map((provider) => ({
-                slug: provider.slug,
-                providerType: provider.providerType,
-                providerId: provider.providerId,
-                displayName: provider.displayName,
-                icon: provider.icon,
-              }))
-          : [],
-      links: {
-        termsUri: settings?.termsUri ?? null,
-        privacyUri: settings?.privacyUri ?? null,
-        supportEmail: settings?.supportEmail ?? null,
-      },
-      copy,
-      auth: {
-        basePath: '/api/auth',
-        signInEmailPath: '/api/auth/sign-in/email',
-        signInUsernamePath: '/api/auth/sign-in/username',
-        signUpEmailPath: '/api/auth/sign-up/email',
-        signOutPath: '/api/auth/sign-out',
-        requestPasswordResetPath: '/api/auth/request-password-reset',
-        resetPasswordPath: '/api/auth/reset-password',
-        sendVerificationEmailPath: '/api/auth/send-verification-email',
-        verifyEmailPath: '/api/auth/verify-email',
-        emailOtpPath: '/api/auth/email-otp/send-verification-otp',
-        emailOtpSignInPath: '/api/auth/sign-in/email-otp',
-        emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
-        emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
-        emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
-      },
-      oidc: {
-        issuer: `${issuer}/api/auth`,
-        discoveryUrl: `${issuer}/api/auth/.well-known/openid-configuration`,
-        authorizationEndpoint: `${issuer}/api/auth/oauth2/authorize`,
-        deviceAuthorizationEndpoint: `${issuer}/api/auth/device/code`,
-        tokenEndpoint: `${issuer}/api/auth/oauth2/token`,
-        jwksUri: `${issuer}/api/auth/jwks`,
-        userInfoEndpoint: `${issuer}/api/auth/oauth2/userinfo`,
-        endSessionEndpoint: `${issuer}/api/auth/oauth2/end-session`,
-      },
-      security: {
-        mfaRequired: this.options.securityPolicy?.mfa.mode === 'required',
-        sessionExpiresInSeconds: this.options.securityPolicy?.sessions.expiresInSeconds ?? 0,
-        passkeysEnabled: this.options.securityPolicy?.passkeys.enabled ?? false,
-      },
-      accountCenter: accountCenter ?? defaultAccountCenterSettings,
-      captcha: {
-        enabled: this.options.securityPolicy?.captcha.enabled ?? false,
-        provider: 'turnstile',
-        siteKey: this.options.securityPolicy?.captcha.siteKey ?? '',
-      },
-    }
+    identityProviders:
+      (settings?.socialLoginEnabled ?? true)
+        ? identityProviders
+            .filter((provider) => availableIdentityProviderIds.has(provider.providerId))
+            .map((provider) => ({
+              slug: provider.slug,
+              providerType: provider.providerType,
+              providerId: provider.providerId,
+              displayName: provider.displayName,
+              icon: provider.icon,
+            }))
+        : [],
+    links: {
+      termsUri: settings?.termsUri ?? null,
+      privacyUri: settings?.privacyUri ?? null,
+      supportEmail: settings?.supportEmail ?? null,
+    },
+    copy,
+    auth: {
+      basePath: '/api/auth',
+      signInEmailPath: '/api/auth/sign-in/email',
+      signInUsernamePath: '/api/auth/sign-in/username',
+      signUpEmailPath: '/api/auth/sign-up/email',
+      signOutPath: '/api/auth/sign-out',
+      requestPasswordResetPath: '/api/auth/request-password-reset',
+      resetPasswordPath: '/api/auth/reset-password',
+      sendVerificationEmailPath: '/api/auth/send-verification-email',
+      verifyEmailPath: '/api/auth/verify-email',
+      emailOtpPath: '/api/auth/email-otp/send-verification-otp',
+      emailOtpSignInPath: '/api/auth/sign-in/email-otp',
+      emailOtpVerificationPath: '/api/auth/email-otp/verify-email',
+      emailOtpPasswordResetRequestPath: '/api/auth/email-otp/request-password-reset',
+      emailOtpPasswordResetPath: '/api/auth/email-otp/reset-password',
+    },
+    oidc: {
+      issuer: `${issuer}/api/auth`,
+      discoveryUrl: `${issuer}/api/auth/.well-known/openid-configuration`,
+      authorizationEndpoint: `${issuer}/api/auth/oauth2/authorize`,
+      deviceAuthorizationEndpoint: `${issuer}/api/auth/device/code`,
+      tokenEndpoint: `${issuer}/api/auth/oauth2/token`,
+      jwksUri: `${issuer}/api/auth/jwks`,
+      userInfoEndpoint: `${issuer}/api/auth/oauth2/userinfo`,
+      endSessionEndpoint: `${issuer}/api/auth/oauth2/end-session`,
+    },
+    security: {
+      mfaRequired: options.securityPolicy?.mfa.mode === 'required',
+      sessionExpiresInSeconds: options.securityPolicy?.sessions.expiresInSeconds ?? 0,
+      passkeysEnabled: options.securityPolicy?.passkeys.enabled ?? false,
+    },
+    accountCenter: accountCenter ?? defaultAccountCenterSettings,
+    captcha: {
+      enabled: options.securityPolicy?.captcha.enabled ?? false,
+      provider: 'turnstile',
+      siteKey: options.securityPolicy?.captcha.siteKey ?? '',
+    },
   }
+}
 
-  async getManagementSignInSettings(): Promise<ManagementSignInSettingsResponse> {
-    const config = await this.getConfig()
-    const settings = await this.repository.getSettings()
-    return {
-      signIn: config.signIn,
-      builtInProviders: readBuiltInProviders(settings?.metadata, this.options.emailOtpEnabled),
-      links: config.links,
-      copy: config.copy,
-    }
+export async function getManagementSignInSettings(
+  deps: Deps,
+  options: ConfigzOptions,
+): Promise<ManagementSignInSettingsResponse> {
+  const config = await getConfig(deps, options)
+  const settings = await deps.configz.getSettings()
+  return {
+    signIn: config.signIn,
+    builtInProviders: readBuiltInProviders(settings?.metadata, options.emailOtpEnabled ?? true),
+    links: config.links,
+    copy: config.copy,
   }
+}
 
-  async updateManagementSignInSettings(
-    input: UpdateManagementSignInSettingsRequest,
-  ): Promise<ManagementSignInSettingsResponse> {
-    await this.repository.updateSettings({
-      ...input.signIn,
-      builtInProviders: input.builtInProviders,
-      termsUri: input.links?.termsUri,
-      privacyUri: input.links?.privacyUri,
-      supportEmail: input.links?.supportEmail,
-      copy: input.copy,
-    })
+export async function updateManagementSignInSettings(
+  deps: Deps,
+  options: ConfigzOptions,
+  input: UpdateManagementSignInSettingsRequest,
+): Promise<ManagementSignInSettingsResponse> {
+  await deps.configz.updateSettings({
+    ...input.signIn,
+    builtInProviders: input.builtInProviders,
+    termsUri: input.links?.termsUri,
+    privacyUri: input.links?.privacyUri,
+    supportEmail: input.links?.supportEmail,
+    copy: input.copy,
+  })
 
-    return this.getManagementSignInSettings()
+  return getManagementSignInSettings(deps, options)
+}
+
+export async function getManagementBrandingSettings(
+  deps: Deps,
+  options: ConfigzOptions,
+): Promise<ManagementBrandingSettingsResponse> {
+  const config = await getConfig(deps, options)
+  return {
+    branding: config.branding,
+    copy: config.copy,
   }
+}
 
-  async getManagementBrandingSettings(): Promise<ManagementBrandingSettingsResponse> {
-    const config = await this.getConfig()
-    return {
-      branding: config.branding,
-      copy: config.copy,
-    }
+export async function updateManagementBrandingSettings(
+  deps: Deps,
+  options: ConfigzOptions,
+  input: UpdateManagementBrandingSettingsRequest,
+): Promise<ManagementBrandingSettingsResponse> {
+  await deps.configz.updateBranding({
+    ...input.branding,
+    copy: input.copy,
+  })
+
+  return getManagementBrandingSettings(deps, options)
+}
+
+export async function getManagementAccountCenterSettings(
+  deps: Deps,
+  options: ConfigzOptions,
+): Promise<ManagementAccountCenterSettingsResponse> {
+  const config = await getConfig(deps, options)
+  return {
+    accountCenter: config.accountCenter,
   }
+}
 
-  async updateManagementBrandingSettings(
-    input: UpdateManagementBrandingSettingsRequest,
-  ): Promise<ManagementBrandingSettingsResponse> {
-    await this.repository.updateBranding({
-      ...input.branding,
-      copy: input.copy,
-    })
-
-    return this.getManagementBrandingSettings()
-  }
-
-  async getManagementAccountCenterSettings(): Promise<ManagementAccountCenterSettingsResponse> {
-    const config = await this.getConfig()
-    return {
-      accountCenter: config.accountCenter,
-    }
-  }
-
-  async updateManagementAccountCenterSettings(
-    input: UpdateManagementAccountCenterSettingsRequest,
-  ): Promise<ManagementAccountCenterSettingsResponse> {
-    await this.repository.updateAccountCenterSettings(input.accountCenter)
-    return this.getManagementAccountCenterSettings()
-  }
+export async function updateManagementAccountCenterSettings(
+  deps: Deps,
+  options: ConfigzOptions,
+  input: UpdateManagementAccountCenterSettingsRequest,
+): Promise<ManagementAccountCenterSettingsResponse> {
+  await deps.configz.updateAccountCenterSettings(input.accountCenter)
+  return getManagementAccountCenterSettings(deps, options)
 }
 
 function toPublicBranding(branding: ConfigzBranding): ConfigzConfigResponse['branding'] {

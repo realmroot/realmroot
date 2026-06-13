@@ -1,4 +1,11 @@
-import { ApplicationService } from '@server/usecases/applications'
+import {
+  createApplication,
+  createConsent,
+  listApplications,
+  loadConsentRequest,
+  updateApplication,
+} from '@server/usecases/applications'
+import type { Deps } from '@server/usecases/deps'
 import type {
   ApplicationAggregate,
   ApplicationRepository,
@@ -11,9 +18,12 @@ import { describe, expect, it } from 'vitest'
 describe('service.test 2', () => {
   it('paginates application collection responses', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
 
-    const first = await service.create(
+    const first = await createApplication(
+      deps,
+      issuer,
       {
         name: 'First App',
         clientType: 'public_spa',
@@ -21,7 +31,9 @@ describe('service.test 2', () => {
       },
       'admin-1',
     )
-    const second = await service.create(
+    const second = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Second App',
         clientType: 'public_spa',
@@ -30,7 +42,7 @@ describe('service.test 2', () => {
       'admin-1',
     )
 
-    await expect(service.list({ limit: 1, offset: 0 })).resolves.toMatchObject({
+    await expect(listApplications(deps, issuer, { limit: 1, offset: 0 })).resolves.toMatchObject({
       applications: [{ id: first.id }],
       pagination: {
         limit: 1,
@@ -39,7 +51,7 @@ describe('service.test 2', () => {
         hasMore: true,
       },
     })
-    await expect(service.list({ limit: 1, offset: 1 })).resolves.toMatchObject({
+    await expect(listApplications(deps, issuer, { limit: 1, offset: 1 })).resolves.toMatchObject({
       applications: [{ id: second.id }],
       pagination: {
         limit: 1,
@@ -51,10 +63,13 @@ describe('service.test 2', () => {
   })
 
   it('validates redirect URIs and client grant settings at the API boundary', async () => {
-    const service = new ApplicationService(new InMemoryApplicationRepository(), { issuer: 'https://auth.example.com' })
+    const deps = { applications: new InMemoryApplicationRepository() } as unknown as Deps
+    const issuer = 'https://auth.example.com'
 
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Bad SPA',
           clientType: 'public_spa',
@@ -65,7 +80,9 @@ describe('service.test 2', () => {
     ).rejects.toMatchObject({ status: 400, message: 'Redirect URIs must not include fragments.' })
 
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Bad Native App',
           clientType: 'public_native',
@@ -77,7 +94,9 @@ describe('service.test 2', () => {
     ).rejects.toMatchObject({ status: 400, message: 'Public clients cannot use the client_credentials grant.' })
 
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Executable Native Redirect',
           clientType: 'public_native',
@@ -91,7 +110,9 @@ describe('service.test 2', () => {
     })
 
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Native App',
           clientType: 'public_native',
@@ -103,7 +124,9 @@ describe('service.test 2', () => {
       redirectUris: ['com.example.app:/oauth/callback'],
     })
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Relative Redirect',
           clientType: 'public_spa',
@@ -113,7 +136,9 @@ describe('service.test 2', () => {
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Redirect URIs must be absolute URLs.' })
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Plain HTTP Redirect',
           clientType: 'public_spa',
@@ -126,7 +151,9 @@ describe('service.test 2', () => {
       message: 'Redirect URIs must use HTTPS except localhost development URLs.',
     })
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Bad Private Scheme',
           clientType: 'public_native',
@@ -139,7 +166,9 @@ describe('service.test 2', () => {
       message: 'Native redirect URI schemes must use a reverse-domain private-use scheme.',
     })
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Unsupported Scope',
           clientType: 'public_spa',
@@ -150,7 +179,9 @@ describe('service.test 2', () => {
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Unsupported scope: bad-scope' })
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Reserved Management Scope',
           clientType: 'public_spa',
@@ -164,7 +195,9 @@ describe('service.test 2', () => {
       message: 'Management scopes are reserved for the system CLI client.',
     })
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Unsupported Grant',
           clientType: 'confidential_web',
@@ -178,8 +211,11 @@ describe('service.test 2', () => {
 
   it('validates application post sign-out redirects and CORS origins at the API boundary', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
-    const created = await service.create(
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Browser App',
         clientType: 'public_spa',
@@ -189,12 +225,14 @@ describe('service.test 2', () => {
     )
 
     await expect(
-      service.update(created.id, {
+      updateApplication(deps, issuer, created.id, {
         postLogoutRedirectUris: ['https://spa.example.com/signed-out#fragment'],
       }),
     ).rejects.toMatchObject({ status: 400, message: 'Post sign-out redirect URIs must not include fragments.' })
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Bad SPA',
           clientType: 'public_spa',
@@ -205,12 +243,14 @@ describe('service.test 2', () => {
       ),
     ).rejects.toMatchObject({ status: 400, message: 'Post sign-out redirect URIs must not include fragments.' })
     await expect(
-      service.update(created.id, {
+      updateApplication(deps, issuer, created.id, {
         corsOrigins: ['not an origin'],
       }),
     ).rejects.toMatchObject({ status: 400, message: 'CORS origins must be absolute origins.' })
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Bad SPA',
           clientType: 'public_spa',
@@ -221,7 +261,7 @@ describe('service.test 2', () => {
       ),
     ).rejects.toMatchObject({ status: 400, message: 'CORS origins must be absolute origins.' })
     await expect(
-      service.update(created.id, {
+      updateApplication(deps, issuer, created.id, {
         corsOrigins: ['https://spa.example.com/callback'],
       }),
     ).rejects.toMatchObject({
@@ -229,7 +269,7 @@ describe('service.test 2', () => {
       message: 'CORS origins must include scheme, host, and optional port only.',
     })
     await expect(
-      service.update(created.id, {
+      updateApplication(deps, issuer, created.id, {
         corsOrigins: ['http://spa.example.com'],
       }),
     ).rejects.toMatchObject({
@@ -240,8 +280,11 @@ describe('service.test 2', () => {
 
   it('loads consent data for an authorization request and records consent', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
-    const created = await service.create(
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Consent App',
         clientType: 'public_spa',
@@ -251,8 +294,10 @@ describe('service.test 2', () => {
       'admin-1',
     )
 
-    await service.createConsent({ clientId: created.clientId, scopes: ['openid'] }, 'user-1')
-    const consent = await service.loadConsentRequest(
+    await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1')
+    const consent = await loadConsentRequest(
+      deps,
+      issuer,
       {
         clientId: created.clientId,
         redirectUri: 'https://spa.example.com/callback',
@@ -295,7 +340,9 @@ describe('service.test 2', () => {
     })
     expect(consent.application).not.toHaveProperty('secretMetadata')
     await expect(
-      service.loadConsentRequest(
+      loadConsentRequest(
+        deps,
+        issuer,
         {
           clientId: created.clientId,
           redirectUri: 'https://evil.example.com/callback',
@@ -305,7 +352,7 @@ describe('service.test 2', () => {
       ),
     ).rejects.toMatchObject({ status: 400, message: 'redirect_uri is not registered for this client.' })
     await expect(
-      service.createConsent({ clientId: created.clientId, scopes: ['bad-scope' as 'openid'] }, 'user-1'),
+      createConsent(deps, { clientId: created.clientId, scopes: ['bad-scope' as 'openid'] }, 'user-1'),
     ).rejects.toMatchObject({ status: 400, message: 'Scope is not allowed for this client: bad-scope' })
   })
 })

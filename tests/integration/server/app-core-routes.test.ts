@@ -1,5 +1,6 @@
 import { createApp } from '@server/http/app'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from './test-deps'
 
 describe('app.test 1', () => {
   beforeEach(() => {
@@ -12,7 +13,7 @@ describe('app.test 1', () => {
 
   it('serves health status', async () => {
     const auth = createAuthMock()
-    const response = await createApp(auth).request('/api/health')
+    const response = await createApp(auth, createTestDeps()).request('/api/health')
 
     await expect(response.json()).resolves.toEqual({
       ok: true,
@@ -46,7 +47,7 @@ describe('app.test 1', () => {
       handler: async () => new Response(null, { status: 204 }),
     }
 
-    const response = await createApp(auth).request('/.well-known/oauth-authorization-server/api/auth')
+    const response = await createApp(auth, createTestDeps()).request('/.well-known/oauth-authorization-server/api/auth')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
@@ -87,7 +88,7 @@ describe('app.test 1', () => {
       handler: async () => new Response(null, { status: 204 }),
     }
 
-    const response = await createApp(auth).request('/.well-known/openid-configuration/api/auth')
+    const response = await createApp(auth, createTestDeps()).request('/.well-known/openid-configuration/api/auth')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
@@ -123,7 +124,9 @@ describe('app.test 1', () => {
       handler: async () => new Response(null, { status: 204 }),
     }
 
-    const response = await createApp(auth).request('https://tenant.example.net/.well-known/agent-configuration')
+    const response = await createApp(auth, createTestDeps()).request(
+      'https://tenant.example.net/.well-known/agent-configuration',
+    )
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
@@ -152,7 +155,7 @@ describe('app.test 1', () => {
       },
       handler: async () => new Response(null, { status: 204 }),
     }
-    const response = await createApp(auth).request('/.well-known/agent-configuration', {
+    const response = await createApp(auth, createTestDeps()).request('/.well-known/agent-configuration', {
       headers: { 'cf-ray': 'request-1' },
     })
 
@@ -167,7 +170,7 @@ describe('app.test 1', () => {
   })
 
   it('returns consistent JSON errors from the boundary', async () => {
-    const response = await createApp(createAuthMock()).request('/api/missing', {
+    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/missing', {
       headers: {
         'cf-ray': 'request-1',
       },
@@ -185,7 +188,9 @@ describe('app.test 1', () => {
 
   it('rejects untrusted API origins before handlers run', async () => {
     const auth = createAuthMock()
-    const response = await createApp(auth, { trustedOrigins: ['https://tenant.example.com'] }).request('/api/health', {
+    const response = await createApp(auth, createTestDeps(), {
+      trustedOrigins: ['https://tenant.example.com'],
+    }).request('/api/health', {
       headers: {
         origin: 'https://evil.example.com',
       },
@@ -202,14 +207,13 @@ describe('app.test 1', () => {
   })
 
   it('allows trusted API origins and emits CORS response headers', async () => {
-    const response = await createApp(createAuthMock(), { trustedOrigins: ['https://tenant.example.com'] }).request(
-      '/api/health',
-      {
-        headers: {
-          origin: 'https://tenant.example.com',
-        },
+    const response = await createApp(createAuthMock(), createTestDeps(), {
+      trustedOrigins: ['https://tenant.example.com'],
+    }).request('/api/health', {
+      headers: {
+        origin: 'https://tenant.example.com',
       },
-    )
+    })
 
     expect(response.status).toBe(200)
     expect(response.headers.get('access-control-allow-origin')).toBe('https://tenant.example.com')

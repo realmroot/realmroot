@@ -1,23 +1,27 @@
-import { type AssetBindings, type ConfigzBindings, createAssetService, createConfigzService } from '@server/composition'
 import { badRequest, forbidden } from '@server/domain/errors'
-import type { AssetService } from '@server/usecases/assets'
-import { defaultAccountCenterSettings } from '@server/usecases/configz'
+import {
+  getAssetObject,
+  updateApplicationLogo,
+  updateBrandingAsset,
+  updateOrganizationLogo,
+  updateUserAvatar,
+  uploadAsset,
+} from '@server/usecases/assets'
+import { defaultAccountCenterSettings, getConfig } from '@server/usecases/configz'
 import type { ConfigzAccountCenter } from '@server/usecases/ports'
+import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { configzOptions } from '../app-config'
 import { requireAdmin, requireAuth } from '../middleware/admin'
 import { getAuthContext } from '../middleware/auth-context'
+import { getDeps } from '../middleware/deps'
 
-export type AssetServiceFactory = (c: Parameters<typeof createAssetService>[0]) => AssetService
-export type AccountCenterConfigFactory = (
-  c: Context<{ Bindings: AssetBindings & ConfigzBindings }>,
-) => Promise<ConfigzAccountCenter>
-
-export function createAssetRoutes(assetServiceFactory: AssetServiceFactory = createAssetService) {
-  const app = new Hono<{ Bindings: AssetBindings }>()
+export function createAssetRoutes() {
+  const app = new Hono()
 
   app.get('/:assetId', async (c) => {
-    const { asset, object } = await assetServiceFactory(c).getObject(c.req.param('assetId'))
+    const { asset, object } = await getAssetObject(getDeps(c), c.req.param('assetId'))
     return new Response(object.body, {
       headers: {
         'cache-control': 'public, max-age=31536000, immutable',
@@ -32,90 +36,90 @@ export function createAssetRoutes(assetServiceFactory: AssetServiceFactory = cre
   return app
 }
 
-export function createAccountAssetRoutes(
-  assetServiceFactory: AssetServiceFactory = createAssetService,
-  accountCenterConfigFactory?: AccountCenterConfigFactory,
-) {
-  const app = new Hono<{ Bindings: AssetBindings & ConfigzBindings }>()
+export function createAccountAssetRoutes(securityPolicy?: SecurityPolicy) {
+  const app = new Hono()
 
   app.use('*', requireAuth())
 
   app.post('/avatar', async (c) => {
-    const accountCenter = c.env?.DB
-      ? await (accountCenterConfigFactory ?? defaultAccountCenterConfig)(c)
-      : accountCenterConfigFactory
-        ? await accountCenterConfigFactory(c)
-        : defaultAccountCenterSettings
+    const accountCenter = await accountCenterSettings(c, securityPolicy)
     if (!accountCenter.profileEditingEnabled || !accountCenter.avatarEditable) {
       throw forbidden('Avatar editing is disabled for this account center.')
     }
-    const service = assetServiceFactory(c)
-    const asset = await service.upload({
+    const deps = getDeps(c)
+    const origin = requestOrigin(c)
+    const asset = await uploadAsset(deps, origin, {
       purpose: 'avatar',
       file: await readUploadFile(c.req.raw),
       actorUserId: getAuthContext(c).user!.id,
     })
-    await service.updateUserAvatar(getAuthContext(c).user!.id, asset.asset)
+    await updateUserAvatar(deps, getAuthContext(c).user!.id, asset.asset)
     return c.json(asset, 201)
   })
 
   return app
 }
 
-async function defaultAccountCenterConfig(c: Context<{ Bindings: AssetBindings & ConfigzBindings }>) {
-  return (await createConfigzService(c as unknown as Context<{ Bindings: ConfigzBindings }>).getConfig()).accountCenter
+async function accountCenterSettings(c: Context, securityPolicy?: SecurityPolicy): Promise<ConfigzAccountCenter> {
+  const deps = getDeps(c)
+  if (!deps) return defaultAccountCenterSettings
+  return (await getConfig(deps, configzOptions(c, securityPolicy))).accountCenter
 }
 
-export function createManagementAssetRoutes(assetServiceFactory: AssetServiceFactory = createAssetService) {
-  const app = new Hono<{ Bindings: AssetBindings }>()
+export function createManagementAssetRoutes() {
+  const app = new Hono()
 
   app.use('*', requireAdmin())
 
   app.post('/applications/:applicationId/logo', async (c) => {
-    const service = assetServiceFactory(c)
-    const asset = await service.upload({
+    const deps = getDeps(c)
+    const asset = await uploadAsset(deps, requestOrigin(c), {
       purpose: 'application_logo',
       file: await readUploadFile(c.req.raw),
       actorUserId: getAuthContext(c).user?.id ?? null,
     })
-    await service.updateApplicationLogo(c.req.param('applicationId'), asset.asset)
+    await updateApplicationLogo(deps, c.req.param('applicationId'), asset.asset)
     return c.json(asset, 201)
   })
 
   app.post('/organizations/:organizationId/logo', async (c) => {
-    const service = assetServiceFactory(c)
-    const asset = await service.upload({
+    const deps = getDeps(c)
+    const asset = await uploadAsset(deps, requestOrigin(c), {
       purpose: 'organization_logo',
       file: await readUploadFile(c.req.raw),
       actorUserId: getAuthContext(c).user?.id ?? null,
     })
-    await service.updateOrganizationLogo(c.req.param('organizationId'), asset.asset)
+    await updateOrganizationLogo(deps, c.req.param('organizationId'), asset.asset)
     return c.json(asset, 201)
   })
 
   app.post('/branding/logo', async (c) => {
-    const service = assetServiceFactory(c)
-    const asset = await service.upload({
+    const deps = getDeps(c)
+    const asset = await uploadAsset(deps, requestOrigin(c), {
       purpose: 'branding_logo',
       file: await readUploadFile(c.req.raw),
       actorUserId: getAuthContext(c).user?.id ?? null,
     })
-    await service.updateBrandingAsset('logo', asset.asset)
+    await updateBrandingAsset(deps, 'logo', asset.asset)
     return c.json(asset, 201)
   })
 
   app.post('/branding/favicon', async (c) => {
-    const service = assetServiceFactory(c)
-    const asset = await service.upload({
+    const deps = getDeps(c)
+    const asset = await uploadAsset(deps, requestOrigin(c), {
       purpose: 'favicon',
       file: await readUploadFile(c.req.raw),
       actorUserId: getAuthContext(c).user?.id ?? null,
     })
-    await service.updateBrandingAsset('favicon', asset.asset)
+    await updateBrandingAsset(deps, 'favicon', asset.asset)
     return c.json(asset, 201)
   })
 
   return app
+}
+
+function requestOrigin(c: Context) {
+  return new URL(c.req.url).origin
 }
 
 async function readUploadFile(request: Request) {

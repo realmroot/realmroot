@@ -1,38 +1,52 @@
-import { AuthorizationService } from '@server/usecases/authorization'
+import {
+  addMember,
+  assignMemberRole,
+  buildTokenClaims,
+  createOrganization,
+  createPermission,
+  createResource,
+  createRole,
+  createScope,
+  listOrganizations,
+  listPermissions,
+  listRolePermissions,
+  listScopes,
+  replaceRolePermissions,
+} from '@server/usecases/authorization'
+import type { Deps } from '@server/usecases/deps'
 import type { AuthorizationRepository, RoleAssignmentRecord } from '@server/usecases/ports'
 import type { PaginationQuery } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('service.test 1', () => {
   it('manages organizations, members, resources, scopes, permissions, roles, and assignments', async () => {
-    const repository = new InMemoryAuthorizationRepository()
-    const service = new AuthorizationService(repository)
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
 
-    const organization = await service.createOrganization({
+    const organization = await createOrganization(deps, {
       slug: 'acme-workspace',
       name: 'Acme Workspace',
     })
-    const member = await service.addMember(organization.id, {
+    const member = await addMember(deps, organization.id, {
       userId: 'user-1',
       role: 'member',
       title: 'Developer',
     })
-    const resource = await service.createResource({
+    const resource = await createResource(deps, {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
       tokenClaimsNamespace: 'https://claims.example.com/contacts',
     })
-    const scope = await service.createScope(resource.id, {
+    const scope = await createScope(deps, resource.id, {
       value: 'contacts:read',
       includeInAccessToken: true,
     })
-    const permission = await service.createPermission(resource.id, {
+    const permission = await createPermission(deps, resource.id, {
       scopeId: scope.id,
       key: 'contacts.read',
       tokenClaimValue: 'read',
     })
-    const role = await service.createRole({
+    const role = await createRole(deps, {
       key: 'contacts-reader',
       name: 'Contacts Reader',
       resourceId: resource.id,
@@ -40,24 +54,24 @@ describe('service.test 1', () => {
       tokenClaimName: 'contacts_role',
     })
 
-    await service.replaceRolePermissions(role.id, [permission.id])
-    await service.assignMemberRole({ roleId: role.id, subjectId: member.id, tokenClaims: { tier: 'gold' } }, 'admin-1')
+    await replaceRolePermissions(deps, role.id, [permission.id])
+    await assignMemberRole(deps, { roleId: role.id, subjectId: member.id, tokenClaims: { tier: 'gold' } }, 'admin-1')
 
-    await expect(service.listOrganizations({ limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(listOrganizations(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
       organizations: [{ id: organization.id, slug: 'acme-workspace' }],
       pagination: { total: 1, hasMore: false },
     })
-    await expect(service.listScopes(resource.id, { limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(listScopes(deps, resource.id, { limit: 20, offset: 0 })).resolves.toMatchObject({
       scopes: [{ value: 'contacts:read' }],
     })
-    await expect(service.listPermissions(resource.id, { limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(listPermissions(deps, resource.id, { limit: 20, offset: 0 })).resolves.toMatchObject({
       permissions: [{ key: 'contacts.read' }],
     })
-    await expect(service.listRolePermissions(role.id)).resolves.toMatchObject({
+    await expect(listRolePermissions(deps, role.id)).resolves.toMatchObject({
       permissions: [{ key: 'contacts.read' }],
     })
 
-    const claims = await service.buildTokenClaims({
+    const claims = await buildTokenClaims(deps, {
       userId: 'user-1',
       organizationId: organization.id,
       resource: 'https://api.example.com/contacts',

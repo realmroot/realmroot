@@ -1,6 +1,7 @@
 import { createApp } from '@server/http/app'
 import type { UserRepository } from '@server/usecases/ports'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../test-deps'
 
 describe('management users and account routes', () => {
   beforeEach(() => {
@@ -9,7 +10,7 @@ describe('management users and account routes', () => {
 
   it('rejects normal users from admin user APIs', async () => {
     const auth = createAuthMock()
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users',
       {
         headers: {
@@ -25,7 +26,7 @@ describe('management users and account routes', () => {
 
   it('rejects unauthenticated admin and account requests', async () => {
     const auth = createAuthMock()
-    const app = createApp(auth, { userRepository: createUserRepositoryMock() })
+    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
 
     const adminResponse = await app.request('/api/management/users')
     const accountResponse = await app.request('/api/account/profile')
@@ -37,7 +38,7 @@ describe('management users and account routes', () => {
   it('delegates admin user CRUD and password reset to Better Auth admin APIs', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
-    const app = createApp(auth, { userRepository: users })
+    const app = createApp(auth, createTestDeps({ users }))
     const headers = adminHeaders()
 
     await app.request('/api/management/users?search=ada&searchField=email&limit=10&role=user', { headers })
@@ -131,7 +132,7 @@ describe('management users and account routes', () => {
   it('parses banned=false as a false admin list filter', async () => {
     const auth = createAuthMock()
 
-    await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users?banned=false',
       {
         headers: adminHeaders(),
@@ -150,7 +151,7 @@ describe('management users and account routes', () => {
   it('aggregates admin user detail resources', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
-    const response = await createApp(auth, { userRepository: users }).request('/api/management/users/user-1', {
+    const response = await createApp(auth, createTestDeps({ users })).request('/api/management/users/user-1', {
       headers: adminHeaders(),
     })
 
@@ -167,7 +168,7 @@ describe('management users and account routes', () => {
 
   it('serves admin user sub-collections with pagination metadata', async () => {
     const users = createUserRepositoryMock()
-    const app = createApp(createAuthMock(), { userRepository: users })
+    const app = createApp(createAuthMock(), createTestDeps({ users }))
     const headers = adminHeaders()
 
     const accounts = await app.request('/api/management/users/user-1/linked-accounts?limit=2&offset=4', { headers })
@@ -212,7 +213,7 @@ describe('management users and account routes', () => {
   it('lists and revokes admin-visible user sessions without exposing token lookup in the route', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
-    const app = createApp(auth, { userRepository: users })
+    const app = createApp(auth, createTestDeps({ users }))
 
     await app.request('/api/management/users/user-1/sessions', { headers: adminHeaders() })
     await app.request('/api/management/users/user-1/sessions', { method: 'DELETE', headers: adminHeaders() })
@@ -234,7 +235,7 @@ describe('management users and account routes', () => {
   it('updates account profile at the request boundary and delegates email and password flows', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
-    const app = createApp(auth, { userRepository: users })
+    const app = createApp(auth, createTestDeps({ users }))
     const headers = userHeaders()
 
     await app.request('/api/account/profile', {

@@ -1,5 +1,5 @@
 import { badRequest, forbidden } from '@server/domain/errors'
-import type { ConfigzAccountCenter, SecurityRepository, UserRepository } from '@server/usecases/ports'
+import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import {
   securityBackupCodesRequestSchema,
@@ -12,32 +12,28 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { requireAuth } from '../../../middleware/admin'
 import { getAuthContext } from '../../../middleware/auth-context'
+import { getDeps } from '../../../middleware/deps'
 import type { ManagementAuthApi } from '../../auth-api'
 import { toBoundaryError } from '../../auth-api'
 import { readJson, readQuery } from '../../validation'
 
 type AccountCenterSettingsReader = (c: Context) => Promise<ConfigzAccountCenter>
 
-export function accountSecurityRoutes(
-  authApi: ManagementAuthApi,
-  users: UserRepository,
-  security: SecurityRepository,
-  accountCenterSettings?: AccountCenterSettingsReader,
-) {
+export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterSettings?: AccountCenterSettingsReader) {
   const app = new Hono()
 
   app.use('*', requireAuth())
 
-  app.get('/', async (c) => c.json({ security: await security.getSecurityState(currentUserId(c)) }))
+  app.get('/', async (c) => c.json({ security: await getDeps(c).security.getSecurityState(currentUserId(c)) }))
 
   app.get('/mfa', async (c) => {
-    const state = await security.getSecurityState(currentUserId(c))
+    const state = await getDeps(c).security.getSecurityState(currentUserId(c))
     return c.json({ mfa: state.mfa, policy: state.policy.mfa })
   })
 
   app.post('/mfa/totp-enrollment', async (c) => {
     const body = await readJson(c, securityTotpEnrollmentSchema)
-    await assertAuthenticatorAppEnabled(c, security)
+    await assertAuthenticatorAppEnabled(c)
 
     try {
       return c.json(await authApi.enableTwoFactor({ body, headers: c.req.raw.headers }), 201)
@@ -48,7 +44,7 @@ export function accountSecurityRoutes(
 
   app.post('/mfa/totp-verification', async (c) => {
     const body = await readJson(c, securityTotpVerificationSchema)
-    await assertAuthenticatorAppEnabled(c, security)
+    await assertAuthenticatorAppEnabled(c)
 
     try {
       return c.json(await authApi.verifyTOTP({ body, headers: c.req.raw.headers }))
@@ -58,7 +54,7 @@ export function accountSecurityRoutes(
   })
 
   app.delete('/mfa/totp', async (c) => {
-    const state = await security.getSecurityState(currentUserId(c))
+    const state = await getDeps(c).security.getSecurityState(currentUserId(c))
 
     if (state.policy.mfa.mode === 'required') {
       throw forbidden('MFA cannot be disabled while it is required for this deployment.')
@@ -84,13 +80,14 @@ export function accountSecurityRoutes(
   })
 
   app.get('/passkeys', async (c) => {
+    const security = getDeps(c).security
     const state = await security.getSecurityState(currentUserId(c))
     const page = await security.listPasskeys(currentUserId(c), readQuery(c, paginationQuerySchema))
     return c.json({ passkeys: page.items, policy: state.policy.passkeys, pagination: paginationMetadata(page) })
   })
 
   app.patch('/passkeys/:id', async (c) => {
-    await assertPasskeysEnabled(c, security)
+    await assertPasskeysEnabled(c)
     const body = await readJson(c, securityPasskeyUpdateSchema)
 
     try {
@@ -103,7 +100,7 @@ export function accountSecurityRoutes(
   })
 
   app.delete('/passkeys/:id', async (c) => {
-    await assertPasskeysEnabled(c, security)
+    await assertPasskeysEnabled(c)
 
     try {
       return c.json(await authApi.deletePasskey({ body: { id: c.req.param('id') }, headers: c.req.raw.headers }))
@@ -115,7 +112,7 @@ export function accountSecurityRoutes(
   app.get('/sessions', async (c) => {
     await assertSessionsEnabled(c, accountCenterSettings)
     const authContext = getAuthContext(c)
-    const page = await users.listSessions(authContext.user!.id, readQuery(c, paginationQuerySchema))
+    const page = await getDeps(c).users.listSessions(authContext.user!.id, readQuery(c, paginationQuerySchema))
     const currentSessionId = authContext.session?.session.id
     return c.json({
       sessions: page.items.map((session) => ({ ...session, current: session.id === currentSessionId })),
@@ -134,7 +131,7 @@ export function accountSecurityRoutes(
 
   app.delete('/sessions/:sessionId', async (c) => {
     await assertSessionsEnabled(c, accountCenterSettings)
-    const token = await security.getSessionToken(currentUserId(c), c.req.param('sessionId'))
+    const token = await getDeps(c).security.getSessionToken(currentUserId(c), c.req.param('sessionId'))
 
     try {
       return c.json(await authApi.revokeSession({ body: { token }, headers: c.req.raw.headers }))
@@ -150,16 +147,16 @@ function currentUserId(c: Context): string {
   return getAuthContext(c).user!.id
 }
 
-async function assertPasskeysEnabled(c: Context, security: SecurityRepository) {
-  const state = await security.getSecurityState(currentUserId(c))
+async function assertPasskeysEnabled(c: Context) {
+  const state = await getDeps(c).security.getSecurityState(currentUserId(c))
 
   if (!state.policy.passkeys.enabled) {
     throw badRequest('Passkeys are disabled for this deployment.')
   }
 }
 
-async function assertAuthenticatorAppEnabled(c: Context, security: SecurityRepository) {
-  const state = await security.getSecurityState(currentUserId(c))
+async function assertAuthenticatorAppEnabled(c: Context) {
+  const state = await getDeps(c).security.getSecurityState(currentUserId(c))
 
   if (!state.policy.mfa.authenticatorAppEnabled) {
     throw badRequest('Authenticator app MFA is disabled for this deployment.')

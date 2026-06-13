@@ -1,5 +1,6 @@
 import { badRequest, notFound } from '@server/domain/errors'
-import type { AssetRepository, AssetStorage, UploadedAssetRecord } from '@server/usecases/ports'
+import type { Deps } from '@server/usecases/deps'
+import type { UploadedAssetRecord } from '@server/usecases/ports'
 import type { AssetPurpose, UploadedAssetResponse } from '@shared/api/assets'
 
 const allowedContentTypes: Record<AssetPurpose, readonly string[]> = {
@@ -18,91 +19,87 @@ const maxByteSizes: Record<AssetPurpose, number> = {
   favicon: 512 * 1024,
 }
 
-export class AssetService {
-  constructor(
-    private readonly repository: AssetRepository,
-    private readonly storage: AssetStorage,
-    private readonly publicOrigin: string,
-  ) {}
-
-  async upload(input: {
+export async function uploadAsset(
+  deps: Deps,
+  origin: string,
+  input: {
     purpose: AssetPurpose
     file: File
     actorUserId: string | null
-  }): Promise<UploadedAssetResponse> {
-    const { bytes, contentType } = await this.validate(input.purpose, input.file)
-    const checksumSha256 = await sha256Hex(bytes)
-    const assetId = createId('asset')
-    const storageKey = `${input.purpose}/${checksumSha256.slice(0, 2)}/${assetId}-${safeFileName(input.file.name)}`
-    const publicUrl = new URL(`/api/assets/${assetId}`, this.publicOrigin).toString()
+  },
+): Promise<UploadedAssetResponse> {
+  const { bytes, contentType } = await validate(input.purpose, input.file)
+  const checksumSha256 = await sha256Hex(bytes)
+  const assetId = createId('asset')
+  const storageKey = `${input.purpose}/${checksumSha256.slice(0, 2)}/${assetId}-${safeFileName(input.file.name)}`
+  const publicUrl = new URL(`/api/assets/${assetId}`, origin).toString()
 
-    await this.storage.put(storageKey, bytes, { httpMetadata: { contentType } })
-    const asset = await this.repository.createAsset({
-      id: assetId,
-      purpose: input.purpose,
-      storageKey,
-      publicUrl,
-      contentType,
-      byteSize: bytes.byteLength,
-      checksumSha256,
-      createdByUserId: input.actorUserId,
-    })
+  await deps.assetStorage.put(storageKey, bytes, { httpMetadata: { contentType } })
+  const asset = await deps.assets.createAsset({
+    id: assetId,
+    purpose: input.purpose,
+    storageKey,
+    publicUrl,
+    contentType,
+    byteSize: bytes.byteLength,
+    checksumSha256,
+    createdByUserId: input.actorUserId,
+  })
 
-    return { asset: toResponse(asset) }
+  return { asset: toResponse(asset) }
+}
+
+export async function getAssetObject(deps: Deps, assetId: string) {
+  const asset = await deps.assets.findAsset(assetId)
+  if (!asset) {
+    throw notFound('Asset was not found.')
   }
 
-  async getObject(assetId: string) {
-    const asset = await this.repository.findAsset(assetId)
-    if (!asset) {
-      throw notFound('Asset was not found.')
-    }
-
-    const object = await this.storage.get(asset.storageKey)
-    if (!object) {
-      throw notFound('Asset object was not found.')
-    }
-
-    return { asset, object }
+  const object = await deps.assetStorage.get(asset.storageKey)
+  if (!object) {
+    throw notFound('Asset object was not found.')
   }
 
-  updateUserAvatar(userId: string, asset: UploadedAssetResponse['asset']) {
-    return this.repository.updateUserAvatar(userId, asset.id, asset.publicUrl)
+  return { asset, object }
+}
+
+export function updateUserAvatar(deps: Deps, userId: string, asset: UploadedAssetResponse['asset']) {
+  return deps.assets.updateUserAvatar(userId, asset.id, asset.publicUrl)
+}
+
+export function updateApplicationLogo(deps: Deps, applicationId: string, asset: UploadedAssetResponse['asset']) {
+  return deps.assets.updateApplicationLogo(applicationId, asset.id, asset.publicUrl)
+}
+
+export function updateOrganizationLogo(deps: Deps, organizationId: string, asset: UploadedAssetResponse['asset']) {
+  return deps.assets.updateOrganizationLogo(organizationId, asset.id, asset.publicUrl)
+}
+
+export function updateBrandingAsset(deps: Deps, kind: 'logo' | 'favicon', asset: UploadedAssetResponse['asset']) {
+  return deps.assets.updateBrandingAsset(kind, asset.id)
+}
+
+async function validate(purpose: AssetPurpose, file: File) {
+  if (file.size === 0) {
+    throw badRequest('Upload file is required.')
   }
 
-  updateApplicationLogo(applicationId: string, asset: UploadedAssetResponse['asset']) {
-    return this.repository.updateApplicationLogo(applicationId, asset.id, asset.publicUrl)
+  if (file.size > maxByteSizes[purpose]) {
+    throw badRequest(`File exceeds the ${maxByteSizes[purpose]} byte limit.`)
   }
 
-  updateOrganizationLogo(organizationId: string, asset: UploadedAssetResponse['asset']) {
-    return this.repository.updateOrganizationLogo(organizationId, asset.id, asset.publicUrl)
+  const declaredContentType = normalizeContentType(file.type)
+  if (!allowedContentTypes[purpose].includes(file.type) || !declaredContentType) {
+    throw badRequest(`Unsupported file type for ${purpose}.`)
   }
 
-  updateBrandingAsset(kind: 'logo' | 'favicon', asset: UploadedAssetResponse['asset']) {
-    return this.repository.updateBrandingAsset(kind, asset.id)
+  const bytes = await file.arrayBuffer()
+  const contentType = sniffContentType(bytes)
+  if (!contentType || contentType !== declaredContentType) {
+    throw badRequest(`Unsupported file type for ${purpose}.`)
   }
 
-  private async validate(purpose: AssetPurpose, file: File) {
-    if (file.size === 0) {
-      throw badRequest('Upload file is required.')
-    }
-
-    if (file.size > maxByteSizes[purpose]) {
-      throw badRequest(`File exceeds the ${maxByteSizes[purpose]} byte limit.`)
-    }
-
-    const declaredContentType = normalizeContentType(file.type)
-    if (!allowedContentTypes[purpose].includes(file.type) || !declaredContentType) {
-      throw badRequest(`Unsupported file type for ${purpose}.`)
-    }
-
-    const bytes = await file.arrayBuffer()
-    const contentType = sniffContentType(bytes)
-    if (!contentType || contentType !== declaredContentType) {
-      throw badRequest(`Unsupported file type for ${purpose}.`)
-    }
-
-    return { bytes, contentType }
-  }
+  return { bytes, contentType }
 }
 
 function toResponse(asset: UploadedAssetRecord): UploadedAssetResponse['asset'] {

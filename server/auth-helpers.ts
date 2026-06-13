@@ -1,5 +1,6 @@
 import type { TransactionalEmailSender } from '@server/adapters/gateways/email/sender'
-import type { AuthorizationService, AuthorizationTokenClaimInput } from '@server/usecases/authorization'
+import { type AuthorizationTokenClaimInput, buildTokenClaims } from '@server/usecases/authorization'
+import type { Deps } from '@server/usecases/deps'
 import {
   type ApplicationOidcClaims,
   defaultApplicationOidcClaims,
@@ -111,7 +112,7 @@ export async function sendSmsOtp(
 }
 
 export async function buildOAuthUserInfoClaims(
-  authorization: Pick<AuthorizationService, 'buildTokenClaims'>,
+  deps: Deps,
   applications: {
     findByClientId(clientId: string): Promise<{ id: string; oidcClaims: ApplicationOidcClaims } | null>
   },
@@ -125,7 +126,7 @@ export async function buildOAuthUserInfoClaims(
   if (!input.clientId) return {}
   const application = await applications.findByClientId(input.clientId)
   if (!application) return {}
-  return authorization.buildTokenClaims({
+  return buildTokenClaims(deps, {
     userId: readUserId(input.user),
     applicationId: application.id,
     organizationId:
@@ -138,7 +139,7 @@ export async function buildOAuthUserInfoClaims(
 }
 
 export async function buildOAuthAccessTokenClaims(
-  authorization: Pick<AuthorizationService, 'buildTokenClaims'>,
+  deps: Deps,
   input: {
     user?: ({ id?: string } & Record<string, unknown>) | null
     scopes: Iterable<string>
@@ -148,7 +149,7 @@ export async function buildOAuthAccessTokenClaims(
   },
 ): Promise<Record<string, unknown>> {
   const oidcClaims = readOidcClaims(input.metadata)
-  const claims = await authorization.buildTokenClaims({
+  const claims = await buildTokenClaims(deps, {
     userId: input.user?.id,
     applicationId: readString(input.metadata, 'applicationId'),
     organizationId: input.referenceId,
@@ -161,7 +162,7 @@ export async function buildOAuthAccessTokenClaims(
 }
 
 export async function buildOAuthIdTokenClaims(
-  authorization: Pick<AuthorizationService, 'buildTokenClaims'>,
+  deps: Deps,
   input: {
     user?: ({ id?: string } & Record<string, unknown>) | null
     scopes?: Iterable<string>
@@ -172,7 +173,7 @@ export async function buildOAuthIdTokenClaims(
   const oidcClaims = readOidcClaims(input.metadata)
   return {
     ...(applicationId ? { application_id: applicationId } : {}),
-    ...(await authorization.buildTokenClaims({
+    ...(await buildTokenClaims(deps, {
       userId: input.user?.id,
       applicationId,
       scopes: input.scopes ? [...input.scopes] : [],

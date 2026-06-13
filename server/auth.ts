@@ -6,9 +6,9 @@ import type { TransactionalEmailSender } from '@server/adapters/gateways/email/s
 import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
-import { AgentService } from '@server/usecases/agents'
-import { AuthorizationService } from '@server/usecases/authorization'
+import { executeReadOnlyCapability } from '@server/usecases/agents'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
+import type { Deps } from '@server/usecases/deps'
 import type { ApplicationRepository } from '@server/usecases/ports'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
@@ -111,9 +111,14 @@ export function createAuth(
     validAudiences?: string[]
   } = {},
 ) {
-  const authorization = new AuthorizationService(createDrizzleAuthorizationRepository(db))
   const applications = createDrizzleApplicationRepository(db)
-  const agents = new AgentService(createUserRepository(db), createDrizzleAgentRepository(db))
+  // The better-auth boundary builds its own repos; only the slices the token-claim
+  // and agent-capability usecases read are populated here.
+  const deps = {
+    authorization: createDrizzleAuthorizationRepository(db),
+    users: createUserRepository(db),
+    agents: createDrizzleAgentRepository(db),
+  } as unknown as Deps
 
   return betterAuth({
     appName: 'FlareAuth',
@@ -261,7 +266,7 @@ export function createAuth(
         capabilities: agentCapabilities,
         validateCapabilities: areKnownAgentCapabilities,
         onExecute: ({ capability, arguments: args, agentSession }) =>
-          agents.executeReadOnlyCapability({ capability, arguments: args, agentSession }),
+          executeReadOnlyCapability(deps, { capability, arguments: args, agentSession }),
       }),
       deviceAuthorization({
         verificationUri: '/device',
@@ -368,11 +373,11 @@ export function createAuth(
         consentPage: '/oauth/consent',
         scopes: oauthScopes,
         validAudiences: options.validAudiences,
-        customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(authorization, input),
+        customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(deps, input),
         customUserInfoClaims: async ({ user, scopes, jwt }) => {
           const clientId = readString(jwt, 'client_id') ?? readString(jwt, 'azp')
           if (clientId !== systemCliClientId) {
-            return buildOAuthUserInfoClaims(authorization, applications, { clientId, user, scopes, jwt })
+            return buildOAuthUserInfoClaims(deps, applications, { clientId, user, scopes, jwt })
           }
           if (!hasManagementScope(scopes)) return {}
           return {
@@ -383,7 +388,7 @@ export function createAuth(
             roles: jwt.roles,
           }
         },
-        customIdTokenClaims: (input) => buildOAuthIdTokenClaims(authorization, input),
+        customIdTokenClaims: (input) => buildOAuthIdTokenClaims(deps, input),
         clientRegistrationDefaultScopes: ['openid', 'profile', 'email'],
         clientRegistrationAllowedScopes: [...userConfigurableApplicationScopes],
         storeClientSecret: 'hashed',

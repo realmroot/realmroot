@@ -1,5 +1,12 @@
 import { createApp } from '@server/http/app'
+import * as applications from '@server/usecases/applications'
+import * as configz from '@server/usecases/configz'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { createTestDeps } from './test-deps'
+
+type ConfigzConfig = Awaited<ReturnType<typeof configz.getConfig>>
+type ListApplicationsResponse = Awaited<ReturnType<typeof applications.listApplications>>
 
 describe('app.test 2', () => {
   beforeEach(() => {
@@ -11,14 +18,13 @@ describe('app.test 2', () => {
   })
 
   it('emits CORS response headers for raw auth handler responses', async () => {
-    const response = await createApp(createAuthMock(), { trustedOrigins: ['https://tenant.example.com'] }).request(
-      '/api/auth/session',
-      {
-        headers: {
-          origin: 'https://tenant.example.com',
-        },
+    const response = await createApp(createAuthMock(), createTestDeps(), {
+      trustedOrigins: ['https://tenant.example.com'],
+    }).request('/api/auth/session', {
+      headers: {
+        origin: 'https://tenant.example.com',
       },
-    )
+    })
 
     expect(response.status).toBe(204)
     expect(response.headers.get('access-control-allow-origin')).toBe('https://tenant.example.com')
@@ -34,9 +40,9 @@ describe('app.test 2', () => {
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
       userinfo_endpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
     })
-    const response = await createApp(auth, {
+    mockApplicationCors(['https://app.example.com'])
+    const response = await createApp(auth, createTestDeps(), {
       trustedOrigins: ['https://tenant.example.com'],
-      applicationServiceFactory: applicationCorsFactory(['https://app.example.com']),
     }).request('/api/auth/.well-known/openid-configuration', {
       headers: {
         origin: 'https://app.example.com',
@@ -58,9 +64,9 @@ describe('app.test 2', () => {
       userinfo_endpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
     })
 
-    const response = await createApp(auth, {
+    mockApplicationCors([])
+    const response = await createApp(auth, createTestDeps(), {
       trustedOrigins: ['https://tenant.example.com'],
-      applicationServiceFactory: applicationCorsFactory([]),
     }).request('/api/auth/.well-known/openid-configuration', {
       headers: {
         origin: 'https://unknown.example.com',
@@ -74,9 +80,9 @@ describe('app.test 2', () => {
 
   it('allows application CORS origins for OAuth token preflight', async () => {
     const auth = createAuthMock()
-    const response = await createApp(auth, {
+    mockApplicationCors(['https://app.example.com'])
+    const response = await createApp(auth, createTestDeps(), {
       trustedOrigins: ['https://tenant.example.com'],
-      applicationServiceFactory: applicationCorsFactory(['https://app.example.com']),
     }).request('/api/auth/oauth2/token', {
       method: 'OPTIONS',
       headers: {
@@ -92,9 +98,9 @@ describe('app.test 2', () => {
   })
 
   it('rejects unconfigured origins for OAuth client endpoints', async () => {
-    const response = await createApp(createAuthMock(), {
+    mockApplicationCors(['https://app.example.com'])
+    const response = await createApp(createAuthMock(), createTestDeps(), {
       trustedOrigins: ['https://tenant.example.com'],
-      applicationServiceFactory: applicationCorsFactory(['https://app.example.com']),
     }).request('/api/auth/oauth2/token', {
       method: 'OPTIONS',
       headers: {
@@ -109,10 +115,9 @@ describe('app.test 2', () => {
   })
 
   it('keeps first-party API routes restricted to deployment-level trusted origins', async () => {
-    const response = await createApp(createAuthMock(), {
+    mockApplicationCors(['https://app.example.com'])
+    const response = await createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() }), {
       trustedOrigins: ['https://tenant.example.com'],
-      userRepository: createUserRepositoryMock(),
-      applicationServiceFactory: applicationCorsFactory(['https://app.example.com']),
     }).request('/api/account/profile', {
       headers: {
         origin: 'https://app.example.com',
@@ -125,18 +130,15 @@ describe('app.test 2', () => {
 
   it('blocks password auth endpoints when hosted password auth is disabled', async () => {
     const auth = createAuthMock()
-    const configzService = createConfigzServiceMock({
+    mockConfig({
       signIn: { passwordEnabled: false, signupEnabled: true, socialLoginEnabled: true, emailOtpEnabled: true },
     })
 
-    const response = await createApp(auth, { configzServiceFactory: () => configzService }).request(
-      '/api/auth/sign-in/username',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ username: 'admin', password: 'admin2026' }),
-      },
-    )
+    const response = await createApp(auth, createTestDeps()).request('/api/auth/sign-in/username', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'admin2026' }),
+    })
 
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toMatchObject({
@@ -147,10 +149,10 @@ describe('app.test 2', () => {
 
   it('blocks email OTP sign-in while allowing email verification when email code sign-in is disabled', async () => {
     const auth = createAuthMock()
-    const configzService = createConfigzServiceMock({
+    mockConfig({
       signIn: { passwordEnabled: true, signupEnabled: true, socialLoginEnabled: true, emailOtpEnabled: false },
     })
-    const app = createApp(auth, { configzServiceFactory: () => configzService })
+    const app = createApp(auth, createTestDeps())
 
     const signInCode = await app.request('/api/auth/email-otp/send-verification-otp', {
       method: 'POST',
@@ -183,10 +185,8 @@ describe('app.test 2', () => {
   it('blocks SIWE sign-in before Better Auth can create an unlinked wallet account', async () => {
     const auth = createAuthMock()
     const wallets = createWalletRepositoryMock({ linked: false })
-    const response = await createApp(auth, {
-      walletRepository: wallets,
-      configzServiceFactory: () => createConfigzServiceMock(),
-    }).request('/api/auth/siwe/verify', {
+    mockConfig()
+    const response = await createApp(auth, createTestDeps({ wallets })).request('/api/auth/siwe/verify', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -205,10 +205,8 @@ describe('app.test 2', () => {
   it('allows SIWE sign-in for an already linked wallet', async () => {
     const auth = createAuthMock()
     const wallets = createWalletRepositoryMock({ linked: true })
-    const response = await createApp(auth, {
-      walletRepository: wallets,
-      configzServiceFactory: () => createConfigzServiceMock(),
-    }).request('/api/auth/siwe/verify', {
+    mockConfig()
+    const response = await createApp(auth, createTestDeps({ wallets })).request('/api/auth/siwe/verify', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -222,7 +220,7 @@ describe('app.test 2', () => {
   })
 
   it('mounts admin authorization routes behind the admin auth boundary', async () => {
-    const app = createApp(createAuthMock())
+    const app = createApp(createAuthMock(), createTestDeps())
 
     const organizations = await app.request('/api/management/organizations')
     const resources = await app.request('/api/management/api-resources')
@@ -258,60 +256,59 @@ function createAuthMock() {
   }
 }
 
-function createConfigzServiceMock(overrides: Record<string, unknown> = {}) {
+function mockConfig(overrides: Record<string, unknown> = {}) {
+  return vi.spyOn(configz, 'getConfig').mockResolvedValue(configFixture(overrides) as ConfigzConfig)
+}
+
+function configFixture(overrides: Record<string, unknown> = {}) {
   return {
-    getConfig: vi.fn().mockResolvedValue({
-      signIn: {
-        passwordEnabled: true,
-        signupEnabled: true,
-        socialLoginEnabled: true,
-        emailOtpEnabled: true,
-        usernameEnabled: true,
-        identifierFirst: false,
+    signIn: {
+      passwordEnabled: true,
+      signupEnabled: true,
+      socialLoginEnabled: true,
+      emailOtpEnabled: true,
+      usernameEnabled: true,
+      identifierFirst: false,
+    },
+    builtInProviders: {
+      email: { enabled: true },
+      phone: { enabled: false },
+      web3Wallet: { enabled: true, chains: [1], allowSignUp: true },
+      passkey: { allowSignUp: true },
+      oneTap: {
+        enabled: false,
+        clientId: '',
+        autoSelect: false,
+        cancelOnTapOutside: true,
+        uxMode: 'popup',
+        context: 'signin',
+        promptBaseDelayMs: 1000,
+        promptMaxAttempts: 5,
       },
-      builtInProviders: {
-        email: { enabled: true },
-        phone: { enabled: false },
-        web3Wallet: { enabled: true, chains: [1], allowSignUp: true },
-        passkey: { allowSignUp: true },
-        oneTap: {
-          enabled: false,
-          clientId: '',
-          autoSelect: false,
-          cancelOnTapOutside: true,
-          uxMode: 'popup',
-          context: 'signin',
-          promptBaseDelayMs: 1000,
-          promptMaxAttempts: 5,
-        },
-      },
-      accountCenter: {
-        profileEditingEnabled: true,
-        displayNameEditable: true,
-        usernameEditable: true,
-        avatarEditable: true,
-        emailChangeEnabled: true,
-        passwordChangeEnabled: true,
-        connectedAccountsEnabled: true,
-        sessionsViewEnabled: true,
-        dangerZoneEnabled: false,
-      },
-      ...overrides,
-    }),
+    },
+    accountCenter: {
+      profileEditingEnabled: true,
+      displayNameEditable: true,
+      usernameEditable: true,
+      avatarEditable: true,
+      emailChangeEnabled: true,
+      passwordChangeEnabled: true,
+      connectedAccountsEnabled: true,
+      sessionsViewEnabled: true,
+      dangerZoneEnabled: false,
+    },
+    ...overrides,
   }
 }
 
-function applicationCorsFactory(origins: string[]) {
-  return () => ({
-    list: vi.fn().mockResolvedValue({
-      applications: [
-        applicationResponse({ corsOrigins: origins }),
-        applicationResponse({ disabled: true, corsOrigins: ['https://disabled.example.com'] }),
-      ],
-      pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
-    }),
-    revokeConsent: vi.fn(),
-  })
+function mockApplicationCors(origins: string[]) {
+  return vi.spyOn(applications, 'listApplications').mockResolvedValue({
+    applications: [
+      applicationResponse({ corsOrigins: origins }),
+      applicationResponse({ disabled: true, corsOrigins: ['https://disabled.example.com'] }),
+    ],
+    pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
+  } as unknown as ListApplicationsResponse)
 }
 
 function applicationResponse(overrides: Record<string, unknown> = {}) {

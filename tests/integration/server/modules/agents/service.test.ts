@@ -1,23 +1,36 @@
 import type { AgentSession } from '@better-auth/agent-auth'
 import { agentCapabilities } from '@server/auth-capabilities'
 import { areKnownAgentCapabilities } from '@server/domain/agents/capabilities'
-import { AgentService } from '@server/usecases/agents'
+import {
+  executeReadOnlyCapability,
+  listAccountAgents,
+  listAgentApprovalRequests,
+  listAgentCapabilityGrants,
+  listAgentHosts,
+  listAgents,
+  revokeAccountAgent,
+  revokeAccountCapabilityGrant,
+  revokeAgent,
+  revokeAgentCapabilityGrant,
+  revokeAgentHost,
+} from '@server/usecases/agents'
+import type { Deps } from '@server/usecases/deps'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('AgentService', () => {
   it('executes only read-only account capabilities through the user repository', async () => {
     const users = createUserRepositoryMock()
-    const service = new AgentService(users as never, createAgentRepositoryMock())
+    const deps = { users, agents: createAgentRepositoryMock() } as unknown as Deps
     const agentSession = createAgentSession()
 
     await expect(
-      service.executeReadOnlyCapability({
+      executeReadOnlyCapability(deps, {
         capability: 'account.profile.read',
         agentSession,
       }),
     ).resolves.toEqual({ user: { id: 'user-1', email: 'user@example.com' } })
     await expect(
-      service.executeReadOnlyCapability({
+      executeReadOnlyCapability(deps, {
         capability: 'account.sessions.list',
         arguments: { limit: 25, offset: 50 },
         agentSession,
@@ -27,7 +40,7 @@ describe('AgentService', () => {
       pagination: { limit: 25, offset: 50, total: 1, hasMore: false, nextOffset: null },
     })
     await expect(
-      service.executeReadOnlyCapability({
+      executeReadOnlyCapability(deps, {
         capability: 'account.authorized_apps.list',
         arguments: { limit: 10 },
         agentSession,
@@ -50,10 +63,10 @@ describe('AgentService', () => {
       limit: 50,
       offset: 0,
     })
-    const service = new AgentService(users as never, createAgentRepositoryMock())
+    const deps = { users, agents: createAgentRepositoryMock() } as unknown as Deps
 
     await expect(
-      service.executeReadOnlyCapability({
+      executeReadOnlyCapability(deps, {
         capability: 'account.sessions.list',
         agentSession: createAgentSession(),
       }),
@@ -66,17 +79,17 @@ describe('AgentService', () => {
   })
 
   it('rejects unknown capabilities and invalid pagination arguments', async () => {
-    const service = new AgentService(createUserRepositoryMock() as never, createAgentRepositoryMock())
+    const deps = { users: createUserRepositoryMock(), agents: createAgentRepositoryMock() } as unknown as Deps
     const agentSession = createAgentSession()
 
     await expect(
-      service.executeReadOnlyCapability({
+      executeReadOnlyCapability(deps, {
         capability: 'account.profile.write',
         agentSession,
       }),
     ).rejects.toMatchObject({ status: 400 })
     await expect(
-      service.executeReadOnlyCapability({
+      executeReadOnlyCapability(deps, {
         capability: 'account.sessions.list',
         arguments: { limit: 101 },
         agentSession,
@@ -95,13 +108,13 @@ describe('AgentService', () => {
       limit: 10,
       offset: 0,
     })
-    const service = new AgentService(createUserRepositoryMock() as never, repository as never)
+    const deps = { users: createUserRepositoryMock(), agents: repository } as unknown as Deps
     const page = { limit: 10, offset: 0 }
 
-    await expect(service.listHosts(page)).resolves.toMatchObject({ items: [{ id: 'host-1' }] })
-    await expect(service.listAgents(page)).resolves.toMatchObject({ items: [{ id: 'agent-1' }] })
-    await expect(service.listCapabilityGrants(page)).resolves.toMatchObject({ items: [{ id: 'grant-1' }] })
-    await expect(service.listApprovalRequests(page)).resolves.toMatchObject({ items: [{ id: 'approval-1' }] })
+    await expect(listAgentHosts(deps, page)).resolves.toMatchObject({ items: [{ id: 'host-1' }] })
+    await expect(listAgents(deps, page)).resolves.toMatchObject({ items: [{ id: 'agent-1' }] })
+    await expect(listAgentCapabilityGrants(deps, page)).resolves.toMatchObject({ items: [{ id: 'grant-1' }] })
+    await expect(listAgentApprovalRequests(deps, page)).resolves.toMatchObject({ items: [{ id: 'approval-1' }] })
   })
 
   it('maps account-owned agents with capability grants and delegates revokes', async () => {
@@ -137,9 +150,9 @@ describe('AgentService', () => {
       },
     ])
     repository.listHostsForAgents.mockResolvedValue([{ id: 'host-1', name: 'Desktop Host', status: 'active' }])
-    const service = new AgentService(createUserRepositoryMock() as never, repository as never)
+    const deps = { users: createUserRepositoryMock(), agents: repository } as unknown as Deps
 
-    await expect(service.listAccountAgents('user-1', { limit: 10, offset: 0 })).resolves.toMatchObject({
+    await expect(listAccountAgents(deps, 'user-1', { limit: 10, offset: 0 })).resolves.toMatchObject({
       agents: [
         {
           id: 'agent-1',
@@ -149,11 +162,11 @@ describe('AgentService', () => {
       ],
       pagination: { limit: 10, offset: 0, total: 1 },
     })
-    await service.revokeAccountAgent('agent-1', 'user-1')
-    await service.revokeAccountCapabilityGrant('grant-1', 'user-1')
-    await service.revokeAgent('agent-1')
-    await service.revokeHost('host-1')
-    await service.revokeCapabilityGrant('grant-1')
+    await revokeAccountAgent(deps, 'agent-1', 'user-1')
+    await revokeAccountCapabilityGrant(deps, 'grant-1', 'user-1')
+    await revokeAgent(deps, 'agent-1')
+    await revokeAgentHost(deps, 'host-1')
+    await revokeAgentCapabilityGrant(deps, 'grant-1')
 
     expect(repository.listAgentsForUser).toHaveBeenCalledWith('user-1', { limit: 10, offset: 0 })
     expect(repository.listHostsForAgents).toHaveBeenCalledWith(['host-1'])

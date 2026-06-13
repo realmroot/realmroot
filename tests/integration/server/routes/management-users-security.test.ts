@@ -1,6 +1,7 @@
 import { createApp } from '@server/http/app'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createTestDeps } from '../test-deps'
 import {
   adminHeaders,
   bearerHeaders,
@@ -29,7 +30,7 @@ describe('management routes 2', () => {
       },
     })
 
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users',
       {
         headers: bearerHeaders('permissions-admin-token'),
@@ -50,7 +51,7 @@ describe('management routes 2', () => {
       scope: 'openid management:read management:write',
     })
 
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users',
       {
         headers: bearerHeaders('valid-admin-token'),
@@ -63,7 +64,7 @@ describe('management routes 2', () => {
 
   it('preserves existing admin-session auth behavior on management routes', async () => {
     const auth = createAuthMock()
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users?limit=10&offset=20&banned=false',
       { headers: adminHeaders() },
     )
@@ -111,11 +112,14 @@ describe('management routes 2', () => {
         entries: ['blocked.example'],
       },
     })
-    const app = createApp(auth, {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(policy),
-      securityPolicy: policy,
-    })
+    const app = createApp(
+      auth,
+      createTestDeps({
+        users: createUserRepositoryMock(),
+        security: createSecurityRepositoryMock(policy),
+      }),
+      { securityPolicy: policy },
+    )
 
     const weakPassword = await app.request('/api/management/users', {
       method: 'POST',
@@ -140,7 +144,7 @@ describe('management routes 2', () => {
   it('normalizes management user list pagination', async () => {
     const auth = createAuthMock()
     auth.api.listUsers.mockResolvedValueOnce({ users: [{ id: 'user-1' }], total: 1, limit: 50 })
-    const app = createApp(auth, { userRepository: createUserRepositoryMock() })
+    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
 
     const managementResponse = await app.request('/api/management/users', { headers: adminHeaders() })
 
@@ -157,7 +161,7 @@ describe('management routes 2', () => {
   })
 
   it('returns the Management error envelope for malformed application JSON', async () => {
-    const response = await createApp(createAuthMock()).request('/api/management/applications', {
+    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/management/applications', {
       method: 'POST',
       headers: adminHeaders(),
       body: '{',
@@ -174,7 +178,7 @@ describe('management routes 2', () => {
 
   it('supports REST-shaped management account action resources', async () => {
     const auth = createAuthMock()
-    const app = createApp(auth, { userRepository: createUserRepositoryMock() })
+    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
     const headers = adminHeaders()
 
     await app.request('/api/management/users/password-reset-requests', {
@@ -214,7 +218,7 @@ describe('management routes 2', () => {
     users.listLinkedAccounts = vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page)))
     users.listConsentedApplications = vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page)))
     users.listSessions = vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page)))
-    const app = createApp(auth, { userRepository: users })
+    const app = createApp(auth, createTestDeps({ users }))
     const headers = adminHeaders()
 
     const detail = await app.request('/api/management/users/user-1', { headers })
@@ -277,10 +281,13 @@ describe('management routes 2', () => {
 
   it('exposes managed user security and passkey controls through safe repositories', async () => {
     const security = createSecurityRepositoryMock()
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: security,
-    })
+    const app = createApp(
+      createAuthMock(),
+      createTestDeps({
+        users: createUserRepositoryMock(),
+        security,
+      }),
+    )
     const headers = adminHeaders()
 
     const securityState = await app.request('/api/management/users/user-1/security', { headers })
@@ -328,11 +335,14 @@ describe('management routes 2', () => {
 
   it('reads and updates managed security policy through the management boundary', async () => {
     const security = createSecurityRepositoryMock()
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: security,
-      securityPolicy: securityPolicy(),
-    })
+    const app = createApp(
+      createAuthMock(),
+      createTestDeps({
+        users: createUserRepositoryMock(),
+        security,
+      }),
+      { securityPolicy: securityPolicy() },
+    )
     const headers = adminHeaders()
     const body = {
       policy: {
@@ -376,7 +386,7 @@ describe('management routes 2', () => {
   it('updates and revokes specific managed users through the management boundary', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
-    const app = createApp(auth, { userRepository: users })
+    const app = createApp(auth, createTestDeps({ users }))
     const headers = adminHeaders()
 
     const updated = await app.request('/api/management/users/user-1', {

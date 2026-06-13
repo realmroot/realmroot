@@ -4,17 +4,33 @@ import type {
   WebhookRequestInsert,
   WebhookRequestRow,
 } from '@server/adapters/repos/webhooks'
+import type { Deps } from '@server/usecases/deps'
 import type { WebhookRepository } from '@server/usecases/ports'
-import { WebhookService } from '@server/usecases/webhooks'
+import {
+  createWebhookEndpoint,
+  deleteWebhookEndpoint,
+  getWebhookEndpoint,
+  getWebhookRequest,
+  listWebhookEndpoints,
+  listWebhookRequests,
+  retryWebhookRequest,
+  rotateWebhookSecret,
+  updateWebhookEndpoint,
+} from '@server/usecases/webhooks'
 import type { ListWebhookEndpointsQuery, ListWebhookRequestsQuery } from '@shared/api/webhooks'
 import { describe, expect, it } from 'vitest'
+
+function depsWith(repository: WebhookRepository): Deps {
+  return { webhooks: repository } as unknown as Deps
+}
 
 describe('WebhookService', () => {
   it('creates, filters, toggles, rotates, deletes, inspects, and retries webhook resources', async () => {
     const repository = new InMemoryWebhookRepository()
-    const service = new WebhookService(repository)
+    const deps = depsWith(repository)
 
-    const created = await service.createEndpoint(
+    const created = await createWebhookEndpoint(
+      deps,
       { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true },
       'admin-1',
     )
@@ -25,21 +41,21 @@ describe('WebhookService', () => {
       events: ['user.created'],
       enabled: true,
     })
-    await expect(service.getEndpoint(created.endpoint.id)).resolves.toMatchObject({ id: created.endpoint.id })
-    expect(await service.listEndpoints({ limit: 50, offset: 0, status: 'enabled' })).toMatchObject({
+    await expect(getWebhookEndpoint(deps, created.endpoint.id)).resolves.toMatchObject({ id: created.endpoint.id })
+    expect(await listWebhookEndpoints(deps, { limit: 50, offset: 0, status: 'enabled' })).toMatchObject({
       endpoints: [{ id: created.endpoint.id }],
       pagination: { total: 1, hasMore: false },
     })
 
-    await expect(service.updateEndpoint(created.endpoint.id, { enabled: false })).resolves.toMatchObject({
+    await expect(updateWebhookEndpoint(deps, created.endpoint.id, { enabled: false })).resolves.toMatchObject({
       enabled: false,
     })
-    await expect(service.listEndpoints({ limit: 50, offset: 0, status: 'enabled' })).resolves.toMatchObject({
+    await expect(listWebhookEndpoints(deps, { limit: 50, offset: 0, status: 'enabled' })).resolves.toMatchObject({
       endpoints: [],
       pagination: { total: 0 },
     })
 
-    const rotated = await service.rotateSecret(created.endpoint.id)
+    const rotated = await rotateWebhookSecret(deps, created.endpoint.id)
     expect(rotated.signingSecret).toMatch(/^whsec_/)
     expect(rotated.signingSecret).not.toBe(created.signingSecret)
 
@@ -58,21 +74,22 @@ describe('WebhookService', () => {
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     })
 
-    await expect(service.getRequest(request.id)).resolves.toMatchObject({ id: 'whr_1', status: 'failed' })
-    await expect(service.listRequests({ limit: 50, offset: 0, status: 'failed' })).resolves.toMatchObject({
+    await expect(getWebhookRequest(deps, request.id)).resolves.toMatchObject({ id: 'whr_1', status: 'failed' })
+    await expect(listWebhookRequests(deps, { limit: 50, offset: 0, status: 'failed' })).resolves.toMatchObject({
       requests: [{ id: 'whr_1', status: 'failed' }],
       pagination: { total: 1, hasMore: false },
     })
-    await expect(service.retryRequest(request.id)).resolves.toMatchObject({ id: 'whr_1', status: 'pending' })
+    await expect(retryWebhookRequest(deps, request.id)).resolves.toMatchObject({ id: 'whr_1', status: 'pending' })
 
-    await service.deleteEndpoint(created.endpoint.id)
-    await expect(service.getEndpoint(created.endpoint.id)).rejects.toMatchObject({ status: 404 })
+    await deleteWebhookEndpoint(deps, created.endpoint.id)
+    await expect(getWebhookEndpoint(deps, created.endpoint.id)).rejects.toMatchObject({ status: 404 })
   })
 
   it('rejects duplicate events and delivered retries', async () => {
     const repository = new InMemoryWebhookRepository()
-    const service = new WebhookService(repository)
-    const created = await service.createEndpoint(
+    const deps = depsWith(repository)
+    const created = await createWebhookEndpoint(
+      deps,
       { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true },
       'admin-1',
     )
@@ -92,33 +109,37 @@ describe('WebhookService', () => {
     })
 
     await expect(
-      service.createEndpoint(
+      createWebhookEndpoint(
+        deps,
         { url: 'https://app.example.com/duplicate', events: ['user.created', 'user.created'], enabled: true },
         'admin-1',
       ),
     ).rejects.toMatchObject({ status: 400 })
-    await expect(service.retryRequest(request.id)).rejects.toMatchObject({ status: 400 })
+    await expect(retryWebhookRequest(deps, request.id)).rejects.toMatchObject({ status: 400 })
   })
 
   it('returns not found when webhook resources disappear during mutations', async () => {
     const repository = new InMemoryWebhookRepository()
-    const service = new WebhookService(repository)
+    const deps = depsWith(repository)
 
-    await expect(service.updateEndpoint('missing', { enabled: false })).rejects.toMatchObject({ status: 404 })
-    await expect(service.deleteEndpoint('missing')).rejects.toMatchObject({ status: 404 })
-    await expect(service.rotateSecret('missing')).rejects.toMatchObject({ status: 404 })
-    await expect(service.getRequest('missing')).rejects.toMatchObject({ status: 404 })
-    await expect(service.retryRequest('missing')).rejects.toMatchObject({ status: 404 })
+    await expect(updateWebhookEndpoint(deps, 'missing', { enabled: false })).rejects.toMatchObject({ status: 404 })
+    await expect(deleteWebhookEndpoint(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+    await expect(rotateWebhookSecret(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+    await expect(getWebhookRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+    await expect(retryWebhookRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
 
-    const created = await service.createEndpoint(
+    const created = await createWebhookEndpoint(
+      deps,
       { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true },
       'admin-1',
     )
     repository.missingEndpointUpdateIds.add(created.endpoint.id)
-    await expect(service.updateEndpoint(created.endpoint.id, { events: ['session.revoked'] })).rejects.toMatchObject({
+    await expect(
+      updateWebhookEndpoint(deps, created.endpoint.id, { events: ['session.revoked'] }),
+    ).rejects.toMatchObject({
       status: 404,
     })
-    await expect(service.rotateSecret(created.endpoint.id)).rejects.toMatchObject({ status: 404 })
+    await expect(rotateWebhookSecret(deps, created.endpoint.id)).rejects.toMatchObject({ status: 404 })
 
     const request = repository.createRequest({
       id: 'whr_1',
@@ -135,7 +156,7 @@ describe('WebhookService', () => {
       updatedAt: new Date(),
     })
     repository.missingRequestUpdateIds.add(request.id)
-    await expect(service.retryRequest(request.id)).rejects.toMatchObject({ status: 404 })
+    await expect(retryWebhookRequest(deps, request.id)).rejects.toMatchObject({ status: 404 })
   })
 })
 

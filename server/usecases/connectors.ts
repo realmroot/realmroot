@@ -1,5 +1,6 @@
 import { connectorTemplates, isSupportedProvider } from '@server/domain/connectors/provider-templates'
 import { badRequest, notFound } from '@server/domain/errors'
+import type { Deps } from '@server/usecases/deps'
 import type { ConnectorRecord, ConnectorRepository } from '@server/usecases/ports'
 import type {
   ConnectorProviderType,
@@ -35,94 +36,90 @@ export interface AuthConnectorConfig {
   cacheKey: string
 }
 
-export class ConnectorService {
-  constructor(private readonly repository: ConnectorRepository) {}
-
-  async list(page: { limit: number; offset: number }) {
-    const result = await this.repository.list(page)
-    return {
-      connectors: result.items.map(toResponse),
-      pagination: paginationMetadata({ ...page, total: result.total }),
-    }
+export async function listConnectors(deps: Deps, page: { limit: number; offset: number }) {
+  const result = await deps.connectors.list(page)
+  return {
+    connectors: result.items.map(toResponse),
+    pagination: paginationMetadata({ ...page, total: result.total }),
   }
+}
 
-  listTemplates() {
-    return { templates: connectorTemplates }
+export function listConnectorTemplates() {
+  return { templates: connectorTemplates }
+}
+
+export async function getConnector(deps: Deps, id: string) {
+  const connector = await deps.connectors.findById(id)
+  if (!connector) throw notFound('Connector not found.')
+  return toResponse(connector)
+}
+
+export async function connectorReadiness(deps: Deps, id: string): Promise<ConnectorReadinessResponse> {
+  const connector = await deps.connectors.findById(id)
+  if (!connector) throw notFound('Connector not found.')
+
+  const checks = connectorReadinessChecks(connector)
+  return {
+    connectorId: connector.id,
+    ready: checks.every((check) => check.ok),
+    checks,
   }
+}
 
-  async get(id: string) {
-    const connector = await this.repository.findById(id)
-    if (!connector) throw notFound('Connector not found.')
-    return toResponse(connector)
+export async function createConnector(deps: Deps, input: CreateConnectorRequest) {
+  assertSupportedProvider(input.providerType, input.providerId)
+  await assertProviderAvailable(deps.connectors, input.providerId)
+  const now = new Date()
+  const candidate = {
+    id: `idp_${crypto.randomUUID().replaceAll('-', '')}`,
+    slug: input.slug ?? input.providerId,
+    providerType: input.providerType,
+    providerId: input.providerId,
+    displayName: input.displayName,
+    enabled: input.enabled ?? true,
+    clientId: input.clientId ?? null,
+    clientSecret: input.clientSecret ?? null,
+    issuer: input.issuer ?? null,
+    authorizationEndpoint: input.authorizationEndpoint ?? null,
+    tokenEndpoint: input.tokenEndpoint ?? null,
+    userInfoEndpoint: input.userInfoEndpoint ?? null,
+    jwksEndpoint: input.jwksEndpoint ?? null,
+    scopes: input.scopes ?? null,
+    attributeMapping: null,
+    providerMetadata: input.providerMetadata ?? null,
+    createdAt: now,
+    updatedAt: now,
   }
+  assertComplete(candidate)
+  const connector = await deps.connectors.create(candidate)
+  assertComplete(connector)
+  return toResponse(connector)
+}
 
-  async readiness(id: string): Promise<ConnectorReadinessResponse> {
-    const connector = await this.repository.findById(id)
-    if (!connector) throw notFound('Connector not found.')
+export async function updateConnector(deps: Deps, id: string, input: UpdateConnectorRequest) {
+  const current = await deps.connectors.findById(id)
+  if (!current) throw notFound('Connector not found.')
 
-    const checks = connectorReadinessChecks(connector)
-    return {
-      connectorId: connector.id,
-      ready: checks.every((check) => check.ok),
-      checks,
-    }
+  const candidate = {
+    ...current,
+    ...input,
+    updatedAt: new Date(),
   }
+  assertComplete(candidate)
 
-  async create(input: CreateConnectorRequest) {
-    assertSupportedProvider(input.providerType, input.providerId)
-    await assertProviderAvailable(this.repository, input.providerId)
-    const now = new Date()
-    const candidate = {
-      id: `idp_${crypto.randomUUID().replaceAll('-', '')}`,
-      slug: input.slug ?? input.providerId,
-      providerType: input.providerType,
-      providerId: input.providerId,
-      displayName: input.displayName,
-      enabled: input.enabled ?? true,
-      clientId: input.clientId ?? null,
-      clientSecret: input.clientSecret ?? null,
-      issuer: input.issuer ?? null,
-      authorizationEndpoint: input.authorizationEndpoint ?? null,
-      tokenEndpoint: input.tokenEndpoint ?? null,
-      userInfoEndpoint: input.userInfoEndpoint ?? null,
-      jwksEndpoint: input.jwksEndpoint ?? null,
-      scopes: input.scopes ?? null,
-      attributeMapping: null,
-      providerMetadata: input.providerMetadata ?? null,
-      createdAt: now,
-      updatedAt: now,
-    }
-    assertComplete(candidate)
-    const connector = await this.repository.create(candidate)
-    assertComplete(connector)
-    return toResponse(connector)
-  }
+  const updated = await deps.connectors.update(id, {
+    ...input,
+    updatedAt: candidate.updatedAt,
+  })
+  if (!updated) throw notFound('Connector not found.')
+  assertComplete(updated)
+  return toResponse(updated)
+}
 
-  async update(id: string, input: UpdateConnectorRequest) {
-    const current = await this.repository.findById(id)
-    if (!current) throw notFound('Connector not found.')
-
-    const candidate = {
-      ...current,
-      ...input,
-      updatedAt: new Date(),
-    }
-    assertComplete(candidate)
-
-    const updated = await this.repository.update(id, {
-      ...input,
-      updatedAt: candidate.updatedAt,
-    })
-    if (!updated) throw notFound('Connector not found.')
-    assertComplete(updated)
-    return toResponse(updated)
-  }
-
-  async delete(id: string) {
-    const current = await this.repository.findById(id)
-    if (!current) throw notFound('Connector not found.')
-    await this.repository.delete(id)
-  }
+export async function deleteConnector(deps: Deps, id: string) {
+  const current = await deps.connectors.findById(id)
+  if (!current) throw notFound('Connector not found.')
+  await deps.connectors.delete(id)
 }
 
 export async function loadAuthConnectorConfig(repository: ConnectorRepository): Promise<AuthConnectorConfig> {

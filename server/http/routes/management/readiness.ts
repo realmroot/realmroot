@@ -1,10 +1,5 @@
-import {
-  type ApplicationBindings,
-  type ConfigzBindings,
-  createApplicationService,
-  createConfigzService,
-} from '@server/composition'
-import type { ListApplicationsResponse } from '@shared/api/applications'
+import { listApplications } from '@server/usecases/applications'
+import { getConfig } from '@server/usecases/configz'
 import {
   type ManagementReadinessItem,
   type ManagementReadinessResponse,
@@ -13,35 +8,24 @@ import {
 import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { configzOptions } from '../../app-config'
 import { requireAdmin } from '../../middleware/admin'
-import type { ManagementConfigzServiceFactory } from './settings'
+import { getDeps } from '../../middleware/deps'
 
-export type ManagementApplicationServiceFactory = (c: Context<{ Bindings: ApplicationBindings }>) => {
-  list: (query: { limit: number; offset: number }) => Promise<ListApplicationsResponse>
-  revokeConsent: (consentId: string, userId: string) => Promise<void>
-}
-
-interface ReadinessBindings extends ApplicationBindings, ConfigzBindings {
+interface ReadinessBindings {
   EMAIL?: unknown
   EMAIL_FROM?: string
 }
 
-export function createManagementReadinessRoute({
-  applicationServiceFactory = createApplicationService,
-  configzServiceFactory = createConfigzService,
-  securityPolicy,
-}: {
-  applicationServiceFactory?: ManagementApplicationServiceFactory
-  configzServiceFactory?: ManagementConfigzServiceFactory
-  securityPolicy?: SecurityPolicy
-}) {
+export function createManagementReadinessRoute({ securityPolicy }: { securityPolicy?: SecurityPolicy }) {
   const app = new Hono<{ Bindings: ReadinessBindings }>()
 
   app.use('/readiness', requireAdmin())
   app.get('/readiness', async (c) => {
+    const deps = getDeps(c)
     const [applications, config] = await Promise.all([
-      applicationServiceFactory(c).list({ limit: 100, offset: 0 }),
-      configzServiceFactory(c).getConfig(),
+      listApplications(deps, issuerFor(c), { limit: 100, offset: 0 }),
+      getConfig(deps, configzOptions(c, securityPolicy)),
     ])
     const hasOidcApplication = applications.applications.some((application) => !application.systemManaged)
     const identityProviderCount =
@@ -124,6 +108,11 @@ export function createManagementReadinessRoute({
   })
 
   return app
+}
+
+function issuerFor(c: Context) {
+  const url = new URL(c.req.url)
+  return `${url.protocol}//${url.host}`
 }
 
 function readinessItem(input: {

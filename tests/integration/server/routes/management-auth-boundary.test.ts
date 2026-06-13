@@ -3,6 +3,7 @@ import { managementOpenApi, managementOpenApiForRequest } from '@server/http/ope
 import { managementCollectionRoutes } from '@shared/api/management'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createTestDeps } from '../test-deps'
 import {
   assertConstrainedOpenApiSchema,
   bearerHeaders,
@@ -29,11 +30,14 @@ describe('management routes 1', () => {
   })
 
   it('keeps the Management OpenAPI route inventory aligned with mounted routes', () => {
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(),
-      securityPolicy: securityPolicy(),
-    })
+    const app = createApp(
+      createAuthMock(),
+      createTestDeps({
+        users: createUserRepositoryMock(),
+        security: createSecurityRepositoryMock(),
+      }),
+      { securityPolicy: securityPolicy() },
+    )
 
     expect(openApiOperations()).toEqual(mountedManagementOperations(app))
 
@@ -92,11 +96,14 @@ describe('management routes 1', () => {
   })
 
   it('serves the Management OpenAPI contract with Restish discovery headers', async () => {
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(),
-      securityPolicy: securityPolicy(),
-    })
+    const app = createApp(
+      createAuthMock(),
+      createTestDeps({
+        users: createUserRepositoryMock(),
+        security: createSecurityRepositoryMock(),
+      }),
+      { securityPolicy: securityPolicy() },
+    )
 
     const contract = await app.request('/api/management/openapi.json')
     const protectedResponse = await app.request('/api/management/users')
@@ -137,7 +144,7 @@ describe('management routes 1', () => {
   })
 
   it('mounts the documented management collections behind the admin boundary', async () => {
-    const app = createApp(createAuthMock(), { userRepository: createUserRepositoryMock() })
+    const app = createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() }))
 
     for (const route of managementCollectionRoutes) {
       const response = await app.request(`/api/management${route}`)
@@ -151,7 +158,7 @@ describe('management routes 1', () => {
   })
 
   it('rejects non-admin sessions from management APIs', async () => {
-    const response = await createApp(createAuthMock(), { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users',
       {
         headers: userHeaders(),
@@ -178,7 +185,7 @@ describe('management routes 1', () => {
     })
 
     const users = createUserRepositoryMock()
-    const response = await createApp(auth, { userRepository: users }).request(
+    const response = await createApp(auth, createTestDeps({ users })).request(
       '/api/management/users?limit=10&offset=20',
       { headers: bearerHeaders('valid-admin-token') },
     )
@@ -211,7 +218,7 @@ describe('management routes 1', () => {
       }),
     )
 
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users?limit=10&offset=20',
       { headers: bearerHeaders('valid-admin-token') },
     )
@@ -235,7 +242,7 @@ describe('management routes 1', () => {
       scope: 'openid management:read management:write',
     })
 
-    const app = createApp(auth, { userRepository: createUserRepositoryMock() })
+    const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
     const response = await app.request('/api/management/users', { headers: bearerHeaders('valid-user-token') })
 
     expect(response.status).toBe(403)
@@ -252,7 +259,7 @@ describe('management routes 1', () => {
     const auth = createAuthMock()
     auth.api.oauth2UserInfo.mockRejectedValue(new Error('token expired'))
 
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users',
       {
         headers: bearerHeaders('expired-token'),
@@ -273,7 +280,7 @@ describe('management routes 1', () => {
     const auth = createAuthMock()
     auth.api.oauth2UserInfo = undefined as never
 
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users',
       {
         headers: bearerHeaders('valid-admin-token'),
@@ -300,7 +307,7 @@ describe('management routes 1', () => {
       scope: 'openid management:read management:write',
     })
 
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users',
       {
         headers: bearerHeaders('wrong-client-token'),
@@ -319,7 +326,7 @@ describe('management routes 1', () => {
   it('rejects malformed Management API Bearer authorization headers with 401', async () => {
     const auth = createAuthMock()
 
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users',
       {
         headers: {
@@ -350,7 +357,7 @@ describe('management routes 1', () => {
       scope: 'openid management:read',
     })
 
-    const response = await createApp(auth, { userRepository: createUserRepositoryMock() }).request(
+    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
       '/api/management/users',
       {
         method: 'POST',
@@ -383,7 +390,7 @@ describe('management routes 1', () => {
       scope: 'openid management:read management:write',
     })
     const users = createUserRepositoryMock()
-    const app = createApp(auth, { userRepository: users })
+    const app = createApp(auth, createTestDeps({ users }))
     const headers = bearerHeaders('write-token')
 
     const created = await app.request('/api/management/users', {
@@ -440,7 +447,7 @@ describe('management routes 1', () => {
     })
 
     const users = createUserRepositoryMock()
-    const response = await createApp(auth, { userRepository: users }).request('/api/management/users', {
+    const response = await createApp(auth, createTestDeps({ users })).request('/api/management/users', {
       headers: bearerHeaders('roles-admin-token'),
     })
 

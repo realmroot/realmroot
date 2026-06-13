@@ -2,6 +2,7 @@ import { createApp } from '@server/http/app'
 import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../test-deps'
 
 describe('management security user routes', () => {
   beforeEach(() => {
@@ -12,11 +13,14 @@ describe('management security user routes', () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock()
     const users = createUserRepositoryMock()
-    const app = createApp(auth, {
-      userRepository: users,
-      securityRepository: security,
-      securityPolicy: securityPolicy(),
-    })
+    const app = createApp(
+      auth,
+      createTestDeps({
+        users,
+        security,
+      }),
+      { securityPolicy: securityPolicy() },
+    )
 
     const passkeys = await app.request('/api/management/security/users/user-2/passkeys?limit=2&offset=4', {
       headers: adminHeaders(),
@@ -59,11 +63,14 @@ describe('management security user routes', () => {
 
   it('persists admin security policy updates through both admin and management boundaries', async () => {
     const security = createSecurityRepositoryMock()
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: security,
-      securityPolicy: securityPolicy(),
-    })
+    const app = createApp(
+      createAuthMock(),
+      createTestDeps({
+        users: createUserRepositoryMock(),
+        security,
+      }),
+      { securityPolicy: securityPolicy() },
+    )
     const body = {
       policy: {
         mfa: { mode: 'required' },
@@ -129,11 +136,14 @@ describe('management security user routes', () => {
         entries: ['blocked@example.com', 'blocked.test'],
       },
     })
-    const app = createApp(auth, {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(policy),
-      securityPolicy: policy,
-    })
+    const app = createApp(
+      auth,
+      createTestDeps({
+        users: createUserRepositoryMock(),
+        security: createSecurityRepositoryMock(policy),
+      }),
+      { securityPolicy: policy },
+    )
 
     const weakSignup = await app.request('/api/auth/sign-up/email', {
       method: 'POST',

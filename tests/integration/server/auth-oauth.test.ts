@@ -6,6 +6,8 @@ import type {
   UsernamePluginOptions,
 } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
+import * as authorizationUsecase from '@server/usecases/authorization'
+import type { Deps } from '@server/usecases/deps'
 import type { ApplicationAggregate } from '@server/usecases/ports'
 import { deviceCodeGrantType } from '@shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
@@ -13,13 +15,12 @@ import { describe, expect, it, vi } from 'vitest'
 
 describe('auth.test 3', () => {
   it('maps configured OAuth provider context into customer userinfo claims', async () => {
-    const authorization = {
-      buildTokenClaims: vi.fn().mockResolvedValue({
-        roles: ['member'],
-        permissions: ['contacts.read'],
-        organization_name: 'Acme',
-      }),
-    }
+    const buildTokenClaims = vi.spyOn(authorizationUsecase, 'buildTokenClaims').mockResolvedValue({
+      roles: ['member'],
+      permissions: ['contacts.read'],
+      organization_name: 'Acme',
+    })
+    const deps = {} as Deps
     const applications = {
       findByClientId: vi.fn().mockResolvedValue({
         id: 'app-1',
@@ -32,7 +33,7 @@ describe('auth.test 3', () => {
     }
 
     await expect(
-      buildOAuthUserInfoClaims(authorization, applications, {
+      buildOAuthUserInfoClaims(deps, applications, {
         clientId: 'client-1',
         user: { id: 'user-1' },
         scopes: ['openid', 'contacts:read'],
@@ -47,7 +48,7 @@ describe('auth.test 3', () => {
       organization_name: 'Acme',
     })
 
-    expect(authorization.buildTokenClaims).toHaveBeenCalledWith({
+    expect(buildTokenClaims).toHaveBeenCalledWith(deps, {
       userId: 'user-1',
       applicationId: 'app-1',
       organizationId: 'org-1',
@@ -56,6 +57,7 @@ describe('auth.test 3', () => {
       destination: 'userinfo',
       claimSelection: { roles: true, permissions: true, organizationName: true },
     })
+    buildTokenClaims.mockRestore()
   })
 
   it('configures account profile fields and email changes', () => {

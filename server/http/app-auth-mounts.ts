@@ -1,11 +1,11 @@
-import type { ConfigzBindings } from '@server/composition'
-import { createApplicationService } from '@server/composition'
 import { forbidden } from '@server/domain/errors'
+import { listApplications } from '@server/usecases/applications'
+import { type ConfigzOptions, getConfig } from '@server/usecases/configz'
 import type { WalletRepository } from '@server/usecases/ports'
 import type { Context } from 'hono'
 import { getAddress } from 'viem'
-import type { AgentConfiguration, AppOptions } from './app-types'
-import type { ConfigzServiceFactory } from './routes/configz'
+import type { AgentConfiguration } from './app-types'
+import { getDeps } from './middleware/deps'
 
 export function mountAgentConfiguration(configuration: AgentConfiguration): AgentConfiguration {
   const issuer = mountAgentIssuer(configuration.issuer)
@@ -31,16 +31,17 @@ export function mountAgentUrl(value: string, issuer: string) {
   return `${issuer}${path}${url.search}`
 }
 
-export function oauthClientCorsOrigins(options: AppOptions) {
+export function oauthClientCorsOrigins() {
   return async ({ path, context }: { path: string; context: Context }) => {
     if (!isOAuthClientCorsPath(path)) return []
 
-    const serviceFactory = options.applicationServiceFactory ?? createApplicationService
+    const deps = getDeps(context)
+    const issuer = new URL(context.req.url).origin
     const origins = new Set<string>()
     let offset = 0
 
     for (;;) {
-      const result = await serviceFactory(context as never).list({
+      const result = await listApplications(deps, issuer, {
         limit: 100,
         offset,
       })
@@ -80,11 +81,11 @@ const oauthClientCorsPaths = new Set([
   '/api/auth/oauth2/introspect',
 ])
 
-export async function requireHostedAuthMethodEnabled(c: Context, factory: ConfigzServiceFactory) {
+export async function requireHostedAuthMethodEnabled(c: Context, options: ConfigzOptions) {
   const path = c.req.path
   if (!isManagedHostedAuthPath(path)) return
 
-  const config = await factory(c as unknown as Context<{ Bindings: ConfigzBindings }>).getConfig()
+  const config = await getConfig(getDeps(c), options)
   if (!config.signIn.passwordEnabled && passwordAuthPaths.has(path)) {
     throw forbidden('Password authentication is disabled.')
   }

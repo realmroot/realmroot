@@ -1,16 +1,17 @@
 import { forbidden } from '@server/domain/errors'
 import { hashPassword } from '@server/domain/password'
-import type { OnboardingRepository } from '@server/usecases/ports'
 import { onboardingAdminRequestSchema } from '@shared/api/onboarding'
 import { Hono } from 'hono'
+import { getDeps } from '../../middleware/deps'
 import { readJson } from '../validation'
 
-export function onboardingRoutes(onboarding: OnboardingRepository) {
+export function onboardingRoutes() {
   const app = new Hono()
 
-  app.get('/status', async (c) => c.json({ required: !(await onboarding.hasUsers()) }))
+  app.get('/status', async (c) => c.json({ required: !(await getDeps(c).onboarding.hasUsers()) }))
 
   app.post('/admin-users', async (c) => {
+    const onboarding = getDeps(c).onboarding
     if (await onboarding.hasUsers()) {
       throw forbidden('Onboarding is locked after the first user exists.')
     }

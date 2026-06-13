@@ -1,12 +1,13 @@
 import type { ConnectorRow } from '@server/adapters/repos/connectors'
-import { ConnectorService, loadAuthConnectorConfig } from '@server/usecases/connectors'
+import { connectorReadiness, createConnector, loadAuthConnectorConfig } from '@server/usecases/connectors'
+import type { Deps } from '@server/usecases/deps'
 import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 2', () => {
   it('reports generic OAuth endpoint readiness modes', async () => {
-    const service = new ConnectorService(
-      createRepository({
+    const deps = {
+      connectors: createRepository({
         byId: connector({
           id: 'idp_generic',
           providerType: 'generic_oauth',
@@ -15,9 +16,9 @@ describe('service.test 2', () => {
           issuer: 'https://idp.example.com',
         }),
       }),
-    )
+    } as unknown as Deps
 
-    await expect(service.readiness('idp_generic')).resolves.toEqual({
+    await expect(connectorReadiness(deps, 'idp_generic')).resolves.toEqual({
       connectorId: 'idp_generic',
       ready: false,
       checks: expect.arrayContaining([
@@ -34,8 +35,8 @@ describe('service.test 2', () => {
       ]),
     })
 
-    const explicitService = new ConnectorService(
-      createRepository({
+    const explicitDeps = {
+      connectors: createRepository({
         byId: connector({
           id: 'idp_generic_explicit',
           providerType: 'generic_oauth',
@@ -46,8 +47,8 @@ describe('service.test 2', () => {
           tokenEndpoint: 'https://idp.example.com/token',
         }),
       }),
-    )
-    await expect(explicitService.readiness('idp_generic_explicit')).resolves.toEqual({
+    } as unknown as Deps
+    await expect(connectorReadiness(explicitDeps, 'idp_generic_explicit')).resolves.toEqual({
       connectorId: 'idp_generic_explicit',
       ready: true,
       checks: expect.arrayContaining([
@@ -59,8 +60,8 @@ describe('service.test 2', () => {
       ]),
     })
 
-    const incompleteService = new ConnectorService(
-      createRepository({
+    const incompleteDeps = {
+      connectors: createRepository({
         byId: connector({
           id: 'idp_generic_incomplete',
           providerType: 'generic_oauth',
@@ -71,8 +72,8 @@ describe('service.test 2', () => {
           tokenEndpoint: null,
         }),
       }),
-    )
-    await expect(incompleteService.readiness('idp_generic_incomplete')).resolves.toEqual({
+    } as unknown as Deps
+    await expect(connectorReadiness(incompleteDeps, 'idp_generic_incomplete')).resolves.toEqual({
       connectorId: 'idp_generic_incomplete',
       ready: false,
       checks: expect.arrayContaining([
@@ -86,10 +87,10 @@ describe('service.test 2', () => {
   })
 
   it('omits unsupported and incomplete enabled connector rows from auth config', async () => {
-    const service = new ConnectorService(createRepository())
+    const deps = { connectors: createRepository() } as unknown as Deps
 
     await expect(
-      service.create({
+      createConnector(deps, {
         providerType: 'social',
         providerId: 'unsupported',
         displayName: 'Unsupported',
@@ -173,7 +174,7 @@ describe('service.test 2', () => {
       ),
     ).resolves.toMatchObject({ trustedProviders: [] })
     await expect(
-      service.create({
+      createConnector(deps, {
         providerType: 'generic_oauth',
         providerId: 'mixed',
         displayName: 'Mixed',

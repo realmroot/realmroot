@@ -1,4 +1,12 @@
-import { type AgentBindings, createAgentService } from '@server/composition'
+import {
+  listAgentApprovalRequests,
+  listAgentCapabilityGrants,
+  listAgentHosts,
+  listAgents,
+  revokeAgent,
+  revokeAgentCapabilityGrant,
+  revokeAgentHost,
+} from '@server/usecases/agents'
 import type {
   AgentCapabilityGrantRecord,
   AgentHostRecord,
@@ -16,20 +24,21 @@ import type {
 import { type PaginatedResult, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
+import { getDeps } from '../../middleware/deps'
 import { readQuery } from '../validation'
 
-export const managementAgentsRoute = new Hono<{ Bindings: AgentBindings }>()
+export const managementAgentsRoute = new Hono()
 
 managementAgentsRoute.use('*', requireAdmin())
 
 managementAgentsRoute.get('/agents/protocol-inventory', async (c) => {
   const query = readQuery(c, paginationQuerySchema)
-  const agents = createAgentService(c)
+  const deps = getDeps(c)
   const [hosts, agentRecords, capabilityGrants, approvalRequests] = await Promise.all([
-    agents.listHosts(query),
-    agents.listAgents(query),
-    agents.listCapabilityGrants(query),
-    agents.listApprovalRequests(query),
+    listAgentHosts(deps, query),
+    listAgents(deps, query),
+    listAgentCapabilityGrants(deps, query),
+    listAgentApprovalRequests(deps, query),
   ])
 
   return c.json({
@@ -41,17 +50,17 @@ managementAgentsRoute.get('/agents/protocol-inventory', async (c) => {
 })
 
 managementAgentsRoute.delete('/agents/:agentId', async (c) => {
-  await createAgentService(c).revokeAgent(c.req.param('agentId'))
+  await revokeAgent(getDeps(c), c.req.param('agentId'))
   return c.body(null, 204)
 })
 
 managementAgentsRoute.delete('/agent-hosts/:hostId', async (c) => {
-  await createAgentService(c).revokeHost(c.req.param('hostId'))
+  await revokeAgentHost(getDeps(c), c.req.param('hostId'))
   return c.body(null, 204)
 })
 
 managementAgentsRoute.delete('/agent-capability-grants/:grantId', async (c) => {
-  await createAgentService(c).revokeCapabilityGrant(c.req.param('grantId'))
+  await revokeAgentCapabilityGrant(getDeps(c), c.req.param('grantId'))
   return c.body(null, 204)
 })
 

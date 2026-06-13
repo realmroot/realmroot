@@ -1,8 +1,11 @@
+import * as applicationsUsecase from '@server/usecases/applications'
+import * as authorizationUsecase from '@server/usecases/authorization'
+import * as connectorsUsecase from '@server/usecases/connectors'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../test-deps'
 
 afterEach(() => {
-  vi.resetModules()
   vi.restoreAllMocks()
 })
 
@@ -148,10 +151,25 @@ describe('management resource routes', () => {
 
 async function loadAppRoutes() {
   const applicationService = applicationServiceMock()
-  vi.doMock('@server/composition', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@server/composition')>()),
-    createApplicationService: () => applicationService,
-  }))
+  vi.spyOn(applicationsUsecase, 'listApplications').mockImplementation((_d, _i, q) => applicationService.list(q))
+  vi.spyOn(applicationsUsecase, 'getApplication').mockImplementation((_d, _i, id) => applicationService.get(id))
+  vi.spyOn(applicationsUsecase, 'updateApplication').mockImplementation((_d, _i, id, b) =>
+    applicationService.update(id, b),
+  )
+  vi.spyOn(applicationsUsecase, 'deleteApplication').mockImplementation((_d, id) => applicationService.delete(id))
+  vi.spyOn(applicationsUsecase, 'replaceRedirectUris').mockImplementation((_d, _i, id, b) =>
+    applicationService.replaceRedirectUris(id, b),
+  )
+  vi.spyOn(applicationsUsecase, 'createApplication').mockImplementation((_d, _i, b, actor) =>
+    applicationService.create(b, actor),
+  )
+  vi.spyOn(applicationsUsecase, 'listApplicationSecrets').mockImplementation((_d, id, q) =>
+    applicationService.listSecrets(id, q),
+  )
+  vi.spyOn(applicationsUsecase, 'rotateApplicationSecret').mockImplementation((_d, id, actor) =>
+    applicationService.rotateSecret(id, actor),
+  )
+
   const { managementApplicationsRoute } = await import('@server/http/routes/management/applications')
   const app = withAdminContext()
   app.route('/applications', managementApplicationsRoute)
@@ -160,10 +178,12 @@ async function loadAppRoutes() {
 
 async function loadAuthorizationRoutes() {
   const authorizationService = authorizationServiceMock()
-  vi.doMock('@server/composition', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@server/composition')>()),
-    createAuthorizationService: () => authorizationService,
-  }))
+  const usecaseModule = authorizationUsecase as unknown as Record<string, (...args: unknown[]) => unknown>
+  for (const name of Object.keys(authorizationService)) {
+    const delegate = authorizationService[name as keyof typeof authorizationService] as (...a: unknown[]) => unknown
+    vi.spyOn(usecaseModule, name).mockImplementation((_d: unknown, ...args: unknown[]) => delegate(...args))
+  }
+
   const { managementApiResourcesRoute } = await import('@server/http/routes/management/api-resources')
   const { managementOrganizationsRoute } = await import('@server/http/routes/management/organizations')
   const { managementRolesRoute } = await import('@server/http/routes/management/roles')
@@ -178,27 +198,30 @@ async function loadAuthorizationRoutes() {
 
 async function loadConnectorRoutes() {
   const connectorService = connectorServiceMock()
-  vi.doMock('@server/composition', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@server/composition')>()),
-    createConnectorService: () => connectorService,
-  }))
+  vi.spyOn(connectorsUsecase, 'listConnectors').mockImplementation((_d, p) => connectorService.list(p))
+  vi.spyOn(connectorsUsecase, 'getConnector').mockImplementation((_d, id) => connectorService.get(id))
+  vi.spyOn(connectorsUsecase, 'connectorReadiness').mockImplementation((_d, id) => connectorService.readiness(id))
+  vi.spyOn(connectorsUsecase, 'createConnector').mockImplementation((_d, b) => connectorService.create(b))
+  vi.spyOn(connectorsUsecase, 'updateConnector').mockImplementation((_d, id, b) => connectorService.update(id, b))
+  vi.spyOn(connectorsUsecase, 'deleteConnector').mockImplementation((_d, id) => connectorService.delete(id))
+  vi.spyOn(connectorsUsecase, 'listConnectorTemplates').mockImplementation(() => connectorService.listTemplates())
+
   const { createManagementConnectorRoutes } = await import('@server/http/routes/management/connectors')
   const app = withAdminContext()
-  app.route(
-    '/connectors',
-    createManagementConnectorRoutes(() => connectorService),
-  )
+  app.route('/connectors', createManagementConnectorRoutes())
   return { app, connectorService }
 }
 
 function withAdminContext() {
   const app = new Hono()
+  const deps = createTestDeps()
   app.use('*', async (c, next) => {
     const user = { id: 'admin-1', role: 'admin' }
     c.set('authContext', {
       session: { session: { id: 'session-1' }, user },
       user,
     })
+    c.set('deps', deps)
     await next()
   })
   return app

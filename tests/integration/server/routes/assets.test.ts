@@ -2,24 +2,19 @@ import { ApiError, notFound } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
 import { authContext } from '@server/http/middleware/auth-context'
 import { createAccountAssetRoutes, createAssetRoutes, createManagementAssetRoutes } from '@server/http/routes/assets'
-import type { AssetService } from '@server/usecases/assets'
+import * as assetsUsecase from '@server/usecases/assets'
+import * as configzUsecase from '@server/usecases/configz'
 import { Hono } from 'hono'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-const createConfigzServiceMock = vi.hoisted(() => vi.fn())
-
-vi.mock('@server/composition', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@server/composition')>()
-  return {
-    ...actual,
-    createConfigzService: createConfigzServiceMock,
-  }
-})
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../test-deps'
 
 describe('asset routes', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
-    createConfigzServiceMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('requires an authenticated account session before avatar uploads', async () => {
@@ -74,16 +69,15 @@ describe('asset routes', () => {
 
   it('uses default account-center settings for account avatar uploads without a config source', async () => {
     const assets = createAssetServiceMock()
+    const deps = setupAssetMocks(assets)
     const app = new Hono()
       .use('/api/*', authContext(createAuthMock()))
+      .use('/api/*', setDeps(deps))
       .onError((error, c) => {
         if (error instanceof ApiError) return handleApiError(error, c)
         throw error
       })
-      .route(
-        '/api/account',
-        createAccountAssetRoutes(() => assets as unknown as AssetService),
-      )
+      .route('/api/account', createAccountAssetRoutes())
     const response = await requestWithFile(
       app,
       '/api/account/avatar',
@@ -141,29 +135,18 @@ describe('asset routes', () => {
     expect(assets.updateUserAvatar).not.toHaveBeenCalled()
   })
 
-  it('uses the injected account center config when D1 bindings are present', async () => {
+  it('reads account center config from deps when serving avatar uploads', async () => {
     const assets = createAssetServiceMock()
-    const accountCenterConfig = vi.fn().mockResolvedValue({
-      profileEditingEnabled: true,
-      displayNameEditable: true,
-      usernameEditable: true,
-      avatarEditable: true,
-      emailChangeEnabled: true,
-      passwordChangeEnabled: true,
-      connectedAccountsEnabled: true,
-      sessionsViewEnabled: true,
-      dangerZoneEnabled: false,
-    })
+    const deps = setupAssetMocks(assets)
+    const getConfig = configzUsecase.getConfig as unknown as ReturnType<typeof vi.fn>
     const app = new Hono()
       .use('/api/*', authContext(createAuthMock()))
+      .use('/api/*', setDeps(deps))
       .onError((error, c) => {
         if (error instanceof ApiError) return handleApiError(error, c)
         throw error
       })
-      .route(
-        '/api/account',
-        createAccountAssetRoutes(() => assets as unknown as AssetService, accountCenterConfig),
-      )
+      .route('/api/account', createAccountAssetRoutes())
     const response = await requestWithFile(
       app,
       '/api/account/avatar',
@@ -175,49 +158,6 @@ describe('asset routes', () => {
     )
 
     expect(response.status).toBe(201)
-    expect(accountCenterConfig).toHaveBeenCalled()
-    expect(assets.upload).toHaveBeenCalled()
-  })
-
-  it('uses the default account center config reader when D1 bindings are present', async () => {
-    const assets = createAssetServiceMock()
-    const getConfig = vi.fn().mockResolvedValue({
-      accountCenter: {
-        profileEditingEnabled: true,
-        displayNameEditable: true,
-        usernameEditable: true,
-        avatarEditable: true,
-        emailChangeEnabled: true,
-        passwordChangeEnabled: true,
-        connectedAccountsEnabled: true,
-        sessionsViewEnabled: true,
-        dangerZoneEnabled: false,
-      },
-    })
-    createConfigzServiceMock.mockReturnValue({ getConfig })
-    const app = new Hono()
-      .use('/api/*', authContext(createAuthMock()))
-      .onError((error, c) => {
-        if (error instanceof ApiError) return handleApiError(error, c)
-        throw error
-      })
-      .route(
-        '/api/account',
-        createAccountAssetRoutes(() => assets as unknown as AssetService),
-      )
-
-    const response = await requestWithFile(
-      app,
-      '/api/account/avatar',
-      userHeaders(),
-      'avatar.png',
-      'image/png',
-      'avatar',
-      { DB: createD1Mock() },
-    )
-
-    expect(response.status).toBe(201)
-    expect(createConfigzServiceMock).toHaveBeenCalled()
     expect(getConfig).toHaveBeenCalled()
     expect(assets.upload).toHaveBeenCalled()
   })
@@ -298,40 +238,68 @@ function assetFixture() {
   }
 }
 
+function accountCenterFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    profileEditingEnabled: true,
+    displayNameEditable: true,
+    usernameEditable: true,
+    avatarEditable: true,
+    emailChangeEnabled: true,
+    passwordChangeEnabled: true,
+    connectedAccountsEnabled: true,
+    sessionsViewEnabled: true,
+    dangerZoneEnabled: false,
+    ...overrides,
+  }
+}
+
+/**
+ * Spies the asset usecase functions to delegate to the service mock and the
+ * configz usecase to return the requested account-center settings. Returns the
+ * Deps the routes read from context.
+ */
+function setupAssetMocks(
+  assets: ReturnType<typeof createAssetServiceMock>,
+  accountCenter: Record<string, unknown> = {},
+) {
+  vi.spyOn(assetsUsecase, 'uploadAsset').mockImplementation((_d, _origin, input) => assets.upload(input))
+  vi.spyOn(assetsUsecase, 'getAssetObject').mockImplementation((_d, id) => assets.getObject(id))
+  vi.spyOn(assetsUsecase, 'updateUserAvatar').mockImplementation((_d, userId, a) => assets.updateUserAvatar(userId, a))
+  vi.spyOn(assetsUsecase, 'updateApplicationLogo').mockImplementation((_d, id, a) =>
+    assets.updateApplicationLogo(id, a),
+  )
+  vi.spyOn(assetsUsecase, 'updateOrganizationLogo').mockImplementation((_d, id, a) =>
+    assets.updateOrganizationLogo(id, a),
+  )
+  vi.spyOn(assetsUsecase, 'updateBrandingAsset').mockImplementation((_d, kind, a) =>
+    assets.updateBrandingAsset(kind, a),
+  )
+  vi.spyOn(configzUsecase, 'getConfig').mockResolvedValue({
+    accountCenter: accountCenterFixture(accountCenter),
+  } as never)
+  return createTestDeps()
+}
+
+function setDeps(deps: ReturnType<typeof createTestDeps>) {
+  return async (c: { set: (key: 'deps', value: unknown) => void }, next: () => Promise<void>) => {
+    c.set('deps', deps)
+    await next()
+  }
+}
+
 function createRouteTestApp(assets: ReturnType<typeof createAssetServiceMock>, accountCenter = {}) {
+  const deps = setupAssetMocks(assets, accountCenter)
   return new Hono()
     .use('/api/*', authContext(createAuthMock()))
+    .use('/api/*', setDeps(deps))
     .onError((error, c) => {
       if (error instanceof ApiError) return handleApiError(error, c)
       throw error
     })
     .notFound((c) => handleApiError(notFound(), c))
-    .route(
-      '/api/assets',
-      createAssetRoutes(() => assets as unknown as AssetService),
-    )
-    .route(
-      '/api/account',
-      createAccountAssetRoutes(
-        () => assets as unknown as AssetService,
-        async () => ({
-          profileEditingEnabled: true,
-          displayNameEditable: true,
-          usernameEditable: true,
-          avatarEditable: true,
-          emailChangeEnabled: true,
-          passwordChangeEnabled: true,
-          connectedAccountsEnabled: true,
-          sessionsViewEnabled: true,
-          dangerZoneEnabled: false,
-          ...accountCenter,
-        }),
-      ),
-    )
-    .route(
-      '/api/management',
-      createManagementAssetRoutes(() => assets as unknown as AssetService),
-    )
+    .route('/api/assets', createAssetRoutes())
+    .route('/api/account', createAccountAssetRoutes())
+    .route('/api/management', createManagementAssetRoutes())
 }
 
 function requestWithFile(

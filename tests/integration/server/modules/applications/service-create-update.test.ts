@@ -1,4 +1,17 @@
-import { ApplicationService, systemCliApplication } from '@server/usecases/applications'
+import {
+  createApplication,
+  deleteApplication,
+  ensureCliApplication,
+  ensureSystemClients,
+  getApplication,
+  listApplicationSecrets,
+  listApplications,
+  replaceRedirectUris,
+  rotateApplicationSecret,
+  systemCliApplication,
+  updateApplication,
+} from '@server/usecases/applications'
+import type { Deps } from '@server/usecases/deps'
 import type {
   ApplicationAggregate,
   ApplicationRepository,
@@ -11,9 +24,12 @@ import { describe, expect, it } from 'vitest'
 describe('service.test 1', () => {
   it('creates, lists, updates, inspects, and deletes confidential clients with one-time secrets', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
 
-    const created = await service.create(
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Admin Portal',
         clientType: 'confidential_web',
@@ -53,7 +69,7 @@ describe('service.test 1', () => {
       },
     })
 
-    await expect(service.list({ limit: 50, offset: 0 })).resolves.toMatchObject({
+    await expect(listApplications(deps, issuer, { limit: 50, offset: 0 })).resolves.toMatchObject({
       applications: [{ id: created.id }],
       pagination: {
         limit: 50,
@@ -63,7 +79,7 @@ describe('service.test 1', () => {
       },
     })
 
-    const updated = await service.update(created.id, {
+    const updated = await updateApplication(deps, issuer, created.id, {
       name: 'Admin Console',
       redirectUris: ['https://admin.example.com/callback'],
       disabled: true,
@@ -76,15 +92,18 @@ describe('service.test 1', () => {
       redirectUris: ['https://admin.example.com/callback'],
     })
 
-    await service.delete(created.id)
-    await expect(service.get(created.id)).rejects.toMatchObject({ status: 404 })
+    await deleteApplication(deps, created.id)
+    await expect(getApplication(deps, issuer, created.id)).rejects.toMatchObject({ status: 404 })
   })
 
   it('does not issue or rotate secrets for public clients', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
 
-    const created = await service.create(
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Browser App',
         clientType: 'public_spa',
@@ -100,7 +119,7 @@ describe('service.test 1', () => {
       requirePkce: true,
     })
     expect(created.secretMetadata).toEqual([])
-    await expect(service.rotateSecret(created.id, 'admin-1')).rejects.toMatchObject({
+    await expect(rotateApplicationSecret(deps, created.id, 'admin-1')).rejects.toMatchObject({
       status: 400,
       message: 'Public clients do not have client secrets.',
     })
@@ -108,11 +127,12 @@ describe('service.test 1', () => {
 
   it('upserts the system-managed CLI public native client without a secret', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
 
-    await service.ensureSystemClients()
-    const created = await service.ensureCliApplication()
-    const updated = await service.ensureCliApplication()
+    await ensureSystemClients(deps, issuer)
+    const created = await ensureCliApplication(deps, issuer)
+    const updated = await ensureCliApplication(deps, issuer)
 
     expect(created).toMatchObject({
       id: systemCliApplication.id,
@@ -133,17 +153,17 @@ describe('service.test 1', () => {
     })
     expect(updated.id).toBe(created.id)
     expect(repository.applicationCount()).toBe(1)
-    await expect(service.update(systemCliApplication.id, { disabled: true })).rejects.toMatchObject({
+    await expect(updateApplication(deps, issuer, systemCliApplication.id, { disabled: true })).rejects.toMatchObject({
       status: 400,
       message: 'System-managed applications cannot be modified.',
     })
     await expect(
-      service.replaceRedirectUris(systemCliApplication.id, { redirectUris: ['http://localhost:8484/callback'] }),
+      replaceRedirectUris(deps, issuer, systemCliApplication.id, { redirectUris: ['http://localhost:8484/callback'] }),
     ).rejects.toMatchObject({
       status: 400,
       message: 'System-managed applications cannot be modified.',
     })
-    await expect(service.delete(systemCliApplication.id)).rejects.toMatchObject({
+    await expect(deleteApplication(deps, systemCliApplication.id)).rejects.toMatchObject({
       status: 400,
       message: 'System-managed applications cannot be deleted.',
     })
@@ -151,10 +171,13 @@ describe('service.test 1', () => {
 
   it('allows the device-code grant only for public native clients', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
 
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'CLI App',
           clientType: 'public_native',
@@ -173,7 +196,9 @@ describe('service.test 1', () => {
     })
 
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Browser App',
           clientType: 'public_spa',
@@ -188,7 +213,9 @@ describe('service.test 1', () => {
     })
 
     await expect(
-      service.create(
+      createApplication(
+        deps,
+        issuer,
         {
           name: 'Server App',
           clientType: 'confidential_web',
@@ -205,8 +232,11 @@ describe('service.test 1', () => {
 
   it('rotates confidential client secrets and revokes previous secret metadata', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
-    const created = await service.create(
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Server App',
         clientType: 'confidential_web',
@@ -215,11 +245,11 @@ describe('service.test 1', () => {
       'admin-1',
     )
 
-    const rotated = await service.rotateSecret(created.id, 'admin-2')
+    const rotated = await rotateApplicationSecret(deps, created.id, 'admin-2')
 
     expect(rotated.clientSecret).toMatch(/^fas_/)
     expect(rotated.secret.version).toBe(2)
-    const secrets = await service.listSecrets(created.id, { limit: 1, offset: 0 })
+    const secrets = await listApplicationSecrets(deps, created.id, { limit: 1, offset: 0 })
     expect(secrets).toMatchObject({
       secrets: [{ version: 2, status: 'active', revokedAt: null }],
       pagination: {
@@ -230,7 +260,7 @@ describe('service.test 1', () => {
       },
     })
 
-    await expect(service.listSecrets(created.id, { limit: 1, offset: 1 })).resolves.toMatchObject({
+    await expect(listApplicationSecrets(deps, created.id, { limit: 1, offset: 1 })).resolves.toMatchObject({
       secrets: [{ version: 1, status: 'revoked' }],
       pagination: {
         limit: 1,
@@ -243,8 +273,11 @@ describe('service.test 1', () => {
 
   it('updates metadata without changing OAuth client settings', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com/' })
-    const created = await service.create(
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com/'
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Metadata App',
         clientType: 'public_spa',
@@ -253,7 +286,7 @@ describe('service.test 1', () => {
       'admin-1',
     )
 
-    await expect(service.update(created.id, { name: 'Renamed App' })).resolves.toMatchObject({
+    await expect(updateApplication(deps, issuer, created.id, { name: 'Renamed App' })).resolves.toMatchObject({
       name: 'Renamed App',
       redirectUris: ['https://spa.example.com/callback'],
       oidc: {
@@ -264,8 +297,11 @@ describe('service.test 1', () => {
 
   it('round-trips OIDC claim configuration on create and update', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
-    const created = await service.create(
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Claims App',
         clientType: 'public_spa',
@@ -286,7 +322,7 @@ describe('service.test 1', () => {
     })
 
     await expect(
-      service.update(created.id, {
+      updateApplication(deps, issuer, created.id, {
         oidcClaims: {
           accessToken: { permissions: true },
           idToken: { roles: true },
@@ -304,8 +340,11 @@ describe('service.test 1', () => {
 
   it('normalizes partial OAuth client setting updates against existing values', async () => {
     const repository = new InMemoryApplicationRepository()
-    const service = new ApplicationService(repository, { issuer: 'https://auth.example.com' })
-    const created = await service.create(
+    const deps = { applications: repository } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
       {
         name: 'Partial Settings App',
         clientType: 'public_spa',
@@ -315,18 +354,20 @@ describe('service.test 1', () => {
       'admin-1',
     )
 
-    await expect(service.update(created.id, { allowedGrantTypes: ['authorization_code'] })).resolves.toMatchObject({
+    await expect(
+      updateApplication(deps, issuer, created.id, { allowedGrantTypes: ['authorization_code'] }),
+    ).resolves.toMatchObject({
       allowedGrantTypes: ['authorization_code'],
       allowedScopes: ['openid', 'profile', 'offline_access'],
       redirectUris: ['https://spa.example.com/callback'],
     })
     await expect(
-      service.replaceRedirectUris(created.id, { redirectUris: ['http://localhost:4173/oidc/callback'] }),
+      replaceRedirectUris(deps, issuer, created.id, { redirectUris: ['http://localhost:4173/oidc/callback'] }),
     ).resolves.toMatchObject({
       redirectUris: ['http://localhost:4173/oidc/callback'],
     })
     await expect(
-      service.update(created.id, {
+      updateApplication(deps, issuer, created.id, {
         postLogoutRedirectUris: ['https://spa.example.com/signed-out', 'https://spa.example.com/signed-out'],
         corsOrigins: ['https://spa.example.com', 'http://localhost:4173'],
         customData: { plan: 'enterprise' },

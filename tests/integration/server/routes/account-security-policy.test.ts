@@ -1,26 +1,28 @@
-import { notFound } from '@server/domain/errors'
 import { createApp } from '@server/http/app'
-import type { AssetService } from '@server/usecases/assets'
+import * as assets from '@server/usecases/assets'
+import * as configz from '@server/usecases/configz'
 import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { createTestDeps } from '../test-deps'
 
 describe('account security policy routes', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('protects authorized application consent revocation and surfaces missing grants', async () => {
-    const applicationService = {
-      list: vi.fn().mockResolvedValue({ pagination: { total: 1 } }),
-      revokeConsent: vi.fn().mockRejectedValue(notFound('Application consent was not found.')),
-    }
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(),
-      securityPolicy: securityPolicy(),
-      applicationServiceFactory: () => applicationService,
+    const deps = createTestDeps({
+      users: createUserRepositoryMock(),
+      security: createSecurityRepositoryMock(),
     })
+    deps.applications.revokeConsent = vi.fn().mockResolvedValue(false)
+    const app = createApp(createAuthMock(), deps, { securityPolicy: securityPolicy() })
 
     const unauthorized = await app.request('/api/account/applications/consent-1', { method: 'DELETE' })
     const missing = await app.request('/api/account/applications/consent-1', {
@@ -38,11 +40,13 @@ describe('account security policy routes', () => {
   it('rejects disabled passkey management before calling Better Auth passkey APIs', async () => {
     const auth = createAuthMock()
     const policy = securityPolicy({ passkeys: { ...securityPolicy().passkeys, enabled: false } })
-    const app = createApp(auth, {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(policy),
-      securityPolicy: policy,
-    })
+    const app = createApp(
+      auth,
+      createTestDeps({ users: createUserRepositoryMock(), security: createSecurityRepositoryMock(policy) }),
+      {
+        securityPolicy: policy,
+      },
+    )
 
     const response = await app.request('/api/account/security/passkeys/passkey-1', {
       method: 'DELETE',
@@ -66,11 +70,13 @@ describe('account security policy routes', () => {
       body: { message: 'Invalid password.' },
       message: 'Invalid password.',
     })
-    const app = createApp(auth, {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(),
-      securityPolicy: securityPolicy(),
-    })
+    const app = createApp(
+      auth,
+      createTestDeps({ users: createUserRepositoryMock(), security: createSecurityRepositoryMock() }),
+      {
+        securityPolicy: securityPolicy(),
+      },
+    )
 
     const invalid = await app.request('/api/account/security/mfa/totp-verification', {
       method: 'POST',
@@ -97,14 +103,8 @@ describe('account security policy routes', () => {
   it('enforces required MFA for protected APIs while allowing enrollment routes', async () => {
     const policy = securityPolicy({ mfa: { mode: 'required' } })
     const security = createSecurityRepositoryMock(policy, { mfaEnabled: false })
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: security,
+    const app = createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock(), security }), {
       securityPolicy: policy,
-      assetServiceFactory: () =>
-        ({
-          getObject: vi.fn().mockRejectedValue(notFound('Asset was not found.')),
-        }) as unknown as AssetService,
     })
 
     const protectedResponse = await app.request('/api/account/profile', { headers: userHeaders() })
@@ -127,47 +127,46 @@ describe('account security policy routes', () => {
   })
 
   it('mounts account avatar uploads with account-center config in the full RPC app', async () => {
-    const assets = {
-      upload: vi.fn().mockResolvedValue({ asset: assetFixture() }),
-      updateUserAvatar: vi.fn().mockResolvedValue(undefined),
-    }
-    const app = createApp(createAuthMock(), {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(),
-      securityPolicy: securityPolicy(),
-      assetServiceFactory: () => assets as unknown as AssetService,
-      configzServiceFactory: () => ({
-        getConfig: vi.fn().mockResolvedValue({
-          accountCenter: {
-            profileEditingEnabled: true,
-            displayNameEditable: true,
-            usernameEditable: true,
-            avatarEditable: false,
-            emailChangeEnabled: true,
-            passwordChangeEnabled: true,
-            connectedAccountsEnabled: true,
-            sessionsViewEnabled: true,
-            dangerZoneEnabled: false,
-          },
-        }),
-      }),
-    })
+    const uploadAsset = vi.spyOn(assets, 'uploadAsset').mockResolvedValue({ asset: assetFixture() })
+    const updateUserAvatar = vi.spyOn(assets, 'updateUserAvatar').mockResolvedValue(undefined)
+    vi.spyOn(configz, 'getConfig').mockResolvedValue({
+      accountCenter: {
+        profileEditingEnabled: true,
+        displayNameEditable: true,
+        usernameEditable: true,
+        avatarEditable: false,
+        emailChangeEnabled: true,
+        passwordChangeEnabled: true,
+        connectedAccountsEnabled: true,
+        sessionsViewEnabled: true,
+        dangerZoneEnabled: false,
+      },
+    } as Awaited<ReturnType<typeof configz.getConfig>>)
+    const app = createApp(
+      createAuthMock(),
+      createTestDeps({ users: createUserRepositoryMock(), security: createSecurityRepositoryMock() }),
+      {
+        securityPolicy: securityPolicy(),
+      },
+    )
 
     const response = await requestWithFile(app, '/api/account/avatar', userHeaders())
 
     expect(response.status).toBe(403)
-    expect(assets.upload).not.toHaveBeenCalled()
-    expect(assets.updateUserAvatar).not.toHaveBeenCalled()
+    expect(uploadAsset).not.toHaveBeenCalled()
+    expect(updateUserAvatar).not.toHaveBeenCalled()
   })
 
   it('rejects MFA disable when deployment policy requires MFA', async () => {
     const auth = createAuthMock()
     const policy = securityPolicy({ mfa: { mode: 'required' } })
-    const app = createApp(auth, {
-      userRepository: createUserRepositoryMock(),
-      securityRepository: createSecurityRepositoryMock(policy),
-      securityPolicy: policy,
-    })
+    const app = createApp(
+      auth,
+      createTestDeps({ users: createUserRepositoryMock(), security: createSecurityRepositoryMock(policy) }),
+      {
+        securityPolicy: policy,
+      },
+    )
 
     const response = await app.request('/api/account/security/mfa/totp', {
       method: 'DELETE',
@@ -189,9 +188,7 @@ describe('account security policy routes', () => {
     const auth = createAuthMock()
     const security = createSecurityRepositoryMock(securityPolicy({ mfa: { mode: 'required' } }))
     const users = createUserRepositoryMock()
-    const app = createApp(auth, {
-      userRepository: users,
-      securityRepository: security,
+    const app = createApp(auth, createTestDeps({ users, security }), {
       securityPolicy: securityPolicy({ mfa: { mode: 'required' } }),
     })
 

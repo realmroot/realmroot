@@ -1,4 +1,12 @@
-import { type ConnectorBindings, createConnectorService } from '@server/composition'
+import {
+  connectorReadiness,
+  createConnector,
+  deleteConnector,
+  getConnector,
+  listConnectors,
+  listConnectorTemplates,
+  updateConnector,
+} from '@server/usecases/connectors'
 import { connectorReadinessResponseSchema, listConnectorTemplatesResponseSchema } from '@shared/api/connectors'
 import {
   createManagementConnectorRequestSchema,
@@ -7,55 +15,42 @@ import {
   paginationQuerySchema,
   updateManagementConnectorRequestSchema,
 } from '@shared/api/management'
-import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
+import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
-export interface ManagementConnectorService {
-  list(page: { limit: number; offset: number }): Promise<unknown>
-  listTemplates(): unknown
-  create(input: unknown): Promise<unknown>
-  get(id: string): Promise<unknown>
-  readiness(id: string): Promise<unknown>
-  update(id: string, input: unknown): Promise<unknown>
-  delete(id: string): Promise<void>
-}
-
-export type ConnectorServiceFactory = (c: Context<{ Bindings: ConnectorBindings }>) => ManagementConnectorService
-
-export function createManagementConnectorRoutes(
-  createService: ConnectorServiceFactory = (c) => createConnectorService(c),
-) {
-  const app = new Hono<{ Bindings: ConnectorBindings }>()
+export function createManagementConnectorRoutes() {
+  const app = new Hono()
 
   app.use('*', requireAdmin())
 
-  app.get('/templates', async (c) =>
-    c.json(listConnectorTemplatesResponseSchema.parse(createService(c).listTemplates())),
-  )
+  app.get('/templates', async (c) => c.json(listConnectorTemplatesResponseSchema.parse(listConnectorTemplates())))
 
   app.get('/', async (c) =>
     c.json(
-      listManagementConnectorsResponseSchema.parse(await createService(c).list(readQuery(c, paginationQuerySchema))),
+      listManagementConnectorsResponseSchema.parse(
+        await listConnectors(getDeps(c), readQuery(c, paginationQuerySchema)),
+      ),
     ),
   )
 
   app.post('/', async (c) => {
-    const connector = await createService(c).create(await readJson(c, createManagementConnectorRequestSchema))
+    const connector = await createConnector(getDeps(c), await readJson(c, createManagementConnectorRequestSchema))
     return c.json(managementConnectorResponseSchema.parse(connector), 201)
   })
 
   app.get('/:id', async (c) =>
-    c.json(managementConnectorResponseSchema.parse(await createService(c).get(c.req.param('id')))),
+    c.json(managementConnectorResponseSchema.parse(await getConnector(getDeps(c), c.req.param('id')))),
   )
 
   app.get('/:id/readiness', async (c) =>
-    c.json(connectorReadinessResponseSchema.parse(await createService(c).readiness(c.req.param('id')))),
+    c.json(connectorReadinessResponseSchema.parse(await connectorReadiness(getDeps(c), c.req.param('id')))),
   )
 
   app.patch('/:id', async (c) => {
-    const connector = await createService(c).update(
+    const connector = await updateConnector(
+      getDeps(c),
       c.req.param('id'),
       await readJson(c, updateManagementConnectorRequestSchema),
     )
@@ -63,7 +58,7 @@ export function createManagementConnectorRoutes(
   })
 
   app.delete('/:id', async (c) => {
-    await createService(c).delete(c.req.param('id'))
+    await deleteConnector(getDeps(c), c.req.param('id'))
     return c.body(null, 204)
   })
 

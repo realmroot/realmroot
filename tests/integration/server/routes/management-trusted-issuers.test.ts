@@ -1,8 +1,8 @@
-import type { TokenExchangeServiceFactory } from '@server/composition'
 import { handleApiError } from '@server/http/errors'
 import { createTrustedIssuerRoutes } from '@server/http/routes/management/trusted-issuers'
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
+import { createTestDeps } from '../test-deps'
 
 describe('management trusted issuer routes', () => {
   it('lists trusted issuers without exposing configured shared secrets', async () => {
@@ -17,8 +17,8 @@ describe('management trusted issuer routes', () => {
         }),
       ]),
     }
-    const app = withAdminContext()
-    app.route('/trusted-issuers', createTrustedIssuerRoutes(factory(service)))
+    const app = withAdminContext(service)
+    app.route('/trusted-issuers', createTrustedIssuerRoutes())
 
     const response = await app.request('/trusted-issuers')
 
@@ -57,8 +57,8 @@ describe('management trusted issuer routes', () => {
     const service = {
       createTrustedIssuer: vi.fn().mockResolvedValue(trustedIssuer({ sharedSecret: 'issuer-secret' })),
     }
-    const app = withAdminContext()
-    app.route('/trusted-issuers', createTrustedIssuerRoutes(factory(service)))
+    const app = withAdminContext(service)
+    app.route('/trusted-issuers', createTrustedIssuerRoutes())
 
     const response = await app.request('/trusted-issuers', {
       method: 'POST',
@@ -92,8 +92,8 @@ describe('management trusted issuer routes', () => {
     const service = {
       createTrustedIssuer: vi.fn(),
     }
-    const app = withAdminContext()
-    app.route('/trusted-issuers', createTrustedIssuerRoutes(factory(service)))
+    const app = withAdminContext(service)
+    app.route('/trusted-issuers', createTrustedIssuerRoutes())
 
     const response = await app.request('/trusted-issuers', {
       method: 'POST',
@@ -110,22 +110,20 @@ describe('management trusted issuer routes', () => {
   })
 })
 
-function withAdminContext() {
+function withAdminContext(service: Record<string, unknown>) {
   const app = new Hono()
   app.onError((error, c) => handleApiError(error, c))
+  const deps = createTestDeps({ tokenExchange: service })
   app.use('*', async (c, next) => {
     const user = { id: 'admin-1', role: 'admin' }
     c.set('authContext', {
       session: { session: { id: 'session-1' }, user },
       user,
     })
+    c.set('deps', deps)
     await next()
   })
   return app
-}
-
-function factory(service: Record<string, unknown>): TokenExchangeServiceFactory {
-  return () => service as unknown as ReturnType<TokenExchangeServiceFactory>
 }
 
 function trustedIssuer(overrides: Partial<TrustedIssuerFixture> = {}) {

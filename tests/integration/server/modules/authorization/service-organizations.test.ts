@@ -1,41 +1,55 @@
-import { AuthorizationService } from '@server/usecases/authorization'
+import {
+  addMember,
+  assignMemberRole,
+  assignUserRole,
+  buildTokenClaims,
+  createOrganization,
+  createPermission,
+  createResource,
+  createRole,
+  createScope,
+  deleteRole,
+  getOrganization,
+  getResource,
+  replaceRolePermissions,
+} from '@server/usecases/authorization'
+import type { Deps } from '@server/usecases/deps'
 import type { AuthorizationRepository, RoleAssignmentRecord } from '@server/usecases/ports'
 import type { PaginationQuery } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('service.test 2', () => {
   it('emits configured destination claims and honors scope token flags', async () => {
-    const repository = new InMemoryAuthorizationRepository()
-    const service = new AuthorizationService(repository)
-    const organization = await service.createOrganization({
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
+    const organization = await createOrganization(deps, {
       slug: 'acme',
       name: 'Acme',
       displayName: 'Acme Inc.',
     })
-    const member = await service.addMember(organization.id, {
+    const member = await addMember(deps, organization.id, {
       userId: 'user-1',
       role: 'member',
     })
-    const resource = await service.createResource({
+    const resource = await createResource(deps, {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
     })
-    const accessOnlyScope = await service.createScope(resource.id, {
+    const accessOnlyScope = await createScope(deps, resource.id, {
       value: 'contacts:read',
       includeInAccessToken: true,
       includeInIdToken: false,
     })
-    const idOnlyScope = await service.createScope(resource.id, {
+    const idOnlyScope = await createScope(deps, resource.id, {
       value: 'contacts:profile',
       includeInAccessToken: false,
       includeInIdToken: true,
     })
-    const permission = await service.createPermission(resource.id, {
+    const permission = await createPermission(deps, resource.id, {
       scopeId: accessOnlyScope.id,
       key: 'contacts.read',
     })
-    const role = await service.createRole({
+    const role = await createRole(deps, {
       key: 'contacts-admin',
       name: 'Contacts Admin',
       resourceId: resource.id,
@@ -43,11 +57,11 @@ describe('service.test 2', () => {
       tokenClaimName: 'contacts_role',
     })
 
-    await service.replaceRolePermissions(role.id, [permission.id])
-    await service.assignMemberRole({ roleId: role.id, subjectId: member.id, tokenClaims: { tier: 'gold' } }, 'admin-1')
+    await replaceRolePermissions(deps, role.id, [permission.id])
+    await assignMemberRole(deps, { roleId: role.id, subjectId: member.id, tokenClaims: { tier: 'gold' } }, 'admin-1')
 
     await expect(
-      service.buildTokenClaims({
+      buildTokenClaims(deps, {
         userId: 'user-1',
         organizationId: organization.id,
         resource: 'https://api.example.com/contacts',
@@ -68,7 +82,7 @@ describe('service.test 2', () => {
     })
 
     await expect(
-      service.buildTokenClaims({
+      buildTokenClaims(deps, {
         userId: 'user-1',
         organizationId: organization.id,
         resource: 'https://api.example.com/contacts',
@@ -83,7 +97,7 @@ describe('service.test 2', () => {
     })
 
     await expect(
-      service.buildTokenClaims({
+      buildTokenClaims(deps, {
         userId: 'user-1',
         organizationId: organization.id,
         resource: 'https://api.example.com/contacts',
@@ -96,7 +110,7 @@ describe('service.test 2', () => {
     })
 
     await expect(
-      service.buildTokenClaims({
+      buildTokenClaims(deps, {
         userId: 'user-1',
         organizationId: organization.id,
         resource: 'https://api.example.com/contacts',
@@ -110,31 +124,31 @@ describe('service.test 2', () => {
   })
 
   it('rejects assignments to missing roles and protects system roles from deletion', async () => {
-    const service = new AuthorizationService(new InMemoryAuthorizationRepository())
-    const systemRole = await service.createRole({
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
+    const systemRole = await createRole(deps, {
       key: 'system-admin',
       name: 'System Admin',
       system: true,
     })
 
-    await expect(service.assignUserRole({ roleId: 'missing', subjectId: 'user-1' }, 'admin-1')).rejects.toMatchObject({
+    await expect(assignUserRole(deps, { roleId: 'missing', subjectId: 'user-1' }, 'admin-1')).rejects.toMatchObject({
       status: 404,
       message: 'Role was not found.',
     })
-    await expect(service.deleteRole(systemRole.id)).rejects.toMatchObject({
+    await expect(deleteRole(deps, systemRole.id)).rejects.toMatchObject({
       status: 400,
       message: 'System roles cannot be deleted.',
     })
   })
 
   it('surfaces missing organizations and resources at service boundaries', async () => {
-    const service = new AuthorizationService(new InMemoryAuthorizationRepository())
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
 
-    await expect(service.getOrganization('missing')).rejects.toMatchObject({
+    await expect(getOrganization(deps, 'missing')).rejects.toMatchObject({
       status: 404,
       message: 'Organization was not found.',
     })
-    await expect(service.getResource('missing')).rejects.toMatchObject({
+    await expect(getResource(deps, 'missing')).rejects.toMatchObject({
       status: 404,
       message: 'API resource was not found.',
     })

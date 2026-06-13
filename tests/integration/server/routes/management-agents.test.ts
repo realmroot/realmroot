@@ -1,8 +1,9 @@
+import { managementAgentsRoute } from '@server/http/routes/management/agents'
+import * as agentsUsecase from '@server/usecases/agents'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 afterEach(() => {
-  vi.resetModules()
   vi.restoreAllMocks()
 })
 
@@ -28,10 +29,14 @@ describe('management agent routes', () => {
         ]),
       ),
     }
-    vi.doMock('@server/composition', () => ({
-      createAgentService: () => service,
-    }))
-    const { managementAgentsRoute } = await import('@server/http/routes/management/agents')
+    vi.spyOn(agentsUsecase, 'listAgentHosts').mockImplementation((_deps, query) => service.listHosts(query))
+    vi.spyOn(agentsUsecase, 'listAgents').mockImplementation((_deps, query) => service.listAgents(query))
+    vi.spyOn(agentsUsecase, 'listAgentCapabilityGrants').mockImplementation((_deps, query) =>
+      service.listCapabilityGrants(query),
+    )
+    vi.spyOn(agentsUsecase, 'listAgentApprovalRequests').mockImplementation((_deps, query) =>
+      service.listApprovalRequests(query),
+    )
     const app = withAdminContext()
     app.route('/', managementAgentsRoute)
 
@@ -75,6 +80,7 @@ function withAdminContext() {
       session: { session: { id: 'session-1' }, user },
       user,
     })
+    c.set('deps', {} as never)
     await next()
   })
   return app

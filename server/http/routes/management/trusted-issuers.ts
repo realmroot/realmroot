@@ -1,5 +1,5 @@
-import type { TokenExchangeServiceFactory } from '@server/composition'
-import { createTokenExchangeService, type TokenExchangeBindings } from '@server/composition'
+import type { TrustedExternalIssuerRecord } from '@server/usecases/ports'
+import { createTrustedIssuer, listTrustedIssuers } from '@server/usecases/token-exchange'
 import {
   createManagementTrustedIssuerRequestSchema,
   createManagementTrustedIssuerResponseSchema,
@@ -7,29 +7,28 @@ import {
 } from '@shared/api/management'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
+import { getDeps } from '../../middleware/deps'
 import { readJson } from '../validation'
 
-export function createTrustedIssuerRoutes(factory: TokenExchangeServiceFactory = createTokenExchangeService) {
-  const app = new Hono<{ Bindings: TokenExchangeBindings }>()
+export function createTrustedIssuerRoutes() {
+  const app = new Hono()
 
   app.use('*', requireAdmin())
 
   app.get('/', async (c) => {
-    const issuers = await factory(c).listTrustedIssuers()
+    const issuers = await listTrustedIssuers(getDeps(c))
     return c.json(listManagementTrustedIssuersResponseSchema.parse({ issuers: issuers.map(trustedIssuerResponse) }))
   })
 
   app.post('/', async (c) => {
-    const issuer = await factory(c).createTrustedIssuer(await readJson(c, createManagementTrustedIssuerRequestSchema))
+    const issuer = await createTrustedIssuer(getDeps(c), await readJson(c, createManagementTrustedIssuerRequestSchema))
     return c.json(createManagementTrustedIssuerResponseSchema.parse({ issuer: trustedIssuerResponse(issuer) }), 201)
   })
 
   return app
 }
 
-function trustedIssuerResponse(
-  issuer: Awaited<ReturnType<ReturnType<TokenExchangeServiceFactory>['createTrustedIssuer']>>,
-) {
+function trustedIssuerResponse(issuer: TrustedExternalIssuerRecord) {
   return {
     id: issuer.id,
     name: issuer.name,

@@ -1,59 +1,69 @@
-import { AuthorizationService } from '@server/usecases/authorization'
+import {
+  assignUserRole,
+  createResource,
+  createRole,
+  deleteResource,
+  getResource,
+  listRoles,
+  updateResource,
+  updateRole,
+} from '@server/usecases/authorization'
+import type { Deps } from '@server/usecases/deps'
 import type { AuthorizationRepository, RoleAssignmentRecord } from '@server/usecases/ports'
 import type { PaginationQuery } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 
 describe('service.test 3', () => {
   it('updates and deletes API resources and lists roles', async () => {
-    const repository = new InMemoryAuthorizationRepository()
-    const service = new AuthorizationService(repository)
-    const resource = await service.createResource({
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
+    const resource = await createResource(deps, {
       identifier: 'orders-api',
       name: 'Orders API',
       audience: 'https://api.example.com/orders',
     })
-    const role = await service.createRole({
+    const role = await createRole(deps, {
       key: 'orders-reader',
       name: 'Orders Reader',
       resourceId: resource.id,
     })
 
-    await expect(service.updateResource(resource.id, { enabled: false })).resolves.toMatchObject({
+    await expect(updateResource(deps, resource.id, { enabled: false })).resolves.toMatchObject({
       id: resource.id,
       enabled: false,
     })
-    await expect(service.listRoles({ limit: 20, offset: 0 })).resolves.toMatchObject({
+    await expect(listRoles(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
       roles: [{ id: role.id, key: 'orders-reader' }],
       pagination: { total: 1 },
     })
-    await service.deleteResource(resource.id)
-    await expect(service.getResource(resource.id)).rejects.toMatchObject({
+    await deleteResource(deps, resource.id)
+    await expect(getResource(deps, resource.id)).rejects.toMatchObject({
       status: 404,
       message: 'API resource was not found.',
     })
   })
 
   it('keeps role scope immutable and rejects token claim overrides', async () => {
-    const service = new AuthorizationService(new InMemoryAuthorizationRepository())
-    const role = await service.createRole({
+    const deps = { authorization: new InMemoryAuthorizationRepository() } as unknown as Deps
+    const role = await createRole(deps, {
       key: 'auditor',
       name: 'Auditor',
     })
 
-    await expect(service.updateRole(role.id, { organizationId: 'org-1' })).rejects.toMatchObject({
+    await expect(updateRole(deps, role.id, { organizationId: 'org-1' })).rejects.toMatchObject({
       status: 400,
       message: 'Role resource and subject scope cannot be changed after creation.',
     })
-    await expect(service.updateRole(role.id, { resourceId: 'resource-1' })).rejects.toMatchObject({
+    await expect(updateRole(deps, role.id, { resourceId: 'resource-1' })).rejects.toMatchObject({
       status: 400,
       message: 'Role resource and subject scope cannot be changed after creation.',
     })
-    await expect(service.updateRole(role.id, { applicationId: 'app-1' })).rejects.toMatchObject({
+    await expect(updateRole(deps, role.id, { applicationId: 'app-1' })).rejects.toMatchObject({
       status: 400,
       message: 'Role resource and subject scope cannot be changed after creation.',
     })
     await expect(
-      service.assignUserRole(
+      assignUserRole(
+        deps,
         {
           roleId: role.id,
           subjectId: 'user-1',
@@ -68,7 +78,8 @@ describe('service.test 3', () => {
       message: 'Assignment token claim is reserved: authorization',
     })
     await expect(
-      service.assignUserRole(
+      assignUserRole(
+        deps,
         {
           roleId: role.id,
           subjectId: 'user-1',
@@ -83,7 +94,7 @@ describe('service.test 3', () => {
       message: 'Assignment token claim is reserved: https://claims.example.com/contacts',
     })
     await expect(
-      service.createRole({
+      createRole(deps, {
         key: 'claim-overrider',
         name: 'Claim Overrider',
         tokenClaimName: 'roles',
@@ -93,7 +104,7 @@ describe('service.test 3', () => {
       message: 'Role token claim name is reserved: roles',
     })
     await expect(
-      service.updateRole(role.id, { tokenClaimName: 'https://claims.example.com/contacts' }),
+      updateRole(deps, role.id, { tokenClaimName: 'https://claims.example.com/contacts' }),
     ).rejects.toMatchObject({
       status: 400,
       message: 'Role token claim name is reserved: https://claims.example.com/contacts',
