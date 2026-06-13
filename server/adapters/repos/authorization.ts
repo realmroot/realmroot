@@ -1,4 +1,4 @@
-import type { AuthorizationRepository, RoleAssignmentScope } from '@server/modules/authorization/service'
+import type { AuthorizationRepository, RoleAssignmentScope } from '@server/usecases/ports'
 import { and, count, desc, eq, gt, inArray, isNull, or } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'

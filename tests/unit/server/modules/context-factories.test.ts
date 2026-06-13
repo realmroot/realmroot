@@ -42,7 +42,7 @@ describe('module context factories', () => {
     vi.doMock('@server/adapters/repos/authorization', () => ({
       createDrizzleAuthorizationRepository,
     }))
-    vi.doMock('../../../../server/modules/authorization/service', () => ({ AuthorizationService }))
+    vi.doMock('@server/usecases/authorization', () => ({ AuthorizationService }))
 
     const { createAuthorizationService } = await import('@server/modules/authorization/context')
 

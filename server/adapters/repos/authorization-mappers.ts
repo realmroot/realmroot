@@ -1,4 +1,4 @@
-import type { ApiPermissionRecordInput, ApiScopeRecordInput } from '@server/modules/authorization/service'
+import type { ApiPermissionRecordInput, ApiScopeRecordInput } from '@server/usecases/ports'
 import type { apiPermission, apiResource, apiScope, invitation, member, organization, role } from '../../db/schema'
 
 export function toOrganization(row: typeof organization.$inferSelect) {

@@ -1,8 +1,5 @@
-import {
-  type AuthorizationRepository,
-  AuthorizationService,
-  type RoleAssignmentRecord,
-} from '@server/modules/authorization/service'
+import { AuthorizationService } from '@server/usecases/authorization'
+import type { AuthorizationRepository, RoleAssignmentRecord } from '@server/usecases/ports'
 import type { PaginationQuery } from '@shared/api/authorization'
 import { describe, expect, it } from 'vitest'
 

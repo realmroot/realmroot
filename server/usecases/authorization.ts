@@ -1,29 +1,4 @@
-import type { ApplicationOidcClaims, PaginationMetadata } from '../../../shared/api/applications'
-import type {
-  AddMemberRequest,
-  ApiPermissionResponse,
-  ApiResourceResponse,
-  ApiScopeResponse,
-  AssignRoleRequest,
-  CreateApiPermissionRequest,
-  CreateApiResourceRequest,
-  CreateApiScopeRequest,
-  CreateInvitationRequest,
-  CreateOrganizationRequest,
-  CreateRoleRequest,
-  InvitationResponse,
-  MemberResponse,
-  OrganizationResponse,
-  PaginationQuery,
-  RoleResponse,
-  UpdateApiPermissionRequest,
-  UpdateApiResourceRequest,
-  UpdateApiScopeRequest,
-  UpdateMemberRequest,
-  UpdateOrganizationRequest,
-  UpdateRoleRequest,
-} from '../../../shared/api/authorization'
-import { badRequest, notFound } from '../../lib/errors'
+import { badRequest, notFound } from '@server/domain/errors'
 import {
   assertRoleTokenClaimName,
   assertTokenClaims,
@@ -31,18 +6,26 @@ import {
   filterScopes,
   toAssignmentInput,
   toTokenClaims,
-} from './service-utils'
-
-export interface PaginatedResult<T> {
-  items: T[]
-  pagination: PaginationMetadata
-}
-
-export interface RoleAssignmentRecord {
-  role: RoleResponse
-  permissions: ApiPermissionResponse[]
-  tokenClaims: Record<string, unknown> | null
-}
+} from '@server/usecases/authorization-utils'
+import type { AuthorizationRepository, RoleAssignmentScope } from '@server/usecases/ports'
+import type { ApplicationOidcClaims } from '@shared/api/applications'
+import type {
+  AddMemberRequest,
+  AssignRoleRequest,
+  CreateApiPermissionRequest,
+  CreateApiResourceRequest,
+  CreateApiScopeRequest,
+  CreateInvitationRequest,
+  CreateOrganizationRequest,
+  CreateRoleRequest,
+  PaginationQuery,
+  UpdateApiPermissionRequest,
+  UpdateApiResourceRequest,
+  UpdateApiScopeRequest,
+  UpdateMemberRequest,
+  UpdateOrganizationRequest,
+  UpdateRoleRequest,
+} from '@shared/api/authorization'
 
 export interface AuthorizationTokenClaimInput {
   userId?: string | null
@@ -52,68 +35,6 @@ export interface AuthorizationTokenClaimInput {
   scopes: string[]
   destination?: 'access_token' | 'id_token' | 'userinfo'
   claimSelection?: ApplicationOidcClaims['accessToken']
-}
-
-export interface AuthorizationRepository {
-  createOrganization(input: OrganizationRecordInput): Promise<OrganizationResponse>
-  listOrganizations(pagination: PaginationQuery): Promise<PaginatedResult<OrganizationResponse>>
-  findOrganization(id: string): Promise<OrganizationResponse | null>
-  updateOrganization(id: string, patch: UpdateOrganizationRequest): Promise<void>
-  deleteOrganization(id: string): Promise<void>
-  addMember(organizationId: string, input: MemberRecordInput): Promise<MemberResponse>
-  listMembers(organizationId: string, pagination: PaginationQuery): Promise<PaginatedResult<MemberResponse>>
-  findMember(id: string): Promise<MemberResponse | null>
-  findMemberByOrganizationUser(organizationId: string, userId: string): Promise<MemberResponse | null>
-  updateMember(id: string, patch: UpdateMemberRequest): Promise<void>
-  removeMember(id: string): Promise<void>
-  createInvitation(input: InvitationRecordInput): Promise<InvitationResponse>
-  listInvitations(organizationId: string, pagination: PaginationQuery): Promise<PaginatedResult<InvitationResponse>>
-  findInvitation(id: string): Promise<InvitationResponse | null>
-  cancelInvitation(id: string): Promise<void>
-  createResource(input: ApiResourceRecordInput): Promise<ApiResourceResponse>
-  listResources(pagination: PaginationQuery): Promise<PaginatedResult<ApiResourceResponse>>
-  findResource(id: string): Promise<ApiResourceResponse | null>
-  findResourceByAudience(audience: string): Promise<ApiResourceResponse | null>
-  updateResource(id: string, patch: UpdateApiResourceRequest): Promise<void>
-  deleteResource(id: string): Promise<void>
-  createScope(resourceId: string, input: ApiScopeRecordInput): Promise<ApiScopeResponse>
-  listScopes(resourceId: string, pagination: PaginationQuery): Promise<PaginatedResult<ApiScopeResponse>>
-  listScopesByValues(resourceId: string | undefined, values: string[]): Promise<ApiScopeResponse[]>
-  findScope(id: string): Promise<ApiScopeResponse | null>
-  updateScope(id: string, patch: UpdateApiScopeRequest): Promise<void>
-  deleteScope(id: string): Promise<void>
-  createPermission(resourceId: string, input: ApiPermissionRecordInput): Promise<ApiPermissionResponse>
-  listPermissions(resourceId: string, pagination: PaginationQuery): Promise<PaginatedResult<ApiPermissionResponse>>
-  findPermission(id: string): Promise<ApiPermissionResponse | null>
-  updatePermission(id: string, patch: UpdateApiPermissionRequest): Promise<void>
-  deletePermission(id: string): Promise<void>
-  createRole(input: RoleRecordInput): Promise<RoleResponse>
-  listRoles(pagination: PaginationQuery): Promise<PaginatedResult<RoleResponse>>
-  findRole(id: string): Promise<RoleResponse | null>
-  updateRole(id: string, patch: UpdateRoleRequest): Promise<void>
-  deleteRole(id: string): Promise<void>
-  listRolePermissions(roleId: string): Promise<ApiPermissionResponse[]>
-  replaceRolePermissions(roleId: string, permissionIds: string[]): Promise<void>
-  assignUserRole(input: RoleAssignmentInput): Promise<void>
-  assignApplicationRole(input: RoleAssignmentInput): Promise<void>
-  assignMemberRole(input: RoleAssignmentInput): Promise<void>
-  listUserRoleAssignments(userId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
-  listApplicationRoleAssignments(applicationId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
-  listMemberRoleAssignments(memberId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
-}
-
-export type OrganizationRecordInput = Omit<OrganizationResponse, 'createdAt' | 'updatedAt'>
-export type MemberRecordInput = Omit<MemberResponse, 'createdAt' | 'updatedAt'>
-export type InvitationRecordInput = Omit<InvitationResponse, 'createdAt' | 'acceptedAt' | 'revokedAt'>
-export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'createdAt' | 'updatedAt'>
-export type ApiScopeRecordInput = ApiScopeResponse
-export type ApiPermissionRecordInput = ApiPermissionResponse
-export type RoleRecordInput = Omit<RoleResponse, 'createdAt' | 'updatedAt'>
-export type RoleAssignmentInput = AssignRoleRequest & { id: string; assignedByUserId: string | null }
-export interface RoleAssignmentScope {
-  resourceId?: string
-  organizationId?: string
-  applicationId?: string
 }
 
 export class AuthorizationService {

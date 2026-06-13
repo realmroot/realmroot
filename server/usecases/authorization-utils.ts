@@ -1,12 +1,13 @@
-import type { ApplicationOidcClaims } from '../../../shared/api/applications'
+import { badRequest } from '@server/domain/errors'
+import type { AuthorizationTokenClaimInput } from '@server/usecases/authorization'
+import type { RoleAssignmentInput, RoleAssignmentRecord } from '@server/usecases/ports'
+import type { ApplicationOidcClaims } from '@shared/api/applications'
 import type {
   ApiResourceResponse,
   ApiScopeResponse,
   AssignRoleRequest,
   OrganizationResponse,
-} from '../../../shared/api/authorization'
-import { badRequest } from '../../lib/errors'
-import type { AuthorizationTokenClaimInput, RoleAssignmentInput, RoleAssignmentRecord } from './service'
+} from '@shared/api/authorization'
 
 export function toAssignmentInput(input: AssignRoleRequest, actorUserId: string | null): RoleAssignmentInput {
   return {
