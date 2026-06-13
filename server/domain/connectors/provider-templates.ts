@@ -44,7 +44,7 @@ const socialTemplates = socialProviderIds.map((providerId) => ({
   displayName: displayName(providerId),
   icon: providerIcon(providerId),
   requiredFields: requiredSocialFields(providerId),
-  optionalFields: optionalSocialFields(providerId).map((field) => `providerMetadata.${field}`),
+  optionalFields: [],
   defaultScopes: defaultScopes(providerId),
   endpoints: {
     issuer: null,
@@ -117,11 +117,6 @@ function requiredSocialFields(providerId: string) {
     ]
   }
   return ['clientId', 'clientSecret']
-}
-
-function optionalSocialFields(providerId: string) {
-  void providerId
-  return []
 }
 
 function defaultScopes(providerId: string) {

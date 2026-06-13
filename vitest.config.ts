@@ -14,22 +14,49 @@ const compatibilityDate = '2026-04-12'
 const compatibilityFlags = ['nodejs_compat']
 
 export default defineConfig({
-  // Coverage lives on the `unit` project only: v8 cannot instrument the workerd
-  // pool, and the jsdom `web` project is exercised by the same fast suites.
+  // Coverage gates only the layers the fast (v8-instrumentable) `unit` + `web`
+  // suites own. The workerd `integration` crown can't be v8-instrumented, so the
+  // edge layers it proves (adapters/repos, composition, worker, http full-flow,
+  // the real JWKS verify path) are excluded — counting them here is a false 0%.
   test: {
     coverage: {
       provider: 'v8',
+      // text hides fully-covered files; json-summary exposes the real per-file data.
       reporter: ['text', 'json-summary', 'lcov'],
-      // `server/adapters/repos/**` is exercised end-to-end in the uninstrumented
-      // workerd crown (real D1 + real SQL), which v8 cannot measure; counting it
-      // under the unit project would falsely drop coverage now that its FakeDb
-      // tests are gone. The crown is the proof these repos work, not a percentage.
-      exclude: ['server/auth.ts', 'server/adapters/repos/**', 'src/features/account/account-center.tsx'],
+      // Allowlist: business logic + testable frontend + stub-fetch gateways.
+      include: [
+        'server/domain/**',
+        'server/usecases/**',
+        'server/adapters/gateways/**',
+        'shared/api/**',
+        'src/features/**',
+        'src/lib/**',
+      ],
+      exclude: [
+        '**/*.test.{ts,tsx}',
+        '**/*.test-utils.{ts,tsx}', // co-located test helpers
+        '**/*.test-fixtures.{ts,tsx}',
+        '**/*fixtures*.{ts,tsx}',
+        '**/*.d.ts',
+        '**/index.ts', // barrels
+        'server/adapters/gateways/jwks.ts', // real JWKS fetch/verify — crown-proven
+        // presentational / config / generated glue
+        'src/lib/theme.tsx',
+        'src/lib/utils.ts',
+        'src/lib/auth-client.ts', // thin better-auth client wiring
+        'src/lib/i18n*.ts',
+        'src/features/**/*.gen.ts',
+      ],
       thresholds: {
-        branches: 80,
-        functions: 84,
-        lines: 89,
-        statements: 87,
+        perFile: true,
+        // business logic is exhaustively unit-tested with fake ports
+        'server/domain/**': { branches: 95, functions: 95, lines: 95, statements: 95 },
+        'server/usecases/**': { branches: 95, functions: 95, lines: 95, statements: 95 },
+        // everything else in the allowlist
+        branches: 90,
+        functions: 90,
+        lines: 90,
+        statements: 90,
       },
     },
     projects: [

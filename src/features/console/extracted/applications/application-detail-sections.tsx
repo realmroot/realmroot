@@ -206,12 +206,8 @@ export function ApplicationsTableContent({
         ) : (
           <TableEmptyRow
             colSpan={6}
-            description={
-              hasApplications
-                ? emptyDescription
-                : tt('Create your first OIDC client to connect an application to hosted authentication.')
-            }
-            title={hasApplications ? emptyTitle : tt('No applications yet')}
+            description={tt('Create your first OIDC client to connect an application to hosted authentication.')}
+            title={tt('No applications yet')}
           />
         )}
       </TableBody>

@@ -87,4 +87,49 @@ describe('DeviceVerification', () => {
     expect(await screen.findByText('Denial failed.')).toBeTruthy()
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Deny' }).disabled).toBe(false)
   })
+
+  it('uses a generic message for non-Error verification rejections', async () => {
+    vi.mocked(verifyDeviceCode).mockRejectedValueOnce('boom')
+
+    render(<DeviceVerification mode="approval" userCode="EXPIRED1" />)
+
+    expect(await screen.findByText('Device code is invalid or expired.')).toBeTruthy()
+  })
+
+  it('uses a generic message for non-Error approval rejections', async () => {
+    vi.mocked(approveDeviceCode).mockRejectedValueOnce('boom')
+    render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+
+    await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalledWith({ userCode: 'ABCD-2345' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(await screen.findByText('Unable to update device access.')).toBeTruthy()
+  })
+
+  it('does not navigate when the entry code is blank', () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    render(<DeviceVerification mode="entry" />)
+
+    fireEvent.submit(screen.getByRole('button', { name: 'Continue' }).closest('form')!)
+
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('ignores verification results after the component unmounts', async () => {
+    let resolveVerify: ((value: { user_code: string; status: string }) => void) | undefined
+    vi.mocked(verifyDeviceCode).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveVerify = resolve as typeof resolveVerify
+      }) as ReturnType<typeof verifyDeviceCode>,
+    )
+
+    const { unmount } = render(<DeviceVerification mode="approval" userCode="ABCD-2345" />)
+    await waitFor(() => expect(verifyDeviceCode).toHaveBeenCalled())
+    unmount()
+    resolveVerify?.({ user_code: 'ABCD2345', status: 'pending' })
+
+    // The resolved code must not appear after unmount; no assertion errors thrown.
+    expect(screen.queryByText('ABCD2345')).toBeNull()
+  })
 })

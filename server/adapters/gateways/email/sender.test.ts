@@ -34,6 +34,22 @@ describe('createEmailSender', () => {
       html: '<p>Verify your email address</p><p><a href="https://auth.example.com/verify">https://auth.example.com/verify</a></p>',
     })
   })
+
+  it('uses the bare from address when no display name is configured', async () => {
+    const send = vi.fn().mockResolvedValue({ messageId: 'email-2' })
+    const sender = createEmailSender({ send }, { from: 'noreply@example.com' })
+
+    await sender.send({
+      to: 'user@example.com',
+      template: { type: 'verification', url: 'https://auth.example.com/verify' },
+    })
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: 'noreply@example.com',
+      }),
+    )
+  })
 })
 
 describe('renderEmailTemplate', () => {

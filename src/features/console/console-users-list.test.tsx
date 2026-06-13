@@ -89,6 +89,62 @@ describe('admin console users-list', () => {
     })
   })
 
+  it('promotes a non-admin user to admin from the list menu', async () => {
+    const requests: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/users/user-1' && init?.method === 'PATCH') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse({ ...user, role: 'admin' }))
+      }
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(jsonResponse({ users: [{ ...user, role: 'user' }], pagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<UsersPage />)
+
+    expect(await screen.findByText('jane@example.com')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Actions for jane@example.com'))
+    fireEvent.click(await screen.findByText('Toggle admin role'))
+
+    await waitFor(() => {
+      expect(requests.at(-1)).toEqual({ url: '/api/management/users/user-1', body: { role: 'admin' } })
+    })
+  })
+
+  it('paginates forward through a multi-page user list', async () => {
+    const seen: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.startsWith('/api/management/users')) {
+        seen.push(url)
+        return Promise.resolve(
+          jsonResponse({
+            users: [user],
+            pagination: {
+              limit: 10,
+              offset: url.includes('offset=10') ? 10 : 0,
+              total: 30,
+              hasMore: !url.includes('offset=10'),
+              nextOffset: url.includes('offset=10') ? null : 10,
+            },
+          }),
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<UsersPage />)
+
+    expect(await screen.findByText('jane@example.com')).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(seen.some((url) => url.includes('offset=10'))).toBe(true))
+    // on the last page Next is disabled (nextOffset null / hasMore false)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true))
+  })
+
   it('shows client-side validation errors for user creation', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

@@ -1,4 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { HttpResponse, http } from 'msw'
+import { setupServer } from 'msw/node'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import {
+  createPasskeyRegistrationOptions,
+  getAccountProfile,
+  linkAccount,
+  listAccountAgents,
+  revokeAccountAgent,
+  revokeAccountAgentCapabilityGrant,
+  verifyPasskeyRegistration,
+} from '@/lib/api/account'
 
 afterEach(() => {
   vi.resetModules()
@@ -84,6 +95,105 @@ describe('account API client', () => {
       ['securitySessions.delete'],
       ['securitySession.delete', { param: { sessionId: 'session-1' } }],
     ])
+  })
+})
+
+const base = 'http://localhost:3000'
+const realClientServer = setupServer()
+
+describe('account API client over the real network boundary', () => {
+  beforeAll(() => realClientServer.listen({ onUnhandledRequest: 'error' }))
+  afterEach(() => realClientServer.resetHandlers())
+  afterAll(() => realClientServer.close())
+
+  it('lists, revokes agents, and revokes capability grants', async () => {
+    realClientServer.use(
+      http.get(`${base}/api/account/agents`, () => HttpResponse.json({ agents: [{ id: 'ag1' }] })),
+      http.delete(`${base}/api/account/agents/:agentId`, ({ params }) =>
+        HttpResponse.json({ revoked: params.agentId }),
+      ),
+      http.delete(`${base}/api/account/agent-capability-grants/:grantId`, ({ params }) =>
+        HttpResponse.json({ revoked: params.grantId }),
+      ),
+    )
+    expect((await listAccountAgents()).agents).toEqual([{ id: 'ag1' }])
+    expect(await revokeAccountAgent('ag1')).toEqual({ revoked: 'ag1' })
+    expect(await revokeAccountAgentCapabilityGrant('g1')).toEqual({ revoked: 'g1' })
+  })
+
+  it('links a social provider via the native sign-in endpoint', async () => {
+    let body: unknown = null
+    realClientServer.use(
+      http.post(`${base}/api/auth/link-social`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ url: '/social-redirect' })
+      }),
+    )
+    const result = await linkAccount({ providerType: 'social', providerId: 'github', callbackURL: '/cb' })
+    expect(result).toEqual({ url: '/social-redirect' })
+    expect((body as { provider: string }).provider).toBe('github')
+  })
+
+  it('links a generic oauth provider via the oauth2 link endpoint', async () => {
+    let body: unknown = null
+    realClientServer.use(
+      http.post(`${base}/api/auth/oauth2/link`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ url: '/oauth-redirect' })
+      }),
+    )
+    const result = await linkAccount({
+      providerType: 'generic_oauth',
+      providerId: 'custom',
+      callbackURL: '/cb',
+      scopes: ['email'],
+    })
+    expect(result).toEqual({ url: '/oauth-redirect' })
+    expect((body as { providerId: string }).providerId).toBe('custom')
+  })
+
+  it('builds the register-options query and posts verification', async () => {
+    const captured: { url: URL | null; body: unknown } = { url: null, body: null }
+    realClientServer.use(
+      http.get(`${base}/api/auth/passkey/generate-register-options`, ({ request }) => {
+        captured.url = new URL(request.url)
+        return HttpResponse.json({ challenge: 'abc' })
+      }),
+      http.post(`${base}/api/auth/passkey/verify-registration`, async ({ request }) => {
+        captured.body = await request.json()
+        return HttpResponse.json({ verified: true })
+      }),
+    )
+    await createPasskeyRegistrationOptions({
+      name: 'Key',
+      authenticatorAttachment: 'platform',
+      context: 'account',
+    })
+    expect(captured.url?.searchParams.get('name')).toBe('Key')
+    expect(captured.url?.searchParams.get('authenticatorAttachment')).toBe('platform')
+    expect(captured.url?.searchParams.get('context')).toBe('account')
+
+    expect(await verifyPasskeyRegistration({ response: { id: 'cred' } })).toEqual({ verified: true })
+    expect(captured.body).toEqual({ response: { id: 'cred' } })
+  })
+
+  it('omits the register-options query string when no options are provided', async () => {
+    const captured: { url: URL | null } = { url: null }
+    realClientServer.use(
+      http.get(`${base}/api/auth/passkey/generate-register-options`, ({ request }) => {
+        captured.url = new URL(request.url)
+        return HttpResponse.json({ challenge: 'abc' })
+      }),
+    )
+    await createPasskeyRegistrationOptions({})
+    expect(captured.url?.search).toBe('')
+  })
+
+  it('surfaces a structured error message from a failed response', async () => {
+    realClientServer.use(
+      http.get(`${base}/api/account/profile`, () => HttpResponse.json({ error: 'forbidden' }, { status: 403 })),
+    )
+    await expect(getAccountProfile()).rejects.toThrow('forbidden')
   })
 })
 

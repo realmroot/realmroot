@@ -160,6 +160,40 @@ describe('console dashboard guards', () => {
     await waitFor(() => expect(requests.filter((url) => url === '/api/management/applications').length).toBe(2))
   })
 
+  it('shows the loading state before the dashboard query resolves', async () => {
+    const deferred: { resolve: (value: Response) => void } = { resolve: () => {} }
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/applications') {
+        return new Promise<Response>((resolve) => {
+          deferred.resolve = resolve
+        })
+      }
+      if (url.startsWith('/api/management/users')) {
+        return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/management/roles')) {
+        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/api-resources') {
+        return Promise.resolve(jsonResponse({ resources: [], pagination: emptyPagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ConsoleDashboardPage />)
+
+    expect(await screen.findByText('Loading Console dashboard')).toBeTruthy()
+    deferred.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
+    await waitFor(() => expect(screen.queryByText('Loading Console dashboard')).toBeNull())
+  })
+
   it('surfaces non-auth account guard errors instead of converting them to sign-in redirects', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

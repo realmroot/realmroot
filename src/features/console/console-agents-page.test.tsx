@@ -51,9 +51,127 @@ describe('console delegated agents page', () => {
       expect(requests).toContainEqual({ url: '/api/management/agent-hosts/host-1', method: 'DELETE' })
     })
   })
+
+  it('renders empty agent, host, and approval tables', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, _init) => {
+      const request = input instanceof Request ? input : null
+      const url = request?.url ? new URL(request.url).pathname : String(input)
+      if (url === '/api/management/agents/protocol-inventory') {
+        return Promise.resolve(jsonResponse(emptyInventory))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(<AgentsPage />)
+
+    expect(await screen.findByText('No delegated agents.')).toBeTruthy()
+    expect(screen.getByText('No agent hosts.')).toBeTruthy()
+    expect(screen.getByText('No approval requests.')).toBeTruthy()
+  })
+
+  it('renders unlinked agents, hosts, and approvals with missing fields', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, _init) => {
+      const request = input instanceof Request ? input : null
+      const url = request?.url ? new URL(request.url).pathname : String(input)
+      if (url === '/api/management/agents/protocol-inventory') {
+        return Promise.resolve(jsonResponse(unlinkedInventory))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(<AgentsPage />)
+
+    expect(await screen.findByText('Floating Agent')).toBeTruthy()
+    // unlinked user labels appear for agent, host, and approval rows
+    expect(screen.getAllByText('Unlinked').length).toBeGreaterThanOrEqual(3)
+    // host without a name falls back to its id, capabilities show "None"
+    expect(screen.getAllByText('host-2').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('None').length).toBeGreaterThanOrEqual(1)
+    // agent with no grants
+    expect(screen.getByText('No grants')).toBeTruthy()
+    // pending (non-active / non-approved) badges use the outline variant path
+    expect(screen.getAllByText('pending').length).toBeGreaterThanOrEqual(3)
+  })
 })
 
 const timestamp = '2026-01-01T00:00:00.000Z'
+
+const emptyInventory = {
+  hosts: { items: [], pagination: { ...emptyPagination } },
+  agents: { items: [], pagination: { ...emptyPagination } },
+  capabilityGrants: { items: [], pagination: { ...emptyPagination } },
+  approvalRequests: { items: [], pagination: { ...emptyPagination } },
+}
+
+const unlinkedInventory = {
+  hosts: {
+    items: [
+      {
+        id: 'host-2',
+        name: null,
+        userId: null,
+        defaultCapabilities: null,
+        publicKey: null,
+        kid: null,
+        jwksUrl: null,
+        enrollmentTokenExpiresAt: null,
+        status: 'pending',
+        activatedAt: null,
+        expiresAt: null,
+        lastUsedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ],
+    pagination: { ...emptyPagination, total: 1 },
+  },
+  agents: {
+    items: [
+      {
+        id: 'agent-2',
+        name: 'Floating Agent',
+        userId: null,
+        hostId: null,
+        status: 'pending',
+        mode: 'delegated',
+        publicKey: 'public-key',
+        kid: null,
+        jwksUrl: null,
+        lastUsedAt: null,
+        activatedAt: null,
+        expiresAt: null,
+        metadata: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ],
+    pagination: { ...emptyPagination, total: 1 },
+  },
+  capabilityGrants: { items: [], pagination: { ...emptyPagination } },
+  approvalRequests: {
+    items: [
+      {
+        id: 'approval-2',
+        method: 'device_code',
+        agentId: null,
+        hostId: null,
+        userId: null,
+        capabilities: null,
+        status: 'pending',
+        loginHint: null,
+        bindingMessage: null,
+        clientNotificationEndpoint: null,
+        deliveryMode: null,
+        interval: 5,
+        lastPolledAt: null,
+        expiresAt: timestamp,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ],
+    pagination: { ...emptyPagination, total: 1 },
+  },
+}
 
 const agentInventory = {
   hosts: {

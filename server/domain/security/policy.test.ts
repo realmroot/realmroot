@@ -28,6 +28,24 @@ describe('security policy validation', () => {
     expect(() => validatePasswordPolicy('Valid-Password-42', policy)).not.toThrow()
   })
 
+  it('rejects repetitive and descending sequential character runs', () => {
+    const policy: SecurityPolicy['password'] = {
+      minLength: 8,
+      requiredCharacterTypes: 3,
+      customWords: [],
+      rejectUserInfo: false,
+      rejectSequential: true,
+      rejectCustomWords: false,
+    }
+
+    expect(() => validatePasswordPolicy('Vaaalid-Pass1!', policy)).toThrow(
+      'Password cannot include sequential or repetitive characters.',
+    )
+    expect(() => validatePasswordPolicy('Validcba-Pass1!', policy)).toThrow(
+      'Password cannot include sequential or repetitive characters.',
+    )
+  })
+
   it('rejects emails that match blocklist policy constraints', () => {
     const policy: SecurityPolicy['blocklist'] = {
       blockSubaddressing: true,

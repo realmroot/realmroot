@@ -118,6 +118,69 @@ describe('console authorization resource detail', () => {
     expect(await screen.findByText('No permissions yet.')).toBeTruthy()
   })
 
+  it('renders resource, scope, and permission detail with absent optional fields', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/api-resources/resource-1') {
+        return Promise.resolve(
+          jsonResponse({ ...apiResource, description: null, tokenClaimsNamespace: null, enabled: false }),
+        )
+      }
+      if (url === '/api/management/api-resources/resource-1/scopes') {
+        return Promise.resolve(
+          jsonResponse({
+            scopes: [
+              {
+                id: 'scope-1',
+                resourceId: 'resource-1',
+                value: 'orders:read',
+                description: null,
+                required: false,
+                tokenClaimName: null,
+                includeInAccessToken: true,
+                includeInIdToken: false,
+              },
+            ],
+            pagination,
+          }),
+        )
+      }
+      if (url === '/api/management/api-resources/resource-1/permissions') {
+        return Promise.resolve(
+          jsonResponse({
+            permissions: [
+              {
+                id: 'permission-1',
+                resourceId: 'resource-1',
+                scopeId: null,
+                key: 'orders.read',
+                description: null,
+                tokenClaimValue: null,
+              },
+            ],
+            pagination,
+          }),
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    // settings tab: resource with null description/namespace and disabled -> Enable button
+    const { unmount } = renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+    expect(await screen.findByRole('button', { name: 'Enable' })).toBeTruthy()
+
+    // scopes tab: scope row with no description falls back to "No description"
+    unmount()
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="scopes" />)
+    expect(await screen.findByText('orders:read')).toBeTruthy()
+    expect(screen.getByText('No description')).toBeTruthy()
+
+    cleanup()
+    // permissions tab: permission row falls back to its key with no description/scopeId
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="permissions" />)
+    expect(await screen.findByText('orders.read')).toBeTruthy()
+  })
+
   it('retries authorization detail loading failures', async () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

@@ -199,6 +199,46 @@ describe('admin console branding-content-b', () => {
     expect(screen.getAllByText('Cookie cache').length).toBeGreaterThan(1)
   })
 
+  it('discards account center edits and surfaces a save error', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/account-center-settings' && method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Account center save failed.' } }, 500))
+      }
+      if (url === '/api/management/account-center-settings') {
+        return Promise.resolve(jsonResponse(accountCenterSettings))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<AccountCenterSettingsPage />)
+
+    const profileSwitch = await screen.findByRole('switch', { name: 'Profile section' })
+    expect(screen.queryByRole('button', { name: 'Save account center' })).toBeNull()
+    fireEvent.click(profileSwitch)
+    // changes section becomes visible
+    expect(await screen.findByRole('button', { name: 'Save account center' })).toBeTruthy()
+    // discard restores the loaded form, hiding the changes section
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save account center' })).toBeNull())
+
+    // edit again and save -> error surfaces inside the changes section
+    fireEvent.click(screen.getByRole('switch', { name: 'Profile section' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save account center' }))
+    expect(await screen.findByText('Account center save failed.')).toBeTruthy()
+  })
+
+  it('renders the collect user profile read-only surface', async () => {
+    const { CollectUserProfilePage } = await import('@/features/console/extracted/branding-content/collect-profile')
+    vi.spyOn(window, 'fetch').mockImplementation(consoleSharedFetch)
+    renderWithQuery(<CollectUserProfilePage />)
+    expect(await screen.findByRole('heading', { name: 'Supported profile data' })).toBeTruthy()
+    expect(screen.getAllByText('Built in').length).toBeGreaterThan(0)
+    expect(screen.getByText('Custom profile field collection is outside the v1 hosted auth surface.')).toBeTruthy()
+  })
+
   it('opens account center from the account configuration tab', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     let accountCenterRequests = 0
@@ -329,6 +369,81 @@ describe('admin console branding-content-b', () => {
         body: null,
       }),
     )
+  })
+
+  it('handles webhook empty states, event toggling, and create errors', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'POST') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Endpoint create failed.' } }, 500))
+      }
+      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'GET') {
+        return Promise.resolve(jsonResponse({ endpoints: [], pagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<WebhooksPage />)
+
+    // empty endpoint table state
+    expect(await screen.findByText('No webhook endpoints')).toBeTruthy()
+
+    // user.created starts selected; toggle it off then back on
+    fireEvent.click(screen.getByRole('switch', { name: 'user.created' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'user.created' }))
+    fireEvent.change(screen.getByLabelText('Endpoint URL'), { target: { value: 'https://events.example.com/auth' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create endpoint' })[0])
+
+    // create error badge surfaces the failure message
+    expect(await screen.findByText('Endpoint create failed.')).toBeTruthy()
+  })
+
+  it('ignores an invalid webhook endpoint submission', async () => {
+    const posts: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'POST') {
+        posts.push(url)
+        return Promise.resolve(jsonResponse({ endpoint: webhookEndpoint, signingSecret: 'x' }, 201))
+      }
+      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'GET') {
+        return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<WebhooksPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Webhooks' })).toBeTruthy()
+    // submit the create form with an empty (invalid) URL -> safeParse fails, no POST
+    const urlField = screen.getByLabelText('Endpoint URL') as HTMLInputElement
+    fireEvent.submit(urlField.closest('form')!)
+    await waitFor(() => expect(posts).toEqual([]))
+  })
+
+  it('renders pending webhook request badges and an empty request state on filter', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.startsWith('/api/management/webhooks/requests')) {
+        // a filtered (non-failed) status returns no rows; the default load shows a pending row
+        const empty = url.includes('status=') && !url.includes('status=failed')
+        return Promise.resolve(
+          jsonResponse({
+            requests: empty ? [] : [{ ...webhookRequest, status: 'pending', error: null }],
+            pagination,
+          }),
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<WebhooksPage section="requests" />)
+
+    expect(await screen.findByText('Pending')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Filter webhook status'), { target: { value: 'delivered' } })
+    expect(await screen.findByText('No webhook requests')).toBeTruthy()
   })
 
   it('hides deferred audit logs and unavailable JWT controls', async () => {

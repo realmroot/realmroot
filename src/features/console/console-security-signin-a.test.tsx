@@ -427,6 +427,33 @@ describe('admin console security-signin-a', () => {
     expect(requests).toEqual([])
   })
 
+  it('toggles every alternative login method and surfaces a save error', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/management/sign-in-settings' && method === 'PATCH') {
+        return Promise.resolve(jsonResponse({ error: { message: 'Sign-in save failed.' } }, 500))
+      }
+      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<SignInSettingsPage />)
+
+    fireEvent.click(await screen.findByRole('switch', { name: 'Social login' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Phone login' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Passkey login' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Web3 wallet login' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save sign-in settings' }))
+
+    expect(await screen.findByText('Sign-in save failed.')).toBeTruthy()
+
+    // discard resets the toggled switches and the password policy fields
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save sign-in settings' })).toBeNull())
+  })
+
   it('discards sign-in settings optional fields back to empty defaults', async () => {
     const settings = {
       ...signInSettings,

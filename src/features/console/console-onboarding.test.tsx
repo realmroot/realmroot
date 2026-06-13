@@ -173,4 +173,33 @@ describe('console onboarding', () => {
       scopes: 'openid profile email',
     })
   })
+
+  it('resets device login when switching away from a native client type', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.includes('/api/management/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ConsoleOnboardingPage />)
+
+    expect(await screen.findByText('Setup checklist')).toBeTruthy()
+    // copy integration details before any client exists -> clientId placeholder branch
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard })
+    fireEvent.change(screen.getByLabelText('Redirect URIs'), { target: { value: 'https://app.example.com/cb' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy details' }))
+    await waitFor(() => expect(clipboard.writeText).toHaveBeenCalled())
+    expect(JSON.parse(clipboard.writeText.mock.calls[0]?.[0]).clientId).toBe('<create-client-first>')
+
+    fireEvent.click(screen.getByRole('button', { name: /Native app/ }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Device login' }))
+    expect(screen.getByRole('switch', { name: 'Device login' }).getAttribute('aria-checked')).toBe('true')
+    // switching to a non-native type removes the device login control and resets the flag
+    fireEvent.click(screen.getByRole('button', { name: /Single-page app/ }))
+    expect(screen.queryByRole('switch', { name: 'Device login' })).toBeNull()
+    // switching back to native shows it reset to off
+    fireEvent.click(screen.getByRole('button', { name: /Native app/ }))
+    expect(screen.getByRole('switch', { name: 'Device login' }).getAttribute('aria-checked')).toBe('false')
+  })
 })

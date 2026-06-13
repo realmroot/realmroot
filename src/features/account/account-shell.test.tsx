@@ -83,4 +83,38 @@ describe('AccountPageShell', () => {
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/auth/sign-in' }))
   })
+
+  it('does not redirect when sign out fails', async () => {
+    signOut.mockRejectedValueOnce(new Error('Sign out failed.'))
+    renderShell(profile())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }))
+
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('renders the avatar image when the profile has one', () => {
+    renderShell(profile({ image: 'https://cdn.example.com/avatar.png' }))
+    const trigger = screen.getByRole('button', { name: 'Account menu' })
+    expect(trigger.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.com/avatar.png')
+  })
+
+  it('omits the account menu when there is no profile', () => {
+    renderShell(null)
+    expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
+  })
+
+  it('switches language and theme from the avatar submenus', async () => {
+    renderShell(profile())
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: '简体中文' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Light' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'English' }))
+
+    expect(screen.getAllByRole('menuitemradio').length).toBeGreaterThan(0)
+  })
 })

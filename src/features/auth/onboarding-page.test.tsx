@@ -47,6 +47,62 @@ describe('OnboardingRoute', () => {
     expect(screen.queryByLabelText('Password')).toBeNull()
   })
 
+  it('shows the already-locked notice when onboarding is no longer required', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz()))
+      if (url === '/api/onboarding/status') return Promise.resolve(jsonResponse({ required: false }))
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<OnboardingRoute />)
+
+    expect(await screen.findByText('First-admin onboarding is already locked.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Continue to sign in' }).getAttribute('href')).toBe(
+      '/auth/sign-in?return_to=/console/onboarding',
+    )
+    expect(screen.queryByLabelText('Password')).toBeNull()
+  })
+
+  it('falls back to a generic message for non-Error onboarding rejections', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz()))
+      if (url === '/api/onboarding/status') return Promise.resolve(jsonResponse({ required: true }))
+      if (url === '/api/onboarding/admin-users' && init?.method === 'POST') return Promise.reject('boom')
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    render(<OnboardingRoute />)
+
+    fireEvent.change(await screen.findByLabelText('Name', { exact: true }), { target: { value: 'Admin User' } })
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'admin@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create first admin' }))
+
+    expect(await screen.findByText('Onboarding failed.')).toBeTruthy()
+  })
+
+  it('ignores onboarding status resolution after unmount', async () => {
+    let resolveStatus: ((value: Response) => void) | undefined
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz()))
+      if (url === '/api/onboarding/status') {
+        return new Promise<Response>((resolve) => {
+          resolveStatus = resolve
+        })
+      }
+      return Promise.resolve(jsonResponse({ ok: true }))
+    })
+
+    const { unmount } = render(<OnboardingRoute />)
+    unmount()
+    resolveStatus?.(jsonResponse({ required: false }))
+    await waitFor(() => expect(resolveStatus).toBeDefined())
+    expect(screen.queryByText('First-admin onboarding is already locked.')).toBeNull()
+  })
+
   it('shows first-admin creation errors without clearing the form', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)

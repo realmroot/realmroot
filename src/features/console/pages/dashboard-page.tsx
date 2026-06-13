@@ -17,6 +17,7 @@ export function ConsoleDashboardPage() {
   if (query.isLoading) return <LoadingState label={tt('Loading Console dashboard')} />
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />
   const dashboard = query.data
+  /* v8 ignore next -- data is always present after the isLoading/isError guards above */
   if (!dashboard) return null
   return (
     <>
