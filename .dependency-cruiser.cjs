@@ -85,7 +85,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: ['\\.(test|spec)\\.[jt]sx?$', '\\.gen\\.[jt]s$'] },
+    exclude: { path: ['\\.(test|spec)\\.[jt]sx?$', '\\.gen\\.[jt]s$', '\\.d\\.ts$'] },
     tsConfig: { fileName: 'tsconfig.server.json' },
     tsPreCompilationDeps: true,
   },

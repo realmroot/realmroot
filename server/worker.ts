@@ -5,12 +5,12 @@ import { createConnectorRepository } from '@server/adapters/repos/connectors'
 import { type Auth, createAuth } from '@server/auth'
 import { createConfigzService, createDeps, createTokenExchangeService } from '@server/composition'
 import { createDb } from '@server/db/client'
+import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp } from '@server/http/app'
 import { ApplicationService } from '@server/usecases/applications'
 import { defaultBuiltInProviders } from '@server/usecases/configz'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
 import { managementBuiltInProviderSettingsSchema } from '@shared/api/management'
-import { type Env, type RuntimeConfig, validateEnv } from '@shared/env'
 
 let cachedAuth: Auth | null = null
 let cachedKey: string | null = null

@@ -1,4 +1,4 @@
-import { type Env, validateEnv } from '@shared/env'
+import { type Env, validateEnv } from '@server/env'
 import { describe, expect, it } from 'vitest'
 
 describe('validateEnv', () => {

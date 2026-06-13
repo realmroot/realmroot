@@ -31,7 +31,9 @@
     "lint:arch": "depcruise server/ shared/ src/ --config .dependency-cruiser.cjs",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "cf-typegen": "wrangler types server/worker-configuration.d.ts --include-runtime=false --env-file .dev.vars.example",
+    "postinstall": "wrangler types server/worker-configuration.d.ts --include-runtime=false --env-file .dev.vars.example"
   },
   "engines": {
     "node": ">=24"

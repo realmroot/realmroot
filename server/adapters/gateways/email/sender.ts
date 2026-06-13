@@ -1,5 +1,5 @@
+import type { EmailMessageBuilder, SendEmail } from '@server/env'
 import type { EmailGateway } from '@server/usecases/ports'
-import type { EmailMessageBuilder, SendEmail } from '@shared/env'
 import { type EmailTemplate, renderEmailTemplate } from './templates'
 
 export interface EmailSenderConfig {

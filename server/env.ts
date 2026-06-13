@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
+/// <reference path="./worker-configuration.d.ts" />
 
-import type { SecurityPolicy } from './api/security'
+import type { SecurityPolicy } from '@shared/api/security'
 
 export interface EmailAddress {
   email: string
@@ -25,15 +26,15 @@ export interface SendEmail {
   send(message: EmailMessageBuilder): Promise<EmailSendResult>
 }
 
-export interface Env {
-  DB: D1Database
-  ASSETS: Fetcher
+/**
+ * Bindings + declared vars (DB, ASSET_BUCKET, EMAIL_QUEUE, ASSETS, EMAIL_FROM,
+ * EMAIL_FROM_NAME, BETTER_AUTH_SECRET) are typed from wrangler.toml via the generated
+ * `Cloudflare.Env` (regenerate with `pnpm cf-typegen`). EMAIL is narrowed to our
+ * transactional `SendEmail` wrapper, and the optional runtime config vars below are
+ * declared by hand because they are deployment secrets/vars, not wrangler bindings.
+ */
+export type Env = Omit<Cloudflare.Env, 'EMAIL'> & {
   EMAIL: SendEmail
-  ASSET_BUCKET: R2Bucket
-  EMAIL_QUEUE: Queue
-  BETTER_AUTH_SECRET: string
-  EMAIL_FROM: string
-  EMAIL_FROM_NAME?: string
   BETTER_AUTH_URL?: string
   TRUSTED_ORIGINS?: string
   MFA_POLICY?: string
@@ -45,7 +46,6 @@ export interface Env {
   WEBAUTHN_RP_ID?: string
   WEBAUTHN_RP_NAME?: string
   WEBAUTHN_ORIGINS?: string
-  [binding: string]: unknown
 }
 
 export interface RuntimeConfig {
