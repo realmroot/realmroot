@@ -28,6 +28,7 @@
     "test:e2e:report": "pnpm run test:e2e",
     "test:watch": "vitest",
     "lint": "biome check .",
+    "lint:arch": "depcruise server/ shared/ --config .dependency-cruiser.cjs",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "prepare": "husky"
@@ -81,6 +82,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.2",
+    "dependency-cruiser": "^17.4.3",
     "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
     "jsdom": "^29.0.2",

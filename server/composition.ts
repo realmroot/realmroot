@@ -139,3 +139,5 @@ export function createConfigzService(c: Context<{ Bindings: ConfigzBindings }>, 
     },
   })
 }
+
+export type TokenExchangeServiceFactory = typeof createTokenExchangeService

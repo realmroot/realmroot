@@ -1,4 +1,4 @@
-import type { TokenExchangeServiceFactory } from '@server/http/app'
+import type { TokenExchangeServiceFactory } from '@server/composition'
 import { handleApiError } from '@server/http/errors'
 import { createTrustedIssuerRoutes } from '@server/http/routes/management/trusted-issuers'
 import { Hono } from 'hono'

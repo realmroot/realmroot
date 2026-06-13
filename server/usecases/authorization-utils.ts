@@ -1,5 +1,4 @@
 import { badRequest } from '@server/domain/errors'
-import type { AuthorizationTokenClaimInput } from '@server/usecases/authorization'
 import type { RoleAssignmentInput, RoleAssignmentRecord } from '@server/usecases/ports'
 import type { ApplicationOidcClaims } from '@shared/api/applications'
 import type {
@@ -8,6 +7,16 @@ import type {
   AssignRoleRequest,
   OrganizationResponse,
 } from '@shared/api/authorization'
+
+export interface AuthorizationTokenClaimInput {
+  userId?: string | null
+  applicationId?: string | null
+  organizationId?: string
+  resource?: string
+  scopes: string[]
+  destination?: 'access_token' | 'id_token' | 'userinfo'
+  claimSelection?: ApplicationOidcClaims['accessToken']
+}
 
 export function toAssignmentInput(input: AssignRoleRequest, actorUserId: string | null): RoleAssignmentInput {
   return {

@@ -1,10 +1,14 @@
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
 import type { Auth } from '@server/auth'
 import type { ConfigzBindings } from '@server/composition'
-import { createTokenExchangeService, type TokenExchangeBindings } from '@server/composition'
+import {
+  createTokenExchangeService,
+  type TokenExchangeBindings,
+  type TokenExchangeServiceFactory,
+} from '@server/composition'
 import { forbidden, notFound } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
-import type { OnboardingRepository, SecurityRepository, UserRepository, WalletRepository } from '@server/usecases/ports'
+import type { OnboardingRepository, SecurityRepository, UserRepository } from '@server/usecases/ports'
 import {
   parseBasicClientAuthorization,
   refreshTokenGrantType,
@@ -21,6 +25,7 @@ import {
   requireLinkedSiweWallet,
 } from './app-auth-mounts'
 import type { RpcSchema } from './app-rpc-schema'
+import type { AgentConfiguration, AppOptions } from './app-types'
 import { accessLog } from './middleware/access-log'
 import { authContext, managementBearerAuth, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
@@ -28,21 +33,10 @@ import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
 import { managementOpenApiForRequest, managementOpenApiLinkHeader, managementOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
-import {
-  type AssetServiceFactory,
-  createAccountAssetRoutes,
-  createAssetRoutes,
-  createManagementAssetRoutes,
-} from './routes/assets'
+import { createAccountAssetRoutes, createAssetRoutes, createManagementAssetRoutes } from './routes/assets'
 import type { ManagementAuthApi } from './routes/auth-api'
-import { type ConfigzServiceFactory, createConfigzRoutes } from './routes/configz'
-import {
-  createManagementRoutes,
-  type ManagementApplicationServiceFactory,
-  type ManagementConfigzServiceFactory,
-} from './routes/management'
-import type { ConnectorServiceFactory } from './routes/management/connectors'
-import type { WebhookServiceFactory } from './routes/management/webhooks'
+import { createConfigzRoutes } from './routes/configz'
+import { createManagementRoutes } from './routes/management'
 import { oauthConsentRoute } from './routes/oauth/consent'
 import { onboardingRoutes } from './routes/onboarding'
 
@@ -53,30 +47,6 @@ type AuthHandler = Pick<Auth, 'handler'> & {
     getAgentConfiguration?: (context: { request: Request; asResponse: false }) => Promise<AgentConfiguration>
   } & SessionReader['api']
 }
-
-export type AgentConfiguration = {
-  issuer: string
-  default_location: string
-  endpoints: Record<string, string>
-  [key: string]: unknown
-}
-
-export interface AppOptions {
-  trustedOrigins?: string[]
-  userRepository?: UserRepository
-  securityRepository?: SecurityRepository
-  walletRepository?: WalletRepository
-  onboardingRepository?: OnboardingRepository
-  securityPolicy?: SecurityPolicy
-  configzServiceFactory?: ConfigzServiceFactory & ManagementConfigzServiceFactory
-  applicationServiceFactory?: ManagementApplicationServiceFactory
-  connectorServiceFactory?: ConnectorServiceFactory
-  webhookServiceFactory?: WebhookServiceFactory
-  assetServiceFactory?: AssetServiceFactory
-  tokenExchangeServiceFactory?: TokenExchangeServiceFactory
-}
-
-export type TokenExchangeServiceFactory = typeof createTokenExchangeService
 
 interface RpcAppOptions extends AppOptions {
   userRepository: UserRepository

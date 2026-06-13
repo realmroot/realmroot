@@ -4,7 +4,7 @@ import { forbidden } from '@server/domain/errors'
 import type { WalletRepository } from '@server/usecases/ports'
 import type { Context } from 'hono'
 import { getAddress } from 'viem'
-import type { AgentConfiguration, AppOptions } from './app'
+import type { AgentConfiguration, AppOptions } from './app-types'
 import type { ConfigzServiceFactory } from './routes/configz'
 
 export function mountAgentConfiguration(configuration: AgentConfiguration): AgentConfiguration {

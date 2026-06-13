@@ -74,6 +74,10 @@ jobs:
         if: inputs.run_checks == 'true'
         run: pnpm run lint
 
+      - name: Lint architecture
+        if: inputs.run_checks == 'true'
+        run: pnpm run lint:arch
+
       - name: Test
         if: inputs.run_checks == 'true'
         run: pnpm test

@@ -1,10 +1,14 @@
-import type { AgentBindings, ApplicationBindings, ConfigzBindings } from '@server/composition'
+import type {
+  AgentBindings,
+  ApplicationBindings,
+  ConfigzBindings,
+  TokenExchangeServiceFactory,
+} from '@server/composition'
 import { type AuthorizationBindings, createAuthorizationService } from '@server/composition'
 import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import { assignRoleRequestSchema } from '@shared/api/authorization'
 import type { SecurityPolicy } from '@shared/api/security'
 import { Hono } from 'hono'
-import type { TokenExchangeServiceFactory } from '../../app'
 import { requireAdmin } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
 import type { ManagementAuthApi } from '../auth-api'

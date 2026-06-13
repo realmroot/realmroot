@@ -1,1 +1,1 @@
-pnpm run typecheck && pnpm exec lint-staged
+pnpm run typecheck && pnpm run lint:arch && pnpm exec lint-staged

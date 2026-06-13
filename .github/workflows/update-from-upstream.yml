@@ -186,6 +186,10 @@ jobs:
         if: steps.merge.outputs.changed == 'true'
         run: pnpm run lint
 
+      - name: Lint architecture
+        if: steps.merge.outputs.changed == 'true'
+        run: pnpm run lint:arch
+
       - name: Test
         if: steps.merge.outputs.changed == 'true'
         run: pnpm test

@@ -1,5 +1,6 @@
 import { badRequest, notFound } from '@server/domain/errors'
 import {
+  type AuthorizationTokenClaimInput,
   assertRoleTokenClaimName,
   assertTokenClaims,
   createId,
@@ -8,7 +9,9 @@ import {
   toTokenClaims,
 } from '@server/usecases/authorization-utils'
 import type { AuthorizationRepository, RoleAssignmentScope } from '@server/usecases/ports'
-import type { ApplicationOidcClaims } from '@shared/api/applications'
+
+export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
+
 import type {
   AddMemberRequest,
   AssignRoleRequest,
@@ -26,16 +29,6 @@ import type {
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '@shared/api/authorization'
-
-export interface AuthorizationTokenClaimInput {
-  userId?: string | null
-  applicationId?: string | null
-  organizationId?: string
-  resource?: string
-  scopes: string[]
-  destination?: 'access_token' | 'id_token' | 'userinfo'
-  claimSelection?: ApplicationOidcClaims['accessToken']
-}
 
 export class AuthorizationService {
   constructor(private readonly repository: AuthorizationRepository) {}

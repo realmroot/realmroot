@@ -1,3 +1,4 @@
+import type { TokenExchangeServiceFactory } from '@server/composition'
 import { createTokenExchangeService, type TokenExchangeBindings } from '@server/composition'
 import {
   createManagementTrustedIssuerRequestSchema,
@@ -5,7 +6,6 @@ import {
   listManagementTrustedIssuersResponseSchema,
 } from '@shared/api/management'
 import { Hono } from 'hono'
-import type { TokenExchangeServiceFactory } from '../../app'
 import { requireAdmin } from '../../middleware/admin'
 import { readJson } from '../validation'
 
