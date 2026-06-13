@@ -7,7 +7,7 @@
   },
   "files": {
     "includes": [
-      "cucumber.mjs",
+      "playwright.config.ts",
       "server/**/*.ts",
       "shared/**/*.ts",
       "scripts/**/*.mjs",
