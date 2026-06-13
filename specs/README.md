@@ -17,16 +17,24 @@ reference specs; the specs do not generate tests.
 
 ## Traceability
 
-Each `@e2e` scenario maps to a test by a `[spec: <feature>/<journey>]`
+Every scenario maps to its home test by a `[spec: <feature>/<journey>]`
 breadcrumb in the test title (e.g. `[spec: platform-onboarding/first-admin-gate]`).
+The breadcrumb sits on the test that genuinely asserts the scenario's behaviour,
+at the cheapest meaningful layer (usecase, web, route, then the real-D1
+integration crown, with Playwright only for hermetic cross-stack journeys).
 `pnpm run spec:check` is a runner-less governance lint (sibling to `lint:arch`)
 that verifies:
 
 1. Every scenario declares `@journey:<id>` and exactly one supported
    `@entrypoint:<id>`.
-2. Every `@e2e` scenario has its matching `[spec:]` breadcrumb in `tests/`.
+2. Every scenario has its matching `[spec:]` breadcrumb somewhere in the test
+   tree (`server/`, `src/`, `shared/`, `tests/`).
+
+The breadcrumb scan covers all co-located suites, so a behaviour proven by a
+usecase or web test is traced there — `@e2e` only marks the hermetic Playwright
+crown; it never relaxes the tracing requirement.
 
 When adding a product behaviour, update the source spec first, assign the
-journey and entrypoint, then cover it at the cheapest meaningful layer — adding
-a Playwright spec (and the `@e2e` tag + breadcrumb) only when the behaviour is a
-genuinely cross-stack, hermetic journey.
+journey and entrypoint, then cover it at the cheapest meaningful layer and add
+the `[spec:]` breadcrumb to that home test (adding a Playwright spec and the
+`@e2e` tag only when the behaviour is a genuinely cross-stack, hermetic journey).

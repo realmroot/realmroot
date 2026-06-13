@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url'
 // docs, not a Cucumber suite. This verifies:
 //   1. Every scenario carries a stable @journey:<id> tag (the id, never prose).
 //   2. Every scenario declares exactly one @entrypoint:<id> tag.
-//   3. Every @e2e scenario is traceable to a test via a `[spec: <id>]`
-//      breadcrumb, where <id> is `<feature-stem>/<journey>`.
+//   3. EVERY scenario is traceable to a test via a `[spec: <id>]` breadcrumb,
+//      where <id> is `<feature-stem>/<journey>`. The breadcrumb sits on the
+//      home test that genuinely asserts the scenario's behaviour. @e2e marks the
+//      hermetic Playwright crown; it does not change the tracing requirement.
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const specsDir = join(repoRoot, 'specs')
 // Tests are co-located beside source (server/, src/, shared/) and the Playwright
@@ -32,10 +34,10 @@ for (const scenario of scenarios) {
     errors.push(`${location} scenario declares unsupported entrypoint "${scenario.entrypoints[0]}".`)
   }
 
-  if (scenario.e2e && scenario.journey) {
+  if (scenario.journey) {
     const id = `${scenario.stem}/${scenario.journey}`
     if (!breadcrumbs.has(id)) {
-      errors.push(`${location} @e2e scenario is missing a "[spec: ${id}]" breadcrumb in tests/.`)
+      errors.push(`${location} scenario is missing a "[spec: ${id}]" breadcrumb in the test tree.`)
     }
   }
 }
@@ -51,7 +53,7 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `Spec verification passed: ${scenarios.length} scenarios, ${e2eCount} @e2e journeys traced via [spec:] breadcrumbs.`,
+  `Spec verification passed: ${scenarios.length} scenarios, all traced to a [spec:] breadcrumb (${e2eCount} @e2e).`,
 )
 
 function readScenarios(directory) {
