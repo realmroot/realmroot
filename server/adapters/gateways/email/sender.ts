@@ -1,3 +1,4 @@
+import type { EmailGateway } from '@server/usecases/ports'
 import type { EmailMessageBuilder, SendEmail } from '@shared/env'
 import { type EmailTemplate, renderEmailTemplate } from './templates'
 
@@ -11,7 +12,7 @@ export interface TransactionalEmail {
   template: EmailTemplate
 }
 
-export function createEmailSender(binding: SendEmail, config: EmailSenderConfig) {
+export function createEmailSender(binding: SendEmail, config: EmailSenderConfig): EmailGateway {
   return {
     async send(email: TransactionalEmail) {
       const rendered = renderEmailTemplate(email.template)

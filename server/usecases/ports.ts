@@ -705,3 +705,16 @@ export interface TokenExchangeRepository {
 export interface JwksGateway {
   fetchKeys(jwksUrl: string): Promise<unknown>
 }
+
+// --- email ------------------------------------------------------------------
+
+export type EmailTemplate =
+  | { type: 'verification'; url: string }
+  | { type: 'password-reset'; url: string }
+  | { type: 'invitation'; url: string; inviterName: string }
+  | { type: 'otp'; otp: string }
+  | { type: 'security-notification'; title: string; body: string }
+
+export interface EmailGateway {
+  send(email: { to: string; template: EmailTemplate }): Promise<unknown>
+}
