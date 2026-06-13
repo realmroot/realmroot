@@ -58,6 +58,15 @@ jobs:
       - name: Lint architecture
         run: pnpm run lint:arch
 
+      - name: Migrations up to date
+        run: |
+          pnpm run db:generate
+          if [ -n "$(git status --porcelain migrations)" ]; then
+            echo "::error::schema.ts changed without a committed migration. Run pnpm db:generate and commit migrations/."
+            git status --porcelain migrations
+            exit 1
+          fi
+
       - name: Test
         run: pnpm test
 
