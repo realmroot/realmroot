@@ -1,5 +1,5 @@
-import { createApp } from '@server/app'
-import { notFound } from '@server/lib/errors'
+import { notFound } from '@server/domain/errors'
+import { createApp } from '@server/http/app'
 import type { AssetService } from '@server/usecases/assets'
 import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'

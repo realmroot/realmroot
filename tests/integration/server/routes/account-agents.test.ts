@@ -1,4 +1,4 @@
-import { accountRoutes } from '@server/routes/account'
+import { accountRoutes } from '@server/http/routes/account'
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
 

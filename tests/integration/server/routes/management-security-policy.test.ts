@@ -1,4 +1,4 @@
-import { createApp } from '@server/app'
+import { createApp } from '@server/http/app'
 import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
 import { beforeEach, describe, expect, it, vi } from 'vitest'

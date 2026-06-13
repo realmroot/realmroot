@@ -1,4 +1,4 @@
-import { createApp } from '@server/app'
+import { createApp } from '@server/http/app'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {

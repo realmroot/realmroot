@@ -1,8 +1,8 @@
+import type { AppType } from '@server/http/app'
 import type { HostedConsentApprovalRequest } from '@shared/api/applications'
 import type { UploadedAssetResponse } from '@shared/api/assets'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import { type ClientResponse, hc } from 'hono/client'
-import type { AppType } from '../../../server/app'
 
 export class ApiRequestError extends Error {
   constructor(

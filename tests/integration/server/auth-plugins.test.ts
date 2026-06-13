@@ -1,7 +1,7 @@
-import { createApp } from '@server/app'
 import { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, createAuth } from '@server/auth'
 import type { OAuthProviderPluginOptions } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
+import { createApp } from '@server/http/app'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { describe, expect, it, vi } from 'vitest'
 

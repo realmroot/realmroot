@@ -1,5 +1,5 @@
-import { handleApiError } from '@server/lib/errors'
-import { createOAuthConsentRoute } from '@server/routes/oauth/consent'
+import { handleApiError } from '@server/http/errors'
+import { createOAuthConsentRoute } from '@server/http/routes/oauth/consent'
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 

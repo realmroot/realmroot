@@ -31,7 +31,7 @@ describe('management agent routes', () => {
     vi.doMock('../../../../server/modules/agents/context', () => ({
       createAgentService: () => service,
     }))
-    const { managementAgentsRoute } = await import('@server/routes/management/agents')
+    const { managementAgentsRoute } = await import('@server/http/routes/management/agents')
     const app = withAdminContext()
     app.route('/', managementAgentsRoute)
 

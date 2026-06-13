@@ -24,12 +24,12 @@ describe('createManagementWebhookRoutes', () => {
       }),
     }
     const createWebhookService = vi.fn().mockReturnValue(service)
-    vi.doMock('../../../../../server/middleware/admin', () => ({
+    vi.doMock('@server/http/middleware/admin', () => ({
       requireAdmin: () => async (_c: unknown, next: () => Promise<void>) => next(),
     }))
     vi.doMock('../../../../../server/modules/webhooks/context', () => ({ createWebhookService }))
 
-    const { createManagementWebhookRoutes } = await import('@server/routes/management/webhooks')
+    const { createManagementWebhookRoutes } = await import('@server/http/routes/management/webhooks')
     const app = createManagementWebhookRoutes()
     const response = await app.request('/endpoints?limit=1&offset=0')
 

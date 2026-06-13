@@ -1,6 +1,6 @@
 import * as password from '@server/domain/password'
-import { handleApiError } from '@server/lib/errors'
-import { onboardingRoutes } from '@server/routes/onboarding'
+import { handleApiError } from '@server/http/errors'
+import { onboardingRoutes } from '@server/http/routes/onboarding'
 import type { OnboardingRepository } from '@server/usecases/ports'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

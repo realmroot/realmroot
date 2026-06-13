@@ -1,4 +1,5 @@
-import { ApiError, badRequest, forbidden, handleApiError, notFound, unauthorized } from '@server/lib/errors'
+import { ApiError, badRequest, forbidden, notFound, unauthorized } from '@server/domain/errors'
+import { handleApiError } from '@server/http/errors'
 import { HTTPException } from 'hono/http-exception'
 import { describe, expect, it, vi } from 'vitest'
 

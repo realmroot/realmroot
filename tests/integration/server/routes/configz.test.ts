@@ -1,4 +1,4 @@
-import { createApp } from '@server/app'
+import { createApp } from '@server/http/app'
 import { describe, expect, it } from 'vitest'
 
 describe('configz routes', () => {

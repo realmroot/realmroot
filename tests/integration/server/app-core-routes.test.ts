@@ -1,4 +1,4 @@
-import { createApp } from '@server/app'
+import { createApp } from '@server/http/app'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('app.test 1', () => {

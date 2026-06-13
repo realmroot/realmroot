@@ -1,4 +1,3 @@
-import { createApp } from '@server/app'
 import { createAuth } from '@server/auth'
 import type {
   AgentAuthPluginOptions,
@@ -6,6 +5,7 @@ import type {
   OrganizationPluginOptions,
 } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
+import { createApp } from '@server/http/app'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { describe, expect, it, vi } from 'vitest'
 

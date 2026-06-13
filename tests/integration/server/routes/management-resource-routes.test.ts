@@ -151,7 +151,7 @@ async function loadAppRoutes() {
   vi.doMock('../../../../server/modules/applications/context', () => ({
     createApplicationService: () => applicationService,
   }))
-  const { managementApplicationsRoute } = await import('@server/routes/management/applications')
+  const { managementApplicationsRoute } = await import('@server/http/routes/management/applications')
   const app = withAdminContext()
   app.route('/applications', managementApplicationsRoute)
   return { app, applicationService }
@@ -162,10 +162,10 @@ async function loadAuthorizationRoutes() {
   vi.doMock('../../../../server/modules/authorization/context', () => ({
     createAuthorizationService: () => authorizationService,
   }))
-  const { managementApiResourcesRoute } = await import('@server/routes/management/api-resources')
-  const { managementOrganizationsRoute } = await import('@server/routes/management/organizations')
-  const { managementRolesRoute } = await import('@server/routes/management/roles')
-  const { createManagementRoutes } = await import('@server/routes/management')
+  const { managementApiResourcesRoute } = await import('@server/http/routes/management/api-resources')
+  const { managementOrganizationsRoute } = await import('@server/http/routes/management/organizations')
+  const { managementRolesRoute } = await import('@server/http/routes/management/roles')
+  const { createManagementRoutes } = await import('@server/http/routes/management')
   const app = withAdminContext()
   app.route('/api-resources', managementApiResourcesRoute)
   app.route('/organizations', managementOrganizationsRoute)
@@ -179,7 +179,7 @@ async function loadConnectorRoutes() {
   vi.doMock('../../../../server/modules/connectors/context', () => ({
     createConnectorService: () => connectorService,
   }))
-  const { createManagementConnectorRoutes } = await import('@server/routes/management/connectors')
+  const { createManagementConnectorRoutes } = await import('@server/http/routes/management/connectors')
   const app = withAdminContext()
   app.route(
     '/connectors',

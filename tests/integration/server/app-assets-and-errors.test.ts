@@ -1,4 +1,4 @@
-import { createApp } from '@server/app'
+import { createApp } from '@server/http/app'
 import type { AssetService } from '@server/usecases/assets'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 

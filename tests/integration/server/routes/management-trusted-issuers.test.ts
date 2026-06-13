@@ -1,6 +1,6 @@
-import type { TokenExchangeServiceFactory } from '@server/app'
-import { handleApiError } from '@server/lib/errors'
-import { createTrustedIssuerRoutes } from '@server/routes/management/trusted-issuers'
+import type { TokenExchangeServiceFactory } from '@server/http/app'
+import { handleApiError } from '@server/http/errors'
+import { createTrustedIssuerRoutes } from '@server/http/routes/management/trusted-issuers'
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
 

@@ -1,5 +1,5 @@
-import { createApp } from '@server/app'
-import { managementOpenApi, managementOpenApiForRequest } from '@server/openapi/management'
+import { createApp } from '@server/http/app'
+import { managementOpenApi, managementOpenApiForRequest } from '@server/http/openapi/management'
 import { managementCollectionRoutes } from '@shared/api/management'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
