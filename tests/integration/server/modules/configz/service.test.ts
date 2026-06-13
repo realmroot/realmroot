@@ -1,4 +1,5 @@
-import { type ConfigzRepository, ConfigzService, defaultAccountCenterSettings } from '@server/modules/configz/service'
+import { ConfigzService, defaultAccountCenterSettings } from '@server/usecases/configz'
+import type { ConfigzRepository } from '@server/usecases/ports'
 import { describe, expect, it } from 'vitest'
 
 describe('ConfigzService', () => {

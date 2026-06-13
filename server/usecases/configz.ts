@@ -1,5 +1,10 @@
-import type { OnboardingRepository } from '@server/usecases/ports'
-import { type ConfigzConfigResponse, hostedCustomCssSchema } from '../../../shared/api/configz'
+import type {
+  ConfigzAccountCenter,
+  ConfigzBranding,
+  ConfigzRepository,
+  OnboardingRepository,
+} from '@server/usecases/ports'
+import { type ConfigzConfigResponse, hostedCustomCssSchema } from '@shared/api/configz'
 import type {
   ManagementAccountCenterSettingsResponse,
   ManagementBrandingSettingsResponse,
@@ -7,73 +12,8 @@ import type {
   UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementSignInSettingsRequest,
-} from '../../../shared/api/management'
-import type { SecurityPolicy } from '../../../shared/api/security'
-
-export interface ConfigzSettings {
-  passwordEnabled: boolean
-  signupEnabled: boolean
-  socialLoginEnabled: boolean
-  identifierFirst: boolean
-  termsUri: string | null
-  privacyUri: string | null
-  supportEmail: string | null
-  metadata: Record<string, unknown> | null
-}
-
-export interface ConfigzBranding {
-  logoUrl: string | null
-  logoAssetUrl: string | null
-  faviconUrl: string | null
-  faviconAssetUrl: string | null
-  primaryColor: string | null
-  backgroundColor: string | null
-  customCss: string | null
-}
-
-export interface ConfigzIdentityProvider {
-  slug: string
-  providerType: string
-  providerId: string
-  displayName: string
-  icon: string
-}
-
-export interface ConfigzApplication {
-  id: string
-  clientId: string
-  redirectUris: string[]
-  disabled: boolean
-}
-
-export type ConfigzAccountCenter = ConfigzConfigResponse['accountCenter']
-
-export interface ConfigzRepository {
-  getSettings(): Promise<ConfigzSettings | null>
-  getBranding(applicationId: string | null): Promise<ConfigzBranding | null>
-  getAccountCenterSettings(): Promise<ConfigzAccountCenter | null>
-  listEnabledIdentityProviders(): Promise<ConfigzIdentityProvider[]>
-  updateSettings(input: UpdateConfigzSettingsInput): Promise<void>
-  updateBranding(input: UpdateConfigzBrandingInput): Promise<void>
-  updateAccountCenterSettings(input: Partial<ConfigzAccountCenter>): Promise<void>
-}
-
-export type UpdateConfigzSettingsInput = {
-  passwordEnabled?: boolean
-  signupEnabled?: boolean
-  socialLoginEnabled?: boolean
-  identifierFirst?: boolean
-  emailOtpEnabled?: boolean
-  builtInProviders?: UpdateManagementSignInSettingsRequest['builtInProviders']
-  termsUri?: string | null
-  privacyUri?: string | null
-  supportEmail?: string | null
-  copy?: Partial<ConfigzConfigResponse['copy']>
-}
-
-export type UpdateConfigzBrandingInput = Partial<ConfigzBranding> & {
-  copy?: Partial<ConfigzConfigResponse['copy']>
-}
+} from '@shared/api/management'
+import type { SecurityPolicy } from '@shared/api/security'
 
 export interface ConfigzServiceOptions {
   issuer: string

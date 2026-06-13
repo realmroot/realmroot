@@ -1,3 +1,4 @@
+import { defaultAccountCenterSettings } from '@server/usecases/configz'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import {
@@ -16,7 +17,6 @@ import {
 } from '../../../shared/api/management'
 import { requireAdmin } from '../../middleware/admin'
 import { type ConfigzBindings, createConfigzService } from '../../modules/configz/context'
-import { defaultAccountCenterSettings } from '../../modules/configz/service'
 import { readJson } from '../validation'
 
 interface ManagementConfigz {

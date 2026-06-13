@@ -1,4 +1,4 @@
-import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
+import type { ConfigzAccountCenter, SecurityRepository, UserRepository } from '@server/usecases/ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { paginationMetadata, paginationQuerySchema } from '../../../../shared/api/pagination'
@@ -12,7 +12,6 @@ import {
 import { badRequest, forbidden } from '../../../lib/errors'
 import { requireAuth } from '../../../middleware/admin'
 import { getAuthContext } from '../../../middleware/auth-context'
-import type { ConfigzAccountCenter } from '../../../modules/configz/service'
 import type { ManagementAuthApi } from '../../auth-api'
 import { toBoundaryError } from '../../auth-api'
 import { readJson, readQuery } from '../../validation'

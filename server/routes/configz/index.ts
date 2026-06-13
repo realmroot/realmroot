@@ -1,9 +1,9 @@
+import type { ConfigzService } from '@server/usecases/configz'
 import type { OnboardingRepository } from '@server/usecases/ports'
 import { type Context, Hono } from 'hono'
 import { configzConfigResponseSchema } from '../../../shared/api/configz'
 import type { SecurityPolicy } from '../../../shared/api/security'
 import { type ConfigzBindings, type ConfigzRuntimeOptions, createConfigzService } from '../../modules/configz/context'
-import type { ConfigzService } from '../../modules/configz/service'
 
 export type ConfigzServiceFactory = (
   c: Context<{ Bindings: ConfigzBindings }>,

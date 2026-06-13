@@ -1,4 +1,6 @@
 import type { AssetService } from '@server/usecases/assets'
+import { defaultAccountCenterSettings } from '@server/usecases/configz'
+import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { badRequest, forbidden } from '../lib/errors'
@@ -6,7 +8,6 @@ import { requireAdmin, requireAuth } from '../middleware/admin'
 import { getAuthContext } from '../middleware/auth-context'
 import { type AssetBindings, createAssetService } from '../modules/assets/context'
 import { type ConfigzBindings, createConfigzService } from '../modules/configz/context'
-import { type ConfigzAccountCenter, defaultAccountCenterSettings } from '../modules/configz/service'
 
 export type AssetServiceFactory = (c: Parameters<typeof createAssetService>[0]) => AssetService
 export type AccountCenterConfigFactory = (

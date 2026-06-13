@@ -1,5 +1,5 @@
 import { createConfigzService } from '@server/modules/configz/context'
-import { ConfigzService } from '@server/modules/configz/service'
+import { ConfigzService } from '@server/usecases/configz'
 import { describe, expect, it } from 'vitest'
 
 describe('createConfigzService', () => {

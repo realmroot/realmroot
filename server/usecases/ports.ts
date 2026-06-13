@@ -7,6 +7,8 @@
  */
 import type { AccountProfileUpdateInput } from '@shared/api/account'
 import type { AssetPurpose } from '@shared/api/assets'
+import type { ConfigzConfigResponse } from '@shared/api/configz'
+import type { UpdateManagementSignInSettingsRequest } from '@shared/api/management'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import type { PaginatedResult, PaginationInput } from '@shared/api/pagination'
 import type { SecurityPolicy, UpdateSecurityPolicyInput } from '@shared/api/security'
@@ -384,4 +386,71 @@ export interface AgentRepository {
   revokeAgent(agentId: string): Promise<void>
   revokeHost(hostId: string): Promise<void>
   revokeCapabilityGrant(grantId: string): Promise<void>
+}
+
+// --- configz ----------------------------------------------------------------
+
+export interface ConfigzSettings {
+  passwordEnabled: boolean
+  signupEnabled: boolean
+  socialLoginEnabled: boolean
+  identifierFirst: boolean
+  termsUri: string | null
+  privacyUri: string | null
+  supportEmail: string | null
+  metadata: Record<string, unknown> | null
+}
+
+export interface ConfigzBranding {
+  logoUrl: string | null
+  logoAssetUrl: string | null
+  faviconUrl: string | null
+  faviconAssetUrl: string | null
+  primaryColor: string | null
+  backgroundColor: string | null
+  customCss: string | null
+}
+
+export interface ConfigzIdentityProvider {
+  slug: string
+  providerType: string
+  providerId: string
+  displayName: string
+  icon: string
+}
+
+export interface ConfigzApplication {
+  id: string
+  clientId: string
+  redirectUris: string[]
+  disabled: boolean
+}
+
+export type ConfigzAccountCenter = ConfigzConfigResponse['accountCenter']
+
+export type UpdateConfigzSettingsInput = {
+  passwordEnabled?: boolean
+  signupEnabled?: boolean
+  socialLoginEnabled?: boolean
+  identifierFirst?: boolean
+  emailOtpEnabled?: boolean
+  builtInProviders?: UpdateManagementSignInSettingsRequest['builtInProviders']
+  termsUri?: string | null
+  privacyUri?: string | null
+  supportEmail?: string | null
+  copy?: Partial<ConfigzConfigResponse['copy']>
+}
+
+export type UpdateConfigzBrandingInput = Partial<ConfigzBranding> & {
+  copy?: Partial<ConfigzConfigResponse['copy']>
+}
+
+export interface ConfigzRepository {
+  getSettings(): Promise<ConfigzSettings | null>
+  getBranding(applicationId: string | null): Promise<ConfigzBranding | null>
+  getAccountCenterSettings(): Promise<ConfigzAccountCenter | null>
+  listEnabledIdentityProviders(): Promise<ConfigzIdentityProvider[]>
+  updateSettings(input: UpdateConfigzSettingsInput): Promise<void>
+  updateBranding(input: UpdateConfigzBrandingInput): Promise<void>
+  updateAccountCenterSettings(input: Partial<ConfigzAccountCenter>): Promise<void>
 }

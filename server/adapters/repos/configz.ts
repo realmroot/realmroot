@@ -1,12 +1,12 @@
 import { connectorTemplates } from '@server/domain/connectors/provider-templates'
+import { defaultAccountCenterSettings } from '@server/usecases/configz'
 import type {
   ConfigzIdentityProvider,
   ConfigzRepository,
   ConfigzSettings,
   UpdateConfigzBrandingInput,
   UpdateConfigzSettingsInput,
-} from '@server/modules/configz/service'
-import { defaultAccountCenterSettings } from '@server/modules/configz/service'
+} from '@server/usecases/ports'
 import type { SQL } from 'drizzle-orm'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
