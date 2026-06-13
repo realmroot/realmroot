@@ -90,9 +90,19 @@ CRUD that only writes D1). The specs in `specs/*.feature` are behaviour-first Gh
 docs (no runner); `pnpm run spec:check` is a governance lint that ties every `@e2e`
 scenario to a `[spec: <feature>/<journey>]` breadcrumb in `tests/`.
 
-## Deliberate adaptations from the skill
+## Migrations
 
-- **No `db:generate` migration-drift CI guard**: the repo uses hand-written D1
-  migrations (the drizzle snapshot is intentionally frozen), so `db:generate` is not the
-  source of truth here. Adopting generated migrations would mean re-baselining applied
-  production migrations — a deliberate DBA step, out of scope for the architecture work.
+`server/db/schema.ts` is the single source. `pnpm db:generate` (drizzle-kit) produces
+migrations; the drizzle snapshot in `migrations/meta/` is baselined to the schema, so
+`db:generate` reports "No schema changes" on a clean tree. The legacy numeric
+`NNNN_*.sql` files remain the applied production history; generated migrations use a
+timestamp prefix so they sort after them. CI runs `db:generate` and fails on a dirty
+`migrations/` tree (schema changed without a committed migration).
+
+## Conformance
+
+The layout, dependency rule, ports, composition root, DI via `c.get('deps')`,
+cf-typegen `Env`, the vitest projects split with the real-D1 integration crown, the
+Playwright e2e layer, and generated migrations all follow the skill. `specs/*.feature`
+stay as behaviour-first Gherkin documentation (the skill's runner-less convention),
+traced from tests via `[spec:]` breadcrumbs.
