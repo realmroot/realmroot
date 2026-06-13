@@ -7,7 +7,7 @@ Feature: Management API Restish entry
     Given a first admin exists
 
 
-  @e2e @entrypoint:restish @journey:management-openapi-discovery
+  @entrypoint:restish @journey:management-openapi-discovery
   Scenario: Management API contract is discoverable
     When a Management API client requests service discovery
     Then /api/management/openapi.json returns the OpenAPI 3.1 contract
@@ -15,7 +15,7 @@ Feature: Management API Restish entry
     And Restish exposes generated Management commands
 
 
-  @e2e @entrypoint:restish @journey:management-restish-oauth-auth
+  @entrypoint:restish @journey:management-restish-oauth-auth
   Scenario: Restish authenticates to the Management API with PKCE
     Given the system-managed FlareAuth CLI OAuth client exists
     When Restish signs in through Authorization Code with PKCE
@@ -34,7 +34,7 @@ Feature: Management API Restish entry
     And confidential, disabled, or non-native clients cannot use device authorization
 
 
-  @e2e @entrypoint:restish @journey:management-restish-oauth-crud
+  @entrypoint:restish @journey:management-restish-oauth-crud
   Scenario: Restish manages applications through the Management API
     Given I authenticate the Restish CLI through the built-in OAuth client
     When I create, update, list, and delete an application with Restish
