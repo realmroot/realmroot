@@ -1,6 +1,6 @@
 import type { AgentSession } from '@better-auth/agent-auth'
 import type { AgentRepository } from '@server/adapters/repos/agents'
-import type { UserRepository } from '@server/adapters/repos/users'
+import type { UserRepository } from '@server/usecases/ports'
 import type { AccountAgent, AccountAgentsResponse } from '../../../shared/api/agents'
 import { type PaginationInput, paginationMetadata, paginationQuerySchema } from '../../../shared/api/pagination'
 import { badRequest } from '../../lib/errors'

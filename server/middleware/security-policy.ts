@@ -1,5 +1,5 @@
-import type { SecurityRepository } from '@server/adapters/repos/security'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
+import type { SecurityRepository } from '@server/usecases/ports'
 import type { MiddlewareHandler } from 'hono'
 import type { SecurityPolicy } from '../../shared/api/security'
 import { badRequest, forbidden } from '../lib/errors'

@@ -1,4 +1,4 @@
-import type { OnboardingRepository } from '@server/adapters/repos/onboarding'
+import type { OnboardingRepository } from '@server/usecases/ports'
 import { type Context, Hono } from 'hono'
 import { configzConfigResponseSchema } from '../../../shared/api/configz'
 import type { SecurityPolicy } from '../../../shared/api/security'

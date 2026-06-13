@@ -1,73 +1,12 @@
 import { badRequest, notFound } from '@server/domain/errors'
 import { hashPassword } from '@server/domain/password'
+import type { UserProfile, UserRepository } from '@server/usecases/ports'
 import { and, asc, count, desc, eq, isNull, like, type SQL } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { AccountProfileUpdateInput } from '../../../shared/api/account'
-import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
-import type { AdminCreateUserInput, AdminUpdateUserInput, AdminUserListQuery } from '../../../shared/api/users'
+import type { AdminUpdateUserInput, AdminUserListQuery } from '../../../shared/api/users'
 import type { Database } from '../../db/client'
 import { account, application, applicationConsent, session, uploadedAsset, user } from '../../db/schema'
-
-export interface UserProfile {
-  id: string
-  email: string
-  emailVerified: boolean
-  displayName: string
-  username: string | null
-  avatarAssetId: string | null
-  image: string | null
-  role: string | null
-  banned: boolean | null
-  banReason: string | null
-  banExpires: Date | null
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface UserSessionDevice {
-  id: string
-  expiresAt: Date
-  createdAt: Date
-  updatedAt: Date
-  ipAddress: string | null
-  userAgent: string | null
-  activeOrganizationId: string | null
-  impersonatedBy: string | null
-}
-
-export interface LinkedAccount {
-  id: string
-  accountId: string
-  providerId: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface ConsentedApplication {
-  id: string
-  applicationId: string
-  applicationName: string
-  applicationSlug: string
-  scopes: string[]
-  permissions: string[] | null
-  grantedAt: Date
-  expiresAt: Date | null
-}
-
-export interface UserRepository {
-  getUser(userId: string): Promise<UserProfile>
-  listManagedUsers(query: AdminUserListQuery): Promise<PaginatedResult<UserProfile>>
-  createManagedUser(input: AdminCreateUserInput): Promise<UserProfile>
-  updateManagedUser(userId: string, input: AdminUpdateUserInput): Promise<UserProfile>
-  deleteManagedUser(userId: string): Promise<void>
-  updateProfile(userId: string, input: AccountProfileUpdateInput): Promise<UserProfile>
-  assertAccountAvatarReference(userId: string, avatarAssetId: string | null | undefined): Promise<void>
-  assertAdminAvatarReference(avatarAssetId: string | null | undefined): Promise<void>
-  listLinkedAccounts(userId: string, page: PaginationInput): Promise<PaginatedResult<LinkedAccount>>
-  listConsentedApplications(userId: string, page: PaginationInput): Promise<PaginatedResult<ConsentedApplication>>
-  listSessions(userId: string, page: PaginationInput): Promise<PaginatedResult<UserSessionDevice>>
-  getSessionToken(userId: string, sessionId: string): Promise<string>
-}
 
 export function createUserRepository(db: Database): UserRepository {
   return {

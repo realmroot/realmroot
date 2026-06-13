@@ -1,5 +1,4 @@
-import type { SecurityRepository } from '@server/adapters/repos/security'
-import type { UserRepository } from '@server/adapters/repos/users'
+import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import { vi } from 'vitest'
 import { managementOpenApi } from '../openapi/management'
 import { createPage, securityPolicy, updatedSecurityPolicy } from './management.fixture-test-utils'

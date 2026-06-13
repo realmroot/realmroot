@@ -1,4 +1,4 @@
-import type { WalletRepository } from '@server/adapters/repos/wallets'
+import type { WalletRepository } from '@server/usecases/ports'
 import type { Context } from 'hono'
 import { getAddress } from 'viem'
 import type { AgentConfiguration, AppOptions } from './app'

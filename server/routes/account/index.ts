@@ -1,7 +1,5 @@
-import type { SecurityRepository } from '@server/adapters/repos/security'
-import type { UserRepository } from '@server/adapters/repos/users'
-import type { WalletRepository } from '@server/adapters/repos/wallets'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
+import type { SecurityRepository, UserRepository, WalletRepository } from '@server/usecases/ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { getAddress, verifyMessage } from 'viem'

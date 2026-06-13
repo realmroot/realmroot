@@ -1,14 +1,5 @@
 import { forbidden } from '@server/domain/errors'
-import type { OnboardingAdminRequest } from '../../../shared/api/onboarding'
-
-export interface BootstrapAdminInput extends OnboardingAdminRequest {
-  passwordHash: string
-}
-
-export interface OnboardingRepository {
-  hasUsers(): Promise<boolean>
-  createBootstrapAdmin(input: BootstrapAdminInput): Promise<{ id: string; email: string; role: string | null }>
-}
+import type { OnboardingRepository } from '@server/usecases/ports'
 
 export function createOnboardingRepository(db: D1Database): OnboardingRepository {
   return {

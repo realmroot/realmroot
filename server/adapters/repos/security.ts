@@ -1,48 +1,9 @@
 import { notFound } from '@server/domain/errors'
+import type { SecurityRepository } from '@server/usecases/ports'
 import { and, count, desc, eq } from 'drizzle-orm'
-import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
-import { type SecurityPolicy, securityPolicySchema, type UpdateSecurityPolicyInput } from '../../../shared/api/security'
+import { type SecurityPolicy, securityPolicySchema } from '../../../shared/api/security'
 import type { Database } from '../../db/client'
 import { passkey, session, signInExperience, twoFactor, user } from '../../db/schema'
-
-export interface SecurityPasskey {
-  id: string
-  name: string | null
-  userId: string
-  deviceType: string
-  backedUp: boolean
-  transports: string | null
-  createdAt: Date | null
-  aaguid: string | null
-}
-
-export interface MfaFactor {
-  id: string
-  type: 'totp'
-  verified: boolean | null
-}
-
-export interface SecurityState {
-  userId: string
-  mfa: {
-    enabled: boolean
-    factors: MfaFactor[]
-  }
-  passkeys: {
-    enabled: boolean
-    count: number
-  }
-  policy: SecurityPolicy
-}
-
-export interface SecurityRepository {
-  getPolicy(): Promise<SecurityPolicy>
-  updatePolicy(input: UpdateSecurityPolicyInput): Promise<SecurityPolicy>
-  getSecurityState(userId: string): Promise<SecurityState>
-  listPasskeys(userId: string, page: PaginationInput): Promise<PaginatedResult<SecurityPasskey>>
-  deletePasskey(userId: string, passkeyId: string): Promise<void>
-  getSessionToken(userId: string, sessionId: string): Promise<string>
-}
 
 export function createSecurityRepository(db: Database, policy: SecurityPolicy): SecurityRepository {
   return {

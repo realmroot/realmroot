@@ -1,25 +1,8 @@
 import { badRequest } from '@server/domain/errors'
+import type { WalletRepository } from '@server/usecases/ports'
 import { and, count, desc, eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { account, verification, walletAddress } from '../../db/schema'
-
-export interface WalletAddressRecord {
-  id: string
-  userId: string
-  address: string
-  chainId: number
-  isPrimary: boolean | null
-  createdAt: Date
-}
-
-export interface WalletRepository {
-  findWalletAddress(address: string, chainId: number): Promise<WalletAddressRecord | null>
-  findAnyWalletAddress(address: string): Promise<WalletAddressRecord | null>
-  getSiweNonce(address: string, chainId: number): Promise<{ value: string; expiresAt: Date } | null>
-  deleteSiweNonce(address: string, chainId: number): Promise<void>
-  linkWalletAddress(userId: string, input: { address: string; chainId: number }): Promise<WalletAddressRecord>
-  unlinkWalletAddress(userId: string, accountId: string): Promise<void>
-}
 
 export function createWalletRepository(db: Database): WalletRepository {
   return {

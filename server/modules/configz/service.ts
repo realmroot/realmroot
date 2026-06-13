@@ -1,4 +1,4 @@
-import type { OnboardingRepository } from '@server/adapters/repos/onboarding'
+import type { OnboardingRepository } from '@server/usecases/ports'
 import { type ConfigzConfigResponse, hostedCustomCssSchema } from '../../../shared/api/configz'
 import type {
   ManagementAccountCenterSettingsResponse,

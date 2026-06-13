@@ -1,6 +1,5 @@
-import type { SecurityRepository } from '@server/adapters/repos/security'
-import type { UserRepository } from '@server/adapters/repos/users'
 import { createApp } from '@server/app'
+import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 

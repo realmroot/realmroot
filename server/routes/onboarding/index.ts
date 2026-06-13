@@ -1,5 +1,5 @@
-import type { OnboardingRepository } from '@server/adapters/repos/onboarding'
 import { hashPassword } from '@server/domain/password'
+import type { OnboardingRepository } from '@server/usecases/ports'
 import { Hono } from 'hono'
 import { onboardingAdminRequestSchema } from '../../../shared/api/onboarding'
 import { forbidden } from '../../lib/errors'
