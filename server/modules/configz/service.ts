@@ -1,3 +1,4 @@
+import type { OnboardingRepository } from '@server/adapters/repos/onboarding'
 import { type ConfigzConfigResponse, hostedCustomCssSchema } from '../../../shared/api/configz'
 import type {
   ManagementAccountCenterSettingsResponse,
@@ -8,7 +9,6 @@ import type {
   UpdateManagementSignInSettingsRequest,
 } from '../../../shared/api/management'
 import type { SecurityPolicy } from '../../../shared/api/security'
-import type { OnboardingRepository } from '../onboarding/repository'
 
 export interface ConfigzSettings {
   passwordEnabled: boolean

@@ -1,6 +1,6 @@
+import { createTokenExchangeRepository } from '@server/adapters/repos/token-exchange'
 import type { Context } from 'hono'
 import { createDb } from '../../db/client'
-import { createTokenExchangeRepository } from './drizzle-repository'
 import { TokenExchangeService } from './service'
 
 export interface TokenExchangeBindings {

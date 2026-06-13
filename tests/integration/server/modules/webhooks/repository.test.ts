@@ -1,10 +1,10 @@
-import type { Database } from '@server/db/client'
-import { webhookDeliveryRequest, webhookEndpoint } from '@server/db/schema'
 import {
   createWebhookRepository,
   type WebhookEndpointRow,
   type WebhookRequestRow,
-} from '@server/modules/webhooks/repository'
+} from '@server/adapters/repos/webhooks'
+import type { Database } from '@server/db/client'
+import { webhookDeliveryRequest, webhookEndpoint } from '@server/db/schema'
 import { describe, expect, it } from 'vitest'
 
 describe('createWebhookRepository', () => {

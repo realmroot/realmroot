@@ -1,7 +1,7 @@
+import { badRequest } from '@server/domain/errors'
 import { and, count, desc, eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { account, verification, walletAddress } from '../../db/schema'
-import { badRequest } from '../../lib/errors'
 
 export interface WalletAddressRecord {
   id: string

@@ -1,3 +1,4 @@
+import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import type { Database } from '@server/db/client'
 import {
   applicationRoleAssignment,
@@ -6,7 +7,6 @@ import {
   rolePermission,
   userRoleAssignment,
 } from '@server/db/schema'
-import { createDrizzleAuthorizationRepository } from '@server/modules/authorization/drizzle-repository'
 import { describe, expect, it } from 'vitest'
 
 describe('drizzle-repository.test 2', () => {

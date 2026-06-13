@@ -1,10 +1,10 @@
+import type { WalletRepository } from '@server/adapters/repos/wallets'
 import type { Context } from 'hono'
 import { getAddress } from 'viem'
 import type { AgentConfiguration, AppOptions } from './app'
 import { forbidden } from './lib/errors'
 import { createApplicationService } from './modules/applications/context'
 import type { ConfigzBindings } from './modules/configz/context'
-import type { WalletRepository } from './modules/wallets/repository'
 import type { ConfigzServiceFactory } from './routes/configz'
 
 export function mountAgentConfiguration(configuration: AgentConfiguration): AgentConfiguration {

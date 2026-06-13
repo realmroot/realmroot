@@ -1,6 +1,6 @@
+import { createSecurityRepository } from '@server/adapters/repos/security'
 import type { Database } from '@server/db/client'
 import { signInExperience } from '@server/db/schema'
-import { createSecurityRepository } from '@server/modules/security/repository'
 import type { SecurityPolicy } from '@shared/api/security'
 import { describe, expect, it } from 'vitest'
 

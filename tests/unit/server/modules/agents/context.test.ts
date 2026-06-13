@@ -15,8 +15,8 @@ describe('createAgentService', () => {
     const AgentService = vi.fn()
 
     vi.doMock('../../../../../server/db/client', () => ({ createDb }))
-    vi.doMock('../../../../../server/modules/users/repository', () => ({ createUserRepository }))
-    vi.doMock('../../../../../server/modules/agents/repository', () => ({ createDrizzleAgentRepository }))
+    vi.doMock('@server/adapters/repos/users', () => ({ createUserRepository }))
+    vi.doMock('@server/adapters/repos/agents', () => ({ createDrizzleAgentRepository }))
     vi.doMock('../../../../../server/modules/agents/service', () => ({ AgentService }))
 
     const { createAgentService } = await import('@server/modules/agents/context')

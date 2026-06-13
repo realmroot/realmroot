@@ -1,4 +1,8 @@
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
+import type { OnboardingRepository } from '@server/adapters/repos/onboarding'
+import type { SecurityRepository } from '@server/adapters/repos/security'
+import type { UserRepository } from '@server/adapters/repos/users'
+import type { WalletRepository } from '@server/adapters/repos/wallets'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { SecurityPolicy } from '../shared/api/security'
@@ -18,16 +22,12 @@ import { trustedOriginCors } from './middleware/cors'
 import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
 import type { ConfigzBindings } from './modules/configz/context'
-import type { OnboardingRepository } from './modules/onboarding/repository'
-import type { SecurityRepository } from './modules/security/repository'
 import { createTokenExchangeService, type TokenExchangeBindings } from './modules/token-exchange/context'
 import {
   parseBasicClientAuthorization,
   refreshTokenGrantType,
   tokenExchangeGrantType,
 } from './modules/token-exchange/service'
-import type { UserRepository } from './modules/users/repository'
-import type { WalletRepository } from './modules/wallets/repository'
 import { managementOpenApiForRequest, managementOpenApiLinkHeader, managementOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
 import {

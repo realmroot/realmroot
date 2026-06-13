@@ -1,4 +1,4 @@
-import { createOnboardingRepository } from '@server/modules/onboarding/repository'
+import { createOnboardingRepository } from '@server/adapters/repos/onboarding'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 describe('createOnboardingRepository', () => {

@@ -1,3 +1,4 @@
+import type { ApplicationRepository } from '@server/modules/applications/service'
 import { and, count, desc, eq, isNull } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
@@ -19,8 +20,7 @@ import {
   toOAuthClientInsert,
   toPaginationMetadata,
   writeApplicationMetadata,
-} from './drizzle-mappers'
-import type { ApplicationRepository } from './service'
+} from './applications-mappers'
 
 const _corsOriginsMetadataKey = 'corsOrigins'
 const _customDataMetadataKey = 'customData'

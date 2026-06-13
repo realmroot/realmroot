@@ -1,3 +1,4 @@
+import type { ApplicationAggregate, ConsentRecord } from '@server/modules/applications/service'
 import {
   type ApplicationOidcClaims,
   defaultApplicationOidcClaims,
@@ -5,7 +6,6 @@ import {
   tokenExchangeGrantType,
 } from '../../../shared/api/applications'
 import type { application, applicationConsent, oauthClient } from '../../db/schema'
-import type { ApplicationAggregate, ConsentRecord } from './service'
 
 type ApplicationRow = typeof application.$inferSelect
 type OAuthClientRow = typeof oauthClient.$inferSelect

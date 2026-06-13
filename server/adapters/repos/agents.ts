@@ -1,8 +1,8 @@
+import { notFound } from '@server/domain/errors'
 import { and, count, desc, eq, inArray } from 'drizzle-orm'
 import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
 import type { Database } from '../../db/client'
 import { agent, agentCapabilityGrant, agentHost, approvalRequest } from '../../db/schema'
-import { notFound } from '../../lib/errors'
 
 export type AgentHostRecord = typeof agentHost.$inferSelect
 export type AgentRecord = typeof agent.$inferSelect

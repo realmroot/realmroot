@@ -1,5 +1,5 @@
+import { forbidden } from '@server/domain/errors'
 import type { OnboardingAdminRequest } from '../../../shared/api/onboarding'
-import { forbidden } from '../../lib/errors'
 
 export interface BootstrapAdminInput extends OnboardingAdminRequest {
   passwordHash: string

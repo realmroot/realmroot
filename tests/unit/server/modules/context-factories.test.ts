@@ -16,7 +16,7 @@ describe('module context factories', () => {
       return service
     })
     vi.doMock('../../../../server/db/client', () => ({ createDb }))
-    vi.doMock('../../../../server/modules/applications/drizzle-repository', () => ({
+    vi.doMock('@server/adapters/repos/applications', () => ({
       createDrizzleApplicationRepository,
     }))
     vi.doMock('../../../../server/modules/applications/service', () => ({ ApplicationService }))
@@ -39,7 +39,7 @@ describe('module context factories', () => {
       return service
     })
     vi.doMock('../../../../server/db/client', () => ({ createDb }))
-    vi.doMock('../../../../server/modules/authorization/drizzle-repository', () => ({
+    vi.doMock('@server/adapters/repos/authorization', () => ({
       createDrizzleAuthorizationRepository,
     }))
     vi.doMock('../../../../server/modules/authorization/service', () => ({ AuthorizationService }))
@@ -62,7 +62,7 @@ describe('module context factories', () => {
       return service
     })
     vi.doMock('../../../../server/db/client', () => ({ createDb }))
-    vi.doMock('../../../../server/modules/connectors/repository', () => ({ createConnectorRepository }))
+    vi.doMock('@server/adapters/repos/connectors', () => ({ createConnectorRepository }))
     vi.doMock('../../../../server/modules/connectors/service', () => ({ ConnectorService }))
 
     const { createConnectorService } = await import('@server/modules/connectors/context')
@@ -83,7 +83,7 @@ describe('module context factories', () => {
       return service
     })
     vi.doMock('../../../../server/db/client', () => ({ createDb }))
-    vi.doMock('../../../../server/modules/webhooks/repository', () => ({ createWebhookRepository }))
+    vi.doMock('@server/adapters/repos/webhooks', () => ({ createWebhookRepository }))
     vi.doMock('../../../../server/modules/webhooks/service', () => ({ WebhookService }))
 
     const { createWebhookService } = await import('@server/modules/webhooks/context')

@@ -1,6 +1,6 @@
+import { createDrizzleAssetRepository } from '@server/adapters/repos/assets'
 import type { Database } from '@server/db/client'
 import { application, brandingSetting, oauthClient, organization, uploadedAsset, user } from '@server/db/schema'
-import { createDrizzleAssetRepository } from '@server/modules/assets/drizzle-repository'
 import { describe, expect, it } from 'vitest'
 
 describe('createDrizzleAssetRepository', () => {

@@ -1,6 +1,6 @@
+import { createUserRepository } from '@server/adapters/repos/users'
 import type { Database } from '@server/db/client'
 import { account, applicationConsent, session, uploadedAsset, user } from '@server/db/schema'
-import { createUserRepository } from '@server/modules/users/repository'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@server/domain/password', () => ({

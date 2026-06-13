@@ -1,6 +1,6 @@
+import { createConnectorRepository } from '@server/adapters/repos/connectors'
 import type { Database } from '@server/db/client'
 import { identityProviderConnector } from '@server/db/schema'
-import { createConnectorRepository } from '@server/modules/connectors/repository'
 import { describe, expect, it } from 'vitest'
 
 describe('createConnectorRepository', () => {

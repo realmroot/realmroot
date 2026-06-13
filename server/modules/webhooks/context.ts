@@ -1,7 +1,7 @@
+import { createWebhookRepository } from '@server/adapters/repos/webhooks'
 import type { Context } from 'hono'
 import { createDb } from '../../db/client'
 import type { ApplicationBindings } from '../applications/context'
-import { createWebhookRepository } from './repository'
 import { WebhookService } from './service'
 
 export type WebhookBindings = ApplicationBindings

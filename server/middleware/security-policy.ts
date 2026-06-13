@@ -1,8 +1,8 @@
+import type { SecurityRepository } from '@server/adapters/repos/security'
 import type { MiddlewareHandler } from 'hono'
 import type { SecurityPolicy } from '../../shared/api/security'
 import { badRequest, forbidden } from '../lib/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '../modules/security/policy'
-import type { SecurityRepository } from '../modules/security/repository'
 import { getAuthContext } from './auth-context'
 
 const mfaEnrollmentPaths = new Set([

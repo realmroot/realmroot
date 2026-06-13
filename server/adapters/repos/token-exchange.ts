@@ -1,7 +1,7 @@
+import type { OAuthClientRecord, TokenExchangeRepository } from '@server/modules/token-exchange/service'
 import { desc, eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { oauthClient, tokenExchangeAccessToken, trustedExternalIssuer } from '../../db/schema'
-import type { OAuthClientRecord, TokenExchangeRepository } from './service'
 
 export function createTokenExchangeRepository(db: Database): TokenExchangeRepository {
   return {

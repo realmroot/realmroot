@@ -1,6 +1,6 @@
+import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import type { Database } from '@server/db/client'
 import { application, applicationClientSecret, applicationConsent, oauthClient } from '@server/db/schema'
-import { createDrizzleApplicationRepository } from '@server/modules/applications/drizzle-repository'
 import { describe, expect, it } from 'vitest'
 
 describe('drizzle-repository.test 3', () => {

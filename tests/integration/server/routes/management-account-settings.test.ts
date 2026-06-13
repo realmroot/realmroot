@@ -1,6 +1,6 @@
+import type { UserRepository } from '@server/adapters/repos/users'
 import { createApp } from '@server/app'
 import type { AssetService } from '@server/modules/assets/service'
-import type { UserRepository } from '@server/modules/users/repository'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('management account settings routes', () => {

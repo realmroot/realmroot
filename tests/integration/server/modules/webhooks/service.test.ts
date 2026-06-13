@@ -4,7 +4,7 @@ import type {
   WebhookRepository,
   WebhookRequestInsert,
   WebhookRequestRow,
-} from '@server/modules/webhooks/repository'
+} from '@server/adapters/repos/webhooks'
 import { WebhookService } from '@server/modules/webhooks/service'
 import type { ListWebhookEndpointsQuery, ListWebhookRequestsQuery } from '@shared/api/webhooks'
 import { describe, expect, it } from 'vitest'

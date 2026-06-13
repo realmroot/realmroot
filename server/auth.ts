@@ -2,6 +2,9 @@ import { agentAuth } from '@better-auth/agent-auth'
 import { i18n } from '@better-auth/i18n'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
+import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
+import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
+import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import {
@@ -46,17 +49,14 @@ import * as schema from './db/schema'
 import { hashPassword, verifyPassword } from './domain/password'
 import type { TransactionalEmailSender } from './lib/email/sender'
 import { agentCapabilities, areKnownAgentCapabilities } from './modules/agents/capabilities'
-import { createDrizzleAgentRepository } from './modules/agents/repository'
 import { AgentService } from './modules/agents/service'
-import { createDrizzleApplicationRepository } from './modules/applications/drizzle-repository'
 import type { ApplicationRepository } from './modules/applications/service'
-import { createDrizzleAuthorizationRepository } from './modules/authorization/drizzle-repository'
 import { AuthorizationService } from './modules/authorization/service'
 import type { AuthConnectorConfig } from './modules/connectors/service'
 
 export { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, buildOAuthUserInfoClaims } from './auth-helpers'
 
-import { createUserRepository } from './modules/users/repository'
+import { createUserRepository } from '@server/adapters/repos/users'
 
 const oauthScopes = ['openid', 'profile', 'email', 'offline_access', ...managementApplicationScopes]
 const organizationAccessControl = createAccessControl({

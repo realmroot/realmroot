@@ -1,5 +1,5 @@
+import type { UserRepository } from '@server/adapters/repos/users'
 import { createApp } from '@server/app'
-import type { UserRepository } from '@server/modules/users/repository'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('management users and account routes', () => {

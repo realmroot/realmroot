@@ -1,4 +1,4 @@
-import type { ConnectorRepository, ConnectorRow } from '@server/modules/connectors/repository'
+import type { ConnectorRepository, ConnectorRow } from '@server/adapters/repos/connectors'
 import { ConnectorService, loadAuthConnectorConfig } from '@server/modules/connectors/service'
 import { describe, expect, it, vi } from 'vitest'
 

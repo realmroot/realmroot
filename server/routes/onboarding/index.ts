@@ -1,8 +1,8 @@
+import type { OnboardingRepository } from '@server/adapters/repos/onboarding'
 import { hashPassword } from '@server/domain/password'
 import { Hono } from 'hono'
 import { onboardingAdminRequestSchema } from '../../../shared/api/onboarding'
 import { forbidden } from '../../lib/errors'
-import type { OnboardingRepository } from '../../modules/onboarding/repository'
 import { readJson } from '../validation'
 
 export function onboardingRoutes(onboarding: OnboardingRepository) {

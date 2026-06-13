@@ -1,6 +1,6 @@
+import { createDrizzleAssetRepository } from '@server/adapters/repos/assets'
 import type { Context } from 'hono'
 import { createDb } from '../../db/client'
-import { createDrizzleAssetRepository } from './drizzle-repository'
 import { AssetService } from './service'
 
 export interface AssetBindings {

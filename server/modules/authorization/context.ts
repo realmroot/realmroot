@@ -1,6 +1,6 @@
+import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import type { Context } from 'hono'
 import { createDb } from '../../db/client'
-import { createDrizzleAuthorizationRepository } from './drizzle-repository'
 import { AuthorizationService } from './service'
 
 export interface AuthorizationBindings {

@@ -1,6 +1,6 @@
+import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import type { Database } from '@server/db/client'
 import { apiPermission, apiResource, apiScope, invitation, member, organization, role } from '@server/db/schema'
-import { createDrizzleAuthorizationRepository } from '@server/modules/authorization/drizzle-repository'
 import { describe, expect, it } from 'vitest'
 
 describe('drizzle-repository.test 1', () => {

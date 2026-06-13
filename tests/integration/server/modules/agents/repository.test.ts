@@ -1,6 +1,6 @@
+import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import type { Database } from '@server/db/client'
 import { agent, agentCapabilityGrant, agentHost, approvalRequest } from '@server/db/schema'
-import { createDrizzleAgentRepository } from '@server/modules/agents/repository'
 import { getTableConfig } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it } from 'vitest'
 

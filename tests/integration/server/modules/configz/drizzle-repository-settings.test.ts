@@ -1,3 +1,4 @@
+import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import type { Database } from '@server/db/client'
 import {
   accountCenterSetting,
@@ -6,7 +7,6 @@ import {
   signInExperience,
   uploadedAsset,
 } from '@server/db/schema'
-import { createDrizzleConfigzRepository } from '@server/modules/configz/drizzle-repository'
 import { describe, expect, it } from 'vitest'
 
 describe('drizzle-repository.test 1', () => {

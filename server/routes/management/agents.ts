@@ -1,3 +1,9 @@
+import type {
+  AgentCapabilityGrantRecord,
+  AgentHostRecord,
+  AgentRecord,
+  ApprovalRequestRecord,
+} from '@server/adapters/repos/agents'
 import { Hono } from 'hono'
 import type {
   AgentProtocolAgent,
@@ -10,12 +16,6 @@ import type {
 import { type PaginatedResult, paginationMetadata, paginationQuerySchema } from '../../../shared/api/pagination'
 import { requireAdmin } from '../../middleware/admin'
 import { type AgentBindings, createAgentService } from '../../modules/agents/context'
-import type {
-  AgentCapabilityGrantRecord,
-  AgentHostRecord,
-  AgentRecord,
-  ApprovalRequestRecord,
-} from '../../modules/agents/repository'
 import { readQuery } from '../validation'
 
 export const managementAgentsRoute = new Hono<{ Bindings: AgentBindings }>()

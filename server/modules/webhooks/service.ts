@@ -1,3 +1,4 @@
+import type { WebhookEndpointRow, WebhookRepository, WebhookRequestRow } from '@server/adapters/repos/webhooks'
 import { paginationMetadata } from '../../../shared/api/pagination'
 import type {
   CreateWebhookEndpointRequest,
@@ -10,7 +11,6 @@ import type {
   WebhookRequest,
 } from '../../../shared/api/webhooks'
 import { badRequest, notFound } from '../../lib/errors'
-import type { WebhookEndpointRow, WebhookRepository, WebhookRequestRow } from './repository'
 
 export class WebhookService {
   constructor(private readonly repository: WebhookRepository) {}

@@ -1,7 +1,7 @@
+import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
+import { createUserRepository } from '@server/adapters/repos/users'
 import type { Context } from 'hono'
 import { createDb } from '../../db/client'
-import { createUserRepository } from '../users/repository'
-import { createDrizzleAgentRepository } from './repository'
 import { AgentService } from './service'
 
 export interface AgentBindings {

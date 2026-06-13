@@ -1,6 +1,6 @@
+import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import type { Context } from 'hono'
 import { createDb } from '../../db/client'
-import { createDrizzleApplicationRepository } from './drizzle-repository'
 import { ApplicationService } from './service'
 
 export interface ApplicationBindings {

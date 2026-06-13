@@ -1,8 +1,8 @@
+import { notFound } from '@server/domain/errors'
+import type { AssetRepository, UploadedAssetRecord } from '@server/modules/assets/service'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { application, brandingSetting, oauthClient, organization, uploadedAsset, user } from '../../db/schema'
-import { notFound } from '../../lib/errors'
-import type { AssetRepository, UploadedAssetRecord } from './service'
 
 export function createDrizzleAssetRepository(db: Database): AssetRepository {
   return {

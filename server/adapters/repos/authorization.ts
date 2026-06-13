@@ -1,3 +1,4 @@
+import type { AuthorizationRepository, RoleAssignmentScope } from '@server/modules/authorization/service'
 import { and, count, desc, eq, gt, inArray, isNull, or } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
@@ -24,8 +25,7 @@ import {
   toRole,
   toScope,
   withoutUndefined,
-} from './drizzle-mappers'
-import type { AuthorizationRepository, RoleAssignmentScope } from './service'
+} from './authorization-mappers'
 
 export function createDrizzleAuthorizationRepository(db: Database): AuthorizationRepository {
   return {

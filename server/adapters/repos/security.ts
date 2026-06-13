@@ -1,9 +1,9 @@
+import { notFound } from '@server/domain/errors'
 import { and, count, desc, eq } from 'drizzle-orm'
 import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
 import { type SecurityPolicy, securityPolicySchema, type UpdateSecurityPolicyInput } from '../../../shared/api/security'
 import type { Database } from '../../db/client'
 import { passkey, session, signInExperience, twoFactor, user } from '../../db/schema'
-import { notFound } from '../../lib/errors'
 
 export interface SecurityPasskey {
   id: string
