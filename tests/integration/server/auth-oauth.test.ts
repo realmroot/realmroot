@@ -6,7 +6,7 @@ import type {
   UsernamePluginOptions,
 } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
-import type { ApplicationAggregate } from '@server/modules/applications/service'
+import type { ApplicationAggregate } from '@server/usecases/ports'
 import { deviceCodeGrantType } from '@shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { describe, expect, it, vi } from 'vitest'

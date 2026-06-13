@@ -6,6 +6,12 @@
  * layer's dependency budget.
  */
 import type { AccountProfileUpdateInput } from '@shared/api/account'
+import type {
+  ApplicationOidcClaims,
+  ApplicationResponse,
+  PaginationMetadata,
+  PaginationQuery,
+} from '@shared/api/applications'
 import type { AssetPurpose } from '@shared/api/assets'
 import type { ConfigzConfigResponse } from '@shared/api/configz'
 import type { UpdateManagementSignInSettingsRequest } from '@shared/api/management'
@@ -453,4 +459,90 @@ export interface ConfigzRepository {
   updateSettings(input: UpdateConfigzSettingsInput): Promise<void>
   updateBranding(input: UpdateConfigzBrandingInput): Promise<void>
   updateAccountCenterSettings(input: Partial<ConfigzAccountCenter>): Promise<void>
+}
+
+// --- applications -----------------------------------------------------------
+
+export interface ApplicationAggregate {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  homepageUrl: string | null
+  iconUrl: string | null
+  clientId: string
+  clientType: ApplicationResponse['clientType']
+  public: boolean
+  firstParty: boolean
+  trusted: boolean
+  systemManaged: boolean
+  disabled: boolean
+  disabledReason: string | null
+  redirectUris: string[]
+  postLogoutRedirectUris: string[]
+  corsOrigins: string[]
+  customData: Record<string, unknown>
+  allowedGrantTypes: ApplicationResponse['allowedGrantTypes']
+  allowedScopes: ApplicationResponse['allowedScopes']
+  requirePkce: boolean
+  tokenEndpointAuthMethod: ApplicationResponse['tokenEndpointAuthMethod']
+  oidcClaims: ApplicationOidcClaims
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ClientSecretRecord {
+  id: string
+  version: number
+  secretHash: string
+  secretPrefix: string | null
+  status: string
+  createdByUserId: string | null
+  createdAt: Date
+  expiresAt: Date | null
+  revokedAt: Date | null
+}
+
+export interface ConsentRecord {
+  id: string
+  scopes: ApplicationResponse['allowedScopes']
+  grantedAt: Date
+}
+
+export interface ApplicationPaginatedResult<T> {
+  items: T[]
+  pagination: PaginationMetadata
+}
+
+export interface ApplicationRepository {
+  create(input: {
+    application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
+    clientSecret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'> | null
+  }): Promise<ApplicationAggregate>
+  upsertSystem(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>): Promise<ApplicationAggregate>
+  list(pagination: PaginationQuery): Promise<ApplicationPaginatedResult<ApplicationAggregate>>
+  findById(id: string): Promise<ApplicationAggregate | null>
+  findByClientId(clientId: string): Promise<ApplicationAggregate | null>
+  update(
+    id: string,
+    patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'createdAt' | 'updatedAt'>>,
+  ): Promise<void>
+  delete(id: string): Promise<void>
+  listSecrets(
+    applicationId: string,
+    pagination: PaginationQuery,
+  ): Promise<ApplicationPaginatedResult<ClientSecretRecord>>
+  rotateSecret(input: {
+    applicationId: string
+    secret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'>
+  }): Promise<ClientSecretRecord>
+  findConsent(applicationId: string, userId: string): Promise<ConsentRecord | null>
+  revokeConsent(consentId: string, userId: string): Promise<boolean>
+  createConsent(input: {
+    applicationId: string
+    clientId: string
+    userId: string
+    scopes: ApplicationResponse['allowedScopes']
+    permissions: string[]
+  }): Promise<ConsentRecord>
 }

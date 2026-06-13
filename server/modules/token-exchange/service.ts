@@ -1,6 +1,6 @@
+import { hashProviderSecret } from '@server/usecases/applications-utils'
 import type { tokenExchangeAccessToken, trustedExternalIssuer } from '../../db/schema'
 import { badRequest, unauthorized } from '../../lib/errors'
-import { hashProviderSecret } from '../applications/service-utils'
 
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 export const refreshTokenGrantType = 'refresh_token'

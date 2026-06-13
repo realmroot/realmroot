@@ -8,6 +8,7 @@ import { createDrizzleApplicationRepository } from '@server/adapters/repos/appli
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { AgentService } from '@server/usecases/agents'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
+import type { ApplicationRepository } from '@server/usecases/ports'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import {
@@ -52,7 +53,6 @@ import type { Database } from './db/client'
 import * as schema from './db/schema'
 import { areKnownAgentCapabilities } from './domain/agents/capabilities'
 import { hashPassword, verifyPassword } from './domain/password'
-import type { ApplicationRepository } from './modules/applications/service'
 import { AuthorizationService } from './modules/authorization/service'
 
 export { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, buildOAuthUserInfoClaims } from './auth-helpers'

@@ -19,7 +19,7 @@ describe('module context factories', () => {
     vi.doMock('@server/adapters/repos/applications', () => ({
       createDrizzleApplicationRepository,
     }))
-    vi.doMock('../../../../server/modules/applications/service', () => ({ ApplicationService }))
+    vi.doMock('@server/usecases/applications', () => ({ ApplicationService }))
 
     const { createApplicationService } = await import('@server/modules/applications/context')
 

@@ -1,11 +1,10 @@
-import {
-  type ApplicationAggregate,
-  type ApplicationRepository,
-  ApplicationService,
-  type ClientSecretRecord,
-  type ConsentRecord,
-  systemCliApplication,
-} from '@server/modules/applications/service'
+import { ApplicationService, systemCliApplication } from '@server/usecases/applications'
+import type {
+  ApplicationAggregate,
+  ApplicationRepository,
+  ClientSecretRecord,
+  ConsentRecord,
+} from '@server/usecases/ports'
 import { type ApplicationResponse, deviceCodeGrantType } from '@shared/api/applications'
 import { describe, expect, it } from 'vitest'
 

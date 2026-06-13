@@ -1,6 +1,6 @@
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { createDeviceAuthorizationOptions } from '@server/auth'
-import type { ApplicationAggregate } from '@server/modules/applications/service'
+import type { ApplicationAggregate } from '@server/usecases/ports'
 import { deviceCodeGrantType } from '@shared/api/applications'
 import { betterAuth } from 'better-auth'
 import { deviceAuthorization, jwt } from 'better-auth/plugins'

@@ -1,4 +1,4 @@
-import type { ApplicationRepository } from '@server/modules/applications/service'
+import type { ApplicationRepository } from '@server/usecases/ports'
 import { and, count, desc, eq, isNull } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'

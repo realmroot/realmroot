@@ -1,4 +1,3 @@
-import { hashProviderSecret } from '@server/modules/applications/service-utils'
 import {
   accessTokenType,
   jwtTokenType,
@@ -9,6 +8,7 @@ import {
   TokenExchangeService,
   tokenExchangeGrantType,
 } from '@server/modules/token-exchange/service'
+import { hashProviderSecret } from '@server/usecases/applications-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 afterEach(() => {

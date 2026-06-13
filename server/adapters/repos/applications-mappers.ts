@@ -1,4 +1,4 @@
-import type { ApplicationAggregate, ConsentRecord } from '@server/modules/applications/service'
+import type { ApplicationAggregate, ConsentRecord } from '@server/usecases/ports'
 import {
   type ApplicationOidcClaims,
   defaultApplicationOidcClaims,

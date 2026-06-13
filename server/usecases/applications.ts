@@ -1,20 +1,4 @@
-import {
-  type ApplicationOidcClaims,
-  type ApplicationResponse,
-  type CreateApplicationRequest,
-  type CreateApplicationResponse,
-  type CreateConsentRequest,
-  defaultApplicationOidcClaims,
-  type ListApplicationsResponse,
-  type ListClientSecretsResponse,
-  type PaginationMetadata,
-  type PaginationQuery,
-  type ReplaceRedirectUrisRequest,
-  type RotateClientSecretResponse,
-  systemCliClientId,
-  type UpdateApplicationRequest,
-} from '../../../shared/api/applications'
-import { badRequest, notFound } from '../../lib/errors'
+import { badRequest, notFound } from '@server/domain/errors'
 import {
   buildDeniedAuthorizationUrl,
   createClientSecret,
@@ -27,7 +11,22 @@ import {
   normalizeRequestedScopes,
   slugify,
   toSecretMetadata,
-} from './service-utils'
+} from '@server/usecases/applications-utils'
+import type { ApplicationAggregate, ApplicationRepository, ClientSecretRecord } from '@server/usecases/ports'
+import {
+  type ApplicationResponse,
+  type CreateApplicationRequest,
+  type CreateApplicationResponse,
+  type CreateConsentRequest,
+  defaultApplicationOidcClaims,
+  type ListApplicationsResponse,
+  type ListClientSecretsResponse,
+  type PaginationQuery,
+  type ReplaceRedirectUrisRequest,
+  type RotateClientSecretResponse,
+  systemCliClientId,
+  type UpdateApplicationRequest,
+} from '@shared/api/applications'
 
 export const systemCliApplication = {
   id: 'app_flareauth_cli',
@@ -45,87 +44,6 @@ export const systemCliApplication = {
   redirectUris: string[]
   allowedGrantTypes: ApplicationResponse['allowedGrantTypes']
   allowedScopes: ApplicationResponse['allowedScopes']
-}
-
-export interface ApplicationAggregate {
-  id: string
-  slug: string
-  name: string
-  description: string | null
-  homepageUrl: string | null
-  iconUrl: string | null
-  clientId: string
-  clientType: ApplicationResponse['clientType']
-  public: boolean
-  firstParty: boolean
-  trusted: boolean
-  systemManaged: boolean
-  disabled: boolean
-  disabledReason: string | null
-  redirectUris: string[]
-  postLogoutRedirectUris: string[]
-  corsOrigins: string[]
-  customData: Record<string, unknown>
-  allowedGrantTypes: ApplicationResponse['allowedGrantTypes']
-  allowedScopes: ApplicationResponse['allowedScopes']
-  requirePkce: boolean
-  tokenEndpointAuthMethod: ApplicationResponse['tokenEndpointAuthMethod']
-  oidcClaims: ApplicationOidcClaims
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface ClientSecretRecord {
-  id: string
-  version: number
-  secretHash: string
-  secretPrefix: string | null
-  status: string
-  createdByUserId: string | null
-  createdAt: Date
-  expiresAt: Date | null
-  revokedAt: Date | null
-}
-
-export interface ConsentRecord {
-  id: string
-  scopes: ApplicationResponse['allowedScopes']
-  grantedAt: Date
-}
-
-export interface PaginatedResult<T> {
-  items: T[]
-  pagination: PaginationMetadata
-}
-
-export interface ApplicationRepository {
-  create(input: {
-    application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
-    clientSecret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'> | null
-  }): Promise<ApplicationAggregate>
-  upsertSystem(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>): Promise<ApplicationAggregate>
-  list(pagination: PaginationQuery): Promise<PaginatedResult<ApplicationAggregate>>
-  findById(id: string): Promise<ApplicationAggregate | null>
-  findByClientId(clientId: string): Promise<ApplicationAggregate | null>
-  update(
-    id: string,
-    patch: Partial<Omit<ApplicationAggregate, 'id' | 'clientId' | 'createdAt' | 'updatedAt'>>,
-  ): Promise<void>
-  delete(id: string): Promise<void>
-  listSecrets(applicationId: string, pagination: PaginationQuery): Promise<PaginatedResult<ClientSecretRecord>>
-  rotateSecret(input: {
-    applicationId: string
-    secret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'>
-  }): Promise<ClientSecretRecord>
-  findConsent(applicationId: string, userId: string): Promise<ConsentRecord | null>
-  revokeConsent(consentId: string, userId: string): Promise<boolean>
-  createConsent(input: {
-    applicationId: string
-    clientId: string
-    userId: string
-    scopes: ApplicationResponse['allowedScopes']
-    permissions: string[]
-  }): Promise<ConsentRecord>
 }
 
 export interface ApplicationServiceOptions {

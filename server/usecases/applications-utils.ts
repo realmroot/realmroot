@@ -1,3 +1,5 @@
+import { badRequest } from '@server/domain/errors'
+import type { ClientSecretRecord } from '@server/usecases/ports'
 import {
   type ApplicationResponse,
   applicationGrantTypes,
@@ -5,9 +7,7 @@ import {
   deviceCodeGrantType,
   managementApplicationScopes,
   type PaginationQuery,
-} from '../../../shared/api/applications'
-import { badRequest } from '../../lib/errors'
-import type { ClientSecretRecord } from './service'
+} from '@shared/api/applications'
 
 export function buildDeniedAuthorizationUrl(redirectUri: string, state: string | undefined) {
   const url = new URL(redirectUri)
