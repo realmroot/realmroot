@@ -1,14 +1,14 @@
+import { createJwksGateway } from '@server/adapters/gateways/jwks'
+import { hashProviderSecret } from '@server/usecases/applications-utils'
+import type { OAuthClientRecord, TokenExchangeRepository } from '@server/usecases/ports'
 import {
   accessTokenType,
   jwtTokenType,
-  type OAuthClientRecord,
   parseBasicClientAuthorization,
   refreshTokenGrantType,
-  type TokenExchangeRepository,
   TokenExchangeService,
   tokenExchangeGrantType,
-} from '@server/modules/token-exchange/service'
-import { hashProviderSecret } from '@server/usecases/applications-utils'
+} from '@server/usecases/token-exchange'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 afterEach(() => {
@@ -18,7 +18,7 @@ afterEach(() => {
 describe('token exchange service', () => {
   it('exchanges a trusted external JWT assertion for an introspectable access token', async () => {
     const repository = new InMemoryTokenExchangeRepository()
-    const service = new TokenExchangeService(repository)
+    const service = new TokenExchangeService(repository, createJwksGateway())
     const clientSecret = 'runner-client-secret'
     repository.client = {
       clientId: 'runner-client',
@@ -99,7 +99,7 @@ describe('token exchange service', () => {
 
   it('refreshes token-exchange access tokens with a signed refresh token', async () => {
     const repository = new InMemoryTokenExchangeRepository()
-    const service = new TokenExchangeService(repository)
+    const service = new TokenExchangeService(repository, createJwksGateway())
     const clientSecret = 'runner-client-secret'
     repository.client = {
       clientId: 'runner-client',
@@ -168,7 +168,7 @@ describe('token exchange service', () => {
 
   it('rejects disallowed audiences and inactive exchanged tokens', async () => {
     const repository = new InMemoryTokenExchangeRepository()
-    const service = new TokenExchangeService(repository)
+    const service = new TokenExchangeService(repository, createJwksGateway())
     const clientSecret = 'runner-client-secret'
     repository.client = {
       clientId: 'runner-client',
@@ -213,7 +213,7 @@ describe('token exchange service', () => {
 
   it('exchanges a trusted RS256 JWT assertion from JWKS', async () => {
     const repository = new InMemoryTokenExchangeRepository()
-    const service = new TokenExchangeService(repository)
+    const service = new TokenExchangeService(repository, createJwksGateway())
     const clientSecret = 'runner-client-secret'
     repository.client = {
       clientId: 'runner-client',
@@ -276,7 +276,7 @@ describe('token exchange service', () => {
 
   it('exchanges a trusted ES256 JWT assertion from JWKS', async () => {
     const repository = new InMemoryTokenExchangeRepository()
-    const service = new TokenExchangeService(repository)
+    const service = new TokenExchangeService(repository, createJwksGateway())
     const clientSecret = 'runner-client-secret'
     repository.client = {
       clientId: 'runner-client',
@@ -369,7 +369,7 @@ describe('token exchange service', () => {
 
   it('rejects invalid client and subject token boundaries', async () => {
     const repository = new InMemoryTokenExchangeRepository()
-    const service = new TokenExchangeService(repository)
+    const service = new TokenExchangeService(repository, createJwksGateway())
     const clientSecret = 'runner-client-secret'
     repository.client = {
       clientId: 'runner-client',
@@ -852,7 +852,7 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
 
 async function tokenExchangeFixture() {
   const repository = new InMemoryTokenExchangeRepository()
-  const service = new TokenExchangeService(repository)
+  const service = new TokenExchangeService(repository, createJwksGateway())
   const clientSecret = 'runner-client-secret'
   repository.client = {
     clientId: 'runner-client',

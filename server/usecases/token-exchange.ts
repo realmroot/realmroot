@@ -1,6 +1,11 @@
+import { badRequest, unauthorized } from '@server/domain/errors'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
-import type { tokenExchangeAccessToken, trustedExternalIssuer } from '../../db/schema'
-import { badRequest, unauthorized } from '../../lib/errors'
+import type {
+  JwksGateway,
+  OAuthClientRecord,
+  TokenExchangeRepository,
+  TrustedExternalIssuerRecord,
+} from '@server/usecases/ports'
 
 export const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 export const refreshTokenGrantType = 'refresh_token'
@@ -11,8 +16,6 @@ const defaultExpiresInSeconds = 60 * 60
 const defaultRefreshExpiresInSeconds = 30 * 24 * 60 * 60
 const refreshTokenPrefix = 'fatr_'
 
-type TrustedIssuerRow = typeof trustedExternalIssuer.$inferSelect
-type TokenRow = typeof tokenExchangeAccessToken.$inferSelect
 type RefreshTokenPayload = {
   typ: 'token_exchange_refresh'
   clientId: string
@@ -24,30 +27,6 @@ type RefreshTokenPayload = {
   claims: Record<string, unknown>
   exp: number
   iat: number
-}
-
-export interface OAuthClientRecord {
-  clientId: string
-  clientSecret: string | null
-  disabled: boolean | null
-  grantTypes: string | null
-  scopes: string | null
-}
-
-export interface TokenExchangeRepository {
-  findClient(clientId: string): Promise<OAuthClientRecord | null>
-  findTrustedIssuer(issuer: string): Promise<TrustedIssuerRow | null>
-  createTrustedIssuer(input: {
-    name: string
-    issuer: string
-    jwksUrl?: string | null
-    sharedSecret?: string | null
-    allowedAudiences?: string[] | null
-    metadata?: Record<string, unknown> | null
-  }): Promise<TrustedIssuerRow>
-  listTrustedIssuers(): Promise<TrustedIssuerRow[]>
-  storeAccessToken(input: Omit<TokenRow, 'createdAt' | 'revokedAt'>): Promise<void>
-  findAccessTokenByHash(tokenHash: string): Promise<TokenRow | null>
 }
 
 export interface TokenExchangeRequest {
@@ -88,7 +67,10 @@ export interface IntrospectionResponse {
 }
 
 export class TokenExchangeService {
-  constructor(private readonly repository: TokenExchangeRepository) {}
+  constructor(
+    private readonly repository: TokenExchangeRepository,
+    private readonly jwks: JwksGateway,
+  ) {}
 
   async exchange(input: TokenExchangeRequest, client: { clientId: string; clientSecret: string | null }) {
     if (input.grantType !== tokenExchangeGrantType) {
@@ -122,7 +104,7 @@ export class TokenExchangeService {
       throw unauthorized('Audience is not allowed for this issuer.')
     }
 
-    await verifySubjectToken(input.subjectToken, assertion, issuer, input.audience)
+    await verifySubjectToken(input.subjectToken, assertion, issuer, input.audience, this.jwks)
 
     const expiresIn = defaultExpiresInSeconds
     const now = new Date()
@@ -368,8 +350,9 @@ function parseJwt(token: string) {
 async function verifySubjectToken(
   token: string,
   assertion: ReturnType<typeof parseJwt>,
-  issuer: TrustedIssuerRow,
+  issuer: TrustedExternalIssuerRecord,
   audience: string,
+  jwks: JwksGateway,
 ) {
   const now = Math.floor(Date.now() / 1000)
   const exp = readNumber(assertion.payload.exp)
@@ -398,7 +381,7 @@ async function verifySubjectToken(
   }
 
   if (!issuer.jwksUrl) throw unauthorized('Subject token issuer does not expose JWKS.')
-  const jwk = await selectJwk(issuer.jwksUrl, readString(assertion.header.kid), alg)
+  const jwk = await selectJwk(jwks, issuer.jwksUrl, readString(assertion.header.kid), alg)
   const key = await importVerificationKey(jwk, alg)
   const algorithm = verificationAlgorithm(alg)
   if (!(await crypto.subtle.verify(algorithm, key, assertion.signature, data))) {
@@ -407,10 +390,8 @@ async function verifySubjectToken(
   return token
 }
 
-async function selectJwk(jwksUrl: string, kid: string | null, alg: string) {
-  const response = await fetch(jwksUrl)
-  if (!response.ok) throw unauthorized('Trusted issuer JWKS is not available.')
-  const body = (await response.json()) as unknown
+async function selectJwk(jwks: JwksGateway, jwksUrl: string, kid: string | null, alg: string) {
+  const body = await jwks.fetchKeys(jwksUrl)
   if (!isRecord(body) || !Array.isArray(body.keys)) throw unauthorized('Trusted issuer JWKS is invalid.')
   const key = body.keys.find((item) => isRecord(item) && (!kid || item.kid === kid) && (!item.alg || item.alg === alg))
   if (!isRecord(key)) throw unauthorized('Subject token signing key was not found.')

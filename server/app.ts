@@ -1,5 +1,10 @@
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
 import type { OnboardingRepository, SecurityRepository, UserRepository, WalletRepository } from '@server/usecases/ports'
+import {
+  parseBasicClientAuthorization,
+  refreshTokenGrantType,
+  tokenExchangeGrantType,
+} from '@server/usecases/token-exchange'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { SecurityPolicy } from '../shared/api/security'
@@ -20,11 +25,6 @@ import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
 import type { ConfigzBindings } from './modules/configz/context'
 import { createTokenExchangeService, type TokenExchangeBindings } from './modules/token-exchange/context'
-import {
-  parseBasicClientAuthorization,
-  refreshTokenGrantType,
-  tokenExchangeGrantType,
-} from './modules/token-exchange/service'
 import { managementOpenApiForRequest, managementOpenApiLinkHeader, managementOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
 import {

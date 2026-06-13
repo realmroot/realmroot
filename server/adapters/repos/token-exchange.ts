@@ -1,4 +1,4 @@
-import type { OAuthClientRecord, TokenExchangeRepository } from '@server/modules/token-exchange/service'
+import type { OAuthClientRecord, TokenExchangeRepository } from '@server/usecases/ports'
 import { desc, eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { oauthClient, tokenExchangeAccessToken, trustedExternalIssuer } from '../../db/schema'

@@ -647,3 +647,61 @@ export interface AuthorizationRepository {
   listApplicationRoleAssignments(applicationId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
   listMemberRoleAssignments(memberId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
 }
+
+// --- token-exchange ---------------------------------------------------------
+
+export interface OAuthClientRecord {
+  clientId: string
+  clientSecret: string | null
+  disabled: boolean | null
+  grantTypes: string | null
+  scopes: string | null
+}
+
+export interface TrustedExternalIssuerRecord {
+  id: string
+  issuer: string
+  name: string
+  jwksUrl: string | null
+  sharedSecret: string | null
+  allowedAudiences: string[] | null
+  enabled: boolean
+  metadata: Record<string, unknown> | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface TokenExchangeAccessTokenRecord {
+  id: string
+  tokenHash: string
+  clientId: string
+  issuerId: string
+  subject: string
+  subjectTokenIssuer: string
+  audience: string
+  scopes: string[]
+  claims: Record<string, unknown>
+  expiresAt: Date
+  createdAt: Date
+  revokedAt: Date | null
+}
+
+export interface TokenExchangeRepository {
+  findClient(clientId: string): Promise<OAuthClientRecord | null>
+  findTrustedIssuer(issuer: string): Promise<TrustedExternalIssuerRecord | null>
+  createTrustedIssuer(input: {
+    name: string
+    issuer: string
+    jwksUrl?: string | null
+    sharedSecret?: string | null
+    allowedAudiences?: string[] | null
+    metadata?: Record<string, unknown> | null
+  }): Promise<TrustedExternalIssuerRecord>
+  listTrustedIssuers(): Promise<TrustedExternalIssuerRecord[]>
+  storeAccessToken(input: Omit<TokenExchangeAccessTokenRecord, 'createdAt' | 'revokedAt'>): Promise<void>
+  findAccessTokenByHash(tokenHash: string): Promise<TokenExchangeAccessTokenRecord | null>
+}
+
+export interface JwksGateway {
+  fetchKeys(jwksUrl: string): Promise<unknown>
+}
