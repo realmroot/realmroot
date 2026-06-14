@@ -20,7 +20,7 @@
     "db:migrate:staging": "wrangler d1 migrations apply DB --remote --config wrangler.preview.toml",
     "db:migrate:prod": "pnpm run db:migrate:remote",
     "routes:generate": "tsr generate",
-    "typecheck": "pnpm run routes:generate && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.vitest.json && tsc --noEmit -p tsconfig.integration.json && tsc --noEmit -p tsconfig.e2e.json",
+    "typecheck": "pnpm run routes:generate && tsc --noEmit -p config/tsconfig.server.json && tsc --noEmit -p config/tsconfig.web.json && tsc --noEmit -p config/tsconfig.vitest.json && tsc --noEmit -p config/tsconfig.integration.json && tsc --noEmit -p config/tsconfig.e2e.json",
     "test": "vitest run",
     "test:integration": "vitest run --project integration",
     "test:coverage": "vitest run --project unit --project web --coverage",

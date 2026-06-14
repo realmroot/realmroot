@@ -12,11 +12,12 @@
     "declaration": false,
     "declarationMap": false,
     "sourceMap": true,
+    "noEmit": true,
     "paths": {
       "@/*": ["./src/*"],
       "@shared/*": ["./shared/*"],
       "@server/*": ["./server/*"]
     }
   },
-  "include": []
+  "include": ["server", "shared", "src"]
 }

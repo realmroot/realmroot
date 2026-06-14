@@ -102,7 +102,7 @@ module.exports = {
         '\\.settings-fixtures\\.ts$',
       ],
     },
-    tsConfig: { fileName: 'tsconfig.server.json' },
+    tsConfig: { fileName: 'tsconfig.json' },
     tsPreCompilationDeps: true,
   },
 }
