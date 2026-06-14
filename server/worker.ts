@@ -5,7 +5,7 @@ import { type Auth, createAuth } from '@server/auth'
 import { createDeps } from '@server/composition'
 import { createDb } from '@server/db/client'
 import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
-import { createApp } from '@server/http/app'
+import { createApp, healthStatus } from '@server/http/app'
 import { ensureSystemClients as ensureSystemClientsUsecase } from '@server/usecases/applications'
 import { defaultBuiltInProviders } from '@server/usecases/configz'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
@@ -20,6 +20,9 @@ let cachedSystemClientDb: D1Database | null = null
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Liveness probe answers from the process alone — before any D1 read — so it
+    // reports the worker is up even when the database is unmigrated or down.
+    if (new URL(request.url).pathname === '/api/health') return Response.json(healthStatus)
     const config = validateEnv(env, request.url)
     const deps = createDeps(env, config)
     const securityPolicy = await deps.security.getPolicy()

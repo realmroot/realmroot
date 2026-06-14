@@ -46,6 +46,10 @@ type AuthHandler = Pick<Auth, 'handler'> & {
   } & SessionReader['api']
 }
 
+// Liveness payload. Shared with the worker entry so it can answer `/api/health`
+// before constructing deps — a liveness probe must not depend on the database.
+export const healthStatus = { ok: true, service: 'flareauth' } as const
+
 export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {}) {
   // Registration order is load-bearing: middleware only guards routes registered
   // after it (public routes like /api/health stay public by registering before the
@@ -104,12 +108,7 @@ export type AppType = ReturnType<typeof createRpcApp>
 function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
   const managementApi = auth.api as unknown as ManagementAuthApi
   const api = app
-    .get('/api/health', (c) =>
-      c.json({
-        ok: true,
-        service: 'flareauth',
-      }),
-    )
+    .get('/api/health', (c) => c.json(healthStatus))
     .route('/api/oauth/consent', oauthConsentRoute)
     .route('/api/configz', createConfigzRoutes(config.securityPolicy))
     .route('/api/assets', createAssetRoutes())
