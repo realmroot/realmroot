@@ -347,9 +347,10 @@ function connectorServiceMock() {
         },
       ],
     }),
-    list: vi
-      .fn()
-      .mockResolvedValue({ connectors: [connector], pagination: { limit: 10, offset: 0, total: 1, nextOffset: null } }),
+    list: vi.fn().mockResolvedValue({
+      connectors: [connector],
+      pagination: { limit: 10, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    }),
     create: vi.fn().mockResolvedValue(connector),
     get: vi.fn().mockResolvedValue(connector),
     update: vi.fn().mockResolvedValue({ ...connector, enabled: false }),

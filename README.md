@@ -10,8 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/saltbo/flareauth/actions/workflows/ci.yml"><img src="https://github.com/saltbo/flareauth/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/saltbo/flareauth/actions/workflows/e2e.yml"><img src="https://github.com/saltbo/flareauth/actions/workflows/e2e.yml/badge.svg" alt="E2E" /></a>
+  <a href="https://github.com/saltbo/flareauth/actions/workflows/ci.yaml"><img src="https://github.com/saltbo/flareauth/actions/workflows/ci.yaml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/saltbo/flareauth.svg" alt="License" /></a>
   <a href="https://codecov.io/gh/saltbo/flareauth"><img src="https://codecov.io/gh/saltbo/flareauth/branch/main/graph/badge.svg" alt="Coverage" /></a>
   <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D24-339933.svg" alt="Node >=24" /></a>

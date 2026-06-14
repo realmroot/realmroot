@@ -3,6 +3,7 @@ import type { AssetRepository, UploadedAssetRecord } from '@server/usecases/port
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { application, brandingSetting, oauthClient, organization, uploadedAsset, user } from '../../db/schema'
+import { writeApplicationMetadata } from './applications-mappers'
 
 export function createDrizzleAssetRepository(db: Database): AssetRepository {
   return {
@@ -41,7 +42,7 @@ export function createDrizzleAssetRepository(db: Database): AssetRepository {
           .update(application)
           .set({
             logoAssetId: assetId,
-            metadata: { ...(current.metadata ?? {}), iconUrl: publicUrl },
+            metadata: writeApplicationMetadata(current.metadata, { iconUrl: publicUrl }),
             updatedAt: new Date(),
           })
           .where(eq(application.id, applicationId)),

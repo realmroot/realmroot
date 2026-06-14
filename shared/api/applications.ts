@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 export const applicationClientTypes = ['public_spa', 'public_native', 'confidential_web'] as const
 export const deviceCodeGrantType = 'urn:ietf:params:oauth:grant-type:device_code'
@@ -36,18 +37,9 @@ const nonEmptyString = z.string().trim().min(1)
 const optionalUrl = z.url().optional()
 const customDataSchema = z.record(z.string(), z.unknown())
 
-export const paginationQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-})
-
-export const paginationMetadataSchema = z.object({
-  limit: z.number().int().positive(),
-  offset: z.number().int().min(0),
-  total: z.number().int().min(0),
-  hasMore: z.boolean(),
-  nextOffset: z.number().int().min(0).nullable(),
-})
+// Re-exported from the canonical pagination module so existing
+// `@shared/api/applications` import sites keep working.
+export { paginationMetadataSchema, paginationQuerySchema }
 
 export const applicationSecretMetadataSchema = z.object({
   id: z.string(),

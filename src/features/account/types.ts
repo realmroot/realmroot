@@ -15,7 +15,7 @@ export type LinkedAccount = LinkedAccountsResponse['accounts'][number]
 export type IdentityProvider = ConfigzConfigResponse['identityProviders'][number]
 export type Web3WalletProvider = ConfigzConfigResponse['builtInProviders']['web3Wallet']
 export type ConsentedApplication = ConsentedApplicationsResponse['applications'][number]
-export type UserSessionDevice = AccountSessionsResponse['sessions'][number] & { current?: boolean }
+export type UserSessionDevice = AccountSessionsResponse['sessions'][number]
 export type SecurityState = AccountSecurityResponse['security']
 export type Passkey = PasskeysResponse['passkeys'][number]
 export type { AccountAgent, AccountAgentGrant }

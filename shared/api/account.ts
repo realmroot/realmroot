@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { PaginationMetadata } from './pagination'
 import { usernameSchema } from './users'
 
 export const accountProfileUpdateSchema = z.object({
@@ -80,7 +81,9 @@ export type AccountSessionsResponse = {
     createdAt: string
     ipAddress: string | null
     userAgent: string | null
+    current: boolean
   }>
+  pagination: PaginationMetadata
 }
 
 export type AccountSecurityResponse = {

@@ -124,6 +124,7 @@ const emptyConnectorsResponse: ListManagementConnectorsResponse = {
     limit: 50,
     offset: 0,
     total: 0,
+    hasMore: false,
     nextOffset: null,
   },
 }

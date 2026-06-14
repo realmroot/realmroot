@@ -42,14 +42,19 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
         .select({ id: agent.id })
         .from(agent)
         .where(and(eq(agent.userId, userId), eq(agent.status, 'active')))
-      return Promise.all(
-        userAgents.map((row) =>
-          db
-            .select()
-            .from(agentCapabilityGrant)
-            .where(and(eq(agentCapabilityGrant.agentId, row.id), eq(agentCapabilityGrant.status, 'active'))),
-        ),
-      ).then((pages) => pages.flat())
+      if (userAgents.length === 0) return []
+      return db
+        .select()
+        .from(agentCapabilityGrant)
+        .where(
+          and(
+            inArray(
+              agentCapabilityGrant.agentId,
+              userAgents.map((row) => row.id),
+            ),
+            eq(agentCapabilityGrant.status, 'active'),
+          ),
+        )
     },
 
     async revokeAgentForUser(agentId, userId) {

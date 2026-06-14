@@ -1,14 +1,7 @@
 import { z } from 'zod'
-import type { PaginationInput } from './pagination'
+import { type PaginationInput, paginationMetadataSchema } from './pagination'
 
 const dateValueSchema = z.union([z.string(), z.date()])
-const paginationMetadataSchema = z.object({
-  limit: z.number().int(),
-  offset: z.number().int(),
-  total: z.number().int(),
-  hasMore: z.boolean(),
-  nextOffset: z.number().int().nullable(),
-})
 
 export const accountAgentGrantSchema = z.object({
   id: z.string(),

@@ -26,10 +26,39 @@ export function toAssignmentInput(input: AssignRoleRequest, actorUserId: string 
   }
 }
 
+// Names a custom role/assignment claim may not occupy: the authorization claims
+// we synthesize, plus the OIDC/JWT registered claims an issuer owns — so an
+// assignment can't shadow `sub`, `email`, etc. in a token. Mirrors the reserved
+// set stripped from subject tokens in token-exchange.ts.
+const reservedClaimNames = new Set([
+  'authorization',
+  'roles',
+  'permissions',
+  'iss',
+  'sub',
+  'aud',
+  'exp',
+  'nbf',
+  'iat',
+  'jti',
+  'email',
+  'email_verified',
+  'name',
+  'given_name',
+  'family_name',
+  'preferred_username',
+  'picture',
+  'phone_number',
+])
+
+function isReservedClaimName(name: string) {
+  return reservedClaimNames.has(name) || /^https?:\/\//.test(name)
+}
+
 export function assertTokenClaims(tokenClaims: Record<string, unknown> | undefined) {
   if (!tokenClaims) return
   for (const key of Object.keys(tokenClaims)) {
-    if (['authorization', 'roles', 'permissions'].includes(key) || /^https?:\/\//.test(key)) {
+    if (isReservedClaimName(key)) {
       throw badRequest(`Assignment token claim is reserved: ${key}`)
     }
   }
@@ -37,7 +66,7 @@ export function assertTokenClaims(tokenClaims: Record<string, unknown> | undefin
 
 export function assertRoleTokenClaimName(tokenClaimName: string | null | undefined) {
   if (!tokenClaimName) return
-  if (['authorization', 'roles', 'permissions'].includes(tokenClaimName) || /^https?:\/\//.test(tokenClaimName)) {
+  if (isReservedClaimName(tokenClaimName)) {
     throw badRequest(`Role token claim name is reserved: ${tokenClaimName}`)
   }
 }

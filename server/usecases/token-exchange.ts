@@ -362,7 +362,7 @@ async function verifySubjectToken(
   const now = Math.floor(Date.now() / 1000)
   const exp = readNumber(assertion.payload.exp)
   const nbf = readNumber(assertion.payload.nbf)
-  if (exp !== null && exp <= now) throw unauthorized('Subject token is expired.')
+  if (exp === null || exp <= now) throw unauthorized('Subject token is expired or missing an exp claim.')
   if (nbf !== null && nbf > now) throw unauthorized('Subject token is not active yet.')
   if (!audienceMatches(assertion.payload.aud, audience)) throw unauthorized('Subject token audience is invalid.')
 

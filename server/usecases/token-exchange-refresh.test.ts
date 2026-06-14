@@ -266,7 +266,7 @@ describe('token exchange refresh and assertion boundaries', () => {
     ).rejects.toMatchObject({ status: 401 })
   })
 
-  it('ignores non-numeric expiry and not-before claims when validating the assertion', async () => {
+  it('rejects an assertion whose expiry is missing or non-numeric', async () => {
     const { deps, clientSecret } = await fixture()
     const subjectToken = await signHs256Jwt(
       {
@@ -274,6 +274,88 @@ describe('token exchange refresh and assertion boundaries', () => {
         sub: 'org_1:runner_1',
         aud: 'https://ama.example.com',
         exp: 'not-a-number',
+      },
+      'external-platform-secret',
+    )
+
+    await expect(
+      exchangeToken(
+        deps,
+        {
+          grantType: tokenExchangeGrantType,
+          subjectToken,
+          subjectTokenType: jwtTokenType,
+          audience: 'https://ama.example.com',
+          scope: 'runner:connect',
+        },
+        { clientId: 'runner-client', clientSecret },
+      ),
+    ).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('rejects an assertion that has already expired', async () => {
+    const { deps, clientSecret } = await fixture()
+    const subjectToken = await signHs256Jwt(
+      {
+        iss: 'https://platform.example.com',
+        sub: 'org_1:runner_1',
+        aud: 'https://ama.example.com',
+        exp: Math.floor(Date.now() / 1000) - 10,
+      },
+      'external-platform-secret',
+    )
+
+    await expect(
+      exchangeToken(
+        deps,
+        {
+          grantType: tokenExchangeGrantType,
+          subjectToken,
+          subjectTokenType: jwtTokenType,
+          audience: 'https://ama.example.com',
+          scope: 'runner:connect',
+        },
+        { clientId: 'runner-client', clientSecret },
+      ),
+    ).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('rejects an assertion that is not active yet', async () => {
+    const { deps, clientSecret } = await fixture()
+    const subjectToken = await signHs256Jwt(
+      {
+        iss: 'https://platform.example.com',
+        sub: 'org_1:runner_1',
+        aud: 'https://ama.example.com',
+        exp: Math.floor(Date.now() / 1000) + 60,
+        nbf: Math.floor(Date.now() / 1000) + 30,
+      },
+      'external-platform-secret',
+    )
+
+    await expect(
+      exchangeToken(
+        deps,
+        {
+          grantType: tokenExchangeGrantType,
+          subjectToken,
+          subjectTokenType: jwtTokenType,
+          audience: 'https://ama.example.com',
+          scope: 'runner:connect',
+        },
+        { clientId: 'runner-client', clientSecret },
+      ),
+    ).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('ignores a non-numeric not-before claim when the assertion has a valid expiry', async () => {
+    const { deps, clientSecret } = await fixture()
+    const subjectToken = await signHs256Jwt(
+      {
+        iss: 'https://platform.example.com',
+        sub: 'org_1:runner_1',
+        aud: 'https://ama.example.com',
+        exp: Math.floor(Date.now() / 1000) + 60,
         nbf: 'not-a-number',
       },
       'external-platform-secret',

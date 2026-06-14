@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { paginationQuerySchema } from './pagination'
+import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 export const connectorProviderTypes = ['social', 'generic_oauth'] as const
 
@@ -9,12 +9,6 @@ const nonEmptyString = z.string().trim().min(1)
 const optionalUrl = z.url().optional()
 const nullableUrl = z.url().nullable()
 const scopesSchema = z.array(nonEmptyString)
-const paginationMetadataSchema = z.object({
-  limit: z.number().int().positive(),
-  offset: z.number().int().min(0),
-  total: z.number().int().min(0),
-  nextOffset: z.number().int().min(0).nullable(),
-})
 
 export const connectorProviderMetadataSchema = z.record(z.string(), z.unknown())
 

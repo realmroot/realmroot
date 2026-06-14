@@ -13,6 +13,7 @@ import {
   useState,
 } from '../../console-shared'
 import { CreateApplicationDialog } from '../../helpers/helpers-create'
+import { MutationError } from '../../helpers/helpers-dialogs'
 import { ListToolbar, ResourcePage } from '../../helpers/helpers-resource'
 import { useAdminMutation } from '../../helpers/helpers-utils'
 import { ApplicationsTableContent } from './application-detail-sections'
@@ -38,6 +39,10 @@ export function ApplicationsPage() {
         }),
       ])
     },
+  })
+  const toggleMutation = useAdminMutation({
+    mutationFn: ({ id, disabled }: { id: string; disabled: boolean }) => updateApplication(id, { disabled }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.applications }),
   })
   const applications = query.data?.applications ?? []
   const visibleApplications = applications.filter((application) => {
@@ -91,6 +96,7 @@ export function ApplicationsPage() {
             value={search}
           />
         </ListToolbar>
+        <MutationError error={toggleMutation.error} />
         <TabsContent value="my-apps">
           <ApplicationsTableContent
             applications={visibleApplications}
@@ -102,13 +108,7 @@ export function ApplicationsPage() {
             emptyTitle={search ? 'No applications found' : 'No applications in this tab'}
             hasApplications={applications.length > 0}
             onToggleDisabled={(application) =>
-              updateApplication(application.id, {
-                disabled: !application.disabled,
-              }).then(() =>
-                queryClient.invalidateQueries({
-                  queryKey: consoleQueryKeys.applications,
-                }),
-              )
+              toggleMutation.mutate({ id: application.id, disabled: !application.disabled })
             }
           />
         </TabsContent>
@@ -123,13 +123,7 @@ export function ApplicationsPage() {
             emptyTitle={search ? 'No applications found' : 'No applications in this tab'}
             hasApplications={applications.length > 0}
             onToggleDisabled={(application) =>
-              updateApplication(application.id, {
-                disabled: !application.disabled,
-              }).then(() =>
-                queryClient.invalidateQueries({
-                  queryKey: consoleQueryKeys.applications,
-                }),
-              )
+              toggleMutation.mutate({ id: application.id, disabled: !application.disabled })
             }
           />
         </TabsContent>

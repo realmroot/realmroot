@@ -67,45 +67,10 @@ jobs:
             exit 1
           fi
 
-      - name: Test
-        run: pnpm test
-
-      - name: Build
-        run: pnpm run build
-
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.30.2
-
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24.14.1
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Restish
-        run: |
-          version=0.21.2
-          archive="restish-${version}-linux-amd64.tar.gz"
-          curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${version}/${archive}" -o "$archive"
-          curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${version}/checksums.txt" -o checksums.txt
-          grep "  ${archive}$" checksums.txt | sha256sum --check -
-          tar -xzf "$archive"
-          sudo install restish /usr/local/bin/restish
-          restish --version
-
-      - name: Coverage
+      # v8 coverage can't instrument the workerd pool, so unit+web run with
+      # coverage here and the integration crown runs separately — each test runs
+      # once (no double run across jobs).
+      - name: Test (unit + web, with coverage)
         run: pnpm run test:coverage
 
       - name: Upload coverage
@@ -114,6 +79,12 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: true
           use_oidc: true
+
+      - name: Test (integration crown)
+        run: pnpm run test:integration
+
+      - name: Build
+        run: pnpm run build
 
   journeys:
     name: Playwright E2E
