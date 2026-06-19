@@ -4,6 +4,7 @@ import type { Deps } from '@server/usecases/deps'
 import type {
   CreateFederatedCredentialInput,
   FederatedCredentialRecord,
+  OAuthAccessTokenRecord,
   OAuthClientRecord,
   ResolvedFederatedCredential,
   TokenExchangeAccessTokenRecord,
@@ -188,6 +189,49 @@ describe('token exchange service', () => {
     await expect(
       introspectToken(deps, 'missing-token', { clientId: applicationClientId, clientSecret }),
     ).resolves.toEqual({
+      active: false,
+    })
+  })
+
+  it('introspects a provider-issued opaque token belonging to another client (resource-server introspection)', async () => {
+    const { deps, repository, clientSecret } = await tokenExchangeFixture()
+    const rawToken = 'runner-device-access-token'
+    const now = new Date()
+    repository.seedOAuthAccessToken(await hashProviderSecret(rawToken), {
+      clientId: 'client_runner',
+      userId: 'user_runner',
+      scopes: ['openid', 'profile', 'email', 'offline_access'],
+      expiresAt: new Date(now.getTime() + 60_000),
+      createdAt: now,
+    })
+
+    // The introspecting client (applicationClientId) differs from the token's
+    // client (client_runner) — Better Auth's own introspect would report inactive;
+    // ours reports active with the token's real client_id.
+    await expect(
+      introspectToken(deps, rawToken, { clientId: applicationClientId, clientSecret }),
+    ).resolves.toMatchObject({
+      active: true,
+      sub: 'user_runner',
+      client_id: 'client_runner',
+      scope: 'openid profile email offline_access',
+      token_type: 'Bearer',
+    })
+  })
+
+  it('reports a provider-issued opaque token inactive once it expires', async () => {
+    const { deps, repository, clientSecret } = await tokenExchangeFixture()
+    const rawToken = 'expired-runner-token'
+    const now = new Date()
+    repository.seedOAuthAccessToken(await hashProviderSecret(rawToken), {
+      clientId: 'client_runner',
+      userId: 'user_runner',
+      scopes: ['openid'],
+      expiresAt: new Date(now.getTime() - 1_000),
+      createdAt: new Date(now.getTime() - 60_000),
+    })
+
+    await expect(introspectToken(deps, rawToken, { clientId: applicationClientId, clientSecret })).resolves.toEqual({
       active: false,
     })
   })
@@ -759,6 +803,7 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
   private records = new Map<string, FederatedCredentialRecord>()
   private nextId = 1
   private tokens = new Map<string, TokenExchangeAccessTokenRecord | null>()
+  private oauthTokens = new Map<string, OAuthAccessTokenRecord>()
 
   async findClient(clientId: string) {
     return this.client?.clientId === clientId ? this.client : null
@@ -882,6 +927,14 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
 
   async findAccessTokenByHash(tokenHash: string) {
     return this.tokens.get(tokenHash) ?? null
+  }
+
+  seedOAuthAccessToken(tokenHash: string, record: OAuthAccessTokenRecord) {
+    this.oauthTokens.set(tokenHash, record)
+  }
+
+  async findOAuthAccessTokenByHash(tokenHash: string) {
+    return this.oauthTokens.get(tokenHash) ?? null
   }
 
   expireTokens() {

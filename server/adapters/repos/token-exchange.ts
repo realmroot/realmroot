@@ -8,7 +8,25 @@ import type {
 } from '@server/usecases/ports'
 import { and, desc, eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { apiResource, application, federatedCredential, oauthClient, tokenExchangeAccessToken } from '../../db/schema'
+import {
+  apiResource,
+  application,
+  federatedCredential,
+  oauthAccessToken,
+  oauthClient,
+  tokenExchangeAccessToken,
+} from '../../db/schema'
+
+// Better Auth stores oauth_access_token.scopes as a JSON array string; older rows
+// may use a space-delimited string. Normalize both to a string list.
+function parseScopeList(value: string): string[] {
+  const trimmed = value.trim()
+  if (trimmed.startsWith('[')) {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed)) return parsed.filter((s): s is string => typeof s === 'string')
+  }
+  return trimmed ? trimmed.split(/\s+/) : []
+}
 
 type CredentialRow = typeof federatedCredential.$inferSelect
 
@@ -139,6 +157,29 @@ export function createTokenExchangeRepository(db: Database): TokenExchangeReposi
         .where(eq(tokenExchangeAccessToken.tokenHash, tokenHash))
         .limit(1)
       return rows[0] ?? null
+    },
+
+    async findOAuthAccessTokenByHash(tokenHash: string) {
+      const rows = await db
+        .select({
+          clientId: oauthAccessToken.clientId,
+          userId: oauthAccessToken.userId,
+          scopes: oauthAccessToken.scopes,
+          expiresAt: oauthAccessToken.expiresAt,
+          createdAt: oauthAccessToken.createdAt,
+        })
+        .from(oauthAccessToken)
+        .where(eq(oauthAccessToken.token, tokenHash))
+        .limit(1)
+      const row = rows[0]
+      if (!row) return null
+      return {
+        clientId: row.clientId,
+        userId: row.userId ?? null,
+        scopes: parseScopeList(row.scopes),
+        expiresAt: row.expiresAt,
+        createdAt: row.createdAt,
+      }
     },
   }
 }

@@ -500,6 +500,10 @@ class InMemoryRepository implements TokenExchangeRepository {
     return this.tokens.get(tokenHash) ?? null
   }
 
+  async findOAuthAccessTokenByHash() {
+    return null
+  }
+
   storedTokens() {
     return this.tokens.size
   }

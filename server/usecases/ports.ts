@@ -742,6 +742,18 @@ export interface TokenExchangeRepository {
   deleteFederatedCredential(applicationId: string, id: string): Promise<boolean>
   storeAccessToken(input: Omit<TokenExchangeAccessTokenRecord, 'createdAt' | 'revokedAt'>): Promise<void>
   findAccessTokenByHash(tokenHash: string): Promise<TokenExchangeAccessTokenRecord | null>
+  // Provider-issued (Better Auth) opaque access tokens, looked up by their stored
+  // hash. Lets a resource server introspect tokens issued to any client, which
+  // Better Auth's own introspect endpoint refuses (it only accepts same-client).
+  findOAuthAccessTokenByHash(tokenHash: string): Promise<OAuthAccessTokenRecord | null>
+}
+
+export interface OAuthAccessTokenRecord {
+  clientId: string
+  userId: string | null
+  scopes: string[]
+  expiresAt: Date
+  createdAt: Date
 }
 
 export interface JwksGateway {

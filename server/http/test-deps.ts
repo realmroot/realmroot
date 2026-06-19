@@ -130,6 +130,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       deleteFederatedCredential: vi.fn().mockResolvedValue(false),
       storeAccessToken: vi.fn(),
       findAccessTokenByHash: vi.fn().mockResolvedValue(null),
+      findOAuthAccessTokenByHash: vi.fn().mockResolvedValue(null),
     },
     users: {
       getUser: vi.fn(),

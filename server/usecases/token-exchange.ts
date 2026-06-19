@@ -199,22 +199,42 @@ export async function introspectToken(
   client: { clientId: string; clientSecret: string | null },
 ) {
   await authenticateClient(deps, client.clientId, client.clientSecret)
-  const row = await deps.tokenExchange.findAccessTokenByHash(await hashProviderSecret(token))
-  if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) {
-    return { active: false } satisfies IntrospectionResponse
+  const tokenHash = await hashProviderSecret(token)
+  const row = await deps.tokenExchange.findAccessTokenByHash(tokenHash)
+  if (row && !row.revokedAt && row.expiresAt.getTime() > Date.now()) {
+    return {
+      active: true,
+      iss: row.subjectTokenIssuer,
+      sub: row.subject,
+      aud: row.audience,
+      client_id: row.clientId,
+      scope: row.scopes.join(' '),
+      exp: Math.floor(row.expiresAt.getTime() / 1000),
+      iat: Math.floor(row.createdAt.getTime() / 1000),
+      token_type: 'Bearer',
+      ...row.claims,
+    } satisfies IntrospectionResponse
   }
-  return {
-    active: true,
-    iss: row.subjectTokenIssuer,
-    sub: row.subject,
-    aud: row.audience,
-    client_id: row.clientId,
-    scope: row.scopes.join(' '),
-    exp: Math.floor(row.expiresAt.getTime() / 1000),
-    iat: Math.floor(row.createdAt.getTime() / 1000),
-    token_type: 'Bearer',
-    ...row.claims,
-  } satisfies IntrospectionResponse
+
+  // Resource-server introspection: also resolve provider-issued opaque access
+  // tokens (e.g. a self-hosted runner's device-login token). Better Auth's own
+  // introspect rejects these because the calling client differs from the token's
+  // client; as the authorization server we report client_id so resource servers
+  // can authorize the runner.
+  const oauthRow = await deps.tokenExchange.findOAuthAccessTokenByHash(tokenHash)
+  if (oauthRow && oauthRow.userId && oauthRow.expiresAt.getTime() > Date.now()) {
+    return {
+      active: true,
+      sub: oauthRow.userId,
+      client_id: oauthRow.clientId,
+      scope: oauthRow.scopes.join(' '),
+      exp: Math.floor(oauthRow.expiresAt.getTime() / 1000),
+      iat: Math.floor(oauthRow.createdAt.getTime() / 1000),
+      token_type: 'Bearer',
+    } satisfies IntrospectionResponse
+  }
+
+  return { active: false } satisfies IntrospectionResponse
 }
 
 export async function listFederatedCredentials(deps: Deps, applicationId: string) {
