@@ -128,6 +128,29 @@ describe('auth device authorization endpoints', () => {
     expect(body.refresh_token).toEqual(expect.any(String))
   })
 
+  it('does not revoke sibling refresh tokens when a rotated refresh token is reused', async () => {
+    const auth = createDeviceOAuthAuth()
+    const client = await registerDeviceClient(auth)
+    const cookie = await createBrowserSession(auth)
+
+    const first = await approveOAuthDeviceLogin(auth, client.client_id, cookie)
+    const second = await approveOAuthDeviceLogin(auth, client.client_id, cookie)
+
+    const rotated = await refreshOAuthToken(auth, client.client_id, first.refresh_token)
+    expect(rotated.status).toBe(200)
+
+    const reused = await refreshOAuthToken(auth, client.client_id, first.refresh_token)
+    expect(reused.status).toBe(400)
+    await expect(reused.json()).resolves.toMatchObject({ error: 'invalid_grant' })
+
+    const sibling = await refreshOAuthToken(auth, client.client_id, second.refresh_token)
+    expect(sibling.status).toBe(200)
+    await expect(sibling.json()).resolves.toMatchObject({
+      token_type: 'Bearer',
+      refresh_token: expect.any(String),
+    })
+  })
+
   it('returns pending and slow_down errors through the OAuth token endpoint', async () => {
     const auth = createDeviceOAuthAuth()
     const client = await registerDeviceClient(auth)
@@ -354,6 +377,25 @@ async function pollOAuthDeviceToken(auth: TestAuth, clientId: string) {
     grant_type: grantType,
     client_id: clientId,
     device_code: 'device-code-1',
+  })
+}
+
+async function approveOAuthDeviceLogin(auth: TestAuth, clientId: string, cookie: string) {
+  await requestOAuthDeviceCode(auth, clientId)
+  const verify = await requestJson(auth, '/device?user_code=USERCODE', undefined, { method: 'GET', cookie })
+  expect(verify.status).toBe(200)
+  const approval = await requestJson(auth, '/device/approve', { userCode: 'USERCODE' }, { cookie })
+  expect(approval.status).toBe(200)
+  const token = await pollOAuthDeviceToken(auth, clientId)
+  expect(token.status).toBe(200)
+  return token.json() as Promise<{ refresh_token: string }>
+}
+
+async function refreshOAuthToken(auth: TestAuth, clientId: string, refreshToken: string) {
+  return requestForm(auth, '/oauth2/token', {
+    grant_type: 'refresh_token',
+    client_id: clientId,
+    refresh_token: refreshToken,
   })
 }
 
