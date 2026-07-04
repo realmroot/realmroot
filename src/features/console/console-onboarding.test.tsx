@@ -138,6 +138,10 @@ describe('console onboarding', () => {
     fireEvent.click(screen.getByRole('button', { name: /Native app/ }))
     expect(screen.getByRole('button', { name: /Native app/ }).getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(screen.getByRole('switch', { name: 'Device login' }))
+    fireEvent.click(screen.getByRole('button', { name: /Single-page app/ }))
+    expect(screen.queryByRole('switch', { name: 'Device login' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Native app/ }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Device login' }))
     fireEvent.change(await screen.findByLabelText('Application name'), { target: { value: 'Review app' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'review-app' } })
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
