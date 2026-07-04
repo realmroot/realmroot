@@ -237,17 +237,17 @@ index bbef06a..ed16169 100644
  		...options,
  		scopes: Array.from(scopes),
 @@ -2877,6 +3004,7 @@ const oauthProvider = (options) => {
-					request_uri: z.string().optional(),
-					code_challenge: z.string().optional(),
-					code_challenge_method: z.enum(["S256"]).optional(),
+ 					request_uri: z.string().optional(),
+ 					code_challenge: z.string().optional(),
+ 					code_challenge_method: z.enum(["S256"]).optional(),
 +					resource: z.union([z.string(), z.array(z.string())]).optional(),
-					nonce: z.string().optional(),
-					prompt: z.enum([
-						"none",
+ 					nonce: z.string().optional(),
+ 					prompt: z.enum([
+ 						"none",
 @@ -3051,11 +3178,13 @@ const oauthProvider = (options) => {
-					grant_type: z.enum([
-						"authorization_code",
-						"client_credentials",
+ 					grant_type: z.enum([
+ 						"authorization_code",
+ 						"client_credentials",
 -						"refresh_token"
 +						"refresh_token",
 +						deviceCodeGrantType
