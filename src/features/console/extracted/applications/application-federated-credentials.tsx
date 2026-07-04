@@ -36,7 +36,7 @@ type JwkRecord = Record<string, unknown>
 
 type KeyMaterial = { jwksUrl?: string; publicKeys?: JwkRecord[] }
 
-function parseKeyMaterial(jwksUrl: string, publicKeysText: string): KeyMaterial {
+export function parseKeyMaterial(jwksUrl: string, publicKeysText: string): KeyMaterial {
   const trimmedUrl = jwksUrl.trim()
   const trimmedKeys = publicKeysText.trim()
   if (trimmedUrl && trimmedKeys) {
@@ -58,6 +58,21 @@ function parseKeyMaterial(jwksUrl: string, publicKeysText: string): KeyMaterial 
   if (Array.isArray(parsed)) return { publicKeys: parsed as JwkRecord[] }
   if (parsed && typeof parsed === 'object') return { publicKeys: [parsed as JwkRecord] }
   throw new Error('Public keys must be a valid JWK or JWK Set in JSON format.')
+}
+
+export function parseFederatedCredentialForm(form: FormData): {
+  material: KeyMaterial
+  base: { name: string; issuer: string; subject: string; audienceResourceId: string }
+} {
+  return {
+    material: parseKeyMaterial(String(form.get('jwksUrl') ?? ''), String(form.get('publicKeys') ?? '')),
+    base: {
+      name: String(form.get('name') ?? ''),
+      issuer: String(form.get('issuer') ?? ''),
+      subject: String(form.get('subject') ?? ''),
+      audienceResourceId: String(form.get('audienceResourceId') ?? ''),
+    },
+  }
 }
 
 export function ApplicationFederatedCredentialsPanel({ applicationId }: { applicationId: string }) {
@@ -171,14 +186,8 @@ function FederatedCredentialForm({
       className="formStack"
       onSubmit={(event: FormEvent<HTMLFormElement>) => {
         event.preventDefault()
-        const form = new FormData(event.currentTarget)
-        const material = parseKeyMaterial(String(form.get('jwksUrl') ?? ''), String(form.get('publicKeys') ?? ''))
-        onSubmit(material, {
-          name: String(form.get('name') ?? ''),
-          issuer: String(form.get('issuer') ?? ''),
-          subject: String(form.get('subject') ?? ''),
-          audienceResourceId: String(form.get('audienceResourceId') ?? ''),
-        })
+        const { material, base } = parseFederatedCredentialForm(new FormData(event.currentTarget))
+        onSubmit(material, base)
       }}
     >
       <Field label={tt('Name')}>

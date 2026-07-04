@@ -14,7 +14,9 @@ import type {
 import {
   accessTokenType,
   createFederatedCredential,
+  deleteFederatedCredential,
   exchangeToken,
+  getFederatedCredential,
   introspectToken,
   jwtTokenType,
   listFederatedCredentials,
@@ -22,6 +24,7 @@ import {
   refreshToken,
   refreshTokenGrantType,
   tokenExchangeGrantType,
+  updateFederatedCredential,
 } from '@server/usecases/token-exchange'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -752,6 +755,66 @@ describe('token exchange service', () => {
       introspectToken(deps, 'missing-token', { clientId: applicationClientId, clientSecret: 'wrong-secret' }),
     ).rejects.toMatchObject({
       status: 401,
+    })
+  })
+
+  it('manages federated credential CRUD boundaries', async () => {
+    const { deps } = await tokenExchangeFixture({ seedCredential: false })
+
+    await expect(listFederatedCredentials(deps, 'missing-app')).rejects.toMatchObject({ status: 404 })
+    await expect(
+      createFederatedCredential(deps, applicationId, {
+        name: 'Bad audience',
+        issuer: 'https://platform.example.com',
+        subject: 'org_1:*',
+        audienceResourceId: 'missing-resource',
+        jwksUrl: 'https://platform.example.com/jwks',
+      }),
+    ).rejects.toMatchObject({ status: 400 })
+
+    const created = await createFederatedCredential(deps, applicationId, {
+      name: 'Inline key',
+      issuer: 'https://platform.example.com',
+      subject: 'org_1:*',
+      audienceResourceId,
+      publicKeys: [{ kty: 'RSA', kid: 'key-1' }],
+      metadata: { owner: 'platform' },
+    })
+    expect(created).toMatchObject({
+      applicationId,
+      name: 'Inline key',
+      publicKeys: [{ kty: 'RSA', kid: 'key-1' }],
+      metadata: { owner: 'platform' },
+    })
+    await expect(getFederatedCredential(deps, applicationId, created.id)).resolves.toMatchObject({
+      id: created.id,
+      enabled: true,
+    })
+
+    await expect(
+      updateFederatedCredential(deps, applicationId, created.id, {
+        enabled: false,
+        name: 'Disabled inline key',
+        jwksUrl: null,
+        publicKeys: [{ kty: 'EC', kid: 'key-2' }],
+      }),
+    ).resolves.toMatchObject({
+      id: created.id,
+      enabled: false,
+      name: 'Disabled inline key',
+      jwksUrl: null,
+      publicKeys: [{ kty: 'EC', kid: 'key-2' }],
+    })
+
+    await expect(deleteFederatedCredential(deps, applicationId, created.id)).resolves.toBeUndefined()
+    await expect(getFederatedCredential(deps, applicationId, created.id)).rejects.toMatchObject({ status: 404 })
+    await expect(
+      updateFederatedCredential(deps, applicationId, 'missing-credential', { enabled: true }),
+    ).rejects.toMatchObject({
+      status: 404,
+    })
+    await expect(deleteFederatedCredential(deps, applicationId, 'missing-credential')).rejects.toMatchObject({
+      status: 404,
     })
   })
 

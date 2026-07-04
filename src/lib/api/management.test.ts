@@ -21,6 +21,16 @@ describe('management API client', () => {
       },
     })
     await management.deleteApplication('app-1')
+    await management.listFederatedCredentials('app-1')
+    await management.createFederatedCredential('app-1', {
+      name: 'Runner workload',
+      issuer: 'https://platform.example.com',
+      subject: 'org_1:*',
+      audienceResourceId: 'resource-1',
+      jwksUrl: 'https://platform.example.com/jwks',
+    })
+    await management.updateFederatedCredential('app-1', 'cred-1', { enabled: false })
+    await management.deleteFederatedCredential('app-1', 'cred-1')
     await management.listApplicationRedirectUris('app-1', { limit: 10, offset: 20 })
     await management.replaceApplicationRedirectUris('app-1', { redirectUris: ['https://app.example.com/callback'] })
     await management.listApplicationClientSecrets('app-1', { limit: 5 })
@@ -132,6 +142,25 @@ describe('management API client', () => {
         },
       ],
       ['applications.delete', { param: { id: 'app-1' } }],
+      ['federatedCredentials.get', { param: { applicationId: 'app-1' } }],
+      [
+        'federatedCredentials.post',
+        {
+          param: { applicationId: 'app-1' },
+          json: {
+            name: 'Runner workload',
+            issuer: 'https://platform.example.com',
+            subject: 'org_1:*',
+            audienceResourceId: 'resource-1',
+            jwksUrl: 'https://platform.example.com/jwks',
+          },
+        },
+      ],
+      [
+        'federatedCredential.patch',
+        { param: { applicationId: 'app-1', credentialId: 'cred-1' }, json: { enabled: false } },
+      ],
+      ['federatedCredential.delete', { param: { applicationId: 'app-1', credentialId: 'cred-1' } }],
       ['redirectUris.get', { param: { id: 'app-1' }, query: { limit: '10', offset: '20' } }],
       ['redirectUris.put', { param: { id: 'app-1' }, json: { redirectUris: ['https://app.example.com/callback'] } }],
       ['clientSecrets.get', { param: { id: 'app-1' }, query: { limit: '5' } }],
@@ -286,6 +315,16 @@ async function loadManagementApi() {
               'client-secrets': {
                 $get: endpoint('clientSecrets.get'),
                 $post: endpoint('clientSecrets.post'),
+              },
+            },
+            ':applicationId': {
+              'federated-credentials': {
+                $get: endpoint('federatedCredentials.get'),
+                $post: endpoint('federatedCredentials.post'),
+                ':credentialId': {
+                  $patch: endpoint('federatedCredential.patch'),
+                  $delete: endpoint('federatedCredential.delete'),
+                },
               },
             },
           },
