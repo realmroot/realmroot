@@ -94,6 +94,12 @@ Feature: Hosted authentication
     When I arrive at hosted sign-in
     Then the application context is visible
 
+  @entrypoint:product-ui @journey:oidc-resource-authorization
+  Scenario: Hosted OIDC authorization preserves the requested resource audience
+    Given an OIDC client starts authorization with a resource audience
+    When the user completes hosted sign-in
+    Then FlareAuth exchanges the authorization code for an access token with that audience
+
   @entrypoint:product-ui @journey:oauth-consent
   Scenario: OAuth consent approves requested scopes
     Given a third-party OIDC application requests scopes
