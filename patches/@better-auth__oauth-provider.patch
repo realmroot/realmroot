@@ -18,6 +18,14 @@ index bbef06a..ed16169 100644
  		case void 0: throw new APIError("BAD_REQUEST", {
  			error_description: "missing required grant_type",
  			error: "unsupported_grant_type"
+@@ -488,6 +490,7 @@ async function createUserTokens(ctx, opts, params) {
+ 	const exp = opts.scopeExpirations ? scopes.map((sc) => opts.scopeExpirations?.[sc] ? toExpJWT(opts.scopeExpirations[sc], iat) : defaultExp).reduce((prev, curr) => {
+ 		return prev < curr ? prev : curr;
+ 	}, defaultExp) : defaultExp;
++	if (!ctx.body.resource && verificationValue?.query.resource) ctx.body.resource = verificationValue.query.resource;
+ 	const audience = await checkResource(ctx, opts, scopes);
+ 	const isRefreshToken = user && (existingRefreshToken?.scopes?.includes("offline_access") || scopes.includes("offline_access"));
+ 	const isJwtAccessToken = audience && !opts.disableJwtPlugin;
 @@ -674,6 +676,125 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
  		verificationValue
  	});
@@ -228,10 +236,18 @@ index bbef06a..ed16169 100644
  		],
  		...options,
  		scopes: Array.from(scopes),
-@@ -3051,11 +3166,13 @@ const oauthProvider = (options) => {
- 					grant_type: z.enum([
- 						"authorization_code",
- 						"client_credentials",
+@@ -2877,6 +3004,7 @@ const oauthProvider = (options) => {
+					request_uri: z.string().optional(),
+					code_challenge: z.string().optional(),
+					code_challenge_method: z.enum(["S256"]).optional(),
++					resource: z.union([z.string(), z.array(z.string())]).optional(),
+					nonce: z.string().optional(),
+					prompt: z.enum([
+						"none",
+@@ -3051,11 +3178,13 @@ const oauthProvider = (options) => {
+					grant_type: z.enum([
+						"authorization_code",
+						"client_credentials",
 -						"refresh_token"
 +						"refresh_token",
 +						deviceCodeGrantType
