@@ -219,6 +219,10 @@ export function createAuth(
           issuer: `${baseURL}/api/auth`,
           audience: `${baseURL}/api/auth`,
         },
+        jwks: {
+          keyPairConfig: { alg: 'RS256', modulusLength: 2048 },
+          gracePeriod: 60 * 60 * 24 * 30,
+        },
       }),
       admin(),
       twoFactor({

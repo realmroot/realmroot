@@ -1,8 +1,8 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index bbef06a..ed16169 100644
+index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411f0c775a1 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -312,6 +312,7 @@ async function userInfoEndpoint(ctx, opts) {
+@@ -262,6 +262,7 @@ async function userInfoEndpoint(ctx, opts) {
  }
  //#endregion
  //#region src/token.ts
@@ -10,7 +10,7 @@ index bbef06a..ed16169 100644
  /**
  * Handles the /oauth2/token endpoint by delegating
  * the grant types
-@@ -326,6 +327,7 @@ async function tokenEndpoint(ctx, opts) {
+@@ -276,6 +277,7 @@ async function tokenEndpoint(ctx, opts) {
  		case "authorization_code": return handleAuthorizationCodeGrant(ctx, opts);
  		case "client_credentials": return handleClientCredentialsGrant(ctx, opts);
  		case "refresh_token": return handleRefreshTokenGrant(ctx, opts);
@@ -18,15 +18,15 @@ index bbef06a..ed16169 100644
  		case void 0: throw new APIError("BAD_REQUEST", {
  			error_description: "missing required grant_type",
  			error: "unsupported_grant_type"
-@@ -488,6 +490,7 @@ async function createUserTokens(ctx, opts, params) {
+@@ -505,6 +507,7 @@ async function createUserTokens(ctx, opts, params) {
  	const exp = opts.scopeExpirations ? scopes.map((sc) => opts.scopeExpirations?.[sc] ? toExpJWT(opts.scopeExpirations[sc], iat) : defaultExp).reduce((prev, curr) => {
  		return prev < curr ? prev : curr;
  	}, defaultExp) : defaultExp;
 +	if (!ctx.body.resource && verificationValue?.query.resource) ctx.body.resource = verificationValue.query.resource;
  	const audience = await checkResource(ctx, opts, scopes);
- 	const isRefreshToken = user && (existingRefreshToken?.scopes?.includes("offline_access") || scopes.includes("offline_access"));
+ 	const isRefreshToken = user && clientAllowsGrant(client, "refresh_token") && (existingRefreshToken?.scopes?.includes("offline_access") || scopes.includes("offline_access"));
  	const isJwtAccessToken = audience && !opts.disableJwtPlugin;
-@@ -674,6 +676,125 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
+@@ -682,6 +685,125 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
  		verificationValue
  	});
  }
@@ -152,21 +152,12 @@ index bbef06a..ed16169 100644
  /**
  * Grant that allows direct access to an API using the application's credentials
  * This grant is for M2M so the concept of a user id does not exist on the token.
-@@ -763,22 +884,10 @@ async function handleRefreshTokenGrant(ctx, opts) {
+@@ -771,13 +893,10 @@ async function handleRefreshTokenGrant(ctx, opts) {
  		error_description: "invalid refresh token",
  		error: "invalid_grant"
  	});
 -	if (refreshToken.revoked) {
--		await ctx.context.adapter.deleteMany({
--			model: "oauthRefreshToken",
--			where: [{
--				field: "clientId",
--				value: client_id
--			}, {
--				field: "userId",
--				value: refreshToken.userId
--			}]
--		});
+-		await invalidateRefreshFamily(ctx, client_id, refreshToken.userId);
 -		throw new APIError("BAD_REQUEST", {
 +	if (refreshToken.revoked) throw new APIError("BAD_REQUEST", {
  			error_description: "invalid refresh token",
@@ -176,7 +167,7 @@ index bbef06a..ed16169 100644
  	const scopes = refreshToken?.scopes;
  	const requestedScopes = scope?.split(" ");
  	if (requestedScopes) {
-@@ -1645,7 +1754,8 @@ const adminCreateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/creat
+@@ -1658,7 +1777,8 @@ const adminCreateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/creat
  		grant_types: z.array(z.enum([
  			"authorization_code",
  			"client_credentials",
@@ -186,17 +177,7 @@ index bbef06a..ed16169 100644
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -1754,7 +1864,8 @@ const adminCreateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/creat
- 								enum: [
- 									"authorization_code",
- 									"client_credentials",
--									"refresh_token"
-+									"refresh_token",
-+									deviceCodeGrantType
- 								]
- 							},
- 							description: "Requested authentication method for the token endpoint"
-@@ -1829,7 +1940,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+@@ -1841,7 +1961,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
  		grant_types: z.array(z.enum([
  			"authorization_code",
  			"client_credentials",
@@ -206,7 +187,17 @@ index bbef06a..ed16169 100644
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -2031,7 +2143,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
+@@ -1942,7 +2063,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+ 							enum: [
+ 								"authorization_code",
+ 								"client_credentials",
+-								"refresh_token"
++								"refresh_token",
++								deviceCodeGrantType
+ 							]
+ 						},
+ 						description: "Requested authentication method for the token endpoint"
+@@ -2042,7 +2164,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -216,7 +207,7 @@ index bbef06a..ed16169 100644
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2073,7 +2186,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
+@@ -2084,7 +2207,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -226,7 +217,7 @@ index bbef06a..ed16169 100644
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2765,7 +2879,8 @@ const oauthProvider = (options) => {
+@@ -2781,7 +2905,8 @@ const oauthProvider = (options) => {
  		grantTypes: [
  			"authorization_code",
  			"client_credentials",
@@ -236,15 +227,15 @@ index bbef06a..ed16169 100644
  		],
  		...options,
  		scopes: Array.from(scopes),
-@@ -2877,6 +3004,7 @@ const oauthProvider = (options) => {
- 					request_uri: z.string().optional(),
- 					code_challenge: z.string().optional(),
- 					code_challenge_method: z.enum(["S256"]).optional(),
-+					resource: z.union([z.string(), z.array(z.string())]).optional(),
- 					nonce: z.string().optional(),
- 					prompt: z.enum([
- 						"none",
-@@ -3051,11 +3178,13 @@ const oauthProvider = (options) => {
+@@ -2844,6 +2969,7 @@ const oauthProvider = (options) => {
+ 			request_uri: z.string().optional(),
+ 			code_challenge: z.string().optional(),
+ 			code_challenge_method: z.enum(["S256"]).optional(),
++			resource: z.union([z.string(), z.array(z.string())]).optional(),
+ 			nonce: z.string().optional(),
+ 			prompt: z.enum([
+ 				"none",
+@@ -3118,11 +3244,13 @@ const oauthProvider = (options) => {
  					grant_type: z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -259,17 +250,25 @@ index bbef06a..ed16169 100644
  					code_verifier: z.string().optional(),
  					redirect_uri: SafeUrlSchema.optional(),
  					refresh_token: z.string().optional(),
-@@ -3076,7 +3193,8 @@ const oauthProvider = (options) => {
- 										enum: [
- 											"authorization_code",
- 											"client_credentials",
+@@ -3140,11 +3268,12 @@ const oauthProvider = (options) => {
+ 								properties: {
+ 									grant_type: {
+ 										type: "string",
+-										enum: [
+-											"authorization_code",
+-											"client_credentials",
 -											"refresh_token"
-+											"refresh_token",
-+											deviceCodeGrantType
- 										],
+-										],
++									enum: [
++										"authorization_code",
++										"client_credentials",
++										"refresh_token",
++										deviceCodeGrantType
++									],
  										description: "OAuth2 grant type"
  									},
-@@ -3092,6 +3210,10 @@ const oauthProvider = (options) => {
+ 									client_id: {
+@@ -3159,6 +3288,10 @@ const oauthProvider = (options) => {
  										type: "string",
  										description: "Authorization code (for authorization_code grant)"
  									},
@@ -280,7 +279,7 @@ index bbef06a..ed16169 100644
  									code_verifier: {
  										type: "string",
  										description: "PKCE code verifier (for authorization_code grant)"
-@@ -3499,7 +3621,8 @@ const oauthProvider = (options) => {
+@@ -3566,7 +3699,8 @@ const oauthProvider = (options) => {
  					grant_types: z.array(z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -290,8 +289,8 @@ index bbef06a..ed16169 100644
  					])).default(["authorization_code"]).optional(),
  					response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  					type: z.enum([
-@@ -3978,12 +4101,14 @@ function authServerMetadata(ctx, opts, overrides) {
- 		registration_endpoint: `${baseURL}/oauth2/register`,
+@@ -4048,12 +4182,14 @@ function authServerMetadata(ctx, opts, overrides) {
+ 		registration_endpoint: overrides?.dynamic_client_registration_supported ? `${baseURL}/oauth2/register` : void 0,
  		introspection_endpoint: `${baseURL}/oauth2/introspect`,
  		revocation_endpoint: `${baseURL}/oauth2/revoke`,
 +		...overrides?.grant_types_supported?.includes(deviceCodeGrantType) ? { device_authorization_endpoint: `${baseURL}/device/code` } : {},
@@ -306,11 +305,11 @@ index bbef06a..ed16169 100644
  		],
  		token_endpoint_auth_methods_supported: [
  			...overrides?.public_client_supported ? ["none"] : [],
-diff --git a/dist/oauth-CqgT-XaR.d.mts b/dist/oauth-CqgT-XaR.d.mts
-index 9382ec7..4e25830 100644
---- a/dist/oauth-CqgT-XaR.d.mts
-+++ b/dist/oauth-CqgT-XaR.d.mts
-@@ -1336,7 +1336,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
+diff --git a/dist/oauth-D74mBkw6.d.mts b/dist/oauth-D74mBkw6.d.mts
+index 5531f010da1b43580be514022df818bb1f835323..c897e3d6f2d7ae8972b8c4d597ce51ec47cee527 100644
+--- a/dist/oauth-D74mBkw6.d.mts
++++ b/dist/oauth-D74mBkw6.d.mts
+@@ -1337,7 +1337,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
  /**
   * Supported grant types of the token endpoint
   */
@@ -319,7 +318,7 @@ index 9382ec7..4e25830 100644
  type AuthMethod = "client_secret_basic" | "client_secret_post";
  type TokenEndpointAuthMethod = AuthMethod | "none";
  type BearerMethodsSupported = "header" | "body";
-@@ -1366,6 +1366,12 @@ interface AuthServerMetadata {
+@@ -1367,6 +1367,12 @@ interface AuthServerMetadata {
     * @default `/oauth2/token`
     */
    token_endpoint: string;
@@ -332,3 +331,25 @@ index 9382ec7..4e25830 100644
    /**
     * The URL of the jwks_uri endpoint.
     *
+diff --git a/dist/utils-B3Myyglw.mjs b/dist/utils-B3Myyglw.mjs
+index 1a7ab61274ee66aa6de927186400d016adc77215..cd6779caa2c8220f622bb6a1959cccc8f58bfd42 100644
+--- a/dist/utils-B3Myyglw.mjs
++++ b/dist/utils-B3Myyglw.mjs
+@@ -278,14 +278,14 @@ function basicToClientCredentials(authorization) {
+ *
+ * A client's registered `grantTypes` defaults to the documented default
+ * `["authorization_code"]` when unset (see client registration). Refresh tokens
+-* are only ever issued through the authorization_code flow, so a client allowed
+-* to use `authorization_code` is implicitly allowed to use `refresh_token`.
++* are issued through authorization_code or device_code flows, so clients allowed
++* to use either interactive grant are implicitly allowed to use `refresh_token`.
+ *
+ * @internal
+ */
+ function clientAllowsGrant(client, grantType) {
+ 	const allowedGrants = client.grantTypes && client.grantTypes.length > 0 ? client.grantTypes : ["authorization_code"];
+-	if (grantType === "refresh_token" && allowedGrants.includes("authorization_code")) return true;
++	if (grantType === "refresh_token" && (allowedGrants.includes("authorization_code") || allowedGrants.includes("urn:ietf:params:oauth:grant-type:device_code"))) return true;
+ 	return allowedGrants.includes(grantType);
+ }
+ /**

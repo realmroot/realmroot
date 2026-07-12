@@ -27,6 +27,7 @@ describe('auth.test 1', () => {
     const metadata = (await response.json()) as {
       token_endpoint_auth_methods_supported: string[]
       grant_types_supported: string[]
+      id_token_signing_alg_values_supported: string[]
     }
 
     expect(metadata).toMatchObject({
@@ -44,6 +45,7 @@ describe('auth.test 1', () => {
       code_challenge_methods_supported: ['S256'],
       scopes_supported: ['openid', 'profile', 'email', 'offline_access', 'management:read', 'management:write'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+      id_token_signing_alg_values_supported: ['RS256'],
     })
     expect(metadata.token_endpoint_auth_methods_supported).not.toContain('none')
   })

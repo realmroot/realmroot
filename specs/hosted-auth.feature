@@ -100,6 +100,13 @@ Feature: Hosted authentication
     When the user completes hosted sign-in
     Then FlareAuth exchanges the authorization code for an access token with that audience
 
+  @entrypoint:product-ui @journey:oidc-native-token-verification
+  Scenario: Native OIDC clients can verify issued identity tokens
+    Given a native OIDC client uses a standards-compliant JOSE verifier
+    When FlareAuth publishes discovery metadata and signs an identity token
+    Then discovery advertises RS256 identity token signing
+    And the token can be verified with the published RSA public key
+
   @entrypoint:product-ui @journey:oauth-consent
   Scenario: OAuth consent approves requested scopes
     Given a third-party OIDC application requests scopes

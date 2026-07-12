@@ -9,6 +9,13 @@ FlareAuth v1.0 uses `@better-auth/oauth-provider` as the long-term OAuth 2.1 and
 The selected provider is configured in `server/auth.ts` with:
 
 - `jwt()` so OAuth access tokens and ID tokens are remotely verifiable through JWKS.
+- RS256 as the active ID-token signing algorithm required by the OpenID Connect
+  Discovery interoperability baseline. Superseded EdDSA and ES256 public keys
+  remain published during the configured JWKS grace period so already-issued
+  tokens can still be verified.
+- Better Auth 1.6 is patched to select the newest live key matching the configured
+  signing algorithm instead of the newest key of any algorithm. This keeps
+  algorithm rotation safe while the JWKS contains rollover keys.
 - `oauthProvider()` from `@better-auth/oauth-provider`.
 - OIDC scopes: `openid`, `profile`, `email`, `offline_access`.
 - Dynamic client registration disabled by default.

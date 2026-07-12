@@ -42,15 +42,15 @@
   "packageManager": "pnpm@10.30.2",
   "dependencies": {
     "@better-auth/agent-auth": "0.5.1",
-    "@better-auth/i18n": "^1.6.11",
-    "@better-auth/oauth-provider": "^1.6.10",
-    "@better-auth/passkey": "^1.6.10",
+    "@better-auth/i18n": "^1.6.23",
+    "@better-auth/oauth-provider": "^1.6.23",
+    "@better-auth/passkey": "^1.6.23",
     "@fontsource-variable/geist": "^5.2.8",
     "@hono/zod-openapi": "^1.4.0",
     "@hono/zod-validator": "^0.8.0",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-router": "^1.93.0",
-    "better-auth": "^1.6.2",
+    "better-auth": "^1.6.23",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
@@ -134,7 +134,8 @@
       "workerd"
     ],
     "patchedDependencies": {
-      "@better-auth/oauth-provider": "patches/@better-auth__oauth-provider.patch"
+      "@better-auth/oauth-provider": "patches/@better-auth__oauth-provider.patch",
+      "better-auth": "patches/better-auth.patch"
     }
   }
 }

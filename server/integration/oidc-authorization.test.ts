@@ -25,6 +25,21 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
   return JSON.parse(atob(padded.replaceAll('-', '+').replaceAll('_', '/'))) as Record<string, unknown>
 }
 
+function decodeJwtHeader(token: string): Record<string, unknown> {
+  const header = token.split('.')[0]
+  expect(header).toBeTruthy()
+  const padded = header.padEnd(Math.ceil(header.length / 4) * 4, '=')
+  return JSON.parse(atob(padded.replaceAll('-', '+').replaceAll('_', '/'))) as Record<string, unknown>
+}
+
+function decodeBase64Url(value: string): ArrayBuffer {
+  const padded = value.padEnd(Math.ceil(value.length / 4) * 4, '=')
+  return Uint8Array.from(atob(padded.replaceAll('-', '+').replaceAll('_', '/')), (character) => character.charCodeAt(0))
+    .buffer as ArrayBuffer
+}
+
+type PublishedJwk = JsonWebKey & { alg?: string; kid?: string }
+
 describe('OIDC authorization over real D1', () => {
   let harness: Harness
 
@@ -32,7 +47,19 @@ describe('OIDC authorization over real D1', () => {
     harness = await createHarness()
   })
 
-  it('preserves resource through hosted sign-in and code exchange [spec: hosted-auth/oidc-resource-authorization]', async () => {
+  it('preserves resource and issues a verifiable RS256 identity token [spec: hosted-auth/oidc-resource-authorization] [spec: hosted-auth/oidc-native-token-verification]', async () => {
+    await env.DB.prepare(
+      `INSERT INTO jwks (id, public_key, private_key, alg, crv, created_at, expires_at)
+       VALUES (?, ?, ?, 'ES256', 'P-256', ?, NULL)`,
+    )
+      .bind(
+        'legacy-es256-key',
+        JSON.stringify({ kty: 'EC', crv: 'P-256', x: 'legacy-x', y: 'legacy-y' }),
+        '{}',
+        Date.now(),
+      )
+      .run()
+
     const cookie = await signInAdmin(harness)
     const redirectUri = 'http://localhost/callback'
     const verifier = 'resource-flow-pkce-verifier-0123456789abcdefghijklmnop'
@@ -91,11 +118,39 @@ describe('OIDC authorization over real D1', () => {
       }),
     })
     expect(token.status, await token.clone().text()).toBe(200)
-    const tokenBody = (await token.json()) as { access_token: string }
+    const tokenBody = (await token.json()) as { access_token: string; id_token: string }
     const payload = decodeJwtPayload(tokenBody.access_token)
     const audience = Array.isArray(payload.aud) ? payload.aud : [payload.aud]
 
     expect(audience).toContain(resource)
     expect(payload.azp).toBe(application.clientId)
+
+    const header = decodeJwtHeader(tokenBody.id_token)
+    expect(header).toMatchObject({ alg: 'RS256', kid: expect.any(String) })
+
+    const jwksResponse = await harness.request('/api/auth/jwks')
+    expect(jwksResponse.status, await jwksResponse.clone().text()).toBe(200)
+    const jwks = (await jwksResponse.json()) as { keys: PublishedJwk[] }
+    const signingKey = jwks.keys.find((key) => key.kid === header.kid)
+    expect(signingKey).toMatchObject({ alg: 'RS256', kty: 'RSA' })
+    expect(jwks.keys).toEqual(
+      expect.arrayContaining([expect.objectContaining({ alg: 'ES256', kid: 'legacy-es256-key', kty: 'EC' })]),
+    )
+
+    const verificationKey = await crypto.subtle.importKey(
+      'jwk',
+      signingKey!,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['verify'],
+    )
+    const [encodedHeader, encodedPayload, encodedSignature] = tokenBody.id_token.split('.')
+    const verified = await crypto.subtle.verify(
+      'RSASSA-PKCS1-v1_5',
+      verificationKey,
+      decodeBase64Url(encodedSignature),
+      new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`),
+    )
+    expect(verified).toBe(true)
   })
 })
