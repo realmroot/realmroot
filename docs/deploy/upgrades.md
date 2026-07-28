@@ -1,164 +1,65 @@
-# Upgrades
+# Deployment Upgrades
 
-FlareAuth is distributed as a template repository. Deploy Button creates a
-deployment repository in the operator's GitHub or GitLab account. Keep those two
-repositories separate:
+FlareAuth deployment forks do not maintain a second copy of the application
+source. Their small, deployment-only workflow checks out canonical source from
+`saltbo/flareauth` each time it runs. The upstream repository itself has no
+GitHub deployment workflow.
 
-- upstream repository: generic FlareAuth source code, migrations, docs, and
-  default Wrangler bindings
-- deployment repository: one product auth realm, instance-specific domain,
-  sender, Cloudflare resource IDs, and secrets
+## Normal Upgrade
 
-Do not put production instance values such as `id.example.com`,
-`noreply@example.com`, D1 database IDs, or custom domain routes back into the
-upstream repository.
+From the deployment fork:
 
-## Deployment Repository Setup
+1. Select **Sync fork > Update branch** on GitHub.
+2. Wait for **Deploy FlareAuth Fork** to complete.
+3. Run the smoke tests below.
 
-After Deploy Button creates the deployment repository, add the upstream remote:
+The sync produces a push to the fork's `main` branch, which triggers deployment
+automatically. The fork receives current workflows and documentation while the
+deployment itself uses current upstream source.
 
-```bash
-git remote add upstream https://github.com/saltbo/flareauth.git
-git fetch upstream --tags
-```
-
-Keep instance configuration in the deployment repository:
-
-- `BETTER_AUTH_URL`
-- `TRUSTED_ORIGINS`
-- `EMAIL_FROM`
-- `[[send_email]].allowed_sender_addresses`
-- `[[routes]]` or Cloudflare Dashboard custom domain settings
-- generated D1 `database_id`, R2 bucket name, Queue name, and Worker name
-
-Commit those instance settings in the deployment repository only.
-
-`BETTER_AUTH_URL` and `TRUSTED_ORIGINS` are optional for a single-domain
-deployment because FlareAuth can derive them from the request origin. Set them
-only when the deployment needs a canonical issuer that differs from the incoming
-host or when extra trusted origins are required.
-
-## Upgrade From Upstream
-
-## Automated Upgrade PR
-
-The upstream repository ships `.github/workflows/update-from-upstream.yml` for
-deployment repositories. The workflow is maintained in upstream so every
-deployment receives the same upgrade mechanism, but its job is disabled when it
-runs in `saltbo/flareauth` itself. Deployment repositories check for upstream
-updates every six hours.
-
-In a deployment repository, open **Actions > Update From FlareAuth Upstream >
-Run workflow** to run the same check manually.
-
-If repository settings do not allow GitHub Actions to create pull requests with
-the default `GITHUB_TOKEN`, add a repository secret named
-`FLAREAUTH_UPGRADE_TOKEN` with permission to create and update pull requests.
-The workflow uses that token when it is present.
-
-- Leave `target_ref` empty to merge the latest compatible upstream semver tag.
-  Compatibility is based on the current deployment repository's
-  `package.json` major version. For example, a `1.2.0` deployment can
-  automatically upgrade to `1.3.0` or `1.3.4`, but not to `2.0.0`.
-- Set `target_ref` to a release tag such as `v1.0.3`, a branch, or a commit SHA
-  to upgrade to a specific upstream version.
-- Manual semver tags from a different major are rejected unless
-  `allow_major_upgrade` is set to `true`.
-- Keep `upstream_repository` as `saltbo/flareauth` unless the deployment follows
-  a different FlareAuth upstream fork.
-- Enable `run_e2e` when the deployment repository should run Cucumber E2E before
-  opening the upgrade PR.
-
-The scheduled workflow creates or updates a single PR from
-`flareauth-upgrade/latest` into the deployment repository's `main` branch. If
-that PR is still open when a newer compatible upstream tag is published, the
-same branch and PR are updated to the newer tag instead of creating a second
-upgrade PR. Manually pinned versions use `flareauth-upgrade/<target>`.
-
-Upgrade PRs are opened after running:
-
-- `pnpm run typecheck`
-- `pnpm run lint`
-- `pnpm test`
-- `pnpm run build`
-- optionally `pnpm run test:e2e`
-
-Review deployment-specific files such as `wrangler.toml`,
-`wrangler.preview.toml`, and `package.json` before merging the PR. Those files
-belong in the deployment repository even though the workflow templates are
-maintained in upstream.
-
-## Manual Upgrade
-
-Prefer tagged releases for production upgrades:
+The equivalent GitHub CLI command is:
 
 ```bash
-git fetch upstream --tags
-git merge v1.0.3
-pnpm install --frozen-lockfile
-pnpm run typecheck
-pnpm run lint
-pnpm test
-pnpm run deploy
+gh repo sync OWNER/FLAREAUTH_FORK --branch main
 ```
 
-For fast-moving internal deployments, merge `upstream/main` after checking CI:
+No local clone of the deployment fork is required.
 
-```bash
-git fetch upstream
-git merge upstream/main
-pnpm install --frozen-lockfile
-pnpm run typecheck
-pnpm run lint
-pnpm test
-pnpm run deploy
-```
+## Pinned Or Recovery Deployment
 
-The deploy script applies D1 migrations through the `DB` binding before
-publishing the Worker:
+Run **Deploy FlareAuth Fork** manually and set `upstream_ref` to an upstream
+branch, tag, or commit SHA. The default is `main`.
 
-```bash
-wrangler d1 migrations apply DB --remote
-vite build
-wrangler deploy
-```
+Pinned deployment changes code only. It continues to use the fork's configured
+Worker, D1, R2, Queue, sender, and existing secrets.
 
-Using the binding name keeps upgrades compatible with Deploy Button generated
-database names.
+## Deployment Configuration
 
-Deploy Button should replace placeholder resource fields in the deployment
-repository. If a deployment repository still contains
-`00000000-0000-0000-0000-000000000000`, replace it with the generated D1
-database ID before running CI.
+Deployment-specific values belong in GitHub Actions secrets and variables, not
+in committed application files:
 
-## Conflict Rules
+- secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and optionally
+  `BETTER_AUTH_SECRET`
+- required variable: `FLAREAUTH_EMAIL_FROM`
+- optional variables: `FLAREAUTH_EMAIL_FROM_NAME`, `FLAREAUTH_WORKER_NAME`,
+  `FLAREAUTH_D1_DATABASE`, `FLAREAUTH_R2_BUCKET`, and
+  `FLAREAUTH_EMAIL_QUEUE`
 
-Upgrade conflicts usually happen in `wrangler.toml`, `wrangler.preview.toml`,
-or `package.json`.
+Resource override variables are primarily for adopting an existing deployment
+whose names do not match the fork-name convention.
 
-- Keep deployment repository values for domains, senders, resource IDs, and
-  custom routes.
-- Keep upstream changes to code, migrations, shared schemas, scripts, and
-  generic binding shape.
-- Keep the upstream `deploy` script unless the deployment repository has a
-  documented reason to override it.
+The canonical `saltbo/flareauth` repository never runs the fork deployment job.
+It continues to deploy its own Worker through Cloudflare Workers Builds.
 
-If a release adds a new binding or environment variable, update the deployment
-repository's Wrangler config and Cloudflare Dashboard settings before deploying.
+## Migrations And Rollback
 
-## Release Notes Checklist
-
-Every upstream release should state:
-
-- whether D1 migrations are included
-- whether new bindings, secrets, or environment variables are required
-- whether any instance config must be changed manually
-- whether the release is safe to roll back after migrations
-- the recommended smoke tests after deploy
+Every workflow deployment applies pending D1 migrations before publishing code.
+Review migration release notes before intentionally deploying an older commit:
+database migrations are not rolled back by selecting an older `upstream_ref`.
 
 ## Smoke Tests
 
-After upgrade, verify:
+After deployment, verify:
 
 ```bash
 curl https://AUTH_ORIGIN/api/configz
@@ -166,4 +67,10 @@ curl https://AUTH_ORIGIN/api/auth/.well-known/openid-configuration
 curl https://AUTH_ORIGIN/api/management/openapi.json
 ```
 
-Confirm that the issuer in both config responses matches the deployment origin.
+Confirm the issuer matches the deployment origin, then use the FlareAuth Restish
+skill to run `get-readiness` and at least one generated read-only Management API
+operation.
+
+Source:
+
+- [GitHub: Syncing a fork](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/syncing-a-fork)

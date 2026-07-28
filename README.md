@@ -17,12 +17,6 @@
   <a href="package.json"><img src="https://img.shields.io/badge/TypeScript-6.x-3178c6.svg" alt="TypeScript 6.x" /></a>
 </p>
 
-<p align="center">
-  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/saltbo/flareauth">
-    <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare" />
-  </a>
-</p>
-
 ## What It Is
 
 FlareAuth gives a product team its own auth realm: one user pool, one issuer, one
@@ -62,7 +56,7 @@ admin experience.
 - Standard OIDC integration for product applications.
 - Public Management API with generated OpenAPI contract.
 - Agent-operable administration through an installable FlareAuth skill.
-- Cloudflare Deploy Button setup for low-cost per-product deployments.
+- Fork-and-deploy GitHub Actions setup for low-cost per-product deployments.
 
 ## Core Capabilities
 
@@ -94,8 +88,19 @@ contract is served by each deployment at:
 
 ## Deploy
 
-Use the Deploy to Cloudflare button at the top of this page for each product
-auth realm.
+Deploy each product auth realm from a GitHub fork:
+
+1. Fork `saltbo/flareauth`.
+2. Install [`deploy/flareauth-fork.yml`](deploy/flareauth-fork.yml) as
+   `.github/workflows/deploy.yml` in the fork and enable GitHub Actions.
+3. Add the Cloudflare deployment secrets and sender variable described in
+   [Cloudflare deployment](docs/deploy/cloudflare.md).
+4. Run **Deploy FlareAuth Fork** once.
+
+Later upgrades only require **Sync fork**. The resulting push to the fork's
+`main` branch deploys the current upstream source automatically. The canonical
+`saltbo/flareauth` repository has no GitHub deployment workflow: its Worker
+continues to deploy exclusively through Cloudflare Workers Builds.
 
 After deployment:
 

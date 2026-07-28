@@ -3,6 +3,7 @@ dist
 src/routeTree.gen.ts
 src/routeTree.gen.js
 .wrangler
+wrangler.deployment.toml
 .playwright-cli
 .dev.vars
 *.local

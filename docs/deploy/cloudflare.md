@@ -1,10 +1,61 @@
 # Cloudflare Deployment
 
-FlareAuth runs as a Cloudflare Worker with Assets, D1, R2, Email Routing, Queue, and Cron bindings.
+FlareAuth runs as a Cloudflare Worker with Assets, D1, R2, Email Routing,
+Queue, and Cron bindings.
 
-Deploy a new product auth realm from the repository button:
+## Repository Model
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/saltbo/flareauth)
+Keep two clear repository roles:
+
+- `saltbo/flareauth` is the canonical upstream source. Its own Worker deploys
+  exclusively through Cloudflare Workers Builds and has no GitHub deployment
+  workflow.
+- A GitHub fork is one product deployment. Its only operational responsibility
+  is holding GitHub Actions credentials and triggering the upstream-maintained
+  deployment script.
+
+Do not develop product code in the deployment fork. The workflow checks out
+`saltbo/flareauth` directly, so deployment source always comes from upstream.
+
+## Create A Deployment
+
+1. Fork `saltbo/flareauth`.
+2. Copy [`deploy/flareauth-fork.yml`](../../deploy/flareauth-fork.yml) to
+   `.github/workflows/deploy.yml` in the fork, then enable it from the fork's
+   **Actions** tab. This small trigger belongs only to the deployment fork.
+3. Add these repository secrets under **Settings > Secrets and variables >
+   Actions**:
+
+   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_ACCOUNT_ID`
+   - optional `BETTER_AUTH_SECRET`
+
+4. Add the required repository variable:
+
+   - `FLAREAUTH_EMAIL_FROM`, for example `noreply@example.com`
+
+5. Optionally add:
+
+   - `FLAREAUTH_EMAIL_FROM_NAME`, default `FlareAuth`
+   - `FLAREAUTH_WORKER_NAME`
+   - `FLAREAUTH_D1_DATABASE`
+   - `FLAREAUTH_R2_BUCKET`
+   - `FLAREAUTH_EMAIL_QUEUE`
+
+6. Open **Actions > Deploy FlareAuth Fork > Run workflow**.
+
+The default resource names derive from the fork repository. A fork named
+`flareauth-example` deploys Worker and D1 names as `flareauth-example`, R2 as
+`flareauth-assets-example`, and Queue as `flareauth-email-example`.
+
+The fork workflow checks out upstream and runs `pnpm run deploy:fork`. The
+upstream-maintained script is idempotent: it reuses existing resources by name,
+creates missing resources, generates a deployment-only Wrangler config, applies
+D1 migrations, builds, and deploys. Existing Worker secrets are preserved.
+
+The Cloudflare API token must be scoped to the intended account and allow
+Workers Scripts, D1, R2, Queues, and the bindings used by the deployment. Do not
+commit the token or put it in a repository variable.
 
 ## Auth Realm Boundary
 
@@ -18,147 +69,60 @@ FlareAuth deployments. Keep the deployment boundary as the isolation boundary
 instead of adding product-level tenant predicates inside one D1 database. See
 [Tenancy Model](../architecture/tenancy.md).
 
-## Required Resources
+## Secrets And Runtime Settings
 
-Cloudflare Deploy Button reads `wrangler.toml`, clones the repository into the
-operator's GitHub/GitLab account, provisions supported resources, fills generated
-resource IDs into the cloned repository, configures Workers Builds, and deploys
-the Worker. Use the button for each product auth realm. The button should only
-need the `BETTER_AUTH_SECRET` from `.dev.vars.example` during the initial flow.
-The template keeps placeholder D1 and R2 resource fields so Cloudflare has
-configuration keys to replace in the cloned deployment repository.
+`BETTER_AUTH_SECRET` must be unique for every auth realm. When the GitHub secret
+is configured, the workflow applies it. Otherwise it reuses the existing Worker
+secret or generates one on the first deployment.
 
-If you are creating resources manually instead, create one production and one
-staging resource set per product:
+These settings remain deployment-specific:
 
-```bash
-wrangler d1 create flareauth
-wrangler d1 create flareauth-staging
-wrangler r2 bucket create flareauth-assets
-wrangler r2 bucket create flareauth-assets-staging
-wrangler queues create flareauth-email
-wrangler queues create flareauth-email-staging
-```
+- `BETTER_AUTH_URL`: optional canonical issuer origin.
+- `TRUSTED_ORIGINS`: optional extra first-party FlareAuth origins.
+- OAuth provider credentials configured in the admin console or Management API.
+- `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, and `WEBAUTHN_ORIGINS` when passkeys
+  span custom domains.
 
-Update `database_id` in `wrangler.toml` and `wrangler.preview.toml` after
-creating D1 databases manually. Deploy Button handles this resource provisioning
-step for button-created deployments by replacing the placeholder IDs in the
-cloned deployment repository, not in the upstream template.
-
-## Secrets And Vars
-
-Set secrets separately for preview and production:
-
-```bash
-wrangler secret put BETTER_AUTH_SECRET
-```
-
-Checklist:
-
-- `BETTER_AUTH_SECRET`: 32+ bytes from `openssl rand -base64 32`.
-- `BETTER_AUTH_URL`: optional production issuer origin, for example `https://auth.example.com`. When omitted, FlareAuth uses the request origin.
-- `TRUSTED_ORIGINS`: optional comma-separated first-party FlareAuth origins,
-  such as admin console, account center, and deployment preview origins. When
-  omitted, FlareAuth trusts the resolved issuer origin. Configure OAuth/OIDC
-  application browser origins in each Application's CORS origins setting instead
-  of putting every product origin here.
-- OAuth provider credentials configured in the admin console or management API.
-- Management API credentials for any product automation.
-- Cloudflare account credentials for deployments, D1 migrations, R2, Queues, and Email Routing.
-- `EMAIL_FROM` and `EMAIL_FROM_NAME` in Wrangler vars.
-- `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, and `WEBAUTHN_ORIGINS` when passkeys are enabled across custom domains and previews.
-
-Set a fresh `BETTER_AUTH_SECRET` for every product deployment and every
-environment. Do not reuse one secret across independent auth realms.
-
-Deploy Button reads `.dev.vars.example` and prompts operators to fill required
-secrets. Keep this file minimal. Instance domains and trusted origins can be
-configured after the deployment repository is created, or omitted when the
-deployment uses a single custom domain.
-
-Deploy Button creates a deployment repository for the product instance. Keep
-instance values in that repository, not in the upstream FlareAuth template. See
-[Deployment upgrades](upgrades.md) for the upstream sync workflow.
-
-The upstream FlareAuth repository keeps `wrangler.toml` as the Deploy Button
-template. If upstream maintainers need to deploy their own production Worker,
-they should use `wrangler.production.toml` through `pnpm run deploy:self`. That
-configuration uses the Worker `workers.dev` origin and does not include a custom
-domain.
+The generated deployment config enables Wrangler `keep_vars`, so settings
+managed on the existing Worker but absent from the upstream template are not
+removed during deployment. Secrets are preserved by Wrangler independently.
 
 ## Email Routing
 
-Cloudflare Email Routing must be active for the sending domain before deployment mail can be sent.
+Cloudflare Email Routing must be active for the sending domain:
 
 1. Add the domain to Cloudflare.
 2. Enable Email Routing for the zone.
-3. Complete the DNS records Cloudflare provides, including MX and TXT/SPF records.
-4. Verify the sender address used by `EMAIL_FROM`.
-5. Keep the Worker binding in both Wrangler configs:
+3. Complete the required MX and TXT/SPF records.
+4. Verify the address used by `FLAREAUTH_EMAIL_FROM`.
 
-```toml
-[[send_email]]
-name = "EMAIL"
-allowed_sender_addresses = ["noreply@example.com"]
-```
-
-The `allowed_sender_addresses` value must match a verified address for the product domain.
-
-For the first Deploy Button pass, leave the template sender in place if needed.
-After the deployment repository is created, update `EMAIL_FROM` and
-`allowed_sender_addresses` to the verified product sender, then redeploy.
+The workflow uses the same address for the `EMAIL_FROM` variable and the
+`EMAIL` binding allowlist, avoiding mismatched sender configuration.
 
 ## Storage
 
-The `ASSET_BUCKET` R2 binding stores uploaded avatars, organization logos, application logos, branding logos, and favicons. Upload endpoints write objects to R2, create `uploaded_asset` rows with purpose, storage key, content type, byte size, SHA-256 checksum, and public URL, then store the asset ID on the user, organization, application, or branding setting.
+The `ASSET_BUCKET` R2 binding stores uploaded avatars, organization logos,
+application logos, branding logos, and favicons. Files remain private and are
+served through `/api/assets/{assetId}`.
 
-Uploaded assets are served through the Worker at `/api/assets/{assetId}`. This keeps R2 buckets private while still giving hosted UI and OAuth metadata stable same-origin public URLs. Do not expose the R2 bucket directly unless a future deployment intentionally moves asset delivery behind a public custom domain.
-
-### AgentAuth Foundation Limitation
-
-The delegated AgentAuth foundation is an integration milestone, not a production-ready delegated-agent launch gate. `@better-auth/agent-auth@0.5.1` stores JWT replay `jti` entries and fetched JWKS documents in process memory unless Better Auth is configured with shared `secondaryStorage`. Cloudflare Workers memory is isolate-local, so replay protection and JWKS caching are not durable across isolates. This milestone also allows dynamic host registration for delegated protocol compatibility; production enablement must pair that with an explicit host trust policy. Before enabling AgentAuth for production traffic, add a shared secondary storage adapter suitable for Workers, preferably Durable Object-backed or D1-backed storage with strong enough consistency for replay checks.
-
-SVG uploads are intentionally rejected because asset URLs are served from the auth origin.
-
-Keep staging and production buckets separate to avoid leaking preview assets into production.
+Keep one R2 bucket and D1 database per auth realm. When migrating an existing
+deployment, set the optional repository variables to its current resource names
+before the first workflow run so the workflow reuses data rather than creating
+empty resources.
 
 ## D1 Migrations
 
-Local development:
+The workflow always applies committed migrations through the `DB` binding before
+publishing the Worker:
 
 ```bash
-pnpm run db:migrate
+wrangler d1 migrations apply DB --remote --config wrangler.deployment.toml
 ```
 
-Staging preview:
-
-```bash
-pnpm run db:migrate:staging
-```
-
-Production:
-
-```bash
-pnpm run db:migrate:prod
-```
-
-Run migrations before deployment. `pnpm run deploy` runs remote D1 migrations
-through the `DB` binding, builds, and deploys. Using the binding name keeps the
-script compatible with Deploy Button generated database names.
-
-Deployment repositories also receive `.github/workflows/deploy.yml` from
-upstream. The workflow is maintained in upstream but disabled in
-`saltbo/flareauth`; it only performs deployment steps when copied into a product
-deployment repository. Configure these GitHub Actions secrets in the deployment
-repository before using it:
-
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-
-Then open **Actions > Deploy FlareAuth Deployment > Run workflow**. Keep
-`run_migrations` enabled for normal upgrades so D1 migrations are applied before
-the Worker is published.
+The generated configuration is runner-local and ignored by Git. Instance
+resource IDs never need to be committed to the deployment fork.
 
 Sources:
 
-- [Cloudflare Deploy to Cloudflare buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
+- [Cloudflare GitHub Actions deployment](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/)
+- [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/)

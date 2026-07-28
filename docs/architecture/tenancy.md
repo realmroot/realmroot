@@ -100,6 +100,7 @@ EMAIL_FROM
 EMAIL_FROM_NAME
 ```
 
-Use the Deploy to Cloudflare button for each new product auth realm. Cloudflare
-will clone the repository, provision supported resources from `wrangler.toml`,
-configure Workers Builds, and deploy the Worker in the operator's account.
+Use one GitHub fork for each new product auth realm. The fork workflow checks
+out canonical upstream source, provisions or reuses the realm's Cloudflare
+resources, applies migrations, and deploys the Worker. Keep instance credentials
+and resource overrides in the fork's GitHub Actions settings.

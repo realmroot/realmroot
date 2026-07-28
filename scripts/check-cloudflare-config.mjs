@@ -2,7 +2,8 @@
 
 import { readFileSync } from 'node:fs'
 
-const configs = ['wrangler.toml', 'wrangler.preview.toml']
+const requestedConfigs = process.argv.slice(2).filter((argument) => argument !== '--')
+const configs = requestedConfigs.length > 0 ? requestedConfigs : ['wrangler.toml', 'wrangler.preview.toml']
 const requiredSnippets = [
   'binding = "ASSETS"',
   'directory = "./dist/client"',

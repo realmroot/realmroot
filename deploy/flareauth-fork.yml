@@ -1,0 +1,58 @@
+name: Deploy FlareAuth Fork
+
+# Install this file as .github/workflows/deploy.yml in a deployment fork.
+# The canonical saltbo/flareauth repository does not use this workflow.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: Upstream branch, tag, or commit to deploy
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flareauth-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout FlareAuth upstream
+        uses: actions/checkout@v5
+        with:
+          repository: saltbo/flareauth
+          ref: ${{ inputs.upstream_ref || 'main' }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.14.1
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          FLAREAUTH_WORKER_NAME: ${{ vars.FLAREAUTH_WORKER_NAME }}
+          FLAREAUTH_D1_DATABASE: ${{ vars.FLAREAUTH_D1_DATABASE }}
+          FLAREAUTH_R2_BUCKET: ${{ vars.FLAREAUTH_R2_BUCKET }}
+          FLAREAUTH_EMAIL_QUEUE: ${{ vars.FLAREAUTH_EMAIL_QUEUE }}
+          FLAREAUTH_EMAIL_FROM: ${{ vars.FLAREAUTH_EMAIL_FROM }}
+          FLAREAUTH_EMAIL_FROM_NAME: ${{ vars.FLAREAUTH_EMAIL_FROM_NAME }}
+        run: pnpm run deploy:fork
