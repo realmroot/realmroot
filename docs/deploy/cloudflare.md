@@ -11,11 +11,13 @@ Keep two clear repository roles:
   exclusively through Cloudflare Workers Builds and has no GitHub deployment
   workflow.
 - A GitHub fork is one product deployment. Its only operational responsibility
-  is holding GitHub Actions credentials and triggering the upstream-maintained
-  deployment script.
+  is holding GitHub Actions credentials and deploying its current `main`
+  commit with the upstream-maintained deployment script.
 
-Do not develop product code in the deployment fork. The workflow checks out
-`saltbo/flareauth` directly, so deployment source always comes from upstream.
+Do not develop product code in the deployment fork during normal operation.
+Use GitHub's **Sync fork** action to bring upstream changes into the fork. The
+workflow checks out the triggering fork commit, so the fork's `main` branch is
+the explicit deployment version boundary.
 
 ## Create A Deployment
 
@@ -48,10 +50,11 @@ The default resource names derive from the fork repository. A fork named
 `flareauth-example` deploys Worker and D1 names as `flareauth-example`, R2 as
 `flareauth-assets-example`, and Queue as `flareauth-email-example`.
 
-The fork workflow checks out upstream and runs `pnpm run deploy:fork`. The
-upstream-maintained script is idempotent: it reuses existing resources by name,
-creates missing resources, generates a deployment-only Wrangler config, applies
-D1 migrations, builds, and deploys. Existing Worker secrets are preserved.
+The fork workflow checks out its own triggering commit and runs
+`pnpm run deploy:fork`. The upstream-maintained script is idempotent: it reuses
+existing resources by name, creates missing resources, generates a
+deployment-only Wrangler config, applies D1 migrations, builds, and deploys.
+Existing Worker secrets are preserved.
 
 The Cloudflare API token must be scoped to the intended account and allow
 Workers Scripts, D1, R2, Queues, and the bindings used by the deployment. Do not

@@ -98,7 +98,7 @@ Deploy each product auth realm from a GitHub fork:
 4. Run **Deploy FlareAuth Fork** once.
 
 Later upgrades only require **Sync fork**. The resulting push to the fork's
-`main` branch deploys the current upstream source automatically. The canonical
+`main` branch deploys that exact fork commit automatically. The canonical
 `saltbo/flareauth` repository has no GitHub deployment workflow: its Worker
 continues to deploy exclusively through Cloudflare Workers Builds.
 

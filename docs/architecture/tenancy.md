@@ -101,6 +101,6 @@ EMAIL_FROM_NAME
 ```
 
 Use one GitHub fork for each new product auth realm. The fork workflow checks
-out canonical upstream source, provisions or reuses the realm's Cloudflare
+out its triggering commit, provisions or reuses the realm's Cloudflare
 resources, applies migrations, and deploys the Worker. Keep instance credentials
 and resource overrides in the fork's GitHub Actions settings.
