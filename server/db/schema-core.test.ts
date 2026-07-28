@@ -96,7 +96,9 @@ describe('schema.test 1', () => {
       onDelete: 'cascade',
     })
 
-    expect(columnNames(oauthClient)).toEqual(expect.arrayContaining(['redirect_uris', 'grant_types', 'client_secret']))
+    expect(columnNames(oauthClient)).toEqual(
+      expect.arrayContaining(['redirect_uris', 'grant_types', 'response_types', 'client_secret']),
+    )
     expect(indexNames(applicationClientSecret)).toEqual(
       expect.arrayContaining(['applicationClientSecret_applicationId_version_unique']),
     )
