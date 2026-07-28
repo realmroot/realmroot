@@ -20,16 +20,17 @@ Protected Management API responses include Restish-compatible discovery links:
 Link: </api/management/openapi.json>; rel="service-desc"; type="application/openapi+json", </api/management/openapi.json>; rel="describedby"; type="application/openapi+json"
 ```
 
-Restish can load the contract directly:
+Restish v2 can load the contract directly:
 
 ```bash
-restish api configure flareauth https://auth.example.com/api/management
-restish api sync flareauth
+restish api connect flareauth https://auth.example.com/api/management --replace --yes
 ```
 
 Restish discovers `/api/management/openapi.json` from the `service-desc` link relation. The OpenAPI document response itself intentionally does not include a self-referential discovery link.
+`--replace` ensures an existing profile is rebuilt from the Restish v2
+configuration published by FlareAuth.
 
-Generated Restish commands are available after sync, for example:
+Generated Restish commands are available after connecting, for example:
 
 ```bash
 restish flareauth list-applications

@@ -29,7 +29,7 @@ import { trustedOriginCors } from './middleware/cors'
 import { depsMiddleware } from './middleware/deps'
 import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
-import { managementOpenApiForRequest, managementOpenApiLinkHeader, managementOpenApiPath } from './openapi/management'
+import { managementOpenApi, managementOpenApiLinkHeader, managementOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
 import { createAccountAssetRoutes, createAssetRoutes, createManagementAssetRoutes } from './routes/assets'
 import type { ManagementAuthApi } from './routes/auth-api'
@@ -116,7 +116,7 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .use('/api/management/*', managementOpenApiDiscoveryHeader())
     .use('/api/management', managementBearerAuth(auth))
     .use('/api/management/*', managementBearerAuth(auth))
-    .get(managementOpenApiPath, (c) => c.json(managementOpenApiForRequest(c.req.url)))
+    .get(managementOpenApiPath, (c) => c.json(managementOpenApi))
     .route('/api/management', createManagementAssetRoutes())
     .route('/api/management', createManagementRoutes({ authApi: managementApi, securityPolicy: config.securityPolicy }))
     .route('/api/onboarding', onboardingRoutes())

@@ -112,7 +112,7 @@ export interface ManagementRouteConfig {
 export const jsonContentType = 'application/json'
 export const multipartContentType = 'multipart/form-data'
 export const managementSecurity: Array<Record<string, string[]>> = [{ adminSession: [] }, { managementOAuth2: [] }]
-export const managementScopes = 'openid,profile,email,offline_access,management:read,management:write'
+export const managementScopes = 'openid profile email offline_access management:read management:write'
 export function errorResponse(description: string) {
   return { description, content: { [jsonContentType]: { schema: managementErrorResponseSchema } } }
 }

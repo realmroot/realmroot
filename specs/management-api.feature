@@ -12,7 +12,7 @@ Feature: Management API Restish entry
     When a Management API client requests service discovery
     Then /api/management/openapi.json returns the OpenAPI 3.1 contract
     And Management API responses advertise the contract with Restish-compatible Link headers
-    And Restish exposes generated Management commands
+    And Restish v2 exposes generated Management commands
 
 
   @entrypoint:restish @journey:management-restish-oauth-auth

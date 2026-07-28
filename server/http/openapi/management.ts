@@ -23,10 +23,20 @@ interface ManagementOpenApiDocument {
     schemas?: Record<string, unknown>
   }
   security?: unknown
-  'x-cli-config': { security: string; params: RestishCliConfigParams }
+  'x-cli-config': RestishCliConfig
   [key: string]: unknown
 }
-type RestishCliConfigParams = Record<string, string>
+interface RestishCliConfig {
+  profiles: {
+    default: {
+      credentials: {
+        managementOAuth2: {
+          params: Record<string, string>
+        }
+      }
+    }
+  }
+}
 
 export const managementOpenApiPath = '/api/management/openapi.json'
 export const managementOpenApiLinkHeader = [
@@ -41,22 +51,6 @@ const managementRoutes: ManagementRouteConfig[] = [
 ]
 const openApiApp = createManagementOpenApiApp()
 export const managementOpenApi = buildManagementOpenApi()
-
-export function managementOpenApiForRequest(requestUrl: string): ManagementOpenApiDocument {
-  const contract = structuredClone(managementOpenApi)
-  const origin = new URL(requestUrl).origin
-  const securitySchemes = contract.components?.securitySchemes as Record<string, unknown>
-  const oauth = securitySchemes.managementOAuth2 as {
-    flows: { authorizationCode: { authorizationUrl: string; tokenUrl: string } }
-  }
-  const flow = oauth.flows.authorizationCode
-  flow.authorizationUrl = new URL(flow.authorizationUrl, origin).toString()
-  flow.tokenUrl = new URL(flow.tokenUrl, origin).toString()
-  const restishParams = contract['x-cli-config'].params as RestishCliConfigParams
-  restishParams.authorize_url = flow.authorizationUrl
-  restishParams.token_url = flow.tokenUrl
-  return contract
-}
 
 function createManagementOpenApiApp() {
   const app = new OpenAPIHono()
@@ -102,11 +96,18 @@ function buildManagementOpenApi(): ManagementOpenApiDocument {
   return {
     ...document,
     'x-cli-config': {
-      security: 'managementOAuth2',
-      params: {
-        client_id: systemCliClientId,
-        scopes: managementScopes,
-        redirect_url: 'http://localhost:8484/callback',
+      profiles: {
+        default: {
+          credentials: {
+            managementOAuth2: {
+              params: {
+                client_id: systemCliClientId,
+                scopes: managementScopes,
+                redirect_path: '/callback',
+              },
+            },
+          },
+        },
       },
     },
   } as ManagementOpenApiDocument

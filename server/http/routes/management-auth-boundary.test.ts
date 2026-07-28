@@ -1,5 +1,5 @@
 import { createApp } from '@server/http/app'
-import { managementOpenApi, managementOpenApiForRequest } from '@server/http/openapi/management'
+import { managementOpenApi } from '@server/http/openapi/management'
 import { managementCollectionRoutes } from '@shared/api/management'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -55,11 +55,18 @@ describe('management routes 1', () => {
       },
     })
     expect(managementOpenApi['x-cli-config']).toEqual({
-      security: 'managementOAuth2',
-      params: {
-        client_id: 'flareauth-cli',
-        scopes: 'openid,profile,email,offline_access,management:read,management:write',
-        redirect_url: 'http://localhost:8484/callback',
+      profiles: {
+        default: {
+          credentials: {
+            managementOAuth2: {
+              params: {
+                client_id: 'flareauth-cli',
+                scopes: 'openid profile email offline_access management:read management:write',
+                redirect_path: '/callback',
+              },
+            },
+          },
+        },
       },
     })
 
@@ -111,9 +118,7 @@ describe('management routes 1', () => {
     expect(contract.status).toBe(200)
     expect(contract.headers.get('content-type')).toContain('application/json')
     expect(contract.headers.get('link')).toBeNull()
-    await expect(contract.json()).resolves.toEqual(
-      managementOpenApiForRequest('http://localhost/api/management/openapi.json'),
-    )
+    await expect(contract.json()).resolves.toEqual(managementOpenApi)
 
     expect(protectedResponse.status).toBe(401)
     expect(protectedResponse.headers.get('link')).toContain('</api/management/openapi.json>; rel="service-desc"')

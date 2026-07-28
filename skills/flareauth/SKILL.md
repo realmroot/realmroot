@@ -1,6 +1,6 @@
 ---
 name: flareauth
-description: Operate a FlareAuth deployment and guide product OIDC client integration. Use this when an agent needs to inspect or change FlareAuth applications, connectors, users, roles, organizations, API resources, webhooks, security settings, branding, sign-in settings, readiness, or configure public SPA, public native, confidential web, or device-authorization OIDC clients.
+description: Operate a FlareAuth deployment with Restish v2 and guide product OIDC client integration. Use this when an agent needs to inspect or change FlareAuth applications, connectors, users, roles, organizations, API resources, webhooks, security settings, branding, sign-in settings, readiness, or configure public SPA, public native, confidential web, or device-authorization OIDC clients.
 ---
 
 # FlareAuth
@@ -10,7 +10,7 @@ Use this skill for two related tasks:
 - Operating a FlareAuth deployment through the Management API.
 - Guiding product OIDC clients that integrate with FlareAuth.
 
-For the full Management API Restish command list, read
+For the Management API Restish workflow, read
 `references/restish-commands.md`.
 
 ## Setup
@@ -27,7 +27,7 @@ If the user did not provide `AUTH_ORIGIN`, inspect the deployment repository or
 Cloudflare Worker configuration when available. If neither is available, ask for
 the deployment origin before continuing.
 
-For deployment operations, authorize a Restish profile first. The command
+For deployment operations, connect and authorize a Restish API first. The command
 sequence is in `references/restish-commands.md`; use that reference rather than
 reconstructing Restish commands from memory.
 
@@ -38,15 +38,16 @@ Management API automation. It is not the product OIDC device-login client, and
 system-managed applications such as `flareauth-cli` must not be modified.
 
 Ask the user to complete browser login when Restish authorization starts. Do not
-ask the user to copy or paste bearer tokens. The authorization helper suppresses
-token output and lets Restish store OAuth tokens in its local auth cache.
+ask the user to copy or paste bearer tokens. The initial readiness command
+suppresses response output and lets Restish store OAuth tokens in its local auth
+cache.
 
 Do not use product OIDC client credentials for Management API automation. The
 Management API accepts an admin browser session or a bearer token issued to
 `flareauth-cli`; non-admin users receive `403`.
 
-If the user has already authorized this Restish profile, they can rerun the same
-authorization script to refresh the local profile and cached auth.
+If the user has already authorized this Restish API, sync its OpenAPI contract
+before operating it. Restish reuses and refreshes its cached OAuth token.
 
 ## OIDC Client Integration
 
@@ -80,7 +81,7 @@ clients use a client secret.
 
 ## Creating OIDC Clients
 
-Authorize and sync a `PROFILE_NAME` before running these examples. Distinguish
+Connect and authorize an `API_NAME` before running these examples. Distinguish
 the FlareAuth deployment origin from the consuming product origin.
 `AUTH_ORIGIN` is where FlareAuth runs; `APP_ORIGIN` is the product application's
 origin used in OIDC redirect URIs.
@@ -88,8 +89,8 @@ origin used in OIDC redirect URIs.
 Create a public SPA application:
 
 ```bash
-restish PROFILE_NAME create-application \
-  -H "Content-Type: application/json" \
+restish API_NAME create-application \
+  --rsh-validate \
   -o json <<'JSON'
 {
   "name": "Customer Portal",
@@ -109,8 +110,8 @@ JSON
 Create a public native authorization-code application:
 
 ```bash
-restish PROFILE_NAME create-application \
-  -H "Content-Type: application/json" \
+restish API_NAME create-application \
+  --rsh-validate \
   -o json <<'JSON'
 {
   "name": "Desktop App",
@@ -128,8 +129,8 @@ JSON
 Create a public native device-login application:
 
 ```bash
-restish PROFILE_NAME create-application \
-  -H "Content-Type: application/json" \
+restish API_NAME create-application \
+  --rsh-validate \
   -o json <<'JSON'
 {
   "name": "Runner CLI",
@@ -147,8 +148,8 @@ JSON
 Create a confidential web application:
 
 ```bash
-restish PROFILE_NAME create-application \
-  -H "Content-Type: application/json" \
+restish API_NAME create-application \
+  --rsh-validate \
   -o json <<'JSON'
 {
   "name": "Admin Backend",
@@ -217,7 +218,7 @@ device authorization support.
 ## Guardrails
 
 - Always sync before operating a deployment you have not used recently.
-- Always confirm the deployment origin and profile name before making changes.
+- Always confirm the deployment origin and Restish API name before making changes.
 - Prefer resource nouns and real IDs from list/get responses; do not infer IDs
   from names.
 - System-managed applications such as `flareauth-cli` must not be deleted or modified.

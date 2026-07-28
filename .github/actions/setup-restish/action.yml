@@ -1,0 +1,28 @@
+name: Setup Restish
+description: Install the pinned Restish v2 release with checksum verification
+
+inputs:
+  version:
+    description: Restish version
+    required: false
+    default: 2.3.0
+
+runs:
+  using: composite
+  steps:
+    - name: Install Restish
+      shell: bash
+      env:
+        RESTISH_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        archive="restish-${RESTISH_VERSION}-linux-amd64.tar.gz"
+        install_dir="${RUNNER_TEMP}/restish-setup"
+        mkdir -p "$install_dir"
+        cd "$install_dir"
+        curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${RESTISH_VERSION}/${archive}" -o "$archive"
+        curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${RESTISH_VERSION}/checksums.txt" -o checksums.txt
+        grep "  ${archive}$" checksums.txt | sha256sum --check -
+        tar -xzf "$archive"
+        sudo install restish /usr/local/bin/restish
+        restish --version

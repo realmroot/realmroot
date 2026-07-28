@@ -168,15 +168,7 @@ jobs:
 
       - name: Install Restish
         if: steps.merge.outputs.changed == 'true'
-        run: |
-          version=0.21.2
-          archive="restish-${version}-linux-amd64.tar.gz"
-          curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${version}/${archive}" -o "$archive"
-          curl -fsSL "https://github.com/rest-sh/restish/releases/download/v${version}/checksums.txt" -o checksums.txt
-          grep "  ${archive}$" checksums.txt | sha256sum --check -
-          tar -xzf "$archive"
-          sudo install restish /usr/local/bin/restish
-          restish --version
+        uses: ./.github/actions/setup-restish
 
       - name: Typecheck
         if: steps.merge.outputs.changed == 'true'
