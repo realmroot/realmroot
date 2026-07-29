@@ -115,7 +115,7 @@ export function RolesPage() {
           onSubmit={createMutation.mutate}
           open={dialogOpen}
           pending={createMutation.isPending}
-          resources={resourcesQuery.data?.resources ?? []}
+          resources={resourcesQuery.data?.items ?? []}
         />
       }
       error={query.error}
@@ -356,7 +356,7 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
                       value={selectedResourceId}
                     >
                       <option value="">{tt('Select resource')}</option>
-                      {resourcesQuery.data?.resources.map((resource) => (
+                      {resourcesQuery.data?.items.map((resource) => (
                         <option key={resource.id} value={resource.id}>
                           {resource.name}
                         </option>

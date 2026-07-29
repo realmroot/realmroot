@@ -6,8 +6,7 @@ import {
   getAccountProfile,
   linkAccount,
   listAccountAgents,
-  revokeAccountAgent,
-  revokeAccountAgentCapabilityGrant,
+  retireAgent,
   verifyPasskeyRegistration,
 } from '@/lib/api/account'
 
@@ -106,19 +105,18 @@ describe('account API client over the real network boundary', () => {
   afterEach(() => realClientServer.resetHandlers())
   afterAll(() => realClientServer.close())
 
-  it('lists, revokes agents, and revokes capability grants', async () => {
+  it('lists and retires stable Agents', async () => {
     realClientServer.use(
-      http.get(`${base}/api/account/agents`, () => HttpResponse.json({ agents: [{ id: 'ag1' }] })),
-      http.delete(`${base}/api/account/agents/:agentId`, ({ params }) =>
-        HttpResponse.json({ revoked: params.agentId }),
+      http.get(`${base}/api/account/agents`, () =>
+        HttpResponse.json({
+          items: [{ id: 'ag1' }],
+          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
       ),
-      http.delete(`${base}/api/account/agent-capability-grants/:grantId`, ({ params }) =>
-        HttpResponse.json({ revoked: params.grantId }),
-      ),
+      http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })),
     )
-    expect((await listAccountAgents()).agents).toEqual([{ id: 'ag1' }])
-    expect(await revokeAccountAgent('ag1')).toEqual({ revoked: 'ag1' })
-    expect(await revokeAccountAgentCapabilityGrant('g1')).toEqual({ revoked: 'g1' })
+    expect((await listAccountAgents()).items).toEqual([{ id: 'ag1' }])
+    expect(await retireAgent('ag1')).toBeUndefined()
   })
 
   it('links a social provider via the native sign-in endpoint', async () => {

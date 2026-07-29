@@ -165,10 +165,11 @@ Feature: Admin Console
     And individual Management API operations are not generated as AgentAuth capabilities
 
   @entrypoint:product-ui @journey:admin-agent-inventory
-  Scenario: Admins can inspect and revoke delegated agent protocol records
+  Scenario: Admins govern Agents without managing protocol internals
     Given delegated AgentAuth hosts, agents, grants, and approval requests exist
-    When Console reads the agent protocol inventory
-    Then FlareAuth presents host, agent, user, grant, capability, and approval state from its agent module
-    When an admin revokes an agent, host, or capability grant
-    Then the revoked protocol record is no longer active
+    When Console reads the tenant Agent inventory
+    Then FlareAuth presents stable Agents, access requests, access grants, account connections, and audit events
+    And it does not expose hosts, registrations, bindings, or protocol approval records as management resources
+    When an admin retires an Agent or revokes an access grant
+    Then the Agent or grant is no longer active
     And no autonomous agent mode or broad admin mutation capability is enabled

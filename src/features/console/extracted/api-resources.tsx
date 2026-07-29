@@ -1,9 +1,6 @@
+import { type ApiResource, createApiResourceSchema } from '@shared/api/agent-api'
+import { configureExternalResourceAuthorizationRequestSchema } from '@shared/api/external-resources'
 import {
-  configureExternalResourceAuthorizationRequestSchema,
-  type ExternalResourceAuthorizationRecord,
-} from '@shared/api/external-resources'
-import {
-  configureExternalApiResourceAuthorization,
   consoleQueryKeys,
   createApiPermission,
   createApiResource,
@@ -12,7 +9,6 @@ import {
   deleteApiResource,
   deleteApiScope,
   getApiResource,
-  getExternalApiResourceAuthorization,
   listApiPermissions,
   listApiResources,
   listApiScopes,
@@ -88,7 +84,7 @@ export function ApiResourcesPage() {
       })
     },
   })
-  const resources = query.data?.resources ?? []
+  const resources = query.data?.items ?? []
   const visibleResources = resources.filter((resource) =>
     [resource.name, resource.identifier, resource.audience, resource.description ?? ''].some((value) =>
       value.toLowerCase().includes(search.trim().toLowerCase()),
@@ -127,11 +123,24 @@ export function ApiResourcesPage() {
             ['name', 'Name'],
             ['audience', 'Audience'],
             ['description', 'Description'],
+            ...(createMode === 'external' ? [['resourceUrl', 'Protected resource URL'] as [string, string]] : []),
           ]}
           onClose={() => setDialogOpen(false)}
-          onSubmit={(form) =>
-            createMutation.mutate(parseForm(createApiResourceRequestSchema, { ...form, authorizationMode: createMode }))
-          }
+          onSubmit={(form) => {
+            const resource = parseForm(createApiResourceRequestSchema, {
+              ...form,
+              authorizationMode: createMode,
+            })
+            createMutation.mutate(
+              createApiResourceSchema.parse({
+                ...resource,
+                authorization:
+                  createMode === 'external'
+                    ? { resourceUrl: form.resourceUrl, registrationMode: 'dynamic' }
+                    : undefined,
+              }),
+            )
+          }}
           open={dialogOpen}
           pending={createMutation.isPending}
           title={tt(createMode === 'external' ? 'Create external API resource' : 'Create local API resource')}
@@ -221,12 +230,6 @@ export function ApiResourceDetailPage({
     queryKey: [...consoleQueryKeys.apiResources, resourceId, 'permissions'],
     queryFn: () => listApiPermissions(resourceId),
     enabled: selectedTab === 'permissions',
-  })
-  const externalAuthorizationQuery = useQuery({
-    queryKey: [...consoleQueryKeys.apiResources, resourceId, 'external-authorization'],
-    queryFn: () => getExternalApiResourceAuthorization(resourceId),
-    enabled: resourceQuery.data?.authorizationMode === 'external',
-    retry: false,
   })
   const resource = resourceQuery.data
   const refreshChildren = () =>
@@ -386,10 +389,7 @@ export function ApiResourceDetailPage({
                   </CardContent>
                 </Card>
                 {resource.authorizationMode === 'external' ? (
-                  <ExternalAuthorizationCard
-                    authorization={externalAuthorizationQuery.data ?? null}
-                    resourceId={resource.id}
-                  />
+                  <ExternalAuthorizationCard authorization={resource.authorization} resourceId={resource.id} />
                 ) : null}
               </>
             ) : null}
@@ -525,7 +525,7 @@ function ExternalAuthorizationCard({
   authorization,
   resourceId,
 }: {
-  authorization: ExternalResourceAuthorizationRecord | null
+  authorization: ApiResource['authorization']
   resourceId: string
 }) {
   const queryClient = useQueryClient()
@@ -546,9 +546,8 @@ function ExternalAuthorizationCard({
   }, [authorization])
   const mutation = useMutation({
     mutationFn: (input: z.infer<typeof configureExternalResourceAuthorizationRequestSchema>) =>
-      configureExternalApiResourceAuthorization(resourceId, input),
-    onSuccess: (configured) =>
-      queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId, 'external-authorization'], configured),
+      updateApiResource(resourceId, { authorization: input }),
+    onSuccess: (updated) => queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated),
   })
   return (
     <Card>

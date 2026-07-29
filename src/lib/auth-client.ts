@@ -139,11 +139,16 @@ export function decideAgentCapability(input: {
   action: 'approve' | 'deny'
   capabilities?: string[]
 }) {
-  return postAccount(`/api/account/agent-approvals/${encodeURIComponent(input.agentId)}/decisions`, {
-    userCode: input.userCode,
-    action: input.action,
-    ...(input.capabilities ? { capabilities: input.capabilities } : {}),
-  })
+  return postAccount(
+    `/api/account/agent-enrollments/${encodeURIComponent(input.agentId)}/decision`,
+    {
+      kind: 'protocol',
+      decision: input.action,
+      userCode: input.userCode,
+      ...(input.capabilities ? { permissions: input.capabilities } : {}),
+    },
+    'PUT',
+  )
 }
 
 export function verifyDeviceCode(input: { userCode: string }) {
@@ -192,9 +197,9 @@ export async function nativeAuth(
   return response.json() as Promise<NativeAuthResult>
 }
 
-async function postAccount(path: string, body: Record<string, unknown>) {
+async function postAccount(path: string, body: Record<string, unknown>, method = 'POST') {
   const response = await fetch(path, {
-    method: 'POST',
+    method,
     headers: authHeaders(body),
     body: JSON.stringify(body),
   })

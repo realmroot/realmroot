@@ -46,7 +46,7 @@ describe('AccountConnectionsPage', () => {
     renderWithClient(<AccountConnectionsPage />)
     expect(await screen.findByText('GitHub')).toBeTruthy()
     expect(screen.getAllByRole('heading', { name: 'Authorized apps' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('heading', { name: 'Delegated agents' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('heading', { name: 'Agent identities' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Web3 wallet')).toBeTruthy()
   })
 
@@ -67,9 +67,7 @@ describe('AccountConnectionsPage', () => {
       },
     ]
     Object.assign(store, withIdentity)
-    server.use(
-      http.delete(`${base}/api/account/agent-identities/:identityId`, () => new HttpResponse(null, { status: 204 })),
-    )
+    server.use(http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })))
 
     renderWithClient(<AccountConnectionsPage />)
 
@@ -77,7 +75,7 @@ describe('AccountConnectionsPage', () => {
     expect(screen.getByText(/https:\/\/auth\.example\.com · agt_stable/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retire' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Retire identity' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent identity retired.'))
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent retired.'))
   })
 
   it('renders an error state when a connections request fails', async () => {
@@ -174,77 +172,6 @@ describe('AccountConnectionsPage', () => {
     await waitFor(() => expect(success).toHaveBeenCalledWith('Application access revoked.'))
   })
 
-  it('revokes a delegated agent and a capability grant', async () => {
-    const withAgent = createAccountStore()
-    withAgent.agents = [
-      {
-        id: 'agent-1',
-        name: 'Helper Bot',
-        status: 'active',
-        host: { id: 'host-1', name: 'Workstation' },
-        capabilityGrants: [{ id: 'grant-1', capability: 'read:profile' }],
-      },
-    ]
-    Object.assign(store, withAgent)
-    server.use(
-      http.delete(`${base}/api/account/agents/:agentId`, () => {
-        store.agents = []
-        return HttpResponse.json({ ok: true })
-      }),
-      http.delete(`${base}/api/account/agent-capability-grants/:grantId`, () => {
-        store.agents[0].capabilityGrants = []
-        return HttpResponse.json({ ok: true })
-      }),
-    )
-    renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('Helper Bot')).toBeTruthy()
-    expect(screen.getByText('read:profile')).toBeTruthy()
-
-    const agentRow = screen.getByText('Helper Bot').closest('article') as HTMLElement
-    const agentButtons = agentRow.querySelectorAll('button')
-    fireEvent.click(agentButtons[agentButtons.length - 1])
-    fireEvent.click(await screen.findByRole('button', { name: 'Revoke access' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent access revoked.'))
-    await waitFor(() => expect(screen.queryByText('Helper Bot')).toBeNull())
-  })
-
-  it('revokes an agent capability grant', async () => {
-    const withAgent = createAccountStore()
-    withAgent.agents = [
-      {
-        id: 'agent-3',
-        name: 'Grant Bot',
-        status: 'active',
-        host: { id: 'host-3', name: 'Box' },
-        capabilityGrants: [{ id: 'grant-9', capability: 'read:email' }],
-      },
-    ]
-    Object.assign(store, withAgent)
-    server.use(
-      http.delete(`${base}/api/account/agent-capability-grants/:grantId`, () => {
-        store.agents[0].capabilityGrants = []
-        return HttpResponse.json({ ok: true })
-      }),
-    )
-    renderWithClient(<AccountConnectionsPage />)
-    const grantRow = (await screen.findByText('read:email')).closest('div') as HTMLElement
-    fireEvent.click(grantRow.querySelector('button') as HTMLElement)
-    fireEvent.click(await screen.findByRole('button', { name: 'Revoke grant' }))
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Capability grant revoked.'))
-  })
-
-  it('renders an agent host id and None capabilities fallback', async () => {
-    const withAgent = createAccountStore()
-    withAgent.agents = [
-      { id: 'agent-2', name: 'Bare Bot', status: 'pending', host: { id: 'host-2', name: null }, capabilityGrants: [] },
-    ]
-    Object.assign(store, withAgent)
-    renderWithClient(<AccountConnectionsPage />)
-    expect(await screen.findByText('Bare Bot')).toBeTruthy()
-    expect(screen.getByText(/host-2/)).toBeTruthy()
-    expect(screen.getByText(/None/)).toBeTruthy()
-  })
-
   it('connects a wallet through the enroll flow', async () => {
     vi.stubGlobal(
       'window',
@@ -274,7 +201,7 @@ describe('AccountConnectionsPage', () => {
     disabled.accountCenter = { ...disabled.accountCenter, connectedAccountsEnabled: false }
     server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(disabled)))
     renderWithClient(<AccountConnectionsPage />)
-    expect((await screen.findAllByRole('heading', { name: 'Delegated agents' })).length).toBeGreaterThan(0)
+    expect((await screen.findAllByRole('heading', { name: 'Agent identities' })).length).toBeGreaterThan(0)
   })
 
   it('shows the generic error message when a query rejects with a non-Error', async () => {
@@ -296,6 +223,6 @@ describe('AccountConnectionsPage', () => {
     )
     renderWithClient(<AccountConnectionsPage />)
     expect(await screen.findByText('No authorized applications yet.')).toBeTruthy()
-    expect(screen.getByText('No delegated agents yet.')).toBeTruthy()
+    expect(screen.getByText('No Agent identities yet.')).toBeTruthy()
   })
 })

@@ -12,12 +12,7 @@ vi.mock('@/lib/api', () => ({
 }))
 vi.mock('@/lib/auth-client', () => ({ nativeAuth: vi.fn() }))
 
-import {
-  approveAgentEnrollmentIntent,
-  getAgentEnrollmentIntent,
-  listPersonalAgentIdentities,
-  retirePersonalAgentIdentity,
-} from '@/lib/api/account'
+import { approveAgentEnrollment, getAgentEnrollment, retireAgent } from '@/lib/api/account'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -25,7 +20,7 @@ afterEach(() => {
 })
 
 describe('Agent identity account API', () => {
-  it('lists identities and reads and approves encoded enrollment intents', async () => {
+  it('reads and approves encoded Agent enrollments', async () => {
     const requests: Array<{ url: string; method: string; credentials: RequestCredentials | undefined }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       requests.push({
@@ -33,27 +28,23 @@ describe('Agent identity account API', () => {
         method: init?.method ?? 'GET',
         credentials: init?.credentials,
       })
-      return Response.json(
-        String(input).includes('approvals') ? { identity: { id: 'identity-1' } } : { identities: [] },
-      )
+      return Response.json(init?.method === 'PUT' ? { agent: { id: 'agent-1' } } : { id: 'enrollment-1' })
     })
 
-    await expect(listPersonalAgentIdentities()).resolves.toEqual({ identities: [] })
-    await getAgentEnrollmentIntent('intent/with space')
-    await expect(approveAgentEnrollmentIntent('intent/with space')).resolves.toEqual({
-      identity: { id: 'identity-1' },
+    await getAgentEnrollment('intent/with space')
+    await expect(approveAgentEnrollment('intent/with space')).resolves.toEqual({
+      agent: { id: 'agent-1' },
     })
 
     expect(requests).toEqual([
-      { url: '/api/account/agent-identities', method: 'GET', credentials: 'same-origin' },
       {
-        url: '/api/account/agent-enrollment-intents/intent%2Fwith%20space',
+        url: '/api/account/agent-enrollments/intent%2Fwith%20space',
         method: 'GET',
         credentials: 'same-origin',
       },
       {
-        url: '/api/account/agent-enrollment-intents/intent%2Fwith%20space/approvals',
-        method: 'POST',
+        url: '/api/account/agent-enrollments/intent%2Fwith%20space/decision',
+        method: 'PUT',
         credentials: 'same-origin',
       },
     ])
@@ -64,9 +55,9 @@ describe('Agent identity account API', () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(Response.json({ error: 'already retired' }, { status: 400 }))
 
-    await expect(retirePersonalAgentIdentity('identity/1')).resolves.toBeUndefined()
-    await expect(retirePersonalAgentIdentity('identity/1')).resolves.toEqual({ error: 'already retired' })
-    expect(window.fetch).toHaveBeenCalledWith('/api/account/agent-identities/identity%2F1', {
+    await expect(retireAgent('agent/1')).resolves.toBeUndefined()
+    await expect(retireAgent('agent/1')).resolves.toEqual({ error: 'already retired' })
+    expect(window.fetch).toHaveBeenCalledWith('/api/account/agents/agent%2F1', {
       method: 'DELETE',
       credentials: 'same-origin',
     })

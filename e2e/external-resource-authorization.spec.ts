@@ -29,6 +29,7 @@ test.describe('external API resource authorization', () => {
           name: 'E2E Projects API',
           audience: externalResource,
           authorizationMode: 'external',
+          authorization: { resourceUrl: externalResource, registrationMode: 'dynamic' },
         },
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
@@ -39,40 +40,37 @@ test.describe('external API resource authorization', () => {
         })
         expect(created.status(), await created.text()).toBe(201)
       }
-      const configured = await page.request.put(`/api/management/api-resources/${resource.id}/external-authorization`, {
-        data: { resourceUrl: externalResource, registrationMode: 'dynamic' },
+      const intentResponse = await page.request.post('/api/account/account-connections', {
+        data: {
+          apiResourceId: resource.id,
+          owner: { type: 'user' },
+          permissions: ['projects:read', 'projects:write'],
+        },
       })
-      expect(configured.status(), await configured.text()).toBe(200)
-
-      const intentResponse = await page.request.post(
-        `/api/account/resource-connections/${resource.id}/authorization-intents`,
-        { data: { owner: { type: 'user' }, scopes: ['projects:read', 'projects:write'] } },
-      )
       expect(intentResponse.status(), await intentResponse.text()).toBe(201)
       const intent = (await intentResponse.json()) as { authorizationUrl: string }
       await page.goto(intent.authorizationUrl)
       await page.waitForURL('**/connections?resource_connection=connected')
 
       const discovered = await plugin.agentRequest<{
-        resources: Array<{ id: string; connections: Array<{ id: string }> }>
-      }>('/api/agent/resources')
-      const available = discovered.resources.find((candidate) => candidate.id === resource.id)
-      expect(available?.connections).toHaveLength(1)
-      const connectionId = available!.connections[0]!.id
+        items: Array<{ id: string; accountConnections: Array<{ id: string }> }>
+      }>('/api/agent/api-resources')
+      const available = discovered.items.find((candidate) => candidate.id === resource.id)
+      expect(available?.accountConnections).toHaveLength(1)
+      const connectionId = available!.accountConnections[0]!.id
 
       const accessRequest = await plugin.agentRequest<{
         id: string
-        approvalUrl: string
+        approval: { url: string }
       }>('/api/agent/access-requests', {
         method: 'POST',
         body: JSON.stringify({
-          resourceId: resource.id,
-          connectionId,
-          scopes: ['projects:read'],
+          target: { type: 'api-resource', apiResourceId: resource.id, accountConnectionId: connectionId },
+          permissions: ['projects:read'],
           reason: 'List projects for the controller',
         }),
       })
-      await page.goto(accessRequest.approvalUrl)
+      await page.goto(accessRequest.approval.url)
       await expect(page.getByRole('heading', { name: 'Approve Agent resource access' })).toBeVisible()
       await page.getByRole('button', { name: 'Approve exact access' }).click()
       await expect(page.getByRole('heading', { name: 'Resource access approved' })).toBeVisible()
@@ -88,12 +86,12 @@ test.describe('external API resource authorization', () => {
       const lease = await plugin.agentRequest<{
         accessToken: string
         tokenType: 'DPoP'
-        scope: string
-      }>(`/api/agent/access-requests/${accessRequest.id}/token-leases`, {
+        permissions: string[]
+      }>(`/api/agent/access-grants/${approved.grantId}/tokens`, {
         method: 'POST',
         body: JSON.stringify({ dpopProof: tokenProof }),
       })
-      expect(lease).toMatchObject({ tokenType: 'DPoP', scope: 'projects:read' })
+      expect(lease).toMatchObject({ tokenType: 'DPoP', permissions: ['projects:read'] })
 
       const targetUrl = `${externalResource}/projects`
       const resourceProof = await dpopProof('GET', targetUrl, keyPair.privateKey, publicJwk, lease.accessToken)
@@ -115,7 +113,7 @@ test.describe('external API resource authorization', () => {
       })
       expect(directBody.authorization.act).not.toHaveProperty('host')
 
-      const revoked = await page.request.delete(`/api/account/agent-access-grants/${approved.grantId}`)
+      const revoked = await page.request.delete(`/api/account/access-grants/${approved.grantId}`)
       expect(revoked.status()).toBe(204)
       const revokedProof = await dpopProof('GET', targetUrl, keyPair.privateKey, publicJwk, lease.accessToken)
       const rejected = await fetch(targetUrl, {

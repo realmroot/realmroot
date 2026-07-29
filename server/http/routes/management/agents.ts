@@ -1,29 +1,7 @@
-import { emergencyRetireAgentIdentity, listAllAgentIdentities } from '@server/usecases/agent-identities'
-import {
-  listAgentApprovalRequests,
-  listAgentCapabilityGrants,
-  listAgentHosts,
-  listAgents,
-  revokeAgent,
-  revokeAgentCapabilityGrant,
-  revokeAgentHost,
-} from '@server/usecases/agents'
-import type {
-  AgentCapabilityGrantRecord,
-  AgentHostRecord,
-  AgentRecord,
-  ApprovalRequestRecord,
-} from '@server/usecases/ports'
-import type {
-  AgentProtocolAgent,
-  AgentProtocolApprovalRequest,
-  AgentProtocolCapabilityGrant,
-  AgentProtocolHost,
-  AgentProtocolInventoryResponse,
-  AgentProtocolPage,
-} from '@shared/api/agents'
-import { agentAuditEventSchema, agentIdentitySchema } from '@shared/api/agents'
-import { type PaginatedResult, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
+import { emergencyRetireAgentIdentity, getAgent, listAllAgents } from '@server/usecases/agent-identities'
+import { agentResponseSchema, agentsResponseSchema } from '@shared/api/agent-api'
+import { agentAuditEventSchema } from '@shared/api/agents'
+import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
 import { getDeps } from '../../middleware/deps'
@@ -31,150 +9,32 @@ import { readQuery } from '../validation'
 
 export const managementAgentsRoute = new Hono()
 
+managementAgentsRoute.use('/agents', requireAdmin())
 managementAgentsRoute.use('/agents/*', requireAdmin())
-managementAgentsRoute.use('/agent-audit-events', requireAdmin())
-managementAgentsRoute.use('/agent-identities/*', requireAdmin())
-managementAgentsRoute.use('/agent-hosts/*', requireAdmin())
-managementAgentsRoute.use('/agent-capability-grants/*', requireAdmin())
+managementAgentsRoute.use('/audit-events', requireAdmin())
 
-managementAgentsRoute.get('/agents/protocol-inventory', async (c) => {
-  const query = readQuery(c, paginationQuerySchema)
-  const deps = getDeps(c)
-  const [hosts, agentRecords, capabilityGrants, approvalRequests] = await Promise.all([
-    listAgentHosts(deps, query),
-    listAgents(deps, query),
-    listAgentCapabilityGrants(deps, query),
-    listAgentApprovalRequests(deps, query),
-  ])
-
-  return c.json({
-    hosts: toProtocolPage(hosts, toHostResponse),
-    agents: toProtocolPage(agentRecords, toAgentResponse),
-    capabilityGrants: toProtocolPage(capabilityGrants, toCapabilityGrantResponse),
-    approvalRequests: toProtocolPage(approvalRequests, toApprovalRequestResponse),
-  } satisfies AgentProtocolInventoryResponse)
+managementAgentsRoute.get('/agents', async (c) => {
+  return c.json(agentsResponseSchema.parse(await listAllAgents(getDeps(c), readQuery(c, paginationQuerySchema))))
 })
 
-managementAgentsRoute.get('/agents/identity-inventory', async (c) => {
-  const query = readQuery(c, paginationQuerySchema)
-  const result = await listAllAgentIdentities(getDeps(c), query)
-  return c.json({
-    identities: result.items.map((identity) => agentIdentitySchema.parse(identity)),
-    pagination: paginationMetadata(result),
-  })
-})
-
-managementAgentsRoute.get('/agent-audit-events', async (c) => {
-  const query = readQuery(c, paginationQuerySchema)
-  const result = await getDeps(c).agentAudit.list(query)
-  return c.json({
-    events: result.items.map((event) => agentAuditEventSchema.parse(event)),
-    pagination: paginationMetadata({ ...query, total: result.total }),
-  })
-})
-
-managementAgentsRoute.delete('/agent-identities/:identityId', async (c) => {
-  await emergencyRetireAgentIdentity(getDeps(c), c.req.param('identityId'))
-  return c.body(null, 204)
+managementAgentsRoute.get('/agents/:agentId', async (c) => {
+  return c.json(
+    agentResponseSchema.parse({
+      agent: await getAgent(getDeps(c), c.req.param('agentId')),
+    }),
+  )
 })
 
 managementAgentsRoute.delete('/agents/:agentId', async (c) => {
-  await revokeAgent(getDeps(c), c.req.param('agentId'))
+  await emergencyRetireAgentIdentity(getDeps(c), c.req.param('agentId'))
   return c.body(null, 204)
 })
 
-managementAgentsRoute.delete('/agent-hosts/:hostId', async (c) => {
-  await revokeAgentHost(getDeps(c), c.req.param('hostId'))
-  return c.body(null, 204)
+managementAgentsRoute.get('/audit-events', async (c) => {
+  const query = readQuery(c, paginationQuerySchema)
+  const result = await getDeps(c).agentAudit.list(query)
+  return c.json({
+    items: result.items.map((event) => agentAuditEventSchema.parse(event)),
+    pagination: paginationMetadata({ ...query, total: result.total }),
+  })
 })
-
-managementAgentsRoute.delete('/agent-capability-grants/:grantId', async (c) => {
-  await revokeAgentCapabilityGrant(getDeps(c), c.req.param('grantId'))
-  return c.body(null, 204)
-})
-
-function toProtocolPage<TInput, TOutput>(
-  page: PaginatedResult<TInput>,
-  mapRecord: (record: TInput) => TOutput,
-): AgentProtocolPage<TOutput> {
-  return {
-    items: page.items.map(mapRecord),
-    pagination: paginationMetadata(page),
-  }
-}
-
-function toHostResponse(record: AgentHostRecord): AgentProtocolHost {
-  return {
-    id: record.id,
-    name: record.name,
-    userId: record.userId,
-    defaultCapabilities: record.defaultCapabilities,
-    publicKey: record.publicKey,
-    kid: record.kid,
-    jwksUrl: record.jwksUrl,
-    enrollmentTokenExpiresAt: record.enrollmentTokenExpiresAt,
-    status: record.status,
-    activatedAt: record.activatedAt,
-    expiresAt: record.expiresAt,
-    lastUsedAt: record.lastUsedAt,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
-}
-
-function toAgentResponse(record: AgentRecord): AgentProtocolAgent {
-  return {
-    id: record.id,
-    name: record.name,
-    userId: record.userId,
-    hostId: record.hostId,
-    status: record.status,
-    mode: record.mode,
-    publicKey: record.publicKey,
-    kid: record.kid,
-    jwksUrl: record.jwksUrl,
-    lastUsedAt: record.lastUsedAt,
-    activatedAt: record.activatedAt,
-    expiresAt: record.expiresAt,
-    metadata: record.metadata,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
-}
-
-function toCapabilityGrantResponse(record: AgentCapabilityGrantRecord): AgentProtocolCapabilityGrant {
-  return {
-    id: record.id,
-    agentId: record.agentId,
-    capability: record.capability,
-    deniedBy: record.deniedBy,
-    grantedBy: record.grantedBy,
-    expiresAt: record.expiresAt,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    status: record.status,
-    reason: record.reason,
-    constraints: record.constraints,
-  }
-}
-
-function toApprovalRequestResponse(record: ApprovalRequestRecord): AgentProtocolApprovalRequest {
-  return {
-    id: record.id,
-    method: record.method,
-    agentId: record.agentId,
-    hostId: record.hostId,
-    userId: record.userId,
-    capabilities: record.capabilities,
-    status: record.status,
-    loginHint: record.loginHint,
-    bindingMessage: record.bindingMessage,
-    clientNotificationEndpoint: record.clientNotificationEndpoint,
-    deliveryMode: record.deliveryMode,
-    interval: record.interval,
-    lastPolledAt: record.lastPolledAt,
-    expiresAt: record.expiresAt,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
-}

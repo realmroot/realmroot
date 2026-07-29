@@ -26,15 +26,14 @@ test.describe('new Agent stable identity enrollment', () => {
       await expect(page.getByText('You can safely close this page.')).toBeVisible()
 
       const result = await whoami.result
-      expect(result.identity).toMatchObject({
+      expect(result.agent).toMatchObject({
         issuer: `${baseURL}/api/auth`,
         name: 'E2E Build Agent',
-        bindings: [{ status: 'active' }],
       })
-      expect(result.identity.subject).toMatch(/^agt_/)
-      expect(plugin.whoami().identity).toMatchObject({
-        issuer: result.identity.issuer,
-        subject: result.identity.subject,
+      expect(result.agent.subject).toMatch(/^agt_/)
+      expect(plugin.whoami().agent).toMatchObject({
+        issuer: result.agent.issuer,
+        subject: result.agent.subject,
       })
 
       const firstPermissionRequest = plugin.requestCapabilities(
@@ -49,7 +48,7 @@ test.describe('new Agent stable identity enrollment', () => {
       const repeatedApprovalUrl = await repeatedPermissionRequest.approvalUrl
       expect(repeatedApprovalUrl).not.toBe(firstApprovalUrl)
 
-      expirePendingAgentApprovals(result.identity.bindings[0]!.protocolAgentId)
+      expirePendingAgentApprovals(result.local_agent)
       const renewedPermissionRequest = plugin.requestCapabilities(
         ['management:read', 'management:write'],
         'E2E tenant administration after expiry',
@@ -86,7 +85,7 @@ test.describe('new Agent stable identity enrollment', () => {
       await page.goto('/connections')
       const identities = page.getByLabel('Agent identities')
       await expect(identities.getByRole('heading', { name: 'E2E Build Agent' })).toBeVisible()
-      await expect(identities.getByText(new RegExp(result.identity.subject))).toBeVisible()
+      await expect(identities.getByText(new RegExp(result.agent.subject))).toBeVisible()
     } finally {
       plugin.dispose()
     }

@@ -86,7 +86,7 @@ export function ApplicationFederatedCredentialsPanel({ applicationId }: { applic
     queryKey: consoleQueryKeys.apiResources,
     queryFn: listApiResources,
   })
-  const resources = resourcesQuery.data?.resources ?? []
+  const resources = resourcesQuery.data?.items ?? []
   const invalidate = () => queryClient.invalidateQueries({ queryKey })
   const createMutation = useMutation({
     mutationFn: (input: ReturnType<typeof parseForm<typeof createManagementFederatedCredentialRequestSchema>>) =>

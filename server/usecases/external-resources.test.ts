@@ -6,7 +6,7 @@ import {
   createResourceConnectionIntent,
   decideAgentAccessRequestByToken,
   discoverAgentResources,
-  issueExternalTokenLease,
+  issueExternalAccessToken,
   revokeAgentAccessGrant,
 } from '@server/usecases/external-resources'
 import type {
@@ -175,6 +175,7 @@ describe('external API resource authorization', () => {
     const request = requestRecord()
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
+    vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue(request)
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
     vi.mocked(deps.externalResources.createGrant).mockImplementation(async (record) => record)
     vi.mocked(deps.externalResources.decideAccessRequest).mockImplementation(async (_id, decision) => ({
@@ -204,6 +205,7 @@ describe('external API resource authorization', () => {
     const grant = grantRecord()
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
+    vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue(request)
     vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grant)
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
     vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
@@ -248,7 +250,7 @@ describe('external API resource authorization', () => {
     })
 
     const sign = vi.fn().mockResolvedValue('signed-agent-assertion')
-    const lease = await issueExternalTokenLease(deps, request.id, proof, principal(), { sign })
+    const lease = await issueExternalAccessToken(deps, grant.id, proof, principal(), { sign })
     expect(sign).toHaveBeenCalledWith(
       expect.objectContaining({
         iss: 'https://auth.example.com/api/auth',
@@ -265,8 +267,8 @@ describe('external API resource authorization', () => {
       accessToken: 'target-dpop-access',
       tokenType: 'DPoP',
       expiresIn: 300,
-      scope: 'projects:read',
-      resource: 'https://projects.example.com/api',
+      permissions: ['projects:read'],
+      apiResource: 'https://projects.example.com/api',
     })
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({

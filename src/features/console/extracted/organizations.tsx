@@ -1,7 +1,7 @@
 import {
   consoleQueryKeys,
   createOrganization,
-  getAgentIdentityInventory,
+  getAgentInventory,
   getOrganization,
   listOrganizations,
   updateOrganization,
@@ -190,9 +190,9 @@ export function OrganizationDetailPage({
     queryKey: [...consoleQueryKeys.organizations, organizationId],
     queryFn: () => getOrganization(organizationId),
   })
-  const agentIdentitiesQuery = useQuery({
-    queryKey: [...consoleQueryKeys.organizations, organizationId, 'agent-identities'],
-    queryFn: getAgentIdentityInventory,
+  const agentsQuery = useQuery({
+    queryKey: [...consoleQueryKeys.organizations, organizationId, 'agents'],
+    queryFn: getAgentInventory,
   })
   const organization = query.data
   const updateMutation = useMutation({
@@ -278,7 +278,7 @@ export function OrganizationDetailPage({
                   </CardContent>
                 </Card>
                 <OrganizationAgentsCard
-                  identities={(agentIdentitiesQuery.data?.identities ?? []).filter(
+                  identities={(agentsQuery.data?.items ?? []).filter(
                     (identity) =>
                       identity.homeSpace.type === 'organization' &&
                       identity.homeSpace.organizationId === organizationId,
@@ -314,7 +314,7 @@ export function OrganizationDetailPage({
   )
 }
 
-function OrganizationAgentsCard({ identities }: { identities: import('@shared/api/agents').AgentIdentity[] }) {
+function OrganizationAgentsCard({ identities }: { identities: import('@shared/api/agent-api').Agent[] }) {
   return (
     <Card>
       <CardHeader>

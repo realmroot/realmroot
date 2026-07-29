@@ -44,7 +44,9 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 			return jsonResponse(200, map[string]any{"status": "active"}), nil
 		case 4:
 			return jsonResponse(201, map[string]any{
-				"identity": map[string]any{"issuer": "https://auth.example.com/api/auth", "subject": "agt_123"},
+				"agent": map[string]any{
+					"id": "agent-identity-1", "issuer": "https://auth.example.com/api/auth", "subject": "agt_123",
+				},
 			}), nil
 		case 5:
 			return jsonResponse(200, testAgentConfiguration()), nil
@@ -57,7 +59,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 		API:     "flareauth",
 		Profile: "default",
 		Params:  map[string]string{"provider": authProvider},
-		Request: plugin.HookRequest{Method: "GET", URI: "https://auth.example.com/api/whoami"},
+		Request: plugin.HookRequest{Method: "GET", URI: "https://auth.example.com/api/agent"},
 	}
 
 	output, err := authenticateRequest(input, states, client, prompt)
@@ -85,11 +87,12 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 
 func testAgentConfiguration() map[string]any {
 	return map[string]any{
-		"version":                 "1.0-draft",
-		"issuer":                  "https://auth.example.com/api/auth",
-		"algorithms":              []string{"Ed25519"},
-		"agent_identity_issuer":   "https://auth.example.com/api/auth",
-		"agent_identity_endpoint": "https://auth.example.com/api/agent/identity",
+		"version":                   "1.0-draft",
+		"issuer":                    "https://auth.example.com/api/auth",
+		"algorithms":                []string{"Ed25519"},
+		"agent_identity_issuer":     "https://auth.example.com/api/auth",
+		"agent_enrollment_endpoint": "https://auth.example.com/api/agent/enrollments",
+		"agent_endpoint":            "https://auth.example.com/api/agent",
 		"endpoints": map[string]any{
 			"register": "https://auth.example.com/api/auth/agent/register",
 			"status":   "https://auth.example.com/api/auth/agent/status",

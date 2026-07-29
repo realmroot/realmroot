@@ -2,13 +2,11 @@ import { AppWindow, Bot, KeyRound, Link2, Wallet } from 'lucide-react'
 import { ProviderIcon } from '@/components/provider-icon'
 import { Button } from '@/components/ui/button'
 import {
-  createResourceConnectionIntent,
+  createAccountConnection,
   linkAccount,
-  retirePersonalAgentIdentity,
-  revokeAccountAgent,
-  revokeAccountAgentCapabilityGrant,
+  retireAgent,
+  revokeAccountConnection,
   revokeApplicationConsent,
-  revokeResourceConnection,
   unlinkAccount,
   unlinkWalletAddress,
 } from '@/lib/api/account'
@@ -25,17 +23,15 @@ import {
   accountQueryKeys,
   useAccountAgents,
   useAccountConfig,
+  useAccountConnections,
   useAccountMutation,
   useAccountProfile,
-  useAgentIdentities,
   useConsentedApplications,
   useExternalApiResources,
   useLinkedAccounts,
-  useResourceConnections,
 } from './queries'
 import { defaultAccountCenterSettings } from './settings'
 import type {
-  AccountAgent,
   ConfirmDestructiveHandler,
   ConsentedApplication,
   IdentityProvider,
@@ -53,9 +49,8 @@ export function AccountConnectionsPage() {
   const linkedAccountsQuery = useLinkedAccounts(accountCenter.connectedAccountsEnabled)
   const applicationsQuery = useConsentedApplications(accountCenter.connectedAccountsEnabled)
   const agentsQuery = useAccountAgents()
-  const agentIdentitiesQuery = useAgentIdentities()
   const externalResourcesQuery = useExternalApiResources()
-  const resourceConnectionsQuery = useResourceConnections()
+  const accountConnectionsQuery = useAccountConnections()
   const mutate = useAccountMutation()
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
   const queries = [
@@ -64,9 +59,8 @@ export function AccountConnectionsPage() {
     linkedAccountsQuery,
     applicationsQuery,
     agentsQuery,
-    agentIdentitiesQuery,
     externalResourcesQuery,
-    resourceConnectionsQuery,
+    accountConnectionsQuery,
   ]
   const error = queries.find((query) => query.error)?.error
   if (queries.some((query) => query.isLoading)) return <AccountPageLoading config={config} />
@@ -85,22 +79,17 @@ export function AccountConnectionsPage() {
           walletProvider={config?.builtInProviders.web3Wallet}
         />
         <ResourceConnectionsPanel
-          connections={resourceConnectionsQuery.data?.connections ?? []}
+          connections={accountConnectionsQuery.data?.items ?? []}
           confirm={setConfirmation}
           mutate={mutate}
-          resources={externalResourcesQuery.data?.resources ?? []}
+          resources={externalResourcesQuery.data?.items ?? []}
         />
         <ApplicationsPanel
           applications={applicationsQuery.data?.applications ?? []}
           confirm={setConfirmation}
           mutate={mutate}
         />
-        <AgentsPanel agents={agentsQuery.data?.agents ?? []} confirm={setConfirmation} mutate={mutate} />
-        <AgentIdentitiesPanel
-          identities={agentIdentitiesQuery.data?.identities ?? []}
-          confirm={setConfirmation}
-          mutate={mutate}
-        />
+        <AgentIdentitiesPanel identities={agentsQuery.data?.items ?? []} confirm={setConfirmation} mutate={mutate} />
       </div>
       <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
     </AccountPageShell>
@@ -113,16 +102,16 @@ function ResourceConnectionsPanel({
   confirm,
   mutate,
 }: {
-  resources: import('@shared/api/external-resources').ConnectableExternalResourcesResponse['resources']
-  connections: import('@shared/api/external-resources').ListResourceConnectionsResponse['connections']
+  resources: import('@shared/api/agent-api').ConnectableApiResourcesResponse['items']
+  connections: import('@shared/api/agent-api').AccountConnection[]
   confirm: ConfirmDestructiveHandler
   mutate: MutationHandler
 }) {
   async function connect(resourceId: string) {
     const intent = await mutate('Redirecting to the external platform.', () =>
-      createResourceConnectionIntent(resourceId, { owner: { type: 'user' } }),
+      createAccountConnection({ apiResourceId: resourceId, owner: { type: 'user' } }),
     )
-    if (intent) window.location.assign(intent.authorizationUrl)
+    if (intent?.authorizationUrl) window.location.assign(intent.authorizationUrl)
   }
 
   return (
@@ -144,7 +133,7 @@ function ResourceConnectionsPanel({
           emptyDescription={tt('An administrator must configure an external API Resource first.')}
           items={resources.flatMap((resource) => {
             const matches = connections.filter(
-              (connection) => connection.resourceId === resource.id && connection.status === 'active',
+              (connection) => connection.apiResourceId === resource.id && connection.status === 'active',
             )
             if (matches.length === 0) {
               return [
@@ -152,7 +141,7 @@ function ResourceConnectionsPanel({
                   id: resource.id,
                   icon: <KeyRound size={16} />,
                   title: resource.name,
-                  meta: `${resource.resourceUrl} · ${resource.scopes.map((scope) => scope.value).join(', ')}`,
+                  meta: `${resource.resourceUrl} · ${resource.permissions.map((permission) => permission.value).join(', ')}`,
                   status: tt('Not connected'),
                   action: <Button onClick={() => void connect(resource.id)}>{tt('Connect')}</Button>,
                 },
@@ -162,7 +151,7 @@ function ResourceConnectionsPanel({
               id: connection.id,
               icon: <KeyRound size={16} />,
               title: `${resource.name} · ${connection.displayName}`,
-              meta: connection.grantedScopes.join(', '),
+              meta: connection.permissions.join(', '),
               status: tt('Connected'),
               action: (
                 <Button
@@ -172,8 +161,8 @@ function ResourceConnectionsPanel({
                       description: tt('Active Agent grants and token leases for this account will be revoked.'),
                       actionLabel: tt('Disconnect'),
                       onConfirm: () =>
-                        mutate('Resource account disconnected.', () => revokeResourceConnection(connection.id), {
-                          invalidate: [accountQueryKeys.resourceConnections],
+                        mutate('Resource account disconnected.', () => revokeAccountConnection(connection.id), {
+                          invalidate: [accountQueryKeys.accountConnections],
                         }),
                     })
                   }
@@ -195,7 +184,7 @@ function AgentIdentitiesPanel({
   confirm,
   mutate,
 }: {
-  identities: import('@shared/api/agents').AgentIdentity[]
+  identities: import('@shared/api/agent-api').Agent[]
   confirm: ConfirmDestructiveHandler
   mutate: MutationHandler
 }) {
@@ -219,7 +208,7 @@ function AgentIdentitiesPanel({
             id: identity.id,
             icon: <Bot size={16} />,
             title: identity.name,
-            meta: `${identity.issuer} · ${identity.subject} · ${identity.bindings.length} ${tt('hosts')}`,
+            meta: `${identity.issuer} · ${identity.subject}`,
             status: identity.status,
             action:
               identity.status === 'retired' ? undefined : (
@@ -230,8 +219,8 @@ function AgentIdentitiesPanel({
                       description: tt('This subject will remain reserved and can never be reused.'),
                       actionLabel: tt('Retire identity'),
                       onConfirm: () =>
-                        mutate('Agent identity retired.', () => retirePersonalAgentIdentity(identity.id), {
-                          invalidate: [accountQueryKeys.agentIdentities],
+                        mutate('Agent retired.', () => retireAgent(identity.id), {
+                          invalidate: [accountQueryKeys.agents],
                         }),
                     })
                   }
@@ -481,92 +470,4 @@ function ApplicationsPanel({
       </section>
     </section>
   )
-}
-
-function AgentsPanel({
-  agents,
-  confirm,
-  mutate,
-}: {
-  agents: AccountAgent[]
-  confirm: ConfirmDestructiveHandler
-  mutate: MutationHandler
-}) {
-  return (
-    <section className="accountPanelGroup" aria-label={tt('Delegated agents')}>
-      <div className="accountPanelHeader">
-        <PanelTitle
-          description={tt('Agents approved to access this account.')}
-          icon={<Bot size={18} />}
-          title={tt('Delegated agents')}
-        />
-      </div>
-      <section className="settingsPanel">
-        <SubsectionTitle title={tt('Delegated agents')} description={tt('Agents approved to access this account.')} />
-        <ItemList
-          empty={tt('No delegated agents yet.')}
-          items={agents.map((agent) => agentItem(agent, confirm, mutate))}
-        />
-      </section>
-    </section>
-  )
-}
-
-function agentItem(agent: AccountAgent, confirm: ConfirmDestructiveHandler, mutate: MutationHandler) {
-  return {
-    id: agent.id,
-    icon: <Bot size={16} />,
-    title: agent.name,
-    meta: `${tt('Host:')} ${agent.host.name ?? agent.host.id} ${tt('/ Status:')} ${agent.status} ${tt('/ Capabilities:')} ${agent.capabilityGrants.map((grant) => grant.capability).join(', ') || tt('None')}`,
-    action: (
-      <Button
-        onClick={() =>
-          confirm({
-            title: tt('Revoke agent access'),
-            description: tt('{{agentName}} will lose delegated access to this account.', { agentName: agent.name }),
-            actionLabel: tt('Revoke access'),
-            onConfirm: () =>
-              mutate('Agent access revoked.', () => revokeAccountAgent(agent.id), {
-                invalidate: [accountQueryKeys.agents],
-              }),
-          })
-        }
-        type="button"
-        variant="ghost"
-      >
-        {tt('Revoke')}
-      </Button>
-    ),
-    children: agent.capabilityGrants.length ? (
-      <div className="mt-3 grid gap-2">
-        {agent.capabilityGrants.map((grant) => (
-          <div
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted px-3 py-2"
-            key={grant.id}
-          >
-            <span className="font-mono text-xs text-foreground">{grant.capability}</span>
-            <Button
-              onClick={() =>
-                confirm({
-                  title: tt('Revoke capability grant'),
-                  description: tt('{{capability}} will no longer be available to this agent.', {
-                    capability: grant.capability,
-                  }),
-                  actionLabel: tt('Revoke grant'),
-                  onConfirm: () =>
-                    mutate('Capability grant revoked.', () => revokeAccountAgentCapabilityGrant(grant.id), {
-                      invalidate: [accountQueryKeys.agents],
-                    }),
-                })
-              }
-              type="button"
-              variant="ghost"
-            >
-              {tt('Revoke')}
-            </Button>
-          </div>
-        ))}
-      </div>
-    ) : null,
-  }
 }

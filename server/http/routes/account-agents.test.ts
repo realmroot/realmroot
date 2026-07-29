@@ -1,4 +1,5 @@
 import { accountRoutes } from '@server/http/routes/account'
+import * as agentIdentitiesUsecase from '@server/usecases/agent-identities'
 import * as agentsUsecase from '@server/usecases/agents'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -14,10 +15,14 @@ describe('account agent routes', () => {
     const app = withAccountContext()
     app.route('/account', accountRoutes({} as never))
 
-    const response = await app.request('/account/agent-approvals/agent-1/decisions', {
-      method: 'POST',
+    const response = await app.request('/account/agent-enrollments/agent-1/decision', {
+      method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ userCode: 'ABCD-1234', action: 'approve' }),
+      body: JSON.stringify({
+        kind: 'protocol',
+        userCode: 'ABCD-1234',
+        decision: 'approve',
+      }),
     })
 
     expect(response.status).toBe(200)
@@ -29,48 +34,31 @@ describe('account agent routes', () => {
     )
   })
 
-  it('lists and revokes delegated agents for the signed-in account [spec: account-center/account-agent-management]', async () => {
-    const agents = {
-      listAccountAgents: vi.fn().mockResolvedValue({
-        agents: [
+  it('lists and retires stable Agents for the signed-in account [spec: account-center/account-agent-management]', async () => {
+    const stableAgents = {
+      list: vi.fn().mockResolvedValue({
+        items: [
           {
             id: 'agent-1',
+            issuer: 'https://auth.example.com/api/auth',
+            subject: 'agt_1',
             name: 'Desktop Agent',
-            hostId: 'host-1',
-            host: { id: 'host-1', name: 'Desktop Host', status: 'active' },
+            homeSpace: { type: 'personal', userId: 'user-1' },
             status: 'active',
-            mode: 'delegated',
-            lastUsedAt: null,
-            activatedAt: null,
-            expiresAt: null,
-            createdAt: new Date('2026-01-01T00:00:00.000Z'),
-            updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-            capabilityGrants: [
-              {
-                id: 'grant-1',
-                agentId: 'agent-1',
-                capability: 'account.profile.read',
-                status: 'active',
-                expiresAt: null,
-                createdAt: new Date('2026-01-01T00:00:00.000Z'),
-                updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-              },
-            ],
+            retiredAt: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
           },
         ],
         pagination: { limit: 10, offset: 20, total: 1, hasMore: false, nextOffset: null },
       }),
-      revokeAccountAgent: vi.fn().mockResolvedValue(undefined),
-      revokeAccountCapabilityGrant: vi.fn().mockResolvedValue(undefined),
+      retire: vi.fn().mockResolvedValue(undefined),
     }
-    vi.spyOn(agentsUsecase, 'listAccountAgents').mockImplementation((_d, userId, page) =>
-      agents.listAccountAgents(userId, page),
+    vi.spyOn(agentIdentitiesUsecase, 'listPersonalAgents').mockImplementation((_d, userId, page) =>
+      stableAgents.list(userId, page),
     )
-    vi.spyOn(agentsUsecase, 'revokeAccountAgent').mockImplementation((_d, agentId, userId) =>
-      agents.revokeAccountAgent(agentId, userId),
-    )
-    vi.spyOn(agentsUsecase, 'revokeAccountCapabilityGrant').mockImplementation((_d, grantId, userId) =>
-      agents.revokeAccountCapabilityGrant(grantId, userId),
+    vi.spyOn(agentIdentitiesUsecase, 'retireAgentIdentity').mockImplementation((_d, agentId, userId) =>
+      stableAgents.retire(agentId, userId),
     )
 
     const app = withAccountContext()
@@ -78,18 +66,15 @@ describe('account agent routes', () => {
 
     const listResponse = await app.request('/account/agents?limit=10&offset=20')
     const agentResponse = await app.request('/account/agents/agent-1', { method: 'DELETE' })
-    const grantResponse = await app.request('/account/agent-capability-grants/grant-1', { method: 'DELETE' })
 
     expect(listResponse.status).toBe(200)
     await expect(listResponse.json()).resolves.toMatchObject({
-      agents: [{ id: 'agent-1', capabilityGrants: [{ id: 'grant-1', capability: 'account.profile.read' }] }],
+      items: [{ id: 'agent-1', subject: 'agt_1' }],
       pagination: { limit: 10, offset: 20, total: 1 },
     })
     expect(agentResponse.status).toBe(204)
-    expect(grantResponse.status).toBe(204)
-    expect(agents.listAccountAgents).toHaveBeenCalledWith('user-1', { limit: 10, offset: 20 })
-    expect(agents.revokeAccountAgent).toHaveBeenCalledWith('agent-1', 'user-1')
-    expect(agents.revokeAccountCapabilityGrant).toHaveBeenCalledWith('grant-1', 'user-1')
+    expect(stableAgents.list).toHaveBeenCalledWith('user-1', { limit: 10, offset: 20 })
+    expect(stableAgents.retire).toHaveBeenCalledWith('agent-1', 'user-1')
   })
 })
 

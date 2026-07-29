@@ -1,13 +1,13 @@
-import type { AgentEnrollmentIntent, AgentIdentity } from '@shared/api/agents'
+import type { Agent, AgentEnrollment } from '@shared/api/agent-api'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
-import { approveAgentEnrollmentIntent, getAgentEnrollmentIntent } from '@/lib/api/account'
+import { approveAgentEnrollment, getAgentEnrollment } from '@/lib/api/account'
 
 export function AgentIdentityApproval() {
   const intentId = useMemo(() => new URLSearchParams(window.location.search).get('intent_id') ?? '', [])
-  const [intent, setIntent] = useState<AgentEnrollmentIntent | null>(null)
-  const [identity, setIdentity] = useState<AgentIdentity | null>(null)
+  const [intent, setIntent] = useState<AgentEnrollment | null>(null)
+  const [agent, setAgent] = useState<Agent | null>(null)
   const [loading, setLoading] = useState(Boolean(intentId))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -15,7 +15,7 @@ export function AgentIdentityApproval() {
   useEffect(() => {
     if (!intentId) return
     let active = true
-    getAgentEnrollmentIntent(intentId)
+    getAgentEnrollment(intentId)
       .then((result) => {
         if (active) setIntent(result)
       })
@@ -34,8 +34,8 @@ export function AgentIdentityApproval() {
     setSubmitting(true)
     setError(null)
     try {
-      const result = await approveAgentEnrollmentIntent(intentId)
-      setIdentity(result.identity)
+      const result = await approveAgentEnrollment(intentId)
+      setAgent(result.agent)
     } catch (approvalError) {
       setError(approvalError instanceof Error ? approvalError.message : 'Unable to approve Agent identity.')
     } finally {
@@ -43,7 +43,7 @@ export function AgentIdentityApproval() {
     }
   }
 
-  const canApprove = Boolean(intent && intent.status === 'pending' && !identity)
+  const canApprove = Boolean(intent && intent.status === 'pending' && !agent)
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col justify-center px-6 py-12">
@@ -70,16 +70,12 @@ export function AgentIdentityApproval() {
               <dt className="font-medium text-muted-foreground">Home space</dt>
               <dd className="break-all text-foreground">{formatHomeSpace(intent)}</dd>
             </div>
-            <div className="grid gap-1 sm:col-span-2">
-              <dt className="font-medium text-muted-foreground">Protocol registration</dt>
-              <dd className="break-all font-mono text-xs text-foreground">{intent.protocolAgentId}</dd>
-            </div>
           </dl>
         ) : null}
 
-        {identity ? (
+        {agent ? (
           <Status tone="success">
-            Agent identity approved: {identity.issuer} · {identity.subject}
+            Agent identity approved: {agent.issuer} · {agent.subject}
           </Status>
         ) : null}
 
@@ -91,7 +87,7 @@ export function AgentIdentityApproval() {
   )
 }
 
-function formatHomeSpace(intent: AgentEnrollmentIntent) {
+function formatHomeSpace(intent: AgentEnrollment) {
   return intent.homeSpace.type === 'personal'
     ? `Personal · ${intent.homeSpace.userId}`
     : `Organization · ${intent.homeSpace.organizationId}`

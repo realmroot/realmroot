@@ -2,7 +2,6 @@ import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } fr
 import type { Auth } from '@server/auth'
 import { forbidden, notFound, oauthError } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
-import { getAgentIdentityByProtocolAgent } from '@server/usecases/agent-identities'
 import { issueAgentAccessToken } from '@server/usecases/agent-tokens'
 import type { Deps } from '@server/usecases/deps'
 import {
@@ -32,13 +31,7 @@ import { configzOptions } from './app-config'
 import type { RpcSchema } from './app-rpc-schema'
 import type { AgentConfiguration, AppConfig } from './app-types'
 import { accessLog } from './middleware/access-log'
-import {
-  agentPrincipalAuth,
-  authContext,
-  getAuthContext,
-  managementBearerAuth,
-  type SessionReader,
-} from './middleware/auth-context'
+import { agentPrincipalAuth, authContext, managementBearerAuth, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { depsMiddleware } from './middleware/deps'
 import { requestContext } from './middleware/request-context'
@@ -119,7 +112,8 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
       return c.json({
         ...mounted,
         agent_identity_issuer: issuer,
-        agent_identity_endpoint: new URL('/api/agent/identity', issuer).toString(),
+        agent_enrollment_endpoint: new URL('/api/agent/enrollments', issuer).toString(),
+        agent_endpoint: new URL('/api/agent', issuer).toString(),
         agent_token_endpoint: `${issuer}/oauth2/token`,
         agent_jwks_uri: `${issuer}/jwks`,
       })
@@ -164,32 +158,24 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .use('/api/*', unifiedOpenApiDiscoveryHeader())
     .use('/api/management', managementBearerAuth(auth))
     .use('/api/management/*', managementBearerAuth(auth))
+    .use('/api/management', agentPrincipalAuth(auth))
+    .use('/api/management/*', agentPrincipalAuth(auth))
     .route('/api/management', createManagementAssetRoutes())
     .route('/api/management', createManagementRoutes({ authApi: managementApi, securityPolicy: config.securityPolicy }))
     .route('/api/onboarding', onboardingRoutes())
     .route('/api/account', accountRoutes(managementApi, config.securityPolicy, canonicalOrigin || undefined))
     .route('/api/account', createAccountAssetRoutes(config.securityPolicy))
-    .route('/api/resource-connections', createResourceConnectionRoutes(canonicalOrigin || undefined))
+    .route('/api/account-connections', createResourceConnectionRoutes(canonicalOrigin || undefined))
     .route('/api/agent', createAgentProtocolRoutes(auth.api, issuer || undefined))
 
   return api
 }
 
-function createUnifiedApiRoutes(auth: AuthHandler, config: AppConfig) {
+function createUnifiedApiRoutes(auth: AuthHandler, _config: AppConfig) {
   const app = new Hono()
-  const managementApi = auth.api as unknown as ManagementAuthApi
-  const authenticateAgent = agentPrincipalAuth(auth)
-  const authenticateAgentOnly = agentPrincipalAuth(auth, { allowSession: false })
 
   app.get('/openapi.json', (c) => c.json(unifiedOpenApi))
-  app.use('/whoami', authenticateAgentOnly)
-  app.get('/whoami', async (c) => {
-    const agent = getAuthContext(c).agent!
-    return c.json({
-      identity: await getAgentIdentityByProtocolAgent(c.get('deps'), agent.protocolAgentId),
-    })
-  })
-  app.post('/capability-requests', async (c) => {
+  app.post('/agent/management-access-requests', async (c) => {
     const body = await readJson(c, requestAgentCapabilitiesSchema)
     const headers = new Headers(c.req.raw.headers)
     headers.set('content-type', 'application/json')
@@ -216,34 +202,8 @@ function createUnifiedApiRoutes(auth: AuthHandler, config: AppConfig) {
     }
     return c.json(payload)
   })
-  for (const path of unifiedManagementPaths) {
-    app.use(path, authenticateAgent)
-    app.use(`${path}/*`, authenticateAgent)
-  }
-  app.route('/', createManagementRoutes({ authApi: managementApi, securityPolicy: config.securityPolicy }))
   return app
 }
-
-const unifiedManagementPaths = [
-  '/applications',
-  '/api-resources',
-  '/agents',
-  '/agent-audit-events',
-  '/agent-identities',
-  '/organizations',
-  '/roles',
-  '/user-role-assignments',
-  '/application-role-assignments',
-  '/member-role-assignments',
-  '/users',
-  '/security',
-  '/sign-in-settings',
-  '/branding-settings',
-  '/account-center-settings',
-  '/readiness',
-  '/connectors',
-  '/webhooks',
-] as const
 
 function unifiedOpenApiDiscoveryHeader() {
   return async (c: Context, next: () => Promise<void>) => {

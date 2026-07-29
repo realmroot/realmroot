@@ -249,7 +249,8 @@ describe('app.test 1', () => {
     await expect(response.json()).resolves.toMatchObject({
       issuer: 'https://tenant.example.net/api/auth',
       agent_identity_issuer: 'https://tenant.example.net/api/auth',
-      agent_identity_endpoint: 'https://tenant.example.net/api/agent/identity',
+      agent_endpoint: 'https://tenant.example.net/api/agent',
+      agent_enrollment_endpoint: 'https://tenant.example.net/api/agent/enrollments',
       default_location: 'https://tenant.example.net/api/auth/capability/execute',
       modes: ['delegated'],
       approval_methods: ['device_authorization'],

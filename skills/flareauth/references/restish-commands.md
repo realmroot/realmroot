@@ -7,7 +7,7 @@ API base: AUTH_ORIGIN/api
 contract: AUTH_ORIGIN/api/openapi.json
 ```
 
-The contract contains `whoami` and every permission-gated resource operation.
+The contract contains `get-current-agent` and every permission-gated resource operation.
 There is no separate Management API command surface.
 
 ## Connect
@@ -20,10 +20,10 @@ AUTH_ORIGIN=https://auth.example.com
 API_NAME=auth-example-com
 restish --version
 restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --replace --yes
-restish "$API_NAME" whoami -o json
+restish "$API_NAME" get-current-agent -o json
 ```
 
-The first `whoami` may wait for controller approval. It is both the
+The first `get-current-agent` may wait for controller approval. It is both the
 authentication trigger and the original API operation; do not run a separate
 login command.
 
@@ -39,7 +39,7 @@ Use commands generated from OpenAPI `operationId` values:
 
 ```bash
 restish API_NAME --help
-restish API_NAME whoami -o json
+restish API_NAME get-current-agent -o json
 restish API_NAME list-applications -o json
 restish API_NAME get-application app_123 -o json
 ```
@@ -62,7 +62,7 @@ Use `restish doctor api API_NAME` for discovery problems and
 ## Permission Model
 
 Every CLI request remains the Agent principal. Default enrollment permits
-`whoami` and Agent-owned resources. Tenant administration requires an active
+the current Agent and Agent-owned resources. Tenant administration requires an active
 AgentAuth capability:
 
 - reads: `management:read`;
@@ -71,7 +71,7 @@ AgentAuth capability:
 A `403` names the missing capability. Request it through the unified OpenAPI:
 
 ```bash
-restish API_NAME request-agent-capabilities --rsh-validate -o json <<'JSON'
+restish API_NAME request-agent-management-access --rsh-validate -o json <<'JSON'
 {
   "capabilities": ["management:read", "management:write"],
   "reason": "Operate this FlareAuth tenant"

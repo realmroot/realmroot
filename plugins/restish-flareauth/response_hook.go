@@ -31,7 +31,7 @@ func handleCapabilityApprovalResponse(
 		}
 		return handleResourceAccessApproval(input, opener, finder, client, requestURL)
 	}
-	if input.Request.Method != http.MethodPost || requestURL.Path != "/api/capability-requests" {
+	if input.Request.Method != http.MethodPost || requestURL.Path != "/api/agent/management-access-requests" {
 		return plugin.ResponseMiddlewareOutput{}, nil
 	}
 	body, ok := input.Response.Body.(map[string]any)
@@ -115,10 +115,11 @@ func handleResourceAccessApproval(
 		return plugin.ResponseMiddlewareOutput{}, nil
 	}
 	requestID, _ := body["id"].(string)
-	hostID, _ := body["hostId"].(string)
-	verificationURI, _ := body["approvalUrl"].(string)
+	agentID, _ := body["agentId"].(string)
+	approval, _ := body["approval"].(map[string]any)
+	verificationURI, _ := approval["url"].(string)
 	expiresRaw, _ := body["expiresAt"].(string)
-	if requestID == "" || hostID == "" || verificationURI == "" || expiresRaw == "" {
+	if requestID == "" || agentID == "" || verificationURI == "" || expiresRaw == "" {
 		return plugin.ResponseMiddlewareOutput{}, errors.New("pending resource request is missing approval data")
 	}
 	expiresAt, err := time.Parse(time.RFC3339, expiresRaw)
@@ -137,7 +138,7 @@ func handleResourceAccessApproval(
 	if err := opener.Open(verificationURI); err != nil {
 		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open resource approval: %w", err)
 	}
-	state, err := states.FindByOriginAndHostID(requestOrigin, hostID)
+	state, err := states.FindByOriginAndIdentityID(requestOrigin, agentID)
 	if err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}

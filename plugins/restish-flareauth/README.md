@@ -1,7 +1,7 @@
 # FlareAuth Restish Plugin
 
 `restish-flareauth` is the Restish v2 authentication adapter for FlareAuth's
-unified OpenAPI contract. It contributes no commands. `whoami` and every
+unified OpenAPI contract. It contributes no commands. `get-current-agent` and every
 resource operation are generated from `/api/openapi.json`.
 
 Registration and later Agent requests require Ed25519 possession proofs. The
@@ -14,9 +14,9 @@ prints one controller approval URL to the terminal, waits while the controller
 reviews it, creates the stable identity, signs the original request, and lets
 that same operation continue.
 
-The unified contract also generates `list-agent-resources`,
-`request-agent-resource-access`, `get-agent-resource-access-request`, and
-`issue-external-resource-token-lease`. When an exact resource request is
+The unified contract also generates `list-agent-api-resources`,
+`create-agent-access-request`, `get-agent-access-request`, and
+`issue-target-access-token`. When an exact resource request is
 pending, the response hook opens the hosted controller decision page and waits
 for approval. The issued token belongs to the target platform and is used by
 the Agent against that platform directly; the plugin never routes target API

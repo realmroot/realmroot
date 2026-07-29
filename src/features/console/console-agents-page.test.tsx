@@ -10,8 +10,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('console delegated agents page', () => {
-  it(`renders AgentAuth inventory and stable identity governance
+describe('console Agents page', () => {
+  it(`governs stable Agents without exposing protocol implementation records
       [spec: admin-console/admin-agent-inventory]
       [spec: agent-identity/agent-governance-surfaces]`, async () => {
     const requests: Array<{ url: string; method: string }> = []
@@ -20,23 +20,9 @@ describe('console delegated agents page', () => {
       const url = request?.url ? new URL(request.url).pathname : String(input)
       const method = request?.method ?? init?.method ?? 'GET'
       requests.push({ url, method })
-
-      if (url === '/api/management/agents/protocol-inventory') {
-        return Promise.resolve(jsonResponse(agentInventory))
-      }
-      if (url === '/api/management/agents/identity-inventory') {
-        return Promise.resolve(jsonResponse(identityInventory))
-      }
-      if (url === '/api/management/agent-audit-events') {
-        return Promise.resolve(jsonResponse(agentAudit))
-      }
-      const allowedDeleteUrls = [
-        '/api/management/agents/agent-1',
-        '/api/management/agent-hosts/host-1',
-        '/api/management/agent-capability-grants/grant-1',
-        '/api/management/agent-identities/identity-1',
-      ]
-      if (allowedDeleteUrls.includes(url) && method === 'DELETE') {
+      if (url === '/api/management/agents') return Promise.resolve(jsonResponse(agentInventory))
+      if (url === '/api/management/audit-events') return Promise.resolve(jsonResponse(agentAudit))
+      if (url === '/api/management/agents/agent-1' && method === 'DELETE') {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
       throw new Error(`Unexpected request: ${method} ${url}`)
@@ -44,94 +30,44 @@ describe('console delegated agents page', () => {
 
     renderWithQuery(<AgentsPage />)
 
-    expect(await screen.findByRole('heading', { name: 'Delegated agents' })).toBeTruthy()
-    expect(await screen.findByText('Shell Host')).toBeTruthy()
-    expect(screen.getByText('Build Agent')).toBeTruthy()
-    expect(screen.getAllByText('account.profile.read').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('device_code')).toBeTruthy()
-    expect(screen.getByText('Stable Build Agent')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy()
+    expect(await screen.findByText('Stable Build Agent')).toBeTruthy()
     expect(screen.getByText('Retired Personal Agent')).toBeTruthy()
+    expect(screen.getByText('Organization org-1')).toBeTruthy()
     expect(screen.getByText('User user-2')).toBeTruthy()
     expect(screen.getByText('external_resource.token_issued')).toBeTruthy()
-    expect(screen.getByText('agent.token.denied')).toBeTruthy()
 
-    for (const button of screen.getAllByRole('button', { name: 'Revoke' })) {
-      fireEvent.click(button)
-    }
-    const retire = screen.getAllByRole('button', { name: 'Retire' }).find((button) => !button.hasAttribute('disabled'))
-    expect(retire).toBeTruthy()
-    fireEvent.click(retire!)
-
-    await waitFor(() => {
-      expect(requests).toContainEqual({ url: '/api/management/agent-capability-grants/grant-1', method: 'DELETE' })
-      expect(requests).toContainEqual({ url: '/api/management/agents/agent-1', method: 'DELETE' })
-      expect(requests).toContainEqual({ url: '/api/management/agent-hosts/host-1', method: 'DELETE' })
-      expect(requests).toContainEqual({ url: '/api/management/agent-identities/identity-1', method: 'DELETE' })
-    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Retire' })[0]!)
+    await waitFor(() => expect(requests).toContainEqual({ url: '/api/management/agents/agent-1', method: 'DELETE' }))
+    expect(requests.some(({ url }) => url.includes('host') || url.includes('binding'))).toBe(false)
   })
 
-  it('renders empty agent, host, and approval tables', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input, _init) => {
+  it('renders empty Agent and audit tables', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const request = input instanceof Request ? input : null
       const url = request?.url ? new URL(request.url).pathname : String(input)
-      if (url === '/api/management/agents/protocol-inventory') {
-        return Promise.resolve(jsonResponse(emptyInventory))
+      if (url === '/api/management/agents') {
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/agents/identity-inventory') {
-        return Promise.resolve(jsonResponse({ identities: [], pagination: emptyPagination }))
-      }
-      if (url === '/api/management/agent-audit-events') {
-        return Promise.resolve(jsonResponse({ events: [], pagination: emptyPagination }))
+      if (url === '/api/management/audit-events') {
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       throw new Error(`Unexpected request: ${url}`)
     })
 
     renderWithQuery(<AgentsPage />)
 
-    expect(await screen.findByText('No delegated agents.')).toBeTruthy()
-    expect(screen.getByText('No agent hosts.')).toBeTruthy()
-    expect(screen.getByText('No approval requests.')).toBeTruthy()
-    expect(screen.getByText('No stable Agent identities.')).toBeTruthy()
+    expect(await screen.findByText('No Agents.')).toBeTruthy()
     expect(screen.getByText('No Agent audit events.')).toBeTruthy()
-  })
-
-  it('renders unlinked agents, hosts, and approvals with missing fields', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input, _init) => {
-      const request = input instanceof Request ? input : null
-      const url = request?.url ? new URL(request.url).pathname : String(input)
-      if (url === '/api/management/agents/protocol-inventory') {
-        return Promise.resolve(jsonResponse(unlinkedInventory))
-      }
-      if (url === '/api/management/agents/identity-inventory') {
-        return Promise.resolve(jsonResponse({ identities: [], pagination: emptyPagination }))
-      }
-      if (url === '/api/management/agent-audit-events') {
-        return Promise.resolve(jsonResponse({ events: [], pagination: emptyPagination }))
-      }
-      throw new Error(`Unexpected request: ${url}`)
-    })
-
-    renderWithQuery(<AgentsPage />)
-
-    expect(await screen.findByText('Floating Agent')).toBeTruthy()
-    // unlinked user labels appear for agent, host, and approval rows
-    expect(screen.getAllByText('Unlinked').length).toBeGreaterThanOrEqual(3)
-    // host without a name falls back to its id, capabilities show "None"
-    expect(screen.getAllByText('host-2').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('None').length).toBeGreaterThanOrEqual(1)
-    // agent with no grants
-    expect(screen.getByText('No grants')).toBeTruthy()
-    // pending (non-active / non-approved) badges use the outline variant path
-    expect(screen.getAllByText('pending').length).toBeGreaterThanOrEqual(3)
   })
 })
 
 const timestamp = '2026-01-01T00:00:00.000Z'
 
-const identityInventory = {
-  identities: [
+const agentInventory = {
+  items: [
     {
-      id: 'identity-1',
+      id: 'agent-1',
       issuer: 'https://auth.example.com',
       subject: 'agt_stable',
       name: 'Stable Build Agent',
@@ -140,19 +76,9 @@ const identityInventory = {
       retiredAt: null,
       createdAt: timestamp,
       updatedAt: timestamp,
-      bindings: [
-        {
-          id: 'binding-1',
-          protocolAgentId: 'agent-1',
-          hostId: 'host-1',
-          status: 'active',
-          boundAt: timestamp,
-          revokedAt: null,
-        },
-      ],
     },
     {
-      id: 'identity-2',
+      id: 'agent-2',
       issuer: 'https://auth.example.com',
       subject: 'agt_retired',
       name: 'Retired Personal Agent',
@@ -161,23 +87,13 @@ const identityInventory = {
       retiredAt: timestamp,
       createdAt: timestamp,
       updatedAt: timestamp,
-      bindings: [
-        {
-          id: 'binding-2',
-          protocolAgentId: 'agent-2',
-          hostId: 'host-2',
-          status: 'revoked',
-          boundAt: timestamp,
-          revokedAt: timestamp,
-        },
-      ],
     },
   ],
-  pagination: { ...emptyPagination, total: 1 },
+  pagination: { ...emptyPagination, total: 2 },
 }
 
 const agentAudit = {
-  events: [
+  items: [
     {
       id: 'audit-1',
       action: 'external_resource.token_issued',
@@ -185,217 +101,17 @@ const agentAudit = {
       controllerUserId: 'user-1',
       subjectIssuer: 'https://auth.example.com',
       subject: 'agt_stable',
-      agentIdentityId: 'identity-1',
-      hostId: 'host-1',
-      authorityGrantId: 'authority-1',
+      agentIdentityId: 'agent-1',
+      hostId: null,
+      authorityGrantId: null,
       resourceId: 'resource-1',
       resourceConnectionId: 'connection-1',
       accessGrantId: 'access-grant-1',
       scopes: ['projects:read'],
       reasonCode: null,
-      metadata: { upstreamStatus: 200 },
-      occurredAt: timestamp,
-    },
-    {
-      id: 'audit-2',
-      action: 'agent.token.denied',
-      result: 'denied',
-      controllerUserId: null,
-      subjectIssuer: null,
-      subject: null,
-      agentIdentityId: null,
-      hostId: null,
-      authorityGrantId: null,
-      resourceId: null,
-      resourceConnectionId: null,
-      accessGrantId: null,
-      scopes: null,
-      reasonCode: 'forbidden',
-      metadata: null,
-      occurredAt: timestamp,
-    },
-    {
-      id: 'audit-3',
-      action: 'external_resource.access_decided',
-      result: 'denied',
-      controllerUserId: null,
-      subjectIssuer: null,
-      subject: null,
-      agentIdentityId: null,
-      hostId: null,
-      authorityGrantId: null,
-      resourceId: null,
-      resourceConnectionId: null,
-      accessGrantId: null,
-      scopes: null,
-      reasonCode: null,
-      metadata: null,
+      metadata: {},
       occurredAt: timestamp,
     },
   ],
   pagination: { ...emptyPagination, total: 1 },
-}
-
-const emptyInventory = {
-  hosts: { items: [], pagination: { ...emptyPagination } },
-  agents: { items: [], pagination: { ...emptyPagination } },
-  capabilityGrants: { items: [], pagination: { ...emptyPagination } },
-  approvalRequests: { items: [], pagination: { ...emptyPagination } },
-}
-
-const unlinkedInventory = {
-  hosts: {
-    items: [
-      {
-        id: 'host-2',
-        name: null,
-        userId: null,
-        defaultCapabilities: null,
-        publicKey: null,
-        kid: null,
-        jwksUrl: null,
-        enrollmentTokenExpiresAt: null,
-        status: 'pending',
-        activatedAt: null,
-        expiresAt: null,
-        lastUsedAt: null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
-    ],
-    pagination: { ...emptyPagination, total: 1 },
-  },
-  agents: {
-    items: [
-      {
-        id: 'agent-2',
-        name: 'Floating Agent',
-        userId: null,
-        hostId: null,
-        status: 'pending',
-        mode: 'delegated',
-        publicKey: 'public-key',
-        kid: null,
-        jwksUrl: null,
-        lastUsedAt: null,
-        activatedAt: null,
-        expiresAt: null,
-        metadata: null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
-    ],
-    pagination: { ...emptyPagination, total: 1 },
-  },
-  capabilityGrants: { items: [], pagination: { ...emptyPagination } },
-  approvalRequests: {
-    items: [
-      {
-        id: 'approval-2',
-        method: 'device_code',
-        agentId: null,
-        hostId: null,
-        userId: null,
-        capabilities: null,
-        status: 'pending',
-        loginHint: null,
-        bindingMessage: null,
-        clientNotificationEndpoint: null,
-        deliveryMode: null,
-        interval: 5,
-        lastPolledAt: null,
-        expiresAt: timestamp,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
-    ],
-    pagination: { ...emptyPagination, total: 1 },
-  },
-}
-
-const agentInventory = {
-  hosts: {
-    items: [
-      {
-        id: 'host-1',
-        name: 'Shell Host',
-        userId: 'user-1',
-        defaultCapabilities: 'account.profile.read',
-        publicKey: null,
-        kid: null,
-        jwksUrl: null,
-        enrollmentTokenExpiresAt: null,
-        status: 'active',
-        activatedAt: timestamp,
-        expiresAt: null,
-        lastUsedAt: null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
-    ],
-    pagination: { ...emptyPagination, total: 1 },
-  },
-  agents: {
-    items: [
-      {
-        id: 'agent-1',
-        name: 'Build Agent',
-        userId: 'user-1',
-        hostId: 'host-1',
-        status: 'active',
-        mode: 'delegated',
-        publicKey: 'public-key',
-        kid: null,
-        jwksUrl: null,
-        lastUsedAt: null,
-        activatedAt: timestamp,
-        expiresAt: null,
-        metadata: null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
-    ],
-    pagination: { ...emptyPagination, total: 1 },
-  },
-  capabilityGrants: {
-    items: [
-      {
-        id: 'grant-1',
-        agentId: 'agent-1',
-        capability: 'account.profile.read',
-        deniedBy: null,
-        grantedBy: 'user-1',
-        expiresAt: null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        status: 'active',
-        reason: null,
-        constraints: null,
-      },
-    ],
-    pagination: { ...emptyPagination, total: 1 },
-  },
-  approvalRequests: {
-    items: [
-      {
-        id: 'approval-1',
-        method: 'device_code',
-        agentId: 'agent-1',
-        hostId: 'host-1',
-        userId: 'user-1',
-        capabilities: 'account.profile.read',
-        status: 'approved',
-        loginHint: null,
-        bindingMessage: null,
-        clientNotificationEndpoint: null,
-        deliveryMode: null,
-        interval: 5,
-        lastPolledAt: null,
-        expiresAt: timestamp,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
-    ],
-    pagination: { ...emptyPagination, total: 1 },
-  },
 }

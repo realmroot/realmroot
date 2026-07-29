@@ -2,12 +2,14 @@ import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
 import type { AgentEnrollmentIntentRecord, AgentIdentityAggregate, AgentIdentityRecord } from '@server/usecases/ports'
+import type { Agent, AgentEnrollment } from '@shared/api/agent-api'
 import type {
   AgentEnrollmentIntent,
   AgentHomeSpace,
   AgentIdentity,
   CreateAgentEnrollmentIntentRequest,
 } from '@shared/api/agents'
+import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 
 const enrollmentLifetimeMs = 10 * 60 * 1000
 
@@ -16,6 +18,22 @@ export async function listPersonalAgentIdentities(
   userId: string,
 ): Promise<{ identities: AgentIdentity[] }> {
   return { identities: (await deps.agentIdentities.listPersonal(userId)).map(toIdentity) }
+}
+
+export async function listPersonalAgents(deps: Deps, userId: string, page: PaginationInput) {
+  const agents = (await deps.agentIdentities.listPersonal(userId)).map(toAgent)
+  return {
+    items: agents.slice(page.offset, page.offset + page.limit),
+    pagination: paginationMetadata({ ...page, total: agents.length }),
+  }
+}
+
+export async function getPersonalAgent(deps: Deps, agentId: string, actorUserId: string): Promise<Agent> {
+  return toAgent(await requireControlledIdentity(deps, agentId, actorUserId))
+}
+
+export async function getAgent(deps: Deps, agentId: string): Promise<Agent> {
+  return toAgent(await requireIdentity(deps, agentId))
 }
 
 export async function listOrganizationAgentIdentities(
@@ -30,6 +48,14 @@ export async function listOrganizationAgentIdentities(
 export async function listAllAgentIdentities(deps: Deps, page: { limit: number; offset: number }) {
   const result = await deps.agentIdentities.listAll(page)
   return { items: result.items.map(toIdentity), total: result.total, ...page }
+}
+
+export async function listAllAgents(deps: Deps, page: PaginationInput) {
+  const result = await deps.agentIdentities.listAll(page)
+  return {
+    items: result.items.map(toAgent),
+    pagination: paginationMetadata(result),
+  }
 }
 
 export async function getAgentIdentityByProtocolAgent(deps: Deps, protocolAgentId: string): Promise<AgentIdentity> {
@@ -88,6 +114,14 @@ export async function getAgentEnrollmentIntent(
   if (!intent) throw notFound('Agent enrollment intent was not found.')
   await assertController(deps, homeSpaceOf(intent), actorUserId)
   return toIntent(intent)
+}
+
+export async function getPublicAgentEnrollment(
+  deps: Deps,
+  enrollmentId: string,
+  actorUserId: string,
+): Promise<AgentEnrollment> {
+  return toAgentEnrollment(await getAgentEnrollmentIntent(deps, enrollmentId, actorUserId))
 }
 
 export async function emergencyRetireAgentIdentity(deps: Deps, identityId: string) {
@@ -346,6 +380,40 @@ function toIdentity(aggregate: AgentIdentityAggregate): AgentIdentity {
       revokedAt: binding.revokedAt,
     })),
   }
+}
+
+export function toAgent(identity: AgentIdentityAggregate | AgentIdentity): Agent {
+  const value = 'identity' in identity ? toIdentity(identity) : identity
+  return {
+    id: value.id,
+    issuer: value.issuer,
+    subject: value.subject,
+    name: value.name,
+    homeSpace: value.homeSpace,
+    status: value.status,
+    retiredAt: iso(value.retiredAt),
+    createdAt: iso(value.createdAt)!,
+    updatedAt: iso(value.updatedAt)!,
+  }
+}
+
+export function toAgentEnrollment(intent: AgentEnrollmentIntent): AgentEnrollment {
+  return {
+    id: intent.id,
+    agentId: intent.agentIdentityId,
+    requestedName: intent.requestedName,
+    homeSpace: intent.homeSpace,
+    status: intent.status === 'approved' ? 'approved' : intent.status,
+    expiresAt: iso(intent.expiresAt)!,
+    decidedAt: iso(intent.approvedAt),
+    createdAt: iso(intent.createdAt)!,
+    updatedAt: iso(intent.updatedAt)!,
+  }
+}
+
+function iso(value: string | Date | null) {
+  if (value === null) return null
+  return typeof value === 'string' ? value : value.toISOString()
 }
 
 function createId(prefix: string) {

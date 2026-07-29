@@ -1,16 +1,19 @@
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import {
-  agentAccessRequestSchema,
-  agentResourceDiscoverySchema,
-  createAgentAccessRequestSchema,
-  createExternalTokenLeaseRequestSchema,
-  externalTokenLeaseSchema,
-} from '@shared/api/external-resources'
+  accessGrantSchema,
+  accessGrantsResponseSchema,
+  accessRequestSchema,
+  agentApiResourcesResponseSchema,
+  agentResponseSchema,
+  createAccessRequestSchema,
+  createAgentEnrollmentSchema,
+  createTargetTokenSchema,
+  targetTokenSchema,
+} from '@shared/api/agent-api'
 import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
 import {
-  agentProtocolIdentityResponseSchema,
   errorResponse,
   jsonBody,
   jsonContentType,
@@ -60,56 +63,82 @@ export const unifiedOpenApiLinkHeader = [
 const managementRoutes: ManagementRouteConfig[] = [
   {
     method: 'get',
-    path: '/whoami',
-    operationId: 'whoami',
-    summary: 'Read the current Agent identity',
+    path: '/agent',
+    operationId: 'getCurrentAgent',
+    summary: 'Read the current Agent',
     security: [{ agentAuth: [] }],
-    response: agentProtocolIdentityResponseSchema,
+    response: agentResponseSchema,
+  },
+  {
+    method: 'post',
+    path: '/agent/enrollments',
+    operationId: 'enrollAgent',
+    summary: 'Create the current stable Agent',
+    security: [{ agentAuth: [] }],
+    request: { body: jsonBody(createAgentEnrollmentSchema) },
+    response: agentResponseSchema,
+    status: 201,
   },
   {
     method: 'get',
-    path: '/agent/resources',
-    operationId: 'listAgentResources',
-    summary: 'Discover connected external API resources',
+    path: '/agent/api-resources',
+    operationId: 'listAgentApiResources',
+    summary: 'List API resources available to the Agent',
     security: [{ agentAuth: [] }],
-    response: agentResourceDiscoverySchema,
+    response: agentApiResourcesResponseSchema,
   },
   {
     method: 'post',
     path: '/agent/access-requests',
-    operationId: 'requestAgentResourceAccess',
-    summary: 'Request exact external API resource access',
+    operationId: 'createAgentAccessRequest',
+    summary: 'Request exact API resource access',
     security: [{ agentAuth: [] }],
-    request: { body: jsonBody(createAgentAccessRequestSchema) },
-    response: agentAccessRequestSchema,
+    request: { body: jsonBody(createAccessRequestSchema) },
+    response: accessRequestSchema,
     status: 201,
   },
   {
     method: 'get',
     path: '/agent/access-requests/{requestId}',
-    operationId: 'getAgentResourceAccessRequest',
-    summary: 'Read an external API resource access request',
+    operationId: 'getAgentAccessRequest',
+    summary: 'Get an Agent access request',
     security: [{ agentAuth: [] }],
     request: { params: z.object({ requestId: z.string() }) },
-    response: agentAccessRequestSchema,
+    response: accessRequestSchema,
+  },
+  {
+    method: 'get',
+    path: '/agent/access-grants',
+    operationId: 'listAgentAccessGrants',
+    summary: 'List active Agent access grants',
+    security: [{ agentAuth: [] }],
+    response: accessGrantsResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/agent/access-grants/{grantId}',
+    operationId: 'getAgentAccessGrant',
+    summary: 'Get an Agent access grant',
+    security: [{ agentAuth: [] }],
+    request: { params: z.object({ grantId: z.string() }) },
+    response: accessGrantSchema,
   },
   {
     method: 'post',
-    path: '/agent/access-requests/{requestId}/token-leases',
-    operationId: 'issueExternalResourceTokenLease',
-    summary: 'Issue a target-platform DPoP token lease',
+    path: '/agent/access-grants/{grantId}/tokens',
+    operationId: 'issueTargetAccessToken',
+    summary: 'Issue a target-platform DPoP token',
     security: [{ agentAuth: [] }],
     request: {
-      params: z.object({ requestId: z.string() }),
-      body: jsonBody(createExternalTokenLeaseRequestSchema),
+      params: z.object({ grantId: z.string() }),
+      body: jsonBody(createTargetTokenSchema),
     },
-    response: externalTokenLeaseSchema,
-    status: 201,
+    response: targetTokenSchema,
   },
   ...agentGovernanceRoutes,
-  ...applicationAuthorizationRoutes,
-  ...userSecurityRoutes,
-  ...platformWebhookRoutes,
+  ...applicationAuthorizationRoutes.map(toManagementRoute),
+  ...userSecurityRoutes.map(toManagementRoute),
+  ...platformWebhookRoutes.map(toManagementRoute),
 ]
 const openApiApp = createManagementOpenApiApp()
 export const unifiedOpenApi = buildUnifiedOpenApi()
@@ -184,6 +213,10 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
     request: routeConfig.request as never,
     responses: routeResponses(routeConfig) as never,
   })
+}
+
+function toManagementRoute(route: ManagementRouteConfig): ManagementRouteConfig {
+  return { ...route, path: `/management${route.path}` }
 }
 
 function routeResponses(routeConfig: ManagementRouteConfig) {

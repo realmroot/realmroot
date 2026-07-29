@@ -41,10 +41,10 @@ describe('console authorization summaries', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/management/organizations/org-1') return Promise.resolve(jsonResponse(organization))
-      if (url === '/api/management/agents/identity-inventory') {
+      if (url === '/api/management/agents') {
         return Promise.resolve(
           jsonResponse({
-            identities: [
+            items: [
               {
                 id: 'identity-org-1',
                 issuer: 'https://auth.example.com',
@@ -55,7 +55,6 @@ describe('console authorization summaries', () => {
                 retiredAt: null,
                 createdAt: '2026-01-01T00:00:00.000Z',
                 updatedAt: '2026-01-01T00:00:00.000Z',
-                bindings: [],
               },
             ],
             pagination: { ...emptyPagination, total: 1 },
@@ -105,7 +104,7 @@ describe('console authorization summaries', () => {
         return Promise.resolve(jsonResponse({ permissions: [] }))
       }
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       if (url === '/api/management/api-resources/resource-1/permissions') {
         return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
@@ -135,7 +134,7 @@ describe('console authorization summaries', () => {
         return Promise.resolve(jsonResponse({ permissions: [] }))
       }
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       if (url === '/api/management/api-resources/resource-1/permissions') {
         return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
@@ -171,7 +170,7 @@ describe('console authorization summaries', () => {
         return Promise.resolve(jsonResponse({ permissions: [apiPermission] }))
       }
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       if (url === '/api/management/api-resources/resource-1/permissions') {
         return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
@@ -327,7 +326,7 @@ describe('console authorization summaries', () => {
       }
       if (url === '/api/management/roles/role-1/permissions') return new Promise(() => undefined)
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       return consoleSharedFetch(input, init)
     })

@@ -7,12 +7,11 @@ import { importJWK, SignJWT } from 'jose'
 
 export interface PluginIdentityResult {
   authenticated?: boolean
-  identity: {
+  agent: {
     id: string
     issuer: string
     subject: string
     name: string
-    bindings: Array<{ protocolAgentId: string; hostId: string }>
   }
   local_agent: string
 }
@@ -169,7 +168,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
       child.on('close', (code) => {
         clearInterval(approvalTimer)
         if (code !== 0) {
-          const error = new Error(`FlareAuth ${operation} exited with ${code}: ${stderr}`)
+          const error = new Error(`FlareAuth ${operation} exited with ${code}: ${stderr}${stdout}`)
           if (!approvalResolved) rejectApprovalUrl(error)
           reject(error)
           return
@@ -185,10 +184,11 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   }
 
   return {
-    firstWhoami: (name) => invokePending<PluginIdentityResult>('whoami', undefined, { FLAREAUTH_AGENT_NAME: name }),
-    whoami: () => invoke<PluginIdentityResult>('whoami'),
+    firstWhoami: (name) =>
+      invokePending<PluginIdentityResult>('get-current-agent', undefined, { FLAREAUTH_AGENT_NAME: name }),
+    whoami: () => invoke<PluginIdentityResult>('get-current-agent'),
     requestCapabilities: (capabilities, reason) =>
-      invokePending<CapabilityRequestResult>('request-agent-capabilities', { capabilities, reason }),
+      invokePending<CapabilityRequestResult>('request-agent-management-access', { capabilities, reason }),
     requestAgentToken: (grantId, dpopProof) =>
       invokeWithRequiredArgs<AgentTokenResult>('issue-agent-access-token', [dpopProof], {
         grant_type: 'urn:flareauth:params:oauth:grant-type:agent-authority',

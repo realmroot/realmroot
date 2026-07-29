@@ -21,6 +21,7 @@ type agentTarget struct {
 }
 
 type stableIdentity struct {
+	ID      string `json:"id"`
 	Issuer  string `json:"issuer"`
 	Subject string `json:"subject"`
 }
@@ -56,7 +57,7 @@ type capabilityStateFinder interface {
 }
 
 type resourceStateFinder interface {
-	FindByOriginAndHostID(origin string, hostID string) (agentState, error)
+	FindByOriginAndIdentityID(origin string, identityID string) (agentState, error)
 }
 
 type fileStateStore struct {
@@ -157,8 +158,12 @@ func (s *fileStateStore) FindByOriginAndAgentID(origin string, agentID string) (
 	return s.find(origin, func(state agentState) bool { return state.AgentID == agentID }, "capability request")
 }
 
-func (s *fileStateStore) FindByOriginAndHostID(origin string, hostID string) (agentState, error) {
-	return s.find(origin, func(state agentState) bool { return state.HostID == hostID }, "resource request")
+func (s *fileStateStore) FindByOriginAndIdentityID(origin string, identityID string) (agentState, error) {
+	return s.find(
+		origin,
+		func(state agentState) bool { return state.Identity != nil && state.Identity.ID == identityID },
+		"resource request",
+	)
 }
 
 func (s *fileStateStore) find(origin string, matches func(agentState) bool, label string) (agentState, error) {

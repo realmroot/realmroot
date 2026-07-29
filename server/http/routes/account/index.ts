@@ -2,14 +2,13 @@ import { badRequest, forbidden } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
 import {
   approveAgentEnrollment,
-  createAdditionalAgentEnrollmentIntent,
-  createAgentEnrollmentIntent,
-  getAgentEnrollmentIntent,
+  getPersonalAgent,
+  getPublicAgentEnrollment,
   listOrganizationAgentIdentities,
-  listPersonalAgentIdentities,
+  listPersonalAgents,
   recoverAgentIdentity,
   retireAgentIdentity,
-  revokeAgentIdentityHost,
+  toAgent,
 } from '@server/usecases/agent-identities'
 import {
   approveAgentAuthorityApproval,
@@ -17,22 +16,18 @@ import {
   listAgentAuthorityGrants,
   revokeAgentAuthorityGrant,
 } from '@server/usecases/agent-tokens'
-import {
-  decideAgentApproval,
-  listAccountAgents,
-  revokeAccountAgent,
-  revokeAccountCapabilityGrant,
-} from '@server/usecases/agents'
+import { decideAgentApproval } from '@server/usecases/agents'
 import { revokeConsent } from '@server/usecases/applications'
 import { getConfig } from '@server/usecases/configz'
 import {
-  createResourceConnectionIntent,
-  decideAgentAccessRequest,
-  decideAgentAccessRequestByToken,
-  getControllerAccessRequestByToken,
+  createAccountConnection,
+  decideAccessRequest,
+  getAccountAccessRequest,
+  getAccountAccessRequestByToken,
+  getAccountConnection,
+  listAccountAccessRequests,
+  listAccountConnections,
   listConnectableExternalResources,
-  listControllerAccessRequests,
-  listResourceConnections,
   revokeAgentAccessGrant,
   revokeResourceConnection,
 } from '@server/usecases/external-resources'
@@ -45,32 +40,31 @@ import {
   accountWalletAddressLinkSchema,
 } from '@shared/api/account'
 import {
+  accessRequestSchema,
+  accessRequestsResponseSchema,
+  accountConnectionSchema,
+  accountConnectionsResponseSchema,
+  agentEnrollmentSchema,
+  agentResponseSchema,
+  agentsResponseSchema,
+  connectableApiResourcesResponseSchema,
+  createAccountConnectionSchema,
+  decideAccessRequestSchema,
+  decideAgentEnrollmentSchema,
+} from '@shared/api/agent-api'
+import {
   agentAuthorityApprovalSchema,
-  agentEnrollmentIntentSchema,
-  createAdditionalAgentEnrollmentIntentRequestSchema,
   createAgentAuthorityGrantRequestSchema,
-  createAgentEnrollmentIntentRequestSchema,
-  decideAgentApprovalRequestSchema,
   decideAgentApprovalResponseSchema,
 } from '@shared/api/agents'
 import { linkAccountRequestSchema, unlinkAccountQuerySchema } from '@shared/api/connectors'
-import {
-  agentAccessApprovalTokenQuerySchema,
-  agentAccessRequestSchema,
-  connectableExternalResourcesResponseSchema,
-  createResourceConnectionIntentRequestSchema,
-  decideAgentAccessRequestByTokenSchema,
-  decideAgentAccessRequestSchema,
-  listResourceConnectionsResponseSchema,
-  resourceConnectionIntentResponseSchema,
-} from '@shared/api/external-resources'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { getAddress, verifyMessage } from 'viem'
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
-import type { z } from 'zod'
+import { z } from 'zod'
 import { configzOptions } from '../../app-config'
 import { requireAuth } from '../../middleware/admin'
 import { getAuthContext } from '../../middleware/auth-context'
@@ -370,117 +364,101 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   })
 
   app.get('/agents', async (c) => {
-    const authContext = getAuthContext(c)
-    return c.json(await listAccountAgents(getDeps(c), authContext.user!.id, readQuery(c, paginationQuerySchema)))
-  })
-
-  app.post('/agent-approvals/:agentId/decisions', async (c) => {
-    const result = await decideAgentApproval(
-      getDeps(c),
-      {
-        agentId: c.req.param('agentId'),
-        ...(await readJson(c, decideAgentApprovalRequestSchema)),
-      },
-      getAuthContext(c).user!.id,
-    )
-    return c.json(decideAgentApprovalResponseSchema.parse(result))
-  })
-
-  app.get('/agent-identities', async (c) => {
-    return c.json(await listPersonalAgentIdentities(getDeps(c), getAuthContext(c).user!.id))
-  })
-
-  app.get('/organizations/:organizationId/agent-identities', async (c) => {
     return c.json(
-      await listOrganizationAgentIdentities(getDeps(c), c.req.param('organizationId'), getAuthContext(c).user!.id),
+      agentsResponseSchema.parse(
+        await listPersonalAgents(getDeps(c), getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema)),
+      ),
     )
   })
 
-  app.post('/agent-enrollment-intents', async (c) => {
-    const intent = await createAgentEnrollmentIntent(
-      getDeps(c),
-      await readJson(c, createAgentEnrollmentIntentRequestSchema),
-      getAuthContext(c).user!.id,
+  app.get('/agents/:agentId', async (c) => {
+    return c.json(
+      agentResponseSchema.parse({
+        agent: await getPersonalAgent(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id),
+      }),
     )
-    return c.json(intent, 202)
   })
 
-  app.post('/agent-identities/:identityId/enrollment-intents', async (c) => {
-    const body = await readJson(c, createAdditionalAgentEnrollmentIntentRequestSchema)
-    const intent = await createAdditionalAgentEnrollmentIntent(
-      getDeps(c),
-      c.req.param('identityId'),
-      body.protocolAgentId,
-      getAuthContext(c).user!.id,
-    )
-    return c.json(intent, 202)
-  })
-
-  app.post('/agent-enrollment-intents/:intentId/approvals', async (c) => {
-    const result = await approveAgentEnrollment(
-      getDeps(c),
-      c.req.param('intentId'),
-      `${(canonicalOrigin ?? new URL(c.req.url).origin).replace(/\/$/, '')}/api/auth`,
-      getAuthContext(c).user!.id,
-    )
-    return c.json(result, 201)
-  })
-
-  app.get('/agent-enrollment-intents/:intentId', async (c) => {
-    const intent = await getAgentEnrollmentIntent(getDeps(c), c.req.param('intentId'), getAuthContext(c).user!.id)
-    return c.json(agentEnrollmentIntentSchema.parse(intent))
-  })
-
-  app.delete('/agent-identities/:identityId/hosts/:protocolAgentId', async (c) => {
-    await revokeAgentIdentityHost(
-      getDeps(c),
-      c.req.param('identityId'),
-      c.req.param('protocolAgentId'),
-      getAuthContext(c).user!.id,
-    )
+  app.delete('/agents/:agentId', async (c) => {
+    await retireAgentIdentity(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id)
     return c.body(null, 204)
   })
 
-  app.post('/agent-identities/:identityId/recoveries', async (c) => {
-    await recoverAgentIdentity(getDeps(c), c.req.param('identityId'), getAuthContext(c).user!.id)
+  app.post('/agents/:agentId/recovery', async (c) => {
+    await recoverAgentIdentity(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id)
     return c.body(null, 202)
   })
 
-  app.delete('/agent-identities/:identityId', async (c) => {
-    await retireAgentIdentity(getDeps(c), c.req.param('identityId'), getAuthContext(c).user!.id)
-    return c.body(null, 204)
+  app.get('/organizations/:organizationId/agents', async (c) => {
+    const result = await listOrganizationAgentIdentities(
+      getDeps(c),
+      c.req.param('organizationId'),
+      getAuthContext(c).user!.id,
+    )
+    return c.json({ items: result.identities.map(toAgent) })
   })
 
-  app.get('/agent-identities/:identityId/authority-grants', async (c) => {
-    return c.json(await listAgentAuthorityGrants(getDeps(c), c.req.param('identityId'), getAuthContext(c).user!.id))
-  })
-
-  app.post('/agent-identities/:identityId/authority-grants', async (c) => {
+  app.get('/agent-enrollments/:enrollmentId', async (c) => {
     return c.json(
-      await createAgentAuthorityGrant(
-        getDeps(c),
-        c.req.param('identityId'),
-        await readJson(c, createAgentAuthorityGrantRequestSchema),
-        getAuthContext(c).user!.id,
+      agentEnrollmentSchema.parse(
+        await getPublicAgentEnrollment(getDeps(c), c.req.param('enrollmentId'), getAuthContext(c).user!.id),
       ),
-      201,
     )
   })
 
-  app.delete('/agent-identities/:identityId/authority-grants/:grantId', async (c) => {
+  app.put('/agent-enrollments/:enrollmentId/decision', async (c) => {
+    const input = await readJson(c, decideAgentEnrollmentSchema)
+    if (input.kind === 'protocol') {
+      const result = await decideAgentApproval(
+        getDeps(c),
+        {
+          agentId: c.req.param('enrollmentId'),
+          userCode: input.userCode,
+          action: input.decision,
+          capabilities: input.permissions,
+        },
+        getAuthContext(c).user!.id,
+      )
+      return c.json(decideAgentApprovalResponseSchema.parse(result))
+    }
+    const result = await approveAgentEnrollment(
+      getDeps(c),
+      c.req.param('enrollmentId'),
+      `${(canonicalOrigin ?? new URL(c.req.url).origin).replace(/\/$/, '')}/api/auth`,
+      getAuthContext(c).user!.id,
+    )
+    return c.json(agentResponseSchema.parse({ agent: toAgent(result.identity) }))
+  })
+
+  app.get('/agents/:agentId/access-grants', async (c) => {
+    return c.json(await listAgentAuthorityGrants(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id))
+  })
+
+  app.post('/agents/:agentId/access-grants', async (c) => {
+    const grant = await createAgentAuthorityGrant(
+      getDeps(c),
+      c.req.param('agentId'),
+      await readJson(c, createAgentAuthorityGrantRequestSchema),
+      getAuthContext(c).user!.id,
+    )
+    c.header('Location', `/api/account/agents/${encodeURIComponent(c.req.param('agentId'))}/access-grants/${grant.id}`)
+    return c.json(grant, 201)
+  })
+
+  app.delete('/agents/:agentId/access-grants/:grantId', async (c) => {
     await revokeAgentAuthorityGrant(
       getDeps(c),
-      c.req.param('identityId'),
+      c.req.param('agentId'),
       c.req.param('grantId'),
       getAuthContext(c).user!.id,
     )
     return c.body(null, 204)
   })
 
-  app.post('/agent-identities/:identityId/authority-grants/:grantId/approvals/:approvalId', async (c) => {
+  app.put('/agents/:agentId/access-grants/:grantId/approvals/:approvalId/decision', async (c) => {
     const approval = await approveAgentAuthorityApproval(
       getDeps(c),
-      c.req.param('identityId'),
+      c.req.param('agentId'),
       c.req.param('grantId'),
       c.req.param('approvalId'),
       getAuthContext(c).user!.id,
@@ -488,78 +466,102 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     return c.json(agentAuthorityApprovalSchema.parse(approval))
   })
 
-  app.delete('/agents/:agentId', async (c) => {
-    await revokeAccountAgent(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id)
-    return c.body(null, 204)
-  })
-
-  app.delete('/agent-capability-grants/:grantId', async (c) => {
-    await revokeAccountCapabilityGrant(getDeps(c), c.req.param('grantId'), getAuthContext(c).user!.id)
-    return c.body(null, 204)
-  })
-
-  app.get('/resource-connections', async (c) => {
+  app.get('/account-connections', async (c) => {
     return c.json(
-      listResourceConnectionsResponseSchema.parse(
-        await listResourceConnections(getDeps(c), getAuthContext(c).user!.id),
+      accountConnectionsResponseSchema.parse(
+        await listAccountConnections(getDeps(c), getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema)),
       ),
     )
   })
 
-  app.get('/external-api-resources', async (c) => {
-    return c.json(connectableExternalResourcesResponseSchema.parse(await listConnectableExternalResources(getDeps(c))))
+  app.get('/api-resources', async (c) => {
+    const resources = (await listConnectableExternalResources(getDeps(c))).resources
+    return c.json(
+      connectableApiResourcesResponseSchema.parse({
+        items: resources.map((resource) => ({
+          ...resource,
+          permissions: resource.scopes,
+        })),
+        pagination: {
+          limit: resources.length || 1,
+          offset: 0,
+          total: resources.length,
+          hasMore: false,
+          nextOffset: null,
+        },
+      }),
+    )
   })
 
-  app.post('/resource-connections/:resourceId/authorization-intents', async (c) => {
-    const result = await createResourceConnectionIntent(
+  app.post('/account-connections', async (c) => {
+    const result = await createAccountConnection(
       getDeps(c),
-      c.req.param('resourceId'),
-      await readJson(c, createResourceConnectionIntentRequestSchema),
+      await readJson(c, createAccountConnectionSchema),
       getAuthContext(c).user!.id,
       canonicalOrigin ?? new URL(c.req.url).origin,
     )
-    return c.json(resourceConnectionIntentResponseSchema.parse(result), 201)
+    c.header('Location', `/api/account/account-connections/${encodeURIComponent(result.id)}`)
+    return c.json(accountConnectionSchema.parse(result), 201)
   })
 
-  app.delete('/resource-connections/:connectionId', async (c) => {
+  app.get('/account-connections/:connectionId', async (c) => {
+    return c.json(
+      accountConnectionSchema.parse(
+        await getAccountConnection(getDeps(c), c.req.param('connectionId'), getAuthContext(c).user!.id),
+      ),
+    )
+  })
+
+  app.delete('/account-connections/:connectionId', async (c) => {
     await revokeResourceConnection(getDeps(c), c.req.param('connectionId'), getAuthContext(c).user!.id)
     return c.body(null, 204)
   })
 
-  app.get('/agent-access-requests', async (c) => {
-    const result = await listControllerAccessRequests(getDeps(c), getAuthContext(c).user!.id)
-    return c.json({ requests: result.requests.map((request) => agentAccessRequestSchema.parse(request)) })
-  })
-
-  app.get('/agent-access-requests/approval', async (c) => {
-    const { token } = readQuery(c, agentAccessApprovalTokenQuerySchema)
+  app.get('/access-requests', async (c) => {
+    const query = readQuery(c, paginationQuerySchema.extend({ approvalToken: z.string().trim().min(1).optional() }))
+    if (query.approvalToken) {
+      const request = await getAccountAccessRequestByToken(getDeps(c), query.approvalToken, getAuthContext(c).user!.id)
+      return c.json(
+        accessRequestsResponseSchema.parse({
+          items: [request],
+          pagination: { limit: query.limit, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
+      )
+    }
     return c.json(
-      agentAccessRequestSchema.parse(
-        await getControllerAccessRequestByToken(getDeps(c), token, getAuthContext(c).user!.id),
+      accessRequestsResponseSchema.parse(
+        await listAccountAccessRequests(getDeps(c), getAuthContext(c).user!.id, {
+          limit: query.limit,
+          offset: query.offset,
+        }),
       ),
     )
   })
 
-  app.post('/agent-access-requests/approval', async (c) => {
-    const body = await readJson(c, decideAgentAccessRequestByTokenSchema)
+  app.get('/access-requests/:requestId', async (c) => {
     return c.json(
-      agentAccessRequestSchema.parse(
-        await decideAgentAccessRequestByToken(getDeps(c), body.token, body, getAuthContext(c).user!.id),
+      accessRequestSchema.parse(
+        await getAccountAccessRequest(
+          getDeps(c),
+          c.req.param('requestId'),
+          getAuthContext(c).user!.id,
+          c.req.query('approvalToken'),
+        ),
       ),
     )
   })
 
-  app.post('/agent-access-requests/:requestId/decisions', async (c) => {
-    const result = await decideAgentAccessRequest(
+  app.put('/access-requests/:requestId/decision', async (c) => {
+    const result = await decideAccessRequest(
       getDeps(c),
       c.req.param('requestId'),
-      await readJson(c, decideAgentAccessRequestSchema),
+      await readJson(c, decideAccessRequestSchema),
       getAuthContext(c).user!.id,
     )
-    return c.json(agentAccessRequestSchema.parse(result))
+    return c.json(accessRequestSchema.parse(result))
   })
 
-  app.delete('/agent-access-grants/:grantId', async (c) => {
+  app.delete('/access-grants/:grantId', async (c) => {
     await revokeAgentAccessGrant(getDeps(c), c.req.param('grantId'), getAuthContext(c).user!.id)
     return c.body(null, 204)
   })

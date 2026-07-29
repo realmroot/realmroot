@@ -116,7 +116,7 @@ describe('management routes 1', () => {
     )
 
     const contract = await app.request('/api/openapi.json')
-    const protectedResponse = await app.request('/api/users')
+    const protectedResponse = await app.request('/api/management/users')
 
     expect(contract.status).toBe(200)
     expect(contract.headers.get('content-type')).toContain('application/json')
@@ -128,7 +128,9 @@ describe('management routes 1', () => {
   })
 
   it('documents application setup fields and role permission replacement request bodies', () => {
-    const createApplication = openApiOperationObjects().find((operation) => operation.key === 'POST /applications')
+    const createApplication = openApiOperationObjects().find(
+      (operation) => operation.key === 'POST /management/applications',
+    )
     const createApplicationSchema = openApiSchemaObject(requestBodyContent(createApplication?.requestBody).schema)
     const createApplicationProperties = openApiRecord(createApplicationSchema.properties)
 
@@ -138,7 +140,7 @@ describe('management routes 1', () => {
     expect(createApplicationProperties).not.toHaveProperty('clientSecret')
 
     const replaceRolePermissions = openApiOperationObjects().find(
-      (operation) => operation.key === 'PUT /roles/{param}/permissions',
+      (operation) => operation.key === 'PUT /management/roles/{param}/permissions',
     )
     const replaceRolePermissionsSchema = openApiSchemaObject(
       requestBodyContent(replaceRolePermissions?.requestBody).schema,
@@ -214,7 +216,7 @@ describe('management routes 1', () => {
     expect(auth.api.listUsers).not.toHaveBeenCalled()
   })
 
-  it('uses one Agent principal for whoami and permission-gated management [spec: agent-identity/agent-single-cli-principal] [spec: agent-identity/agent-management-authority] [spec: management-api/management-restish-oauth-auth]', async () => {
+  it('uses one Agent principal for its Agent resource and permission-gated management [spec: agent-identity/agent-single-cli-principal] [spec: agent-identity/agent-management-authority] [spec: management-api/management-restish-oauth-auth] [spec: agent-identity/agent-public-resource-model]', async () => {
     const auth = createAuthMock()
     auth.api.getAgentSession.mockResolvedValue({
       agentId: 'protocol-agent-1',
@@ -256,16 +258,19 @@ describe('management routes 1', () => {
       },
     })
     const app = createApp(auth, deps)
-    const headers = bearerHeaders('agent-proof')
+    const headers = {
+      'content-type': 'application/json',
+      authorization: 'Bearer eyJ0eXAiOiJhZ2VudCtqd3QifQ.e30.c2lnbmF0dXJl',
+    }
 
-    const whoami = await app.request('/api/whoami', { headers })
-    expect(whoami.status).toBe(200)
-    await expect(whoami.json()).resolves.toMatchObject({
-      identity: { issuer: 'http://localhost', subject: 'agt_1' },
+    const agent = await app.request('/api/agent', { headers })
+    expect(agent.status).toBe(200)
+    await expect(agent.json()).resolves.toMatchObject({
+      agent: { issuer: 'http://localhost', subject: 'agt_1' },
     })
 
-    const denied = await app.request('/api/users', { headers })
-    expect(denied.status).toBe(403)
+    const denied = await app.request('/api/management/users', { headers })
+    expect(denied.status, await denied.clone().text()).toBe(403)
     await expect(denied.json()).resolves.toMatchObject({
       error: { message: 'Agent authority "management:read" is required.' },
     })
@@ -280,7 +285,7 @@ describe('management routes 1', () => {
       },
       host: { id: 'host-1', userId: 'controller-1', status: 'active' },
     })
-    const allowed = await app.request('/api/users', { headers })
+    const allowed = await app.request('/api/management/users', { headers })
     expect(allowed.status).toBe(200)
     expect(auth.api.getAgentSession).toHaveBeenCalledTimes(3)
   })
@@ -323,7 +328,7 @@ describe('management routes 1', () => {
       }),
     )
 
-    const response = await app.request('https://auth.example.com/api/capability-requests', {
+    const response = await app.request('https://auth.example.com/api/agent/management-access-requests', {
       method: 'POST',
       headers: {
         authorization: 'Bearer agent-proof',

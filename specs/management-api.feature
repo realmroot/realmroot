@@ -12,7 +12,7 @@ Feature: Unified FlareAuth API Restish entry
     When an API client requests service discovery
     Then /api/openapi.json returns the OpenAPI 3.1 contract
     And API responses advertise that contract with Restish-compatible Link headers
-    And Restish v2 exposes whoami and resource operations from the same contract
+    And Restish v2 exposes the current Agent and resource operations from the same contract
 
 
   @entrypoint:restish @journey:management-restish-oauth-auth

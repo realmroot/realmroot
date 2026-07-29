@@ -66,7 +66,7 @@ describe('console authorization resources', () => {
         return Promise.resolve(jsonResponse(apiResource, 201))
       }
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -127,7 +127,7 @@ describe('console authorization resources', () => {
       }
       if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       if (url === '/api/management/user-role-assignments') return Promise.resolve(new Response(null, { status: 204 }))
       if (url === '/api/management/application-role-assignments')
@@ -301,7 +301,7 @@ describe('console authorization resources', () => {
         return Promise.resolve(jsonResponse({ permissions: [] }))
       }
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       if (url === '/api/management/api-resources/resource-1/permissions') {
         return Promise.resolve(jsonResponse({ permissions: [], pagination: emptyPagination }))

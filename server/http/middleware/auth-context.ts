@@ -3,6 +3,7 @@ import type { ProtocolAgentSession } from '@server/usecases/agent-tokens'
 import type { Deps } from '@server/usecases/deps'
 import { systemCliClientId } from '@shared/api/applications'
 import type { Context, MiddlewareHandler } from 'hono'
+import { decodeProtectedHeader } from 'jose'
 import { toBoundaryError } from '../routes/auth-api'
 
 export interface AuthUser {
@@ -87,7 +88,7 @@ export function getAuthContext(c: Context): AuthContext {
 export function agentPrincipalAuth(auth: SessionReader, options: { allowSession?: boolean } = {}): MiddlewareHandler {
   return async (c, next) => {
     const current = getAuthContext(c)
-    if (current.agent || (options.allowSession !== false && current.session)) {
+    if (current.agent || current.bearer || (options.allowSession !== false && current.session)) {
       await next()
       return
     }
@@ -146,7 +147,7 @@ export function isAutomationPrincipal(c: Context) {
 export function managementBearerAuth(auth: SessionReader): MiddlewareHandler {
   return async (c, next) => {
     const token = bearerToken(c.req.raw.headers)
-    if (!token) {
+    if (!token || isAgentAuthProof(token)) {
       await next()
       return
     }
@@ -181,6 +182,14 @@ export function managementBearerAuth(auth: SessionReader): MiddlewareHandler {
   }
 }
 
+function isAgentAuthProof(token: string) {
+  try {
+    return decodeProtectedHeader(token).typ === 'agent+jwt'
+  } catch {
+    return false
+  }
+}
+
 async function readOAuthUserInfo(auth: SessionReader, c: Context) {
   if (auth.handler) {
     const url = new URL('/api/auth/oauth2/userinfo', c.req.url)
@@ -207,10 +216,10 @@ async function readOAuthUserInfo(auth: SessionReader, c: Context) {
 function bearerToken(headers: Headers) {
   const authorization = headers.get('authorization')
   if (!authorization) return null
-  const match = /^Bearer\s+(.+)$/i.exec(authorization.trim())
-  if (!match?.[1]) {
-    throw unauthorized('Invalid bearer token.')
-  }
+  const value = authorization.trim()
+  if (!/^Bearer(?:\s|$)/i.test(value)) return null
+  const match = /^Bearer\s+(.+)$/i.exec(value)
+  if (!match?.[1]) throw unauthorized('Invalid bearer token.')
   return match[1]
 }
 

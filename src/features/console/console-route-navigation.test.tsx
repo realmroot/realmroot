@@ -196,7 +196,7 @@ describe('console route navigation', () => {
       }
       if (url.startsWith('/api/management/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (url === '/api/management/api-resources/resource-1/scopes') {

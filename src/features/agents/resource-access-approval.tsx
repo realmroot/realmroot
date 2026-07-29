@@ -1,15 +1,15 @@
-import type { AgentAccessRequest, DecideAgentAccessRequest } from '@shared/api/external-resources'
+import type { AccessRequest, DecideAccessRequest } from '@shared/api/agent-api'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
 import { decideAgentResourceApproval, getAgentResourceApproval } from '@/lib/api/account'
 
-type ApprovalMode = NonNullable<DecideAgentAccessRequest['mode']>
+type ApprovalMode = NonNullable<DecideAccessRequest['mode']>
 
 export function ResourceAccessApproval() {
   const token = useMemo(() => new URLSearchParams(window.location.hash.slice(1)).get('token') ?? '', [])
-  const [request, setRequest] = useState<AgentAccessRequest | null>(null)
+  const [request, setRequest] = useState<AccessRequest | null>(null)
   const [mode, setMode] = useState<ApprovalMode>('once')
   const [expiresAt, setExpiresAt] = useState('')
   const [decision, setDecision] = useState<'approved' | 'denied' | null>(null)
@@ -32,7 +32,7 @@ export function ResourceAccessApproval() {
     setSubmitting(true)
     setError(null)
     try {
-      const input: DecideAgentAccessRequest =
+      const input: DecideAccessRequest =
         nextDecision === 'deny'
           ? { decision: 'deny' }
           : {
@@ -40,7 +40,7 @@ export function ResourceAccessApproval() {
               mode,
               ...(mode === 'until' ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
             }
-      await decideAgentResourceApproval(token, input)
+      await decideAgentResourceApproval(request!.id, token, input)
       setDecision(nextDecision === 'approve' ? 'approved' : 'denied')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to decide the Agent resource request.')
@@ -79,13 +79,12 @@ export function ResourceAccessApproval() {
             Confirm the exact account, scopes, Agent, and host before granting access.
           </p>
         </div>
-        {request ? (
+        {request?.target.type === 'api-resource' ? (
           <dl className="grid gap-3 rounded-md border border-border bg-card p-4 text-sm sm:grid-cols-2">
-            <RequestField label="Agent identity" value={request.agentIdentityId} />
-            <RequestField label="Host" value={request.hostId} />
-            <RequestField label="Resource account" value={request.connectionId} />
-            <RequestField label="Resource" value={request.resourceId} />
-            <RequestField label="Exact scopes" value={request.scopes.join(' ')} wide />
+            <RequestField label="Agent" value={request.agentId} />
+            <RequestField label="Resource account" value={request.target.accountConnectionId} />
+            <RequestField label="Resource" value={request.target.apiResourceId} />
+            <RequestField label="Exact permissions" value={request.permissions.join(' ')} wide />
             {request.reason ? <RequestField label="Reason" value={request.reason} wide /> : null}
           </dl>
         ) : null}
@@ -95,7 +94,7 @@ export function ResourceAccessApproval() {
             <label className="flex items-center gap-2 text-sm" key={value}>
               <input checked={mode === value} name="mode" onChange={() => setMode(value)} type="radio" />
               {value === 'once'
-                ? 'One token lease'
+                ? 'One target token'
                 : value === 'until'
                   ? 'Until a date and time'
                   : 'Persistent until revoked'}

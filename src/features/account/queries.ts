@@ -5,24 +5,22 @@ import {
   getAccountProfile,
   getAccountSecurity,
   listAccountAgents,
+  listAccountConnections,
   listAccountSessions,
   listConsentedApplications,
   listExternalApiResources,
   listLinkedAccounts,
   listPasskeys,
-  listPersonalAgentIdentities,
-  listResourceConnections,
 } from '@/lib/api/account'
 import { tt } from '@/lib/i18n'
 
 export const accountQueryKeys = {
   agents: ['account', 'agents'] as const,
-  agentIdentities: ['account', 'agent-identities'] as const,
   applications: ['account', 'applications'] as const,
   configz: ['configz'] as const,
   linkedAccounts: ['account', 'linked-accounts'] as const,
-  externalApiResources: ['account', 'external-api-resources'] as const,
-  resourceConnections: ['account', 'resource-connections'] as const,
+  externalApiResources: ['account', 'api-resources'] as const,
+  accountConnections: ['account', 'account-connections'] as const,
   passkeys: ['account', 'passkeys'] as const,
   profile: ['account', 'profile'] as const,
   security: ['account', 'security'] as const,
@@ -99,14 +97,6 @@ export function useAccountAgents() {
   })
 }
 
-export function useAgentIdentities() {
-  return useQuery({
-    queryKey: accountQueryKeys.agentIdentities,
-    queryFn: listPersonalAgentIdentities,
-    ...accountQueryOptions,
-  })
-}
-
 export function useExternalApiResources() {
   return useQuery({
     queryKey: accountQueryKeys.externalApiResources,
@@ -115,10 +105,10 @@ export function useExternalApiResources() {
   })
 }
 
-export function useResourceConnections() {
+export function useAccountConnections() {
   return useQuery({
-    queryKey: accountQueryKeys.resourceConnections,
-    queryFn: listResourceConnections,
+    queryKey: accountQueryKeys.accountConnections,
+    queryFn: listAccountConnections,
     ...accountQueryOptions,
   })
 }

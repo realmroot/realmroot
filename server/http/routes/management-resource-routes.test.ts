@@ -1,6 +1,7 @@
 import * as applicationsUsecase from '@server/usecases/applications'
 import * as authorizationUsecase from '@server/usecases/authorization'
 import * as connectorsUsecase from '@server/usecases/connectors'
+import * as externalResourcesUsecase from '@server/usecases/external-resources'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from '../test-deps'
@@ -178,6 +179,24 @@ async function loadAppRoutes() {
 
 async function loadAuthorizationRoutes() {
   const authorizationService = authorizationServiceMock()
+  const apiResource = {
+    id: 'resource-1',
+    identifier: 'contacts',
+    name: 'Contacts',
+    audience: 'https://api.example.com',
+    description: null,
+    authorizationMode: 'flareauth' as const,
+    enabled: true,
+    tokenClaimsNamespace: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    authorization: null,
+  }
+  vi.spyOn(externalResourcesUsecase, 'listApiResources').mockResolvedValue({
+    items: [apiResource],
+    pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+  })
+  vi.spyOn(externalResourcesUsecase, 'getApiResource').mockResolvedValue(apiResource)
   const usecaseModule = authorizationUsecase as unknown as Record<string, (...args: unknown[]) => unknown>
   for (const name of Object.keys(authorizationService)) {
     const delegate = authorizationService[name as keyof typeof authorizationService] as (...a: unknown[]) => unknown

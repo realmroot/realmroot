@@ -471,6 +471,7 @@ export interface ExternalResourceRepository {
   consumeConnectionIntent(stateHash: string, now: Date): Promise<ResourceConnectionIntentRecord | null>
   createAccessRequest(input: AgentAccessRequestRecord): Promise<AgentAccessRequestRecord>
   findAccessRequest(id: string): Promise<AgentAccessRequestRecord | null>
+  findAccessRequestByGrant(grantId: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByApprovalTokenHash(tokenHash: string): Promise<AgentAccessRequestRecord | null>
   listPendingAccessRequestsByAgent(agentIdentityId: string, now: Date): Promise<AgentAccessRequestRecord[]>
   decideAccessRequest(

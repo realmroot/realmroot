@@ -129,6 +129,11 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row ?? null
     },
 
+    async findAccessRequestByGrant(grantId) {
+      const [row] = await db.select().from(agentAccessRequest).where(eq(agentAccessRequest.grantId, grantId)).limit(1)
+      return row ?? null
+    },
+
     async findAccessRequestByApprovalTokenHash(tokenHash) {
       const [row] = await db
         .select()

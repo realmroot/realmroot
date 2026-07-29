@@ -39,16 +39,17 @@ type capabilityGrantSummary struct {
 }
 
 type identityResponse struct {
-	Identity stableIdentity `json:"identity"`
+	Agent stableIdentity `json:"agent"`
 }
 
 type agentConfiguration struct {
-	Version               string            `json:"version"`
-	Issuer                string            `json:"issuer"`
-	Algorithms            []string          `json:"algorithms"`
-	AgentIdentityIssuer   string            `json:"agent_identity_issuer"`
-	AgentIdentityEndpoint string            `json:"agent_identity_endpoint"`
-	Endpoints             map[string]string `json:"endpoints"`
+	Version                 string            `json:"version"`
+	Issuer                  string            `json:"issuer"`
+	Algorithms              []string          `json:"algorithms"`
+	AgentIdentityIssuer     string            `json:"agent_identity_issuer"`
+	AgentEnrollmentEndpoint string            `json:"agent_enrollment_endpoint"`
+	AgentEndpoint           string            `json:"agent_endpoint"`
+	Endpoints               map[string]string `json:"endpoints"`
 }
 
 type httpDoer interface {
@@ -135,17 +136,17 @@ func ensureAgentIdentity(
 		ctx,
 		client,
 		http.MethodPost,
-		configuration.AgentIdentityEndpoint,
+		configuration.AgentEnrollmentEndpoint,
 		mustAgentJWT(state, configuration.Issuer),
 		map[string]any{"name": state.Name},
 		&identity,
 	); err != nil {
 		return agentState{}, err
 	}
-	if identity.Identity.Issuer != configuration.AgentIdentityIssuer || identity.Identity.Subject == "" {
+	if identity.Agent.ID == "" || identity.Agent.Issuer != configuration.AgentIdentityIssuer || identity.Agent.Subject == "" {
 		return agentState{}, errors.New("Agent identity response is missing issuer or subject")
 	}
-	state.Identity = &identity.Identity
+	state.Identity = &identity.Agent
 	state.RegistrationApproval = nil
 	if err := states.Update(target, state); err != nil {
 		return agentState{}, err
@@ -183,7 +184,8 @@ func discoverAgentConfiguration(
 	issuerOrigin := issuer.Scheme + "://" + issuer.Host
 	for _, endpoint := range []string{
 		configuration.Issuer,
-		configuration.AgentIdentityEndpoint,
+		configuration.AgentEnrollmentEndpoint,
+		configuration.AgentEndpoint,
 		configuration.Endpoints["register"],
 		configuration.Endpoints["status"],
 	} {

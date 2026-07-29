@@ -152,6 +152,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       consumeConnectionIntent: vi.fn().mockResolvedValue(null),
       createAccessRequest: vi.fn(),
       findAccessRequest: vi.fn().mockResolvedValue(null),
+      findAccessRequestByGrant: vi.fn().mockResolvedValue(null),
       findAccessRequestByApprovalTokenHash: vi.fn().mockResolvedValue(null),
       listPendingAccessRequestsByAgent: vi.fn().mockResolvedValue([]),
       decideAccessRequest: vi.fn().mockResolvedValue(null),

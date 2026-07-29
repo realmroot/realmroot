@@ -7,6 +7,7 @@ import {
   agentIdentityBinding,
   approvalRequest,
 } from '@server/db/schema'
+import { createAdditionalAgentEnrollmentIntent, createAgentEnrollmentIntent } from '@server/usecases/agent-identities'
 import { authenticateAgentAccessToken, issueAgentAccessToken } from '@server/usecases/agent-tokens'
 import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
@@ -69,10 +70,14 @@ describe('Agent identity enrollment over real D1', () => {
       updatedAt: createdAt,
     })
 
-    const loginApproval = await harness.request('/api/account/agent-approvals/approval-agent/decisions', {
-      method: 'POST',
+    const loginApproval = await harness.request('/api/account/agent-enrollments/approval-agent/decision', {
+      method: 'PUT',
       headers: jsonHeaders(ownerCookie),
-      body: JSON.stringify({ userCode: 'ABCD-1234', action: 'approve' }),
+      body: JSON.stringify({
+        kind: 'protocol',
+        userCode: 'ABCD-1234',
+        decision: 'approve',
+      }),
     })
     expect(loginApproval.status, await loginApproval.clone().text()).toBe(200)
     await expect(loginApproval.json()).resolves.toEqual({ status: 'approved' })
@@ -108,13 +113,14 @@ describe('Agent identity enrollment over real D1', () => {
       updatedAt: createdAt,
     })
 
-    const capabilityApproval = await harness.request('/api/account/agent-approvals/approval-agent/decisions', {
-      method: 'POST',
+    const capabilityApproval = await harness.request('/api/account/agent-enrollments/approval-agent/decision', {
+      method: 'PUT',
       headers: jsonHeaders(ownerCookie),
       body: JSON.stringify({
+        kind: 'protocol',
         userCode: 'WXYZ-5678',
-        action: 'approve',
-        capabilities: ['management:read'],
+        decision: 'approve',
+        permissions: ['management:read'],
       }),
     })
     expect(capabilityApproval.status, await capabilityApproval.clone().text()).toBe(200)
@@ -135,105 +141,74 @@ describe('Agent identity enrollment over real D1', () => {
       [spec: agent-identity/agent-identity-retirement]
       [spec: agent-identity/agent-stable-issuer]`, async () => {
     const first = await seedAgent(harness, userId, 'identity-first')
-    const firstIntent = await createIntent(harness, ownerCookie, {
+    const firstIntent = await createIntent(harness, userId, {
       name: 'Release Agent',
       protocolAgentId: first.agentId,
     })
     const approved = await approveIntent(harness, ownerCookie, firstIntent.id)
 
-    expect(approved.identity).toMatchObject({
+    expect(approved.agent).toMatchObject({
       issuer: 'http://localhost/api/auth',
       name: 'Release Agent',
       status: 'active',
       homeSpace: { type: 'personal', userId },
-      bindings: [{ protocolAgentId: first.agentId, hostId: first.hostId, status: 'active' }],
     })
-    const stableSubject = approved.identity.subject
+    const stableSubject = approved.agent.subject
 
     const second = await seedAgent(harness, userId, 'identity-second')
-    const secondIntentResponse = await harness.request(
-      `/api/account/agent-identities/${approved.identity.id}/enrollment-intents`,
-      {
-        method: 'POST',
-        headers: jsonHeaders(ownerCookie),
-        body: JSON.stringify({ protocolAgentId: second.agentId }),
-      },
-    )
-    expect(secondIntentResponse.status, await secondIntentResponse.clone().text()).toBe(202)
-    const secondIntent = (await secondIntentResponse.json()) as { id: string }
+    const secondIntent = await createIntent(harness, userId, {
+      agentIdentityId: approved.agent.id,
+      protocolAgentId: second.agentId,
+    })
     const multiHost = await approveIntent(harness, ownerCookie, secondIntent.id)
-    expect(multiHost.identity.subject).toBe(stableSubject)
-    expect(multiHost.identity.bindings.filter((binding) => binding.status === 'active')).toHaveLength(2)
+    expect(multiHost.agent.subject).toBe(stableSubject)
+    const activeBindings = await harness.db
+      .select()
+      .from(agentIdentityBinding)
+      .where(eq(agentIdentityBinding.agentIdentityId, approved.agent.id))
+    expect(activeBindings.filter((binding) => binding.status === 'active')).toHaveLength(2)
 
-    const revoke = await harness.request(
-      `/api/account/agent-identities/${approved.identity.id}/hosts/${first.agentId}`,
-      { method: 'DELETE', headers: { cookie: ownerCookie } },
-    )
-    expect(revoke.status).toBe(204)
-    const [revokedProtocolAgent] = await harness.db.select().from(agent).where(eq(agent.id, first.agentId))
-    const [remainingProtocolAgent] = await harness.db.select().from(agent).where(eq(agent.id, second.agentId))
-    expect(revokedProtocolAgent.status).toBe('revoked')
-    expect(remainingProtocolAgent.status).toBe('active')
-
-    const recover = await harness.request(`/api/account/agent-identities/${approved.identity.id}/recoveries`, {
+    const recover = await harness.request(`/api/account/agents/${approved.agent.id}/recovery`, {
       method: 'POST',
       headers: { cookie: ownerCookie },
     })
     expect(recover.status).toBe(202)
-    const [recovering] = await harness.db.select().from(agentIdentity).where(eq(agentIdentity.id, approved.identity.id))
+    const [recovering] = await harness.db.select().from(agentIdentity).where(eq(agentIdentity.id, approved.agent.id))
     expect(recovering).toMatchObject({ subject: stableSubject, status: 'recovering' })
 
     const replacement = await seedAgent(harness, userId, 'identity-replacement')
-    const replacementIntentResponse = await harness.request(
-      `/api/account/agent-identities/${approved.identity.id}/enrollment-intents`,
-      {
-        method: 'POST',
-        headers: jsonHeaders(ownerCookie),
-        body: JSON.stringify({ protocolAgentId: replacement.agentId }),
-      },
-    )
-    const replacementIntent = (await replacementIntentResponse.json()) as { id: string }
+    const replacementIntent = await createIntent(harness, userId, {
+      agentIdentityId: approved.agent.id,
+      protocolAgentId: replacement.agentId,
+    })
     const recovered = await approveIntent(harness, ownerCookie, replacementIntent.id)
-    expect(recovered.identity).toMatchObject({ subject: stableSubject, status: 'active' })
+    expect(recovered.agent).toMatchObject({ subject: stableSubject, status: 'active' })
 
-    const retire = await harness.request(`/api/account/agent-identities/${approved.identity.id}`, {
+    const retire = await harness.request(`/api/account/agents/${approved.agent.id}`, {
       method: 'DELETE',
       headers: { cookie: ownerCookie },
     })
     expect(retire.status).toBe(204)
-    const [retired] = await harness.db.select().from(agentIdentity).where(eq(agentIdentity.id, approved.identity.id))
+    const [retired] = await harness.db.select().from(agentIdentity).where(eq(agentIdentity.id, approved.agent.id))
     const bindings = await harness.db
       .select()
       .from(agentIdentityBinding)
-      .where(eq(agentIdentityBinding.agentIdentityId, approved.identity.id))
+      .where(eq(agentIdentityBinding.agentIdentityId, approved.agent.id))
     expect(retired).toMatchObject({ subject: stableSubject, status: 'retired' })
     expect(retired.retiredAt).toBeInstanceOf(Date)
     expect(bindings.some((binding) => binding.status === 'active')).toBe(false)
   })
 
-  it('rejects anonymous enrollment and duplicate protocol bindings', async () => {
-    const seeded = await seedAgent(harness, userId, 'identity-boundary')
+  it('rejects anonymous Agent enrollment', async () => {
     expect(
       (
-        await harness.request('/api/account/agent-enrollment-intents', {
+        await harness.request('/api/agent/enrollments', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ name: 'No Session', protocolAgentId: seeded.agentId }),
+          body: JSON.stringify({ name: 'No Session' }),
         })
       ).status,
     ).toBe(401)
-
-    const intent = await createIntent(harness, ownerCookie, {
-      name: 'Bound Agent',
-      protocolAgentId: seeded.agentId,
-    })
-    await approveIntent(harness, ownerCookie, intent.id)
-    const duplicate = await harness.request('/api/account/agent-enrollment-intents', {
-      method: 'POST',
-      headers: jsonHeaders(ownerCookie),
-      body: JSON.stringify({ name: 'Duplicate', protocolAgentId: seeded.agentId }),
-    })
-    expect(duplicate.status).toBe(400)
   })
 
   it(`persists authority grants, atomically rejects proof replay, and invalidates issued tokens on revocation
@@ -242,24 +217,21 @@ describe('Agent identity enrollment over real D1', () => {
       [spec: agent-identity/agent-oidc-federation]
       [spec: agent-identity/agent-grant-policy]`, async () => {
     const seeded = await seedAgent(harness, userId, 'token')
-    const intent = await createIntent(harness, ownerCookie, {
+    const intent = await createIntent(harness, userId, {
       name: 'Token Agent',
       protocolAgentId: seeded.agentId,
     })
     const approved = await approveIntent(harness, ownerCookie, intent.id)
 
-    const grantResponse = await harness.request(
-      `/api/account/agent-identities/${approved.identity.id}/authority-grants`,
-      {
-        method: 'POST',
-        headers: jsonHeaders(ownerCookie),
-        body: JSON.stringify({
-          mode: 'autonomous',
-          audience: 'https://api.example.com',
-          scopes: ['repo:read', 'repo:write'],
-        }),
-      },
-    )
+    const grantResponse = await harness.request(`/api/account/agents/${approved.agent.id}/access-grants`, {
+      method: 'POST',
+      headers: jsonHeaders(ownerCookie),
+      body: JSON.stringify({
+        mode: 'autonomous',
+        audience: 'https://api.example.com',
+        scopes: ['repo:read', 'repo:write'],
+      }),
+    })
     expect(grantResponse.status, await grantResponse.clone().text()).toBe(201)
     const grant = (await grantResponse.json()) as { id: string }
 
@@ -285,9 +257,9 @@ describe('Agent identity enrollment over real D1', () => {
       audience: 'https://api.example.com',
     })
     expect(verified.payload).toMatchObject({
-      sub: approved.identity.subject,
+      sub: approved.agent.subject,
       scope: 'repo:read repo:write',
-      agent_identity: { iss: 'http://localhost/api/auth', sub: approved.identity.subject },
+      agent_identity: { iss: 'http://localhost/api/auth', sub: approved.agent.subject },
       act: { sub: seeded.hostId, actor_type: 'host' },
     })
     expect(decodeProtectedHeader(issued.value.access_token)).toMatchObject({
@@ -302,10 +274,10 @@ describe('Agent identity enrollment over real D1', () => {
       token_endpoint: 'http://localhost/api/auth/oauth2/token',
     })
 
-    const revoke = await harness.request(
-      `/api/account/agent-identities/${approved.identity.id}/authority-grants/${grant.id}`,
-      { method: 'DELETE', headers: { cookie: ownerCookie } },
-    )
+    const revoke = await harness.request(`/api/account/agents/${approved.agent.id}/access-grants/${grant.id}`, {
+      method: 'DELETE',
+      headers: { cookie: ownerCookie },
+    })
     expect(revoke.status).toBe(204)
 
     const resourceRequest = await createDpopProof(
@@ -329,23 +301,20 @@ describe('Agent identity enrollment over real D1', () => {
       ),
     ).rejects.toMatchObject({ status: 401, message: 'Agent access token authority was revoked.' })
 
-    const stepUpGrantResponse = await harness.request(
-      `/api/account/agent-identities/${approved.identity.id}/authority-grants`,
-      {
-        method: 'POST',
-        headers: jsonHeaders(ownerCookie),
-        body: JSON.stringify({
-          mode: 'autonomous',
-          audience: 'https://high-risk.example.com',
-          scopes: ['deploy:read', 'deploy:write'],
-          constraints: {
-            allowedHostIds: [seeded.hostId],
-            maxUses: 1,
-            stepUpRequired: true,
-          },
-        }),
-      },
-    )
+    const stepUpGrantResponse = await harness.request(`/api/account/agents/${approved.agent.id}/access-grants`, {
+      method: 'POST',
+      headers: jsonHeaders(ownerCookie),
+      body: JSON.stringify({
+        mode: 'autonomous',
+        audience: 'https://high-risk.example.com',
+        scopes: ['deploy:read', 'deploy:write'],
+        constraints: {
+          allowedHostIds: [seeded.hostId],
+          maxUses: 1,
+          stepUpRequired: true,
+        },
+      }),
+    })
     const stepUpGrant = (await stepUpGrantResponse.json()) as { id: string }
     const initialStepUpProof = await createDpopProof(
       'POST',
@@ -364,8 +333,8 @@ describe('Agent identity enrollment over real D1', () => {
     expect(approvalId).toMatch(/^agapproval_/)
 
     const approve = await harness.request(
-      `/api/account/agent-identities/${approved.identity.id}/authority-grants/${stepUpGrant.id}/approvals/${approvalId}`,
-      { method: 'POST', headers: { cookie: ownerCookie } },
+      `/api/account/agents/${approved.agent.id}/access-grants/${stepUpGrant.id}/approvals/${approvalId}/decision`,
+      { method: 'PUT', headers: { cookie: ownerCookie } },
     )
     expect(approve.status, await approve.clone().text()).toBe(200)
     const broadenedProof = await createDpopProof(
@@ -427,29 +396,43 @@ describe('Agent identity enrollment over real D1', () => {
   })
 })
 
-async function createIntent(harness: Harness, cookie: string, input: { name: string; protocolAgentId: string }) {
-  const response = await harness.request('/api/account/agent-enrollment-intents', {
-    method: 'POST',
-    headers: jsonHeaders(cookie),
-    body: JSON.stringify(input),
-  })
-  expect(response.status, await response.clone().text()).toBe(202)
-  return (await response.json()) as { id: string }
+async function createIntent(
+  harness: Harness,
+  actorUserId: string,
+  input: { name?: string; agentIdentityId?: string; protocolAgentId: string },
+) {
+  if (input.agentIdentityId) {
+    return createAdditionalAgentEnrollmentIntent(
+      harness.deps,
+      input.agentIdentityId,
+      input.protocolAgentId,
+      actorUserId,
+    )
+  }
+  if (!input.name) throw new Error('A new Agent enrollment requires a name.')
+  return createAgentEnrollmentIntent(
+    harness.deps,
+    {
+      name: input.name,
+      protocolAgentId: input.protocolAgentId,
+    },
+    actorUserId,
+  )
 }
 
 async function approveIntent(harness: Harness, cookie: string, intentId: string) {
-  const response = await harness.request(`/api/account/agent-enrollment-intents/${intentId}/approvals`, {
-    method: 'POST',
-    headers: { cookie },
+  const response = await harness.request(`/api/account/agent-enrollments/${intentId}/decision`, {
+    method: 'PUT',
+    headers: jsonHeaders(cookie),
+    body: JSON.stringify({ kind: 'identity', decision: 'approve' }),
   })
-  expect(response.status, await response.clone().text()).toBe(201)
+  expect(response.status, await response.clone().text()).toBe(200)
   return (await response.json()) as {
-    identity: {
+    agent: {
       id: string
       issuer: string
       subject: string
       status: string
-      bindings: Array<{ protocolAgentId: string; hostId: string; status: string }>
     }
   }
 }

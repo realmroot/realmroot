@@ -1,4 +1,5 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
+import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createHarness,
@@ -22,11 +23,11 @@ describe('agent protocol management over real D1', () => {
     harness = await createHarness()
   })
 
-  it('rejects anonymous protocol-inventory reads with 401', async () => {
-    expect((await harness.request('/api/management/agents/protocol-inventory')).status).toBe(401)
+  it('rejects anonymous stable Agent reads with 401', async () => {
+    expect((await harness.request('/api/management/agents')).status).toBe(401)
   })
 
-  it('lists the seeded protocol inventory and revokes agent, grant, and host through real SQL', async () => {
+  it('lists and retires stable Agents through real SQL', async () => {
     const cookie = await signInAdmin(harness)
     const userId = await createUser(harness, cookie, {
       email: 'agent-owner@example.com',
@@ -35,34 +36,20 @@ describe('agent protocol management over real D1', () => {
       password: 'agent-owner-password-2026',
     })
     const seeded = await seedAgent(harness, userId)
+    const stableAgent = await createAgentLoginIdentity(
+      harness.deps,
+      { protocolAgentId: seeded.agentId, name: 'Managed Agent' },
+      'http://localhost/api/auth',
+      userId,
+    )
 
-    const inventory = await harness.request('/api/management/agents/protocol-inventory', { headers: { cookie } })
+    const inventory = await harness.request('/api/management/agents', { headers: { cookie } })
     expect(inventory.status).toBe(200)
-    const body = (await inventory.json()) as {
-      hosts: { items: unknown[] }
-      agents: { items: unknown[] }
-      capabilityGrants: { items: unknown[] }
-      approvalRequests: { items: unknown[] }
-    }
-    expect(body.hosts.items.length).toBe(1)
-    expect(body.agents.items.length).toBe(1)
-    expect(body.capabilityGrants.items.length).toBe(1)
-    expect(body.approvalRequests.items.length).toBe(1)
+    const body = (await inventory.json()) as { items: Array<{ id: string }> }
+    expect(body.items).toEqual([expect.objectContaining({ id: stableAgent.id })])
 
     expect(
-      (
-        await harness.request(`/api/management/agent-capability-grants/${seeded.grantId}`, {
-          method: 'DELETE',
-          headers: { cookie },
-        })
-      ).status,
-    ).toBe(204)
-    expect(
-      (await harness.request(`/api/management/agents/${seeded.agentId}`, { method: 'DELETE', headers: { cookie } }))
-        .status,
-    ).toBe(204)
-    expect(
-      (await harness.request(`/api/management/agent-hosts/${seeded.hostId}`, { method: 'DELETE', headers: { cookie } }))
+      (await harness.request(`/api/management/agents/${stableAgent.id}`, { method: 'DELETE', headers: { cookie } }))
         .status,
     ).toBe(204)
   })
@@ -80,23 +67,20 @@ describe('agent protocol management over real D1', () => {
     const me = await harness.request('/api/account/profile', { headers: { cookie: ownerCookie } })
     const userId = ((await me.json()) as { user: { id: string } }).user.id
     const seeded = await seedAgent(harness, userId, 'self')
+    const stableAgent = await createAgentLoginIdentity(
+      harness.deps,
+      { protocolAgentId: seeded.agentId, name: 'Self Agent' },
+      'http://localhost/api/auth',
+      userId,
+    )
 
     const list = await harness.request('/api/account/agents', { headers: { cookie: ownerCookie } })
     expect(list.status).toBe(200)
-    expect(((await list.json()) as { agents: unknown[] }).agents.length).toBe(1)
+    expect(((await list.json()) as { items: unknown[] }).items.length).toBe(1)
 
-    // revokeAccountCapabilityGrant + revokeAccountAgent scope by the owning user.
     expect(
       (
-        await harness.request(`/api/account/agent-capability-grants/${seeded.grantId}`, {
-          method: 'DELETE',
-          headers: { cookie: ownerCookie },
-        })
-      ).status,
-    ).toBe(204)
-    expect(
-      (
-        await harness.request(`/api/account/agents/${seeded.agentId}`, {
+        await harness.request(`/api/account/agents/${stableAgent.id}`, {
           method: 'DELETE',
           headers: { cookie: ownerCookie },
         })

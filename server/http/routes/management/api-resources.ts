@@ -5,9 +5,7 @@ import {
   deletePermission,
   deleteResource,
   deleteScope,
-  getResource,
   listPermissions,
-  listResources,
   listScopes,
   updatePermission,
   updateResource,
@@ -15,21 +13,22 @@ import {
 } from '@server/usecases/authorization'
 import {
   configureExternalResourceAuthorization,
-  getExternalResourceAuthorization,
+  getApiResource,
+  listApiResources,
 } from '@server/usecases/external-resources'
 import {
+  apiResourceSchema,
+  apiResourcesResponseSchema,
+  createApiResourceSchema,
+  updateApiResourceSchema,
+} from '@shared/api/agent-api'
+import {
   createApiPermissionRequestSchema,
-  createApiResourceRequestSchema,
   createApiScopeRequestSchema,
   paginationQuerySchema,
   updateApiPermissionRequestSchema,
-  updateApiResourceRequestSchema,
   updateApiScopeRequestSchema,
 } from '@shared/api/authorization'
-import {
-  configureExternalResourceAuthorizationRequestSchema,
-  externalResourceAuthorizationSchema,
-} from '@shared/api/external-resources'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
 import { getDeps } from '../../middleware/deps'
@@ -40,41 +39,40 @@ export const managementApiResourcesRoute = new Hono()
 managementApiResourcesRoute.use('*', requireAdmin())
 
 managementApiResourcesRoute.get('/', async (c) =>
-  c.json(await listResources(getDeps(c), readQuery(c, paginationQuerySchema))),
+  c.json(apiResourcesResponseSchema.parse(await listApiResources(getDeps(c), readQuery(c, paginationQuerySchema)))),
 )
 
-managementApiResourcesRoute.post('/', async (c) =>
-  c.json(await createResource(getDeps(c), await readJson(c, createApiResourceRequestSchema)), 201),
-)
-
-managementApiResourcesRoute.get('/:id/external-authorization', async (c) =>
-  c.json(
-    externalResourceAuthorizationSchema.parse(await getExternalResourceAuthorization(getDeps(c), c.req.param('id'))),
-  ),
-)
-
-managementApiResourcesRoute.put('/:id/external-authorization', async (c) =>
-  c.json(
-    externalResourceAuthorizationSchema.parse(
-      await configureExternalResourceAuthorization(
-        getDeps(c),
-        c.req.param('id'),
-        await readJson(c, configureExternalResourceAuthorizationRequestSchema),
-        new URL(c.req.url).origin,
-      ),
-    ),
-  ),
-)
+managementApiResourcesRoute.post('/', async (c) => {
+  const input = await readJson(c, createApiResourceSchema)
+  const { authorization, ...resourceInput } = input
+  const resource = await createResource(getDeps(c), resourceInput)
+  if (authorization) {
+    await configureExternalResourceAuthorization(getDeps(c), resource.id, authorization, new URL(c.req.url).origin)
+  }
+  c.header('Location', `/api/management/api-resources/${encodeURIComponent(resource.id)}`)
+  return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
+})
 
 managementApiResourcesRoute.get('/:resourceId', async (c) =>
-  c.json(await getResource(getDeps(c), c.req.param('resourceId'))),
+  c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId')))),
 )
 
-managementApiResourcesRoute.patch('/:resourceId', async (c) =>
-  c.json(
-    await updateResource(getDeps(c), c.req.param('resourceId'), await readJson(c, updateApiResourceRequestSchema)),
-  ),
-)
+managementApiResourcesRoute.patch('/:resourceId', async (c) => {
+  const input = await readJson(c, updateApiResourceSchema)
+  const { authorization, ...resourceInput } = input
+  if (Object.keys(resourceInput).length > 0) {
+    await updateResource(getDeps(c), c.req.param('resourceId'), resourceInput)
+  }
+  if (authorization) {
+    await configureExternalResourceAuthorization(
+      getDeps(c),
+      c.req.param('resourceId'),
+      authorization,
+      new URL(c.req.url).origin,
+    )
+  }
+  return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
+})
 
 managementApiResourcesRoute.delete('/:resourceId', async (c) => {
   await deleteResource(getDeps(c), c.req.param('resourceId'))

@@ -65,7 +65,7 @@ describe('console collections', () => {
       }
       if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -162,7 +162,15 @@ describe('console collections', () => {
         return Promise.resolve(jsonResponse({ roles: [role, billingManagerRole, ordersReaderRole], pagination }))
       }
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource, billingResource], pagination }))
+        return Promise.resolve(
+          jsonResponse({
+            items: [
+              { ...apiResource, authorization: null },
+              { ...billingResource, authorization: null },
+            ],
+            pagination,
+          }),
+        )
       }
       return consoleSharedFetch(input, init)
     })
@@ -317,7 +325,7 @@ describe('console collections', () => {
       {
         component: <ApiResourcesPage />,
         matches: (url: string) => url === '/api/management/api-resources',
-        success: { resources: [apiResource], pagination },
+        success: { items: [{ ...apiResource, authorization: null }], pagination },
         text: 'Management API',
       },
     ]) {

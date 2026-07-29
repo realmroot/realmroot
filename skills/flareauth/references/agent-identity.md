@@ -41,7 +41,7 @@ restish api connect API_NAME AUTH_ORIGIN/api --replace --yes
 Then invoke the OpenAPI-generated identity operation:
 
 ```bash
-restish API_NAME whoami -o json
+restish API_NAME get-current-agent -o json
 ```
 
 There is deliberately no login command. On first use, the auth adapter:
@@ -50,18 +50,18 @@ There is deliberately no login command. On first use, the auth adapter:
 2. generates independent local Agent and Host keys;
 3. registers the Agent;
 4. opens one controller approval URL in the browser;
-5. keeps the original `whoami` process waiting;
+5. keeps the original `get-current-agent` process waiting;
 6. creates the stable identity after approval;
-7. signs and resumes that original `whoami` request.
+7. signs and resumes that original `get-current-agent` request.
 
 The controller signs in to the hosted page and approves once. The controller's
 session authorizes enrollment but never becomes the Restish request identity.
-If the process is interrupted, repeat `whoami`; protected state resumes the
+If the process is interrupted, repeat `get-current-agent`; protected state resumes the
 pending enrollment.
 
-Persist `identity.issuer` and `identity.subject` as the Agent's account
-identifier. Later commands use the same Agent identity and require no login.
-`identity.issuer` is the shared Better Auth issuer
+Persist `agent.issuer` and `agent.subject` as the Agent's account identifier.
+Later commands use the same Agent identity and require no login.
+`agent.issuer` is the shared Better Auth issuer
 `AUTH_ORIGIN/api/auth`; it is also the issuer discovered by product OIDC
 clients.
 
@@ -76,7 +76,7 @@ management:read
 management:write
 ```
 
-Use the unified OpenAPI `request-agent-capabilities` operation. The request is
+Use the unified OpenAPI `request-agent-management-access` operation. The request is
 stored in the existing AgentAuth `approval_request` flow and approved from the
 same hosted `/agent/approve` page, which the adapter opens automatically. The
 command waits until the controller approves or denies the request. Approval
@@ -142,8 +142,8 @@ provider-specific Connector.
   AgentAuth capability.
 - Capability denial: explain the denial and stop; do not retry the protected
   operation automatically.
-- Capability approval timeout: invoke `request-agent-capabilities` again and use
+- Capability approval timeout: invoke `request-agent-management-access` again and use
   the newly opened approval page.
-- Enrollment timeout: invoke `whoami` again; do not seed identity rows.
+- Enrollment timeout: invoke `get-current-agent` again; do not seed identity rows.
 - Missing adapter: inspect `restish plugin list` and reinstall the repository
   binary.

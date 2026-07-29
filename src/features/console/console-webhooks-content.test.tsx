@@ -125,7 +125,7 @@ describe('admin console webhooks-content', () => {
       }
       if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       return consoleSharedFetch(input, init)
     })

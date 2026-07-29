@@ -40,7 +40,7 @@ reconstructing Restish commands from memory.
 ## Authentication
 
 Restish command-line operations always authenticate as the Agent. The first
-protected OpenAPI command—normally `whoami`—triggers transparent enrollment and
+protected OpenAPI command—normally `get-current-agent`—triggers transparent enrollment and
 waits for one controller approval. There is no `login` command and no
 administrator OAuth identity in the CLI.
 

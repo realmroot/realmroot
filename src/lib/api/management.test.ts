@@ -72,9 +72,7 @@ describe('management API client', () => {
     await management.updateBrandingSettings({ branding: { primaryColor: '#2563eb' } })
     await management.getAdminReadiness()
     await management.getAgentInventory()
-    await management.revokeAgent('agent-1')
-    await management.revokeAgentHost('host-1')
-    await management.revokeAgentCapabilityGrant('grant-1')
+    await management.emergencyRetireAgent('agent-1')
     await management.getSecurityPolicy()
     await management.updateSecurityPolicy({ policy: { mfa: { mode: 'required' } } })
     await management.listOrganizations()
@@ -208,8 +206,6 @@ describe('management API client', () => {
       ['readiness.get'],
       ['agentInventory.get'],
       ['agent.delete', { param: { agentId: 'agent-1' } }],
-      ['agentHost.delete', { param: { hostId: 'host-1' } }],
-      ['agentCapabilityGrant.delete', { param: { grantId: 'grant-1' } }],
       ['security.get'],
       ['security.patch', { json: { policy: { mfa: { mode: 'required' } } } }],
       ['organizations.get'],
@@ -282,7 +278,7 @@ describe('management API client', () => {
       connectors: { key: 'connectors.get' },
       organizations: { key: 'organizations.get' },
       roles: { key: 'roles.get' },
-      apiResources: { key: 'apiResources.get' },
+      apiResources: { resources: [] },
       signIn: { key: 'signIn.get' },
       security: { key: 'security.get' },
     })
@@ -294,7 +290,11 @@ async function loadManagementApi() {
   const endpoint = (key: string) =>
     vi.fn((input?: unknown) => {
       calls.push(input === undefined ? [key] : [key, input])
-      return Promise.resolve({ key, input })
+      return Promise.resolve(
+        key === 'apiResources.get'
+          ? { key, input, items: [], pagination: { limit: 50, offset: 0, total: 0 } }
+          : { key, input },
+      )
     })
 
   vi.doMock('@/lib/api', () => ({
@@ -370,15 +370,10 @@ async function loadManagementApi() {
           'branding-settings': { $get: endpoint('branding.get'), $patch: endpoint('branding.patch') },
           readiness: { $get: endpoint('readiness.get') },
           agents: {
-            'protocol-inventory': { $get: endpoint('agentInventory.get') },
+            $get: endpoint('agentInventory.get'),
             ':agentId': { $delete: endpoint('agent.delete') },
           },
-          'agent-hosts': {
-            ':hostId': { $delete: endpoint('agentHost.delete') },
-          },
-          'agent-capability-grants': {
-            ':grantId': { $delete: endpoint('agentCapabilityGrant.delete') },
-          },
+          'audit-events': { $get: endpoint('agentAudit.get') },
           security: { policy: { $get: endpoint('security.get'), $patch: endpoint('security.patch') } },
           organizations: {
             $get: endpoint('organizations.get'),

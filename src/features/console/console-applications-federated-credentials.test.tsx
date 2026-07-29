@@ -102,14 +102,17 @@ describe('admin console application federated credentials', () => {
       const method = init?.method ?? 'GET'
       if (url === '/api/management/api-resources') {
         return jsonResponse({
-          resources: [
+          items: [
             {
               id: 'res_1',
               name: 'Runner API',
               identifier: 'https://auth.example.com/api/runner',
               audience: 'https://auth.example.com/api/runner',
+              authorizationMode: 'flareauth',
+              description: null,
               enabled: true,
-              metadata: {},
+              tokenClaimsNamespace: null,
+              authorization: null,
               createdAt: '2026-01-01T00:00:00.000Z',
               updatedAt: '2026-01-01T00:00:00.000Z',
             },
@@ -210,7 +213,7 @@ describe('admin console application federated credentials', () => {
       const method = init?.method ?? 'GET'
       if (url === '/api/management/api-resources') {
         return jsonResponse({
-          resources: [],
+          items: [],
           pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
         })
       }

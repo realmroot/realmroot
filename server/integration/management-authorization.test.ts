@@ -65,7 +65,7 @@ describe('authorization management over real D1', () => {
     ).json()) as { id: string }
 
     const list = await harness.request('/api/management/api-resources', { headers: { cookie } })
-    expect(((await list.json()) as { resources: unknown[] }).resources.length).toBe(1)
+    expect(((await list.json()) as { items: unknown[] }).items.length).toBe(1)
 
     const fetched = await harness.request(`/api/management/api-resources/${resource.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)

@@ -174,10 +174,24 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
     http.get(`${base}/api/account/sessions`, () => HttpResponse.json({ sessions: store.sessions })),
     http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({ accounts: store.linkedAccounts })),
     http.get(`${base}/api/account/applications`, () => HttpResponse.json({ applications: store.applications })),
-    http.get(`${base}/api/account/agents`, () => HttpResponse.json({ agents: store.agents })),
-    http.get(`${base}/api/account/agent-identities`, () => HttpResponse.json({ identities: store.agentIdentities })),
-    http.get(`${base}/api/account/external-api-resources`, () => HttpResponse.json({ resources: [] })),
-    http.get(`${base}/api/account/resource-connections`, () => HttpResponse.json({ connections: [] })),
+    http.get(`${base}/api/account/agents`, () =>
+      HttpResponse.json({
+        items: store.agentIdentities,
+        pagination: { limit: 50, offset: 0, total: store.agentIdentities.length, hasMore: false, nextOffset: null },
+      }),
+    ),
+    http.get(`${base}/api/account/api-resources`, () =>
+      HttpResponse.json({
+        items: [],
+        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      }),
+    ),
+    http.get(`${base}/api/account/account-connections`, () =>
+      HttpResponse.json({
+        items: [],
+        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      }),
+    ),
   ] as unknown as Handlers
 }
 

@@ -1,5 +1,4 @@
 import {
-  agentProtocolInventoryResponseSchema,
   connectorReadinessResponseSchema,
   createManagementConnectorRequestSchema,
   createWebhookEndpointRequestSchema,
@@ -158,39 +157,6 @@ export const platformWebhookRoutes: ManagementRouteConfig[] = [
     summary: 'Get deployment readiness',
     response: managementReadinessResponseSchema,
   },
-  {
-    method: 'get',
-    path: '/agents/protocol-inventory',
-    operationId: 'getAgentProtocolInventory',
-    summary: 'List delegated agent protocol inventory',
-    request: { query: paginationQuerySchema },
-    response: agentProtocolInventoryResponseSchema,
-  },
-  {
-    method: 'delete',
-    path: '/agents/{id}',
-    operationId: 'revokeAgent',
-    summary: 'Revoke delegated agent access',
-    request: { params: idParam },
-    noBody: true,
-  },
-  {
-    method: 'delete',
-    path: '/agent-hosts/{id}',
-    operationId: 'revokeAgentHost',
-    summary: 'Revoke delegated agent host access',
-    request: { params: idParam },
-    noBody: true,
-  },
-  {
-    method: 'delete',
-    path: '/agent-capability-grants/{id}',
-    operationId: 'revokeAgentCapabilityGrant',
-    summary: 'Revoke delegated agent capability grant',
-    request: { params: idParam },
-    noBody: true,
-  },
-
   {
     method: 'get',
     path: '/webhooks/endpoints',

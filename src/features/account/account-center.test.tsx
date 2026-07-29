@@ -90,9 +90,8 @@ describe('account pages', () => {
         '/api/account/linked-accounts',
         '/api/account/applications',
         '/api/account/agents',
-        '/api/account/agent-identities',
-        '/api/account/external-api-resources',
-        '/api/account/resource-connections',
+        '/api/account/api-resources',
+        '/api/account/account-connections',
       ]),
     )
   })
@@ -115,10 +114,10 @@ function mockAccountFetch() {
     if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))
     if (path === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: linkedAccounts }))
     if (path === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
-    if (path === '/api/account/agents') return Promise.resolve(jsonResponse({ agents: [] }))
-    if (path === '/api/account/agent-identities') return Promise.resolve(jsonResponse({ identities: [] }))
-    if (path === '/api/account/external-api-resources') return Promise.resolve(jsonResponse({ resources: [] }))
-    if (path === '/api/account/resource-connections') return Promise.resolve(jsonResponse({ connections: [] }))
+    const pagination = { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null }
+    if (path === '/api/account/agents') return Promise.resolve(jsonResponse({ items: [], pagination }))
+    if (path === '/api/account/api-resources') return Promise.resolve(jsonResponse({ items: [], pagination }))
+    if (path === '/api/account/account-connections') return Promise.resolve(jsonResponse({ items: [], pagination }))
     return Promise.resolve(jsonResponse({}))
   })
   return requests

@@ -92,14 +92,14 @@ separate token issuance and consumption flow.
 ## Restish and the unified API
 
 FlareAuth publishes one automation contract at `/api/openapi.json`, with `/api`
-as its server root. `whoami` and permission-gated resource operations are
+as its server root. `get-current-agent` and permission-gated resource operations are
 generated from that contract. `/api/management` remains a compatibility path
 for existing clients but is not a separate Restish command or identity model.
 
 The Restish plugin implements only the `auth` hook. On the first protected
 operation it creates local Agent and Host keys, starts AgentAuth enrollment,
 waits for one controller approval, binds the stable identity, signs the original
-request, and lets it continue. It does not expose `login`, `whoami`, or resource
+request, and lets it continue. It does not expose `login`, `get-current-agent`, or resource
 commands. Every later command-line request is authenticated as the same Agent.
 
 ## Connectors and external API Resources

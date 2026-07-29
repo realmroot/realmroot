@@ -1,58 +1,35 @@
+import type { ApiResource, createApiResourceSchema, updateApiResourceSchema } from '@shared/api/agent-api'
 import type {
   ApiPermissionResponse,
-  ApiResourceResponse,
   ApiScopeResponse,
   CreateApiPermissionRequest,
-  CreateApiResourceRequest,
   CreateApiScopeRequest,
   ListApiPermissionsResponse,
   ListApiScopesResponse,
   UpdateApiPermissionRequest,
-  UpdateApiResourceRequest,
   UpdateApiScopeRequest,
 } from '@shared/api/authorization'
-import type { ConfigureExternalResourceAuthorizationRequest } from '@shared/api/external-resources'
-import { externalResourceAuthorizationSchema } from '@shared/api/external-resources'
+import type { z } from 'zod'
 import { apiClient, readRpcResponse } from '@/lib/api'
 
 export function listApiResources() {
   return readRpcResponse(apiClient.api.management['api-resources'].$get())
 }
 
-export function getApiResource(id: string): Promise<ApiResourceResponse> {
+export function getApiResource(id: string): Promise<ApiResource> {
   return readRpcResponse(apiClient.api.management['api-resources'][':id'].$get({ param: { id } }))
 }
 
-export function createApiResource(input: CreateApiResourceRequest) {
+export function createApiResource(input: z.input<typeof createApiResourceSchema>) {
   return readRpcResponse(apiClient.api.management['api-resources'].$post({ json: input }))
 }
 
-export function updateApiResource(id: string, input: UpdateApiResourceRequest) {
+export function updateApiResource(id: string, input: z.infer<typeof updateApiResourceSchema>) {
   return readRpcResponse(apiClient.api.management['api-resources'][':id'].$patch({ param: { id }, json: input }))
 }
 
 export function deleteApiResource(id: string) {
   return readRpcResponse(apiClient.api.management['api-resources'][':id'].$delete({ param: { id } }))
-}
-
-export function getExternalApiResourceAuthorization(resourceId: string) {
-  return readRpcResponse(
-    apiClient.api.management['api-resources'][':id']['external-authorization'].$get({
-      param: { id: resourceId },
-    }),
-  ).then((value) => externalResourceAuthorizationSchema.parse(value))
-}
-
-export function configureExternalApiResourceAuthorization(
-  resourceId: string,
-  input: ConfigureExternalResourceAuthorizationRequest,
-) {
-  return readRpcResponse(
-    apiClient.api.management['api-resources'][':id']['external-authorization'].$put({
-      param: { id: resourceId },
-      json: input,
-    }),
-  ).then((value) => externalResourceAuthorizationSchema.parse(value))
 }
 
 export function listApiScopes(resourceId: string): Promise<ListApiScopesResponse> {

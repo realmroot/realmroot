@@ -18,20 +18,7 @@ describe('Agent protocol routes', () => {
     expect((await app.request('/api/agent/jwks')).status).toBe(404)
   })
 
-  it('lets an authenticated delegated Agent request stable identity enrollment [spec: agent-identity/agent-identity-enrollment]', async () => {
-    const intent = {
-      id: 'intent-1',
-      agentIdentityId: null,
-      requestedName: 'Build Agent',
-      homeSpace: { type: 'personal' as const, userId: 'user-1' },
-      protocolAgentId: 'protocol-agent-1',
-      status: 'pending' as const,
-      expiresAt: new Date('2026-08-01T00:10:00.000Z'),
-      approvedAt: null,
-      createdAt: new Date('2026-08-01T00:00:00.000Z'),
-      updatedAt: new Date('2026-08-01T00:00:00.000Z'),
-    }
-    const createIntent = vi.spyOn(agentIdentities, 'createAgentEnrollmentIntent').mockResolvedValue(intent)
+  it('does not expose enrollment intents as public protocol resources [spec: agent-identity/agent-public-resource-model]', async () => {
     const app = createRouteApp({ getAgentSession: vi.fn().mockResolvedValue(session()) })
 
     const response = await app.request('https://auth.example.com/api/agent/enrollment-intents', {
@@ -40,17 +27,7 @@ describe('Agent protocol routes', () => {
       body: JSON.stringify({ name: 'Build Agent' }),
     })
 
-    expect(response.status).toBe(202)
-    await expect(response.json()).resolves.toMatchObject({
-      intent: { id: 'intent-1', protocolAgentId: 'protocol-agent-1' },
-      verification_uri: 'https://auth.example.com/agent/identity/approve',
-      verification_uri_complete: 'https://auth.example.com/agent/identity/approve?intent_id=intent-1',
-    })
-    expect(createIntent).toHaveBeenCalledWith(
-      expect.anything(),
-      { name: 'Build Agent', protocolAgentId: 'protocol-agent-1' },
-      'user-1',
-    )
+    expect(response.status).toBe(404)
   })
 
   it('returns the authenticated Agent stable identity [spec: agent-identity/agent-identity-enrollment]', async () => {
@@ -77,11 +54,11 @@ describe('Agent protocol routes', () => {
     })
     const app = createRouteApp({ getAgentSession: vi.fn().mockResolvedValue(session()) })
 
-    const response = await app.request('/api/agent/identity', { headers: { authorization: 'Bearer agent-jwt' } })
+    const response = await app.request('/api/agent', { headers: { authorization: 'Bearer agent-jwt' } })
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
-      identity: { id: 'identity-1', issuer: 'https://auth.example.com/api/auth', subject: 'agt_1' },
+      agent: { id: 'identity-1', issuer: 'https://auth.example.com/api/auth', subject: 'agt_1' },
     })
   })
 
@@ -103,7 +80,7 @@ describe('Agent protocol routes', () => {
       'https://auth.example.com/api/auth',
     )
 
-    const response = await app.request('/api/agent/identity', {
+    const response = await app.request('/api/agent/enrollments', {
       method: 'POST',
       headers: { authorization: 'Bearer agent-jwt', ...jsonHeaders() },
       body: JSON.stringify({ name: 'Build Agent' }),
@@ -111,7 +88,7 @@ describe('Agent protocol routes', () => {
 
     expect(response.status).toBe(201)
     await expect(response.json()).resolves.toMatchObject({
-      identity: { issuer: 'https://auth.example.com/api/auth', subject: 'agt_1', name: 'Build Agent' },
+      agent: { issuer: 'https://auth.example.com/api/auth', subject: 'agt_1', name: 'Build Agent' },
     })
     expect(createIdentity).toHaveBeenCalledWith(
       expect.anything(),

@@ -56,7 +56,7 @@ describe('console dashboard guards', () => {
       }
       if (url.startsWith('/api/management/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
@@ -99,7 +99,7 @@ describe('console dashboard guards', () => {
       if (url === '/api/management/roles')
         return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/management/security/policy') {
@@ -147,7 +147,7 @@ describe('console dashboard guards', () => {
         return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       }
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -182,7 +182,7 @@ describe('console dashboard guards', () => {
         return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       }
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [], pagination: emptyPagination }))
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
     })

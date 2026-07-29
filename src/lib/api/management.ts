@@ -1,4 +1,4 @@
-import type { AgentAuditEvent, AgentIdentity } from '@shared/api/agents'
+import type { AgentAuditEvent } from '@shared/api/agents'
 import type {
   ApplicationResponse,
   CreateApplicationRequest,
@@ -38,7 +38,6 @@ import type {
   ListManagementUserSessionsResponse,
   ListManagementUsersResponse,
   ManagementAccountCenterSettingsResponse,
-  ManagementAgentInventoryResponse,
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementCreateUserRequest,
@@ -65,7 +64,7 @@ import type {
   WebhookEndpointSecretResponse,
   WebhookRequest,
 } from '@shared/api/webhooks'
-import { apiClient, readJsonResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
+import { apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
 import { listApiResources } from './management-api-resources'
 
 export { consoleQueryKeys } from './console-query-keys'
@@ -112,7 +111,7 @@ export function getAdminDashboard(): Promise<AdminDashboard> {
     connectors,
     organizations,
     roles,
-    apiResources,
+    apiResources: { resources: apiResources.items, pagination: apiResources.pagination },
     signIn,
     security,
   }))
@@ -330,49 +329,22 @@ export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
   return readRpcResponse(apiClient.api.management.readiness.$get())
 }
 
-export function getAgentInventory(): Promise<ManagementAgentInventoryResponse> {
-  return readRpcResponse(apiClient.api.management.agents['protocol-inventory'].$get())
-}
-
-export function getAgentIdentityInventory(): Promise<{
-  identities: AgentIdentity[]
+export function getAgentInventory(): Promise<{
+  items: import('@shared/api/agent-api').Agent[]
   pagination: PaginationMetadata
 }> {
-  return fetch('/api/management/agents/identity-inventory', { credentials: 'same-origin' }).then((response) =>
-    readJsonResponse(response),
-  )
+  return readRpcResponse(apiClient.api.management.agents.$get())
 }
 
 export function getAgentAuditEvents(): Promise<{
-  events: AgentAuditEvent[]
+  items: AgentAuditEvent[]
   pagination: PaginationMetadata
 }> {
-  return fetch('/api/management/agent-audit-events', { credentials: 'same-origin' }).then((response) =>
-    readJsonResponse(response),
-  )
+  return readRpcResponse(apiClient.api.management['audit-events'].$get())
 }
 
-export function emergencyRetireAgentIdentity(identityId: string) {
-  return fetch(`/api/management/agent-identities/${encodeURIComponent(identityId)}`, {
-    method: 'DELETE',
-    credentials: 'same-origin',
-  }).then((response) => {
-    if (!response.ok) return readJsonResponse<never>(response)
-  })
-}
-
-export function revokeAgent(agentId: string) {
+export function emergencyRetireAgent(agentId: string) {
   return readRpcResponse(apiClient.api.management.agents[':agentId'].$delete({ param: { agentId } }))
-}
-
-export function revokeAgentHost(hostId: string) {
-  return readRpcResponse(apiClient.api.management['agent-hosts'][':hostId'].$delete({ param: { hostId } }))
-}
-
-export function revokeAgentCapabilityGrant(grantId: string) {
-  return readRpcResponse(
-    apiClient.api.management['agent-capability-grants'][':grantId'].$delete({ param: { grantId } }),
-  )
 }
 
 export function listWebhookEndpoints(
@@ -490,7 +462,6 @@ export function assignMemberRole(input: AssignRoleRequest) {
 }
 
 export {
-  configureExternalApiResourceAuthorization,
   createApiPermission,
   createApiResource,
   createApiScope,
@@ -498,7 +469,6 @@ export {
   deleteApiResource,
   deleteApiScope,
   getApiResource,
-  getExternalApiResourceAuthorization,
   listApiPermissions,
   listApiResources,
   listApiScopes,

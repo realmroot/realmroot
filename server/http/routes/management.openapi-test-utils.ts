@@ -107,7 +107,7 @@ export function mountedManagementOperations(app: unknown) {
         .map(toManagementOperationKey),
     ),
   ]
-    .filter((key) => key !== null)
+    .filter((key) => key !== null && key !== 'GET /openapi.json')
     .sort()
 }
 
@@ -158,16 +158,15 @@ export function toManagementOperationKey(route: HonoRoute) {
   if (route.path === '/api/openapi.json') {
     return `${route.method} /openapi.json`
   }
-  if (route.path === '/api/whoami') {
-    return `${route.method} /whoami`
-  }
-  if (route.path === '/api/capability-requests') {
-    return `${route.method} /capability-requests`
-  }
   if (
-    route.path === '/api/agent/resources' ||
+    route.path === '/api/agent' ||
+    route.path === '/api/agent/enrollments' ||
+    route.path === '/api/agent/api-resources' ||
+    route.path === '/api/agent/access-grants' ||
+    route.path.startsWith('/api/agent/access-grants/:') ||
     route.path === '/api/agent/access-requests' ||
-    route.path.startsWith('/api/agent/access-requests/:')
+    route.path.startsWith('/api/agent/access-requests/:') ||
+    route.path === '/api/agent/management-access-requests'
   ) {
     return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
   }
@@ -178,7 +177,7 @@ export function toManagementOperationKey(route: HonoRoute) {
     return null
   }
 
-  return `${route.method} ${normalizeManagementPath(route.path.replace('/api/management', '') || '/')}`
+  return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
 }
 
 export function normalizeManagementPath(path: string) {
@@ -330,11 +329,11 @@ export type ManagementOpenApiMethod = (typeof managementOpenApiMethods)[number]
 export const managementOpenApiOperationKey = 'GET /openapi.json'
 export const methodsWithJsonRequestBody = new Set(['POST', 'PUT', 'PATCH'])
 export const operationsWithoutRequestBody = new Set([
-  'POST /applications/{param}/client-secrets',
-  'POST /users/{param}/password-reset-requests',
-  'POST /users/{param}/unban',
-  'POST /webhooks/endpoints/{param}/secrets',
-  'POST /webhooks/requests/{param}/retries',
+  'POST /management/applications/{param}/client-secrets',
+  'POST /management/users/{param}/password-reset-requests',
+  'POST /management/users/{param}/unban',
+  'POST /management/webhooks/endpoints/{param}/secrets',
+  'POST /management/webhooks/requests/{param}/retries',
 ])
 
 export interface HonoRoute {

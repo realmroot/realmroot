@@ -7,20 +7,31 @@ Feature: Agent identity and external API authorization
     Given a first admin exists
     And Agent identity is enabled for the tenant
 
+  Rule: Public APIs expose product resources rather than security implementation records
+
+    @entrypoint:agent-protocol @journey:agent-public-resource-model
+    Scenario: API clients manage stable product aggregates
+      Given Agent identity uses protocol registrations, host credentials, and identity bindings internally
+      And external authorization uses discovery metadata, OAuth clients, connection state, and token leases internally
+      When an Agent, controller, or administrator reads the FlareAuth API contract
+      Then the public resources are Agents, Agent enrollments, API resources, account connections, access requests, access grants, and audit events
+      And Agent registrations, hosts, identity bindings, connection intents, OAuth integration records, and token leases are not public resources
+      And each public resource has one canonical URI in its caller boundary
+
   Rule: Agent identities remain stable across hosts and credentials
 
     @e2e @entrypoint:agent-protocol @journey:agent-identity-enrollment
     Scenario: A new Agent establishes a stable identity on its first protected API operation
       Given a new Agent connects Restish to the FlareAuth OpenAPI contract
-      When the Agent invokes whoami without a local FlareAuth identity
+      When the Agent invokes get-current-agent without a local FlareAuth identity
       Then the transparent Restish authentication adapter registers locally generated host and Agent keys
-      And whoami waits while an authorized controller approves the Agent once from the hosted verification page
+      And get-current-agent waits while an authorized controller approves the Agent once from the hosted verification page
       And the adapter creates a personal stable identity through the approved Agent session
       Then FlareAuth creates an Agent with a stable issuer and subject
       And the Agent belongs to exactly one home space
       And users govern the Agent through roles in that space
       And the host registration is bound to that Agent identity
-      And the original whoami operation resumes and returns the stable issuer and subject
+      And the original get-current-agent operation resumes and returns the stable issuer and subject
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
       And later OpenAPI operations reuse the Agent identity without another login command
       And enrollment alone grants no management or external API resource access
@@ -208,12 +219,12 @@ Feature: Agent identity and external API authorization
       When an authorized controller approves it
       Then the controller confirms the resource account, exact scopes, and one-time, limited, or persistent mode
       And scope expansion, another account, or another resource requires a new approval
-      And a denied request cannot issue a token lease
+      And a denied request cannot issue a target token
 
     @e2e @entrypoint:agent-protocol @journey:agent-direct-resource-access
     Scenario: An Agent calls an external API directly with a target-issued token
       Given a controller approved an exact external API resource request
-      When the Agent requests a token lease with a DPoP proof for the target token endpoint
+      When the Agent requests a token from its access grant with a DPoP proof for the target token endpoint
       Then FlareAuth submits a signed Agent assertion with the RFC 7523 JWT bearer grant
       And the target platform issues an Agent access token
       And FlareAuth exchanges the connected user's subject token and the target-issued Agent access token with RFC 8693
@@ -227,10 +238,10 @@ Feature: Agent identity and external API authorization
 
     @e2e @entrypoint:agent-protocol @journey:agent-resource-revocation
     Scenario: Revocation stops direct external API access
-      Given an Agent has an active external token lease
-      When a controller revokes its grant, resource account, host, or Agent
-      Then FlareAuth calls the target revocation endpoint for active leases
-      And subsequent lease requests are rejected
+      Given an Agent has an active target token
+      When a controller revokes its grant, account connection, credential, or Agent
+      Then FlareAuth calls the target revocation endpoint for active target tokens
+      And subsequent token requests are rejected
       And unrelated Agents, accounts, and grants remain active
 
   Rule: Controllers and administrators can govern Agent activity

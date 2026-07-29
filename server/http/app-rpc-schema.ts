@@ -1,5 +1,4 @@
 import type {
-  AccountAgentsResponse,
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
   AccountPasswordChangeInput,
@@ -11,6 +10,8 @@ import type {
   ConsentedApplicationsResponse,
   LinkedAccountsResponse,
 } from '@shared/api/account'
+import type { Agent, ApiResource, createApiResourceSchema, updateApiResourceSchema } from '@shared/api/agent-api'
+import type { AgentAuditEvent } from '@shared/api/agents'
 import type {
   ApplicationResponse,
   ConsentApprovalResponse,
@@ -29,16 +30,13 @@ import type {
 import type { UploadedAssetResponse } from '@shared/api/assets'
 import type {
   ApiPermissionResponse,
-  ApiResourceResponse,
   ApiScopeResponse,
   AssignRoleRequest,
   CreateApiPermissionRequest,
-  CreateApiResourceRequest,
   CreateApiScopeRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
   ListApiPermissionsResponse,
-  ListApiResourcesResponse,
   ListApiScopesResponse,
   ListOrganizationsResponse,
   ListRolesResponse,
@@ -46,7 +44,6 @@ import type {
   RolePermissionsResponse,
   RoleResponse,
   UpdateApiPermissionRequest,
-  UpdateApiResourceRequest,
   UpdateApiScopeRequest,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
@@ -57,10 +54,6 @@ import type {
   LinkAccountRequest,
   ListConnectorTemplatesResponse,
 } from '@shared/api/connectors'
-import type {
-  ConfigureExternalResourceAuthorizationRequest,
-  ExternalResourceAuthorizationRecord,
-} from '@shared/api/external-resources'
 import type {
   CreateManagementConnectorRequest,
   CreateManagementFederatedCredentialRequest,
@@ -73,7 +66,6 @@ import type {
   ListManagementUserSessionsResponse,
   ListManagementUsersResponse,
   ManagementAccountCenterSettingsResponse,
-  ManagementAgentInventoryResponse,
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementConnectorResponse,
@@ -92,6 +84,7 @@ import type {
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
+import type { PaginationMetadata } from '@shared/api/pagination'
 import type {
   PasskeysResponse,
   SecurityPolicy,
@@ -112,6 +105,7 @@ import type {
   WebhookRequest,
 } from '@shared/api/webhooks'
 import type { ContentfulStatusCode, StatusCode } from 'hono/utils/http-status'
+import type { z } from 'zod'
 
 export type EmptyResponse = Record<string, unknown>
 export type RpcNoInput = Record<never, never>
@@ -186,13 +180,14 @@ export type RpcSchema = {
     $get: RpcEndpoint<RpcNoInput, AccountSessionsResponse>
   }
   '/api/account/agents': {
-    $get: RpcEndpoint<{ query?: Partial<Record<keyof PaginationQuery, string>> }, AccountAgentsResponse>
+    $get: RpcEndpoint<
+      { query?: Partial<Record<keyof PaginationQuery, string>> },
+      { items: Agent[]; pagination: PaginationMetadata }
+    >
   }
   '/api/account/agents/:agentId': {
+    $get: RpcEndpoint<{ param: { agentId: string } }, { agent: Agent }>
     $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
-  }
-  '/api/account/agent-capability-grants/:grantId': {
-    $delete: RpcEndpoint<{ param: { grantId: string } }, EmptyResponse, 204>
   }
   '/api/account/security': {
     $get: RpcEndpoint<RpcNoInput, AccountSecurityResponse>
@@ -372,17 +367,21 @@ export type RpcSchema = {
   '/api/management/readiness': {
     $get: RpcEndpoint<RpcNoInput, ManagementReadinessResponse>
   }
-  '/api/management/agents/protocol-inventory': {
-    $get: RpcEndpoint<{ query?: Partial<Record<keyof PaginationQuery, string>> }, ManagementAgentInventoryResponse>
+  '/api/management/agents': {
+    $get: RpcEndpoint<
+      { query?: Partial<Record<keyof PaginationQuery, string>> },
+      { items: Agent[]; pagination: PaginationMetadata }
+    >
   }
   '/api/management/agents/:agentId': {
+    $get: RpcEndpoint<{ param: { agentId: string } }, { agent: Agent }>
     $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
   }
-  '/api/management/agent-hosts/:hostId': {
-    $delete: RpcEndpoint<{ param: { hostId: string } }, EmptyResponse, 204>
-  }
-  '/api/management/agent-capability-grants/:grantId': {
-    $delete: RpcEndpoint<{ param: { grantId: string } }, EmptyResponse, 204>
+  '/api/management/audit-events': {
+    $get: RpcEndpoint<
+      { query?: Partial<Record<keyof PaginationQuery, string>> },
+      { items: AgentAuditEvent[]; pagination: PaginationMetadata }
+    >
   }
   '/api/management/security/policy': {
     $get: RpcEndpoint<RpcNoInput, { policy: SecurityPolicy }>
@@ -422,20 +421,13 @@ export type RpcSchema = {
     $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
   }
   '/api/management/api-resources': {
-    $get: RpcEndpoint<RpcNoInput, ListApiResourcesResponse>
-    $post: RpcEndpoint<{ json: CreateApiResourceRequest }, ApiResourceResponse, 201>
+    $get: RpcEndpoint<RpcNoInput, { items: ApiResource[]; pagination: PaginationMetadata }>
+    $post: RpcEndpoint<{ json: z.input<typeof createApiResourceSchema> }, ApiResource, 201>
   }
   '/api/management/api-resources/:id': {
-    $get: RpcEndpoint<{ param: { id: string } }, ApiResourceResponse>
-    $patch: RpcEndpoint<{ param: { id: string }; json: UpdateApiResourceRequest }, ApiResourceResponse>
+    $get: RpcEndpoint<{ param: { id: string } }, ApiResource>
+    $patch: RpcEndpoint<{ param: { id: string }; json: z.infer<typeof updateApiResourceSchema> }, ApiResource>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
-  }
-  '/api/management/api-resources/:id/external-authorization': {
-    $get: RpcEndpoint<{ param: { id: string } }, ExternalResourceAuthorizationRecord>
-    $put: RpcEndpoint<
-      { param: { id: string }; json: ConfigureExternalResourceAuthorizationRequest },
-      ExternalResourceAuthorizationRecord
-    >
   }
   '/api/management/api-resources/:id/scopes': {
     $get: RpcEndpoint<

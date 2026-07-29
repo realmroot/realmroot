@@ -116,6 +116,7 @@ Feature: Account Center
   Scenario: Delegated agent access can be managed from Account Center
     Given I have active delegated agents and capability grants
     When I open Account Center
-    Then I can inspect the active agents, hosts, and granted capabilities
-    When I revoke an agent or a selected capability grant
+    Then I can inspect each stable Agent and its granted access
+    And protocol registrations, hosts, and identity bindings remain internal
+    When I retire an Agent or revoke a selected access grant
     Then that delegated access is no longer active for my account

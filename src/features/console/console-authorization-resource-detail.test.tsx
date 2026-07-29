@@ -62,7 +62,7 @@ describe('console authorization resource detail', () => {
       }
       if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       if (url === '/api/management/api-resources/resource-1/scopes') {
         return Promise.resolve(jsonResponse({ scopes: [], pagination: emptyPagination }))
@@ -196,7 +196,7 @@ describe('console authorization resource detail', () => {
         return Promise.resolve(jsonResponse({ permissions: [] }))
       }
       if (url === '/api/management/api-resources') {
-        return Promise.resolve(jsonResponse({ resources: [apiResource], pagination }))
+        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       if (url.endsWith('/scopes')) return Promise.resolve(jsonResponse({ scopes: [], pagination: emptyPagination }))
       if (url.endsWith('/permissions')) {
