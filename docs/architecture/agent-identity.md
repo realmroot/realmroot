@@ -48,46 +48,34 @@ subject remain reserved while all bindings are revoked.
 
 ## Federation profile
 
-The durable Agent is identified by top-level `iss` and `sub`. A host key proves
-the current presenter, not the durable identity. Autonomous tokens use the Agent
-as subject and the host as actor. Delegated tokens use the delegating user or
-organization as subject and represent Agent and host in the actor chain following
-RFC 8693 semantics. Agent-specific subject type and host claims are a documented
-FlareAuth extension; ordinary OIDC relying parties may treat the subject as a
-normal account, while Agent-aware parties can enforce the extension.
+The durable Agent is identified by `(issuer, subject)`. A host key proves the
+current presenter, not the durable identity. For a native API resource, the
+access token uses the controlling user or organization as `sub` and represents
+the Agent and host in the RFC 8693 actor chain.
 
-FlareAuth exposes the shared issuer metadata at
-`/api/auth/.well-known/openid-configuration`, public signing keys at
-`/api/auth/jwks`, and all OAuth grants at `/api/auth/oauth2/token`. Agent access
-tokens are five-minute JWTs signed by Better Auth's managed issuer keys with an
-`at+jwt` type, audience, scopes, `cnf.jkt`, actor chain, and stable Agent
-identity.
+FlareAuth exposes shared issuer metadata at
+`/api/auth/.well-known/openid-configuration` and public signing keys at
+`/api/auth/jwks`. Access tokens for native API resources are five-minute
+JWTs signed by Better Auth's managed issuer keys with an `at+jwt` type,
+audience, scopes, `cnf.jkt`, and actor chain.
 
 Every token request requires a fresh DPoP proof. JTI state is consumed
-atomically, so a proof cannot be replayed. Token records remain in D1 so host,
-identity, authority-grant, and external-resource-grant revocation takes effect
-immediately instead of waiting for JWT expiry.
+atomically, so a proof cannot be replayed. Token leases remain in D1 for audit
+and revocation; new issuance stops immediately when the Agent, host, connection,
+or access grant is revoked.
 
 ## Authority
 
-An authority grant is either autonomous or delegated:
+API authority always begins with an Agent-created access request. The request
+names one API resource, an exact permission set, and an account connection only
+when the resource uses external authorization. Controller approval creates one
+access grant with one-time, limited, or persistent lifetime. No API authority is
+inferred from enrollment, ownership, Connector configuration, or a
+controller-created grant.
 
-- Autonomous authority uses the Agent subject; the presenting host is the
-  actor.
-- Delegated authority uses the controlling user or organization as subject;
-  the Agent and host form the actor chain.
-
-Grants are audience- and scope-bound and can additionally restrict hosts,
-activation time, total uses, expiry, and one-time controller approval. No
-authority is inferred from enrollment, ownership, or Connector configuration.
-
-For FlareAuth's own unified API, an autonomous grant with audience
-`AUTH_ORIGIN/api` and `management:read`, `management:write`, or
-`management:*` authorizes tenant operations. The request principal remains the
-Agent `(issuer, subject)`; the user who approved the grant is authorization
-provenance, not an impersonated CLI identity. Use-limited and step-up grants are
-not accepted directly at this boundary because those constraints require the
-separate token issuance and consumption flow.
+Tenant management is separate: AgentAuth capability grants provide
+`management:read` and `management:write` to the stable Agent principal. They do
+not issue product API tokens or impersonate the approving controller.
 
 ## Restish and the unified API
 
@@ -102,56 +90,60 @@ waits for one controller approval, binds the stable identity, signs the original
 request, and lets it continue. It does not expose `login`, `get-current-agent`, or resource
 commands. Every later command-line request is authenticated as the same Agent.
 
-## Connectors and external API Resources
+## Connectors and API Resources
 
 Connectors authenticate people to FlareAuth. They remain limited to social and
 generic OAuth/OIDC sign-in providers. They do not describe business APIs,
 credentials, request paths, or proxy behavior.
 
-API Resources authorize access. An API Resource in `external` authorization
-mode points to a target protected resource and is configured from its RFC 9728
-resource URL. FlareAuth discovers RFC 8414 metadata and requires authorization
-code with PKCE and refresh, the RFC 7523 JWT bearer grant, RFC 8693 token
-exchange, RFC 9449 DPoP, and RFC 7009 revocation. The target can use RFC 7591
-dynamic client registration or an administrator can enter a client ID and
-secret. Dynamic registration records FlareAuth's standard `jwks_uri`; no
-FlareAuth-specific discovery or registration fields are used.
+API Resources authorize access and declare one mode:
+
+- `native`: the product uses FlareAuth as its OIDC provider and authorization
+  server. Its API trusts the FlareAuth issuer/JWKS and requires no account
+  connection.
+- `external`: the target owns its user and authorization system. It publishes
+  RFC 9728 metadata; FlareAuth discovers RFC 8414 metadata and requires
+  authorization code with PKCE and refresh, RFC 7523, RFC 8693, RFC 9449, and
+  RFC 7009. The target can use RFC 7591 dynamic client registration or an
+  administrator-configured client.
 
 Account Center lets a user or authorized organization controller connect a
 target account through authorization code with S256 PKCE. The connection's
 refresh credential is encrypted and never returned by an API. Connecting an
 account grants no Agent permission.
 
-An Agent discovers enabled resources and redacted accounts in its home space,
-then requests one account and an exact scope set. An authorized controller
-approves or denies that request in one step and chooses one token lease,
-time-limited, or persistent authority. Scope expansion, a different account, or
-a different resource requires a new decision.
+An Agent discovers enabled resources and exact permissions. External resources
+also return redacted accounts from its home space. The Agent requests an exact
+permission set and includes an account only for external mode. An authorized
+controller approves or denies that request in one step and chooses one token,
+time-limited, or persistent authority. Permission expansion, a different
+external account, or a different resource requires a new decision.
 
 `CREDENTIAL_ENCRYPTION_KEY` supplies AES-GCM key material for Connector client
 secrets, external-resource client secrets, OAuth PKCE verifiers, connected
 account refresh credentials, and active token leases. Each envelope uses
 randomized nonces and purpose-specific authenticated context.
 
-## Direct target access
+## Direct API access
 
-FlareAuth is not an HTTP proxy. After approval, the Agent presents a fresh DPoP
-proof for the target token endpoint. FlareAuth refreshes the connected user's
-subject token when required and signs a short-lived JWT assertion whose subject
-is the stable Agent identity. FlareAuth submits that assertion through the RFC
-7523 JWT bearer grant. The target validates it with the client's registered
-`jwks_uri` and issues an Agent access token. FlareAuth then sends the user's
-access token as `subject_token` and the target-issued Agent access token as
-`actor_token` to the RFC 8693 token endpoint. Both token type parameters use the
-standard access-token identifier. The target intersects the user's scopes with
-the approved Agent scopes and issues its own short-lived DPoP-bound access
-token.
+FlareAuth is not an HTTP proxy. Both modes use the same Access Grant token
+operation.
 
-FlareAuth returns that target access token without a refresh token. The Agent
-calls the target API directly and proves possession of the same DPoP key. The
-target token identifies the connected user as subject and the stable Agent in
-the standard `act.sub` claim. Host identity remains internal governance and
-audit context in FlareAuth; it is not a target-platform protocol claim.
+For `native`, FlareAuth signs an audience- and permission-bound `at+jwt` for
+the controlling identity. The token contains the Agent/host actor chain and the
+Agent's DPoP key thumbprint. The product API validates the FlareAuth issuer,
+JWKS, audience, expiry, permissions, and DPoP proof.
+
+For `external`, FlareAuth refreshes the connected user's subject token when
+required and submits a stable-Agent assertion through RFC 7523. It then uses the
+user token and target-issued Agent token in RFC 8693 token exchange. The target
+intersects the user's scopes with the approved Agent scopes and issues its own
+short-lived DPoP-bound access token.
+
+FlareAuth returns no refresh token. The Agent calls the API directly and proves
+possession of the same DPoP key. External target tokens identify the connected
+user as subject and the stable Agent in `act.sub`; FlareAuth-issued tokens
+identify the controller as subject and include Agent and host actors.
 
 Grant or connection revocation sends active target leases to the target RFC
 7009 endpoint. Subsequent lease requests fail immediately. No credential

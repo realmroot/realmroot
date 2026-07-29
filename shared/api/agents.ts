@@ -122,65 +122,6 @@ export const approveAgentEnrollmentResponseSchema = z.object({
   identity: agentIdentitySchema,
 })
 
-export const createAgentAuthorityGrantRequestSchema = z.object({
-  mode: z.enum(['autonomous', 'delegated']),
-  audience: z.url(),
-  scopes: z.array(z.string().trim().min(1)).min(1),
-  constraints: z
-    .object({
-      allowedHostIds: z.array(z.string().min(1)).min(1).optional(),
-      notBefore: z.iso.datetime().optional(),
-      maxUses: z.number().int().positive().optional(),
-      stepUpRequired: z.boolean().optional(),
-    })
-    .optional(),
-  expiresAt: z.iso.datetime().optional(),
-})
-
-export const agentAuthorityGrantSchema = z.object({
-  id: z.string(),
-  agentIdentityId: z.string(),
-  mode: z.enum(['autonomous', 'delegated']),
-  subjectType: z.enum(['agent', 'user', 'organization']),
-  subjectId: z.string(),
-  audience: z.string(),
-  scopes: z.array(z.string()),
-  constraints: z.record(z.string(), z.unknown()).nullable(),
-  status: z.enum(['active', 'revoked']),
-  expiresAt: dateValueSchema.nullable(),
-  revokedAt: dateValueSchema.nullable(),
-  createdAt: dateValueSchema,
-  updatedAt: dateValueSchema,
-})
-
-export const agentTokenRequestSchema = z.object({
-  grantId: z.string().trim().min(1),
-  scope: z.string().trim().optional(),
-  approvalId: z.string().trim().min(1).optional(),
-})
-
-export const agentAuthorityGrantType = 'urn:flareauth:params:oauth:grant-type:agent-authority'
-
-export const agentTokenFormSchema = z.object({
-  grant_type: z.literal(agentAuthorityGrantType),
-  grant_id: z.string().trim().min(1),
-  scope: z.string().trim().optional(),
-  approval_id: z.string().trim().min(1).optional(),
-})
-
-export const agentAuthorityApprovalSchema = z.object({
-  id: z.string(),
-  grantId: z.string(),
-  bindingId: z.string(),
-  requestedScopes: z.array(z.string()),
-  status: z.enum(['pending', 'approved', 'consumed']),
-  expiresAt: dateValueSchema,
-  approvedAt: dateValueSchema.nullable(),
-  consumedAt: dateValueSchema.nullable(),
-  createdAt: dateValueSchema,
-  updatedAt: dateValueSchema,
-})
-
 export const agentAuditEventSchema = z.object({
   id: z.string(),
   action: z.string(),
@@ -190,7 +131,6 @@ export const agentAuditEventSchema = z.object({
   subject: z.string().nullable(),
   agentIdentityId: z.string().nullable(),
   hostId: z.string().nullable(),
-  authorityGrantId: z.string().nullable(),
   resourceId: z.string().nullable(),
   resourceConnectionId: z.string().nullable(),
   accessGrantId: z.string().nullable(),
@@ -208,14 +148,6 @@ export const listAgentIdentityInventoryResponseSchema = z.object({
 export const listAgentAuditEventsResponseSchema = z.object({
   events: z.array(agentAuditEventSchema),
   pagination: paginationMetadataSchema,
-})
-
-export const agentTokenResponseSchema = z.object({
-  access_token: z.string(),
-  issued_token_type: z.literal('urn:ietf:params:oauth:token-type:access_token'),
-  token_type: z.literal('DPoP'),
-  expires_in: z.number().int().positive(),
-  scope: z.string(),
 })
 
 export const accountAgentGrantSchema = z.object({
@@ -356,10 +288,6 @@ export type CreateAgentProtocolEnrollmentIntentRequest = z.infer<
 export type CreateAdditionalAgentEnrollmentIntentRequest = z.infer<
   typeof createAdditionalAgentEnrollmentIntentRequestSchema
 >
-export type CreateAgentAuthorityGrantRequest = z.infer<typeof createAgentAuthorityGrantRequestSchema>
-export type AgentAuthorityGrant = z.infer<typeof agentAuthorityGrantSchema>
-export type AgentTokenRequest = z.infer<typeof agentTokenRequestSchema>
-
 export interface AgentProtocolHost {
   id: string
   name: string | null

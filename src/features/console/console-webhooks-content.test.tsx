@@ -187,7 +187,7 @@ describe('admin console webhooks-content', () => {
             identifier: 'billing-api',
             name: 'Billing API',
             audience: 'https://billing.example.com',
-            authorizationMode: 'flareauth',
+            authorizationMode: 'native',
             description: 'Billing resource',
           },
         },

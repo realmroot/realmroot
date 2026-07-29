@@ -218,7 +218,7 @@ async function loadAuthorizationRoutes() {
     name: 'Contacts',
     audience: 'https://api.example.com',
     description: null,
-    authorizationMode: 'flareauth' as const,
+    authorizationMode: 'native' as const,
     enabled: true,
     tokenClaimsNamespace: null,
     createdAt: '2026-01-01T00:00:00.000Z',

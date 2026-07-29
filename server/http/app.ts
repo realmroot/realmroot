@@ -2,7 +2,6 @@ import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } fr
 import type { Auth } from '@server/auth'
 import { forbidden, notFound, oauthError } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
-import { issueAgentAccessToken } from '@server/usecases/agent-tokens'
 import type { Deps } from '@server/usecases/deps'
 import {
   exchangeToken,
@@ -12,12 +11,7 @@ import {
   refreshTokenGrantType,
   tokenExchangeGrantType,
 } from '@server/usecases/token-exchange'
-import {
-  agentAuthorityGrantType,
-  agentTokenFormSchema,
-  requestAgentCapabilitiesResponseSchema,
-  requestAgentCapabilitiesSchema,
-} from '@shared/api/agents'
+import { requestAgentCapabilitiesResponseSchema, requestAgentCapabilitiesSchema } from '@shared/api/agents'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import {
@@ -56,7 +50,7 @@ type AuthHandler = Pick<Auth, 'handler'> & {
     getAgentSession?: (context: {
       headers: Headers
       asResponse: false
-    }) => Promise<import('@server/usecases/agent-tokens').ProtocolAgentSession | null>
+    }) => Promise<import('@server/usecases/agent-session').ProtocolAgentSession | null>
     signJWT?: (context: {
       body: { payload: Record<string, unknown>; overrideOptions?: { jwt?: { type?: string } } }
       asResponse?: false
@@ -124,7 +118,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
     await requireHostedAuthMethodEnabled(c, configzOptions(c, config.securityPolicy))
     await requireLinkedSiweWallet(c, c.get('deps').wallets)
 
-    const tokenExchangeResponse = await maybeHandleTokenExchange(c, auth, oauthIssuer(config, c.req.url))
+    const tokenExchangeResponse = await maybeHandleTokenExchange(c, oauthIssuer(config, c.req.url))
     if (tokenExchangeResponse) return tokenExchangeResponse
 
     return auth.handler(c.req.raw)
@@ -226,7 +220,7 @@ async function requireOnboardingComplete(deps: Deps) {
   }
 }
 
-async function maybeHandleTokenExchange(c: Context, auth: AuthHandler, issuer: string) {
+async function maybeHandleTokenExchange(c: Context, issuer: string) {
   if (c.req.method !== 'POST') return null
   if (c.req.path !== '/api/auth/oauth2/token' && c.req.path !== '/api/auth/oauth2/introspect') return null
 
@@ -239,37 +233,6 @@ async function maybeHandleTokenExchange(c: Context, auth: AuthHandler, issuer: s
   const grantType = formString(form, 'grant_type')
   if (c.req.path === '/api/auth/oauth2/introspect' && !(formString(form, 'token') ?? '').startsWith('fatx_')) {
     return null
-  }
-  if (c.req.path === '/api/auth/oauth2/token' && grantType === agentAuthorityGrantType) {
-    const session = await auth.api.getAgentSession?.({ headers: c.req.raw.headers, asResponse: false })
-    if (!session) {
-      throw oauthError('invalid_client', 'An active AgentAuth session is required.', 401)
-    }
-    if (!auth.api.signJWT) throw new Error('Better Auth JWT signing is unavailable.')
-    const parsed = agentTokenFormSchema.safeParse(Object.fromEntries(form))
-    if (!parsed.success) throw oauthError('invalid_request', 'Agent token request parameters are invalid.')
-    const body = parsed.data
-    const response = await issueAgentAccessToken(
-      c.get('deps'),
-      c.req.raw,
-      {
-        grantId: body.grant_id,
-        scope: body.scope,
-        approvalId: body.approval_id,
-      },
-      session,
-      {
-        issuer,
-        sign: async (payload) =>
-          (
-            await auth.api.signJWT!({
-              body: { payload, overrideOptions: { jwt: { type: 'at+jwt' } } },
-              asResponse: false,
-            })
-          ).token,
-      },
-    )
-    return c.json(response)
   }
   const tokenExchangeRefresh =
     grantType === refreshTokenGrantType && (formString(form, 'refresh_token') ?? '').startsWith('fatr_')
@@ -328,25 +291,10 @@ async function extendAgentOAuthMetadata(response: Response) {
   return Response.json(
     {
       ...metadata,
-      grant_types_supported: appendMetadataValue(metadata.grant_types_supported, agentAuthorityGrantType),
-      flareauth_agent_access_token_claims_supported: ['act', 'agent_identity', 'cnf'],
       dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
     },
     { status: response.status, headers },
   )
-}
-
-function appendMetadataValue(value: unknown, addition: string) {
-  return appendMetadataValues(value, [addition])
-}
-
-function appendMetadataValues(value: unknown, additions: string[]) {
-  return [
-    ...new Set([
-      ...(Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []),
-      ...additions,
-    ]),
-  ]
 }
 
 function oauthIssuer(config: AppConfig, requestUrl: string) {

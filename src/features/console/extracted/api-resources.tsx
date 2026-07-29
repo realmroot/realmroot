@@ -73,7 +73,7 @@ export function ApiResourcesPage() {
   })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [createMode, setCreateMode] = useState<'flareauth' | 'external'>('flareauth')
+  const [createMode, setCreateMode] = useState<'native' | 'external'>('native')
   const [search, setSearch] = useState('')
   const createMutation = useAdminMutation({
     mutationFn: createApiResource,
@@ -98,7 +98,7 @@ export function ApiResourcesPage() {
         <div className="flex gap-2">
           <Button
             onClick={() => {
-              setCreateMode('flareauth')
+              setCreateMode('native')
               setDialogOpen(true)
             }}
           >
@@ -184,7 +184,7 @@ export function ApiResourcesPage() {
                 </TableCell>
                 <TableCell>{resource.audience}</TableCell>
                 <TableCell>
-                  {resource.authorizationMode === 'external' ? tt('External issuer') : tt('FlareAuth')}
+                  {resource.authorizationMode === 'external' ? tt('External issuer') : tt('Native (FlareAuth)')}
                 </TableCell>
                 <TableCell>
                   <StatusBadge active={resource.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />

@@ -5,8 +5,6 @@ export { z } from '@hono/zod-openapi'
 export {
   agentProtocolIdentityResponseSchema,
   agentProtocolInventoryResponseSchema,
-  agentTokenFormSchema,
-  agentTokenResponseSchema,
   listAgentAuditEventsResponseSchema,
   listAgentIdentityInventoryResponseSchema,
   requestAgentCapabilitiesResponseSchema,

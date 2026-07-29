@@ -59,18 +59,17 @@ The stable Agent issuer is the same Better Auth OIDC issuer used by product
 clients: `AUTH_ORIGIN/api/auth`. FlareAuth publishes no second Agent-only
 issuer, token endpoint, or JWKS.
 
-Agent authority tokens are OAuth JWT access tokens for resource servers, not
-OIDC login or UserInfo tokens. Resource servers trust the shared issuer/JWKS
-and validate the token audience and DPoP binding; product OIDC sessions remain
-the human login surface.
+For API access, first run `list-agent-api-resources` and inspect each resource's
+`authorizationMode`. Both modes use `create-agent-access-request`, controller
+approval, the returned `grantId`, and `issue-target-access-token`.
 
-For an external API resource, first run `list-agent-api-resources`. Select exact
-`apiResourceId`, `accountConnectionId`, and permission values from that response.
-Then use `create-agent-access-request`; never infer an account connection from a
-display name. The adapter opens the controller approval page and keeps the
-request waiting. After approval, use the returned `grantId` with
-`issue-target-access-token`. The complete command sequence and DPoP requirements
-are in `references/restish-commands.md`.
+- `external`: select an exact `accountConnectionId`; the target platform issues
+  the token.
+- `native`: omit `accountConnectionId`; FlareAuth issues the token for the
+  controller identity. Do not ask the controller to create a grant first.
+
+Never infer an account connection from a display name. The complete command
+sequence and mode-specific DPoP target are in `references/restish-commands.md`.
 
 If the API was already connected, sync its OpenAPI contract before operating
 it. Restish continues to use the locally held Agent and Host keys.

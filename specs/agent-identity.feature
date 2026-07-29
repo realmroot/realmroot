@@ -118,53 +118,49 @@ Feature: Agent identity and external API authorization
       And hosted Agent approval URLs use the configured deployment origin
       And FlareAuth does not publish a second Agent-only OIDC issuer
 
-  Rule: Tokens distinguish an Agent's identity from delegated authority
+  Rule: Native API resources use the shared Agent access workflow
 
-    @entrypoint:agent-protocol @journey:agent-autonomous-authority
-    Scenario: An Agent can receive a token for its own authority
-      Given an active Agent host proves possession of its registered key
-      When it requests a token from the Better Auth OAuth token endpoint for the Agent's own resources
-      Then FlareAuth issues a short-lived audience-bound token
+    @entrypoint:product-ui @journey:native-api-resource-registration
+    Scenario: An administrator registers a native API that trusts FlareAuth
+      Given a product uses FlareAuth as its OIDC provider and OAuth authorization server
+      When an administrator creates an API resource with native authorization mode
+      Then the administrator configures its audience and requestable permissions
+      And no external authorization server, OAuth client, or account connection is configured
+      And the product API validates FlareAuth access tokens with the published issuer and JWKS
+
+    @entrypoint:agent-protocol @journey:native-api-resource-access-request
+    Scenario: An Agent requests access to a native API
+      Given an enabled native API resource belongs to the Agent's home space
+      When the Agent lists available resources
+      Then FlareAuth returns that resource without requiring an account connection
+      When the Agent requests an exact permission set
+      Then FlareAuth creates the same pending access-request resource used for external APIs
+      And it does not require a user-created authority grant or grant identifier
+      When an authorized controller approves the request
+      Then FlareAuth creates the same access-grant resource used for external APIs
+
+    @e2e @entrypoint:agent-protocol @journey:native-api-resource-token
+    Scenario: An Agent calls a native API directly
+      Given a controller approved an exact native API resource request
+      When the Agent requests a token from its access grant with a DPoP proof
+      Then FlareAuth issues a short-lived audience-bound JWT access token
       And the token uses the Better Auth issuer and signing keys
-      And the token identifies the Agent as subject and the host as actor
-      And the token carries only explicitly granted scopes
+      And the token identifies the controller as subject and the Agent and host in the RFC 8693 actor chain
+      And the token carries only the approved permissions
+      And the token is bound to the Agent's DPoP key
+      When the Agent calls the product API
+      Then the Agent sends the request directly to the product API
+      And the product API validates the token type, signature, issuer, audience, expiry, permissions, and DPoP binding
 
-    @entrypoint:agent-protocol @journey:agent-delegated-authority
-    Scenario: An Agent can receive explicitly delegated authority
-      Given a user or organization granted authority to an Agent
-      When an active Agent host requests a token from the Better Auth OAuth token endpoint for that authority
-      Then the token identifies the user or organization as subject
-      And the token identifies the host and Agent through the RFC 8693 nested actor chain
-      And the token is limited by the delegation's scopes, constraints, and expiry
-
-    @entrypoint:agent-protocol @journey:agent-oidc-federation
-    Scenario: An OAuth resource server can associate an account with an Agent
-      Given a resource server trusts the FlareAuth issuer and signing keys
-      When it validates an audience-bound JWT access token for an Agent
-      Then it validates the access-token type, signature, issuer, audience, and expiry
-      And it associates the account by issuer and subject
-      And an Agent-aware resource server can distinguish the Agent subject and acting host
-      And the resource server never needs the Agent's long-lived public key as its account identifier
-      And this access-token profile does not claim to be an Agent OIDC login flow
-
-    @entrypoint:agent-protocol @journey:agent-grant-policy
-    Scenario: Agent authority is denied unless an applicable grant allows it
-      Given an Agent host requests authority for a resource
-      When no active grant permits the scope, resource, host, time, and usage constraints
+    @entrypoint:agent-protocol @journey:agent-resource-grant-policy
+    Scenario: Both API authorization modes enforce the same access grant
+      Given an Agent requests a target token for an API resource
+      When no active access grant permits the Agent, resource, permissions, and lifetime
       Then FlareAuth denies the request
-      When an applicable grant permits the request but requires step-up approval
-      Then FlareAuth waits for an authorized controller to approve the high-risk use
-      And the approval is bound to the exact requested scopes, audience, grant, and host binding
-      And the approved request cannot be retried with broader authority
-
-    @entrypoint:agent-protocol @journey:agent-oauth-errors
-    Scenario: Agent token failures use OAuth and DPoP error contracts
-      Given an Agent requests or presents a DPoP-bound authority token
-      When its OAuth request, DPoP proof, or access token is invalid
-      Then the token endpoint returns a standard OAuth error response
-      And an invalid DPoP proof returns invalid_dpop_proof
-      And a protected resource returns a DPoP WWW-Authenticate challenge
-      And a step-up requirement returns structured approval details rather than an identifier embedded in prose
+      And the Agent cannot substitute another account connection or resource
+      When an active access grant permits the request
+      Then the token issuer is selected only from the API resource authorization mode
+      And one-time, limited, persistent, revocation, and audit behavior is consistent across both modes
 
   Rule: Workload token exchange preserves authorization boundaries
 

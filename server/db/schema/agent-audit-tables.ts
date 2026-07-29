@@ -12,7 +12,6 @@ export const agentAuditEvent = sqliteTable(
     subject: text('subject'),
     agentIdentityId: text('agent_identity_id'),
     hostId: text('host_id'),
-    authorityGrantId: text('authority_grant_id'),
     resourceId: text('resource_id'),
     resourceConnectionId: text('resource_connection_id'),
     accessGrantId: text('access_grant_id'),

@@ -73,16 +73,18 @@ export function ResourceAccessApproval() {
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col justify-center px-6 py-12">
       <div className="space-y-6">
         <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">External API authorization</p>
+          <p className="text-sm font-medium text-muted-foreground">API authorization</p>
           <h1 className="text-2xl font-semibold">Approve Agent resource access</h1>
           <p className="text-sm text-muted-foreground">
-            Confirm the exact account, scopes, Agent, and host before granting access.
+            Confirm the exact resource, permissions, Agent, and host before granting access.
           </p>
         </div>
         {request?.target.type === 'api-resource' ? (
           <dl className="grid gap-3 rounded-md border border-border bg-card p-4 text-sm sm:grid-cols-2">
             <RequestField label="Agent" value={request.agentId} />
-            <RequestField label="Resource account" value={request.target.accountConnectionId} />
+            {request.target.accountConnectionId ? (
+              <RequestField label="Resource account" value={request.target.accountConnectionId} />
+            ) : null}
             <RequestField label="Resource" value={request.target.apiResourceId} />
             <RequestField label="Exact permissions" value={request.permissions.join(' ')} wide />
             {request.reason ? <RequestField label="Reason" value={request.reason} wide /> : null}

@@ -1,5 +1,5 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
-import type { ProtocolAgentSession } from '@server/usecases/agent-tokens'
+import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import { systemCliClientId } from '@shared/api/applications'
 import type { Context, MiddlewareHandler } from 'hono'

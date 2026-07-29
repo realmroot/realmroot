@@ -36,6 +36,7 @@ export default defineConfig({
       env: {
         PORT: String(externalPort),
         ORIGIN: externalOrigin,
+        FLAREAUTH_ORIGIN: baseURL,
       },
     },
     {

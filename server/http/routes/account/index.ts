@@ -10,12 +10,6 @@ import {
   retireAgentIdentity,
   toAgent,
 } from '@server/usecases/agent-identities'
-import {
-  approveAgentAuthorityApproval,
-  createAgentAuthorityGrant,
-  listAgentAuthorityGrants,
-  revokeAgentAuthorityGrant,
-} from '@server/usecases/agent-tokens'
 import { decideAgentApproval } from '@server/usecases/agents'
 import { revokeConsent } from '@server/usecases/applications'
 import { getConfig } from '@server/usecases/configz'
@@ -52,11 +46,7 @@ import {
   decideAccessRequestSchema,
   decideAgentEnrollmentSchema,
 } from '@shared/api/agent-api'
-import {
-  agentAuthorityApprovalSchema,
-  createAgentAuthorityGrantRequestSchema,
-  decideAgentApprovalResponseSchema,
-} from '@shared/api/agents'
+import { decideAgentApprovalResponseSchema } from '@shared/api/agents'
 import { linkAccountRequestSchema, unlinkAccountQuerySchema } from '@shared/api/connectors'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import type { SecurityPolicy } from '@shared/api/security'
@@ -428,42 +418,6 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       getAuthContext(c).user!.id,
     )
     return c.json(agentResponseSchema.parse({ agent: toAgent(result.identity) }))
-  })
-
-  app.get('/agents/:agentId/access-grants', async (c) => {
-    return c.json(await listAgentAuthorityGrants(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id))
-  })
-
-  app.post('/agents/:agentId/access-grants', async (c) => {
-    const grant = await createAgentAuthorityGrant(
-      getDeps(c),
-      c.req.param('agentId'),
-      await readJson(c, createAgentAuthorityGrantRequestSchema),
-      getAuthContext(c).user!.id,
-    )
-    c.header('Location', `/api/account/agents/${encodeURIComponent(c.req.param('agentId'))}/access-grants/${grant.id}`)
-    return c.json(grant, 201)
-  })
-
-  app.delete('/agents/:agentId/access-grants/:grantId', async (c) => {
-    await revokeAgentAuthorityGrant(
-      getDeps(c),
-      c.req.param('agentId'),
-      c.req.param('grantId'),
-      getAuthContext(c).user!.id,
-    )
-    return c.body(null, 204)
-  })
-
-  app.put('/agents/:agentId/access-grants/:grantId/approvals/:approvalId/decision', async (c) => {
-    const approval = await approveAgentAuthorityApproval(
-      getDeps(c),
-      c.req.param('agentId'),
-      c.req.param('grantId'),
-      c.req.param('approvalId'),
-      getAuthContext(c).user!.id,
-    )
-    return c.json(agentAuthorityApprovalSchema.parse(approval))
   })
 
   app.get('/account-connections', async (c) => {

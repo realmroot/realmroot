@@ -111,9 +111,7 @@ export const agentAccessRequest = sqliteTable(
     resourceId: text('resource_id')
       .notNull()
       .references(() => apiResource.id, { onDelete: 'restrict' }),
-    connectionId: text('connection_id')
-      .notNull()
-      .references(() => resourceAccountConnection.id, { onDelete: 'restrict' }),
+    connectionId: text('connection_id').references(() => resourceAccountConnection.id, { onDelete: 'restrict' }),
     agentIdentityId: text('agent_identity_id')
       .notNull()
       .references(() => agentIdentity.id, { onDelete: 'restrict' }),
@@ -151,9 +149,7 @@ export const agentAccessGrant = sqliteTable(
     resourceId: text('resource_id')
       .notNull()
       .references(() => apiResource.id, { onDelete: 'restrict' }),
-    connectionId: text('connection_id')
-      .notNull()
-      .references(() => resourceAccountConnection.id, { onDelete: 'restrict' }),
+    connectionId: text('connection_id').references(() => resourceAccountConnection.id, { onDelete: 'restrict' }),
     agentIdentityId: text('agent_identity_id')
       .notNull()
       .references(() => agentIdentity.id, { onDelete: 'restrict' }),

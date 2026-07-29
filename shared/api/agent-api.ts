@@ -110,6 +110,7 @@ export const agentApiResourcesResponseSchema = z.object({
       identifier: z.string(),
       name: z.string(),
       audience: z.string(),
+      authorizationMode: z.enum(['native', 'external']),
       permissions: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       accountConnections: z.array(
         z.object({
@@ -178,7 +179,7 @@ export const accessTargetSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('api-resource'),
     apiResourceId: z.string(),
-    accountConnectionId: z.string(),
+    accountConnectionId: z.string().optional(),
   }),
   z.object({
     type: z.literal('flareauth-management'),
@@ -238,7 +239,7 @@ export const accessGrantSchema = z.object({
   target: z.object({
     type: z.literal('api-resource'),
     apiResourceId: z.string(),
-    accountConnectionId: z.string(),
+    accountConnectionId: z.string().optional(),
   }),
   permissions: z.array(z.string()),
   mode: agentAccessGrantModeSchema,

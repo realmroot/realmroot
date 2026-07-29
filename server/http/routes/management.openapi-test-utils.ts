@@ -170,9 +170,6 @@ export function toManagementOperationKey(route: HonoRoute) {
   ) {
     return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
   }
-  if (route.path === '/api/auth/*' && route.method === 'POST') {
-    return `${route.method} /auth/oauth2/token`
-  }
   if (!route.path.startsWith('/api/management')) {
     return null
   }

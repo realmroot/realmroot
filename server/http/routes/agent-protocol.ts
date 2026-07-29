@@ -1,12 +1,12 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
 import { createAgentLoginIdentity, getAgentIdentityByProtocolAgent, toAgent } from '@server/usecases/agent-identities'
-import type { ProtocolAgentSession } from '@server/usecases/agent-tokens'
+import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import {
   createAccessRequest,
   getAccessRequest,
   getAgentAccessGrant,
-  issueExternalAccessToken,
+  issueTargetAccessToken,
   listAgentAccessGrants,
   listAgentApiResources,
 } from '@server/usecases/external-resources'
@@ -104,12 +104,20 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
     const input = await readJson(c, createTargetTokenSchema)
-    const result = await issueExternalAccessToken(getDeps(c), c.req.param('grantId'), input.dpopProof, principal, {
-      sign: (payload) =>
-        authApi.signJWT!({ body: { payload, overrideOptions: { jwt: { type: 'JWT' } } }, asResponse: false }).then(
-          ({ token }) => token,
-        ),
-    })
+    const result = await issueTargetAccessToken(
+      getDeps(c),
+      c.req.param('grantId'),
+      input.dpopProof,
+      `${new URL(requireOidcIssuer()).origin}/api/agent/access-grants/${encodeURIComponent(c.req.param('grantId'))}/tokens`,
+      principal,
+      {
+        issuer: requireOidcIssuer(),
+        sign: (payload, type) =>
+          authApi.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
+            ({ token }) => token,
+          ),
+      },
+    )
     return c.json(targetTokenSchema.parse(result))
   })
 

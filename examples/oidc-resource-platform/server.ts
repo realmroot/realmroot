@@ -15,6 +15,10 @@ const port = Number(process.env.PORT ?? 4100)
 const origin = process.env.ORIGIN ?? `http://127.0.0.1:${port}`
 const issuer = origin
 const resource = `${origin}/api`
+const flareauthOrigin = process.env.FLAREAUTH_ORIGIN ?? 'http://localhost:4189'
+const flareauthIssuer = `${flareauthOrigin}/api/auth`
+const flareauthResource = `${origin}/flareauth-api`
+const flareauthJwks = createRemoteJWKSet(new URL(`${flareauthIssuer}/jwks`))
 const db = new DatabaseSync(process.env.DATABASE_PATH ?? ':memory:')
 const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true })
 const publicJwk = { ...(await exportJWK(publicKey)), kid: 'target-signing-key', use: 'sig', alg: 'ES256' }
@@ -184,6 +188,13 @@ app.get('/api/projects', requireDpopAccess, (request, response) => {
   })
 })
 
+app.get('/flareauth-api/projects', requireFlareAuthDpopAccess, (_request, response) => {
+  response.json({
+    projects: [{ id: 'project-1', name: 'FlareAuth-native project' }],
+    authorization: response.locals.authorization,
+  })
+})
+
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   const normalized = error instanceof OAuthError ? error : oauthError('server_error', 'The target platform rejected the request.')
   response.status(normalized.status).json({ error: normalized.code, error_description: normalized.message })
@@ -311,6 +322,32 @@ async function requireDpopAccess(request: Request, response: Response, next: Nex
     }
     if (proof.payload.ath !== sha256Base64Url(token)) throw oauthError('invalid_dpop_proof', 'DPoP ath is invalid.', 401)
     response.locals.authorization = { sub: verified.payload.sub, act: verified.payload.act, scope: verified.payload.scope }
+    next()
+  } catch (error) {
+    next(error)
+  }
+}
+
+async function requireFlareAuthDpopAccess(request: Request, response: Response, next: NextFunction) {
+  try {
+    const token = dpopBearer(request)
+    const verified = await jwtVerify(token, flareauthJwks, {
+      issuer: flareauthIssuer,
+      audience: flareauthResource,
+      typ: 'at+jwt',
+    })
+    const proof = await verifyDpop(request, `${origin}${request.originalUrl}`, 'GET')
+    if ((verified.payload.cnf as { jkt?: string } | undefined)?.jkt !== proof.jkt) {
+      throw oauthError('invalid_token', 'DPoP key does not match the access token.', 401)
+    }
+    if (proof.payload.ath !== sha256Base64Url(token)) {
+      throw oauthError('invalid_dpop_proof', 'DPoP ath is invalid.', 401)
+    }
+    response.locals.authorization = {
+      sub: verified.payload.sub,
+      act: verified.payload.act,
+      scope: verified.payload.scope,
+    }
     next()
   } catch (error) {
     next(error)

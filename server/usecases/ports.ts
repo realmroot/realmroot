@@ -341,7 +341,6 @@ export interface AgentAuditEventRecord {
   subject: string | null
   agentIdentityId: string | null
   hostId: string | null
-  authorityGrantId: string | null
   resourceId: string | null
   resourceConnectionId: string | null
   accessGrantId: string | null
@@ -411,7 +410,7 @@ export interface ResourceConnectionIntentRecord {
 export interface AgentAccessRequestRecord {
   id: string
   resourceId: string
-  connectionId: string
+  connectionId: string | null
   agentIdentityId: string
   bindingId: string
   scopes: string[]
@@ -429,7 +428,7 @@ export interface AgentAccessRequestRecord {
 export interface AgentAccessGrantRecord {
   id: string
   resourceId: string
-  connectionId: string
+  connectionId: string | null
   agentIdentityId: string
   scopes: string[]
   mode: string
@@ -474,6 +473,7 @@ export interface ExternalResourceRepository {
   findAccessRequestByGrant(grantId: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByApprovalTokenHash(tokenHash: string): Promise<AgentAccessRequestRecord | null>
   listPendingAccessRequestsByAgent(agentIdentityId: string, now: Date): Promise<AgentAccessRequestRecord[]>
+  listPendingAccessRequests(): Promise<AgentAccessRequestRecord[]>
   decideAccessRequest(
     id: string,
     input: { status: 'approved' | 'denied'; grantId: string | null; decidedAt: Date; updatedAt: Date },
@@ -660,76 +660,9 @@ export interface AgentIdentityRepository {
   retireIdentity(identityId: string, now: Date): Promise<boolean>
 }
 
-export interface AgentAuthorityGrantRecord {
-  id: string
-  agentIdentityId: string
-  mode: string
-  subjectType: string
-  subjectId: string
-  audience: string
-  scopes: string[]
-  constraints: Record<string, unknown> | null
-  useCount: number
-  status: string
-  grantedByUserId: string
-  expiresAt: Date | null
-  revokedAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface AgentAccessTokenRecord {
-  id: string
-  tokenHash: string
-  agentIdentityId: string
-  bindingId: string
-  protocolAgentId: string
-  grantId: string
-  subjectIssuer: string
-  subject: string
-  actor: Record<string, unknown>
-  audience: string
-  scopes: string[]
-  confirmationJkt: string
-  expiresAt: Date
-  revokedAt: Date | null
-  createdAt: Date
-}
-
-export interface AgentAuthorityApprovalRecord {
-  id: string
-  grantId: string
-  bindingId: string
-  requestedScopes: string[]
-  status: string
-  approvedByUserId: string | null
-  expiresAt: Date
-  approvedAt: Date | null
-  consumedAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-}
-
 export interface AgentTokenRepository {
-  createGrant(input: AgentAuthorityGrantRecord): Promise<AgentAuthorityGrantRecord>
-  listGrants(agentIdentityId: string): Promise<AgentAuthorityGrantRecord[]>
-  findGrant(id: string): Promise<AgentAuthorityGrantRecord | null>
-  revokeGrant(id: string, now: Date): Promise<boolean>
   consumeAgentAuthJti(input: { jtiHash: string; expiresAt: Date; createdAt: Date }): Promise<boolean>
   consumeDpopJti(input: { jtiHash: string; keyThumbprint: string; expiresAt: Date; createdAt: Date }): Promise<boolean>
-  storeAccessToken(input: AgentAccessTokenRecord): Promise<void>
-  findAccessTokenByHash(tokenHash: string): Promise<AgentAccessTokenRecord | null>
-  consumeGrantUse(id: string, maxUses: number): Promise<boolean>
-  createApproval(input: AgentAuthorityApprovalRecord): Promise<AgentAuthorityApprovalRecord>
-  findApproval(id: string): Promise<AgentAuthorityApprovalRecord | null>
-  approveApproval(id: string, userId: string, now: Date): Promise<AgentAuthorityApprovalRecord | null>
-  consumeApproval(
-    id: string,
-    grantId: string,
-    bindingId: string,
-    requestedScopes: string[],
-    now: Date,
-  ): Promise<boolean>
 }
 
 // --- configz ----------------------------------------------------------------

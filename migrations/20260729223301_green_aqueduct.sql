@@ -1,0 +1,1 @@
+ALTER TABLE `agent_audit_event` DROP COLUMN `authority_grant_id`;

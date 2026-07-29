@@ -48,7 +48,7 @@ export function toResource(row: typeof apiResource.$inferSelect) {
     identifier: row.identifier,
     name: row.name,
     audience: row.audience,
-    authorizationMode: row.authorizationMode as 'flareauth' | 'external',
+    authorizationMode: row.authorizationMode as 'native' | 'external',
     description: row.description,
     enabled: row.enabled,
     tokenClaimsNamespace: row.tokenClaimsNamespace,

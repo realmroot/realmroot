@@ -89,48 +89,54 @@ missing capability. After the capability request succeeds, rerun the previously
 denied OpenAPI command. The adapter does not replay business operations. Do not
 switch profiles or authenticate as the controller.
 
-## External API Resource Access
+## API Resource Access
 
-An Agent does not receive external access during enrollment. The controller
-first connects a target-platform account in Account Center. The Agent then uses
-the unified OpenAPI operations:
+Enrollment grants no API resource access. Both API authorization modes use the
+same Agent operations:
 
-1. `list-agent-api-resources` to discover API resources, connected accounts,
-   supported permissions, and existing grants;
-2. `create-agent-access-request` with one exact API resource, account
-   connection, permission set, and reason;
+1. `list-agent-api-resources` to discover authorization modes, API resources,
+   supported permissions, connected accounts where applicable, and grants;
+2. `create-agent-access-request` with one exact API resource, permission set,
+   reason, and an account connection only for `external` mode;
 3. `get-agent-access-request` or `list-agent-access-grants` to read the
    resulting grant;
 4. `issue-target-access-token` with the grant ID and a DPoP proof.
 
 The adapter opens the hosted resource approval page when a new request is
-pending and keeps `create-agent-access-request` waiting. The controller approves
-the exact target account and permissions. Approval never gives the Agent the
-user's refresh token or target-platform credentials.
+pending and keeps `create-agent-access-request` waiting. Approval creates the
+access grant; a controller never pre-creates a grant or passes a grant ID to the
+Agent.
 
-The Agent generates and retains its own DPoP key. Discover the target token
-endpoint from the API resource's RFC 9728 protected-resource metadata and its
-authorization server's RFC 8414 metadata. The proof supplied to
-`issue-target-access-token` uses `typ=dpop+jwt`, the public JWK, `htm=POST`, and
-`htu` equal to that discovered target token endpoint. Use the same key for the
-resource request proof and include `ath` for the issued access token.
+For `external` mode, the controller first connects a target-platform account in
+Account Center and approves that exact account and permissions. Approval never
+gives the Agent the user's refresh token or target-platform credentials.
 
-The returned token is short-lived, target-platform issued, audience-restricted,
-and DPoP-bound. Send it directly to the target API:
+For `native` mode, omit the account connection. The product uses FlareAuth as
+its OIDC provider and OAuth authorization server, and its API validates the
+FlareAuth issuer, JWKS, audience, permissions, and DPoP binding.
+
+The Agent generates and retains its own DPoP key. For `external`, discover the
+target token endpoint through RFC 9728 and RFC 8414 and bind the issuance proof
+to that endpoint. For `native`, bind the issuance proof to the
+`issue-target-access-token` request URL. Use the same key for the resource
+request proof and include `ath` for the issued access token.
+
+The returned token is short-lived, audience-restricted, and DPoP-bound. Its
+issuer is selected only by `authorizationMode`: the target platform for
+`external`, or FlareAuth for `native`. Send it directly to the target API:
 
 ```text
 Authorization: DPoP TARGET_ACCESS_TOKEN
 DPoP: RESOURCE_REQUEST_PROOF
 ```
 
-FlareAuth brokers the standard OAuth exchange but does not proxy target API
-traffic. The target resource server validates its own token, audience, expiry,
-permissions, and DPoP binding.
+FlareAuth never proxies target API traffic. The target resource server validates
+the selected issuer, audience, expiry, permissions, and DPoP binding.
 
 Treat `/.well-known/agent-configuration` as authoritative only for AgentAuth
-registration and stable identity. Treat RFC 9728 and RFC 8414 metadata as
-authoritative for each target platform. Do not derive endpoints from names or
-provider-specific Connector configuration.
+registration and stable identity. For `external`, treat RFC 9728 and RFC 8414
+metadata as authoritative. Do not derive endpoints from names or provider-specific
+Connector configuration.
 
 ## Failure Boundaries
 

@@ -37,7 +37,8 @@ export interface AgentResourcePrincipal {
 }
 
 export interface AgentAssertionSigner {
-  sign(payload: Record<string, unknown>): Promise<string>
+  issuer: string
+  sign(payload: Record<string, unknown>, type: 'JWT' | 'at+jwt'): Promise<string>
 }
 
 export async function configureExternalResourceAuthorization(
@@ -365,26 +366,39 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
     : await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId!])
   const activeConnections = connections.filter((connection) => connection.status === 'active')
   const grants = await deps.externalResources.listActiveGrantsByAgent(principal.identityId)
+  const configuredResources = (await deps.authorization.listResources(page)).items.filter(
+    (resource) => resource.enabled,
+  )
+  const visibleResourceIds = new Set([
+    ...activeConnections.map((connection) => connection.resourceId),
+    ...configuredResources.filter((resource) => resource.authorizationMode === 'native').map((resource) => resource.id),
+  ])
   const resources = []
-  for (const resourceId of [...new Set(activeConnections.map((connection) => connection.resourceId))]) {
+  for (const resourceId of visibleResourceIds) {
     const resource = await deps.authorization.findResource(resourceId)
     const authorization = await deps.externalResources.findAuthorization(resourceId)
-    if (!resource?.enabled || resource.authorizationMode !== 'external' || authorization?.status !== 'active') continue
+    if (!resource?.enabled || (resource.authorizationMode === 'external' && authorization?.status !== 'active')) {
+      continue
+    }
     const scopes = (await deps.authorization.listScopes(resourceId, page)).items
     resources.push({
       id: resource.id,
       identifier: resource.identifier,
       name: resource.name,
       audience: resource.audience,
+      authorizationMode: resource.authorizationMode,
       scopes: scopes.map(({ value, description }) => ({ value, description })),
-      connections: activeConnections
-        .filter((connection) => connection.resourceId === resourceId)
-        .map((connection) => ({
-          id: connection.id,
-          displayName: connection.displayName,
-          subjectHint: redactSubject(connection.externalSubject),
-          grantedScopes: connection.grantedScopes,
-        })),
+      connections:
+        resource.authorizationMode === 'external'
+          ? activeConnections
+              .filter((connection) => connection.resourceId === resourceId)
+              .map((connection) => ({
+                id: connection.id,
+                displayName: connection.displayName,
+                subjectHint: redactSubject(connection.externalSubject),
+                grantedScopes: connection.grantedScopes,
+              }))
+          : [],
       grants: grants
         .filter(
           (grant) => grant.resourceId === resourceId && (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
@@ -405,6 +419,7 @@ export async function listAgentApiResources(
     identifier: resource.identifier,
     name: resource.name,
     audience: resource.audience,
+    authorizationMode: resource.authorizationMode,
     permissions: resource.scopes,
     accountConnections: resource.connections.map((connection) => ({
       id: connection.id,
@@ -442,19 +457,23 @@ export async function createAgentAccessRequest(
   approvalOrigin: string,
 ) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
-  const resource = await requireExternalResource(deps, input.resourceId)
-  const connection = await deps.externalResources.findConnection(input.connectionId)
-  if (!connection || connection.resourceId !== resource.id || connection.status !== 'active') {
-    throw notFound('Active resource account connection was not found.')
+  const resource = await requireEnabledResource(deps, input.resourceId)
+  const connection = input.connectionId ? await deps.externalResources.findConnection(input.connectionId) : null
+  if (resource.authorizationMode === 'external') {
+    if (!connection || connection.resourceId !== resource.id || connection.status !== 'active') {
+      throw notFound('Active resource account connection was not found.')
+    }
+    assertConnectionInHomeSpace(connection, identity.identity.ownerUserId, identity.identity.ownerOrganizationId)
+  } else if (connection) {
+    throw badRequest('Native API resources do not use account connections.')
   }
-  assertConnectionInHomeSpace(connection, identity.identity.ownerUserId, identity.identity.ownerOrganizationId)
   const configuredScopes = (await deps.authorization.listScopes(resource.id, page)).items.map((scope) => scope.value)
   assertScopeSubset(input.scopes, configuredScopes, 'API resource')
-  assertScopeSubset(input.scopes, connection.grantedScopes, 'connected account')
+  if (connection) assertScopeSubset(input.scopes, connection.grantedScopes, 'connected account')
   const scopes = [...new Set(input.scopes)].sort()
   const existingGrant = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).find(
     (grant) =>
-      grant.connectionId === connection.id &&
+      grant.connectionId === connection?.id &&
       grant.resourceId === resource.id &&
       exactScopes(grant.scopes, scopes) &&
       (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
@@ -464,7 +483,10 @@ export async function createAgentAccessRequest(
   )!
   const now = new Date()
   const pending = (await deps.externalResources.listPendingAccessRequestsByAgent(principal.identityId, now)).find(
-    (request) => request.connectionId === connection.id && exactScopes(request.scopes, scopes),
+    (request) =>
+      request.resourceId === resource.id &&
+      request.connectionId === connection?.id &&
+      exactScopes(request.scopes, scopes),
   )
   if (pending) {
     const token = await deps.secrets.open(pending.encryptedApprovalToken, accessRequestTokenContext(pending.id))
@@ -476,7 +498,7 @@ export async function createAgentAccessRequest(
   const request: AgentAccessRequestRecord = {
     id: requestId,
     resourceId: resource.id,
-    connectionId: connection.id,
+    connectionId: connection?.id ?? null,
     agentIdentityId: principal.identityId,
     bindingId: binding.id,
     scopes,
@@ -492,9 +514,10 @@ export async function createAgentAccessRequest(
   }
   const created = await deps.externalResources.createAccessRequest(request)
   await appendResourceAudit(deps, {
-    action: 'external_resource.access_requested',
+    action: 'api_resource.access_requested',
     result: existingGrant ? 'allowed' : 'pending',
     principal,
+    resourceId: resource.id,
     connection,
     grantId: existingGrant?.id ?? null,
     scopes,
@@ -519,7 +542,7 @@ export async function createAccessRequest(
       deps,
       {
         resourceId: input.target.apiResourceId,
-        connectionId: input.target.accountConnectionId,
+        connectionId: input.target.accountConnectionId ?? null,
         scopes: input.permissions,
         reason: input.reason,
       },
@@ -547,12 +570,21 @@ export async function getAccessRequest(
 
 export async function listControllerAccessRequests(deps: Deps, actorUserId: string) {
   const connections = await deps.externalResources.listConnectionsByUser(actorUserId)
-  const requests = await deps.externalResources.listPendingAccessRequestsByConnections(
-    connections.map((connection) => connection.id),
+  const connectionIds = new Set(connections.map((connection) => connection.id))
+  const requests = (await deps.externalResources.listPendingAccessRequests()).filter(
+    (request) => request.connectionId === null || connectionIds.has(request.connectionId),
   )
+  const controlledRequests = []
+  for (const request of requests) {
+    if (request.connectionId || (await controlsAgentIdentity(deps, request.agentIdentityId, actorUserId))) {
+      controlledRequests.push(request)
+    }
+  }
   return {
     requests: await Promise.all(
-      requests.map(async (request) => toAgentAccessRequest(request, await requestHostId(deps, request), null)),
+      controlledRequests.map(async (request) =>
+        toAgentAccessRequest(request, await requestHostId(deps, request), null),
+      ),
     ),
   }
 }
@@ -588,7 +620,7 @@ export async function getAccountAccessRequestByToken(
 
 export async function getControllerAccessRequestByToken(deps: Deps, token: string, actorUserId: string) {
   const request = await requirePendingAccessRequestByToken(deps, token)
-  await requireControlledConnection(deps, request.connectionId, actorUserId)
+  await requireControlledRequestTarget(deps, request, actorUserId)
   return toAgentAccessRequest(request, await requestHostId(deps, request), null)
 }
 
@@ -612,7 +644,7 @@ export async function decideAgentAccessRequest(
   if (!request || request.status !== 'pending' || request.expiresAt.getTime() <= Date.now()) {
     throw notFound('Pending Agent access request was not found.')
   }
-  const connection = await requireControlledConnection(deps, request.connectionId, actorUserId)
+  const connection = await requireControlledRequestTarget(deps, request, actorUserId)
   const now = new Date()
   if (input.decision === 'deny') {
     const decided = await deps.externalResources.decideAccessRequest(request.id, {
@@ -623,8 +655,9 @@ export async function decideAgentAccessRequest(
     })
     if (!decided) throw badRequest('Agent access request was already decided.')
     await appendResourceAudit(deps, {
-      action: 'external_resource.access_decided',
+      action: 'api_resource.access_decided',
       result: 'denied',
+      resourceId: request.resourceId,
       connection,
       request,
       grantId: null,
@@ -659,8 +692,9 @@ export async function decideAgentAccessRequest(
   })
   if (!decided) throw badRequest('Agent access request was already decided.')
   await appendResourceAudit(deps, {
-    action: 'external_resource.access_decided',
+    action: 'api_resource.access_decided',
     result: 'allowed',
+    resourceId: request.resourceId,
     connection,
     request,
     grantId: grant.id,
@@ -684,10 +718,11 @@ export async function decideAccessRequest(
   return toAccessRequest(await decideAgentAccessRequest(deps, requestId, input, actorUserId))
 }
 
-export async function issueExternalAccessToken(
+export async function issueTargetAccessToken(
   deps: Deps,
   grantId: string,
   dpopProof: string,
+  tokenRequestUrl: string,
   principal: AgentResourcePrincipal,
   signer: AgentAssertionSigner,
 ) {
@@ -697,34 +732,42 @@ export async function issueExternalAccessToken(
     throw forbidden('Active Agent access grant is required.')
   const request = await deps.externalResources.findAccessRequestByGrant(grant.id)
   if (!request) throw forbidden('Approved Agent access request is required.')
-  const [connection, resource, authorization] = await Promise.all([
-    deps.externalResources.findConnection(request.connectionId),
-    deps.authorization.findResource(request.resourceId),
+  const resource = await deps.authorization.findResource(request.resourceId)
+  if (grant.status !== 'active' || (grant.expiresAt && grant.expiresAt.getTime() <= Date.now()) || !resource?.enabled) {
+    throw forbidden('Active Agent access grant is required.')
+  }
+  if (resource.authorizationMode === 'native') {
+    return issueNativeAccessToken(
+      deps,
+      { grant, request, resource, identity },
+      dpopProof,
+      tokenRequestUrl,
+      principal,
+      signer,
+    )
+  }
+
+  const [connection, authorization] = await Promise.all([
+    request.connectionId ? deps.externalResources.findConnection(request.connectionId) : null,
     deps.externalResources.findAuthorization(request.resourceId),
   ])
-  if (
-    !grant ||
-    grant.status !== 'active' ||
-    (grant.expiresAt && grant.expiresAt.getTime() <= Date.now()) ||
-    !connection ||
-    connection.status !== 'active' ||
-    !resource?.enabled ||
-    resource.authorizationMode !== 'external' ||
-    authorization?.status !== 'active'
-  ) {
+  if (!connection || connection.status !== 'active' || authorization?.status !== 'active') {
     throw forbidden('Active external API resource grant is required.')
   }
   const confirmationJkt = await dpopThumbprint(deps, dpopProof, authorization.tokenEndpoint)
   const subjectToken = await refreshConnectionToken(deps, connection, authorization)
   const nowSeconds = Math.floor(Date.now() / 1000)
-  const agentAssertion = await signer.sign({
-    iss: principal.issuer,
-    sub: principal.subject,
-    aud: authorization.tokenEndpoint,
-    iat: nowSeconds,
-    exp: nowSeconds + 300,
-    jti: crypto.randomUUID(),
-  })
+  const agentAssertion = await signer.sign(
+    {
+      iss: principal.issuer,
+      sub: principal.subject,
+      aud: authorization.tokenEndpoint,
+      iat: nowSeconds,
+      exp: nowSeconds + 300,
+      jti: crypto.randomUUID(),
+    },
+    'JWT',
+  )
   const clientSecret = await deps.secrets.open(authorization.encryptedClientSecret, clientSecretContext(resource.id))
   const actorGrant = await postForm(
     deps,
@@ -783,9 +826,10 @@ export async function issueExternalAccessToken(
   await deps.externalResources.consumeAccessRequest(request.id, now)
   if (grant.mode === 'once') await deps.externalResources.consumeGrant(grant.id, now)
   await appendResourceAudit(deps, {
-    action: 'external_resource.token_issued',
+    action: 'api_resource.token_issued',
     result: 'allowed',
     principal,
+    resourceId: resource.id,
     connection,
     request,
     grantId: grant.id,
@@ -796,6 +840,95 @@ export async function issueExternalAccessToken(
     accessToken,
     tokenType: 'DPoP' as const,
     expiresIn,
+    permissions: request.scopes,
+    apiResource: resource.audience,
+  }
+}
+
+async function issueNativeAccessToken(
+  deps: Deps,
+  context: {
+    grant: AgentAccessGrantRecord
+    request: AgentAccessRequestRecord
+    resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>
+    identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>
+  },
+  dpopProof: string,
+  tokenRequestUrl: string,
+  principal: AgentResourcePrincipal,
+  signer: AgentAssertionSigner,
+) {
+  const { grant, request, resource, identity } = context
+  if (request.connectionId !== null || grant.connectionId !== null) {
+    throw forbidden('Native API resource grants cannot use account connections.')
+  }
+  if (signer.issuer !== principal.issuer) {
+    throw forbidden('Agent identity does not belong to the active OAuth issuer.')
+  }
+  const confirmationJkt = await dpopThumbprint(deps, dpopProof, tokenRequestUrl)
+  const now = new Date()
+  const maximumExpiresAt = new Date(now.getTime() + 5 * 60 * 1000)
+  const expiresAt =
+    grant.expiresAt && grant.expiresAt.getTime() < maximumExpiresAt.getTime() ? grant.expiresAt : maximumExpiresAt
+  const subject = identity.identity.ownerUserId ?? identity.identity.ownerOrganizationId
+  if (!subject) throw forbidden('Agent home-space controller is unavailable.')
+  const accessToken = await signer.sign(
+    {
+      iss: signer.issuer,
+      sub: subject,
+      aud: resource.audience,
+      jti: createId('resat'),
+      iat: Math.floor(now.getTime() / 1000),
+      exp: Math.floor(expiresAt.getTime() / 1000),
+      scope: request.scopes.join(' '),
+      client_id: principal.protocolAgentId,
+      cnf: { jkt: confirmationJkt },
+      act: {
+        iss: principal.issuer,
+        sub: principal.hostId,
+        actor_type: 'host',
+        act: {
+          iss: principal.issuer,
+          sub: principal.subject,
+          actor_type: 'agent',
+        },
+      },
+    },
+    'at+jwt',
+  )
+  const leaseId = createId('tokenlease')
+  await deps.externalResources.createTokenLease({
+    id: leaseId,
+    grantId: grant.id,
+    requestId: request.id,
+    bindingId: identity.bindings.find(
+      (binding) => binding.protocolAgentId === principal.protocolAgentId && binding.hostId === principal.hostId,
+    )!.id,
+    encryptedAccessToken: await deps.secrets.seal(accessToken, tokenLeaseContext(leaseId)),
+    tokenHash: await sha256(accessToken),
+    confirmationJkt,
+    scopes: request.scopes,
+    expiresAt,
+    revokedAt: null,
+    createdAt: now,
+  })
+  await deps.externalResources.consumeAccessRequest(request.id, now)
+  if (grant.mode === 'once') await deps.externalResources.consumeGrant(grant.id, now)
+  await appendResourceAudit(deps, {
+    action: 'api_resource.token_issued',
+    result: 'allowed',
+    principal,
+    resourceId: resource.id,
+    connection: null,
+    request,
+    grantId: grant.id,
+    scopes: request.scopes,
+    reasonCode: null,
+  })
+  return {
+    accessToken,
+    tokenType: 'DPoP' as const,
+    expiresIn: Math.max(1, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
     permissions: request.scopes,
     apiResource: resource.audience,
   }
@@ -828,13 +961,16 @@ export async function getAgentAccessGrant(
 export async function revokeAgentAccessGrant(deps: Deps, grantId: string, actorUserId: string) {
   const grant = await deps.externalResources.findGrant(grantId)
   if (!grant) throw notFound('Agent access grant was not found.')
-  const connection = await requireControlledConnection(deps, grant.connectionId, actorUserId)
+  const request = await deps.externalResources.findAccessRequestByGrant(grant.id)
+  if (!request) throw notFound('Approved Agent access request was not found.')
+  const connection = await requireControlledRequestTarget(deps, request, actorUserId)
   const now = new Date()
   await revokeGrantTokenLeases(deps, grant, now)
   if (grant.status === 'active') await deps.externalResources.revokeGrant(grant.id, now)
   await appendResourceAudit(deps, {
-    action: 'external_resource.access_revoked',
+    action: 'api_resource.access_revoked',
     result: 'allowed',
+    resourceId: grant.resourceId,
     connection,
     grantId: grant.id,
     controllerUserId: actorUserId,
@@ -872,6 +1008,12 @@ async function revokeTokenLeaseAtTarget(
   lease: Awaited<ReturnType<Deps['externalResources']['listActiveTokenLeasesByGrant']>>[number],
   now: Date,
 ) {
+  const resource = await deps.authorization.findResource(resourceId)
+  if (!resource) throw notFound('API resource was not found.')
+  if (resource.authorizationMode === 'native') {
+    await deps.externalResources.revokeTokenLease(lease.id, now)
+    return
+  }
   const authorization = await requireActiveExternalAuthorization(deps, resourceId)
   const clientSecret = await deps.secrets.open(authorization.encryptedClientSecret, clientSecretContext(resourceId))
   const token = await deps.secrets.open(lease.encryptedAccessToken, tokenLeaseContext(lease.id))
@@ -992,7 +1134,7 @@ async function requirePendingAccessRequestByToken(deps: Deps, token: string) {
 async function requireControlledAccessRequest(deps: Deps, requestId: string, actorUserId: string) {
   const request = await deps.externalResources.findAccessRequest(requestId)
   if (!request) throw notFound('Agent access request was not found.')
-  await requireControlledConnection(deps, request.connectionId, actorUserId)
+  await requireControlledRequestTarget(deps, request, actorUserId)
   return toAgentAccessRequest(request, await requestHostId(deps, request), null)
 }
 
@@ -1015,6 +1157,15 @@ async function requireActiveExternalAuthorization(deps: Deps, resourceId: string
     throw notFound('Active external API resource authorization was not found.')
   }
   return authorization
+}
+
+async function requireEnabledResource(deps: Deps, resourceId: string) {
+  const resource = await deps.authorization.findResource(resourceId)
+  if (!resource?.enabled) throw notFound('Enabled API resource was not found.')
+  if (resource.authorizationMode === 'external') {
+    await requireActiveExternalAuthorization(deps, resourceId)
+  }
+  return resource
 }
 
 async function requireActiveIdentityAndBinding(deps: Deps, principal: AgentResourcePrincipal) {
@@ -1042,6 +1193,24 @@ async function requireControlledConnection(deps: Deps, connectionId: string, act
     }
   }
   throw forbidden('Resource account controller access is required.')
+}
+
+async function requireControlledRequestTarget(deps: Deps, request: AgentAccessRequestRecord, actorUserId: string) {
+  if (request.connectionId) return requireControlledConnection(deps, request.connectionId, actorUserId)
+  if (await controlsAgentIdentity(deps, request.agentIdentityId, actorUserId)) return null
+  throw forbidden('Agent controller access is required.')
+}
+
+async function controlsAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
+  const identity = await deps.agentIdentities.findIdentity(identityId)
+  if (!identity) return false
+  if (identity.identity.ownerUserId === actorUserId) return true
+  if (!identity.identity.ownerOrganizationId) return false
+  const member = await deps.authorization.findMemberByOrganizationUser(
+    identity.identity.ownerOrganizationId,
+    actorUserId,
+  )
+  return member?.role === 'owner' || member?.role === 'admin'
 }
 
 async function requireConnectionOwnerControl(
@@ -1077,7 +1246,8 @@ async function appendResourceAudit(
     result: string
     principal?: AgentResourcePrincipal
     request?: AgentAccessRequestRecord
-    connection: ResourceAccountConnectionRecord
+    resourceId: string
+    connection: ResourceAccountConnectionRecord | null
     grantId: string | null
     controllerUserId?: string
     scopes: string[]
@@ -1093,9 +1263,8 @@ async function appendResourceAudit(
     subject: input.principal?.subject ?? null,
     agentIdentityId: input.principal?.identityId ?? input.request?.agentIdentityId ?? null,
     hostId: input.principal?.hostId ?? null,
-    authorityGrantId: null,
-    resourceId: input.connection.resourceId,
-    resourceConnectionId: input.connection.id,
+    resourceId: input.resourceId,
+    resourceConnectionId: input.connection?.id ?? null,
     accessGrantId: input.grantId,
     scopes: input.scopes,
     reasonCode: input.reasonCode,
@@ -1335,7 +1504,7 @@ function toAccessRequest(
     target: {
       type: 'api-resource',
       apiResourceId: request.resourceId,
-      accountConnectionId: request.connectionId,
+      ...(request.connectionId ? { accountConnectionId: request.connectionId } : {}),
     },
     permissions: request.scopes,
     reason: request.reason,
@@ -1361,7 +1530,7 @@ function toAccessGrant(record: AgentAccessGrantRecord): AccessGrant {
     target: {
       type: 'api-resource',
       apiResourceId: record.resourceId,
-      accountConnectionId: record.connectionId,
+      ...(record.connectionId ? { accountConnectionId: record.connectionId } : {}),
     },
     permissions: record.scopes,
     mode: record.mode as AccessGrant['mode'],

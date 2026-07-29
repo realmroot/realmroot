@@ -32,18 +32,10 @@ export interface PendingCapabilityRequest {
   result: Promise<CapabilityRequestResult>
 }
 
-export interface AgentTokenResult {
-  access_token: string
-  token_type: 'DPoP'
-  expires_in: number
-  scope: string
-}
-
 export interface RestishAgentPlugin {
   firstWhoami(name: string): PendingWhoami
   whoami(): PluginIdentityResult
   requestCapabilities(capabilities: string[], reason: string): PendingCapabilityRequest
-  requestAgentToken(grantId: string, dpopProof: string): AgentTokenResult
   agentRequest<T>(path: string, init?: RequestInit): Promise<T>
   listApplications(): { applications: unknown[] }
   dispose(): void
@@ -93,25 +85,6 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     }
     try {
       return JSON.parse(execFileSync('restish', [apiName, operation, '--rsh-output-format', 'json'], options)) as T
-    } catch (error) {
-      const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
-      throw new Error(
-        `Restish ${operation} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
-        { cause: error },
-      )
-    }
-  }
-
-  const invokeWithRequiredArgs = <T>(operation: string, requiredArgs: string[], input: unknown): T => {
-    const options: ExecFileSyncOptionsWithStringEncoding = {
-      cwd: repoRoot,
-      env: environment,
-      encoding: 'utf8',
-      input: JSON.stringify(input),
-    }
-    const args = [apiName, operation, ...requiredArgs, '--rsh-output-format', 'json']
-    try {
-      return JSON.parse(execFileSync('restish', args, options)) as T
     } catch (error) {
       const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
       throw new Error(
@@ -189,11 +162,6 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     whoami: () => invoke<PluginIdentityResult>('get-current-agent'),
     requestCapabilities: (capabilities, reason) =>
       invokePending<CapabilityRequestResult>('request-agent-management-access', { capabilities, reason }),
-    requestAgentToken: (grantId, dpopProof) =>
-      invokeWithRequiredArgs<AgentTokenResult>('issue-agent-access-token', [dpopProof], {
-        grant_type: 'urn:flareauth:params:oauth:grant-type:agent-authority',
-        grant_id: grantId,
-      }),
     agentRequest: async <T>(path: string, init: RequestInit = {}) => {
       const state = readAgentState(stateDir)
       const raw = Buffer.from(state.agent_private_key, 'base64url')

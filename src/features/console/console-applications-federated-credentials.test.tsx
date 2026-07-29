@@ -108,7 +108,7 @@ describe('admin console application federated credentials', () => {
               name: 'Runner API',
               identifier: 'https://auth.example.com/api/runner',
               audience: 'https://auth.example.com/api/runner',
-              authorizationMode: 'flareauth',
+              authorizationMode: 'native',
               description: null,
               enabled: true,
               tokenClaimsNamespace: null,

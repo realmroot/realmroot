@@ -35,7 +35,7 @@ describe('console Agents page', () => {
     expect(screen.getByText('Retired Personal Agent')).toBeTruthy()
     expect(screen.getByText('Organization org-1')).toBeTruthy()
     expect(screen.getByText('User user-2')).toBeTruthy()
-    expect(screen.getByText('external_resource.token_issued')).toBeTruthy()
+    expect(screen.getByText('api_resource.token_issued')).toBeTruthy()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Retire' })[0]!)
     await waitFor(() => expect(requests).toContainEqual({ url: '/api/management/agents/agent-1', method: 'DELETE' }))
@@ -96,14 +96,13 @@ const agentAudit = {
   items: [
     {
       id: 'audit-1',
-      action: 'external_resource.token_issued',
+      action: 'api_resource.token_issued',
       result: 'allowed',
       controllerUserId: 'user-1',
       subjectIssuer: 'https://auth.example.com',
       subject: 'agt_stable',
       agentIdentityId: 'agent-1',
       hostId: null,
-      authorityGrantId: null,
       resourceId: 'resource-1',
       resourceConnectionId: 'connection-1',
       accessGrantId: 'access-grant-1',

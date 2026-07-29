@@ -6,7 +6,7 @@ import {
   createResourceConnectionIntent,
   decideAgentAccessRequestByToken,
   discoverAgentResources,
-  issueExternalAccessToken,
+  issueTargetAccessToken,
   revokeAgentAccessGrant,
 } from '@server/usecases/external-resources'
 import type {
@@ -250,13 +250,21 @@ describe('external API resource authorization', () => {
     })
 
     const sign = vi.fn().mockResolvedValue('signed-agent-assertion')
-    const lease = await issueExternalAccessToken(deps, grant.id, proof, principal(), { sign })
+    const lease = await issueTargetAccessToken(
+      deps,
+      grant.id,
+      proof,
+      'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+      principal(),
+      { issuer: 'https://auth.example.com/api/auth', sign },
+    )
     expect(sign).toHaveBeenCalledWith(
       expect.objectContaining({
         iss: 'https://auth.example.com/api/auth',
         sub: 'agt_stable',
         aud: 'https://projects.example.com/token',
       }),
+      'JWT',
     )
     expect(sign.mock.calls[0]![0]).not.toHaveProperty('act')
     expect(tokenRequests.map((form) => form.get('grant_type'))).toEqual([
@@ -272,7 +280,7 @@ describe('external API resource authorization', () => {
     })
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'external_resource.token_issued',
+        action: 'api_resource.token_issued',
         agentIdentityId: 'identity-1',
         hostId: 'host-1',
         resourceConnectionId: 'connection-1',
@@ -284,7 +292,13 @@ describe('external API resource authorization', () => {
 
   it('revokes active target token leases [spec: agent-identity/agent-resource-revocation]', async () => {
     const deps = createTestDeps()
+    authorizationDeps(deps)
     vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grantRecord())
+    vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({
+      ...requestRecord(),
+      status: 'approved',
+      grantId: 'grant-1',
+    })
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
     vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
     vi.mocked(deps.externalResources.listActiveTokenLeasesByGrant).mockResolvedValue([

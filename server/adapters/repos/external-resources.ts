@@ -157,6 +157,14 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .orderBy(agentAccessRequest.createdAt)
     },
 
+    async listPendingAccessRequests() {
+      return db
+        .select()
+        .from(agentAccessRequest)
+        .where(eq(agentAccessRequest.status, 'pending'))
+        .orderBy(agentAccessRequest.createdAt)
+    },
+
     async decideAccessRequest(id, input) {
       const [row] = await db
         .update(agentAccessRequest)

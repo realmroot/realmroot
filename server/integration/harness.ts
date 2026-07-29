@@ -6,8 +6,8 @@ import { createDb } from '@server/db/client'
 import { agent, agentCapabilityGrant, agentHost, approvalRequest } from '@server/db/schema'
 import type { Env, RuntimeConfig } from '@server/env'
 import { createApp } from '@server/http/app'
-import type { AgentAccessTokenVerifier, AgentTokenSigner } from '@server/usecases/agent-tokens'
 import { ensureSystemClients } from '@server/usecases/applications'
+import type { AgentAssertionSigner } from '@server/usecases/external-resources'
 import type { SecurityPolicy } from '@shared/api/security'
 
 export const baseURL = 'http://localhost'
@@ -74,8 +74,7 @@ export interface Harness {
   request: (input: string, init?: RequestInit) => Promise<Response>
   db: ReturnType<typeof createDb>
   deps: ReturnType<typeof createDeps>
-  agentTokenSigner: AgentTokenSigner
-  agentAccessTokenVerifier: AgentAccessTokenVerifier
+  agentTokenSigner: AgentAssertionSigner
 }
 
 /**
@@ -114,22 +113,12 @@ export async function createHarness(): Promise<Harness> {
     deps,
     agentTokenSigner: {
       issuer: `${config.baseURL}/api/auth`,
-      sign: async (payload) =>
+      sign: async (payload, type) =>
         (
           await auth.api.signJWT({
-            body: { payload, overrideOptions: { jwt: { type: 'at+jwt' } } },
+            body: { payload, overrideOptions: { jwt: { type } } },
           })
         ).token,
-    },
-    agentAccessTokenVerifier: {
-      issuer: `${config.baseURL}/api/auth`,
-      verify: async (token, audience) =>
-        (
-          await auth.api.verifyJWT({
-            body: { token, issuer: `${config.baseURL}/api/auth`, audience },
-            asResponse: false,
-          })
-        ).payload,
     },
   }
 }

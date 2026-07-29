@@ -170,11 +170,49 @@ describe('Agent protocol routes', () => {
       'https://auth.example.com',
     )
   })
+
+  it('uses the unified grant token operation for native APIs [spec: agent-identity/native-api-resource-token]', async () => {
+    vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
+    const issue = vi.spyOn(externalResources, 'issueTargetAccessToken').mockResolvedValue({
+      accessToken: 'flareauth-access-token',
+      tokenType: 'DPoP',
+      expiresIn: 300,
+      permissions: ['projects:read'],
+      apiResource: 'https://projects.example.com/api',
+    })
+    const app = createRouteApp(
+      {
+        getAgentSession: vi.fn().mockResolvedValue(session()),
+        signJWT: vi.fn().mockResolvedValue({ token: 'flareauth-access-token' }),
+      },
+      'https://auth.example.com/api/auth',
+    )
+
+    const response = await app.request('https://preview.example.net/api/agent/access-grants/grant-1/tokens', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ dpopProof: 'dpop-proof' }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(issue).toHaveBeenCalledWith(
+      expect.anything(),
+      'grant-1',
+      'dpop-proof',
+      'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+      expect.objectContaining({ identityId: 'identity-1' }),
+      expect.objectContaining({ issuer: 'https://auth.example.com/api/auth', sign: expect.any(Function) }),
+    )
+  })
 })
 
 function createRouteApp(
   authApi: {
     getAgentSession: (context: { headers: Headers; asResponse: false }) => Promise<ReturnType<typeof session> | null>
+    signJWT?: (context: {
+      body: { payload: Record<string, unknown>; overrideOptions?: { jwt?: { type?: string } } }
+      asResponse: false
+    }) => Promise<{ token: string }>
   },
   oidcIssuer?: string,
 ) {
@@ -182,6 +220,31 @@ function createRouteApp(
     .use('*', depsMiddleware(createTestDeps()))
     .onError((error, c) => handleApiError(error, c))
     .route('/api/agent', createAgentProtocolRoutes(authApi, oidcIssuer))
+}
+
+function activeIdentity() {
+  const now = new Date('2026-08-01T00:00:00.000Z')
+  return {
+    id: 'identity-1',
+    issuer: 'https://auth.example.com/api/auth',
+    subject: 'agt_1',
+    name: 'Build Agent',
+    homeSpace: { type: 'personal' as const, userId: 'user-1' },
+    status: 'active' as const,
+    retiredAt: null,
+    createdAt: now,
+    updatedAt: now,
+    bindings: [
+      {
+        id: 'binding-1',
+        protocolAgentId: 'protocol-agent-1',
+        hostId: 'host-1',
+        status: 'active' as const,
+        boundAt: now,
+        revokedAt: null,
+      },
+    ],
+  }
 }
 
 function session() {

@@ -127,7 +127,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     method: 'post',
     path: '/agent/access-grants/{grantId}/tokens',
     operationId: 'issueTargetAccessToken',
-    summary: 'Issue a target-platform DPoP token',
+    summary: 'Issue an API resource DPoP token',
     security: [{ agentAuth: [] }],
     request: {
       params: z.object({ grantId: z.string() }),

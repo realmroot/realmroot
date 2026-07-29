@@ -103,7 +103,7 @@ export const agentAccessRequestStatusSchema = z.enum(['pending', 'approved', 'de
 
 export const createAgentAccessRequestSchema = z.object({
   resourceId: nonEmptyString,
-  connectionId: nonEmptyString,
+  connectionId: nonEmptyString.nullable(),
   scopes: scopeListSchema,
   reason: z.string().trim().max(500).nullable().optional(),
 })
@@ -111,7 +111,7 @@ export const createAgentAccessRequestSchema = z.object({
 export const agentAccessRequestSchema = z.object({
   id: z.string(),
   resourceId: z.string(),
-  connectionId: z.string(),
+  connectionId: z.string().nullable(),
   agentIdentityId: z.string(),
   hostId: z.string(),
   scopes: z.array(z.string()),
@@ -146,7 +146,7 @@ export const decideAgentAccessRequestByTokenSchema = decideAgentAccessRequestSch
 export const agentAccessGrantSchema = z.object({
   id: z.string(),
   resourceId: z.string(),
-  connectionId: z.string(),
+  connectionId: z.string().nullable(),
   agentIdentityId: z.string(),
   scopes: z.array(z.string()),
   mode: agentAccessGrantModeSchema,
@@ -165,6 +165,7 @@ export const agentResourceDiscoverySchema = z.object({
       identifier: z.string(),
       name: z.string(),
       audience: z.string(),
+      authorizationMode: z.enum(['native', 'external']),
       scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       connections: z.array(
         z.object({

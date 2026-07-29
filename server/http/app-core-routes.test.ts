@@ -1,6 +1,4 @@
 import { createApp } from '@server/http/app'
-import * as agentTokens from '@server/usecases/agent-tokens'
-import { agentAuthorityGrantType } from '@shared/api/agents'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
 
@@ -36,7 +34,6 @@ describe('app.test 1', () => {
         'refresh_token',
         'client_credentials',
         'urn:ietf:params:oauth:grant-type:device_code',
-        agentAuthorityGrantType,
       ],
       code_challenge_methods_supported: ['S256'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
@@ -60,89 +57,12 @@ describe('app.test 1', () => {
         'refresh_token',
         'client_credentials',
         'urn:ietf:params:oauth:grant-type:device_code',
-        agentAuthorityGrantType,
       ],
       code_challenge_methods_supported: ['S256'],
     })
     expect(getOAuthServerConfig).toHaveBeenCalledWith({
       request: expect.any(Request),
       asResponse: false,
-    })
-  })
-
-  it('issues Agent authority tokens through the Better Auth OAuth token endpoint [spec: agent-identity/agent-autonomous-authority]', async () => {
-    const session = {
-      agentId: 'protocol-agent-1',
-      agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated' },
-      host: { id: 'host-1', userId: 'user-1', status: 'active' },
-    }
-    const issue = vi.spyOn(agentTokens, 'issueAgentAccessToken').mockResolvedValue({
-      access_token: 'signed-agent-token',
-      issued_token_type: 'urn:ietf:params:oauth:token-type:access_token',
-      token_type: 'DPoP',
-      expires_in: 300,
-      scope: 'repo:read',
-    })
-    const auth = createAuthMock()
-    auth.api.getAgentSession = vi.fn().mockResolvedValue(session)
-    auth.api.signJWT = vi.fn().mockResolvedValue({ token: 'signed-agent-token' })
-
-    const response = await createApp(auth, createTestDeps(), { baseURL: 'https://auth.example.com' }).request(
-      '/api/auth/oauth2/token',
-      {
-        method: 'POST',
-        headers: {
-          authorization: 'Bearer agent-proof',
-          'content-type': 'application/x-www-form-urlencoded',
-          dpop: 'dpop-proof',
-        },
-        body: new URLSearchParams({
-          grant_type: agentAuthorityGrantType,
-          grant_id: 'grant-1',
-          scope: 'repo:read',
-        }),
-      },
-    )
-
-    expect(response.status).toBe(200)
-    expect(issue).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ method: 'POST', url: 'http://localhost/api/auth/oauth2/token' }),
-      { grantId: 'grant-1', scope: 'repo:read', approvalId: undefined },
-      session,
-      expect.objectContaining({ issuer: 'https://auth.example.com/api/auth', sign: expect.any(Function) }),
-    )
-  })
-
-  it('returns flat standard OAuth errors for invalid Agent token requests', async () => {
-    const auth = createAuthMock()
-    auth.api.getAgentSession.mockResolvedValue({
-      agentId: 'protocol-agent-1',
-      agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated' },
-      host: { id: 'host-1', userId: 'user-1', status: 'active' },
-    })
-    const invalidRequest = await createApp(auth, createTestDeps()).request('/api/auth/oauth2/token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: agentAuthorityGrantType }),
-    })
-
-    expect(invalidRequest.status).toBe(400)
-    await expect(invalidRequest.json()).resolves.toEqual({
-      error: 'invalid_request',
-      error_description: 'Agent token request parameters are invalid.',
-    })
-
-    auth.api.getAgentSession.mockResolvedValue(null)
-    const invalidClient = await createApp(auth, createTestDeps()).request('/api/auth/oauth2/token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: agentAuthorityGrantType, grant_id: 'grant-1' }),
-    })
-    expect(invalidClient.status).toBe(401)
-    await expect(invalidClient.json()).resolves.toEqual({
-      error: 'invalid_client',
-      error_description: 'An active AgentAuth session is required.',
     })
   })
 
