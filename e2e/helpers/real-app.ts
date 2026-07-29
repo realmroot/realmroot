@@ -69,6 +69,22 @@ export async function signOut(page: Page) {
 export function resetLocalData() {
   sql(`
     PRAGMA foreign_keys = OFF;
+    DELETE FROM agent_audit_event;
+    DELETE FROM agent_dpop_jti;
+    DELETE FROM agent_access_token;
+    DELETE FROM agent_authority_approval;
+    DELETE FROM external_account_grant;
+    DELETE FROM external_credential;
+    DELETE FROM external_oauth_intent;
+    DELETE FROM external_account;
+    DELETE FROM agent_authority_grant;
+    DELETE FROM agent_identity_binding;
+    DELETE FROM agent_enrollment_intent;
+    DELETE FROM agent_signing_key;
+    DELETE FROM agent_identity;
+    DELETE FROM agent_capability_grant;
+    DELETE FROM agent;
+    DELETE FROM agent_host;
     DELETE FROM webhook_delivery_request;
     DELETE FROM webhook_endpoint;
     DELETE FROM user_role_assignment;
@@ -102,11 +118,17 @@ export function resetLocalData() {
     DELETE FROM branding_setting;
     DELETE FROM uploaded_asset;
     DELETE FROM approval_request;
-    DELETE FROM agent_capability_grant;
-    DELETE FROM agent;
-    DELETE FROM agent_host;
     DELETE FROM organization;
     PRAGMA foreign_keys = ON;
+  `)
+}
+
+export function expirePendingAgentApprovals(agentId: string) {
+  if (!/^[A-Za-z0-9_-]+$/.test(agentId)) throw new Error('Invalid Agent id.')
+  sql(`
+    UPDATE approval_request
+    SET expires_at = 0
+    WHERE agent_id = '${agentId}' AND status = 'pending';
   `)
 }
 

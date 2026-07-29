@@ -133,11 +133,16 @@ export function verifySignInTotp(input: { code: string; trustDevice?: boolean })
   return nativeAuth('/two-factor/verify-totp', input)
 }
 
-export function approveAgentCapability(input: { agentId: string; userCode: string; capabilities?: string[] }) {
+export function decideAgentCapability(input: {
+  agentId: string
+  userCode: string
+  action: 'approve' | 'deny'
+  capabilities?: string[]
+}) {
   return nativeAuth('/agent/approve-capability', {
     agent_id: input.agentId,
     user_code: input.userCode,
-    action: 'approve',
+    action: input.action,
     ...(input.capabilities ? { capabilities: input.capabilities } : {}),
   })
 }

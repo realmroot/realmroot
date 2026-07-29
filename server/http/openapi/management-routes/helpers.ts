@@ -2,7 +2,16 @@ import { z } from '@hono/zod-openapi'
 import type { ZodType } from 'zod'
 
 export { z } from '@hono/zod-openapi'
-export { agentProtocolInventoryResponseSchema } from '@shared/api/agents'
+export {
+  agentProtocolIdentityResponseSchema,
+  agentProtocolInventoryResponseSchema,
+  agentTokenRequestSchema,
+  agentTokenResponseSchema,
+  listAgentAuditEventsResponseSchema,
+  listAgentIdentityInventoryResponseSchema,
+  requestAgentCapabilitiesResponseSchema,
+  requestAgentCapabilitiesSchema,
+} from '@shared/api/agents'
 export {
   applicationResponseSchema,
   createApplicationRequestSchema,
@@ -102,6 +111,7 @@ export interface ManagementRouteConfig {
   request?: {
     params?: ZodType
     query?: ZodType
+    headers?: ZodType
     body?: { content: Record<string, { schema: ZodType }>; required?: boolean }
   }
   status?: number
@@ -111,7 +121,7 @@ export interface ManagementRouteConfig {
 }
 export const jsonContentType = 'application/json'
 export const multipartContentType = 'multipart/form-data'
-export const managementSecurity: Array<Record<string, string[]>> = [{ adminSession: [] }, { managementOAuth2: [] }]
+export const managementSecurity: Array<Record<string, string[]>> = [{ agentAuth: [] }, { adminSession: [] }]
 export const managementScopes = 'openid profile email offline_access management:read management:write'
 export function errorResponse(description: string) {
   return { description, content: { [jsonContentType]: { schema: managementErrorResponseSchema } } }
@@ -145,6 +155,7 @@ export const apiPermissionParam = params('id', 'permissionId')
 export const apiScopeParam = params('id', 'scopeId')
 export const memberParam = params('id', 'memberId')
 export const invitationParam = params('id', 'invitationId')
+export const agentIdentityParam = params('identityId')
 export function assignmentRoutes(): ManagementRouteConfig[] {
   const assignments = [
     ['user-role-assignments', 'assignUserRole'],

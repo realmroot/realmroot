@@ -1,3 +1,4 @@
+import type { AgentAuditEvent, AgentIdentity } from '@shared/api/agents'
 import type {
   ApplicationResponse,
   CreateApplicationRequest,
@@ -64,7 +65,7 @@ import type {
   WebhookEndpointSecretResponse,
   WebhookRequest,
 } from '@shared/api/webhooks'
-import { apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
+import { apiClient, readJsonResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
 import { listApiResources } from './management-api-resources'
 
 export { consoleQueryKeys } from './console-query-keys'
@@ -331,6 +332,33 @@ export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
 
 export function getAgentInventory(): Promise<ManagementAgentInventoryResponse> {
   return readRpcResponse(apiClient.api.management.agents['protocol-inventory'].$get())
+}
+
+export function getAgentIdentityInventory(): Promise<{
+  identities: AgentIdentity[]
+  pagination: PaginationMetadata
+}> {
+  return fetch('/api/management/agents/identity-inventory', { credentials: 'same-origin' }).then((response) =>
+    readJsonResponse(response),
+  )
+}
+
+export function getAgentAuditEvents(): Promise<{
+  events: AgentAuditEvent[]
+  pagination: PaginationMetadata
+}> {
+  return fetch('/api/management/agent-audit-events', { credentials: 'same-origin' }).then((response) =>
+    readJsonResponse(response),
+  )
+}
+
+export function emergencyRetireAgentIdentity(identityId: string) {
+  return fetch(`/api/management/agent-identities/${encodeURIComponent(identityId)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  }).then((response) => {
+    if (!response.ok) return readJsonResponse<never>(response)
+  })
 }
 
 export function revokeAgent(agentId: string) {

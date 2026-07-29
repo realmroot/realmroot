@@ -15,4 +15,5 @@ export type AgentConfiguration = {
 export interface AppConfig {
   trustedOrigins?: string[]
   securityPolicy?: SecurityPolicy
+  agentIdentityIssuer?: string
 }

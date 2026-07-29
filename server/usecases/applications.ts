@@ -55,7 +55,7 @@ export async function createApplication(
   deps: Deps,
   issuer: string,
   input: CreateApplicationRequest,
-  actorUserId: string,
+  actorUserId: string | null,
 ): Promise<CreateApplicationResponse> {
   const settings = normalizeClientSettings(
     input.clientType,
@@ -270,7 +270,7 @@ export async function listApplicationSecrets(
 export async function rotateApplicationSecret(
   deps: Deps,
   id: string,
-  actorUserId: string,
+  actorUserId: string | null,
 ): Promise<RotateClientSecretResponse> {
   const application = await requireApplication(deps, id)
   if (application.public) {

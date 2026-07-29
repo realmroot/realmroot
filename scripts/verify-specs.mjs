@@ -17,7 +17,7 @@ const specsDir = join(repoRoot, 'specs')
 // crown lives in e2e/; breadcrumbs can appear in any of them.
 const breadcrumbDirs = ['e2e', 'server', 'src', 'shared'].map((dir) => join(repoRoot, dir))
 
-const supportedEntrypoints = new Set(['product-ui', 'restish'])
+const supportedEntrypoints = new Set(['agent-protocol', 'product-ui', 'restish'])
 const scenarios = readScenarios(specsDir)
 const breadcrumbs = readBreadcrumbs(breadcrumbDirs)
 const errors = []

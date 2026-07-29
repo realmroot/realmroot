@@ -6,6 +6,7 @@ import type {
   AccountProfileUpdateInput,
   AccountWalletAddressLinkInput,
 } from '@shared/api/account'
+import type { AgentEnrollmentIntent, AgentIdentity } from '@shared/api/agents'
 import type {
   SecurityPasskeyRegistrationOptionsInput,
   SecurityTotpDisableInput,
@@ -98,6 +99,34 @@ export function listAccountSessions() {
 
 export function listAccountAgents(): Promise<AccountAgentsResponse> {
   return readRpcResponse(apiClient.api.account.agents.$get())
+}
+
+export function listPersonalAgentIdentities(): Promise<{ identities: AgentIdentity[] }> {
+  return fetch('/api/account/agent-identities', { credentials: 'same-origin' }).then((response) =>
+    readJsonResponse<{ identities: AgentIdentity[] }>(response),
+  )
+}
+
+export function getAgentEnrollmentIntent(intentId: string): Promise<AgentEnrollmentIntent> {
+  return fetch(`/api/account/agent-enrollment-intents/${encodeURIComponent(intentId)}`, {
+    credentials: 'same-origin',
+  }).then((response) => readJsonResponse<AgentEnrollmentIntent>(response))
+}
+
+export function approveAgentEnrollmentIntent(intentId: string): Promise<{ identity: AgentIdentity }> {
+  return fetch(`/api/account/agent-enrollment-intents/${encodeURIComponent(intentId)}/approvals`, {
+    method: 'POST',
+    credentials: 'same-origin',
+  }).then((response) => readJsonResponse<{ identity: AgentIdentity }>(response))
+}
+
+export function retirePersonalAgentIdentity(identityId: string) {
+  return fetch(`/api/account/agent-identities/${encodeURIComponent(identityId)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  }).then((response) => {
+    if (!response.ok) return readJsonResponse<never>(response)
+  })
 }
 
 export function revokeAccountAgent(agentId: string) {

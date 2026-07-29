@@ -1,8 +1,32 @@
 import { badRequest, forbidden } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
+import {
+  approveAgentEnrollment,
+  createAdditionalAgentEnrollmentIntent,
+  createAgentEnrollmentIntent,
+  getAgentEnrollmentIntent,
+  listOrganizationAgentIdentities,
+  listPersonalAgentIdentities,
+  recoverAgentIdentity,
+  retireAgentIdentity,
+  revokeAgentIdentityHost,
+} from '@server/usecases/agent-identities'
+import {
+  approveAgentAuthorityApproval,
+  createAgentAuthorityGrant,
+  listAgentAuthorityGrants,
+  revokeAgentAuthorityGrant,
+} from '@server/usecases/agent-tokens'
 import { listAccountAgents, revokeAccountAgent, revokeAccountCapabilityGrant } from '@server/usecases/agents'
 import { revokeConsent } from '@server/usecases/applications'
 import { getConfig } from '@server/usecases/configz'
+import {
+  createExternalAccount,
+  createExternalAccountGrant,
+  createExternalOAuthIntent,
+  listExternalAccounts,
+  revokeExternalAccountGrant,
+} from '@server/usecases/external-accounts'
 import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import {
   accountEmailChangeConfirmSchema,
@@ -11,7 +35,21 @@ import {
   accountProfileUpdateSchema,
   accountWalletAddressLinkSchema,
 } from '@shared/api/account'
+import {
+  agentAuthorityApprovalSchema,
+  agentEnrollmentIntentSchema,
+  createAdditionalAgentEnrollmentIntentRequestSchema,
+  createAgentAuthorityGrantRequestSchema,
+  createAgentEnrollmentIntentRequestSchema,
+} from '@shared/api/agents'
 import { linkAccountRequestSchema, unlinkAccountQuerySchema } from '@shared/api/connectors'
+import {
+  createExternalAccountGrantRequestSchema,
+  createExternalAccountRequestSchema,
+  createExternalOAuthIntentRequestSchema,
+  externalAccountGrantSchema,
+  externalAccountSchema,
+} from '@shared/api/external-accounts'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
@@ -28,7 +66,11 @@ import { toBoundaryError } from '../auth-api'
 import { readJson, readQuery } from '../validation'
 import { accountSecurityRoutes } from './security'
 
-export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: SecurityPolicy) {
+export function accountRoutes(
+  authApi: ManagementAuthApi,
+  securityPolicy?: SecurityPolicy,
+  agentIdentityIssuer?: string,
+) {
   const app = new Hono()
 
   app.use('*', requireAuth())
@@ -322,6 +364,108 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     return c.json(await listAccountAgents(getDeps(c), authContext.user!.id, readQuery(c, paginationQuerySchema)))
   })
 
+  app.get('/agent-identities', async (c) => {
+    return c.json(await listPersonalAgentIdentities(getDeps(c), getAuthContext(c).user!.id))
+  })
+
+  app.get('/organizations/:organizationId/agent-identities', async (c) => {
+    return c.json(
+      await listOrganizationAgentIdentities(getDeps(c), c.req.param('organizationId'), getAuthContext(c).user!.id),
+    )
+  })
+
+  app.post('/agent-enrollment-intents', async (c) => {
+    const intent = await createAgentEnrollmentIntent(
+      getDeps(c),
+      await readJson(c, createAgentEnrollmentIntentRequestSchema),
+      getAuthContext(c).user!.id,
+    )
+    return c.json(intent, 202)
+  })
+
+  app.post('/agent-identities/:identityId/enrollment-intents', async (c) => {
+    const body = await readJson(c, createAdditionalAgentEnrollmentIntentRequestSchema)
+    const intent = await createAdditionalAgentEnrollmentIntent(
+      getDeps(c),
+      c.req.param('identityId'),
+      body.protocolAgentId,
+      getAuthContext(c).user!.id,
+    )
+    return c.json(intent, 202)
+  })
+
+  app.post('/agent-enrollment-intents/:intentId/approvals', async (c) => {
+    const result = await approveAgentEnrollment(
+      getDeps(c),
+      c.req.param('intentId'),
+      agentIdentityIssuer ?? new URL(c.req.url).origin,
+      getAuthContext(c).user!.id,
+    )
+    return c.json(result, 201)
+  })
+
+  app.get('/agent-enrollment-intents/:intentId', async (c) => {
+    const intent = await getAgentEnrollmentIntent(getDeps(c), c.req.param('intentId'), getAuthContext(c).user!.id)
+    return c.json(agentEnrollmentIntentSchema.parse(intent))
+  })
+
+  app.delete('/agent-identities/:identityId/hosts/:protocolAgentId', async (c) => {
+    await revokeAgentIdentityHost(
+      getDeps(c),
+      c.req.param('identityId'),
+      c.req.param('protocolAgentId'),
+      getAuthContext(c).user!.id,
+    )
+    return c.body(null, 204)
+  })
+
+  app.post('/agent-identities/:identityId/recoveries', async (c) => {
+    await recoverAgentIdentity(getDeps(c), c.req.param('identityId'), getAuthContext(c).user!.id)
+    return c.body(null, 202)
+  })
+
+  app.delete('/agent-identities/:identityId', async (c) => {
+    await retireAgentIdentity(getDeps(c), c.req.param('identityId'), getAuthContext(c).user!.id)
+    return c.body(null, 204)
+  })
+
+  app.get('/agent-identities/:identityId/authority-grants', async (c) => {
+    return c.json(await listAgentAuthorityGrants(getDeps(c), c.req.param('identityId'), getAuthContext(c).user!.id))
+  })
+
+  app.post('/agent-identities/:identityId/authority-grants', async (c) => {
+    return c.json(
+      await createAgentAuthorityGrant(
+        getDeps(c),
+        c.req.param('identityId'),
+        await readJson(c, createAgentAuthorityGrantRequestSchema),
+        getAuthContext(c).user!.id,
+      ),
+      201,
+    )
+  })
+
+  app.delete('/agent-identities/:identityId/authority-grants/:grantId', async (c) => {
+    await revokeAgentAuthorityGrant(
+      getDeps(c),
+      c.req.param('identityId'),
+      c.req.param('grantId'),
+      getAuthContext(c).user!.id,
+    )
+    return c.body(null, 204)
+  })
+
+  app.post('/agent-identities/:identityId/authority-grants/:grantId/approvals/:approvalId', async (c) => {
+    const approval = await approveAgentAuthorityApproval(
+      getDeps(c),
+      c.req.param('identityId'),
+      c.req.param('grantId'),
+      c.req.param('approvalId'),
+      getAuthContext(c).user!.id,
+    )
+    return c.json(agentAuthorityApprovalSchema.parse(approval))
+  })
+
   app.delete('/agents/:agentId', async (c) => {
     await revokeAccountAgent(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id)
     return c.body(null, 204)
@@ -329,6 +473,52 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
 
   app.delete('/agent-capability-grants/:grantId', async (c) => {
     await revokeAccountCapabilityGrant(getDeps(c), c.req.param('grantId'), getAuthContext(c).user!.id)
+    return c.body(null, 204)
+  })
+
+  app.get('/external-accounts', async (c) => {
+    const result = await listExternalAccounts(getDeps(c), getAuthContext(c).user!.id)
+    return c.json({ externalAccounts: result.externalAccounts.map((account) => externalAccountSchema.parse(account)) })
+  })
+
+  app.post('/external-accounts', async (c) => {
+    const account = await createExternalAccount(
+      getDeps(c),
+      await readJson(c, createExternalAccountRequestSchema),
+      getAuthContext(c).user!.id,
+    )
+    return c.json(externalAccountSchema.parse(account), 201)
+  })
+
+  app.post('/external-oauth-intents', async (c) => {
+    return c.json(
+      await createExternalOAuthIntent(
+        getDeps(c),
+        await readJson(c, createExternalOAuthIntentRequestSchema),
+        getAuthContext(c).user!.id,
+        agentIdentityIssuer ?? new URL(c.req.url).origin,
+      ),
+      201,
+    )
+  })
+
+  app.post('/external-accounts/:externalAccountId/grants', async (c) => {
+    const grant = await createExternalAccountGrant(
+      getDeps(c),
+      c.req.param('externalAccountId'),
+      await readJson(c, createExternalAccountGrantRequestSchema),
+      getAuthContext(c).user!.id,
+    )
+    return c.json(externalAccountGrantSchema.parse(grant), 201)
+  })
+
+  app.delete('/external-accounts/:externalAccountId/grants/:grantId', async (c) => {
+    await revokeExternalAccountGrant(
+      getDeps(c),
+      c.req.param('externalAccountId'),
+      c.req.param('grantId'),
+      getAuthContext(c).user!.id,
+    )
     return c.body(null, 204)
   })
 

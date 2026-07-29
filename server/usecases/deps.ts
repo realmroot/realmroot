@@ -4,7 +4,10 @@
  * the eventual container must satisfy.
  */
 import type {
+  AgentAuditRepository,
+  AgentIdentityRepository,
   AgentRepository,
+  AgentTokenRepository,
   ApplicationRepository,
   AssetRepository,
   AssetStorage,
@@ -12,8 +15,11 @@ import type {
   ConfigzRepository,
   ConnectorRepository,
   EmailGateway,
+  ExternalAccountRepository,
+  ExternalHttpGateway,
   JwksGateway,
   OnboardingRepository,
+  SecretCipher,
   SecurityRepository,
   TokenExchangeRepository,
   UserRepository,
@@ -23,14 +29,20 @@ import type {
 
 export interface Deps {
   agents: AgentRepository
+  agentAudit: AgentAuditRepository
+  agentIdentities: AgentIdentityRepository
+  agentTokens: AgentTokenRepository
   applications: ApplicationRepository
   assets: AssetRepository
   assetStorage: AssetStorage
   authorization: AuthorizationRepository
   configz: ConfigzRepository
   connectors: ConnectorRepository
+  externalAccounts: ExternalAccountRepository
+  externalHttp: ExternalHttpGateway
   onboarding: OnboardingRepository
   security: SecurityRepository
+  secrets: SecretCipher
   tokenExchange: TokenExchangeRepository
   users: UserRepository
   wallets: WalletRepository

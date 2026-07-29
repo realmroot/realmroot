@@ -55,6 +55,12 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
       jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
     )
   }
+  if (url === '/api/management/agents/identity-inventory') {
+    return Promise.resolve(jsonResponse({ identities: [], pagination: emptyPagination }))
+  }
+  if (url === '/api/management/agent-audit-events') {
+    return Promise.resolve(jsonResponse({ events: [], pagination: emptyPagination }))
+  }
 
   return unexpectedConsoleRequest(input, init)
 }
@@ -66,6 +72,7 @@ export function accountRouteFetch(input: RequestInfo | URL, init?: RequestInit) 
   if (url === '/api/account/linked-accounts') return Promise.resolve(jsonResponse({ accounts: [] }))
   if (url === '/api/account/applications') return Promise.resolve(jsonResponse({ applications: [] }))
   if (url === '/api/account/agents') return Promise.resolve(jsonResponse({ agents: [], pagination: emptyPagination }))
+  if (url === '/api/account/agent-identities') return Promise.resolve(jsonResponse({ identities: [] }))
   if (url === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))
   if (url === '/api/account/security') return Promise.resolve(jsonResponse({ security: accountSecurity }))
   if (url === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))

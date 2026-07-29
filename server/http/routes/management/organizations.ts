@@ -22,7 +22,7 @@ import {
 } from '@shared/api/authorization'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
-import { getAuthContext } from '../../middleware/auth-context'
+import { getActorUserId } from '../../middleware/auth-context'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -86,13 +86,12 @@ managementOrganizationsRoute.get('/:organizationId/invitations', async (c) =>
 )
 
 managementOrganizationsRoute.post('/:organizationId/invitations', async (c) => {
-  const { user } = getAuthContext(c)
   return c.json(
     await createInvitation(
       getDeps(c),
       c.req.param('organizationId'),
       await readJson(c, createInvitationRequestSchema),
-      user?.id ?? 'system',
+      getActorUserId(c),
     ),
     201,
   )

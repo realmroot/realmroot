@@ -7,6 +7,8 @@ export const agentCapabilityNames = [
   'account.profile.read',
   'account.sessions.list',
   'account.authorized_apps.list',
+  'management:read',
+  'management:write',
 ] as const
 
 const agentCapabilityNameSet = new Set<string>(agentCapabilityNames)

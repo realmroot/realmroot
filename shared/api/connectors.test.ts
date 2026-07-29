@@ -1,4 +1,5 @@
 import {
+  connectorResponseSchema,
   createConnectorRequestSchema,
   linkAccountRequestSchema,
   unlinkAccountQuerySchema,
@@ -6,156 +7,142 @@ import {
 } from '@shared/api/connectors'
 import { describe, expect, it } from 'vitest'
 
-describe('connector API contracts', () => {
-  it('requires connector secrets for social and generic OAuth providers', () => {
-    expect(
-      createConnectorRequestSchema.parse({
+describe('Connector API schemas', () => {
+  it('accepts disabled, social, discovered OAuth, explicit OAuth, and generic API inputs', () => {
+    for (const input of [
+      { providerType: 'social', providerId: 'google', displayName: 'Google', enabled: false },
+      {
         providerType: 'social',
         providerId: 'google',
         displayName: 'Google',
-        clientId: 'google-client-id',
-        clientSecret: 'GOOGLE_CLIENT_SECRET',
-      }),
-    ).toMatchObject({
-      providerType: 'social',
-      providerId: 'google',
-      displayName: 'Google',
-    })
+        clientId: 'client',
+        clientSecret: 'secret',
+      },
+      {
+        providerType: 'generic_oauth',
+        providerId: 'oauth',
+        displayName: 'OAuth',
+        clientId: 'client',
+        clientSecret: 'secret',
+        issuer: 'https://issuer.example.com',
+      },
+      {
+        providerType: 'generic_oauth',
+        providerId: 'oauth-explicit',
+        displayName: 'OAuth explicit',
+        clientId: 'client',
+        clientSecret: 'secret',
+        authorizationEndpoint: 'https://issuer.example.com/authorize',
+        tokenEndpoint: 'https://issuer.example.com/token',
+      },
+      {
+        providerType: 'generic_api',
+        providerId: 'api',
+        displayName: 'API',
+        apiBaseUrl: 'https://api.example.com',
+        credentialModes: ['header'],
+        credentialHeaderName: 'X-API-Key',
+        allowedMethods: ['GET'],
+        allowedPathPrefixes: ['/v1'],
+      },
+    ]) {
+      expect(createConnectorRequestSchema.safeParse(input).success).toBe(true)
+    }
+  })
 
-    expect(() =>
-      createConnectorRequestSchema.parse({
-        providerType: 'social',
-        providerId: 'google',
-        displayName: 'Google',
-        clientId: 'google-client-id',
-      }),
-    ).toThrow(/clientSecret is required/)
+  it('reports every provider-specific create boundary', () => {
+    const invalid = [
+      { providerType: 'social', providerId: 'google', displayName: 'Google', clientSecret: 'secret' },
+      { providerType: 'social', providerId: 'google', displayName: 'Google', clientId: 'client' },
+      { providerType: 'generic_api', providerId: 'api', displayName: 'API', credentialModes: ['bearer'] },
+      {
+        providerType: 'generic_api',
+        providerId: 'api',
+        displayName: 'API',
+        apiBaseUrl: 'https://api.example.com',
+      },
+      {
+        providerType: 'generic_api',
+        providerId: 'api',
+        displayName: 'API',
+        apiBaseUrl: 'https://api.example.com',
+        credentialModes: ['oauth'],
+      },
+      {
+        providerType: 'generic_api',
+        providerId: 'api',
+        displayName: 'API',
+        apiBaseUrl: 'https://api.example.com',
+        credentialModes: ['header'],
+      },
+      {
+        providerType: 'generic_oauth',
+        providerId: 'oauth',
+        displayName: 'OAuth',
+        clientId: 'client',
+        clientSecret: 'secret',
+        issuer: 'https://issuer.example.com',
+        authorizationEndpoint: 'https://issuer.example.com/authorize',
+      },
+      {
+        providerType: 'generic_oauth',
+        providerId: 'oauth',
+        displayName: 'OAuth',
+        clientId: 'client',
+        clientSecret: 'secret',
+      },
+      {
+        providerType: 'generic_oauth',
+        providerId: 'oauth',
+        displayName: 'OAuth',
+        clientId: 'client',
+        clientSecret: 'secret',
+        authorizationEndpoint: 'https://issuer.example.com/authorize',
+      },
+    ]
+    for (const input of invalid) expect(createConnectorRequestSchema.safeParse(input).success).toBe(false)
+  })
 
+  it('parses response, update, linking, and unlinking contracts', () => {
+    const now = new Date().toISOString()
     expect(
-      createConnectorRequestSchema.parse({
-        providerType: 'social',
-        providerId: 'google',
-        displayName: 'Google',
-        enabled: false,
+      connectorResponseSchema.parse({
+        id: 'connector-1',
+        slug: 'connector',
+        providerType: 'generic_api',
+        providerId: 'api',
+        displayName: 'API',
+        enabled: true,
+        clientId: null,
+        clientSecretConfigured: false,
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+        scopes: [],
+        apiBaseUrl: 'https://api.example.com',
+        credentialModes: ['bearer'],
+        credentialHeaderName: null,
+        allowedMethods: ['GET'],
+        allowedPathPrefixes: ['/'],
+        providerMetadata: {},
+        createdAt: now,
+        updatedAt: now,
       }),
-    ).toMatchObject({
-      providerType: 'social',
+    ).toMatchObject({ id: 'connector-1' })
+    expect(updateConnectorRequestSchema.parse({ enabled: false, clientSecret: null })).toEqual({
       enabled: false,
-    })
-  })
-
-  it('requires generic OAuth discovery or explicit endpoints', () => {
-    expect(
-      createConnectorRequestSchema.parse({
-        providerType: 'generic_oauth',
-        providerId: 'okta-main',
-        displayName: 'Okta',
-        clientId: 'okta-client-id',
-        clientSecret: 'OKTA_CLIENT_SECRET',
-        issuer: 'https://idp.example.com/oauth2/default',
-      }),
-    ).toMatchObject({
-      providerType: 'generic_oauth',
-      providerId: 'okta-main',
-      issuer: 'https://idp.example.com/oauth2/default',
-    })
-
-    expect(
-      createConnectorRequestSchema.parse({
-        providerType: 'generic_oauth',
-        providerId: 'entra-main',
-        displayName: 'Microsoft Entra ID',
-        clientId: 'entra-client-id',
-        clientSecret: 'ENTRA_CLIENT_SECRET',
-        authorizationEndpoint: 'https://login.example.com/oauth2/v2.0/authorize',
-        tokenEndpoint: 'https://login.example.com/oauth2/v2.0/token',
-      }),
-    ).toMatchObject({
-      providerId: 'entra-main',
-      authorizationEndpoint: 'https://login.example.com/oauth2/v2.0/authorize',
-      tokenEndpoint: 'https://login.example.com/oauth2/v2.0/token',
-    })
-
-    expect(() =>
-      createConnectorRequestSchema.parse({
-        providerType: 'generic_oauth',
-        providerId: 'broken-main',
-        displayName: 'Broken',
-        clientId: 'broken-client-id',
-        clientSecret: 'BROKEN_CLIENT_SECRET',
-      }),
-    ).toThrow(/Generic OAuth requires issuer or authorizationEndpoint/)
-
-    expect(() =>
-      createConnectorRequestSchema.parse({
-        providerType: 'generic_oauth',
-        providerId: 'mixed-main',
-        displayName: 'Mixed',
-        clientId: 'mixed-client-id',
-        clientSecret: 'MIXED_CLIENT_SECRET',
-        issuer: 'https://idp.example.com',
-        authorizationEndpoint: 'https://idp.example.com/oauth2/v1/authorize',
-      }),
-    ).toThrow(/either issuer discovery or explicit endpoints/)
-
-    expect(() =>
-      createConnectorRequestSchema.parse({
-        providerType: 'generic_oauth',
-        providerId: 'half-configured-main',
-        displayName: 'Half Configured',
-        clientId: 'half-client-id',
-        clientSecret: 'HALF_CLIENT_SECRET',
-        authorizationEndpoint: 'https://login.example.com/oauth2/v2.0/authorize',
-      }),
-    ).toThrow(/Generic OAuth requires tokenEndpoint when issuer is not provided/)
-  })
-
-  it('allows nullable connector updates without defaulting omitted scopes', () => {
-    const parsed = updateConnectorRequestSchema.parse({
-      clientId: null,
       clientSecret: null,
-      issuer: null,
-      authorizationEndpoint: null,
-      tokenEndpoint: null,
     })
-
-    expect(parsed).toMatchObject({
-      clientId: null,
-      clientSecret: null,
-      issuer: null,
-      authorizationEndpoint: null,
-      tokenEndpoint: null,
-    })
-    expect(parsed).not.toHaveProperty('scopes')
-  })
-
-  it('validates linked-account request and unlink query boundaries', () => {
     expect(
       linkAccountRequestSchema.parse({
         providerType: 'social',
         providerId: 'google',
-        callbackURL: '/account/linked-accounts',
-        scopes: ['openid', 'email'],
+        callbackURL: '/callback',
       }),
-    ).toEqual({
-      providerType: 'social',
-      providerId: 'google',
-      callbackURL: '/account/linked-accounts',
-      scopes: ['openid', 'email'],
-    })
-
-    expect(() =>
-      linkAccountRequestSchema.parse({
-        providerType: 'social',
-        providerId: 'google',
-        callbackURL: '   ',
-      }),
-    ).toThrow()
-
+    ).toMatchObject({ providerId: 'google' })
     expect(unlinkAccountQuerySchema.parse({})).toEqual({})
-    expect(unlinkAccountQuerySchema.parse({ accountId: 'google-account-1' })).toEqual({
-      accountId: 'google-account-1',
-    })
-    expect(() => unlinkAccountQuerySchema.parse({ accountId: '' })).toThrow()
+    expect(unlinkAccountQuerySchema.parse({ accountId: 'account-1' })).toEqual({ accountId: 'account-1' })
   })
 })

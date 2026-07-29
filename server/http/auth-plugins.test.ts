@@ -13,7 +13,7 @@ describe('auth.test 2', () => {
     vi.restoreAllMocks()
   })
 
-  it('serves mounted AgentAuth discovery and capability catalog without Management API generation [spec: admin-console/agent-discovery]', async () => {
+  it('serves account and coarse management capabilities without generating one capability per API operation [spec: admin-console/agent-discovery]', async () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
@@ -44,8 +44,10 @@ describe('auth.test 2', () => {
       'account.profile.read',
       'account.sessions.list',
       'account.authorized_apps.list',
+      'management:read',
+      'management:write',
     ])
-    expect(capabilities.capabilities.map((capability) => capability.name).join(' ')).not.toContain('management')
+    expect(capabilities.capabilities.map((capability) => capability.name)).not.toContain('management.users.delete')
   })
 
   it('configures organization access control with teams disabled', () => {

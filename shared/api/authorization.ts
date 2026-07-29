@@ -65,7 +65,7 @@ export const invitationResponseSchema = z.object({
   organizationId: z.string(),
   email: z.email(),
   role: z.string(),
-  inviterId: z.string(),
+  inviterId: z.string().nullable(),
   status: z.string(),
   expiresAt: z.string(),
   acceptedAt: z.string().nullable(),

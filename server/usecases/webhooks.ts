@@ -30,7 +30,7 @@ export async function getWebhookEndpoint(deps: Deps, id: string) {
 export async function createWebhookEndpoint(
   deps: Deps,
   input: CreateWebhookEndpointRequest,
-  actorUserId: string,
+  actorUserId: string | null,
 ): Promise<WebhookEndpointSecretResponse> {
   assertEvents(input.events)
   const signingSecret = createSigningSecret()

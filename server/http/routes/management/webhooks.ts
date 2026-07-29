@@ -22,7 +22,7 @@ import {
 } from '@shared/api/webhooks'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
-import { getAuthContext } from '../../middleware/auth-context'
+import { getActorUserId } from '../../middleware/auth-context'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -40,11 +40,10 @@ export function createManagementWebhookRoutes() {
   )
 
   app.post('/endpoints', async (c) => {
-    const { user } = getAuthContext(c)
     const endpoint = await createWebhookEndpoint(
       getDeps(c),
       await readJson(c, createWebhookEndpointRequestSchema),
-      user!.id,
+      getActorUserId(c),
     )
     return c.json(webhookEndpointSecretResponseSchema.parse(endpoint), 201)
   })

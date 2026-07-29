@@ -1,6 +1,9 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
+import type { ProtocolAgentSession } from '@server/usecases/agent-tokens'
+import type { Deps } from '@server/usecases/deps'
 import { systemCliClientId } from '@shared/api/applications'
 import type { Context, MiddlewareHandler } from 'hono'
+import { toBoundaryError } from '../routes/auth-api'
 
 export interface AuthUser {
   id: string
@@ -23,6 +26,14 @@ export interface AuthSessionResult {
 export interface AuthContext {
   session: AuthSessionResult | null
   user: AuthUser | null
+  agent?: {
+    issuer: string
+    subject: string
+    identityId: string
+    protocolAgentId: string
+    hostId: string
+    scopes: string[]
+  } | null
   bearer?: {
     clientId: string | null
     scopes: string[]
@@ -34,6 +45,7 @@ export interface SessionReader {
   api: {
     getSession: (context: { headers: Headers; asResponse: false }) => Promise<AuthSessionResult | null>
     oauth2UserInfo?: (context: { headers: Headers; asResponse: false }) => Promise<OAuthUserInfo>
+    getAgentSession?: (context: { headers: Headers; asResponse: false }) => Promise<ProtocolAgentSession | null>
   }
 }
 
@@ -70,6 +82,65 @@ export function authContext(auth: SessionReader): MiddlewareHandler {
 
 export function getAuthContext(c: Context): AuthContext {
   return c.get('authContext') ?? { session: null, user: null }
+}
+
+export function agentPrincipalAuth(auth: SessionReader): MiddlewareHandler {
+  return async (c, next) => {
+    const current = getAuthContext(c)
+    if (current.session || current.agent) {
+      await next()
+      return
+    }
+    if (!auth.api.getAgentSession) throw unauthorized('Agent authentication is unavailable.')
+
+    const session = await auth.api
+      .getAgentSession({ headers: c.req.raw.headers, asResponse: false })
+      .catch((error: unknown) => {
+        throw toBoundaryError(error)
+      })
+    if (!session) throw unauthorized('An active Agent identity is required.')
+
+    const deps = c.get('deps') as Deps
+    const identity = await deps.agentIdentities.findActiveByProtocolAgent(session.agent.id)
+    const binding = identity?.bindings.find(
+      (candidate) =>
+        candidate.protocolAgentId === session.agent.id &&
+        candidate.hostId === session.agent.hostId &&
+        candidate.status === 'active',
+    )
+    if (!identity || !binding) throw forbidden('The Agent host is not bound to an active Agent identity.')
+
+    const scopes = [
+      ...new Set(
+        (session.agent.capabilityGrants ?? [])
+          .filter((grant) => grant.status === 'active' && grant.capability.startsWith('management:'))
+          .map((grant) => grant.capability),
+      ),
+    ]
+
+    c.set('authContext', {
+      session: null,
+      user: null,
+      agent: {
+        issuer: identity.identity.issuer,
+        subject: identity.identity.subject,
+        identityId: identity.identity.id,
+        protocolAgentId: session.agent.id,
+        hostId: session.agent.hostId,
+        scopes,
+      },
+    })
+    await next()
+  }
+}
+
+export function getActorUserId(c: Context): string | null {
+  return getAuthContext(c).user?.id ?? null
+}
+
+export function isAutomationPrincipal(c: Context) {
+  const auth = getAuthContext(c)
+  return Boolean(auth.bearer || auth.agent)
 }
 
 export function managementBearerAuth(auth: SessionReader): MiddlewareHandler {

@@ -1,0 +1,33 @@
+import { sql } from 'drizzle-orm'
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+
+export const agentAuditEvent = sqliteTable(
+  'agent_audit_event',
+  {
+    id: text('id').primaryKey(),
+    action: text('action').notNull(),
+    result: text('result').notNull(),
+    controllerUserId: text('controller_user_id'),
+    subjectIssuer: text('subject_issuer'),
+    subject: text('subject'),
+    agentIdentityId: text('agent_identity_id'),
+    hostId: text('host_id'),
+    authorityGrantId: text('authority_grant_id'),
+    externalAccountId: text('external_account_id'),
+    externalAccountGrantId: text('external_account_grant_id'),
+    targetOrigin: text('target_origin'),
+    targetPath: text('target_path'),
+    method: text('method'),
+    reasonCode: text('reason_code'),
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
+    occurredAt: integer('occurred_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    index('agentAuditEvent_occurredAt_idx').on(table.occurredAt),
+    index('agentAuditEvent_agentIdentityId_idx').on(table.agentIdentityId),
+    index('agentAuditEvent_externalAccountId_idx').on(table.externalAccountId),
+    index('agentAuditEvent_result_idx').on(table.result),
+  ],
+)

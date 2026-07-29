@@ -19,7 +19,7 @@ import {
 } from '@shared/api/authorization'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
-import { getAuthContext } from '../../middleware/auth-context'
+import { getActorUserId } from '../../middleware/auth-context'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -55,19 +55,16 @@ managementRolesRoute.put('/:roleId/permissions', async (c) => {
 })
 
 managementRolesRoute.post('/assignments/users', async (c) => {
-  const { user } = getAuthContext(c)
-  await assignUserRole(getDeps(c), await readJson(c, assignRoleRequestSchema), user!.id)
+  await assignUserRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
   return c.body(null, 204)
 })
 
 managementRolesRoute.post('/assignments/applications', async (c) => {
-  const { user } = getAuthContext(c)
-  await assignApplicationRole(getDeps(c), await readJson(c, assignRoleRequestSchema), user!.id)
+  await assignApplicationRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
   return c.body(null, 204)
 })
 
 managementRolesRoute.post('/assignments/members', async (c) => {
-  const { user } = getAuthContext(c)
-  await assignMemberRole(getDeps(c), await readJson(c, assignRoleRequestSchema), user!.id)
+  await assignMemberRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
   return c.body(null, 204)
 })

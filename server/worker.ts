@@ -1,4 +1,5 @@
 import { createEmailSender } from '@server/adapters/gateways/email/sender'
+import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
 import { type Auth, createAuth } from '@server/auth'
@@ -31,6 +32,7 @@ export default {
     return createApp(auth, deps, {
       trustedOrigins: config.trustedOrigins,
       securityPolicy,
+      agentIdentityIssuer: config.agentIdentityIssuer,
     }).fetch(request, env, ctx)
   },
 }
@@ -43,7 +45,9 @@ async function ensureSystemClients(rawDb: D1Database, deps: Deps, issuer: string
 
 async function getAuth(env: Env, config: RuntimeConfig): Promise<Auth> {
   const db = createDb(env.DB)
-  const connectors = await loadAuthConnectorConfig(createConnectorRepository(db))
+  const connectors = await loadAuthConnectorConfig(
+    createConnectorRepository(db, createSecretCipher(config.credentialEncryptionKey)),
+  )
   const validAudiences = await loadValidAudiences(env.DB, config.baseURL)
   const storedBuiltInProviders = (await createDrizzleConfigzRepository(db).getSettings())?.metadata?.builtInProviders
   const builtInProviders = managementBuiltInProviderSettingsSchema.parse(

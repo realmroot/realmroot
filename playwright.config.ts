@@ -9,6 +9,8 @@ import { defineConfig, devices } from '@playwright/test'
 // live here — no external dependency, just SPA + Worker + local D1 + auth.
 const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 4189)
 const baseURL = `http://localhost:${PORT}`
+const externalPort = Number(process.env.E2E_EXTERNAL_PORT ?? 4399)
+const externalOrigin = `http://127.0.0.1:${externalPort}`
 const persistStatePath = process.env.CF_PERSIST_STATE_PATH ?? 'e2e/.wrangler/state'
 
 export default defineConfig({
@@ -25,15 +27,26 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
-    command: `vite dev --host 127.0.0.1 --mode e2e --port ${PORT}`,
-    url: `${baseURL}/api/health`,
-    timeout: 120_000,
-    reuseExistingServer: !process.env.CI,
-    env: {
-      CF_WRANGLER_CONFIG: process.env.E2E_WRANGLER_CONFIG ?? 'e2e/wrangler.toml',
-      CF_PERSIST_STATE_PATH: persistStatePath,
-      PLAYWRIGHT_PORT: String(PORT),
+  webServer: [
+    {
+      command: `wrangler dev --config e2e/fake-external.wrangler.toml --ip 127.0.0.1 --port ${String(externalPort)}`,
+      url: `${externalOrigin}/.well-known/openid-configuration`,
+      timeout: 30_000,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        E2E_EXTERNAL_PORT: String(externalPort),
+      },
     },
-  },
+    {
+      command: `vite dev --host 127.0.0.1 --mode e2e --port ${PORT}`,
+      url: `${baseURL}/api/health`,
+      timeout: 120_000,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        CF_WRANGLER_CONFIG: process.env.E2E_WRANGLER_CONFIG ?? 'e2e/wrangler.toml',
+        CF_PERSIST_STATE_PATH: persistStatePath,
+        PLAYWRIGHT_PORT: String(PORT),
+      },
+    },
+  ],
 })

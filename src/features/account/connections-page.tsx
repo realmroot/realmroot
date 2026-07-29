@@ -3,6 +3,7 @@ import { ProviderIcon } from '@/components/provider-icon'
 import { Button } from '@/components/ui/button'
 import {
   linkAccount,
+  retirePersonalAgentIdentity,
   revokeAccountAgent,
   revokeAccountAgentCapabilityGrant,
   revokeApplicationConsent,
@@ -24,6 +25,7 @@ import {
   useAccountConfig,
   useAccountMutation,
   useAccountProfile,
+  useAgentIdentities,
   useConsentedApplications,
   useLinkedAccounts,
 } from './queries'
@@ -47,9 +49,10 @@ export function AccountConnectionsPage() {
   const linkedAccountsQuery = useLinkedAccounts(accountCenter.connectedAccountsEnabled)
   const applicationsQuery = useConsentedApplications(accountCenter.connectedAccountsEnabled)
   const agentsQuery = useAccountAgents()
+  const agentIdentitiesQuery = useAgentIdentities()
   const mutate = useAccountMutation()
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
-  const queries = [configQuery, profileQuery, linkedAccountsQuery, applicationsQuery, agentsQuery]
+  const queries = [configQuery, profileQuery, linkedAccountsQuery, applicationsQuery, agentsQuery, agentIdentitiesQuery]
   const error = queries.find((query) => query.error)?.error
   if (queries.some((query) => query.isLoading)) return <AccountPageLoading config={config} />
   if (error)
@@ -72,9 +75,72 @@ export function AccountConnectionsPage() {
           mutate={mutate}
         />
         <AgentsPanel agents={agentsQuery.data?.agents ?? []} confirm={setConfirmation} mutate={mutate} />
+        <AgentIdentitiesPanel
+          identities={agentIdentitiesQuery.data?.identities ?? []}
+          confirm={setConfirmation}
+          mutate={mutate}
+        />
       </div>
       <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
     </AccountPageShell>
+  )
+}
+
+function AgentIdentitiesPanel({
+  identities,
+  confirm,
+  mutate,
+}: {
+  identities: import('@shared/api/agents').AgentIdentity[]
+  confirm: ConfirmDestructiveHandler
+  mutate: MutationHandler
+}) {
+  return (
+    <section className="accountPanelGroup" aria-label={tt('Agent identities')}>
+      <div className="accountPanelHeader">
+        <PanelTitle
+          description={tt('Stable Agent identities owned by your personal space.')}
+          icon={<Bot size={18} />}
+          title={tt('Agent identities')}
+        />
+      </div>
+      <section className="settingsPanel">
+        <SubsectionTitle
+          title={tt('Stable identities')}
+          description={tt('Issuer and subject remain stable when hosts change.')}
+        />
+        <ItemList
+          empty={tt('No Agent identities yet.')}
+          items={identities.map((identity) => ({
+            id: identity.id,
+            icon: <Bot size={16} />,
+            title: identity.name,
+            meta: `${identity.issuer} · ${identity.subject} · ${identity.bindings.length} ${tt('hosts')}`,
+            status: identity.status,
+            action:
+              identity.status === 'retired' ? undefined : (
+                <Button
+                  onClick={() =>
+                    confirm({
+                      title: tt('Retire Agent identity'),
+                      description: tt('This subject will remain reserved and can never be reused.'),
+                      actionLabel: tt('Retire identity'),
+                      onConfirm: () =>
+                        mutate('Agent identity retired.', () => retirePersonalAgentIdentity(identity.id), {
+                          invalidate: [accountQueryKeys.agentIdentities],
+                        }),
+                    })
+                  }
+                  type="button"
+                  variant="ghost"
+                >
+                  {tt('Retire')}
+                </Button>
+              ),
+          }))}
+        />
+      </section>
+    </section>
   )
 }
 

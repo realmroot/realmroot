@@ -160,8 +160,8 @@ Feature: Admin Console
   Scenario: AgentAuth discovery exposes a narrow delegated protocol surface
     When an agent client requests /.well-known/agent-configuration
     Then FlareAuth advertises delegated mode and device authorization approval
-    And the advertised capabilities are limited to read-only account data
-    And generated Management API capabilities are not exposed
+    And the advertised capabilities include read-only account data and coarse management permissions
+    And individual Management API operations are not generated as AgentAuth capabilities
 
   @entrypoint:product-ui @journey:admin-agent-inventory
   Scenario: Admins can inspect and revoke delegated agent protocol records

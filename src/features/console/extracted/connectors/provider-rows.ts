@@ -11,7 +11,7 @@ export type ConnectorProviderRow = {
   description: string
   icon: string
   providerId: string
-  providerType: 'builtin' | 'social'
+  providerType: 'builtin' | 'social' | 'generic_oauth' | 'generic_api'
   typeLabel: string
   configurationLabel: string
   enabled: boolean
@@ -26,24 +26,49 @@ export function connectorProviderRows(
 ): ConnectorProviderRow[] {
   const connectorsByProvider = new Map(connectors.map((connector) => [connector.providerId, connector]))
   const builtIn = signInSettings?.builtInProviders
-  const socialRows = templates
-    .filter((template) => template.providerType === 'social')
-    .map((template) => {
-      const connector = connectorsByProvider.get(template.providerId) ?? null
-      return {
-        key: `social:${template.providerId}`,
-        displayName: template.displayName,
-        description: 'Social sign-in provider',
-        icon: template.icon,
-        providerId: template.providerId,
-        providerType: 'social' as const,
-        typeLabel: 'Social',
-        configurationLabel: connector?.clientSecretConfigured ? 'Credentials configured' : 'Credentials required',
-        enabled: connector?.enabled ?? false,
-        connector,
-        template,
-      }
-    })
+  const connectorRows = templates.map((template) => {
+    const connector = connectorsByProvider.get(template.providerId) ?? null
+    const generic = template.providerType !== 'social'
+    return {
+      key: `${template.providerType}:${template.providerId}`,
+      displayName: template.displayName,
+      description: connectorDescription(template.providerType),
+      icon: template.icon,
+      providerId: template.providerId,
+      providerType: template.providerType,
+      typeLabel: connectorTypeLabel(template.providerType),
+      configurationLabel: connector
+        ? generic
+          ? 'Boundary configured'
+          : connector.clientSecretConfigured
+            ? 'Credentials configured'
+            : 'Credentials required'
+        : generic
+          ? 'Not configured'
+          : 'Credentials required',
+      enabled: connector?.enabled ?? false,
+      connector,
+      template,
+    }
+  })
+  const unmatchedGenericRows = connectors
+    .filter(
+      (connector) =>
+        connector.providerType !== 'social' && !templates.some((t) => t.providerId === connector.providerId),
+    )
+    .map((connector) => ({
+      key: `${connector.providerType}:${connector.id}`,
+      displayName: connector.displayName,
+      description: connectorDescription(connector.providerType),
+      icon: connector.providerType === 'generic_api' ? 'api' : 'oauth',
+      providerId: connector.providerId,
+      providerType: connector.providerType,
+      typeLabel: connectorTypeLabel(connector.providerType),
+      configurationLabel: 'Boundary configured',
+      enabled: connector.enabled,
+      connector,
+      template: null,
+    }))
   return [
     {
       key: 'builtin:email',
@@ -110,6 +135,19 @@ export function connectorProviderRows(
       connector: null,
       template: null,
     },
-    ...socialRows,
+    ...connectorRows,
+    ...unmatchedGenericRows,
   ]
+}
+
+function connectorTypeLabel(providerType: 'social' | 'generic_oauth' | 'generic_api') {
+  if (providerType === 'generic_oauth') return 'Generic OAuth'
+  if (providerType === 'generic_api') return 'Generic API'
+  return 'Social'
+}
+
+function connectorDescription(providerType: 'social' | 'generic_oauth' | 'generic_api') {
+  if (providerType === 'generic_oauth') return 'Standards-based OAuth/OIDC connector'
+  if (providerType === 'generic_api') return 'Credential-broker API boundary'
+  return 'Social sign-in provider'
 }

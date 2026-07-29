@@ -30,7 +30,7 @@ import {
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
-import { getAuthContext } from '../../middleware/auth-context'
+import { getActorUserId } from '../../middleware/auth-context'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -44,9 +44,8 @@ managementApplicationsRoute.get('/', async (c) => {
 })
 
 managementApplicationsRoute.post('/', async (c) => {
-  const { user } = getAuthContext(c)
   const body = await readJson(c, createApplicationRequestSchema)
-  const application = await createApplication(getDeps(c), issuerFor(c), body, user?.id ?? 'system')
+  const application = await createApplication(getDeps(c), issuerFor(c), body, getActorUserId(c))
   return c.json(application, 201)
 })
 
@@ -96,8 +95,7 @@ managementApplicationsRoute.get('/:applicationId/client-secrets', async (c) => {
 })
 
 managementApplicationsRoute.post('/:applicationId/client-secrets', async (c) => {
-  const { user } = getAuthContext(c)
-  const secret = await rotateApplicationSecret(getDeps(c), c.req.param('applicationId'), user?.id ?? 'system')
+  const secret = await rotateApplicationSecret(getDeps(c), c.req.param('applicationId'), getActorUserId(c))
   return c.json(secret, 201)
 })
 

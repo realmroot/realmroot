@@ -8,6 +8,8 @@ preview_urls = false
 [vars]
 BETTER_AUTH_SECRET = "e2e-local-secret-value-with-enough-entropy-2026"
 BETTER_AUTH_URL = "http://localhost:4189"
+AGENT_IDENTITY_ISSUER = "http://localhost:4189"
+CREDENTIAL_ENCRYPTION_KEY = "e2e-credential-encryption-key-with-enough-entropy-2026"
 TRUSTED_ORIGINS = "http://localhost:4189"
 EMAIL_FROM = "e2e@example.com"
 EMAIL_FROM_NAME = "FlareAuth E2E"
@@ -36,6 +38,10 @@ migrations_dir = "../migrations"
 [[queues.producers]]
 binding = "EMAIL_QUEUE"
 queue = "flareauth-email-e2e"
+
+[[services]]
+binding = "EXTERNAL_HTTP"
+service = "fake-external-platform-e2e"
 
 [observability]
 enabled = false
