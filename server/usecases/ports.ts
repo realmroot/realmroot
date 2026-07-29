@@ -530,6 +530,14 @@ export interface AgentRepository {
   listAgentsForUser(userId: string, page: PaginationInput): Promise<PaginatedResult<AgentRecord>>
   listHostsForAgents(hostIds: string[]): Promise<AgentHostRecord[]>
   listCapabilityGrantsForUser(userId: string): Promise<AgentCapabilityGrantRecord[]>
+  decideApproval(input: {
+    agentId: string
+    userCodeHash: string
+    action: 'approve' | 'deny'
+    capabilities?: string[]
+    userId: string
+    now: Date
+  }): Promise<'approved' | 'denied'>
   revokeAgentForUser(agentId: string, userId: string): Promise<void>
   revokeCapabilityGrantForUser(grantId: string, userId: string): Promise<void>
   revokeAgent(agentId: string): Promise<void>

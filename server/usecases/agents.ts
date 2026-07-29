@@ -105,6 +105,28 @@ export function revokeAccountCapabilityGrant(deps: Deps, grantId: string, userId
   return deps.agents.revokeCapabilityGrantForUser(grantId, userId)
 }
 
+export async function decideAgentApproval(
+  deps: Deps,
+  input: {
+    agentId: string
+    userCode: string
+    action: 'approve' | 'deny'
+    capabilities?: string[]
+  },
+  userId: string,
+) {
+  return {
+    status: await deps.agents.decideApproval({
+      agentId: input.agentId,
+      userCodeHash: await hashAgentUserCode(input.userCode),
+      action: input.action,
+      capabilities: input.capabilities,
+      userId,
+      now: new Date(),
+    }),
+  }
+}
+
 export function revokeAgent(deps: Deps, agentId: string) {
   return deps.agents.revokeAgent(agentId)
 }
@@ -115,6 +137,28 @@ export function revokeAgentHost(deps: Deps, hostId: string) {
 
 export function revokeAgentCapabilityGrant(deps: Deps, grantId: string) {
   return deps.agents.revokeCapabilityGrant(grantId)
+}
+
+async function hashAgentUserCode(userCode: string) {
+  const stripped = userCode.replaceAll(/[^A-Z0-9]/gi, '').toUpperCase()
+  const normalized = stripped.length === 8 ? `${stripped.slice(0, 4)}-${stripped.slice(4)}` : userCode.toUpperCase()
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized))
+  return base64url(new Uint8Array(digest))
+}
+
+function base64url(bytes: Uint8Array) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+  let result = ''
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index]!
+    const second = bytes[index + 1] ?? 0
+    const third = bytes[index + 2] ?? 0
+    result += alphabet[first >> 2]
+    result += alphabet[((first & 0x03) << 4) | (second >> 4)]
+    if (index + 1 < bytes.length) result += alphabet[((second & 0x0f) << 2) | (third >> 6)]
+    if (index + 2 < bytes.length) result += alphabet[third & 0x3f]
+  }
+  return result
 }
 
 function hostSummary(host: Awaited<ReturnType<AgentRepository['listHostsForAgents']>>[number]) {

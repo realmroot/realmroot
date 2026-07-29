@@ -1,6 +1,6 @@
-import { notFound } from '@server/domain/errors'
+import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import type { AgentRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray } from 'drizzle-orm'
 import type { PaginatedResult, PaginationInput } from '../../../shared/api/pagination'
 import type { Database } from '../../db/client'
 import { agent, agentCapabilityGrant, agentHost, approvalRequest } from '../../db/schema'
@@ -55,6 +55,105 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
             eq(agentCapabilityGrant.status, 'active'),
           ),
         )
+    },
+
+    async decideApproval(input) {
+      const [request] = await db
+        .select()
+        .from(approvalRequest)
+        .where(
+          and(
+            eq(approvalRequest.agentId, input.agentId),
+            eq(approvalRequest.method, 'device_authorization'),
+            eq(approvalRequest.status, 'pending'),
+            eq(approvalRequest.userCodeHash, input.userCodeHash),
+            gt(approvalRequest.expiresAt, input.now),
+          ),
+        )
+        .limit(1)
+      if (!request) throw badRequest('Agent approval is invalid, expired, or no longer pending.')
+
+      const [[currentAgent], [host], pendingGrants] = await Promise.all([
+        db.select().from(agent).where(eq(agent.id, input.agentId)).limit(1),
+        request.hostId
+          ? db.select().from(agentHost).where(eq(agentHost.id, request.hostId)).limit(1)
+          : Promise.resolve([]),
+        db
+          .select()
+          .from(agentCapabilityGrant)
+          .where(and(eq(agentCapabilityGrant.agentId, input.agentId), eq(agentCapabilityGrant.status, 'pending'))),
+      ])
+      if (!currentAgent) throw notFound('Agent was not found.')
+      if (currentAgent.userId && currentAgent.userId !== input.userId) {
+        throw forbidden('Agent approval belongs to another controller.')
+      }
+      if (host?.userId && host.userId !== input.userId) {
+        throw forbidden('Agent host belongs to another controller.')
+      }
+
+      const requestedCapabilities = input.capabilities ?? pendingGrants.map((grant) => grant.capability)
+      if (requestedCapabilities.some((capability) => !pendingGrants.some((grant) => grant.capability === capability))) {
+        throw badRequest('Agent approval includes a capability that is not pending.')
+      }
+
+      if (input.action === 'deny') {
+        await db
+          .update(approvalRequest)
+          .set({ status: 'denied', updatedAt: input.now })
+          .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending')))
+        if (pendingGrants.length > 0) {
+          await db
+            .update(agentCapabilityGrant)
+            .set({ status: 'denied', deniedBy: input.userId, updatedAt: input.now })
+            .where(and(eq(agentCapabilityGrant.agentId, input.agentId), eq(agentCapabilityGrant.status, 'pending')))
+        }
+        if (currentAgent.status === 'pending') {
+          await db
+            .update(agent)
+            .set({ status: 'rejected', userId: input.userId, updatedAt: input.now })
+            .where(and(eq(agent.id, input.agentId), eq(agent.status, 'pending')))
+        }
+        return 'denied'
+      }
+
+      const approvedCapabilities = new Set(requestedCapabilities)
+      for (const grant of pendingGrants) {
+        await db
+          .update(agentCapabilityGrant)
+          .set(
+            approvedCapabilities.has(grant.capability)
+              ? { status: 'active', grantedBy: input.userId, updatedAt: input.now }
+              : { status: 'denied', deniedBy: input.userId, updatedAt: input.now },
+          )
+          .where(and(eq(agentCapabilityGrant.id, grant.id), eq(agentCapabilityGrant.status, 'pending')))
+      }
+      if (currentAgent.status === 'pending') {
+        await db
+          .update(agent)
+          .set({
+            status: 'active',
+            userId: input.userId,
+            activatedAt: input.now,
+            updatedAt: input.now,
+          })
+          .where(and(eq(agent.id, input.agentId), eq(agent.status, 'pending')))
+      }
+      if (host?.status === 'pending') {
+        await db
+          .update(agentHost)
+          .set({
+            status: 'active',
+            userId: input.userId,
+            activatedAt: input.now,
+            updatedAt: input.now,
+          })
+          .where(and(eq(agentHost.id, host.id), eq(agentHost.status, 'pending')))
+      }
+      await db
+        .update(approvalRequest)
+        .set({ status: 'approved', updatedAt: input.now })
+        .where(and(eq(approvalRequest.id, request.id), eq(approvalRequest.status, 'pending')))
+      return 'approved'
     },
 
     async revokeAgentForUser(agentId, userId) {
