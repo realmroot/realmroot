@@ -5,11 +5,127 @@ import {
   Field,
   type FormState,
   type SetStateAction,
+  TextArea,
   TextInput,
   tt,
   useId,
 } from '../../console-shared'
 import { connectorFieldLabel, setValue } from '../../helpers/helpers-utils'
+
+export function GenericConnectorFields({
+  form,
+  isExisting,
+  providerType,
+  setForm,
+}: {
+  form: FormState
+  isExisting: boolean
+  providerType: 'generic_oauth' | 'generic_api'
+  setForm: (value: SetStateAction<FormState>) => void
+}) {
+  return (
+    <div className="grid gap-4">
+      {providerType === 'generic_oauth' ? (
+        <>
+          <ConnectorTextField form={form} field="clientId" label="Client ID" setForm={setForm} required />
+          <ConnectorTextField
+            form={form}
+            field="clientSecret"
+            help={isExisting ? 'Leave blank to keep the current secret.' : undefined}
+            label="Client Secret"
+            setForm={setForm}
+            required={!isExisting}
+            secret
+          />
+          <ConnectorTextField form={form} field="issuer" label="OIDC issuer" setForm={setForm} />
+          <ConnectorTextField
+            form={form}
+            field="authorizationEndpoint"
+            label="Authorization endpoint"
+            setForm={setForm}
+          />
+          <ConnectorTextField form={form} field="tokenEndpoint" label="Token endpoint" setForm={setForm} />
+          <ConnectorTextField form={form} field="userInfoEndpoint" label="UserInfo endpoint" setForm={setForm} />
+        </>
+      ) : null}
+      <ConnectorTextField
+        form={form}
+        field="apiBaseUrl"
+        label="API base URL"
+        setForm={setForm}
+        required={providerType === 'generic_api'}
+      />
+      <ConnectorTextField
+        form={form}
+        field="credentialModes"
+        help={providerType === 'generic_oauth' ? 'Use oauth.' : 'Space-separated: bearer header.'}
+        label="Credential modes"
+        setForm={setForm}
+        required
+      />
+      <ConnectorTextField
+        form={form}
+        field="credentialHeaderName"
+        help="Required only when header mode is enabled."
+        label="Credential header name"
+        setForm={setForm}
+      />
+      <ConnectorTextField
+        form={form}
+        field="allowedMethods"
+        help="Space-separated HTTP methods."
+        label="Allowed methods"
+        setForm={setForm}
+        required
+      />
+      <Field help="One relative path prefix per line." label="Allowed path prefixes">
+        <TextArea
+          onChange={(event) => setValue(setForm, 'allowedPathPrefixes', event.target.value)}
+          required
+          value={form.allowedPathPrefixes ?? ''}
+        />
+      </Field>
+      {providerType === 'generic_oauth' ? (
+        <ConnectorTextField
+          form={form}
+          field="scopes"
+          help="Space-separated OAuth scopes."
+          label="Scopes"
+          setForm={setForm}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function ConnectorTextField({
+  field,
+  form,
+  help,
+  label,
+  required,
+  secret,
+  setForm,
+}: {
+  field: string
+  form: FormState
+  help?: string
+  label: string
+  required?: boolean
+  secret?: boolean
+  setForm: (value: SetStateAction<FormState>) => void
+}) {
+  return (
+    <Field help={help} label={label}>
+      <TextInput
+        onChange={(event) => setValue(setForm, field, event.target.value)}
+        required={required}
+        type={secret ? 'password' : 'text'}
+        value={form[field] ?? ''}
+      />
+    </Field>
+  )
+}
 
 export function CallbackUrlField({ value }: { value: string }) {
   const id = useId()

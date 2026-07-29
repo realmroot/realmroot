@@ -54,6 +54,8 @@ describe('validateEnv', () => {
     expect(validateEnv(env, 'https://tenant.example.com/api/health')).toEqual({
       authSecret: 'secret',
       baseURL: 'https://tenant.example.com',
+      agentIdentityIssuer: 'https://tenant.example.com',
+      credentialEncryptionKey: 'credential-encryption-key-for-tests-2026',
       emailFrom: 'noreply@example.com',
       emailFromName: undefined,
       trustedOrigins: ['https://tenant.example.com', 'https://admin.example.com'],
@@ -177,6 +179,7 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     ASSET_BUCKET: {},
     EMAIL_QUEUE: {},
     BETTER_AUTH_SECRET: 'secret',
+    CREDENTIAL_ENCRYPTION_KEY: 'credential-encryption-key-for-tests-2026',
     EMAIL_FROM: 'noreply@example.com',
     ...overrides,
   } as unknown as Env

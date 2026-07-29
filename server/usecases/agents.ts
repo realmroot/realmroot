@@ -3,12 +3,14 @@ import type { Deps } from '@server/usecases/deps'
 import type { AgentRepository } from '@server/usecases/ports'
 import type { AccountAgent, AccountAgentsResponse } from '@shared/api/agents'
 import { type PaginationInput, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
+import { requireActiveAgentIdentity } from './agent-identities'
 
 /**
  * Minimal mirror of better-auth's AgentSession, capturing only the fields this
  * usecase reads. Keeps the usecase free of the @better-auth/agent-auth import.
  */
 interface AgentSession {
+  agent: { id: string }
   user: { id: string }
 }
 
@@ -20,6 +22,7 @@ export async function executeReadOnlyCapability(
     agentSession: AgentSession
   },
 ) {
+  await requireActiveAgentIdentity(deps, input.agentSession.agent.id)
   const userId = input.agentSession.user.id
 
   if (input.capability === 'account.profile.read') {

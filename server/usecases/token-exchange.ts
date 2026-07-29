@@ -222,7 +222,7 @@ export async function introspectToken(
   // client; as the authorization server we report client_id so resource servers
   // can authorize the runner.
   const oauthRow = await deps.tokenExchange.findOAuthAccessTokenByHash(tokenHash)
-  if (oauthRow && oauthRow.userId && oauthRow.expiresAt.getTime() > Date.now()) {
+  if (oauthRow?.userId && oauthRow.expiresAt.getTime() > Date.now()) {
     return {
       active: true,
       sub: oauthRow.userId,

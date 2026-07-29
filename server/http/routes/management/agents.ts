@@ -1,3 +1,4 @@
+import { emergencyRetireAgentIdentity, listAllAgentIdentities } from '@server/usecases/agent-identities'
 import {
   listAgentApprovalRequests,
   listAgentCapabilityGrants,
@@ -21,6 +22,7 @@ import type {
   AgentProtocolInventoryResponse,
   AgentProtocolPage,
 } from '@shared/api/agents'
+import { agentAuditEventSchema, agentIdentitySchema } from '@shared/api/agents'
 import { type PaginatedResult, paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
@@ -29,7 +31,11 @@ import { readQuery } from '../validation'
 
 export const managementAgentsRoute = new Hono()
 
-managementAgentsRoute.use('*', requireAdmin())
+managementAgentsRoute.use('/agents/*', requireAdmin())
+managementAgentsRoute.use('/agent-audit-events', requireAdmin())
+managementAgentsRoute.use('/agent-identities/*', requireAdmin())
+managementAgentsRoute.use('/agent-hosts/*', requireAdmin())
+managementAgentsRoute.use('/agent-capability-grants/*', requireAdmin())
 
 managementAgentsRoute.get('/agents/protocol-inventory', async (c) => {
   const query = readQuery(c, paginationQuerySchema)
@@ -47,6 +53,29 @@ managementAgentsRoute.get('/agents/protocol-inventory', async (c) => {
     capabilityGrants: toProtocolPage(capabilityGrants, toCapabilityGrantResponse),
     approvalRequests: toProtocolPage(approvalRequests, toApprovalRequestResponse),
   } satisfies AgentProtocolInventoryResponse)
+})
+
+managementAgentsRoute.get('/agents/identity-inventory', async (c) => {
+  const query = readQuery(c, paginationQuerySchema)
+  const result = await listAllAgentIdentities(getDeps(c), query)
+  return c.json({
+    identities: result.items.map((identity) => agentIdentitySchema.parse(identity)),
+    pagination: paginationMetadata(result),
+  })
+})
+
+managementAgentsRoute.get('/agent-audit-events', async (c) => {
+  const query = readQuery(c, paginationQuerySchema)
+  const result = await getDeps(c).agentAudit.list(query)
+  return c.json({
+    events: result.items.map((event) => agentAuditEventSchema.parse(event)),
+    pagination: paginationMetadata({ ...query, total: result.total }),
+  })
+})
+
+managementAgentsRoute.delete('/agent-identities/:identityId', async (c) => {
+  await emergencyRetireAgentIdentity(getDeps(c), c.req.param('identityId'))
+  return c.body(null, 204)
 })
 
 managementAgentsRoute.delete('/agents/:agentId', async (c) => {

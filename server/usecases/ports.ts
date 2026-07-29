@@ -285,6 +285,11 @@ export interface ConnectorRecord {
   userInfoEndpoint: string | null
   jwksEndpoint: string | null
   scopes: string[] | null
+  apiBaseUrl: string | null
+  credentialModes: string[] | null
+  credentialHeaderName: string | null
+  allowedMethods: string[] | null
+  allowedPathPrefixes: string[] | null
   attributeMapping: Record<string, string> | null
   providerMetadata: Record<string, unknown> | null
   createdAt: Date
@@ -306,6 +311,11 @@ export interface ConnectorRecordInput {
   userInfoEndpoint?: string | null
   jwksEndpoint?: string | null
   scopes?: string[] | null
+  apiBaseUrl?: string | null
+  credentialModes?: string[] | null
+  credentialHeaderName?: string | null
+  allowedMethods?: string[] | null
+  allowedPathPrefixes?: string[] | null
   attributeMapping?: Record<string, string> | null
   providerMetadata?: Record<string, unknown> | null
   createdAt?: Date
@@ -320,6 +330,122 @@ export interface ConnectorRepository {
   create(input: ConnectorRecordInput): Promise<ConnectorRecord>
   update(id: string, input: Partial<ConnectorRecordInput>): Promise<ConnectorRecord | null>
   delete(id: string): Promise<void>
+}
+
+export interface SecretCipher {
+  seal(plaintext: string, context: string): Promise<string>
+  open(envelope: string, context: string): Promise<string>
+}
+
+export interface ExternalHttpGateway {
+  fetch(request: Request): Promise<Response>
+}
+
+export interface AgentAuditEventRecord {
+  id: string
+  action: string
+  result: string
+  controllerUserId: string | null
+  subjectIssuer: string | null
+  subject: string | null
+  agentIdentityId: string | null
+  hostId: string | null
+  authorityGrantId: string | null
+  externalAccountId: string | null
+  externalAccountGrantId: string | null
+  targetOrigin: string | null
+  targetPath: string | null
+  method: string | null
+  reasonCode: string | null
+  metadata: Record<string, unknown> | null
+  occurredAt: Date
+}
+
+export interface AgentAuditRepository {
+  append(input: AgentAuditEventRecord): Promise<void>
+  list(page: PaginationInput): Promise<PaginatedResult<AgentAuditEventRecord>>
+}
+
+export interface ExternalAccountRecord {
+  id: string
+  connectorId: string
+  ownerUserId: string | null
+  ownerOrganizationId: string | null
+  ownerAgentIdentityId: string | null
+  externalSubject: string | null
+  displayName: string
+  status: string
+  metadata: Record<string, unknown> | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ExternalCredentialRecord {
+  id: string
+  externalAccountId: string
+  kind: string
+  encryptedPayload: string
+  status: string
+  expiresAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ExternalAccountGrantRecord {
+  id: string
+  externalAccountId: string
+  agentIdentityId: string
+  scopes: string[]
+  allowedMethods: string[]
+  allowedPathPrefixes: string[]
+  status: string
+  grantedByUserId: string
+  expiresAt: Date | null
+  revokedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ExternalOAuthIntentRecord {
+  id: string
+  stateHash: string
+  connectorId: string
+  ownerUserId: string
+  agentIdentityId: string | null
+  ownerOrganizationId: string | null
+  displayName: string
+  scopes: string[]
+  encryptedPkceVerifier: string
+  status: string
+  expiresAt: Date
+  completedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ExternalAccountRepository {
+  createAccountWithCredential(
+    account: ExternalAccountRecord,
+    credential: ExternalCredentialRecord,
+  ): Promise<{ account: ExternalAccountRecord; credential: ExternalCredentialRecord }>
+  listByOwnerUser(
+    userId: string,
+  ): Promise<Array<{ account: ExternalAccountRecord; credential: ExternalCredentialRecord }>>
+  listByOwnerAgents(
+    agentIdentityIds: string[],
+  ): Promise<Array<{ account: ExternalAccountRecord; credential: ExternalCredentialRecord }>>
+  findAccount(id: string): Promise<ExternalAccountRecord | null>
+  findCredential(externalAccountId: string): Promise<ExternalCredentialRecord | null>
+  updateCredential(
+    id: string,
+    input: { encryptedPayload: string; expiresAt: Date | null; updatedAt: Date },
+  ): Promise<ExternalCredentialRecord | null>
+  createGrant(input: ExternalAccountGrantRecord): Promise<ExternalAccountGrantRecord>
+  findGrant(id: string): Promise<ExternalAccountGrantRecord | null>
+  findActiveGrant(externalAccountId: string, agentIdentityId: string): Promise<ExternalAccountGrantRecord | null>
+  revokeGrant(id: string, now: Date): Promise<boolean>
+  createOAuthIntent(input: ExternalOAuthIntentRecord): Promise<ExternalOAuthIntentRecord>
+  consumeOAuthIntent(stateHash: string, now: Date): Promise<ExternalOAuthIntentRecord | null>
 }
 
 // --- agents -----------------------------------------------------------------
@@ -408,6 +534,153 @@ export interface AgentRepository {
   revokeAgent(agentId: string): Promise<void>
   revokeHost(hostId: string): Promise<void>
   revokeCapabilityGrant(grantId: string): Promise<void>
+}
+
+export interface AgentIdentityRecord {
+  id: string
+  issuer: string
+  subject: string
+  name: string
+  ownerUserId: string | null
+  ownerOrganizationId: string | null
+  status: string
+  retiredAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AgentIdentityBindingRecord {
+  id: string
+  agentIdentityId: string
+  protocolAgentId: string
+  hostId: string
+  status: string
+  boundAt: Date
+  revokedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AgentEnrollmentIntentRecord {
+  id: string
+  agentIdentityId: string | null
+  requestedName: string | null
+  ownerUserId: string | null
+  ownerOrganizationId: string | null
+  protocolAgentId: string
+  status: string
+  createdByUserId: string
+  approvedByUserId: string | null
+  expiresAt: Date
+  approvedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AgentIdentityAggregate {
+  identity: AgentIdentityRecord
+  bindings: AgentIdentityBindingRecord[]
+}
+
+export interface AgentIdentityRepository {
+  listPersonal(userId: string): Promise<AgentIdentityAggregate[]>
+  listOrganization(organizationId: string): Promise<AgentIdentityAggregate[]>
+  listAll(page: PaginationInput): Promise<PaginatedResult<AgentIdentityAggregate>>
+  findIdentity(id: string): Promise<AgentIdentityAggregate | null>
+  findIntent(id: string): Promise<AgentEnrollmentIntentRecord | null>
+  findProtocolAgent(id: string): Promise<AgentRecord | null>
+  findBindingByProtocolAgent(id: string): Promise<AgentIdentityBindingRecord | null>
+  findActiveByProtocolAgent(id: string): Promise<AgentIdentityAggregate | null>
+  createIdentity(input: {
+    identity: AgentIdentityRecord
+    binding: Omit<AgentIdentityBindingRecord, 'hostId'>
+  }): Promise<AgentIdentityAggregate>
+  createIntent(input: AgentEnrollmentIntentRecord): Promise<AgentEnrollmentIntentRecord>
+  approveIntent(input: {
+    intentId: string
+    identity: AgentIdentityRecord | null
+    binding: Omit<AgentIdentityBindingRecord, 'hostId'>
+    approvedByUserId: string
+    approvedAt: Date
+  }): Promise<AgentIdentityAggregate>
+  revokeBinding(identityId: string, protocolAgentId: string, now: Date): Promise<boolean>
+  recoverIdentity(identityId: string, now: Date): Promise<boolean>
+  retireIdentity(identityId: string, now: Date): Promise<boolean>
+}
+
+export interface AgentAuthorityGrantRecord {
+  id: string
+  agentIdentityId: string
+  mode: string
+  subjectType: string
+  subjectId: string
+  audience: string
+  scopes: string[]
+  constraints: Record<string, unknown> | null
+  useCount: number
+  status: string
+  grantedByUserId: string
+  expiresAt: Date | null
+  revokedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AgentAccessTokenRecord {
+  id: string
+  tokenHash: string
+  agentIdentityId: string
+  bindingId: string
+  protocolAgentId: string
+  grantId: string
+  subjectIssuer: string
+  subject: string
+  actor: Record<string, unknown>
+  audience: string
+  scopes: string[]
+  confirmationJkt: string
+  expiresAt: Date
+  revokedAt: Date | null
+  createdAt: Date
+}
+
+export interface AgentSigningKeyRecord {
+  id: string
+  algorithm: string
+  publicJwk: Record<string, unknown>
+  encryptedPrivateJwk: string
+  createdAt: Date
+}
+
+export interface AgentAuthorityApprovalRecord {
+  id: string
+  grantId: string
+  bindingId: string
+  requestedScopes: string[]
+  status: string
+  approvedByUserId: string | null
+  expiresAt: Date
+  approvedAt: Date | null
+  consumedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AgentTokenRepository {
+  createGrant(input: AgentAuthorityGrantRecord): Promise<AgentAuthorityGrantRecord>
+  listGrants(agentIdentityId: string): Promise<AgentAuthorityGrantRecord[]>
+  findGrant(id: string): Promise<AgentAuthorityGrantRecord | null>
+  revokeGrant(id: string, now: Date): Promise<boolean>
+  consumeDpopJti(input: { jtiHash: string; keyThumbprint: string; expiresAt: Date; createdAt: Date }): Promise<boolean>
+  storeAccessToken(input: AgentAccessTokenRecord): Promise<void>
+  findAccessTokenByHash(tokenHash: string): Promise<AgentAccessTokenRecord | null>
+  findSigningKey(): Promise<AgentSigningKeyRecord | null>
+  createSigningKey(input: AgentSigningKeyRecord): Promise<AgentSigningKeyRecord>
+  consumeGrantUse(id: string, maxUses: number): Promise<boolean>
+  createApproval(input: AgentAuthorityApprovalRecord): Promise<AgentAuthorityApprovalRecord>
+  findApproval(id: string): Promise<AgentAuthorityApprovalRecord | null>
+  approveApproval(id: string, userId: string, now: Date): Promise<AgentAuthorityApprovalRecord | null>
+  consumeApproval(id: string, grantId: string, bindingId: string, now: Date): Promise<boolean>
 }
 
 // --- configz ----------------------------------------------------------------

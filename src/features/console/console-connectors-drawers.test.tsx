@@ -393,4 +393,45 @@ describe('console connectors built-in drawers', () => {
       expect(requests.some((r) => r.method === 'PATCH' && r.url.startsWith('/api/management/connectors'))).toBe(true)
     })
   })
+
+  it('shows and updates an arbitrary generic API Connector boundary', async () => {
+    const generic = {
+      ...connector,
+      id: 'connector-build',
+      providerId: 'build-api',
+      providerType: 'generic_api',
+      displayName: 'Build API',
+      apiBaseUrl: 'https://build.example.com',
+      credentialModes: ['header'],
+      credentialHeaderName: 'X-API-Key',
+      allowedMethods: ['GET'],
+      allowedPathPrefixes: ['/v1/builds'],
+    }
+    const requests = mountConnectors({ connectors: [generic] })
+
+    await openProvider(/Build API.*Generic API.*Boundary configured.*Enabled/)
+    expect(await screen.findByRole('heading', { name: 'Build API' })).toBeTruthy()
+    const save = await screen.findByRole('button', { name: 'Save' })
+    expect(screen.getByLabelText('API base URL')).toHaveProperty('value', 'https://build.example.com')
+    expect(screen.getByLabelText('Credential modes')).toHaveProperty('value', 'header')
+    fireEvent.change(screen.getByLabelText('Allowed methods'), { target: { value: 'GET POST' } })
+    fireEvent.change(screen.getByLabelText('Allowed path prefixes'), {
+      target: { value: '/v1/builds\n/v1/jobs' },
+    })
+    fireEvent.click(save)
+
+    await waitFor(() =>
+      expect(requests).toContainEqual(
+        expect.objectContaining({
+          method: 'PATCH',
+          body: expect.objectContaining({
+            apiBaseUrl: 'https://build.example.com',
+            credentialModes: ['header'],
+            allowedMethods: ['GET', 'POST'],
+            allowedPathPrefixes: ['/v1/builds', '/v1/jobs'],
+          }),
+        }),
+      ),
+    )
+  })
 })

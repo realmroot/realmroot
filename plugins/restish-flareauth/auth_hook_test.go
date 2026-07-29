@@ -1,0 +1,130 @@
+package main
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/rest-sh/restish/v2/plugin"
+)
+
+func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
+	output, err := authenticateRequest(plugin.AuthHookInput{}, &memoryStateStore{}, roundTripFunc(nil), &promptRecorder{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Request != nil {
+		t.Fatalf("unexpected request update: %#v", output.Request)
+	}
+}
+
+func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
+	requests := 0
+	states := &memoryStateStore{}
+	prompt := &promptRecorder{}
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		switch requests {
+		case 1:
+			return jsonResponse(200, map[string]any{"agent_identity_issuer": "https://auth.example.com"}), nil
+		case 2:
+			return jsonResponse(200, map[string]any{
+				"agent_id": "agent-123",
+				"host_id":  "host-123",
+				"approval": map[string]any{
+					"verification_uri_complete": "https://auth.example.com/agent/approve?code=abc",
+					"expires_in":                600,
+					"interval":                  1,
+				},
+			}), nil
+		case 3:
+			return jsonResponse(200, map[string]any{"status": "active"}), nil
+		case 4:
+			return jsonResponse(201, map[string]any{
+				"identity": map[string]any{"issuer": "https://auth.example.com", "subject": "agt_123"},
+			}), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
+			return nil, nil
+		}
+	})
+	input := plugin.AuthHookInput{
+		API:     "flareauth",
+		Profile: "default",
+		Params:  map[string]string{"provider": authProvider},
+		Request: plugin.HookRequest{Method: "GET", URI: "https://auth.example.com/api/whoami"},
+	}
+
+	output, err := authenticateRequest(input, states, client, prompt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorization := output.Request.Headers["Authorization"].(string)
+	if !strings.HasPrefix(authorization, "Bearer ") {
+		t.Fatalf("missing AgentAuth proof: %q", authorization)
+	}
+	if prompt.uri != "https://auth.example.com/agent/approve?code=abc" {
+		t.Fatalf("approval URI = %q", prompt.uri)
+	}
+	if states.state.Identity == nil || states.state.Identity.Subject != "agt_123" {
+		t.Fatalf("identity was not persisted: %#v", states.state.Identity)
+	}
+
+	if _, err := authenticateRequest(input, states, client, prompt); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 4 {
+		t.Fatalf("second request repeated enrollment; requests = %d", requests)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) Do(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
+
+type promptRecorder struct {
+	uri string
+}
+
+func (p *promptRecorder) Show(uri string) error {
+	p.uri = uri
+	return nil
+}
+
+func jsonResponse(status int, body any) *http.Response {
+	encoded, _ := json.Marshal(body)
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(string(encoded))),
+		Header:     make(http.Header),
+	}
+}
+
+type memoryStateStore struct {
+	state  agentState
+	exists bool
+}
+
+func (s *memoryStateStore) Create(_ agentTarget, state agentState) (string, error) {
+	s.state = state
+	s.exists = true
+	return "/private/agent.json", nil
+}
+
+func (s *memoryStateStore) Load(_ agentTarget) (agentState, error) {
+	if !s.exists {
+		return agentState{}, os.ErrNotExist
+	}
+	return s.state, nil
+}
+
+func (s *memoryStateStore) Update(_ agentTarget, state agentState) error {
+	s.state = state
+	s.exists = true
+	return nil
+}

@@ -90,6 +90,7 @@ describe('account pages', () => {
         '/api/account/linked-accounts',
         '/api/account/applications',
         '/api/account/agents',
+        '/api/account/agent-identities',
       ]),
     )
   })

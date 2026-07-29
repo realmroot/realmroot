@@ -2,8 +2,17 @@ import {
   account,
   accountCenterSetting,
   agent,
+  agentAccessToken,
+  agentAuditEvent,
+  agentAuthorityApproval,
+  agentAuthorityGrant,
   agentCapabilityGrant,
+  agentDpopJti,
+  agentEnrollmentIntent,
   agentHost,
+  agentIdentity,
+  agentIdentityBinding,
+  agentSigningKey,
   apiPermission,
   apiResource,
   apiScope,
@@ -18,6 +27,10 @@ import {
   deploymentSetting,
   deviceCode,
   emailServiceConfig,
+  externalAccount,
+  externalAccountGrant,
+  externalCredential,
+  externalOAuthIntent,
   identityProviderConnector,
   invitation,
   jwks,
@@ -220,6 +233,134 @@ describe('schema.test 1', () => {
     )
   })
 
+  it('models stable Agent identities without changing AgentAuth host records', () => {
+    expect(columnNames(agentHost)).not.toContain('agent_identity_id')
+    expect(indexNames(agentIdentity)).toEqual(
+      expect.arrayContaining([
+        'agentIdentity_issuer_subject_unique',
+        'agentIdentity_ownerUserId_idx',
+        'agentIdentity_ownerOrganizationId_idx',
+      ]),
+    )
+    expect(indexNames(agentIdentityBinding)).toContain('agentIdentityBinding_protocolAgentId_unique')
+    expect(foreignKeyReferences(agentIdentityBinding)).toEqual(
+      expect.arrayContaining([
+        {
+          columns: ['agent_identity_id'],
+          foreignColumns: ['id'],
+          foreignTable: 'agent_identity',
+          onDelete: 'restrict',
+        },
+        {
+          columns: ['protocol_agent_id'],
+          foreignColumns: ['id'],
+          foreignTable: 'agent',
+          onDelete: 'restrict',
+        },
+      ]),
+    )
+    expect(indexNames(agentEnrollmentIntent)).toEqual(
+      expect.arrayContaining([
+        'agentEnrollmentIntent_agentIdentityId_idx',
+        'agentEnrollmentIntent_protocolAgentId_idx',
+        'agentEnrollmentIntent_status_idx',
+      ]),
+    )
+  })
+
+  it('binds Agent authority, access tokens, and replay state to stable identities', () => {
+    expect(indexNames(agentAuthorityGrant)).toEqual(
+      expect.arrayContaining([
+        'agentAuthorityGrant_agentIdentityId_idx',
+        'agentAuthorityGrant_status_idx',
+        'agentAuthorityGrant_expiresAt_idx',
+      ]),
+    )
+    expect(indexNames(agentAccessToken)).toEqual(
+      expect.arrayContaining([
+        'agentAccessToken_agentIdentityId_idx',
+        'agentAccessToken_bindingId_idx',
+        'agentAccessToken_grantId_idx',
+        'agentAccessToken_expiresAt_idx',
+      ]),
+    )
+    expect(getTableConfig(agentAccessToken).columns.find((column) => column.name === 'token_hash')).toMatchObject({
+      isUnique: true,
+    })
+    expect(getTableConfig(agentDpopJti).columns.find((column) => column.name === 'jti_hash')).toMatchObject({
+      primary: true,
+    })
+    expect(columnNames(agentDpopJti)).toEqual(
+      expect.arrayContaining(['jti_hash', 'key_thumbprint', 'expires_at', 'created_at']),
+    )
+    expect(foreignKeyReferences(agentAccessToken)).toEqual(
+      expect.arrayContaining([
+        {
+          columns: ['agent_identity_id'],
+          foreignColumns: ['id'],
+          foreignTable: 'agent_identity',
+          onDelete: 'restrict',
+        },
+        {
+          columns: ['binding_id'],
+          foreignColumns: ['id'],
+          foreignTable: 'agent_identity_binding',
+          onDelete: 'restrict',
+        },
+        {
+          columns: ['grant_id'],
+          foreignColumns: ['id'],
+          foreignTable: 'agent_authority_grant',
+          onDelete: 'restrict',
+        },
+      ]),
+    )
+  })
+
+  it('separates signing, credential custody, grants, OAuth state, and audit storage', () => {
+    expect(columnNames(agentSigningKey)).toEqual(
+      expect.arrayContaining(['id', 'algorithm', 'public_jwk', 'encrypted_private_jwk', 'created_at']),
+    )
+    expect(indexNames(agentAuthorityApproval)).toEqual(
+      expect.arrayContaining([
+        'agentAuthorityApproval_grantId_idx',
+        'agentAuthorityApproval_status_idx',
+        'agentAuthorityApproval_expiresAt_idx',
+      ]),
+    )
+    expect(indexNames(externalAccount)).toEqual(
+      expect.arrayContaining([
+        'externalAccount_connectorId_idx',
+        'externalAccount_ownerUserId_idx',
+        'externalAccount_ownerOrganizationId_idx',
+        'externalAccount_ownerAgentIdentityId_idx',
+      ]),
+    )
+    expect(indexNames(externalCredential)).toContain('externalCredential_externalAccountId_unique')
+    expect(indexNames(externalAccountGrant)).toEqual(
+      expect.arrayContaining([
+        'externalAccountGrant_account_agent_unique',
+        'externalAccountGrant_agentIdentityId_idx',
+        'externalAccountGrant_status_idx',
+      ]),
+    )
+    expect(indexNames(externalOAuthIntent)).toEqual(
+      expect.arrayContaining([
+        'externalOAuthIntent_connectorId_idx',
+        'externalOAuthIntent_status_idx',
+        'externalOAuthIntent_expiresAt_idx',
+      ]),
+    )
+    expect(indexNames(agentAuditEvent)).toEqual(
+      expect.arrayContaining([
+        'agentAuditEvent_occurredAt_idx',
+        'agentAuditEvent_agentIdentityId_idx',
+        'agentAuditEvent_externalAccountId_idx',
+        'agentAuditEvent_result_idx',
+      ]),
+    )
+  })
+
   it('keeps Better Auth AgentAuth plugin tables compatible with delegated mode', () => {
     expect(getTableConfig(agentHost).name).toBe('agent_host')
     expect(columnNames(agentHost)).toEqual(
@@ -393,6 +534,9 @@ const _schemaTables = [
   agentHost,
   agent,
   agentCapabilityGrant,
+  agentAuthorityGrant,
+  agentAccessToken,
+  agentDpopJti,
   approvalRequest,
   uploadedAsset,
   organization,

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiRequestError } from '@/lib/api'
 import {
-  approveAgentCapability,
   approveDeviceCode,
+  decideAgentCapability,
   denyDeviceCode,
   nativeAuth,
   requestEmailOtp,
@@ -128,10 +128,11 @@ describe('native auth client', () => {
     })
     await signInWithOneTap({ idToken: 'id-token-1' })
     await verifySignInTotp({ code: '123456', trustDevice: true })
-    await approveAgentCapability({ agentId: 'agent-1', userCode: 'ABCD-1234' })
-    await approveAgentCapability({
+    await decideAgentCapability({ agentId: 'agent-1', userCode: 'ABCD-1234', action: 'approve' })
+    await decideAgentCapability({
       agentId: 'agent-2',
       userCode: 'WXYZ-9876',
+      action: 'deny',
       capabilities: ['account.profile.read'],
     })
     await verifyDeviceCode({ userCode: 'ABCD-1234' })
@@ -168,7 +169,7 @@ describe('native auth client', () => {
     expect(requests.at(-4)?.body).toEqual({
       agent_id: 'agent-2',
       user_code: 'WXYZ-9876',
-      action: 'approve',
+      action: 'deny',
       capabilities: ['account.profile.read'],
     })
     expect(requests.at(-5)?.body).toEqual({

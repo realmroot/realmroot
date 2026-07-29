@@ -13,7 +13,7 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { requireAdmin } from '../../middleware/admin'
-import { getAuthContext } from '../../middleware/auth-context'
+import { getAuthContext, isAutomationPrincipal } from '../../middleware/auth-context'
 import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
@@ -32,7 +32,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     const users = getDeps(c).users
     const query = readQuery(c, adminUserListQuerySchema)
 
-    if (getAuthContext(c).bearer) {
+    if (isAutomationPrincipal(c)) {
       const page = await users.listManagedUsers(query)
       return c.json(
         listManagementUsersResponseSchema.parse({
@@ -80,7 +80,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
       })
     }
 
-    if (getAuthContext(c).bearer) {
+    if (isAutomationPrincipal(c)) {
       return c.json({ user: await users.createManagedUser(body) }, 201)
     }
 
@@ -180,7 +180,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     const body = await readJson(c, adminUpdateUserSchema)
     await users.assertAdminAvatarReference(body.avatarAssetId)
 
-    if (getAuthContext(c).bearer) {
+    if (isAutomationPrincipal(c)) {
       return c.json({ user: await users.updateManagedUser(c.req.param('id'), body) })
     }
 
@@ -241,7 +241,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
 
   app.delete('/:id', async (c) => {
     const userId = c.req.param('id')
-    if (getAuthContext(c).bearer) {
+    if (isAutomationPrincipal(c)) {
       const actor = getAuthContext(c).user
       if (actor?.id === userId) {
         throw badRequest('You cannot remove yourself.')

@@ -50,6 +50,36 @@ describe('AccountConnectionsPage', () => {
     expect(screen.getByText('Web3 wallet')).toBeTruthy()
   })
 
+  it('presents personal stable Agent identities in Account Center', async () => {
+    const withIdentity = createAccountStore()
+    withIdentity.agentIdentities = [
+      {
+        id: 'identity-1',
+        issuer: 'https://auth.example.com',
+        subject: 'agt_stable',
+        name: 'Personal Build Agent',
+        homeSpace: { type: 'personal', userId: 'user-1' },
+        status: 'active',
+        retiredAt: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        bindings: [],
+      },
+    ]
+    Object.assign(store, withIdentity)
+    server.use(
+      http.delete(`${base}/api/account/agent-identities/:identityId`, () => new HttpResponse(null, { status: 204 })),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+
+    expect(await screen.findByText('Personal Build Agent')).toBeTruthy()
+    expect(screen.getByText(/https:\/\/auth\.example\.com · agt_stable/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retire' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Retire identity' }))
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Agent identity retired.'))
+  })
+
   it('renders an error state when a connections request fails', async () => {
     server.use(
       http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({ error: 'fail' }, { status: 500 })),

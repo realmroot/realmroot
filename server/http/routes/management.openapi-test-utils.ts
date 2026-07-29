@@ -1,6 +1,6 @@
 import type { SecurityRepository, UserRepository } from '@server/usecases/ports'
 import { vi } from 'vitest'
-import { managementOpenApi } from '../openapi/management'
+import { unifiedOpenApi } from '../openapi/management'
 import { createPage, securityPolicy, updatedSecurityPolicy } from './management.fixture-test-utils'
 
 export function createAuthMock() {
@@ -25,6 +25,7 @@ export function createAuthMock() {
         }
       }),
       oauth2UserInfo: vi.fn(),
+      getAgentSession: vi.fn().mockResolvedValue(null),
       listUsers: vi.fn().mockResolvedValue({ users: [], total: 0 }),
       getUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
       createUser: vi.fn().mockResolvedValue({ user: { id: 'user-1' } }),
@@ -117,7 +118,7 @@ export function openApiOperations() {
 }
 
 export function openApiOperationObjects() {
-  return Object.entries(managementOpenApi.paths).flatMap(([path, pathItem]) =>
+  return Object.entries(unifiedOpenApi.paths).flatMap(([path, pathItem]) =>
     Object.entries(resolveOpenApiPathItem(pathItem))
       .filter(([method]) => isManagementOpenApiMethod(method))
       .map(([method, operation]) => {
@@ -149,11 +150,23 @@ export function resolveOpenApiPathItem(pathItem: unknown) {
     return record
   }
 
-  const pathItems = managementOpenApi.components.pathItems as Record<string, unknown>
+  const pathItems = unifiedOpenApi.components.pathItems as Record<string, unknown>
   return openApiRecord(pathItems[ref.replace('#/components/pathItems/', '')])
 }
 
 export function toManagementOperationKey(route: HonoRoute) {
+  if (route.path === '/api/openapi.json') {
+    return `${route.method} /openapi.json`
+  }
+  if (route.path === '/api/whoami') {
+    return `${route.method} /whoami`
+  }
+  if (route.path === '/api/capability-requests') {
+    return `${route.method} /capability-requests`
+  }
+  if (route.path === '/api/agent/oauth2/token') {
+    return `${route.method} /agent/oauth2/token`
+  }
   if (!route.path.startsWith('/api/management')) {
     return null
   }
@@ -188,7 +201,7 @@ export function openApiParameters(value: unknown) {
       return record as unknown as OpenApiParameter
     }
 
-    const parameters = managementOpenApi.components.parameters as Record<string, unknown>
+    const parameters = unifiedOpenApi.components.parameters as Record<string, unknown>
     return openApiRecord(parameters[ref.replace('#/components/parameters/', '')]) as unknown as OpenApiParameter
   })
 }
@@ -261,7 +274,7 @@ export function assertConstrainedOpenApiSchema(value: unknown, path: string, see
 }
 
 export function resolveOpenApiSchemaRef(ref: string) {
-  const schemas = managementOpenApi.components.schemas as Record<string, unknown>
+  const schemas = unifiedOpenApi.components.schemas as Record<string, unknown>
   return schemas[ref.replace('#/components/schemas/', '')]
 }
 
@@ -297,7 +310,7 @@ export function openApiJsonResponseSchema(value: unknown) {
 }
 
 export function openApiResponses() {
-  return managementOpenApi.components.responses as Record<string, unknown>
+  return unifiedOpenApi.components.responses as Record<string, unknown>
 }
 
 export function isManagementOpenApiMethod(method: string): method is ManagementOpenApiMethod {

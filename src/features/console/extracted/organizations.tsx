@@ -1,6 +1,7 @@
 import {
   consoleQueryKeys,
   createOrganization,
+  getAgentIdentityInventory,
   getOrganization,
   listOrganizations,
   updateOrganization,
@@ -189,6 +190,10 @@ export function OrganizationDetailPage({
     queryKey: [...consoleQueryKeys.organizations, organizationId],
     queryFn: () => getOrganization(organizationId),
   })
+  const agentIdentitiesQuery = useQuery({
+    queryKey: [...consoleQueryKeys.organizations, organizationId, 'agent-identities'],
+    queryFn: getAgentIdentityInventory,
+  })
   const organization = query.data
   const updateMutation = useMutation({
     mutationFn: (input: z.infer<typeof updateOrganizationRequestSchema>) => updateOrganization(organizationId, input),
@@ -231,46 +236,55 @@ export function OrganizationDetailPage({
           />
           <div className="grid gap-4 xl:grid-cols-2">
             {selectedTab === 'settings' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{tt('General')}</CardTitle>
-                  <CardDescription>
-                    {' '}
-                    {tt('Team collaboration and invitation management are outside this console surface.')}{' '}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <AuthorizationForm
-                    buttonLabel="Save organization"
-                    defaults={{
-                      slug: organization.slug,
-                      name: organization.name,
-                      displayName: organization.displayName ?? '',
-                      disabledReason: organization.disabledReason ?? '',
-                    }}
-                    error={updateMutation.error}
-                    fields={[
-                      ['slug', 'Slug'],
-                      ['name', 'Name'],
-                      ['displayName', 'Display name'],
-                      ['disabledReason', 'Disabled reason'],
-                    ]}
-                    onSubmit={(form) =>
-                      updateMutation.mutate(
-                        parseForm(updateOrganizationRequestSchema, {
-                          ...form,
-                          displayName: nullableString(form.displayName ?? ''),
-                          disabledReason: nullableString(form.disabledReason ?? ''),
-                        }),
-                      )
-                    }
-                    pending={updateMutation.isPending}
-                  />
-                  <div className="mt-4">
-                    <StatusBadge active={!organization.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-                  </div>
-                </CardContent>
-              </Card>
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{tt('General')}</CardTitle>
+                    <CardDescription>
+                      {' '}
+                      {tt('Team collaboration and invitation management are outside this console surface.')}{' '}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <AuthorizationForm
+                      buttonLabel="Save organization"
+                      defaults={{
+                        slug: organization.slug,
+                        name: organization.name,
+                        displayName: organization.displayName ?? '',
+                        disabledReason: organization.disabledReason ?? '',
+                      }}
+                      error={updateMutation.error}
+                      fields={[
+                        ['slug', 'Slug'],
+                        ['name', 'Name'],
+                        ['displayName', 'Display name'],
+                        ['disabledReason', 'Disabled reason'],
+                      ]}
+                      onSubmit={(form) =>
+                        updateMutation.mutate(
+                          parseForm(updateOrganizationRequestSchema, {
+                            ...form,
+                            displayName: nullableString(form.displayName ?? ''),
+                            disabledReason: nullableString(form.disabledReason ?? ''),
+                          }),
+                        )
+                      }
+                      pending={updateMutation.isPending}
+                    />
+                    <div className="mt-4">
+                      <StatusBadge active={!organization.disabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <OrganizationAgentsCard
+                  identities={(agentIdentitiesQuery.data?.identities ?? []).filter(
+                    (identity) =>
+                      identity.homeSpace.type === 'organization' &&
+                      identity.homeSpace.organizationId === organizationId,
+                  )}
+                />
+              </>
             ) : null}
             {selectedTab === 'authorization' ? (
               <Card>
@@ -297,6 +311,30 @@ export function OrganizationDetailPage({
         </div>
       ) : null}
     </ResourcePage>
+  )
+}
+
+function OrganizationAgentsCard({ identities }: { identities: import('@shared/api/agents').AgentIdentity[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{tt('Organization Agent identities')}</CardTitle>
+        <CardDescription>{tt('Stable Agents owned and governed by this organization.')}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {identities.length ? (
+          identities.map((identity) => (
+            <SettingRow
+              key={identity.id}
+              label={identity.name}
+              value={`${identity.issuer} · ${identity.subject} · ${identity.status}`}
+            />
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">{tt('No organization-owned Agent identities.')}</p>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 function OrganizationSummaryCard({

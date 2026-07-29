@@ -20,7 +20,11 @@ import { describe, expect, it, vi } from 'vitest'
 describe('AgentService', () => {
   it('executes only read-only account capabilities through the user repository', async () => {
     const users = createUserRepositoryMock()
-    const deps = { users, agents: createAgentRepositoryMock() } as unknown as Deps
+    const deps = {
+      users,
+      agents: createAgentRepositoryMock(),
+      agentIdentities: createAgentIdentityRepositoryMock(),
+    } as unknown as Deps
     const agentSession = createAgentSession()
 
     await expect(
@@ -63,7 +67,11 @@ describe('AgentService', () => {
       limit: 50,
       offset: 0,
     })
-    const deps = { users, agents: createAgentRepositoryMock() } as unknown as Deps
+    const deps = {
+      users,
+      agents: createAgentRepositoryMock(),
+      agentIdentities: createAgentIdentityRepositoryMock(),
+    } as unknown as Deps
 
     await expect(
       executeReadOnlyCapability(deps, {
@@ -79,7 +87,11 @@ describe('AgentService', () => {
   })
 
   it('rejects unknown capabilities and invalid pagination arguments', async () => {
-    const deps = { users: createUserRepositoryMock(), agents: createAgentRepositoryMock() } as unknown as Deps
+    const deps = {
+      users: createUserRepositoryMock(),
+      agents: createAgentRepositoryMock(),
+      agentIdentities: createAgentIdentityRepositoryMock(),
+    } as unknown as Deps
     const agentSession = createAgentSession()
 
     await expect(
@@ -115,6 +127,24 @@ describe('AgentService', () => {
     await expect(listAgents(deps, page)).resolves.toMatchObject({ items: [{ id: 'agent-1' }] })
     await expect(listAgentCapabilityGrants(deps, page)).resolves.toMatchObject({ items: [{ id: 'grant-1' }] })
     await expect(listAgentApprovalRequests(deps, page)).resolves.toMatchObject({ items: [{ id: 'approval-1' }] })
+  })
+
+  it('fails closed when a protocol Agent has no active stable identity binding [spec: agent-identity/agent-identity-enrollment]', async () => {
+    const agentIdentities = createAgentIdentityRepositoryMock()
+    agentIdentities.findActiveByProtocolAgent.mockResolvedValue(null)
+    const deps = {
+      users: createUserRepositoryMock(),
+      agents: createAgentRepositoryMock(),
+      agentIdentities,
+    } as unknown as Deps
+
+    await expect(
+      executeReadOnlyCapability(deps, {
+        capability: 'account.profile.read',
+        agentSession: createAgentSession(),
+      }),
+    ).rejects.toMatchObject({ status: 403 })
+    expect(deps.users.getUser).not.toHaveBeenCalled()
   })
 
   it('maps account-owned agents with capability grants and delegates revokes', async () => {
@@ -178,13 +208,15 @@ describe('AgentService', () => {
     expect(repository.revokeCapabilityGrant).toHaveBeenCalledWith('grant-1')
   })
 
-  it('declares only the narrow MVP capability catalog', () => {
+  it('declares account data capabilities and coarse unified API management permissions', () => {
     expect(agentCapabilities.map((capability) => capability.name)).toEqual([
       'account.profile.read',
       'account.sessions.list',
       'account.authorized_apps.list',
+      'management:read',
+      'management:write',
     ])
-    expect(areKnownAgentCapabilities(['account.profile.read', 'account.sessions.list'])).toBe(true)
+    expect(areKnownAgentCapabilities(['account.profile.read', 'management:read'])).toBe(true)
     expect(areKnownAgentCapabilities(['management.openapi.generate'])).toBe(false)
   })
 })
@@ -224,9 +256,28 @@ function createAgentRepositoryMock() {
   }
 }
 
+function createAgentIdentityRepositoryMock() {
+  return {
+    findActiveByProtocolAgent: vi.fn().mockResolvedValue({
+      identity: {
+        id: 'agid-1',
+        issuer: 'https://auth.example.com',
+        subject: 'agt-1',
+        name: 'Test Agent',
+        ownerUserId: 'user-1',
+        ownerOrganizationId: null,
+        status: 'active',
+      },
+      bindings: [],
+    }),
+  }
+}
+
 function createAgentSession(): AgentSession {
   return {
     type: 'delegated',
+    agentId: 'agent-1',
+    userId: 'user-1',
     agent: {
       id: 'agent-1',
       name: 'Test Agent',

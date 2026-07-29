@@ -3,7 +3,7 @@ import { assignRoleRequestSchema } from '@shared/api/authorization'
 import type { SecurityPolicy } from '@shared/api/security'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
-import { getAuthContext } from '../../middleware/auth-context'
+import { getActorUserId } from '../../middleware/auth-context'
 import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { readJson } from '../validation'
@@ -33,18 +33,15 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)
   app.post('/user-role-assignments', requireAdmin(), async (c) => {
-    const { user } = getAuthContext(c)
-    await assignUserRole(getDeps(c), await readJson(c, assignRoleRequestSchema), user!.id)
+    await assignUserRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
     return c.body(null, 204)
   })
   app.post('/application-role-assignments', requireAdmin(), async (c) => {
-    const { user } = getAuthContext(c)
-    await assignApplicationRole(getDeps(c), await readJson(c, assignRoleRequestSchema), user!.id)
+    await assignApplicationRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
     return c.body(null, 204)
   })
   app.post('/member-role-assignments', requireAdmin(), async (c) => {
-    const { user } = getAuthContext(c)
-    await assignMemberRole(getDeps(c), await readJson(c, assignRoleRequestSchema), user!.id)
+    await assignMemberRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
     return c.body(null, 204)
   })
 

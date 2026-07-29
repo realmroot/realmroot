@@ -41,6 +41,16 @@ export const agentCapabilities = [
       },
     },
   },
+  {
+    name: 'management:read',
+    description: 'Read tenant management resources through the unified FlareAuth API.',
+    approvalStrength: 'session',
+  },
+  {
+    name: 'management:write',
+    description: 'Change tenant management resources through the unified FlareAuth API.',
+    approvalStrength: 'session',
+  },
 ] as const satisfies Capability[]
 
 function paginationInputSchema() {

@@ -1,9 +1,646 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "429bd016-2ef3-438e-b822-40574394fa1b",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "b2a5c35f-35b5-499e-91df-537fccfd80e3",
+  "prevId": "429bd016-2ef3-438e-b822-40574394fa1b",
   "tables": {
+    "agent_audit_event": {
+      "name": "agent_audit_event",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "result": {
+          "name": "result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "controller_user_id": {
+          "name": "controller_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "subject_issuer": {
+          "name": "subject_issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "agent_identity_id": {
+          "name": "agent_identity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "host_id": {
+          "name": "host_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "authority_grant_id": {
+          "name": "authority_grant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "external_account_id": {
+          "name": "external_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "external_account_grant_id": {
+          "name": "external_account_grant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "target_origin": {
+          "name": "target_origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "target_path": {
+          "name": "target_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "method": {
+          "name": "method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reason_code": {
+          "name": "reason_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "agentAuditEvent_occurredAt_idx": {
+          "name": "agentAuditEvent_occurredAt_idx",
+          "columns": [
+            "occurred_at"
+          ],
+          "isUnique": false
+        },
+        "agentAuditEvent_agentIdentityId_idx": {
+          "name": "agentAuditEvent_agentIdentityId_idx",
+          "columns": [
+            "agent_identity_id"
+          ],
+          "isUnique": false
+        },
+        "agentAuditEvent_externalAccountId_idx": {
+          "name": "agentAuditEvent_externalAccountId_idx",
+          "columns": [
+            "external_account_id"
+          ],
+          "isUnique": false
+        },
+        "agentAuditEvent_result_idx": {
+          "name": "agentAuditEvent_result_idx",
+          "columns": [
+            "result"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "agent_enrollment_intent": {
+      "name": "agent_enrollment_intent",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_identity_id": {
+          "name": "agent_identity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "requested_name": {
+          "name": "requested_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "owner_organization_id": {
+          "name": "owner_organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "protocol_agent_id": {
+          "name": "protocol_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approved_by_user_id": {
+          "name": "approved_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "agentEnrollmentIntent_agentIdentityId_idx": {
+          "name": "agentEnrollmentIntent_agentIdentityId_idx",
+          "columns": [
+            "agent_identity_id"
+          ],
+          "isUnique": false
+        },
+        "agentEnrollmentIntent_protocolAgentId_idx": {
+          "name": "agentEnrollmentIntent_protocolAgentId_idx",
+          "columns": [
+            "protocol_agent_id"
+          ],
+          "isUnique": false
+        },
+        "agentEnrollmentIntent_status_idx": {
+          "name": "agentEnrollmentIntent_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "agentEnrollmentIntent_expiresAt_idx": {
+          "name": "agentEnrollmentIntent_expiresAt_idx",
+          "columns": [
+            "expires_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agent_enrollment_intent_agent_identity_id_agent_identity_id_fk": {
+          "name": "agent_enrollment_intent_agent_identity_id_agent_identity_id_fk",
+          "tableFrom": "agent_enrollment_intent",
+          "tableTo": "agent_identity",
+          "columnsFrom": [
+            "agent_identity_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_enrollment_intent_owner_user_id_user_id_fk": {
+          "name": "agent_enrollment_intent_owner_user_id_user_id_fk",
+          "tableFrom": "agent_enrollment_intent",
+          "tableTo": "user",
+          "columnsFrom": [
+            "owner_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_enrollment_intent_owner_organization_id_organization_id_fk": {
+          "name": "agent_enrollment_intent_owner_organization_id_organization_id_fk",
+          "tableFrom": "agent_enrollment_intent",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "owner_organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_enrollment_intent_protocol_agent_id_agent_id_fk": {
+          "name": "agent_enrollment_intent_protocol_agent_id_agent_id_fk",
+          "tableFrom": "agent_enrollment_intent",
+          "tableTo": "agent",
+          "columnsFrom": [
+            "protocol_agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_enrollment_intent_created_by_user_id_user_id_fk": {
+          "name": "agent_enrollment_intent_created_by_user_id_user_id_fk",
+          "tableFrom": "agent_enrollment_intent",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_enrollment_intent_approved_by_user_id_user_id_fk": {
+          "name": "agent_enrollment_intent_approved_by_user_id_user_id_fk",
+          "tableFrom": "agent_enrollment_intent",
+          "tableTo": "user",
+          "columnsFrom": [
+            "approved_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "agentEnrollmentIntent_exactly_one_owner_check": {
+          "name": "agentEnrollmentIntent_exactly_one_owner_check",
+          "value": "((\"agent_enrollment_intent\".\"owner_user_id\" is not null) + (\"agent_enrollment_intent\".\"owner_organization_id\" is not null)) = 1"
+        },
+        "agentEnrollmentIntent_new_or_existing_identity_check": {
+          "name": "agentEnrollmentIntent_new_or_existing_identity_check",
+          "value": "(\"agent_enrollment_intent\".\"agent_identity_id\" is not null) or (\"agent_enrollment_intent\".\"requested_name\" is not null)"
+        }
+      }
+    },
+    "agent_identity": {
+      "name": "agent_identity",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuer": {
+          "name": "issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "owner_organization_id": {
+          "name": "owner_organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "retired_at": {
+          "name": "retired_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "agentIdentity_issuer_subject_unique": {
+          "name": "agentIdentity_issuer_subject_unique",
+          "columns": [
+            "issuer",
+            "subject"
+          ],
+          "isUnique": true
+        },
+        "agentIdentity_ownerUserId_idx": {
+          "name": "agentIdentity_ownerUserId_idx",
+          "columns": [
+            "owner_user_id"
+          ],
+          "isUnique": false
+        },
+        "agentIdentity_ownerOrganizationId_idx": {
+          "name": "agentIdentity_ownerOrganizationId_idx",
+          "columns": [
+            "owner_organization_id"
+          ],
+          "isUnique": false
+        },
+        "agentIdentity_status_idx": {
+          "name": "agentIdentity_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agent_identity_owner_user_id_user_id_fk": {
+          "name": "agent_identity_owner_user_id_user_id_fk",
+          "tableFrom": "agent_identity",
+          "tableTo": "user",
+          "columnsFrom": [
+            "owner_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_identity_owner_organization_id_organization_id_fk": {
+          "name": "agent_identity_owner_organization_id_organization_id_fk",
+          "tableFrom": "agent_identity",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "owner_organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "agentIdentity_exactly_one_owner_check": {
+          "name": "agentIdentity_exactly_one_owner_check",
+          "value": "((\"agent_identity\".\"owner_user_id\" is not null) + (\"agent_identity\".\"owner_organization_id\" is not null)) = 1"
+        }
+      }
+    },
+    "agent_identity_binding": {
+      "name": "agent_identity_binding",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_identity_id": {
+          "name": "agent_identity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "protocol_agent_id": {
+          "name": "protocol_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "bound_at": {
+          "name": "bound_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "agentIdentityBinding_protocolAgentId_unique": {
+          "name": "agentIdentityBinding_protocolAgentId_unique",
+          "columns": [
+            "protocol_agent_id"
+          ],
+          "isUnique": true
+        },
+        "agentIdentityBinding_agentIdentityId_idx": {
+          "name": "agentIdentityBinding_agentIdentityId_idx",
+          "columns": [
+            "agent_identity_id"
+          ],
+          "isUnique": false
+        },
+        "agentIdentityBinding_status_idx": {
+          "name": "agentIdentityBinding_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agent_identity_binding_agent_identity_id_agent_identity_id_fk": {
+          "name": "agent_identity_binding_agent_identity_id_agent_identity_id_fk",
+          "tableFrom": "agent_identity_binding",
+          "tableTo": "agent_identity",
+          "columnsFrom": [
+            "agent_identity_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_identity_binding_protocol_agent_id_agent_id_fk": {
+          "name": "agent_identity_binding_protocol_agent_id_agent_id_fk",
+          "tableFrom": "agent_identity_binding",
+          "tableTo": "agent",
+          "columnsFrom": [
+            "protocol_agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "agent": {
       "name": "agent",
       "columns": {
@@ -805,6 +1442,624 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "agent_access_token": {
+      "name": "agent_access_token",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_identity_id": {
+          "name": "agent_identity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "binding_id": {
+          "name": "binding_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "protocol_agent_id": {
+          "name": "protocol_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "grant_id": {
+          "name": "grant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject_issuer": {
+          "name": "subject_issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor": {
+          "name": "actor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "audience": {
+          "name": "audience",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scopes": {
+          "name": "scopes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confirmation_jkt": {
+          "name": "confirmation_jkt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "agent_access_token_token_hash_unique": {
+          "name": "agent_access_token_token_hash_unique",
+          "columns": [
+            "token_hash"
+          ],
+          "isUnique": true
+        },
+        "agentAccessToken_agentIdentityId_idx": {
+          "name": "agentAccessToken_agentIdentityId_idx",
+          "columns": [
+            "agent_identity_id"
+          ],
+          "isUnique": false
+        },
+        "agentAccessToken_bindingId_idx": {
+          "name": "agentAccessToken_bindingId_idx",
+          "columns": [
+            "binding_id"
+          ],
+          "isUnique": false
+        },
+        "agentAccessToken_grantId_idx": {
+          "name": "agentAccessToken_grantId_idx",
+          "columns": [
+            "grant_id"
+          ],
+          "isUnique": false
+        },
+        "agentAccessToken_expiresAt_idx": {
+          "name": "agentAccessToken_expiresAt_idx",
+          "columns": [
+            "expires_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agent_access_token_agent_identity_id_agent_identity_id_fk": {
+          "name": "agent_access_token_agent_identity_id_agent_identity_id_fk",
+          "tableFrom": "agent_access_token",
+          "tableTo": "agent_identity",
+          "columnsFrom": [
+            "agent_identity_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_access_token_binding_id_agent_identity_binding_id_fk": {
+          "name": "agent_access_token_binding_id_agent_identity_binding_id_fk",
+          "tableFrom": "agent_access_token",
+          "tableTo": "agent_identity_binding",
+          "columnsFrom": [
+            "binding_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_access_token_protocol_agent_id_agent_id_fk": {
+          "name": "agent_access_token_protocol_agent_id_agent_id_fk",
+          "tableFrom": "agent_access_token",
+          "tableTo": "agent",
+          "columnsFrom": [
+            "protocol_agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_access_token_grant_id_agent_authority_grant_id_fk": {
+          "name": "agent_access_token_grant_id_agent_authority_grant_id_fk",
+          "tableFrom": "agent_access_token",
+          "tableTo": "agent_authority_grant",
+          "columnsFrom": [
+            "grant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "agent_authority_approval": {
+      "name": "agent_authority_approval",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "grant_id": {
+          "name": "grant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "binding_id": {
+          "name": "binding_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requested_scopes": {
+          "name": "requested_scopes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "approved_by_user_id": {
+          "name": "approved_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "agentAuthorityApproval_grantId_idx": {
+          "name": "agentAuthorityApproval_grantId_idx",
+          "columns": [
+            "grant_id"
+          ],
+          "isUnique": false
+        },
+        "agentAuthorityApproval_status_idx": {
+          "name": "agentAuthorityApproval_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "agentAuthorityApproval_expiresAt_idx": {
+          "name": "agentAuthorityApproval_expiresAt_idx",
+          "columns": [
+            "expires_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agent_authority_approval_grant_id_agent_authority_grant_id_fk": {
+          "name": "agent_authority_approval_grant_id_agent_authority_grant_id_fk",
+          "tableFrom": "agent_authority_approval",
+          "tableTo": "agent_authority_grant",
+          "columnsFrom": [
+            "grant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_authority_approval_binding_id_agent_identity_binding_id_fk": {
+          "name": "agent_authority_approval_binding_id_agent_identity_binding_id_fk",
+          "tableFrom": "agent_authority_approval",
+          "tableTo": "agent_identity_binding",
+          "columnsFrom": [
+            "binding_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_authority_approval_approved_by_user_id_user_id_fk": {
+          "name": "agent_authority_approval_approved_by_user_id_user_id_fk",
+          "tableFrom": "agent_authority_approval",
+          "tableTo": "user",
+          "columnsFrom": [
+            "approved_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "agent_authority_grant": {
+      "name": "agent_authority_grant",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_identity_id": {
+          "name": "agent_identity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject_type": {
+          "name": "subject_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject_id": {
+          "name": "subject_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "audience": {
+          "name": "audience",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scopes": {
+          "name": "scopes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "constraints": {
+          "name": "constraints",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "use_count": {
+          "name": "use_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "granted_by_user_id": {
+          "name": "granted_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "agentAuthorityGrant_agentIdentityId_idx": {
+          "name": "agentAuthorityGrant_agentIdentityId_idx",
+          "columns": [
+            "agent_identity_id"
+          ],
+          "isUnique": false
+        },
+        "agentAuthorityGrant_status_idx": {
+          "name": "agentAuthorityGrant_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "agentAuthorityGrant_expiresAt_idx": {
+          "name": "agentAuthorityGrant_expiresAt_idx",
+          "columns": [
+            "expires_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agent_authority_grant_agent_identity_id_agent_identity_id_fk": {
+          "name": "agent_authority_grant_agent_identity_id_agent_identity_id_fk",
+          "tableFrom": "agent_authority_grant",
+          "tableTo": "agent_identity",
+          "columnsFrom": [
+            "agent_identity_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "agent_authority_grant_granted_by_user_id_user_id_fk": {
+          "name": "agent_authority_grant_granted_by_user_id_user_id_fk",
+          "tableFrom": "agent_authority_grant",
+          "tableTo": "user",
+          "columnsFrom": [
+            "granted_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "agent_dpop_jti": {
+      "name": "agent_dpop_jti",
+      "columns": {
+        "jti_hash": {
+          "name": "jti_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key_thumbprint": {
+          "name": "key_thumbprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "agentDpopJti_expiresAt_idx": {
+          "name": "agentDpopJti_expiresAt_idx",
+          "columns": [
+            "expires_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "agent_signing_key": {
+      "name": "agent_signing_key",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "algorithm": {
+          "name": "algorithm",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "public_jwk": {
+          "name": "public_jwk",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "encrypted_private_jwk": {
+          "name": "encrypted_private_jwk",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -2070,255 +3325,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "token_exchange_access_token": {
-      "name": "token_exchange_access_token",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "client_id": {
-          "name": "client_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "issuer_id": {
-          "name": "issuer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "subject": {
-          "name": "subject",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "subject_token_issuer": {
-          "name": "subject_token_issuer",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "audience": {
-          "name": "audience",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "scopes": {
-          "name": "scopes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "claims": {
-          "name": "claims",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "token_exchange_access_token_token_hash_unique": {
-          "name": "token_exchange_access_token_token_hash_unique",
-          "columns": [
-            "token_hash"
-          ],
-          "isUnique": true
-        },
-        "tokenExchangeAccessToken_clientId_idx": {
-          "name": "tokenExchangeAccessToken_clientId_idx",
-          "columns": [
-            "client_id"
-          ],
-          "isUnique": false
-        },
-        "tokenExchangeAccessToken_issuerId_idx": {
-          "name": "tokenExchangeAccessToken_issuerId_idx",
-          "columns": [
-            "issuer_id"
-          ],
-          "isUnique": false
-        },
-        "tokenExchangeAccessToken_expiresAt_idx": {
-          "name": "tokenExchangeAccessToken_expiresAt_idx",
-          "columns": [
-            "expires_at"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "token_exchange_access_token_client_id_oauth_client_client_id_fk": {
-          "name": "token_exchange_access_token_client_id_oauth_client_client_id_fk",
-          "tableFrom": "token_exchange_access_token",
-          "tableTo": "oauth_client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "client_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "token_exchange_access_token_issuer_id_trusted_external_issuer_id_fk": {
-          "name": "token_exchange_access_token_issuer_id_trusted_external_issuer_id_fk",
-          "tableFrom": "token_exchange_access_token",
-          "tableTo": "trusted_external_issuer",
-          "columnsFrom": [
-            "issuer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "trusted_external_issuer": {
-      "name": "trusted_external_issuer",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "issuer": {
-          "name": "issuer",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "jwks_url": {
-          "name": "jwks_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "shared_secret": {
-          "name": "shared_secret",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "allowed_audiences": {
-          "name": "allowed_audiences",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
-        }
-      },
-      "indexes": {
-        "trustedExternalIssuer_issuer_unique": {
-          "name": "trustedExternalIssuer_issuer_unique",
-          "columns": [
-            "issuer"
-          ],
-          "isUnique": true
-        },
-        "trustedExternalIssuer_enabled_idx": {
-          "name": "trustedExternalIssuer_enabled_idx",
-          "columns": [
-            "enabled"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -3661,6 +4667,168 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "federated_credential": {
+      "name": "federated_credential",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "application_id": {
+          "name": "application_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuer": {
+          "name": "issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "audience_resource_id": {
+          "name": "audience_resource_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "jwks_url": {
+          "name": "jwks_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "public_keys": {
+          "name": "public_keys",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "shared_secret": {
+          "name": "shared_secret",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "federatedCredential_app_issuer_subject_unique": {
+          "name": "federatedCredential_app_issuer_subject_unique",
+          "columns": [
+            "application_id",
+            "issuer",
+            "subject"
+          ],
+          "isUnique": true
+        },
+        "federatedCredential_issuer_idx": {
+          "name": "federatedCredential_issuer_idx",
+          "columns": [
+            "issuer"
+          ],
+          "isUnique": false
+        },
+        "federatedCredential_applicationId_idx": {
+          "name": "federatedCredential_applicationId_idx",
+          "columns": [
+            "application_id"
+          ],
+          "isUnique": false
+        },
+        "federatedCredential_enabled_idx": {
+          "name": "federatedCredential_enabled_idx",
+          "columns": [
+            "enabled"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "federated_credential_application_id_application_id_fk": {
+          "name": "federated_credential_application_id_application_id_fk",
+          "tableFrom": "federated_credential",
+          "tableTo": "application",
+          "columnsFrom": [
+            "application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "federated_credential_audience_resource_id_api_resource_id_fk": {
+          "name": "federated_credential_audience_resource_id_api_resource_id_fk",
+          "tableFrom": "federated_credential",
+          "tableTo": "api_resource",
+          "columnsFrom": [
+            "audience_resource_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "invitation": {
       "name": "invitation",
       "columns": {
@@ -3697,7 +4865,7 @@
           "name": "inviter_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "status": {
@@ -3799,7 +4967,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -4395,6 +5563,157 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "token_exchange_access_token": {
+      "name": "token_exchange_access_token",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "credential_id": {
+          "name": "credential_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject_token_issuer": {
+          "name": "subject_token_issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "audience": {
+          "name": "audience",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scopes": {
+          "name": "scopes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "claims": {
+          "name": "claims",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "token_exchange_access_token_token_hash_unique": {
+          "name": "token_exchange_access_token_token_hash_unique",
+          "columns": [
+            "token_hash"
+          ],
+          "isUnique": true
+        },
+        "tokenExchangeAccessToken_clientId_idx": {
+          "name": "tokenExchangeAccessToken_clientId_idx",
+          "columns": [
+            "client_id"
+          ],
+          "isUnique": false
+        },
+        "tokenExchangeAccessToken_credentialId_idx": {
+          "name": "tokenExchangeAccessToken_credentialId_idx",
+          "columns": [
+            "credential_id"
+          ],
+          "isUnique": false
+        },
+        "tokenExchangeAccessToken_expiresAt_idx": {
+          "name": "tokenExchangeAccessToken_expiresAt_idx",
+          "columns": [
+            "expires_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "token_exchange_access_token_client_id_oauth_client_client_id_fk": {
+          "name": "token_exchange_access_token_client_id_oauth_client_client_id_fk",
+          "tableFrom": "token_exchange_access_token",
+          "tableTo": "oauth_client",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "client_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "token_exchange_access_token_credential_id_federated_credential_id_fk": {
+          "name": "token_exchange_access_token_credential_id_federated_credential_id_fk",
+          "tableFrom": "token_exchange_access_token",
+          "tableTo": "federated_credential",
+          "columnsFrom": [
+            "credential_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "user_role_assignment": {
       "name": "user_role_assignment",
       "columns": {
@@ -4511,6 +5830,670 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "external_account": {
+      "name": "external_account",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "connector_id": {
+          "name": "connector_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "owner_organization_id": {
+          "name": "owner_organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "owner_agent_identity_id": {
+          "name": "owner_agent_identity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "external_subject": {
+          "name": "external_subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "externalAccount_connectorId_idx": {
+          "name": "externalAccount_connectorId_idx",
+          "columns": [
+            "connector_id"
+          ],
+          "isUnique": false
+        },
+        "externalAccount_ownerUserId_idx": {
+          "name": "externalAccount_ownerUserId_idx",
+          "columns": [
+            "owner_user_id"
+          ],
+          "isUnique": false
+        },
+        "externalAccount_ownerOrganizationId_idx": {
+          "name": "externalAccount_ownerOrganizationId_idx",
+          "columns": [
+            "owner_organization_id"
+          ],
+          "isUnique": false
+        },
+        "externalAccount_ownerAgentIdentityId_idx": {
+          "name": "externalAccount_ownerAgentIdentityId_idx",
+          "columns": [
+            "owner_agent_identity_id"
+          ],
+          "isUnique": false
+        },
+        "externalAccount_status_idx": {
+          "name": "externalAccount_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "externalAccount_connectorId_externalSubject_unique": {
+          "name": "externalAccount_connectorId_externalSubject_unique",
+          "columns": [
+            "connector_id",
+            "external_subject"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "external_account_connector_id_identity_provider_connector_id_fk": {
+          "name": "external_account_connector_id_identity_provider_connector_id_fk",
+          "tableFrom": "external_account",
+          "tableTo": "identity_provider_connector",
+          "columnsFrom": [
+            "connector_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "external_account_owner_user_id_user_id_fk": {
+          "name": "external_account_owner_user_id_user_id_fk",
+          "tableFrom": "external_account",
+          "tableTo": "user",
+          "columnsFrom": [
+            "owner_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "external_account_owner_organization_id_organization_id_fk": {
+          "name": "external_account_owner_organization_id_organization_id_fk",
+          "tableFrom": "external_account",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "owner_organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "external_account_owner_agent_identity_id_agent_identity_id_fk": {
+          "name": "external_account_owner_agent_identity_id_agent_identity_id_fk",
+          "tableFrom": "external_account",
+          "tableTo": "agent_identity",
+          "columnsFrom": [
+            "owner_agent_identity_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "externalAccount_exactly_one_owner_check": {
+          "name": "externalAccount_exactly_one_owner_check",
+          "value": "((\"external_account\".\"owner_user_id\" IS NOT NULL) + (\"external_account\".\"owner_organization_id\" IS NOT NULL) + (\"external_account\".\"owner_agent_identity_id\" IS NOT NULL)) = 1"
+        }
+      }
+    },
+    "external_account_grant": {
+      "name": "external_account_grant",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "external_account_id": {
+          "name": "external_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_identity_id": {
+          "name": "agent_identity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scopes": {
+          "name": "scopes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "allowed_methods": {
+          "name": "allowed_methods",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "allowed_path_prefixes": {
+          "name": "allowed_path_prefixes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "granted_by_user_id": {
+          "name": "granted_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "externalAccountGrant_account_agent_unique": {
+          "name": "externalAccountGrant_account_agent_unique",
+          "columns": [
+            "external_account_id",
+            "agent_identity_id"
+          ],
+          "isUnique": true
+        },
+        "externalAccountGrant_agentIdentityId_idx": {
+          "name": "externalAccountGrant_agentIdentityId_idx",
+          "columns": [
+            "agent_identity_id"
+          ],
+          "isUnique": false
+        },
+        "externalAccountGrant_status_idx": {
+          "name": "externalAccountGrant_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "external_account_grant_external_account_id_external_account_id_fk": {
+          "name": "external_account_grant_external_account_id_external_account_id_fk",
+          "tableFrom": "external_account_grant",
+          "tableTo": "external_account",
+          "columnsFrom": [
+            "external_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "external_account_grant_agent_identity_id_agent_identity_id_fk": {
+          "name": "external_account_grant_agent_identity_id_agent_identity_id_fk",
+          "tableFrom": "external_account_grant",
+          "tableTo": "agent_identity",
+          "columnsFrom": [
+            "agent_identity_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "external_account_grant_granted_by_user_id_user_id_fk": {
+          "name": "external_account_grant_granted_by_user_id_user_id_fk",
+          "tableFrom": "external_account_grant",
+          "tableTo": "user",
+          "columnsFrom": [
+            "granted_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "external_credential": {
+      "name": "external_credential",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "external_account_id": {
+          "name": "external_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "encrypted_payload": {
+          "name": "encrypted_payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "externalCredential_externalAccountId_unique": {
+          "name": "externalCredential_externalAccountId_unique",
+          "columns": [
+            "external_account_id"
+          ],
+          "isUnique": true
+        },
+        "externalCredential_status_idx": {
+          "name": "externalCredential_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "externalCredential_expiresAt_idx": {
+          "name": "externalCredential_expiresAt_idx",
+          "columns": [
+            "expires_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "external_credential_external_account_id_external_account_id_fk": {
+          "name": "external_credential_external_account_id_external_account_id_fk",
+          "tableFrom": "external_credential",
+          "tableTo": "external_account",
+          "columnsFrom": [
+            "external_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "external_oauth_intent": {
+      "name": "external_oauth_intent",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state_hash": {
+          "name": "state_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "connector_id": {
+          "name": "connector_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_identity_id": {
+          "name": "agent_identity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "owner_organization_id": {
+          "name": "owner_organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scopes": {
+          "name": "scopes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "encrypted_pkce_verifier": {
+          "name": "encrypted_pkce_verifier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "external_oauth_intent_state_hash_unique": {
+          "name": "external_oauth_intent_state_hash_unique",
+          "columns": [
+            "state_hash"
+          ],
+          "isUnique": true
+        },
+        "externalOAuthIntent_connectorId_idx": {
+          "name": "externalOAuthIntent_connectorId_idx",
+          "columns": [
+            "connector_id"
+          ],
+          "isUnique": false
+        },
+        "externalOAuthIntent_ownerUserId_idx": {
+          "name": "externalOAuthIntent_ownerUserId_idx",
+          "columns": [
+            "owner_user_id"
+          ],
+          "isUnique": false
+        },
+        "externalOAuthIntent_ownerOrganizationId_idx": {
+          "name": "externalOAuthIntent_ownerOrganizationId_idx",
+          "columns": [
+            "owner_organization_id"
+          ],
+          "isUnique": false
+        },
+        "externalOAuthIntent_status_idx": {
+          "name": "externalOAuthIntent_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "externalOAuthIntent_expiresAt_idx": {
+          "name": "externalOAuthIntent_expiresAt_idx",
+          "columns": [
+            "expires_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "external_oauth_intent_connector_id_identity_provider_connector_id_fk": {
+          "name": "external_oauth_intent_connector_id_identity_provider_connector_id_fk",
+          "tableFrom": "external_oauth_intent",
+          "tableTo": "identity_provider_connector",
+          "columnsFrom": [
+            "connector_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "external_oauth_intent_owner_user_id_user_id_fk": {
+          "name": "external_oauth_intent_owner_user_id_user_id_fk",
+          "tableFrom": "external_oauth_intent",
+          "tableTo": "user",
+          "columnsFrom": [
+            "owner_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "external_oauth_intent_agent_identity_id_agent_identity_id_fk": {
+          "name": "external_oauth_intent_agent_identity_id_agent_identity_id_fk",
+          "tableFrom": "external_oauth_intent",
+          "tableTo": "agent_identity",
+          "columnsFrom": [
+            "agent_identity_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "external_oauth_intent_owner_organization_id_organization_id_fk": {
+          "name": "external_oauth_intent_owner_organization_id_organization_id_fk",
+          "tableFrom": "external_oauth_intent",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "owner_organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -5170,6 +7153,41 @@
         },
         "scopes": {
           "name": "scopes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "api_base_url": {
+          "name": "api_base_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "credential_modes": {
+          "name": "credential_modes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "credential_header_name": {
+          "name": "credential_header_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allowed_methods": {
+          "name": "allowed_methods",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allowed_path_prefixes": {
+          "name": "allowed_path_prefixes",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

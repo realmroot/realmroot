@@ -1,16 +1,22 @@
 ---
 name: flareauth
-description: Operate a FlareAuth deployment with Restish v2 and guide product OIDC client integration. Use this when an agent needs to inspect or change FlareAuth applications, connectors, users, roles, organizations, API resources, webhooks, security settings, branding, sign-in settings, readiness, or configure public SPA, public native, confidential web, or device-authorization OIDC clients.
+description: Operate a FlareAuth deployment with Restish v2, establish and use a stable Agent identity, and guide product OIDC client integration. Use this when an agent needs to register itself, obtain an (issuer, sub) identity through controller approval, inspect Agent governance, configure credential brokerage, inspect or change FlareAuth resources, or configure public SPA, native, confidential web, or device-authorization OIDC clients.
 ---
 
 # FlareAuth
 
-Use this skill for two related tasks:
+Use this skill for three related tasks:
 
-- Operating a FlareAuth deployment through the Management API.
+- Establishing and using a stable Agent identity.
+- Operating a FlareAuth deployment through its unified API.
 - Guiding product OIDC clients that integrate with FlareAuth.
 
-For the Management API Restish workflow, read
+For Agent enrollment, stable identity creation, and the controller approval handoff,
+read `references/agent-identity.md`. Install and use the repository's Restish
+authentication adapter for AgentAuth key custody and proof signing; do not
+construct proof JWTs from memory. The adapter contributes no commands.
+
+For the unified API Restish workflow, read
 `references/restish-commands.md`.
 
 ## Setup
@@ -33,21 +39,24 @@ reconstructing Restish commands from memory.
 
 ## Authentication
 
-FlareAuth has a built-in public native client named `flareauth-cli` for Restish
-Management API automation. It is not the product OIDC device-login client, and
-system-managed applications such as `flareauth-cli` must not be modified.
+Restish command-line operations always authenticate as the Agent. The first
+protected OpenAPI command—normally `whoami`—triggers transparent enrollment and
+waits for one controller approval. There is no `login` command and no
+administrator OAuth identity in the CLI.
 
-Ask the user to complete browser login when Restish authorization starts. Do not
-ask the user to copy or paste bearer tokens. The initial readiness command
-suppresses response output and lets Restish store OAuth tokens in its local auth
-cache.
+Enrollment grants only the Agent's self-service identity. Tenant management
+operations require the AgentAuth capabilities `management:read` or
+`management:write`. Request them with the generated `request-agent-capabilities`
+operation. FlareAuth reuses its existing Agent capability approval request and
+hosted approval page. The Restish adapter opens that page in the controller's
+browser automatically and keeps the capability-request command waiting. An
+approval returns the active grants; a denial exits with an error. The adapter
+never replays the previously denied business operation, so run that operation
+again after the capability request succeeds. Every CLI request remains the
+Agent's stable `(issuer, subject)` principal.
 
-Do not use product OIDC client credentials for Management API automation. The
-Management API accepts an admin browser session or a bearer token issued to
-`flareauth-cli`; non-admin users receive `403`.
-
-If the user has already authorized this Restish API, sync its OpenAPI contract
-before operating it. Restish reuses and refreshes its cached OAuth token.
+If the API was already connected, sync its OpenAPI contract before operating
+it. Restish continues to use the locally held Agent and Host keys.
 
 ## OIDC Client Integration
 
@@ -224,4 +233,6 @@ device authorization support.
 - System-managed applications such as `flareauth-cli` must not be deleted or modified.
 - Asset upload endpoints use `multipart/form-data` with a single `file` field.
 - Raw secrets are returned only once on creation or rotation; never expect list/detail responses to reveal secret material.
+- Generate Agent and Host private keys locally. Never place them in Restish request bodies, approval URLs, logs, or chat.
+- An Agent may initiate login, but it must not approve its own login, grants, or external-account access.
 - For large changes, read current state first, apply the smallest patch, then read back the resource to verify.

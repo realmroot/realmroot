@@ -62,9 +62,7 @@ export const invitation = sqliteTable(
       .references(() => organization.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
     role: text('role').notNull().default('member'),
-    inviterId: text('inviter_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    inviterId: text('inviter_id').references(() => user.id, { onDelete: 'set null' }),
     status: text('status').notNull().default('pending'),
     tokenHash: text('token_hash').unique(),
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),

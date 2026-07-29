@@ -1,17 +1,22 @@
 import type {
+  AgentAuditEvent,
+  AgentIdentity,
   AgentProtocolAgent,
   AgentProtocolApprovalRequest,
   AgentProtocolCapabilityGrant,
   AgentProtocolHost,
 } from '@shared/api/agents'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, Server, Trash2 } from 'lucide-react'
+import { Bot, Fingerprint, ScrollText, Server, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableEmptyRow, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   consoleQueryKeys,
+  emergencyRetireAgentIdentity,
+  getAgentAuditEvents,
+  getAgentIdentityInventory,
   getAgentInventory,
   revokeAgent,
   revokeAgentCapabilityGrant,
@@ -27,8 +32,17 @@ export function AgentsPage() {
     queryKey: consoleQueryKeys.agents,
     queryFn: getAgentInventory,
   })
+  const governanceQuery = useQuery({
+    queryKey: [...consoleQueryKeys.agents, 'governance'],
+    queryFn: () =>
+      Promise.all([getAgentIdentityInventory(), getAgentAuditEvents()]).then(([identities, audit]) => ({
+        identities,
+        audit,
+      })),
+  })
   const revokeMutation = useMutation({
-    mutationFn: (input: { kind: 'agent' | 'host' | 'grant'; id: string }) => {
+    mutationFn: (input: { kind: 'agent' | 'host' | 'grant' | 'identity'; id: string }) => {
+      if (input.kind === 'identity') return emergencyRetireAgentIdentity(input.id)
       if (input.kind === 'agent') return revokeAgent(input.id)
       if (input.kind === 'host') return revokeAgentHost(input.id)
       return revokeAgentCapabilityGrant(input.id)
@@ -39,10 +53,10 @@ export function AgentsPage() {
   return (
     <ResourcePage
       description={tt('Inventory AgentAuth hosts, agents, approval requests, and capability grants.')}
-      error={query.error ?? revokeMutation.error}
+      error={query.error ?? governanceQuery.error ?? revokeMutation.error}
       framed={false}
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
+      loading={query.isLoading || governanceQuery.isLoading}
+      onRetry={() => Promise.all([query.refetch(), governanceQuery.refetch()])}
       title={tt('Delegated agents')}
     >
       {query.data ? (
@@ -81,9 +95,148 @@ export function AgentsPage() {
             revoke={(id) => revokeMutation.mutate({ kind: 'host', id })}
           />
           <AgentApprovalRequestTable requests={query.data.approvalRequests.items} />
+          <AgentIdentityTable
+            identities={governanceQuery.data?.identities.identities ?? []}
+            pending={revokeMutation.isPending}
+            retire={(id) => revokeMutation.mutate({ kind: 'identity', id })}
+          />
+          <AgentAuditTable events={governanceQuery.data?.audit.events ?? []} />
         </div>
       ) : null}
     </ResourcePage>
+  )
+}
+
+function AgentIdentityTable({
+  identities,
+  pending,
+  retire,
+}: {
+  identities: AgentIdentity[]
+  pending: boolean
+  retire: (id: string) => void
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{tt('Stable Agent identities')}</CardTitle>
+        <CardDescription>{tt('Tenant inventory keyed by immutable issuer and subject.')}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{tt('Identity')}</TableHead>
+              <TableHead>{tt('Home space')}</TableHead>
+              <TableHead>{tt('Hosts')}</TableHead>
+              <TableHead>{tt('Status')}</TableHead>
+              <TableHead>{tt('Emergency action')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {identities.length ? (
+              identities.map((identity) => (
+                <TableRow key={identity.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Fingerprint className="size-4 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">{identity.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {identity.issuer} · {identity.subject}
+                        </p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {identity.homeSpace.type === 'personal'
+                      ? `User ${identity.homeSpace.userId}`
+                      : `Organization ${identity.homeSpace.organizationId}`}
+                  </TableCell>
+                  <TableCell>{identity.bindings.filter((binding) => binding.status === 'active').length}</TableCell>
+                  <TableCell>
+                    <Badge variant={identity.status === 'active' ? 'secondary' : 'outline'}>{identity.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      disabled={pending || identity.status === 'retired'}
+                      onClick={() => retire(identity.id)}
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Trash2 data-icon="inline-start" /> {tt('Retire')}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableEmptyRow
+                colSpan={5}
+                title={tt('No stable Agent identities.')}
+                description={tt('Enrolled Agent identities will appear here.')}
+              />
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+}
+
+function AgentAuditTable({ events }: { events: AgentAuditEvent[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{tt('Agent audit')}</CardTitle>
+        <CardDescription>{tt('Credential-broker decisions without credentials or request bodies.')}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{tt('Decision')}</TableHead>
+              <TableHead>{tt('Agent / host')}</TableHead>
+              <TableHead>{tt('Target')}</TableHead>
+              <TableHead>{tt('Grant')}</TableHead>
+              <TableHead>{tt('Time')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {events.length ? (
+              events.map((event) => (
+                <TableRow key={event.id}>
+                  <TableCell>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <ScrollText className="size-4 text-muted-foreground" />
+                        <Badge variant={event.result === 'allowed' ? 'secondary' : 'outline'}>{event.result}</Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{event.action}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <p>{event.agentIdentityId ?? tt('Unresolved')}</p>
+                    <p className="text-xs text-muted-foreground">{event.hostId ?? tt('Unknown host')}</p>
+                  </TableCell>
+                  <TableCell>
+                    {event.method} {event.targetOrigin}
+                    {event.targetPath}
+                  </TableCell>
+                  <TableCell>{event.externalAccountGrantId ?? event.reasonCode ?? tt('None')}</TableCell>
+                  <TableCell>{new Date(event.occurredAt).toLocaleString()}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableEmptyRow
+                colSpan={5}
+                title={tt('No Agent audit events.')}
+                description={tt('Credential-broker decisions will appear here.')}
+              />
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   )
 }
 

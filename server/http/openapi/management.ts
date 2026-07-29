@@ -1,17 +1,17 @@
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
-import { systemCliClientId } from '@shared/api/applications'
+import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
 import {
+  agentProtocolIdentityResponseSchema,
   errorResponse,
   jsonContentType,
   type ManagementRouteConfig,
-  managementScopes,
   managementSecurity,
 } from './management-routes/helpers'
 import { platformWebhookRoutes } from './management-routes/platform-webhooks'
 import { userSecurityRoutes } from './management-routes/users-security'
 
-interface ManagementOpenApiDocument {
+interface UnifiedOpenApiDocument {
   openapi: string
   info: unknown
   paths: Record<string, unknown>
@@ -30,7 +30,11 @@ interface RestishCliConfig {
   profiles: {
     default: {
       credentials: {
-        managementOAuth2: {
+        agentAuth: {
+          auth: {
+            type: string
+            params: Record<string, string>
+          }
           params: Record<string, string>
         }
       }
@@ -38,19 +42,27 @@ interface RestishCliConfig {
   }
 }
 
-export const managementOpenApiPath = '/api/management/openapi.json'
-export const managementOpenApiLinkHeader = [
-  `<${managementOpenApiPath}>; rel="service-desc"; type="application/openapi+json"`,
-  `<${managementOpenApiPath}>; rel="describedby"; type="application/openapi+json"`,
+export const unifiedOpenApiPath = '/api/openapi.json'
+export const unifiedOpenApiLinkHeader = [
+  `<${unifiedOpenApiPath}>; rel="service-desc"; type="application/openapi+json"`,
+  `<${unifiedOpenApiPath}>; rel="describedby"; type="application/openapi+json"`,
 ].join(', ')
 
 const managementRoutes: ManagementRouteConfig[] = [
+  {
+    method: 'get',
+    path: '/whoami',
+    operationId: 'whoami',
+    summary: 'Read the current Agent identity',
+    response: agentProtocolIdentityResponseSchema,
+  },
+  ...agentGovernanceRoutes,
   ...applicationAuthorizationRoutes,
   ...userSecurityRoutes,
   ...platformWebhookRoutes,
 ]
 const openApiApp = createManagementOpenApiApp()
-export const managementOpenApi = buildManagementOpenApi()
+export const unifiedOpenApi = buildUnifiedOpenApi()
 
 function createManagementOpenApiApp() {
   const app = new OpenAPIHono()
@@ -60,35 +72,27 @@ function createManagementOpenApiApp() {
     name: 'better-auth.session_token',
     description: 'Authenticated administrator session.',
   })
-  app.openAPIRegistry.registerComponent('securitySchemes', 'managementOAuth2', {
-    type: 'oauth2',
-    description:
-      'Management API OAuth 2.0 authorization code flow with PKCE for the built-in public native FlareAuth CLI client.',
-    flows: {
-      authorizationCode: {
-        authorizationUrl: '/api/auth/oauth2/authorize',
-        tokenUrl: '/api/auth/oauth2/token',
-        scopes: {
-          'management:read': 'Read Management API resources.',
-          'management:write': 'Create, update, and delete Management API resources.',
-        },
-      },
-    },
+  app.openAPIRegistry.registerComponent('securitySchemes', 'agentAuth', {
+    type: 'apiKey',
+    in: 'header',
+    name: 'Authorization',
+    description: 'AgentAuth possession proof supplied transparently by the FlareAuth Restish authentication adapter.',
   })
   for (const routeConfig of managementRoutes) app.openAPIRegistry.registerPath(createManagementRoute(routeConfig))
   return app
 }
 
-function buildManagementOpenApi(): ManagementOpenApiDocument {
+function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
   const document = openApiApp.getOpenAPI31Document(
     {
       openapi: '3.1.0',
       info: {
-        title: 'FlareAuth Management API',
+        title: 'FlareAuth API',
         version: '2026-05-24',
-        description: 'Administrative API for FlareAuth applications, users, connectors, security, and settings.',
+        description:
+          'Unified API for Agent identity, self-service resources, and permission-gated tenant administration.',
       },
-      servers: [{ url: '/api/management' }],
+      servers: [{ url: '/api' }],
       security: managementSecurity,
     },
     { unionPreferredType: 'oneOf' },
@@ -99,18 +103,25 @@ function buildManagementOpenApi(): ManagementOpenApiDocument {
       profiles: {
         default: {
           credentials: {
-            managementOAuth2: {
+            agentAuth: {
+              auth: {
+                type: 'api-key',
+                params: {
+                  in: 'header',
+                  name: 'Authorization',
+                  value: 'AgentAuth',
+                  provider: 'flareauth-agent',
+                },
+              },
               params: {
-                client_id: systemCliClientId,
-                scopes: managementScopes,
-                redirect_path: '/callback',
+                provider: 'flareauth-agent',
               },
             },
           },
         },
       },
     },
-  } as ManagementOpenApiDocument
+  } as UnifiedOpenApiDocument
 }
 
 function createManagementRoute(routeConfig: ManagementRouteConfig) {

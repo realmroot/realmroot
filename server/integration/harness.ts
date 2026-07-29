@@ -25,6 +25,7 @@ function integrationEnv(): Env {
     EMAIL_QUEUE: { send: async () => {}, sendBatch: async () => {} },
     ASSETS: { fetch: async () => new Response(null, { status: 404 }) },
     BETTER_AUTH_SECRET: authSecret,
+    CREDENTIAL_ENCRYPTION_KEY: 'integration-credential-encryption-key-2026',
     BETTER_AUTH_URL: baseURL,
     TRUSTED_ORIGINS: baseURL,
     EMAIL_FROM: 'noreply@example.com',
@@ -36,6 +37,8 @@ function integrationConfig(): RuntimeConfig {
   return {
     authSecret,
     baseURL,
+    agentIdentityIssuer: baseURL,
+    credentialEncryptionKey: 'integration-credential-encryption-key-2026',
     emailFrom: 'noreply@example.com',
     emailFromName: 'FlareAuth',
     trustedOrigins: [baseURL],
@@ -99,6 +102,7 @@ export async function createHarness(): Promise<Harness> {
   const app = createApp(auth, deps, {
     trustedOrigins: config.trustedOrigins,
     securityPolicy: config.securityPolicy,
+    agentIdentityIssuer: config.agentIdentityIssuer,
   })
 
   return {

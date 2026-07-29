@@ -99,7 +99,7 @@ export async function createInvitation(
   deps: Deps,
   organizationId: string,
   input: CreateInvitationRequest,
-  inviterId: string,
+  inviterId: string | null,
 ) {
   await getOrganization(deps, organizationId)
   return deps.authorization.createInvitation({

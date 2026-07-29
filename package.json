@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "vite dev",
     "build": "[ \"$WORKERS_CI\" = \"1\" ] && [ \"$WORKERS_CI_BRANCH\" != \"main\" ] && export CF_WRANGLER_CONFIG=wrangler.preview.toml; vite build",
+    "plugin:build": "cd plugins/restish-flareauth && go build -o restish-flareauth .",
+    "plugin:test": "cd plugins/restish-flareauth && go test ./...",
     "deploy": "pnpm run db:migrate:remote && pnpm run build && wrangler deploy",
     "deploy:check": "node scripts/check-cloudflare-config.mjs",
     "deploy:fork": "node scripts/deploy-cloudflare-fork.mjs",
@@ -22,7 +24,7 @@
     "db:migrate:prod": "pnpm run db:migrate:remote",
     "routes:generate": "tsr generate",
     "typecheck": "pnpm run routes:generate && tsc --noEmit -p config/tsconfig.server.json && tsc --noEmit -p config/tsconfig.web.json && tsc --noEmit -p config/tsconfig.vitest.json && tsc --noEmit -p config/tsconfig.integration.json && tsc --noEmit -p config/tsconfig.e2e.json",
-    "test": "vitest run",
+    "test": "vitest run && pnpm run plugin:test",
     "test:integration": "vitest run --project integration",
     "test:coverage": "vitest run --project unit --project web --coverage",
     "spec:check": "node scripts/verify-specs.mjs",
@@ -42,21 +44,22 @@
   },
   "packageManager": "pnpm@10.30.2",
   "dependencies": {
-    "@better-auth/agent-auth": "0.5.1",
-    "@better-auth/i18n": "^1.6.23",
+    "@better-auth/agent-auth": "0.6.2",
+    "@better-auth/i18n": "^1.6.25",
     "@better-auth/oauth-provider": "^1.6.23",
-    "@better-auth/passkey": "^1.6.23",
+    "@better-auth/passkey": "^1.6.25",
     "@fontsource-variable/geist": "^5.2.8",
     "@hono/zod-openapi": "^1.4.0",
     "@hono/zod-validator": "^0.8.0",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-router": "^1.93.0",
-    "better-auth": "^1.6.23",
+    "better-auth": "^1.6.25",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.18",
     "i18next": "^26.1.0",
+    "jose": "6.2.4",
     "lucide-react": "^1.14.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.5",
@@ -103,6 +106,12 @@
       "BETTER_AUTH_SECRET": {
         "description": "Signing secret for auth sessions. Generate with: `openssl rand -base64 32`"
       },
+      "CREDENTIAL_ENCRYPTION_KEY": {
+        "description": "Master secret for AES-GCM encryption of Connector and external account credentials"
+      },
+      "AGENT_IDENTITY_ISSUER": {
+        "description": "Immutable canonical HTTPS origin used in stable Agent identities"
+      },
       "DB": {
         "description": "D1 database for FlareAuth identity data"
       },
@@ -135,6 +144,7 @@
       "workerd"
     ],
     "patchedDependencies": {
+      "@better-auth/agent-auth": "patches/@better-auth__agent-auth.patch",
       "@better-auth/oauth-provider": "patches/@better-auth__oauth-provider.patch",
       "better-auth": "patches/better-auth.patch"
     }

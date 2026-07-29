@@ -456,5 +456,10 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     createdAt: now,
     updatedAt: now,
     ...overrides,
+    apiBaseUrl: overrides.apiBaseUrl ?? null,
+    credentialModes: overrides.credentialModes ?? null,
+    credentialHeaderName: overrides.credentialHeaderName ?? null,
+    allowedMethods: overrides.allowedMethods ?? null,
+    allowedPathPrefixes: overrides.allowedPathPrefixes ?? null,
   }
 }

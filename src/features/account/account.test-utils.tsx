@@ -58,6 +58,25 @@ export function createAccountStore() {
       host: { id: string; name: string | null }
       capabilityGrants: Array<{ id: string; capability: string }>
     }>,
+    agentIdentities: [] as Array<{
+      id: string
+      issuer: string
+      subject: string
+      name: string
+      homeSpace: { type: 'personal'; userId: string }
+      status: 'active' | 'recovering' | 'retired'
+      retiredAt: string | null
+      createdAt: string
+      updatedAt: string
+      bindings: Array<{
+        id: string
+        protocolAgentId: string
+        hostId: string
+        status: 'active' | 'revoked'
+        boundAt: string
+        revokedAt: string | null
+      }>
+    }>,
   }
 }
 
@@ -156,6 +175,7 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
     http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({ accounts: store.linkedAccounts })),
     http.get(`${base}/api/account/applications`, () => HttpResponse.json({ applications: store.applications })),
     http.get(`${base}/api/account/agents`, () => HttpResponse.json({ agents: store.agents })),
+    http.get(`${base}/api/account/agent-identities`, () => HttpResponse.json({ identities: store.agentIdentities })),
   ] as unknown as Handlers
 }
 

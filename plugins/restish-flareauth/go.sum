@@ -1,0 +1,6 @@
+github.com/fxamacker/cbor/v2 v2.9.1 h1:2rWm8B193Ll4VdjsJY28jxs70IdDsHRWgQYAI80+rMQ=
+github.com/fxamacker/cbor/v2 v2.9.1/go.mod h1:vM4b+DJCtHn+zz7h3FFp/hDAI9WNWCsZj23V5ytsSxQ=
+github.com/rest-sh/restish/v2 v2.3.0 h1:kbeHH4uvEYsgi1ShS8M5M/qkWHQVlQ6L8b3NGcJA6NE=
+github.com/rest-sh/restish/v2 v2.3.0/go.mod h1:5i2g3d6x84yp4NvJ8c7gUPYoMSeaeXIUizC3CQLpHRU=
+github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
+github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=

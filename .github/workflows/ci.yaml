@@ -35,6 +35,12 @@ jobs:
           node-version: 24.14.1
           cache: pnpm
 
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: plugins/restish-flareauth/go.mod
+          cache-dependency-path: plugins/restish-flareauth/go.sum
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -75,6 +81,9 @@ jobs:
       - name: Test (integration crown)
         run: pnpm run test:integration
 
+      - name: Test Restish plugin
+        run: pnpm run plugin:test
+
       - name: Build
         run: pnpm run build
 
@@ -96,8 +105,17 @@ jobs:
           node-version: 24.14.1
           cache: pnpm
 
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: plugins/restish-flareauth/go.mod
+          cache-dependency-path: plugins/restish-flareauth/go.sum
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Restish
+        uses: ./.github/actions/setup-restish
 
       - name: Verify specs
         run: pnpm run spec:check

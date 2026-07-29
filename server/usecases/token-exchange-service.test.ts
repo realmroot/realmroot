@@ -38,6 +38,38 @@ afterEach(() => {
 })
 
 describe('token exchange service', () => {
+  it('matches an exact federated credential subject', async () => {
+    const { deps, repository, clientSecret } = await tokenExchangeFixture({ seedCredential: false })
+    repository.seedCredential({
+      issuer: 'https://platform.example.com',
+      subject: 'org_1:runner_1',
+    })
+    const subjectToken = await signHs256Jwt(
+      {
+        iss: 'https://platform.example.com',
+        sub: 'org_1:runner_1',
+        aud: defaultAudience,
+        exp: Math.floor(Date.now() / 1000) + 60,
+      },
+      'external-platform-secret',
+    )
+
+    await expect(
+      exchangeToken(
+        deps,
+        {
+          grantType: tokenExchangeGrantType,
+          subjectToken,
+          subjectTokenType: jwtTokenType,
+          requestedTokenType: accessTokenType,
+          audience: defaultAudience,
+          scope: 'runner:connect',
+        },
+        { clientId: applicationClientId, clientSecret },
+      ),
+    ).resolves.toMatchObject({ token_type: 'Bearer' })
+  })
+
   it('exchanges a trusted external JWT assertion for an introspectable access token', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture()
 

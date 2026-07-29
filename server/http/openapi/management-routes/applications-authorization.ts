@@ -60,8 +60,8 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
   {
     method: 'get',
     path: '/openapi.json',
-    operationId: 'getManagementOpenApi',
-    summary: 'Get Management OpenAPI document',
+    operationId: 'getOpenApi',
+    summary: 'Get the unified OpenAPI document',
     response: z.record(z.string(), z.unknown()),
     security: [],
   },

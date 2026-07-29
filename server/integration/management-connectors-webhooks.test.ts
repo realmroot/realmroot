@@ -1,5 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { webhookDeliveryRequest } from '@server/db/schema'
+import { identityProviderConnector, webhookDeliveryRequest } from '@server/db/schema'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, type Harness, signInAdmin } from './harness'
 
@@ -39,6 +40,15 @@ describe('connector management over real D1', () => {
     })
     expect(created.status, await created.clone().text()).toBe(201)
     const connector = (await created.json()) as { id: string }
+    const [stored] = await harness.db
+      .select({ clientSecret: identityProviderConnector.clientSecret })
+      .from(identityProviderConnector)
+      .where(eq(identityProviderConnector.id, connector.id))
+    expect(stored.clientSecret).toMatch(/^v1\./)
+    expect(stored.clientSecret).not.toContain('google-secret')
+    await expect(harness.deps.connectors.findById(connector.id)).resolves.toMatchObject({
+      clientSecret: 'google-secret',
+    })
 
     const list = await harness.request('/api/management/connectors', { headers: { cookie } })
     expect(((await list.json()) as { connectors: unknown[] }).connectors.length).toBe(1)

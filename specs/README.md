@@ -9,7 +9,8 @@ reference specs; the specs do not generate tests.
 
 - One `.feature` file per product area.
 - Each scenario carries a stable `@journey:<id>` tag (the id never changes once
-  written) and exactly one `@entrypoint:<id>` tag (`product-ui` or `restish`).
+  written) and exactly one `@entrypoint:<id>` tag (`agent-protocol`,
+  `product-ui`, or `restish`).
 - Add `@e2e` only to scenarios proven by the hermetic Playwright crown in
   `../e2e`. Most behaviour is proven cheaper (usecase/web/integration) and
   carries no `@e2e` tag.

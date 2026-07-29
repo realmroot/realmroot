@@ -11,7 +11,9 @@ afterEach(() => {
 })
 
 describe('console delegated agents page', () => {
-  it('renders AgentAuth inventory and revokes records through management RPCs [spec: admin-console/admin-agent-inventory]', async () => {
+  it(`renders AgentAuth inventory and stable identity governance
+      [spec: admin-console/admin-agent-inventory]
+      [spec: agent-identity/agent-governance-surfaces]`, async () => {
     const requests: Array<{ url: string; method: string }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = input instanceof Request ? input : null
@@ -22,10 +24,17 @@ describe('console delegated agents page', () => {
       if (url === '/api/management/agents/protocol-inventory') {
         return Promise.resolve(jsonResponse(agentInventory))
       }
+      if (url === '/api/management/agents/identity-inventory') {
+        return Promise.resolve(jsonResponse(identityInventory))
+      }
+      if (url === '/api/management/agent-audit-events') {
+        return Promise.resolve(jsonResponse(agentAudit))
+      }
       const allowedDeleteUrls = [
         '/api/management/agents/agent-1',
         '/api/management/agent-hosts/host-1',
         '/api/management/agent-capability-grants/grant-1',
+        '/api/management/agent-identities/identity-1',
       ]
       if (allowedDeleteUrls.includes(url) && method === 'DELETE') {
         return Promise.resolve(new Response(null, { status: 204 }))
@@ -40,15 +49,24 @@ describe('console delegated agents page', () => {
     expect(screen.getByText('Build Agent')).toBeTruthy()
     expect(screen.getAllByText('account.profile.read').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('device_code')).toBeTruthy()
+    expect(screen.getByText('Stable Build Agent')).toBeTruthy()
+    expect(screen.getByText('Retired Personal Agent')).toBeTruthy()
+    expect(screen.getByText('User user-2')).toBeTruthy()
+    expect(screen.getByText('external_account.egress')).toBeTruthy()
+    expect(screen.getByText('agent.token.denied')).toBeTruthy()
 
     for (const button of screen.getAllByRole('button', { name: 'Revoke' })) {
       fireEvent.click(button)
     }
+    const retire = screen.getAllByRole('button', { name: 'Retire' }).find((button) => !button.hasAttribute('disabled'))
+    expect(retire).toBeTruthy()
+    fireEvent.click(retire!)
 
     await waitFor(() => {
       expect(requests).toContainEqual({ url: '/api/management/agent-capability-grants/grant-1', method: 'DELETE' })
       expect(requests).toContainEqual({ url: '/api/management/agents/agent-1', method: 'DELETE' })
       expect(requests).toContainEqual({ url: '/api/management/agent-hosts/host-1', method: 'DELETE' })
+      expect(requests).toContainEqual({ url: '/api/management/agent-identities/identity-1', method: 'DELETE' })
     })
   })
 
@@ -59,6 +77,12 @@ describe('console delegated agents page', () => {
       if (url === '/api/management/agents/protocol-inventory') {
         return Promise.resolve(jsonResponse(emptyInventory))
       }
+      if (url === '/api/management/agents/identity-inventory') {
+        return Promise.resolve(jsonResponse({ identities: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/agent-audit-events') {
+        return Promise.resolve(jsonResponse({ events: [], pagination: emptyPagination }))
+      }
       throw new Error(`Unexpected request: ${url}`)
     })
 
@@ -67,6 +91,8 @@ describe('console delegated agents page', () => {
     expect(await screen.findByText('No delegated agents.')).toBeTruthy()
     expect(screen.getByText('No agent hosts.')).toBeTruthy()
     expect(screen.getByText('No approval requests.')).toBeTruthy()
+    expect(screen.getByText('No stable Agent identities.')).toBeTruthy()
+    expect(screen.getByText('No Agent audit events.')).toBeTruthy()
   })
 
   it('renders unlinked agents, hosts, and approvals with missing fields', async () => {
@@ -75,6 +101,12 @@ describe('console delegated agents page', () => {
       const url = request?.url ? new URL(request.url).pathname : String(input)
       if (url === '/api/management/agents/protocol-inventory') {
         return Promise.resolve(jsonResponse(unlinkedInventory))
+      }
+      if (url === '/api/management/agents/identity-inventory') {
+        return Promise.resolve(jsonResponse({ identities: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/management/agent-audit-events') {
+        return Promise.resolve(jsonResponse({ events: [], pagination: emptyPagination }))
       }
       throw new Error(`Unexpected request: ${url}`)
     })
@@ -95,6 +127,98 @@ describe('console delegated agents page', () => {
 })
 
 const timestamp = '2026-01-01T00:00:00.000Z'
+
+const identityInventory = {
+  identities: [
+    {
+      id: 'identity-1',
+      issuer: 'https://auth.example.com',
+      subject: 'agt_stable',
+      name: 'Stable Build Agent',
+      homeSpace: { type: 'organization', organizationId: 'org-1' },
+      status: 'active',
+      retiredAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      bindings: [
+        {
+          id: 'binding-1',
+          protocolAgentId: 'agent-1',
+          hostId: 'host-1',
+          status: 'active',
+          boundAt: timestamp,
+          revokedAt: null,
+        },
+      ],
+    },
+    {
+      id: 'identity-2',
+      issuer: 'https://auth.example.com',
+      subject: 'agt_retired',
+      name: 'Retired Personal Agent',
+      homeSpace: { type: 'personal', userId: 'user-2' },
+      status: 'retired',
+      retiredAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      bindings: [
+        {
+          id: 'binding-2',
+          protocolAgentId: 'agent-2',
+          hostId: 'host-2',
+          status: 'revoked',
+          boundAt: timestamp,
+          revokedAt: timestamp,
+        },
+      ],
+    },
+  ],
+  pagination: { ...emptyPagination, total: 1 },
+}
+
+const agentAudit = {
+  events: [
+    {
+      id: 'audit-1',
+      action: 'external_account.egress',
+      result: 'allowed',
+      controllerUserId: 'user-1',
+      subjectIssuer: 'https://auth.example.com',
+      subject: 'agt_stable',
+      agentIdentityId: 'identity-1',
+      hostId: 'host-1',
+      authorityGrantId: 'authority-1',
+      externalAccountId: 'account-1',
+      externalAccountGrantId: 'external-grant-1',
+      targetOrigin: 'https://api.example.com',
+      targetPath: '/v1/builds',
+      method: 'GET',
+      reasonCode: null,
+      metadata: { upstreamStatus: 200 },
+      occurredAt: timestamp,
+    },
+    {
+      id: 'audit-2',
+      action: 'agent.token.denied',
+      result: 'denied',
+      controllerUserId: null,
+      subjectIssuer: null,
+      subject: null,
+      agentIdentityId: null,
+      hostId: null,
+      authorityGrantId: null,
+      externalAccountId: null,
+      externalAccountGrantId: null,
+      targetOrigin: null,
+      targetPath: null,
+      method: null,
+      reasonCode: 'forbidden',
+      metadata: null,
+      occurredAt: timestamp,
+    },
+  ],
+  pagination: { ...emptyPagination, total: 1 },
+}
 
 const emptyInventory = {
   hosts: { items: [], pagination: { ...emptyPagination } },

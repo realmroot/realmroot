@@ -35,7 +35,10 @@ export interface SendEmail {
  */
 export type Env = Omit<Cloudflare.Env, 'EMAIL'> & {
   EMAIL: SendEmail
+  EXTERNAL_HTTP?: Fetcher
   BETTER_AUTH_URL?: string
+  AGENT_IDENTITY_ISSUER?: string
+  CREDENTIAL_ENCRYPTION_KEY?: string
   TRUSTED_ORIGINS?: string
   MFA_POLICY?: string
   PASSKEY_ENABLED?: string
@@ -51,6 +54,8 @@ export type Env = Omit<Cloudflare.Env, 'EMAIL'> & {
 export interface RuntimeConfig {
   authSecret: string
   baseURL: string
+  agentIdentityIssuer: string
+  credentialEncryptionKey: string
   emailFrom: string
   emailFromName?: string
   trustedOrigins: string[]
@@ -60,6 +65,7 @@ export interface RuntimeConfig {
 export function validateEnv(env: Env, requestUrl: string): RuntimeConfig {
   const origin = new URL(requestUrl).origin
   const baseURL = parseOrigin(env.BETTER_AUTH_URL || origin, 'BETTER_AUTH_URL')
+  const agentIdentityIssuer = parseOrigin(env.AGENT_IDENTITY_ISSUER || baseURL, 'AGENT_IDENTITY_ISSUER')
   const trustedOrigins = parseTrustedOrigins(env.TRUSTED_ORIGINS, baseURL)
   const securityPolicy = parseSecurityPolicy(env, baseURL, trustedOrigins)
 
@@ -87,6 +93,10 @@ export function validateEnv(env: Env, requestUrl: string): RuntimeConfig {
     throw new Error('BETTER_AUTH_SECRET is not configured for this deployment.')
   }
 
+  if (!env.CREDENTIAL_ENCRYPTION_KEY || env.CREDENTIAL_ENCRYPTION_KEY.length < 32) {
+    throw new Error('CREDENTIAL_ENCRYPTION_KEY must contain at least 32 characters.')
+  }
+
   if (!env.EMAIL_FROM) {
     throw new Error('EMAIL_FROM is not configured for this deployment.')
   }
@@ -94,6 +104,8 @@ export function validateEnv(env: Env, requestUrl: string): RuntimeConfig {
   return {
     authSecret: env.BETTER_AUTH_SECRET,
     baseURL,
+    agentIdentityIssuer,
+    credentialEncryptionKey: env.CREDENTIAL_ENCRYPTION_KEY,
     emailFrom: env.EMAIL_FROM,
     emailFromName: env.EMAIL_FROM_NAME,
     trustedOrigins,

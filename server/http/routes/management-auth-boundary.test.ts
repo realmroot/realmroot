@@ -1,5 +1,5 @@
 import { createApp } from '@server/http/app'
-import { managementOpenApi } from '@server/http/openapi/management'
+import { unifiedOpenApi } from '@server/http/openapi/management'
 import { managementCollectionRoutes } from '@shared/api/management'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -29,7 +29,7 @@ describe('management routes 1', () => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
   })
 
-  it('keeps the Management OpenAPI route inventory aligned with mounted routes', () => {
+  it('keeps the unified OpenAPI route inventory aligned with mounted routes', () => {
     const app = createApp(
       createAuthMock(),
       createTestDeps({
@@ -44,25 +44,28 @@ describe('management routes 1', () => {
     const operationIds = openApiOperationObjects().map((operation) => operation.operationId)
     expect(operationIds).not.toContain(undefined)
     expect(new Set(operationIds).size).toBe(operationIds.length)
-    expect(managementOpenApi.security).toEqual([{ adminSession: [] }, { managementOAuth2: [] }])
-    expect(managementOpenApi.components.securitySchemes.managementOAuth2).toMatchObject({
-      type: 'oauth2',
-      flows: {
-        authorizationCode: {
-          authorizationUrl: '/api/auth/oauth2/authorize',
-          tokenUrl: '/api/auth/oauth2/token',
-        },
-      },
+    expect(unifiedOpenApi.security).toEqual([{ agentAuth: [] }, { adminSession: [] }])
+    expect(unifiedOpenApi.components.securitySchemes.agentAuth).toMatchObject({
+      type: 'apiKey',
+      in: 'header',
+      name: 'Authorization',
     })
-    expect(managementOpenApi['x-cli-config']).toEqual({
+    expect(unifiedOpenApi['x-cli-config']).toEqual({
       profiles: {
         default: {
           credentials: {
-            managementOAuth2: {
+            agentAuth: {
+              auth: {
+                type: 'api-key',
+                params: {
+                  in: 'header',
+                  name: 'Authorization',
+                  value: 'AgentAuth',
+                  provider: 'flareauth-agent',
+                },
+              },
               params: {
-                client_id: 'flareauth-cli',
-                scopes: 'openid profile email offline_access management:read management:write',
-                redirect_path: '/callback',
+                provider: 'flareauth-agent',
               },
             },
           },
@@ -102,7 +105,7 @@ describe('management routes 1', () => {
     }
   })
 
-  it('serves the Management OpenAPI contract with Restish discovery headers [spec: management-api/management-openapi-discovery]', async () => {
+  it('serves the unified OpenAPI contract with Restish discovery headers [spec: management-api/management-openapi-discovery]', async () => {
     const app = createApp(
       createAuthMock(),
       createTestDeps({
@@ -112,16 +115,16 @@ describe('management routes 1', () => {
       { securityPolicy: securityPolicy() },
     )
 
-    const contract = await app.request('/api/management/openapi.json')
-    const protectedResponse = await app.request('/api/management/users')
+    const contract = await app.request('/api/openapi.json')
+    const protectedResponse = await app.request('/api/users')
 
     expect(contract.status).toBe(200)
     expect(contract.headers.get('content-type')).toContain('application/json')
     expect(contract.headers.get('link')).toBeNull()
-    await expect(contract.json()).resolves.toEqual(managementOpenApi)
+    await expect(contract.json()).resolves.toEqual(unifiedOpenApi)
 
     expect(protectedResponse.status).toBe(401)
-    expect(protectedResponse.headers.get('link')).toContain('</api/management/openapi.json>; rel="service-desc"')
+    expect(protectedResponse.headers.get('link')).toContain('</api/openapi.json>; rel="service-desc"')
   })
 
   it('documents application setup fields and role permission replacement request bodies', () => {
@@ -179,7 +182,7 @@ describe('management routes 1', () => {
     })
   })
 
-  it('accepts Management API Bearer tokens from the CLI client for admin users [spec: management-api/management-restish-oauth-auth]', async () => {
+  it('keeps accepting legacy Management API Bearer tokens from the CLI client for admin users', async () => {
     const auth = createAuthMock()
     auth.api.oauth2UserInfo.mockResolvedValue({
       sub: 'admin-1',
@@ -209,6 +212,128 @@ describe('management routes 1', () => {
     })
     expect(users.listManagedUsers).toHaveBeenCalledWith(expect.objectContaining({ limit: 10, offset: 20 }))
     expect(auth.api.listUsers).not.toHaveBeenCalled()
+  })
+
+  it('uses one Agent principal for whoami and permission-gated management [spec: agent-identity/agent-single-cli-principal] [spec: agent-identity/agent-management-authority] [spec: management-api/management-restish-oauth-auth]', async () => {
+    const auth = createAuthMock()
+    auth.api.getAgentSession.mockResolvedValue({
+      agentId: 'protocol-agent-1',
+      agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated', capabilityGrants: [] },
+      host: { id: 'host-1', userId: 'controller-1', status: 'active' },
+    })
+    const now = new Date()
+    const identity = {
+      identity: {
+        id: 'identity-1',
+        issuer: 'http://localhost',
+        subject: 'agt_1',
+        name: 'Build Agent',
+        ownerUserId: 'controller-1',
+        ownerOrganizationId: null,
+        status: 'active',
+        retiredAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      bindings: [
+        {
+          id: 'binding-1',
+          agentIdentityId: 'identity-1',
+          protocolAgentId: 'protocol-agent-1',
+          hostId: 'host-1',
+          status: 'active',
+          boundAt: now,
+          revokedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    }
+    const deps = createTestDeps({
+      users: createUserRepositoryMock(),
+      agentIdentities: {
+        findActiveByProtocolAgent: vi.fn().mockResolvedValue(identity),
+      },
+    })
+    const app = createApp(auth, deps)
+    const headers = bearerHeaders('agent-proof')
+
+    const whoami = await app.request('/api/whoami', { headers })
+    expect(whoami.status).toBe(200)
+    await expect(whoami.json()).resolves.toMatchObject({
+      identity: { issuer: 'http://localhost', subject: 'agt_1' },
+    })
+
+    const denied = await app.request('/api/users', { headers })
+    expect(denied.status).toBe(403)
+    await expect(denied.json()).resolves.toMatchObject({
+      error: { message: 'Agent authority "management:read" is required.' },
+    })
+
+    auth.api.getAgentSession.mockResolvedValue({
+      agentId: 'protocol-agent-1',
+      agent: {
+        id: 'protocol-agent-1',
+        hostId: 'host-1',
+        mode: 'delegated',
+        capabilityGrants: [{ capability: 'management:read', status: 'active' }],
+      },
+      host: { id: 'host-1', userId: 'controller-1', status: 'active' },
+    })
+    const allowed = await app.request('/api/users', { headers })
+    expect(allowed.status).toBe(200)
+    expect(auth.api.getAgentSession).toHaveBeenCalledTimes(3)
+  })
+
+  it('adapts unified capability requests to the existing AgentAuth approval flow [spec: agent-identity/agent-management-authority]', async () => {
+    const auth = createAuthMock()
+    auth.handler.mockImplementationOnce(async (request) => {
+      expect(new URL(request.url).pathname).toBe('/api/auth/agent/request-capability')
+      await expect(request.json()).resolves.toEqual({
+        capabilities: ['management:read', 'management:write'],
+        reason: 'Administer this tenant',
+        preferred_method: 'device_authorization',
+        binding_message: 'Agent requesting management:read, management:write',
+      })
+      return Response.json({
+        agent_id: 'protocol-agent-1',
+        status: 'pending',
+        agent_capability_grants: [
+          { capability: 'management:read', status: 'pending' },
+          { capability: 'management:write', status: 'pending' },
+        ],
+        approval: {
+          method: 'device_authorization',
+          device_code: 'approval-1',
+          verification_uri: 'https://auth.example.com/agent/approve',
+          verification_uri_complete: 'https://auth.example.com/agent/approve?agent_id=protocol-agent-1&code=ABCD-1234',
+          user_code: 'ABCD-1234',
+          expires_in: 600,
+          interval: 5,
+        },
+      })
+    })
+    const app = createApp(auth, createTestDeps())
+
+    const response = await app.request('https://auth.example.com/api/capability-requests', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer agent-proof',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        capabilities: ['management:read', 'management:write'],
+        reason: 'Administer this tenant',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      approval: { verification_uri_complete: string }
+    }
+    const approvalUrl = new URL(body.approval.verification_uri_complete)
+    expect(approvalUrl.pathname).toBe('/agent/approve')
+    expect(approvalUrl.searchParams.getAll('capability')).toEqual(['management:read', 'management:write'])
   })
 
   it('accepts Management API Bearer tokens verified through the OAuth userinfo route handler', async () => {

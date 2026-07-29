@@ -37,6 +37,40 @@ import {
 } from './console.test-utils'
 
 describe('console authorization summaries', () => {
+  it('presents organization-owned Agent identities in organization settings', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/management/organizations/org-1') return Promise.resolve(jsonResponse(organization))
+      if (url === '/api/management/agents/identity-inventory') {
+        return Promise.resolve(
+          jsonResponse({
+            identities: [
+              {
+                id: 'identity-org-1',
+                issuer: 'https://auth.example.com',
+                subject: 'agt_org',
+                name: 'Organization Build Agent',
+                homeSpace: { type: 'organization', organizationId: 'org-1' },
+                status: 'active',
+                retiredAt: null,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                bindings: [],
+              },
+            ],
+            pagination: { ...emptyPagination, total: 1 },
+          }),
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
+
+    expect(await screen.findByText('Organization Build Agent')).toBeTruthy()
+    expect(screen.getByText(/agt_org/)).toBeTruthy()
+  })
+
   it('retries organization and organization-template detail loading failures', async () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

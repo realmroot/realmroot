@@ -1,13 +1,18 @@
 import type { ConnectorResponse, ConnectorTemplate } from '@shared/api/connectors'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import type { SecurityPolicy } from '@shared/api/security'
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { ProviderRuntime } from '@/features/console/extracted/connectors/builtin-provider-controls'
 import { BuiltinProviderPanel } from '@/features/console/extracted/connectors/builtin-provider-panel'
 import { connectorProviderRows } from '@/features/console/extracted/connectors/provider-rows'
-import { ConnectorDynamicFields, connectorCallbackUrl } from '@/features/console/extracted/connectors/social-fields'
+import {
+  CallbackUrlField,
+  ConnectorDynamicFields,
+  connectorCallbackUrl,
+  GenericConnectorFields,
+} from '@/features/console/extracted/connectors/social-fields'
 import { connector, connectorTemplates, securityPolicy, signInSettings } from './console.test-utils'
 
 const templates = connectorTemplates.templates as ConnectorTemplate[]
@@ -54,6 +59,31 @@ describe('connector provider rows', () => {
     expect(byKey['builtin:passkey'].configurationLabel).toBe('Runtime disabled')
     expect(byKey['social:google'].configurationLabel).toBe('Credentials required')
     expect(byKey['social:google'].enabled).toBe(false)
+  })
+
+  it('keeps arbitrary platform-independent API connectors visible', () => {
+    const generic = {
+      ...connector,
+      id: 'connector-build',
+      providerId: 'build-api',
+      providerType: 'generic_api',
+      displayName: 'Build API',
+      apiBaseUrl: 'https://build.example.com',
+      credentialModes: ['header'],
+      credentialHeaderName: 'X-API-Key',
+      allowedMethods: ['GET'],
+      allowedPathPrefixes: ['/v1/builds'],
+    } as ConnectorResponse
+    const rows = connectorProviderRows(templates, [generic], undefined, undefined)
+    const row = rows.find((candidate) => candidate.connector?.id === generic.id)
+
+    expect(row).toMatchObject({
+      displayName: 'Build API',
+      providerId: 'build-api',
+      providerType: 'generic_api',
+      typeLabel: 'Generic API',
+      configurationLabel: 'Boundary configured',
+    })
   })
 })
 
@@ -123,6 +153,64 @@ describe('ConnectorDynamicFields', () => {
     }
     render(<ConnectorDynamicFields form={{}} isExisting={true} setForm={() => {}} template={template} />)
     expect(screen.getByText('Leave blank to keep the current secret.', { exact: false })).toBeTruthy()
+  })
+
+  it('merges duplicate supported fields and ignores non-product fields', () => {
+    const template = {
+      providerType: 'social' as const,
+      providerId: 'custom',
+      displayName: 'Custom',
+      icon: 'custom',
+      requiredFields: ['providerMetadata.domain'],
+      optionalFields: ['providerMetadata.domain', 'unknown'],
+      defaultScopes: [],
+      endpoints: {
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+      },
+    }
+    render(<ConnectorDynamicFields form={{}} isExisting={false} setForm={() => {}} template={template} />)
+    expect(screen.getAllByRole('textbox')).toHaveLength(1)
+    expect(screen.getByRole('textbox').hasAttribute('required')).toBe(true)
+  })
+})
+
+describe('GenericConnectorFields', () => {
+  it('renders and updates the generic OAuth field set for create and edit', () => {
+    const setForm = vi.fn()
+    const { rerender } = render(
+      <GenericConnectorFields form={{}} isExisting={false} providerType="generic_oauth" setForm={setForm} />,
+    )
+    expect(screen.getByLabelText('Client Secret').getAttribute('type')).toBe('password')
+    expect(screen.getByLabelText('Client Secret').hasAttribute('required')).toBe(true)
+    expect(screen.getByText('Use oauth.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-1' } })
+    expect(setForm).toHaveBeenCalled()
+
+    rerender(<GenericConnectorFields form={{}} isExisting providerType="generic_oauth" setForm={setForm} />)
+    expect(screen.getByText('Leave blank to keep the current secret.')).toBeTruthy()
+    expect(screen.getByLabelText('Client Secret').hasAttribute('required')).toBe(false)
+  })
+
+  it('renders the generic API boundaries and updates path prefixes', () => {
+    const setForm = vi.fn()
+    render(<GenericConnectorFields form={{}} isExisting={false} providerType="generic_api" setForm={setForm} />)
+    expect(screen.queryByLabelText('Client ID')).toBeNull()
+    expect(screen.getByLabelText('API base URL').hasAttribute('required')).toBe(true)
+    expect(screen.getByText('Space-separated: bearer header.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Allowed path prefixes'), { target: { value: '/v1\\n/v2' } })
+    expect(setForm).toHaveBeenCalled()
+  })
+
+  it('copies the callback URL', () => {
+    const writeText = vi.fn()
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    render(<CallbackUrlField value="https://auth.example.com/callback" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    expect(writeText).toHaveBeenCalledWith('https://auth.example.com/callback')
   })
 })
 

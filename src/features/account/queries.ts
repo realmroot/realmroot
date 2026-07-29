@@ -9,11 +9,13 @@ import {
   listConsentedApplications,
   listLinkedAccounts,
   listPasskeys,
+  listPersonalAgentIdentities,
 } from '@/lib/api/account'
 import { tt } from '@/lib/i18n'
 
 export const accountQueryKeys = {
   agents: ['account', 'agents'] as const,
+  agentIdentities: ['account', 'agent-identities'] as const,
   applications: ['account', 'applications'] as const,
   configz: ['configz'] as const,
   linkedAccounts: ['account', 'linked-accounts'] as const,
@@ -89,6 +91,14 @@ export function useAccountAgents() {
   return useQuery({
     queryKey: accountQueryKeys.agents,
     queryFn: listAccountAgents,
+    ...accountQueryOptions,
+  })
+}
+
+export function useAgentIdentities() {
+  return useQuery({
+    queryKey: accountQueryKeys.agentIdentities,
+    queryFn: listPersonalAgentIdentities,
     ...accountQueryOptions,
   })
 }

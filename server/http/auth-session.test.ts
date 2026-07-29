@@ -208,7 +208,7 @@ describe('auth.test 1', () => {
     )
   })
 
-  it('configures AgentAuth as delegated-only with read-only account capabilities', async () => {
+  it('configures AgentAuth as delegated-only with account and coarse management capabilities', async () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
@@ -232,8 +232,10 @@ describe('auth.test 1', () => {
       'account.profile.read',
       'account.sessions.list',
       'account.authorized_apps.list',
+      'management:read',
+      'management:write',
     ])
-    expect(agentAuthPlugin.options.validateCapabilities(['account.profile.read'])).toBe(true)
+    expect(agentAuthPlugin.options.validateCapabilities(['account.profile.read', 'management:read'])).toBe(true)
     expect(agentAuthPlugin.options.validateCapabilities(['management.users.delete'])).toBe(false)
     expect(agentAuthPlugin.options.resolveAutonomousUser).toBeUndefined()
   })

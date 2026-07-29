@@ -56,7 +56,12 @@ import {
 } from '../helpers/helpers-utils'
 import { BuiltinProviderPanel } from './connectors/builtin-provider-panel'
 import { type ConnectorProviderRow, connectorProviderRows } from './connectors/provider-rows'
-import { CallbackUrlField, ConnectorDynamicFields, connectorCallbackUrl } from './connectors/social-fields'
+import {
+  CallbackUrlField,
+  ConnectorDynamicFields,
+  connectorCallbackUrl,
+  GenericConnectorFields,
+} from './connectors/social-fields'
 
 export function ConnectorsPage() {
   const query = useQuery({
@@ -135,7 +140,7 @@ export function ConnectorsPage() {
   return (
     <ResourcePage
       title={tt('Connectors')}
-      description={tt('Configure built-in and social identity providers used by the hosted sign-in experience.')}
+      description={tt('Configure sign-in providers and platform-independent OAuth or API credential boundaries.')}
       error={query.error ?? templatesQuery.error ?? signInQuery.error ?? securityQuery.error}
       loading={query.isLoading || templatesQuery.isLoading || signInQuery.isLoading || securityQuery.isLoading}
       onRetry={() => {
@@ -300,6 +305,11 @@ function ConnectorProviderDrawer({
       clientId: '',
       clientSecret: '',
       scopes: provider.template?.defaultScopes.join(' ') ?? '',
+      apiBaseUrl: '',
+      credentialModes: provider.providerType === 'generic_oauth' ? 'oauth' : '',
+      credentialHeaderName: '',
+      allowedMethods: 'GET',
+      allowedPathPrefixes: '/',
       providerMetadata: '',
     })
   }, [provider, activeConnector])
@@ -340,6 +350,23 @@ function ConnectorProviderDrawer({
               try {
                 setValidationError(null)
                 const scopes = form.scopes?.split(/\s+/).filter(Boolean)
+                const isGenericConnector =
+                  provider.providerType === 'generic_oauth' || provider.providerType === 'generic_api'
+                const credentialModes =
+                  isGenericConnector && form.credentialModes?.trim()
+                    ? form.credentialModes.split(/\s+/).filter(Boolean)
+                    : undefined
+                const allowedMethods =
+                  isGenericConnector && form.allowedMethods?.trim()
+                    ? form.allowedMethods
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((method) => method.toUpperCase())
+                    : undefined
+                const allowedPathPrefixes =
+                  isGenericConnector && form.allowedPathPrefixes?.trim()
+                    ? form.allowedPathPrefixes.split(/\s+/).filter(Boolean)
+                    : undefined
                 const providerMetadata = parseConnectorMetadata(form)
                 if (isExisting) {
                   onUpdate(
@@ -348,6 +375,9 @@ function ConnectorProviderDrawer({
                       ...connectorUpdateForm(form),
                       enabled: form.enabled === 'true',
                       scopes,
+                      credentialModes,
+                      allowedMethods,
+                      allowedPathPrefixes,
                       providerMetadata,
                     }),
                   )
@@ -358,10 +388,13 @@ function ConnectorProviderDrawer({
                     ...form,
                     slug: provider.providerId,
                     enabled: form.enabled === 'true',
-                    providerType: 'social',
+                    providerType: provider.providerType,
                     providerId: provider.providerId,
                     displayName: provider.displayName,
                     scopes,
+                    credentialModes,
+                    allowedMethods,
+                    allowedPathPrefixes,
                     providerMetadata,
                   }),
                 )
@@ -408,13 +441,24 @@ function ConnectorProviderDrawer({
                     type="button"
                   />
                 </div>
-                <ConnectorDynamicFields
-                  form={form}
-                  isExisting={isExisting}
-                  setForm={setForm}
-                  template={provider.template}
-                />
-                <CallbackUrlField value={connectorCallbackUrl(provider.providerId)} />
+                {provider.providerType === 'generic_oauth' || provider.providerType === 'generic_api' ? (
+                  <GenericConnectorFields
+                    form={form}
+                    isExisting={isExisting}
+                    providerType={provider.providerType}
+                    setForm={setForm}
+                  />
+                ) : (
+                  <ConnectorDynamicFields
+                    form={form}
+                    isExisting={isExisting}
+                    setForm={setForm}
+                    template={provider.template}
+                  />
+                )}
+                {provider.providerType !== 'generic_api' ? (
+                  <CallbackUrlField value={connectorCallbackUrl(provider.providerId)} />
+                ) : null}
               </div>
             </div>
             <SheetFooter className="border-t border-border sm:flex-row sm:justify-end">

@@ -7,12 +7,17 @@
  */
 import { createEmailSender } from '@server/adapters/gateways/email/sender'
 import { createJwksGateway } from '@server/adapters/gateways/jwks'
+import { createSecretCipher } from '@server/adapters/gateways/secrets'
+import { createAgentAuditRepository } from '@server/adapters/repos/agent-audit'
+import { createDrizzleAgentIdentityRepository } from '@server/adapters/repos/agent-identities'
+import { createDrizzleAgentTokenRepository } from '@server/adapters/repos/agent-tokens'
 import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAssetRepository } from '@server/adapters/repos/assets'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
+import { createExternalAccountRepository } from '@server/adapters/repos/external-accounts'
 import { createOnboardingRepository } from '@server/adapters/repos/onboarding'
 import { createSecurityRepository } from '@server/adapters/repos/security'
 import { createTokenExchangeRepository } from '@server/adapters/repos/token-exchange'
@@ -29,16 +34,23 @@ import { createDb } from './db/client'
  */
 export function createDeps(env: Env, config: RuntimeConfig): Deps {
   const db = createDb(env.DB)
+  const secrets = createSecretCipher(config.credentialEncryptionKey)
   return {
     agents: createDrizzleAgentRepository(db),
+    agentAudit: createAgentAuditRepository(db),
+    agentIdentities: createDrizzleAgentIdentityRepository(db),
+    agentTokens: createDrizzleAgentTokenRepository(db),
     applications: createDrizzleApplicationRepository(db),
     assets: createDrizzleAssetRepository(db),
     assetStorage: env.ASSET_BUCKET,
     authorization: createDrizzleAuthorizationRepository(db),
     configz: createDrizzleConfigzRepository(db),
-    connectors: createConnectorRepository(db),
+    connectors: createConnectorRepository(db, secrets),
+    externalAccounts: createExternalAccountRepository(db),
+    externalHttp: { fetch: (request) => (env.EXTERNAL_HTTP ? env.EXTERNAL_HTTP.fetch(request) : fetch(request)) },
     onboarding: createOnboardingRepository(env.DB),
     security: createSecurityRepository(db, config.securityPolicy),
+    secrets,
     tokenExchange: createTokenExchangeRepository(db),
     users: createUserRepository(db),
     wallets: createWalletRepository(db),
