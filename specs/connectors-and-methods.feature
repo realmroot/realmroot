@@ -42,6 +42,13 @@ Feature: Connectors and hosted method availability
     When the connector is available or unavailable
     Then hosted auth and native social endpoints enforce that state
 
+  @entrypoint:product-ui @journey:connector-secret-upgrade
+  Scenario: Existing connector credentials survive encrypted-custody upgrades
+    Given an enabled connector was created before encrypted credential custody
+    When the upgraded deployment loads that connector
+    Then its plaintext client secret is encrypted in place before use
+    And the connector remains available for hosted sign-in
+
   @entrypoint:product-ui @journey:provider-disabled-endpoint-enforcement
   Scenario: Disabled hosted auth providers block native auth endpoints
     Given hosted auth providers are disabled by policy

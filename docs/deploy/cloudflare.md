@@ -31,6 +31,7 @@ the explicit deployment version boundary.
    - `CLOUDFLARE_API_TOKEN`
    - `CLOUDFLARE_ACCOUNT_ID`
    - optional `BETTER_AUTH_SECRET`
+   - optional `CREDENTIAL_ENCRYPTION_KEY`
 
 4. Add the required repository variable:
 
@@ -43,6 +44,8 @@ the explicit deployment version boundary.
    - `FLAREAUTH_D1_DATABASE`
    - `FLAREAUTH_R2_BUCKET`
    - `FLAREAUTH_EMAIL_QUEUE`
+   - `AGENT_IDENTITY_ISSUER`, the immutable public origin used in stable Agent
+     identities when the Worker has a custom domain
 
 6. Open **Actions > Deploy FlareAuth Fork > Run workflow**.
 
@@ -74,13 +77,17 @@ instead of adding product-level tenant predicates inside one D1 database. See
 
 ## Secrets And Runtime Settings
 
-`BETTER_AUTH_SECRET` must be unique for every auth realm. When the GitHub secret
-is configured, the workflow applies it. Otherwise it reuses the existing Worker
-secret or generates one on the first deployment.
+`BETTER_AUTH_SECRET` and `CREDENTIAL_ENCRYPTION_KEY` must be unique for every
+auth realm. When the matching GitHub secret is configured, the workflow applies
+it. Otherwise it reuses the existing Worker secret or generates one on the first
+deployment. Rotating `CREDENTIAL_ENCRYPTION_KEY` requires re-encrypting stored
+credentials first.
 
 These settings remain deployment-specific:
 
 - `BETTER_AUTH_URL`: optional canonical issuer origin.
+- `AGENT_IDENTITY_ISSUER`: immutable public origin for stable Agent identities;
+  set it when the Worker has a custom domain or more than one reachable origin.
 - `TRUSTED_ORIGINS`: optional extra first-party FlareAuth origins.
 - OAuth provider credentials configured in the admin console or Management API.
 - `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, and `WEBAUTHN_ORIGINS` when passkeys

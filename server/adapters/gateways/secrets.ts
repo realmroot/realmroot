@@ -10,6 +10,10 @@ export function createSecretCipher(masterSecret: string): SecretCipher {
   const key = deriveKey(masterSecret)
 
   return {
+    isSealed(value) {
+      return value.startsWith(`${envelopeVersion}.`)
+    },
+
     async seal(plaintext, context) {
       const iv = crypto.getRandomValues(new Uint8Array(12))
       const ciphertext = await crypto.subtle.encrypt(

@@ -75,6 +75,40 @@ describe('connector management over real D1', () => {
     expect(removed.status).toBe(204)
   })
 
+  it('encrypts legacy connector secrets in place before hosted auth uses them [spec: connectors-and-methods/connector-secret-upgrade]', async () => {
+    const now = new Date()
+    await harness.db.insert(identityProviderConnector).values({
+      id: 'idp_legacy_github',
+      slug: 'github',
+      providerType: 'social',
+      providerId: 'github',
+      displayName: 'GitHub',
+      enabled: true,
+      clientId: 'legacy-client',
+      clientSecret: 'legacy-plaintext-secret',
+      scopes: ['read:user', 'user:email'],
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await expect(harness.deps.connectors.listEnabled()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'idp_legacy_github',
+        clientSecret: 'legacy-plaintext-secret',
+      }),
+    ])
+
+    const [stored] = await harness.db
+      .select({ clientSecret: identityProviderConnector.clientSecret })
+      .from(identityProviderConnector)
+      .where(eq(identityProviderConnector.id, 'idp_legacy_github'))
+    expect(stored.clientSecret).toMatch(/^v1\./)
+    expect(stored.clientSecret).not.toContain('legacy-plaintext-secret')
+    await expect(harness.deps.connectors.findById('idp_legacy_github')).resolves.toMatchObject({
+      clientSecret: 'legacy-plaintext-secret',
+    })
+  })
+
   it('rejects an invalid connector payload with 400', async () => {
     const cookie = await signInAdmin(harness)
     const response = await harness.request('/api/management/connectors', {
