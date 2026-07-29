@@ -158,8 +158,8 @@ describe('native auth client', () => {
       '/api/auth/siwe/verify',
       '/api/auth/one-tap/callback',
       '/api/auth/two-factor/verify-totp',
-      '/api/auth/agent/approve-capability',
-      '/api/auth/agent/approve-capability',
+      '/api/account/agent-approvals/agent-1/decisions',
+      '/api/account/agent-approvals/agent-2/decisions',
       '/api/auth/device?user_code=ABCD-1234',
       '/api/auth/device/approve',
       '/api/auth/device/deny',
@@ -167,14 +167,12 @@ describe('native auth client', () => {
     expect(requests.at(-1)?.body).toEqual({ userCode: 'ABCD-1234' })
     expect(requests.at(-2)?.body).toEqual({ userCode: 'ABCD-1234' })
     expect(requests.at(-4)?.body).toEqual({
-      agent_id: 'agent-2',
-      user_code: 'WXYZ-9876',
+      userCode: 'WXYZ-9876',
       action: 'deny',
       capabilities: ['account.profile.read'],
     })
     expect(requests.at(-5)?.body).toEqual({
-      agent_id: 'agent-1',
-      user_code: 'ABCD-1234',
+      userCode: 'ABCD-1234',
       action: 'approve',
     })
   })
