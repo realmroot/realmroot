@@ -192,7 +192,30 @@ describe('external OAuth connection', () => {
         'https://auth.example.com',
       ),
     ).resolves.toMatchObject({ authorizationUrl: expect.stringContaining('scope=repo%3Aread') })
-    expect(deps.externalAccounts.createOAuthIntent).toHaveBeenCalledTimes(2)
+
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(agentIdentity())
+    await createExternalOAuthIntent(
+      deps,
+      {
+        connectorId: 'connector-1',
+        owner: { type: 'agent', agentIdentityId: 'identity-1' },
+        displayName: 'Agent OAuth Account',
+      },
+      'user-1',
+      'https://auth.example.com',
+    )
+    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(member('owner'))
+    await createExternalOAuthIntent(
+      deps,
+      {
+        connectorId: 'connector-1',
+        owner: { type: 'organization', organizationId: 'org-1' },
+        displayName: 'Organization OAuth Account',
+      },
+      'user-1',
+      'https://auth.example.com',
+    )
+    expect(deps.externalAccounts.createOAuthIntent).toHaveBeenCalledTimes(4)
   })
 
   it('rejects incomplete OAuth connectors and invalid endpoint metadata', async () => {
@@ -415,6 +438,23 @@ describe('external account grants', () => {
     vi.mocked(deps.externalAccounts.findGrant).mockResolvedValue(externalGrant())
     vi.mocked(deps.externalAccounts.revokeGrant).mockResolvedValue(true)
     await expect(revokeExternalAccountGrant(deps, 'account-1', 'grant-1', 'user-1')).resolves.toBeUndefined()
+
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connector({ allowedMethods: null, allowedPathPrefixes: null }),
+    )
+    await expect(
+      createExternalAccountGrant(
+        deps,
+        'account-1',
+        {
+          agentIdentityId: 'identity-1',
+          scopes: [],
+          allowedMethods: [],
+          allowedPathPrefixes: [],
+        },
+        'user-1',
+      ),
+    ).resolves.toMatchObject({ expiresAt: null })
   })
 
   it('rejects grant and revocation boundary violations', async () => {

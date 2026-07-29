@@ -85,6 +85,57 @@ describe('connector provider rows', () => {
       configurationLabel: 'Boundary configured',
     })
   })
+
+  it('labels configured generic templates and unmatched OAuth connectors', () => {
+    const genericTemplate = {
+      providerType: 'generic_api',
+      providerId: 'build-api',
+      displayName: 'Build API',
+      icon: 'api',
+      requiredFields: [],
+      optionalFields: [],
+      defaultScopes: [],
+      endpoints: {
+        issuer: null,
+        authorizationEndpoint: null,
+        tokenEndpoint: null,
+        userInfoEndpoint: null,
+        jwksEndpoint: null,
+      },
+    } as ConnectorTemplate
+    const configuredGeneric = {
+      ...connector,
+      id: 'connector-build',
+      providerId: 'build-api',
+      providerType: 'generic_api',
+      displayName: 'Build API',
+    } as ConnectorResponse
+    const unmatchedOAuth = {
+      ...connector,
+      id: 'connector-oauth',
+      providerId: 'partner-oauth',
+      providerType: 'generic_oauth',
+      displayName: 'Partner OAuth',
+    } as ConnectorResponse
+    const googleWithoutSecret = {
+      ...connector,
+      providerId: 'google',
+      providerType: 'social',
+      clientSecretConfigured: false,
+    } as ConnectorResponse
+
+    const rows = connectorProviderRows(
+      [...templates, genericTemplate],
+      [configuredGeneric, unmatchedOAuth, googleWithoutSecret],
+      undefined,
+      undefined,
+    )
+    const byProvider = Object.fromEntries(rows.map((row) => [row.providerId, row]))
+
+    expect(byProvider['build-api'].configurationLabel).toBe('Boundary configured')
+    expect(byProvider.google.configurationLabel).toBe('Credentials required')
+    expect(byProvider['partner-oauth'].icon).toBe('oauth')
+  })
 })
 
 describe('ProviderRuntime fallback panel', () => {

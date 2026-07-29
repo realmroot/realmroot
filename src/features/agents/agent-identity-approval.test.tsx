@@ -114,4 +114,41 @@ describe('Agent stable identity approval', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Approve stable identity' }))
     expect(await screen.findByText('Unable to approve Agent identity.')).toBeTruthy()
   })
+
+  it('ignores enrollment completion after the approval page unmounts', async () => {
+    let resolveIntent!: (value: unknown) => void
+    const intentPromise = new Promise((resolve) => {
+      resolveIntent = resolve
+    })
+    api.getAgentEnrollmentIntent.mockReturnValue(intentPromise)
+
+    const view = render(<AgentIdentityApproval />)
+    view.unmount()
+    resolveIntent({
+      id: 'intent-1',
+      agentIdentityId: null,
+      requestedName: 'Build Agent',
+      homeSpace: { type: 'personal', userId: 'user-1' },
+      protocolAgentId: 'protocol-agent-1',
+      status: 'pending',
+      expiresAt: '2026-08-01T00:10:00.000Z',
+      approvedAt: null,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    })
+    await intentPromise
+  })
+
+  it('ignores enrollment failure after the approval page unmounts', async () => {
+    let rejectIntent!: (reason: unknown) => void
+    const intentPromise = new Promise((_, reject) => {
+      rejectIntent = reject
+    })
+    api.getAgentEnrollmentIntent.mockReturnValue(intentPromise)
+
+    const view = render(<AgentIdentityApproval />)
+    view.unmount()
+    rejectIntent(new Error('Enrollment expired'))
+    await expect(intentPromise).rejects.toThrow('Enrollment expired')
+  })
 })
