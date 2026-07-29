@@ -1,92 +1,21 @@
 import { handleApiError } from '@server/http/errors'
 import { depsMiddleware } from '@server/http/middleware/deps'
-import { createAgentTokenRoutes } from '@server/http/routes/agent-tokens'
+import { createAgentProtocolRoutes } from '@server/http/routes/agent-protocol'
 import * as agentIdentities from '@server/usecases/agent-identities'
-import * as agentTokens from '@server/usecases/agent-tokens'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from '../test-deps'
 
-describe('Agent token routes', () => {
+describe('Agent protocol routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('requires an active Agent protocol session', async () => {
+  it('does not publish a second Agent-only OAuth token endpoint [spec: agent-identity/agent-stable-issuer]', async () => {
     const app = createRouteApp({ getAgentSession: vi.fn().mockResolvedValue(null) })
 
-    const response = await app.request('/api/agent/oauth2/token', {
-      method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ grantId: 'grant-1' }),
-    })
-
-    expect(response.status).toBe(401)
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'unauthorized', message: 'An active Agent protocol session is required.' },
-    })
-  })
-
-  it('preserves Better Auth Agent authentication errors at the HTTP boundary', async () => {
-    const app = createRouteApp({
-      getAgentSession: vi.fn().mockRejectedValue({
-        statusCode: 401,
-        message: 'JWT is invalid.',
-        body: { message: 'JWT is invalid.' },
-      }),
-    })
-
-    const response = await app.request('/api/agent/oauth2/token', {
-      method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ grantId: 'grant-1' }),
-    })
-
-    expect(response.status).toBe(401)
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'unauthorized', message: 'JWT is invalid.' },
-    })
-  })
-
-  it('validates the token request before invoking the usecase', async () => {
-    const issue = vi.spyOn(agentTokens, 'issueAgentAccessToken')
-    const app = createRouteApp({ getAgentSession: vi.fn().mockResolvedValue(session()) })
-
-    const response = await app.request('/api/agent/oauth2/token', {
-      method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ scope: 'repo:read' }),
-    })
-
-    expect(response.status).toBe(400)
-    expect(issue).not.toHaveBeenCalled()
-  })
-
-  it('passes the authenticated Agent session and DPoP request to token issuance', async () => {
-    const issue = vi.spyOn(agentTokens, 'issueAgentAccessToken').mockResolvedValue({
-      access_token: 'faat_token',
-      issued_token_type: 'urn:ietf:params:oauth:token-type:access_token',
-      token_type: 'DPoP',
-      expires_in: 300,
-      scope: 'repo:read',
-    })
-    const getAgentSession = vi.fn().mockResolvedValue(session())
-    const app = createRouteApp({ getAgentSession })
-
-    const response = await app.request('/api/agent/oauth2/token', {
-      method: 'POST',
-      headers: { ...jsonHeaders(), dpop: 'proof' },
-      body: JSON.stringify({ grantId: 'grant-1', scope: 'repo:read' }),
-    })
-
-    expect(response.status).toBe(200)
-    expect(getAgentSession).toHaveBeenCalledWith({ headers: expect.any(Headers), asResponse: false })
-    expect(issue).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ method: 'POST' }),
-      { grantId: 'grant-1', scope: 'repo:read' },
-      session(),
-    )
+    expect((await app.request('/api/agent/oauth2/token', { method: 'POST' })).status).toBe(404)
+    expect((await app.request('/api/agent/jwks')).status).toBe(404)
   })
 
   it('lets an authenticated delegated Agent request stable identity enrollment [spec: agent-identity/agent-identity-enrollment]', async () => {
@@ -127,7 +56,7 @@ describe('Agent token routes', () => {
   it('returns the authenticated Agent stable identity [spec: agent-identity/agent-identity-enrollment]', async () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue({
       id: 'identity-1',
-      issuer: 'https://auth.example.com',
+      issuer: 'https://auth.example.com/api/auth',
       subject: 'agt_1',
       name: 'Build Agent',
       homeSpace: { type: 'personal', userId: 'user-1' },
@@ -152,14 +81,14 @@ describe('Agent token routes', () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
-      identity: { id: 'identity-1', issuer: 'https://auth.example.com', subject: 'agt_1' },
+      identity: { id: 'identity-1', issuer: 'https://auth.example.com/api/auth', subject: 'agt_1' },
     })
   })
 
   it('creates the stable identity after the single controller login approval [spec: agent-identity/agent-identity-enrollment]', async () => {
     const createIdentity = vi.spyOn(agentIdentities, 'createAgentLoginIdentity').mockResolvedValue({
       id: 'identity-1',
-      issuer: 'https://agents.example.com',
+      issuer: 'https://auth.example.com/api/auth',
       subject: 'agt_1',
       name: 'Build Agent',
       homeSpace: { type: 'personal', userId: 'user-1' },
@@ -169,7 +98,10 @@ describe('Agent token routes', () => {
       updatedAt: new Date('2026-08-01T00:00:00.000Z'),
       bindings: [],
     })
-    const app = createRouteApp({ getAgentSession: vi.fn().mockResolvedValue(session()) }, 'https://agents.example.com')
+    const app = createRouteApp(
+      { getAgentSession: vi.fn().mockResolvedValue(session()) },
+      'https://auth.example.com/api/auth',
+    )
 
     const response = await app.request('/api/agent/identity', {
       method: 'POST',
@@ -179,12 +111,12 @@ describe('Agent token routes', () => {
 
     expect(response.status).toBe(201)
     await expect(response.json()).resolves.toMatchObject({
-      identity: { issuer: 'https://agents.example.com', subject: 'agt_1', name: 'Build Agent' },
+      identity: { issuer: 'https://auth.example.com/api/auth', subject: 'agt_1', name: 'Build Agent' },
     })
     expect(createIdentity).toHaveBeenCalledWith(
       expect.anything(),
       { protocolAgentId: 'protocol-agent-1', name: 'Build Agent' },
-      'https://agents.example.com',
+      'https://auth.example.com/api/auth',
       'user-1',
     )
   })
@@ -194,12 +126,12 @@ function createRouteApp(
   authApi: {
     getAgentSession: (context: { headers: Headers; asResponse: false }) => Promise<ReturnType<typeof session> | null>
   },
-  agentIdentityIssuer?: string,
+  oidcIssuer?: string,
 ) {
   return new Hono()
     .use('*', depsMiddleware(createTestDeps()))
     .onError((error, c) => handleApiError(error, c))
-    .route('/api/agent', createAgentTokenRoutes(authApi, agentIdentityIssuer))
+    .route('/api/agent', createAgentProtocolRoutes(authApi, oidcIssuer))
 }
 
 function session() {

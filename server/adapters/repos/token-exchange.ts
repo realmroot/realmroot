@@ -6,27 +6,16 @@ import type {
   TokenExchangeRepository,
   UpdateFederatedCredentialInput,
 } from '@server/usecases/ports'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   apiResource,
   application,
   federatedCredential,
-  oauthAccessToken,
   oauthClient,
   tokenExchangeAccessToken,
+  tokenExchangeRefreshToken,
 } from '../../db/schema'
-
-// Better Auth stores oauth_access_token.scopes as a JSON array string; older rows
-// may use a space-delimited string. Normalize both to a string list.
-function parseScopeList(value: string): string[] {
-  const trimmed = value.trim()
-  if (trimmed.startsWith('[')) {
-    const parsed = JSON.parse(trimmed)
-    if (Array.isArray(parsed)) return parsed.filter((s): s is string => typeof s === 'string')
-  }
-  return trimmed ? trimmed.split(/\s+/) : []
-}
 
 type CredentialRow = typeof federatedCredential.$inferSelect
 
@@ -78,13 +67,33 @@ export function createTokenExchangeRepository(db: Database): TokenExchangeReposi
           audience: apiResource.audience,
           jwksUrl: federatedCredential.jwksUrl,
           publicKeys: federatedCredential.publicKeys,
-          sharedSecret: federatedCredential.sharedSecret,
           enabled: federatedCredential.enabled,
         })
         .from(federatedCredential)
         .innerJoin(application, eq(application.id, federatedCredential.applicationId))
         .innerJoin(apiResource, eq(apiResource.id, federatedCredential.audienceResourceId))
-        .where(and(eq(application.oauthClientId, applicationClientId), eq(federatedCredential.issuer, issuer)))
+        .where(
+          and(
+            eq(application.oauthClientId, applicationClientId),
+            eq(federatedCredential.issuer, issuer),
+            eq(application.disabled, false),
+            eq(apiResource.enabled, true),
+            eq(federatedCredential.enabled, true),
+          ),
+        )
+    },
+
+    async findFederatedCredentialForClient(id, clientId) {
+      const [row] = await resolvedCredentialQuery(db).where(
+        and(
+          eq(federatedCredential.id, id),
+          eq(application.oauthClientId, clientId),
+          eq(application.disabled, false),
+          eq(apiResource.enabled, true),
+          eq(federatedCredential.enabled, true),
+        ),
+      )
+      return row ?? null
     },
 
     async listFederatedCredentials(applicationId: string) {
@@ -111,7 +120,6 @@ export function createTokenExchangeRepository(db: Database): TokenExchangeReposi
         audienceResourceId: input.audienceResourceId,
         jwksUrl: input.jwksUrl ?? null,
         publicKeys: input.publicKeys ?? null,
-        sharedSecret: null,
         enabled: true,
         metadata: input.metadata ?? null,
         createdAt: now,
@@ -159,27 +167,71 @@ export function createTokenExchangeRepository(db: Database): TokenExchangeReposi
       return rows[0] ?? null
     },
 
-    async findOAuthAccessTokenByHash(tokenHash: string) {
-      const rows = await db
-        .select({
-          clientId: oauthAccessToken.clientId,
-          userId: oauthAccessToken.userId,
-          scopes: oauthAccessToken.scopes,
-          expiresAt: oauthAccessToken.expiresAt,
-          createdAt: oauthAccessToken.createdAt,
-        })
-        .from(oauthAccessToken)
-        .where(eq(oauthAccessToken.token, tokenHash))
+    async storeRefreshToken(input) {
+      await db.insert(tokenExchangeRefreshToken).values(input)
+      const [revokedFamily] = await db
+        .select({ id: tokenExchangeRefreshToken.id })
+        .from(tokenExchangeRefreshToken)
+        .where(
+          and(eq(tokenExchangeRefreshToken.familyId, input.familyId), isNotNull(tokenExchangeRefreshToken.revokedAt)),
+        )
         .limit(1)
-      const row = rows[0]
-      if (!row) return null
-      return {
-        clientId: row.clientId,
-        userId: row.userId ?? null,
-        scopes: parseScopeList(row.scopes),
-        expiresAt: row.expiresAt,
-        createdAt: row.createdAt,
-      }
+      if (!revokedFamily) return true
+      await db
+        .update(tokenExchangeRefreshToken)
+        .set({ revokedAt: new Date() })
+        .where(eq(tokenExchangeRefreshToken.id, input.id))
+      return false
+    },
+
+    async findRefreshTokenByHash(tokenHash) {
+      const [row] = await db
+        .select()
+        .from(tokenExchangeRefreshToken)
+        .where(eq(tokenExchangeRefreshToken.tokenHash, tokenHash))
+        .limit(1)
+      return row ?? null
+    },
+
+    async consumeRefreshToken(id, now) {
+      const [row] = await db
+        .update(tokenExchangeRefreshToken)
+        .set({ consumedAt: now })
+        .where(
+          and(
+            eq(tokenExchangeRefreshToken.id, id),
+            isNull(tokenExchangeRefreshToken.consumedAt),
+            isNull(tokenExchangeRefreshToken.revokedAt),
+          ),
+        )
+        .returning({ id: tokenExchangeRefreshToken.id })
+      return Boolean(row)
+    },
+
+    async revokeRefreshTokenFamily(familyId, now) {
+      await db
+        .update(tokenExchangeRefreshToken)
+        .set({ revokedAt: now })
+        .where(and(eq(tokenExchangeRefreshToken.familyId, familyId), isNull(tokenExchangeRefreshToken.revokedAt)))
     },
   }
+}
+
+function resolvedCredentialQuery(db: Database) {
+  return db
+    .select({
+      id: federatedCredential.id,
+      applicationId: federatedCredential.applicationId,
+      applicationClientId: application.oauthClientId,
+      name: federatedCredential.name,
+      issuer: federatedCredential.issuer,
+      subject: federatedCredential.subject,
+      audience: apiResource.audience,
+      jwksUrl: federatedCredential.jwksUrl,
+      publicKeys: federatedCredential.publicKeys,
+      enabled: federatedCredential.enabled,
+    })
+    .from(federatedCredential)
+    .innerJoin(application, eq(application.id, federatedCredential.applicationId))
+    .innerJoin(apiResource, eq(apiResource.id, federatedCredential.audienceResourceId))
 }

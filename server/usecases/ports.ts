@@ -653,14 +653,6 @@ export interface AgentAccessTokenRecord {
   createdAt: Date
 }
 
-export interface AgentSigningKeyRecord {
-  id: string
-  algorithm: string
-  publicJwk: Record<string, unknown>
-  encryptedPrivateJwk: string
-  createdAt: Date
-}
-
 export interface AgentAuthorityApprovalRecord {
   id: string
   grantId: string
@@ -680,16 +672,21 @@ export interface AgentTokenRepository {
   listGrants(agentIdentityId: string): Promise<AgentAuthorityGrantRecord[]>
   findGrant(id: string): Promise<AgentAuthorityGrantRecord | null>
   revokeGrant(id: string, now: Date): Promise<boolean>
+  consumeAgentAuthJti(input: { jtiHash: string; expiresAt: Date; createdAt: Date }): Promise<boolean>
   consumeDpopJti(input: { jtiHash: string; keyThumbprint: string; expiresAt: Date; createdAt: Date }): Promise<boolean>
   storeAccessToken(input: AgentAccessTokenRecord): Promise<void>
   findAccessTokenByHash(tokenHash: string): Promise<AgentAccessTokenRecord | null>
-  findSigningKey(): Promise<AgentSigningKeyRecord | null>
-  createSigningKey(input: AgentSigningKeyRecord): Promise<AgentSigningKeyRecord>
   consumeGrantUse(id: string, maxUses: number): Promise<boolean>
   createApproval(input: AgentAuthorityApprovalRecord): Promise<AgentAuthorityApprovalRecord>
   findApproval(id: string): Promise<AgentAuthorityApprovalRecord | null>
   approveApproval(id: string, userId: string, now: Date): Promise<AgentAuthorityApprovalRecord | null>
-  consumeApproval(id: string, grantId: string, bindingId: string, now: Date): Promise<boolean>
+  consumeApproval(
+    id: string,
+    grantId: string,
+    bindingId: string,
+    requestedScopes: string[],
+    now: Date,
+  ): Promise<boolean>
 }
 
 // --- configz ----------------------------------------------------------------
@@ -968,7 +965,6 @@ export interface ResolvedFederatedCredential {
   audience: string
   jwksUrl: string | null
   publicKeys: Record<string, unknown>[] | null
-  sharedSecret: string | null
   enabled: boolean
 }
 
@@ -1004,12 +1000,30 @@ export interface TokenExchangeAccessTokenRecord {
   revokedAt: Date | null
 }
 
+export interface TokenExchangeRefreshTokenRecord {
+  id: string
+  familyId: string
+  tokenHash: string
+  clientId: string
+  credentialId: string
+  subject: string
+  subjectTokenIssuer: string
+  audience: string
+  scopes: string[]
+  claims: Record<string, unknown>
+  expiresAt: Date
+  consumedAt: Date | null
+  revokedAt: Date | null
+  createdAt: Date
+}
+
 export interface TokenExchangeRepository {
   findClient(clientId: string): Promise<OAuthClientRecord | null>
   // Enabled credentials under the application owning `applicationClientId` that match
   // `issuer`, resolved with their api-resource audience. Subject-pattern matching is
   // done in the usecase.
   findFederatedCredentials(applicationClientId: string, issuer: string): Promise<ResolvedFederatedCredential[]>
+  findFederatedCredentialForClient(id: string, clientId: string): Promise<ResolvedFederatedCredential | null>
   listFederatedCredentials(applicationId: string): Promise<FederatedCredentialRecord[]>
   getFederatedCredential(applicationId: string, id: string): Promise<FederatedCredentialRecord | null>
   createFederatedCredential(
@@ -1024,18 +1038,12 @@ export interface TokenExchangeRepository {
   deleteFederatedCredential(applicationId: string, id: string): Promise<boolean>
   storeAccessToken(input: Omit<TokenExchangeAccessTokenRecord, 'createdAt' | 'revokedAt'>): Promise<void>
   findAccessTokenByHash(tokenHash: string): Promise<TokenExchangeAccessTokenRecord | null>
-  // Provider-issued (Better Auth) opaque access tokens, looked up by their stored
-  // hash. Lets a resource server introspect tokens issued to any client, which
-  // Better Auth's own introspect endpoint refuses (it only accepts same-client).
-  findOAuthAccessTokenByHash(tokenHash: string): Promise<OAuthAccessTokenRecord | null>
-}
-
-export interface OAuthAccessTokenRecord {
-  clientId: string
-  userId: string | null
-  scopes: string[]
-  expiresAt: Date
-  createdAt: Date
+  storeRefreshToken(
+    input: Omit<TokenExchangeRefreshTokenRecord, 'createdAt' | 'consumedAt' | 'revokedAt'>,
+  ): Promise<boolean>
+  findRefreshTokenByHash(tokenHash: string): Promise<TokenExchangeRefreshTokenRecord | null>
+  consumeRefreshToken(id: string, now: Date): Promise<boolean>
+  revokeRefreshTokenFamily(familyId: string, now: Date): Promise<void>
 }
 
 export interface JwksGateway {

@@ -46,9 +46,9 @@ describe('management routes 1', () => {
     expect(new Set(operationIds).size).toBe(operationIds.length)
     expect(unifiedOpenApi.security).toEqual([{ agentAuth: [] }, { adminSession: [] }])
     expect(unifiedOpenApi.components.securitySchemes.agentAuth).toMatchObject({
-      type: 'apiKey',
-      in: 'header',
-      name: 'Authorization',
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'agent+jwt',
     })
     expect(unifiedOpenApi['x-cli-config']).toEqual({
       profiles: {
@@ -287,6 +287,7 @@ describe('management routes 1', () => {
 
   it('adapts unified capability requests to the existing AgentAuth approval flow [spec: agent-identity/agent-management-authority]', async () => {
     const auth = createAuthMock()
+    auth.api.getAgentSession.mockResolvedValue(agentSession())
     auth.handler.mockImplementationOnce(async (request) => {
       expect(new URL(request.url).pathname).toBe('/api/auth/agent/request-capability')
       await expect(request.json()).resolves.toEqual({
@@ -313,7 +314,14 @@ describe('management routes 1', () => {
         },
       })
     })
-    const app = createApp(auth, createTestDeps())
+    const app = createApp(
+      auth,
+      createTestDeps({
+        agentIdentities: {
+          findActiveByProtocolAgent: vi.fn().mockResolvedValue(agentIdentity()),
+        },
+      }),
+    )
 
     const response = await app.request('https://auth.example.com/api/capability-requests', {
       method: 'POST',
@@ -586,3 +594,42 @@ describe('management routes 1', () => {
     expect(auth.api.listUsers).not.toHaveBeenCalled()
   })
 })
+
+function agentSession() {
+  return {
+    agentId: 'protocol-agent-1',
+    agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated', capabilityGrants: [] },
+    host: { id: 'host-1', userId: 'controller-1', status: 'active' },
+  }
+}
+
+function agentIdentity() {
+  const now = new Date()
+  return {
+    identity: {
+      id: 'identity-1',
+      issuer: 'https://auth.example.com/api/auth',
+      subject: 'agt_1',
+      name: 'Build Agent',
+      ownerUserId: 'controller-1',
+      ownerOrganizationId: null,
+      status: 'active',
+      retiredAt: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+    bindings: [
+      {
+        id: 'binding-1',
+        agentIdentityId: 'identity-1',
+        protocolAgentId: 'protocol-agent-1',
+        hostId: 'host-1',
+        status: 'active',
+        boundAt: now,
+        revokedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+  }
+}

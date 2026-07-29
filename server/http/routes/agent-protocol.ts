@@ -5,11 +5,10 @@ import {
   createAgentLoginIdentity,
   getAgentIdentityByProtocolAgent,
 } from '@server/usecases/agent-identities'
-import { getAgentJwks, issueAgentAccessToken, type ProtocolAgentSession } from '@server/usecases/agent-tokens'
+import type { ProtocolAgentSession } from '@server/usecases/agent-tokens'
 import {
   agentProtocolEnrollmentIntentResponseSchema,
   agentProtocolIdentityResponseSchema,
-  agentTokenRequestSchema,
   createAgentLoginIdentityRequestSchema,
   createAgentProtocolEnrollmentIntentRequestSchema,
 } from '@shared/api/agents'
@@ -20,12 +19,14 @@ import { readJson } from './validation'
 
 interface AgentSessionApi {
   getAgentSession?: (context: { headers: Headers; asResponse: false }) => Promise<ProtocolAgentSession | null>
+  verifyJWT?: (context: {
+    body: { token: string; issuer?: string; audience?: string | string[] }
+    asResponse: false
+  }) => Promise<{ payload: Record<string, unknown> | null }>
 }
 
-export function createAgentTokenRoutes(authApi: AgentSessionApi, agentIdentityIssuer?: string) {
+export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?: string) {
   const app = new Hono()
-
-  app.get('/jwks', async (c) => c.json(await getAgentJwks(getDeps(c))))
 
   app.get('/identity', async (c) => {
     const session = await requireAgentSession(authApi, c.req.raw.headers)
@@ -45,7 +46,7 @@ export function createAgentTokenRoutes(authApi: AgentSessionApi, agentIdentityIs
     const identity = await createAgentLoginIdentity(
       getDeps(c),
       { protocolAgentId: session.agent.id, name: body.name },
-      agentIdentityIssuer ?? new URL(c.req.url).origin,
+      oidcIssuer ?? new URL('/api/auth', c.req.url).toString(),
       session.host.userId,
     )
     return c.json(agentProtocolIdentityResponseSchema.parse({ identity }), 201)
@@ -73,18 +74,28 @@ export function createAgentTokenRoutes(authApi: AgentSessionApi, agentIdentityIs
     )
   })
 
-  app.post('/oauth2/token', async (c) => {
-    const session = await requireAgentSession(authApi, c.req.raw.headers)
-    return c.json(
-      await issueAgentAccessToken(getDeps(c), c.req.raw, await readJson(c, agentTokenRequestSchema), session),
-    )
-  })
-
   app.all('/egress/:externalAccountId/*', async (c) => {
     const externalAccountId = c.req.param('externalAccountId')
     const routePrefix = `/api/agent/egress/${externalAccountId}`
     const relativePath = new URL(c.req.url).pathname.slice(routePrefix.length) || '/'
-    return proxyAgentEgress(getDeps(c), c.req.raw, externalAccountId, relativePath)
+    const issuer = oidcIssuer ?? new URL('/api/auth', c.req.url).toString()
+    if (!authApi.verifyJWT) throw unauthorized('Agent access token verification is unavailable.')
+    return proxyAgentEgress(
+      getDeps(c),
+      {
+        issuer,
+        verify: async (token, audience) =>
+          (
+            await authApi.verifyJWT!({
+              body: { token, issuer, audience },
+              asResponse: false,
+            })
+          ).payload,
+      },
+      c.req.raw,
+      externalAccountId,
+      relativePath,
+    )
   })
 
   return app

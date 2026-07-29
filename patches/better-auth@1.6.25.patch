@@ -1,0 +1,134 @@
+diff --git a/dist/plugins/jwt/adapter.mjs b/dist/plugins/jwt/adapter.mjs
+index 92437a66acab0e683c9d31f142bef3e140fd119f..d4d0172eb93d212d5f6e0b3da40e0fb4f4215e91 100644
+--- a/dist/plugins/jwt/adapter.mjs
++++ b/dist/plugins/jwt/adapter.mjs
+@@ -6,8 +6,11 @@ const getJwksAdapter = (adapter, options) => {
+ 			return await adapter.findMany({ model: "jwks" });
+ 		},
+ 		getLatestKey: async (ctx) => {
+-			if (options?.adapter?.getJwks) return (await options.adapter.getJwks(ctx))?.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+-			return (await adapter.findMany({ model: "jwks" }))?.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
++			const keys = options?.adapter?.getJwks ? await options.adapter.getJwks(ctx) : await adapter.findMany({ model: "jwks" });
++			const signingAlgorithm = options?.jwks?.keyPairConfig?.alg ?? "EdDSA";
++			return keys
++				?.filter((key) => key.alg === signingAlgorithm)
++				.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+ 		},
+ 		createJwk: async (ctx, webKey) => {
+ 			if (options?.adapter?.createJwk) return await options.adapter.createJwk(webKey, ctx);
+diff --git a/dist/plugins/jwt/index.d.mts b/dist/plugins/jwt/index.d.mts
+index 1238d87320dc979b14519f3cafc503deb0890fd4..32c8c2767d8541ba73a92696015c2684fda0294a 100644
+--- a/dist/plugins/jwt/index.d.mts
++++ b/dist/plugins/jwt/index.d.mts
+@@ -170,6 +170,7 @@ declare const jwt: <O extends JwtOptions>(options?: O) => {
+           body: {
+             token: string;
+             issuer?: string;
++            audience?: string | string[];
+           };
+           response: {
+             payload: {
+@@ -183,6 +184,7 @@ declare const jwt: <O extends JwtOptions>(options?: O) => {
+       body: z.ZodObject<{
+         token: z.ZodString;
+         issuer: z.ZodOptional<z.ZodString>;
++        audience: z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>>;
+       }, z.core.$strip>;
+     }, {
+       payload: (JWTPayload & Required<Pick<JWTPayload, "sub" | "aud">>) | null;
+diff --git a/dist/plugins/jwt/index.mjs b/dist/plugins/jwt/index.mjs
+index 6c6049feb2151cb555bc3f8051e36cc835052dca..f3d6f80ed8a26d9253cda6707351e9405c51b0d8 100644
+--- a/dist/plugins/jwt/index.mjs
++++ b/dist/plugins/jwt/index.mjs
+@@ -17,7 +17,8 @@ const signJWTBodySchema = z.object({
+ });
+ const verifyJWTBodySchema = z.object({
+ 	token: z.string(),
+-	issuer: z.string().optional()
++	issuer: z.string().optional(),
++	audience: z.union([z.string(), z.array(z.string())]).optional()
+ });
+ const jwt = (options) => {
+ 	if (options?.jwt?.sign && !options.jwks?.remoteUrl) throw new BetterAuthError("options.jwks.remoteUrl must be set when using options.jwt.sign");
+@@ -166,11 +167,12 @@ const jwt = (options) => {
+ 				} },
+ 				body: verifyJWTBodySchema
+ 			}, async (ctx) => {
+-				const overrideOptions = ctx.body.issuer ? {
++				const overrideOptions = ctx.body.issuer || ctx.body.audience ? {
+ 					...options,
+ 					jwt: {
+ 						...options?.jwt,
+-						issuer: ctx.body.issuer
++						...ctx.body.issuer ? { issuer: ctx.body.issuer } : {},
++						...ctx.body.audience ? { audience: ctx.body.audience } : {}
+ 					}
+ 				} : options;
+ 				const payload = await verifyJWT(ctx.body.token, overrideOptions);
+diff --git a/dist/plugins/jwt/schema.d.mts b/dist/plugins/jwt/schema.d.mts
+index 3e4ae896a47533e9b9101869d0a296a964dc723c..30481be5b04ae6450df911585d16dbeb0a7e96de 100644
+--- a/dist/plugins/jwt/schema.d.mts
++++ b/dist/plugins/jwt/schema.d.mts
+@@ -10,6 +10,14 @@ declare const schema: {
+         type: "string";
+         required: true;
+       };
++      alg: {
++        type: "string";
++        required: false;
++      };
++      crv: {
++        type: "string";
++        required: false;
++      };
+       createdAt: {
+         type: "date";
+         required: true;
+diff --git a/dist/plugins/jwt/schema.mjs b/dist/plugins/jwt/schema.mjs
+index b90b921f3863f26bbdb7bfa119ecc6f8998623f5..4c3c6ca25631cd2a878518dfa1f76a7ca7e9c31e 100644
+--- a/dist/plugins/jwt/schema.mjs
++++ b/dist/plugins/jwt/schema.mjs
+@@ -8,6 +8,14 @@ const schema = { jwks: { fields: {
+ 		type: "string",
+ 		required: true
+ 	},
++	alg: {
++		type: "string",
++		required: false
++	},
++	crv: {
++		type: "string",
++		required: false
++	},
+ 	createdAt: {
+ 		type: "date",
+ 		required: true
+diff --git a/dist/plugins/jwt/sign.mjs b/dist/plugins/jwt/sign.mjs
+index fdc7d2f9ce97526a8ba4250a73ca6e798e3db7c1..3c121c274653e648bc542cf0cbd3124a45a445b1 100644
+--- a/dist/plugins/jwt/sign.mjs
++++ b/dist/plugins/jwt/sign.mjs
+@@ -41,7 +41,8 @@ async function signJWT(ctx, config) {
+ 	const privateKey = await importJWK(JSON.parse(privateWebKey), alg);
+ 	const jwt = new SignJWT(payload).setProtectedHeader({
+ 		alg,
+-		kid: key.id
++		kid: key.id,
++		...options?.jwt?.type ? { typ: options.jwt.type } : {}
+ 	}).setExpirationTime(exp).setIssuer(iss ?? defaultIss).setAudience(aud ?? defaultAud);
+ 	if (iat) jwt.setIssuedAt(iat);
+ 	if (payload.sub) jwt.setSubject(payload.sub);
+diff --git a/dist/plugins/jwt/types.d.mts b/dist/plugins/jwt/types.d.mts
+index deba82e7159b08a77d165c70ccfed497ccb12640..df3a2bd0ed4990d1784ccad266bf1dfdf1a55b71 100644
+--- a/dist/plugins/jwt/types.d.mts
++++ b/dist/plugins/jwt/types.d.mts
+@@ -53,6 +53,10 @@ interface JwtOptions {
+     jwksPath?: string | undefined;
+   } | undefined;
+   jwt?: {
++    /**
++     * The protected header type for the JWT.
++     */
++    type?: string | undefined;
+     /**
+      * The issuer of the JWT
+      */

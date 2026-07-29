@@ -46,18 +46,27 @@ func handleCapabilityApprovalResponse(
 	if !ok || verificationURI == "" {
 		return plugin.ResponseMiddlewareOutput{}, errors.New("pending capability response is missing approval URL")
 	}
+	requestOrigin := requestURL.Scheme + "://" + requestURL.Host
+	configuration, err := discoverAgentConfiguration(context.Background(), client, requestOrigin)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	issuerURL, err := url.Parse(configuration.Issuer)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("Agent discovery issuer is invalid")
+	}
 	approvalURL, err := url.Parse(verificationURI)
 	if err != nil ||
-		approvalURL.Scheme != requestURL.Scheme ||
-		approvalURL.Host != requestURL.Host ||
+		approvalURL.Scheme != issuerURL.Scheme ||
+		approvalURL.Host != issuerURL.Host ||
 		approvalURL.Path != "/agent/approve" {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("capability approval URL must use the FlareAuth origin")
+		return plugin.ResponseMiddlewareOutput{}, errors.New("capability approval URL must use the discovered issuer origin")
 	}
 	if err := opener.Open(verificationURI); err != nil {
 		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open capability approval: %w", err)
 	}
 
-	state, err := states.FindByOriginAndAgentID(requestURL.Scheme+"://"+requestURL.Host, agentID)
+	state, err := states.FindByOriginAndAgentID(requestOrigin, agentID)
 	if err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
@@ -69,6 +78,7 @@ func handleCapabilityApprovalResponse(
 		context.Background(),
 		client,
 		state,
+		configuration,
 		capabilities,
 		time.Now().Add(expiresIn),
 		interval,
@@ -89,6 +99,7 @@ func waitForCapabilityDecision(
 	ctx context.Context,
 	client httpDoer,
 	state agentState,
+	configuration agentConfiguration,
 	capabilities []string,
 	expiresAt time.Time,
 	interval time.Duration,
@@ -99,8 +110,8 @@ func waitForCapabilityDecision(
 			ctx,
 			client,
 			http.MethodGet,
-			state.Origin+"/api/auth/agent/status",
-			mustAgentJWT(state),
+			configuration.Endpoints["status"],
+			mustAgentJWT(state, configuration.Issuer),
 			nil,
 			&status,
 		); err != nil {

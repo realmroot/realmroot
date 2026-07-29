@@ -1,5 +1,5 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411f0c775a1 100644
+index 7091595f3c16e1cf51776b4f5c039ff2d360cd67..ac1c2660b1beb772b0e120fe689cbc974314f25f 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -262,6 +262,7 @@ async function userInfoEndpoint(ctx, opts) {
@@ -177,7 +177,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -1841,7 +1961,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+@@ -1842,7 +1962,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
  		grant_types: z.array(z.enum([
  			"authorization_code",
  			"client_credentials",
@@ -187,7 +187,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  		])).default(["authorization_code"]).optional(),
  		response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  		type: z.enum([
-@@ -1942,7 +2063,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
+@@ -1944,7 +2065,8 @@ const createOAuthClient = (opts) => createAuthEndpoint("/oauth2/create-client",
  							enum: [
  								"authorization_code",
  								"client_credentials",
@@ -197,7 +197,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  							]
  						},
  						description: "Requested authentication method for the token endpoint"
-@@ -2042,7 +2164,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
+@@ -2044,7 +2166,8 @@ const adminUpdateOAuthClient = (opts) => createAuthEndpoint("/admin/oauth2/updat
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -207,7 +207,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2084,7 +2207,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
+@@ -2086,7 +2209,8 @@ const updateOAuthClient = (opts) => createAuthEndpoint("/oauth2/update-client",
  			grant_types: z.array(z.enum([
  				"authorization_code",
  				"client_credentials",
@@ -217,7 +217,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  			])).optional(),
  			response_types: z.array(z.enum(["code"])).optional(),
  			type: z.enum([
-@@ -2781,7 +2905,8 @@ const oauthProvider = (options) => {
+@@ -2800,7 +2924,8 @@ const oauthProvider = (options) => {
  		grantTypes: [
  			"authorization_code",
  			"client_credentials",
@@ -227,7 +227,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  		],
  		...options,
  		scopes: Array.from(scopes),
-@@ -2844,6 +2969,7 @@ const oauthProvider = (options) => {
+@@ -2863,6 +2988,7 @@ const oauthProvider = (options) => {
  			request_uri: z.string().optional(),
  			code_challenge: z.string().optional(),
  			code_challenge_method: z.enum(["S256"]).optional(),
@@ -235,7 +235,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  			nonce: z.string().optional(),
  			prompt: z.enum([
  				"none",
-@@ -3118,11 +3244,13 @@ const oauthProvider = (options) => {
+@@ -3152,11 +3278,13 @@ const oauthProvider = (options) => {
  					grant_type: z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -250,7 +250,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  					code_verifier: z.string().optional(),
  					redirect_uri: SafeUrlSchema.optional(),
  					refresh_token: z.string().optional(),
-@@ -3140,11 +3268,12 @@ const oauthProvider = (options) => {
+@@ -3174,11 +3302,12 @@ const oauthProvider = (options) => {
  								properties: {
  									grant_type: {
  										type: "string",
@@ -268,7 +268,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  										description: "OAuth2 grant type"
  									},
  									client_id: {
-@@ -3159,6 +3288,10 @@ const oauthProvider = (options) => {
+@@ -3193,6 +3322,10 @@ const oauthProvider = (options) => {
  										type: "string",
  										description: "Authorization code (for authorization_code grant)"
  									},
@@ -279,7 +279,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  									code_verifier: {
  										type: "string",
  										description: "PKCE code verifier (for authorization_code grant)"
-@@ -3566,7 +3699,8 @@ const oauthProvider = (options) => {
+@@ -3600,7 +3733,8 @@ const oauthProvider = (options) => {
  					grant_types: z.array(z.enum([
  						"authorization_code",
  						"client_credentials",
@@ -289,7 +289,7 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  					])).default(["authorization_code"]).optional(),
  					response_types: z.array(z.enum(["code"])).default(["code"]).optional(),
  					type: z.enum([
-@@ -4048,12 +4182,14 @@ function authServerMetadata(ctx, opts, overrides) {
+@@ -4083,12 +4217,14 @@ function authServerMetadata(ctx, opts, overrides) {
  		registration_endpoint: overrides?.dynamic_client_registration_supported ? `${baseURL}/oauth2/register` : void 0,
  		introspection_endpoint: `${baseURL}/oauth2/introspect`,
  		revocation_endpoint: `${baseURL}/oauth2/revoke`,
@@ -305,11 +305,11 @@ index 847085c481843ce6852a5db9006a2e79b7f77b15..292b9fbe4007caf4eb39457ca86e3411
  		],
  		token_endpoint_auth_methods_supported: [
  			...overrides?.public_client_supported ? ["none"] : [],
-diff --git a/dist/oauth-D74mBkw6.d.mts b/dist/oauth-D74mBkw6.d.mts
-index 5531f010da1b43580be514022df818bb1f835323..c897e3d6f2d7ae8972b8c4d597ce51ec47cee527 100644
---- a/dist/oauth-D74mBkw6.d.mts
-+++ b/dist/oauth-D74mBkw6.d.mts
-@@ -1337,7 +1337,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
+diff --git a/dist/oauth-BFBataE_.d.mts b/dist/oauth-BFBataE_.d.mts
+index 21db9f619b24c6ddf16a2b7e805bab38426672d1..9b293b791639db28f0d21b71c9860875e0d32e90 100644
+--- a/dist/oauth-BFBataE_.d.mts
++++ b/dist/oauth-BFBataE_.d.mts
+@@ -1349,7 +1349,7 @@ type OAuthConsent<Scopes extends readonly Scope[] = InternallySupportedScopes[]>
  /**
   * Supported grant types of the token endpoint
   */
@@ -318,7 +318,7 @@ index 5531f010da1b43580be514022df818bb1f835323..c897e3d6f2d7ae8972b8c4d597ce51ec
  type AuthMethod = "client_secret_basic" | "client_secret_post";
  type TokenEndpointAuthMethod = AuthMethod | "none";
  type BearerMethodsSupported = "header" | "body";
-@@ -1367,6 +1367,12 @@ interface AuthServerMetadata {
+@@ -1379,6 +1379,12 @@ interface AuthServerMetadata {
     * @default `/oauth2/token`
     */
    token_endpoint: string;
@@ -331,10 +331,10 @@ index 5531f010da1b43580be514022df818bb1f835323..c897e3d6f2d7ae8972b8c4d597ce51ec
    /**
     * The URL of the jwks_uri endpoint.
     *
-diff --git a/dist/utils-B3Myyglw.mjs b/dist/utils-B3Myyglw.mjs
-index 1a7ab61274ee66aa6de927186400d016adc77215..cd6779caa2c8220f622bb6a1959cccc8f58bfd42 100644
---- a/dist/utils-B3Myyglw.mjs
-+++ b/dist/utils-B3Myyglw.mjs
+diff --git a/dist/utils-CZyscB8_.mjs b/dist/utils-CZyscB8_.mjs
+index ff135a7305796fbf3c53270f837c03512776caea..852771a58517a7684d3d706cdba848e86dc5c6f1 100644
+--- a/dist/utils-CZyscB8_.mjs
++++ b/dist/utils-CZyscB8_.mjs
 @@ -278,14 +278,14 @@ function basicToClientCredentials(authorization) {
  *
  * A client's registered `grantTypes` defaults to the documented default

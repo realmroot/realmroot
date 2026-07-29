@@ -164,8 +164,8 @@ export function toManagementOperationKey(route: HonoRoute) {
   if (route.path === '/api/capability-requests') {
     return `${route.method} /capability-requests`
   }
-  if (route.path === '/api/agent/oauth2/token') {
-    return `${route.method} /agent/oauth2/token`
+  if (route.path === '/api/auth/*' && route.method === 'POST') {
+    return `${route.method} /auth/oauth2/token`
   }
   if (!route.path.startsWith('/api/management')) {
     return null
@@ -208,7 +208,8 @@ export function openApiParameters(value: unknown) {
 
 export function requestBodyContent(value: unknown) {
   const content = openApiRecord(openApiRecord(value).content)
-  const mediaType = content['application/json'] ?? content['multipart/form-data']
+  const mediaType =
+    content['application/json'] ?? content['multipart/form-data'] ?? content['application/x-www-form-urlencoded']
   return openApiRecord(mediaType)
 }
 

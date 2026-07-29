@@ -117,13 +117,3 @@ export const agentDpopJti = sqliteTable(
   },
   (table) => [index('agentDpopJti_expiresAt_idx').on(table.expiresAt)],
 )
-
-export const agentSigningKey = sqliteTable('agent_signing_key', {
-  id: text('id').primaryKey(),
-  algorithm: text('algorithm').notNull(),
-  publicJwk: text('public_jwk', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
-  encryptedPrivateJwk: text('encrypted_private_jwk').notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .notNull(),
-})

@@ -161,6 +161,7 @@ Feature: Admin Console
     When an agent client requests /.well-known/agent-configuration
     Then FlareAuth advertises delegated mode and device authorization approval
     And the advertised capabilities include read-only account data and coarse management permissions
+    And the advertised endpoints, issuer, and proof algorithms are authoritative for the client
     And individual Management API operations are not generated as AgentAuth capabilities
 
   @entrypoint:product-ui @journey:admin-agent-inventory

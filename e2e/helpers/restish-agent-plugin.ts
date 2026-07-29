@@ -188,7 +188,10 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     requestCapabilities: (capabilities, reason) =>
       invokePending<CapabilityRequestResult>('request-agent-capabilities', { capabilities, reason }),
     requestAgentToken: (grantId, dpopProof) =>
-      invokeWithRequiredArgs<AgentTokenResult>('issue-agent-access-token', [dpopProof], { grantId }),
+      invokeWithRequiredArgs<AgentTokenResult>('issue-agent-access-token', [dpopProof], {
+        grant_type: 'urn:flareauth:params:oauth:grant-type:agent-authority',
+        grant_id: grantId,
+      }),
     listApplications: () => invoke<{ applications: unknown[] }>('list-applications'),
     dispose: () => rmSync(root, { recursive: true, force: true }),
   }

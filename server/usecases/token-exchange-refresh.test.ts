@@ -7,20 +7,25 @@ import type {
   OAuthClientRecord,
   ResolvedFederatedCredential,
   TokenExchangeAccessTokenRecord,
+  TokenExchangeRefreshTokenRecord,
   TokenExchangeRepository,
 } from '@server/usecases/ports'
 import {
-  accessTokenType,
   exchangeToken,
   jwtTokenType,
-  refreshToken,
   refreshTokenGrantType,
+  refreshToken as refreshTokenVerified,
   tokenExchangeGrantType,
 } from '@server/usecases/token-exchange'
 import { describe, expect, it } from 'vitest'
 
 const applicationClientId = 'runner-client'
 const defaultAudience = 'https://ama.example.com'
+const testClient = { clientId: applicationClientId, clientSecret: 'runner-client-secret' }
+
+function refreshToken(deps: Deps, input: Parameters<typeof refreshTokenVerified>[1], client = testClient) {
+  return refreshTokenVerified(deps, input, client)
+}
 
 describe('token exchange refresh and assertion boundaries', () => {
   it('rejects offline_access scopes when the client cannot issue refresh tokens', async () => {
@@ -28,7 +33,7 @@ describe('token exchange refresh and assertion boundaries', () => {
       grantTypes: [tokenExchangeGrantType],
       scopes: ['runner:connect', 'offline_access'],
     })
-    const subjectToken = await signHs256Jwt(validClaims(), 'external-platform-secret')
+    const subjectToken = await signEs256TestJwt(validClaims(), 'external-platform-secret')
 
     await expect(
       exchangeToken(
@@ -48,7 +53,7 @@ describe('token exchange refresh and assertion boundaries', () => {
   it('rejects exchanges when the federated credential is disabled', async () => {
     const { deps, clientSecret, repository } = await fixture()
     repository.disableCredentials()
-    const subjectToken = await signHs256Jwt(validClaims(), 'external-platform-secret')
+    const subjectToken = await signEs256TestJwt(validClaims(), 'external-platform-secret')
 
     await expect(
       exchangeToken(
@@ -61,12 +66,12 @@ describe('token exchange refresh and assertion boundaries', () => {
         },
         { clientId: 'runner-client', clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects subject tokens missing issuer or subject claims', async () => {
     const { deps, clientSecret } = await fixture()
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       { aud: 'https://ama.example.com', exp: Math.floor(Date.now() / 1000) + 60 },
       'external-platform-secret',
     )
@@ -82,12 +87,12 @@ describe('token exchange refresh and assertion boundaries', () => {
         },
         { clientId: 'runner-client', clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects subject tokens whose audience claim does not match the requested audience', async () => {
     const { deps, clientSecret } = await fixture()
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -108,7 +113,7 @@ describe('token exchange refresh and assertion boundaries', () => {
         },
         { clientId: 'runner-client', clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects subject tokens that are not well-formed JWTs', async () => {
@@ -116,7 +121,7 @@ describe('token exchange refresh and assertion boundaries', () => {
     const twoSegments = `${base64UrlString('{}')}.${base64UrlString('{}')}`
     const nonObjectPayload = `${base64UrlString('{}')}.${base64UrlString('"not-an-object"')}.sig`
 
-    for (const subjectToken of [twoSegments, nonObjectPayload]) {
+    for (const subjectToken of [twoSegments, nonObjectPayload, '%%%.e30.signature']) {
       await expect(
         exchangeToken(
           deps,
@@ -128,7 +133,7 @@ describe('token exchange refresh and assertion boundaries', () => {
           },
           { clientId: 'runner-client', clientSecret },
         ),
-      ).rejects.toMatchObject({ status: 401 })
+      ).rejects.toMatchObject({ status: 400 })
     }
   })
 
@@ -141,7 +146,7 @@ describe('token exchange refresh and assertion boundaries', () => {
       deps,
       {
         grantType: tokenExchangeGrantType,
-        subjectToken: await signHs256Jwt(validClaims(), 'external-platform-secret'),
+        subjectToken: await signEs256TestJwt(validClaims(), 'external-platform-secret'),
         subjectTokenType: jwtTokenType,
         audience: 'https://ama.example.com',
         scope: 'runner:connect offline_access',
@@ -156,6 +161,39 @@ describe('token exchange refresh and assertion boundaries', () => {
 
     expect(refreshed.scope).toBe('runner:connect offline_access')
     expect(repository.storedTokens()).toBe(2)
+  })
+
+  it('binds refresh to client authentication, stored scopes, and an enabled federated credential', async () => {
+    const { deps, clientSecret, repository } = await fixture({
+      grantTypes: [tokenExchangeGrantType, refreshTokenGrantType],
+      scopes: ['runner:connect', 'offline_access'],
+    })
+    const exchanged = await exchangeToken(
+      deps,
+      {
+        grantType: tokenExchangeGrantType,
+        subjectToken: await signEs256TestJwt(validClaims(), 'external-platform-secret'),
+        subjectTokenType: jwtTokenType,
+        audience: defaultAudience,
+        scope: 'runner:connect offline_access',
+      },
+      { clientId: applicationClientId, clientSecret },
+    )
+    const input = { grantType: refreshTokenGrantType, refreshToken: exchanged.refresh_token! }
+
+    await expect(refreshToken(deps, input, { ...testClient, clientSecret: 'wrong-secret' })).rejects.toMatchObject({
+      status: 401,
+      error: 'invalid_client',
+    })
+    await expect(refreshToken(deps, { ...input, scope: 'runner:admin' })).rejects.toMatchObject({
+      status: 400,
+      error: 'invalid_scope',
+    })
+    repository.disableCredentials()
+    await expect(refreshToken(deps, input)).rejects.toMatchObject({
+      status: 400,
+      error: 'invalid_grant',
+    })
   })
 
   it('rejects refresh requests with the wrong grant type', async () => {
@@ -174,7 +212,7 @@ describe('token exchange refresh and assertion boundaries', () => {
       deps,
       {
         grantType: tokenExchangeGrantType,
-        subjectToken: await signHs256Jwt(validClaims(), 'external-platform-secret'),
+        subjectToken: await signEs256TestJwt(validClaims(), 'external-platform-secret'),
         subjectTokenType: jwtTokenType,
         audience: 'https://ama.example.com',
         scope: 'runner:connect offline_access',
@@ -185,7 +223,7 @@ describe('token exchange refresh and assertion boundaries', () => {
     repository.client = { ...repository.client!, grantTypes: JSON.stringify([tokenExchangeGrantType]) }
     await expect(
       refreshToken(deps, { grantType: refreshTokenGrantType, refreshToken: exchanged.refresh_token! }),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects refresh tokens for unknown or disabled clients', async () => {
@@ -197,7 +235,7 @@ describe('token exchange refresh and assertion boundaries', () => {
       deps,
       {
         grantType: tokenExchangeGrantType,
-        subjectToken: await signHs256Jwt(validClaims(), 'external-platform-secret'),
+        subjectToken: await signEs256TestJwt(validClaims(), 'external-platform-secret'),
         subjectTokenType: jwtTokenType,
         audience: 'https://ama.example.com',
         scope: 'runner:connect offline_access',
@@ -208,10 +246,42 @@ describe('token exchange refresh and assertion boundaries', () => {
     repository.client = { ...repository.client!, disabled: true }
     await expect(
       refreshToken(deps, { grantType: refreshTokenGrantType, refreshToken: exchanged.refresh_token! }),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 401, error: 'invalid_client' })
   })
 
-  it('rejects malformed and tampered refresh tokens', async () => {
+  it('rotates refresh tokens and revokes the family when an ancestor is replayed [spec: agent-identity/workload-refresh-security]', async () => {
+    const { deps, clientSecret } = await fixture({
+      grantTypes: [tokenExchangeGrantType, refreshTokenGrantType],
+      scopes: ['runner:connect', 'offline_access'],
+    })
+    const exchanged = await exchangeToken(
+      deps,
+      {
+        grantType: tokenExchangeGrantType,
+        subjectToken: await signEs256TestJwt(validClaims(), 'external-platform-secret'),
+        subjectTokenType: jwtTokenType,
+        audience: 'https://ama.example.com',
+        scope: 'runner:connect offline_access',
+      },
+      { clientId: 'runner-client', clientSecret },
+    )
+    const ancestor = exchanged.refresh_token!
+    const rotated = await refreshToken(deps, { grantType: refreshTokenGrantType, refreshToken: ancestor })
+    await expect(
+      refreshToken(deps, { grantType: refreshTokenGrantType, refreshToken: ancestor }),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
+    await expect(
+      refreshToken(deps, { grantType: refreshTokenGrantType, refreshToken: rotated.refresh_token! }),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
+
+    for (const token of ['missing-token', 'fatr_unknown']) {
+      await expect(refreshToken(deps, { grantType: refreshTokenGrantType, refreshToken: token })).rejects.toMatchObject(
+        { status: 400, error: 'invalid_grant' },
+      )
+    }
+  })
+
+  it('does not persist a refreshed access token when replay revokes the family during rotation', async () => {
     const { deps, clientSecret, repository } = await fixture({
       grantTypes: [tokenExchangeGrantType, refreshTokenGrantType],
       scopes: ['runner:connect', 'offline_access'],
@@ -220,39 +290,48 @@ describe('token exchange refresh and assertion boundaries', () => {
       deps,
       {
         grantType: tokenExchangeGrantType,
-        subjectToken: await signHs256Jwt(validClaims(), 'external-platform-secret'),
+        subjectToken: await signEs256TestJwt(validClaims(), 'external-platform-secret'),
         subjectTokenType: jwtTokenType,
-        audience: 'https://ama.example.com',
+        audience: defaultAudience,
         scope: 'runner:connect offline_access',
       },
-      { clientId: 'runner-client', clientSecret },
+      { clientId: applicationClientId, clientSecret },
     )
-    const valid = exchanged.refresh_token!
-    const [payloadPart, signaturePart] = valid.slice('fatr_'.length).split('.')
+    repository.revokeFamilyDuringNextRotation()
 
-    const badPrefix = valid.slice('fatr_'.length)
-    const badParts = `fatr_${payloadPart}`
-    const tamperedSignature = `fatr_${payloadPart}.${signaturePart}AA`
-    const wrongLengthSignature = `fatr_${payloadPart}.${base64UrlString('short')}`
-    const nonRecordPayload = `fatr_${base64UrlString('"plain"')}.${signaturePart}`
+    await expect(
+      refreshToken(deps, {
+        grantType: refreshTokenGrantType,
+        refreshToken: exchanged.refresh_token!,
+      }),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
+    expect(repository.storedTokens()).toBe(1)
+  })
 
-    for (const token of [badPrefix, badParts, tamperedSignature, wrongLengthSignature, nonRecordPayload]) {
-      await expect(refreshToken(deps, { grantType: refreshTokenGrantType, refreshToken: token })).rejects.toMatchObject(
-        { status: 401 },
-      )
-    }
-
-    const decoded = JSON.parse(new TextDecoder().decode(base64UrlDecode(payloadPart))) as Record<string, unknown>
-    const wrongTyp = await reSignPayload({ ...decoded, typ: 'other' }, repository.client!.clientSecret!)
-    const expired = await reSignPayload(
-      { ...decoded, exp: Math.floor(Date.now() / 1000) - 10 },
-      repository.client!.clientSecret!,
+  it('revokes the refresh family when another request consumes the token first', async () => {
+    const { deps, clientSecret, repository } = await fixture({
+      grantTypes: [tokenExchangeGrantType, refreshTokenGrantType],
+      scopes: ['runner:connect', 'offline_access'],
+    })
+    const exchanged = await exchangeToken(
+      deps,
+      {
+        grantType: tokenExchangeGrantType,
+        subjectToken: await signEs256TestJwt(validClaims(), 'external-platform-secret'),
+        subjectTokenType: jwtTokenType,
+        audience: defaultAudience,
+        scope: 'runner:connect offline_access',
+      },
+      { clientId: applicationClientId, clientSecret },
     )
-    for (const token of [wrongTyp, expired]) {
-      await expect(refreshToken(deps, { grantType: refreshTokenGrantType, refreshToken: token })).rejects.toMatchObject(
-        { status: 401 },
-      )
-    }
+    repository.rejectNextConsume()
+
+    await expect(
+      refreshToken(deps, {
+        grantType: refreshTokenGrantType,
+        refreshToken: exchanged.refresh_token!,
+      }),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
   })
 
   it('rejects subject tokens that declare the "none" algorithm', async () => {
@@ -272,12 +351,12 @@ describe('token exchange refresh and assertion boundaries', () => {
         },
         { clientId: 'runner-client', clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects an assertion whose expiry is missing or non-numeric', async () => {
     const { deps, clientSecret } = await fixture()
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -299,12 +378,12 @@ describe('token exchange refresh and assertion boundaries', () => {
         },
         { clientId: 'runner-client', clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects an assertion that has already expired', async () => {
     const { deps, clientSecret } = await fixture()
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -326,12 +405,12 @@ describe('token exchange refresh and assertion boundaries', () => {
         },
         { clientId: 'runner-client', clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects an assertion that is not active yet', async () => {
     const { deps, clientSecret } = await fixture()
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -354,12 +433,12 @@ describe('token exchange refresh and assertion boundaries', () => {
         },
         { clientId: 'runner-client', clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
-  it('ignores a non-numeric not-before claim when the assertion has a valid expiry', async () => {
+  it('rejects a non-numeric not-before claim', async () => {
     const { deps, clientSecret } = await fixture()
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -382,13 +461,13 @@ describe('token exchange refresh and assertion boundaries', () => {
         },
         { clientId: 'runner-client', clientSecret },
       ),
-    ).resolves.toMatchObject({ issued_token_type: accessTokenType })
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
   })
 
   it('treats malformed client grant metadata as an empty grant list', async () => {
     const { deps, clientSecret, repository } = await fixture()
     repository.client = { ...repository.client!, grantTypes: JSON.stringify('not-an-array') }
-    const subjectToken = await signHs256Jwt(validClaims(), 'external-platform-secret')
+    const subjectToken = await signEs256TestJwt(validClaims(), 'external-platform-secret')
 
     await expect(
       exchangeToken(
@@ -401,7 +480,7 @@ describe('token exchange refresh and assertion boundaries', () => {
         },
         { clientId: 'runner-client', clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 })
 
@@ -425,19 +504,18 @@ async function fixture(options: { grantTypes?: string[]; scopes?: string[] } = {
     grantTypes: JSON.stringify(options.grantTypes ?? [tokenExchangeGrantType]),
     scopes: JSON.stringify(options.scopes ?? ['runner:connect']),
   }
-  repository.seedCredential('https://platform.example.com', 'external-platform-secret')
+  await repository.seedCredential('https://platform.example.com')
   return { repository, deps, clientSecret }
 }
 
-/**
- * In-memory federated-credential repository. The resolved credential keeps the
- * legacy shared secret so the HS256 verify path stays exercisable.
- */
 class InMemoryRepository implements TokenExchangeRepository {
   client: OAuthClientRecord | null = null
+  private rejectConsume = false
+  private revokeNextRefreshFamily = false
   private credentials: ResolvedFederatedCredential[] = []
   private nextId = 1
   private tokens = new Map<string, TokenExchangeAccessTokenRecord | null>()
+  private refreshTokens = new Map<string, TokenExchangeRefreshTokenRecord>()
 
   async findClient(clientId: string) {
     return this.client?.clientId === clientId ? this.client : null
@@ -472,7 +550,7 @@ class InMemoryRepository implements TokenExchangeRepository {
     return false
   }
 
-  seedCredential(issuer: string, sharedSecret: string) {
+  async seedCredential(issuer: string) {
     this.credentials.push({
       id: `fcr_${this.nextId++}`,
       applicationId: 'app_1',
@@ -482,14 +560,21 @@ class InMemoryRepository implements TokenExchangeRepository {
       subject: 'org_1:*',
       audience: defaultAudience,
       jwksUrl: null,
-      publicKeys: null,
-      sharedSecret,
+      publicKeys: [{ ...(await defaultSigningJwk()), kid: 'default', alg: 'ES256' }],
       enabled: true,
     })
   }
 
   disableCredentials() {
     this.credentials = this.credentials.map((item) => ({ ...item, enabled: false }))
+  }
+
+  revokeFamilyDuringNextRotation() {
+    this.revokeNextRefreshFamily = true
+  }
+
+  rejectNextConsume() {
+    this.rejectConsume = true
   }
 
   async storeAccessToken(input: Parameters<TokenExchangeRepository['storeAccessToken']>[0]) {
@@ -500,8 +585,49 @@ class InMemoryRepository implements TokenExchangeRepository {
     return this.tokens.get(tokenHash) ?? null
   }
 
-  async findOAuthAccessTokenByHash() {
-    return null
+  async findFederatedCredentialForClient(id: string, clientId: string) {
+    return this.credentials.find((item) => item.id === id && item.applicationClientId === clientId) ?? null
+  }
+
+  async storeRefreshToken(input: Omit<TokenExchangeRefreshTokenRecord, 'createdAt' | 'consumedAt' | 'revokedAt'>) {
+    if (this.revokeNextRefreshFamily) {
+      this.revokeNextRefreshFamily = false
+      await this.revokeRefreshTokenFamily(input.familyId, new Date())
+    }
+    const revoked = [...this.refreshTokens.values()].some(
+      (token) => token.familyId === input.familyId && token.revokedAt,
+    )
+    this.refreshTokens.set(input.tokenHash, {
+      ...input,
+      consumedAt: null,
+      revokedAt: revoked ? new Date() : null,
+      createdAt: new Date(),
+    })
+    return !revoked
+  }
+
+  async findRefreshTokenByHash(tokenHash: string) {
+    return this.refreshTokens.get(tokenHash) ?? null
+  }
+
+  async consumeRefreshToken(id: string, consumedAt: Date) {
+    if (this.rejectConsume) {
+      this.rejectConsume = false
+      return false
+    }
+    for (const [hash, token] of this.refreshTokens) {
+      if (token.id === id && !token.consumedAt && !token.revokedAt) {
+        this.refreshTokens.set(hash, { ...token, consumedAt })
+        return true
+      }
+    }
+    return false
+  }
+
+  async revokeRefreshTokenFamily(familyId: string, revokedAt: Date) {
+    for (const [hash, token] of this.refreshTokens) {
+      if (token.familyId === familyId && !token.revokedAt) this.refreshTokens.set(hash, { ...token, revokedAt })
+    }
   }
 
   storedTokens() {
@@ -509,31 +635,26 @@ class InMemoryRepository implements TokenExchangeRepository {
   }
 }
 
-async function reSignPayload(payload: Record<string, unknown>, secret: string) {
-  const payloadPart = base64UrlString(JSON.stringify(payload))
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
+async function signEs256TestJwt(payload: Record<string, unknown>, _secret: string) {
+  const header = base64UrlString(JSON.stringify({ alg: 'ES256', typ: 'JWT', kid: 'default' }))
+  const body = base64UrlString(JSON.stringify(payload))
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    (await defaultSigningKeyPair()).privateKey,
+    new TextEncoder().encode(`${header}.${body}`),
   )
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadPart))
-  return `fatr_${payloadPart}.${base64Url(new Uint8Array(signature))}`
+  return `${header}.${body}.${base64Url(new Uint8Array(signature))}`
 }
 
-async function signHs256Jwt(payload: Record<string, unknown>, secret: string) {
-  const header = base64UrlString(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-  const body = base64UrlString(JSON.stringify(payload))
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${header}.${body}`))
-  return `${header}.${body}.${base64Url(new Uint8Array(signature))}`
+let signingKeyPairPromise: Promise<CryptoKeyPair> | null = null
+
+function defaultSigningKeyPair() {
+  signingKeyPairPromise ??= crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])
+  return signingKeyPairPromise
+}
+
+async function defaultSigningJwk() {
+  return crypto.subtle.exportKey('jwk', (await defaultSigningKeyPair()).publicKey)
 }
 
 function base64UrlString(value: string) {
@@ -544,12 +665,4 @@ function base64Url(bytes: Uint8Array) {
   let value = ''
   for (const byte of bytes) value += String.fromCharCode(byte)
   return btoa(value).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
-}
-
-function base64UrlDecode(value: string) {
-  const padded = value.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - (value.length % 4)) % 4)
-  const binary = atob(padded)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
-  return bytes
 }

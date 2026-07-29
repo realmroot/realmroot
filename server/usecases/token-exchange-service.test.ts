@@ -4,10 +4,10 @@ import type { Deps } from '@server/usecases/deps'
 import type {
   CreateFederatedCredentialInput,
   FederatedCredentialRecord,
-  OAuthAccessTokenRecord,
   OAuthClientRecord,
   ResolvedFederatedCredential,
   TokenExchangeAccessTokenRecord,
+  TokenExchangeRefreshTokenRecord,
   TokenExchangeRepository,
   UpdateFederatedCredentialInput,
 } from '@server/usecases/ports'
@@ -32,6 +32,7 @@ const applicationId = 'app_1'
 const applicationClientId = 'runner-client'
 const audienceResourceId = 'res_1'
 const defaultAudience = 'https://ama.example.com'
+const flareAuthIssuer = 'https://auth.example.com/api/auth'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -40,11 +41,11 @@ afterEach(() => {
 describe('token exchange service', () => {
   it('matches an exact federated credential subject', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture({ seedCredential: false })
-    repository.seedCredential({
+    await repository.seedCredential({
       issuer: 'https://platform.example.com',
       subject: 'org_1:runner_1',
     })
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -70,10 +71,10 @@ describe('token exchange service', () => {
     ).resolves.toMatchObject({ token_type: 'Bearer' })
   })
 
-  it('exchanges a trusted external JWT assertion for an introspectable access token', async () => {
+  it('exchanges a trusted external JWT assertion for an introspectable access token [spec: agent-identity/workload-token-exchange-claims]', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture()
 
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -83,6 +84,10 @@ describe('token exchange service', () => {
         ama_environment_id: 'env_1',
         ama_runner_id: 'runner_1',
         runner_capabilities: ['session:poll', 'session:claim'],
+        active: false,
+        client_id: 'attacker-client',
+        scope: 'admin',
+        token_type: 'attacker',
       },
       'external-platform-secret',
     )
@@ -105,33 +110,60 @@ describe('token exchange service', () => {
       token_type: 'Bearer',
       scope: 'runner:connect',
     })
+    expect(exchanged.expires_in).toBeGreaterThan(0)
+    expect(exchanged.expires_in).toBeLessThanOrEqual(60)
     expect(exchanged.access_token).toMatch(/^fatx_/)
 
     await expect(
-      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }),
+      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
     ).resolves.toMatchObject({
       active: true,
-      iss: 'https://platform.example.com',
+      iss: flareAuthIssuer,
       sub: 'org_1:runner_1',
       aud: defaultAudience,
       client_id: applicationClientId,
       scope: 'runner:connect',
-      ama_project_id: 'project_1',
-      ama_environment_id: 'env_1',
-      ama_runner_id: 'runner_1',
-      runner_capabilities: ['session:poll', 'session:claim'],
+      'urn:flareauth:params:oauth:token-exchange:subject-claims': {
+        ama_project_id: 'project_1',
+        ama_environment_id: 'env_1',
+        ama_runner_id: 'runner_1',
+        runner_capabilities: ['session:poll', 'session:claim'],
+        active: false,
+        client_id: 'attacker-client',
+        scope: 'admin',
+        token_type: 'attacker',
+      },
     })
+
+    repository.client = {
+      ...repository.client!,
+      clientId: 'other-client',
+      clientSecret: await hashProviderSecret('other-client-secret'),
+    }
+    await expect(
+      introspectToken(
+        deps,
+        exchanged.access_token,
+        { clientId: 'other-client', clientSecret: 'other-client-secret' },
+        flareAuthIssuer,
+      ),
+    ).resolves.toEqual({ active: false })
+    repository.client = {
+      ...repository.client!,
+      clientId: applicationClientId,
+      clientSecret: await hashProviderSecret(clientSecret),
+    }
 
     repository.expireTokens()
     await expect(
-      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }),
+      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
     ).resolves.toEqual({
       active: false,
     })
     repository.unexpireTokens()
     repository.revokeTokens()
     await expect(
-      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }),
+      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
     ).resolves.toEqual({
       active: false,
     })
@@ -143,7 +175,7 @@ describe('token exchange service', () => {
       scopes: ['runner:connect', 'offline_access'],
     })
 
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -169,11 +201,15 @@ describe('token exchange service', () => {
     )
 
     expect(exchanged.refresh_token).toMatch(/^fatr_/)
-    const refreshed = await refreshToken(deps, {
-      grantType: refreshTokenGrantType,
-      refreshToken: exchanged.refresh_token!,
-      scope: 'runner:connect',
-    })
+    const refreshed = await refreshToken(
+      deps,
+      {
+        grantType: refreshTokenGrantType,
+        refreshToken: exchanged.refresh_token!,
+        scope: 'runner:connect',
+      },
+      { clientId: applicationClientId, clientSecret },
+    )
 
     expect(refreshed).toMatchObject({
       issued_token_type: accessTokenType,
@@ -182,22 +218,24 @@ describe('token exchange service', () => {
     })
     expect(refreshed.access_token).toMatch(/^fatx_/)
     await expect(
-      introspectToken(deps, refreshed.access_token, { clientId: applicationClientId, clientSecret }),
+      introspectToken(deps, refreshed.access_token, { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
     ).resolves.toMatchObject({
       active: true,
-      iss: 'https://platform.example.com',
+      iss: flareAuthIssuer,
       sub: 'org_1:runner_1',
       aud: defaultAudience,
       client_id: applicationClientId,
       scope: 'runner:connect',
-      ama_project_id: 'project_1',
-      ama_environment_id: 'env_1',
+      'urn:flareauth:params:oauth:token-exchange:subject-claims': {
+        ama_project_id: 'project_1',
+        ama_environment_id: 'env_1',
+      },
     })
   })
 
   it('rejects disallowed audiences and inactive exchanged tokens', async () => {
     const { deps, clientSecret } = await tokenExchangeFixture()
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -219,54 +257,11 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
 
     await expect(
-      introspectToken(deps, 'missing-token', { clientId: applicationClientId, clientSecret }),
+      introspectToken(deps, 'missing-token', { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
     ).resolves.toEqual({
-      active: false,
-    })
-  })
-
-  it('introspects a provider-issued opaque token belonging to another client (resource-server introspection)', async () => {
-    const { deps, repository, clientSecret } = await tokenExchangeFixture()
-    const rawToken = 'runner-device-access-token'
-    const now = new Date()
-    repository.seedOAuthAccessToken(await hashProviderSecret(rawToken), {
-      clientId: 'client_runner',
-      userId: 'user_runner',
-      scopes: ['openid', 'profile', 'email', 'offline_access'],
-      expiresAt: new Date(now.getTime() + 60_000),
-      createdAt: now,
-    })
-
-    // The introspecting client (applicationClientId) differs from the token's
-    // client (client_runner) — Better Auth's own introspect would report inactive;
-    // ours reports active with the token's real client_id.
-    await expect(
-      introspectToken(deps, rawToken, { clientId: applicationClientId, clientSecret }),
-    ).resolves.toMatchObject({
-      active: true,
-      sub: 'user_runner',
-      client_id: 'client_runner',
-      scope: 'openid profile email offline_access',
-      token_type: 'Bearer',
-    })
-  })
-
-  it('reports a provider-issued opaque token inactive once it expires', async () => {
-    const { deps, repository, clientSecret } = await tokenExchangeFixture()
-    const rawToken = 'expired-runner-token'
-    const now = new Date()
-    repository.seedOAuthAccessToken(await hashProviderSecret(rawToken), {
-      clientId: 'client_runner',
-      userId: 'user_runner',
-      scopes: ['openid'],
-      expiresAt: new Date(now.getTime() - 1_000),
-      createdAt: new Date(now.getTime() - 60_000),
-    })
-
-    await expect(introspectToken(deps, rawToken, { clientId: applicationClientId, clientSecret })).resolves.toEqual({
       active: false,
     })
   })
@@ -290,7 +285,7 @@ describe('token exchange service', () => {
         headers: { 'content-type': 'application/json' },
       }),
     )
-    repository.seedCredential({
+    await repository.seedCredential({
       issuer: 'https://platform.example.com',
       jwksUrl: 'https://platform.example.com/.well-known/jwks.json',
     })
@@ -334,7 +329,7 @@ describe('token exchange service', () => {
         headers: { 'content-type': 'application/json' },
       }),
     )
-    repository.seedCredential({
+    await repository.seedCredential({
       issuer: 'https://platform.example.com',
       jwksUrl: 'https://platform.example.com/.well-known/jwks.json',
     })
@@ -370,7 +365,7 @@ describe('token exchange service', () => {
 
   it('rejects unsupported JWKS algorithms', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture({ seedCredential: false })
-    repository.seedCredential({
+    await repository.seedCredential({
       issuer: 'https://platform.example.com',
       jwksUrl: 'https://platform.example.com/.well-known/jwks.json',
     })
@@ -402,7 +397,7 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects invalid client and subject token boundaries', async () => {
@@ -419,7 +414,7 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret: null },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 401, error: 'invalid_client' })
 
     await expect(
       createFederatedCredential(deps, applicationId, {
@@ -429,10 +424,36 @@ describe('token exchange service', () => {
         audienceResourceId,
       }),
     ).rejects.toMatchObject({ status: 400 })
+    await expect(
+      createFederatedCredential(deps, applicationId, {
+        name: 'Private JWKS URL',
+        issuer: 'https://platform.example.com',
+        subject: 'org_1:*',
+        audienceResourceId,
+        jwksUrl: 'http://127.0.0.1/jwks',
+      }),
+    ).rejects.toMatchObject({ status: 400 })
+    await expect(
+      createFederatedCredential(deps, applicationId, {
+        name: 'Private key material',
+        issuer: 'https://platform.example.com',
+        subject: 'org_1:*',
+        audienceResourceId,
+        publicKeys: [
+          {
+            kty: 'EC',
+            crv: 'P-256',
+            x: 'public-x',
+            y: 'public-y',
+            d: 'private-key',
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ status: 400 })
 
-    repository.seedCredential({ issuer: 'https://platform.example.com' })
+    await repository.seedCredential({ issuer: 'https://platform.example.com' })
 
-    const expiredSubjectToken = await signHs256Jwt(
+    const expiredSubjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -453,9 +474,9 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
 
-    const futureSubjectToken = await signHs256Jwt(
+    const futureSubjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -476,9 +497,9 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
 
-    const validSubjectToken = await signHs256Jwt(
+    const validSubjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -510,11 +531,96 @@ describe('token exchange service', () => {
       clientId: 'runner client',
       clientSecret: 'runner/secret',
     })
+    expect(parseBasicClientAuthorization('Basic %%%')).toBeNull()
+    expect(parseBasicClientAuthorization(`Basic ${btoa('%:secret')}`)).toBeNull()
+  })
+
+  it('validates federated JWKS URLs and public verification keys at the configuration boundary', async () => {
+    const { deps } = await tokenExchangeFixture({ seedCredential: false })
+    const base = {
+      issuer: 'https://platform.example.com',
+      subject: 'org_1:*',
+      audienceResourceId,
+    }
+
+    for (const jwksUrl of [
+      'not-a-url',
+      'http://keys.example.com/jwks',
+      'https://user@keys.example.com/jwks',
+      'https://keys.example.com/jwks#fragment',
+      'https://localhost/jwks',
+      'https://keys.localhost/jwks',
+      'https://keys.local/jwks',
+      'https://[::1]/jwks',
+      'https://[fc00::1]/jwks',
+      'https://[fd00::1]/jwks',
+      'https://[fe80::1]/jwks',
+      'https://10.0.0.1/jwks',
+      'https://127.0.0.1/jwks',
+      'https://169.254.1.1/jwks',
+      'https://172.16.0.1/jwks',
+      'https://192.168.1.1/jwks',
+      'https://0.1.2.3/jwks',
+    ]) {
+      await expect(
+        createFederatedCredential(deps, applicationId, { ...base, name: jwksUrl, jwksUrl }),
+      ).rejects.toMatchObject({ status: 400 })
+    }
+    for (const jwksUrl of ['https://keys.example.com/jwks', 'https://8.8.8.8/jwks']) {
+      await expect(
+        createFederatedCredential(deps, applicationId, { ...base, name: jwksUrl, jwksUrl }),
+      ).resolves.toMatchObject({ jwksUrl })
+    }
+
+    const rsa = { kty: 'RSA', kid: 'rsa-1', alg: 'RS256', n: 'modulus', e: 'AQAB' }
+    const ec = { kty: 'EC', kid: 'ec-1', alg: 'ES256', crv: 'P-256', x: 'x', y: 'y' }
+    const invalidKeySets: Record<string, unknown>[][] = [
+      [
+        { ...rsa, kid: undefined },
+        { ...ec, kid: undefined },
+      ],
+      [rsa, { ...rsa }],
+      [{ ...rsa, use: 'enc' }],
+      [{ ...rsa, key_ops: 'verify' }],
+      [{ ...rsa, key_ops: ['sign'] }],
+      [{ ...rsa, key_ops: ['verify', 'sign'] }],
+      [{ ...rsa, d: 'private' }],
+      [{ ...rsa, p: 'private' }],
+      [{ ...rsa, q: 'private' }],
+      [{ ...rsa, dp: 'private' }],
+      [{ ...rsa, dq: 'private' }],
+      [{ ...rsa, qi: 'private' }],
+      [{ ...rsa, k: 'symmetric' }],
+      [{ ...rsa, alg: 'RS512' }],
+      [{ ...rsa, n: undefined }],
+      [{ ...rsa, e: undefined }],
+      [{ ...ec, alg: 'ES384' }],
+      [{ ...ec, crv: 'P-384' }],
+      [{ ...ec, x: undefined }],
+      [{ ...ec, y: undefined }],
+      [{ kty: 'oct', kid: 'oct-1', alg: 'HS256', k: 'secret' }],
+    ]
+    for (const publicKeys of invalidKeySets) {
+      await expect(
+        createFederatedCredential(deps, applicationId, {
+          ...base,
+          name: JSON.stringify(publicKeys),
+          publicKeys,
+        }),
+      ).rejects.toMatchObject({ status: 400 })
+    }
+    await expect(
+      createFederatedCredential(deps, applicationId, {
+        ...base,
+        name: 'Valid verification keys',
+        publicKeys: [{ kty: 'RSA', n: 'modulus', e: 'AQAB', key_ops: ['verify'] }],
+      }),
+    ).resolves.toMatchObject({ enabled: true })
   })
 
   it('rejects unsupported exchange inputs and untrusted client states', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture()
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -574,7 +680,7 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 401, error: 'invalid_client' })
 
     repository.client = { ...repository.client!, disabled: false, grantTypes: JSON.stringify(['client_credentials']) }
     await expect(
@@ -588,12 +694,12 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects invalid subject token signer states', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture()
-    const unsignedSubjectToken = await signHs256Jwt(
+    const unsignedSubjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -614,14 +720,14 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
 
     repository.clearCredentials()
-    repository.seedCredential({
+    await repository.seedCredential({
       issuer: 'https://platform.example.com',
       jwksUrl: 'https://platform.example.com/.well-known/jwks.json',
     })
-    const hsSubjectToken = await signHs256Jwt(
+    const hsSubjectToken = await signJwtWithHeader(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -629,6 +735,7 @@ describe('token exchange service', () => {
         exp: Math.floor(Date.now() / 1000) + 60,
       },
       'external-platform-secret',
+      { alg: 'HS256', typ: 'JWT' },
     )
     await expect(
       exchangeToken(
@@ -641,9 +748,9 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
 
-    const rsHeaderSubjectToken = await signHs256JwtWithHeader(
+    const rsHeaderSubjectToken = await signJwtWithHeader(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -654,7 +761,7 @@ describe('token exchange service', () => {
       { alg: 'RS256', typ: 'JWT', kid: 'ak-key-1' },
     )
     repository.clearCredentials()
-    repository.seedCredential({ issuer: 'https://platform.example.com' })
+    await repository.seedCredential({ issuer: 'https://platform.example.com' })
     await expect(
       exchangeToken(
         deps,
@@ -666,12 +773,12 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('rejects unavailable or unmatched JWKS signing keys', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture({ seedCredential: false })
-    repository.seedCredential({
+    await repository.seedCredential({
       issuer: 'https://platform.example.com',
       jwksUrl: 'https://platform.example.com/.well-known/jwks.json',
     })
@@ -708,7 +815,7 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify({ keys: [{ kid: 'other-key', alg: 'RS256' }] }), {
@@ -727,7 +834,7 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify({ notKeys: [] }), {
@@ -746,7 +853,7 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
 
     const otherKeyPair = await crypto.subtle.generateKey(
       {
@@ -776,7 +883,65 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
+
+    repository.clearCredentials()
+    await repository.seedCredential({
+      issuer: 'https://platform.example.com',
+      publicKeys: null,
+    })
+    await expect(
+      exchangeToken(
+        deps,
+        {
+          grantType: tokenExchangeGrantType,
+          subjectToken: await signEs256TestJwt(
+            {
+              iss: 'https://platform.example.com',
+              sub: 'org_1:runner_1',
+              aud: defaultAudience,
+              exp: Math.floor(Date.now() / 1000) + 60,
+            },
+            'external-platform-secret',
+          ),
+          subjectTokenType: jwtTokenType,
+          audience: defaultAudience,
+        },
+        { clientId: applicationClientId, clientSecret },
+      ),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
+
+    const signingJwk = await defaultSigningJwk()
+    repository.clearCredentials()
+    await repository.seedCredential({
+      issuer: 'https://platform.example.com',
+      publicKeys: [
+        { ...signingJwk, kid: 'key-1', alg: 'ES256' },
+        { ...signingJwk, kid: 'key-2', alg: 'ES256' },
+      ],
+    })
+    const noKidToken = await signJwtWithHeader(
+      {
+        iss: 'https://platform.example.com',
+        sub: 'org_1:runner_1',
+        aud: defaultAudience,
+        exp: Math.floor(Date.now() / 1000) + 60,
+      },
+      'external-platform-secret',
+      { alg: 'ES256', typ: 'JWT' },
+    )
+    await expect(
+      exchangeToken(
+        deps,
+        {
+          grantType: tokenExchangeGrantType,
+          subjectToken: noKidToken,
+          subjectTokenType: jwtTokenType,
+          audience: defaultAudience,
+        },
+        { clientId: applicationClientId, clientSecret },
+      ),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
   })
 
   it('lists federated credentials and rejects invalid client secrets', async () => {
@@ -784,14 +949,19 @@ describe('token exchange service', () => {
 
     await expect(listFederatedCredentials(deps, applicationId)).resolves.toHaveLength(1)
     await expect(
-      introspectToken(deps, 'missing-token', { clientId: applicationClientId, clientSecret: 'wrong-secret' }),
+      introspectToken(
+        deps,
+        'missing-token',
+        { clientId: applicationClientId, clientSecret: 'wrong-secret' },
+        flareAuthIssuer,
+      ),
     ).rejects.toMatchObject({
       status: 401,
     })
   })
 
   it('manages federated credential CRUD boundaries', async () => {
-    const { deps } = await tokenExchangeFixture({ seedCredential: false })
+    const { deps, repository } = await tokenExchangeFixture({ seedCredential: false })
 
     await expect(listFederatedCredentials(deps, 'missing-app')).rejects.toMatchObject({ status: 404 })
     await expect(
@@ -809,34 +979,47 @@ describe('token exchange service', () => {
       issuer: 'https://platform.example.com',
       subject: 'org_1:*',
       audienceResourceId,
-      publicKeys: [{ kty: 'RSA', kid: 'key-1' }],
+      publicKeys: [{ kty: 'RSA', kid: 'key-1', alg: 'RS256', n: 'public-modulus', e: 'AQAB' }],
       metadata: { owner: 'platform' },
     })
     expect(created).toMatchObject({
       applicationId,
       name: 'Inline key',
-      publicKeys: [{ kty: 'RSA', kid: 'key-1' }],
+      publicKeys: [{ kty: 'RSA', kid: 'key-1', alg: 'RS256', n: 'public-modulus', e: 'AQAB' }],
       metadata: { owner: 'platform' },
     })
     await expect(getFederatedCredential(deps, applicationId, created.id)).resolves.toMatchObject({
       id: created.id,
       enabled: true,
     })
+    await expect(
+      updateFederatedCredential(deps, applicationId, created.id, { publicKeys: [], jwksUrl: null }),
+    ).rejects.toMatchObject({ status: 400 })
 
     await expect(
       updateFederatedCredential(deps, applicationId, created.id, {
         enabled: false,
         name: 'Disabled inline key',
         jwksUrl: null,
-        publicKeys: [{ kty: 'EC', kid: 'key-2' }],
+        publicKeys: [{ kty: 'EC', kid: 'key-2', alg: 'ES256', crv: 'P-256', x: 'public-x', y: 'public-y' }],
       }),
     ).resolves.toMatchObject({
       id: created.id,
       enabled: false,
       name: 'Disabled inline key',
       jwksUrl: null,
-      publicKeys: [{ kty: 'EC', kid: 'key-2' }],
+      publicKeys: [{ kty: 'EC', kid: 'key-2', alg: 'ES256', crv: 'P-256', x: 'public-x', y: 'public-y' }],
     })
+    await expect(
+      updateFederatedCredential(deps, applicationId, created.id, {
+        name: 'Validated current keys',
+        audienceResourceId,
+      }),
+    ).resolves.toMatchObject({ name: 'Validated current keys' })
+    repository.failNextCredentialUpdate()
+    await expect(
+      updateFederatedCredential(deps, applicationId, created.id, { name: 'Concurrent deletion' }),
+    ).rejects.toMatchObject({ status: 404 })
 
     await expect(deleteFederatedCredential(deps, applicationId, created.id)).resolves.toBeUndefined()
     await expect(getFederatedCredential(deps, applicationId, created.id)).rejects.toMatchObject({ status: 404 })
@@ -853,7 +1036,7 @@ describe('token exchange service', () => {
   it('rejects clients without token exchange grants', async () => {
     const { deps, repository, clientSecret } = await tokenExchangeFixture()
     repository.client = { ...repository.client!, grantTypes: null, scopes: null }
-    const subjectToken = await signHs256Jwt(
+    const subjectToken = await signEs256TestJwt(
       {
         iss: 'https://platform.example.com',
         sub: 'org_1:runner_1',
@@ -874,7 +1057,7 @@ describe('token exchange service', () => {
         },
         { clientId: applicationClientId, clientSecret },
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400 })
   })
 })
 
@@ -882,23 +1065,18 @@ interface SeedCredentialInput {
   issuer: string
   subject?: string
   audience?: string
-  sharedSecret?: string | null
   jwksUrl?: string | null
   publicKeys?: Record<string, unknown>[] | null
 }
 
-/**
- * In-memory repository over the federated-credential contract. Resolved
- * credentials carry the legacy shared secret (kept off the management surface)
- * so the HS256 verify path stays exercisable without a real keypair.
- */
 class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
   client: OAuthClientRecord | null = null
+  private failUpdate = false
   private credentials: ResolvedFederatedCredential[] = []
   private records = new Map<string, FederatedCredentialRecord>()
   private nextId = 1
   private tokens = new Map<string, TokenExchangeAccessTokenRecord | null>()
-  private oauthTokens = new Map<string, OAuthAccessTokenRecord>()
+  private refreshTokens = new Map<string, TokenExchangeRefreshTokenRecord>()
 
   async findClient(clientId: string) {
     return this.client?.clientId === clientId ? this.client : null
@@ -947,7 +1125,6 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
       audience: defaultAudience,
       jwksUrl: input.jwksUrl ?? null,
       publicKeys: input.publicKeys ?? null,
-      sharedSecret: null,
       enabled: true,
     })
     return record
@@ -956,6 +1133,10 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
   async updateFederatedCredential(applicationIdValue: string, id: string, input: UpdateFederatedCredentialInput) {
     const record = this.records.get(id)
     if (!record || record.applicationId !== applicationIdValue) return null
+    if (this.failUpdate) {
+      this.failUpdate = false
+      return null
+    }
     const updated: FederatedCredentialRecord = {
       ...record,
       name: input.name ?? record.name,
@@ -978,10 +1159,15 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
     return true
   }
 
-  /** Seeds a resolved credential directly (bypassing the no-shared-secret create API). */
-  seedCredential(input: SeedCredentialInput) {
+  async seedCredential(input: SeedCredentialInput) {
     const id = `fcr_${this.nextId++}`
     const now = new Date()
+    const publicKeys =
+      input.publicKeys === undefined
+        ? input.jwksUrl
+          ? null
+          : [{ ...(await defaultSigningJwk()), kid: 'default', alg: 'ES256' }]
+        : input.publicKeys
     this.credentials.push({
       id,
       applicationId,
@@ -991,9 +1177,7 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
       subject: input.subject ?? 'org_1:*',
       audience: input.audience ?? defaultAudience,
       jwksUrl: input.jwksUrl ?? null,
-      publicKeys: input.publicKeys ?? null,
-      sharedSecret:
-        input.sharedSecret === undefined ? (input.jwksUrl ? null : 'external-platform-secret') : input.sharedSecret,
+      publicKeys,
       enabled: true,
     })
     this.records.set(id, {
@@ -1004,7 +1188,7 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
       subject: input.subject ?? 'org_1:*',
       audienceResourceId: 'res_1',
       jwksUrl: input.jwksUrl ?? null,
-      publicKeys: input.publicKeys ?? null,
+      publicKeys,
       enabled: true,
       metadata: null,
       createdAt: now,
@@ -1016,6 +1200,10 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
     this.credentials = []
   }
 
+  failNextCredentialUpdate() {
+    this.failUpdate = true
+  }
+
   async storeAccessToken(input: Parameters<TokenExchangeRepository['storeAccessToken']>[0]) {
     this.tokens.set(input.tokenHash, { ...input, createdAt: new Date(), revokedAt: null })
   }
@@ -1024,12 +1212,41 @@ class InMemoryTokenExchangeRepository implements TokenExchangeRepository {
     return this.tokens.get(tokenHash) ?? null
   }
 
-  seedOAuthAccessToken(tokenHash: string, record: OAuthAccessTokenRecord) {
-    this.oauthTokens.set(tokenHash, record)
+  async findFederatedCredentialForClient(id: string, clientId: string) {
+    return this.credentials.find((item) => item.id === id && item.applicationClientId === clientId) ?? null
   }
 
-  async findOAuthAccessTokenByHash(tokenHash: string) {
-    return this.oauthTokens.get(tokenHash) ?? null
+  async storeRefreshToken(input: Omit<TokenExchangeRefreshTokenRecord, 'consumedAt' | 'revokedAt' | 'createdAt'>) {
+    const revoked = [...this.refreshTokens.values()].some(
+      (token) => token.familyId === input.familyId && token.revokedAt,
+    )
+    this.refreshTokens.set(input.tokenHash, {
+      ...input,
+      consumedAt: null,
+      revokedAt: revoked ? new Date() : null,
+      createdAt: new Date(),
+    })
+    return !revoked
+  }
+
+  async findRefreshTokenByHash(tokenHash: string) {
+    return this.refreshTokens.get(tokenHash) ?? null
+  }
+
+  async consumeRefreshToken(id: string, consumedAt: Date) {
+    for (const [hash, token] of this.refreshTokens) {
+      if (token.id === id && !token.consumedAt && !token.revokedAt) {
+        this.refreshTokens.set(hash, { ...token, consumedAt })
+        return true
+      }
+    }
+    return false
+  }
+
+  async revokeRefreshTokenFamily(familyId: string, revokedAt: Date) {
+    for (const [hash, token] of this.refreshTokens) {
+      if (token.familyId === familyId && !token.revokedAt) this.refreshTokens.set(hash, { ...token, revokedAt })
+    }
   }
 
   expireTokens() {
@@ -1080,31 +1297,43 @@ async function tokenExchangeFixture(
     scopes: JSON.stringify(options.scopes ?? ['runner:connect']),
   }
   if (options.seedCredential !== false) {
-    repository.seedCredential({ issuer: 'https://platform.example.com' })
+    await repository.seedCredential({ issuer: 'https://platform.example.com' })
   }
   return { repository, deps, clientSecret }
 }
 
-async function signHs256Jwt(payload: Record<string, unknown>, secret: string) {
-  return signHs256JwtWithHeader(payload, secret, { alg: 'HS256', typ: 'JWT' })
+async function signEs256TestJwt(payload: Record<string, unknown>, secret: string) {
+  const keyPair =
+    secret === 'external-platform-secret'
+      ? await defaultSigningKeyPair()
+      : await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])
+  return signEs256Jwt(payload, keyPair.privateKey, 'default')
 }
 
-async function signHs256JwtWithHeader(
+async function signJwtWithHeader(
   payload: Record<string, unknown>,
-  secret: string,
+  _secret: string,
   headerValue: Record<string, unknown>,
 ) {
   const header = base64UrlString(JSON.stringify(headerValue))
   const body = base64UrlString(JSON.stringify(payload))
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    (await defaultSigningKeyPair()).privateKey,
+    new TextEncoder().encode(`${header}.${body}`),
   )
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${header}.${body}`))
   return `${header}.${body}.${base64Url(new Uint8Array(signature))}`
+}
+
+let signingKeyPairPromise: Promise<CryptoKeyPair> | null = null
+
+function defaultSigningKeyPair() {
+  signingKeyPairPromise ??= crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])
+  return signingKeyPairPromise
+}
+
+async function defaultSigningJwk() {
+  return crypto.subtle.exportKey('jwk', (await defaultSigningKeyPair()).publicKey)
 }
 
 async function signRs256Jwt(payload: Record<string, unknown>, privateKey: CryptoKey, kid: string) {

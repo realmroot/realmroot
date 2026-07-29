@@ -84,10 +84,10 @@ export function getAuthContext(c: Context): AuthContext {
   return c.get('authContext') ?? { session: null, user: null }
 }
 
-export function agentPrincipalAuth(auth: SessionReader): MiddlewareHandler {
+export function agentPrincipalAuth(auth: SessionReader, options: { allowSession?: boolean } = {}): MiddlewareHandler {
   return async (c, next) => {
     const current = getAuthContext(c)
-    if (current.session || current.agent) {
+    if (current.agent || (options.allowSession !== false && current.session)) {
       await next()
       return
     }

@@ -43,8 +43,9 @@ in committed application files:
 - optional variables: `FLAREAUTH_EMAIL_FROM_NAME`, `FLAREAUTH_WORKER_NAME`,
   `FLAREAUTH_D1_DATABASE`, `FLAREAUTH_R2_BUCKET`, and
   `FLAREAUTH_EMAIL_QUEUE`
-- deployments with a custom domain should set `AGENT_IDENTITY_ISSUER` to that
-  immutable public origin
+
+Deployments with a custom domain should set `BETTER_AUTH_URL` to that immutable
+public origin. Both users and Agents use its `/api/auth` issuer.
 
 Resource override variables are primarily for adopting an existing deployment
 whose names do not match the fork-name convention.

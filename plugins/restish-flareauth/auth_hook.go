@@ -42,6 +42,15 @@ type identityResponse struct {
 	Identity stableIdentity `json:"identity"`
 }
 
+type agentConfiguration struct {
+	Version               string            `json:"version"`
+	Issuer                string            `json:"issuer"`
+	Algorithms            []string          `json:"algorithms"`
+	AgentIdentityIssuer   string            `json:"agent_identity_issuer"`
+	AgentIdentityEndpoint string            `json:"agent_identity_endpoint"`
+	Endpoints             map[string]string `json:"endpoints"`
+}
+
 type httpDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
@@ -65,12 +74,16 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	target := agentTarget{API: input.API, Profile: input.Profile, Name: "default", Origin: origin}
-	state, err := ensureAgentIdentity(context.Background(), states, client, prompt, target)
+	configuration, err := discoverAgentConfiguration(context.Background(), client, origin)
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	token, err := signAgentJWT(state, time.Now())
+	target := agentTarget{API: input.API, Profile: input.Profile, Name: "default", Origin: origin}
+	state, err := ensureAgentIdentity(context.Background(), states, client, prompt, target, configuration)
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
+	token, err := signAgentJWT(state, configuration.Issuer, time.Now())
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
@@ -87,13 +100,14 @@ func ensureAgentIdentity(
 	client httpDoer,
 	prompt approvalPrompt,
 	target agentTarget,
+	configuration agentConfiguration,
 ) (agentState, error) {
 	state, err := states.Load(target)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return agentState{}, err
 		}
-		state, err = registerAgent(ctx, states, client, target, agentDisplayName(), false)
+		state, err = registerAgent(ctx, states, client, target, agentDisplayName(), false, configuration)
 		if err != nil {
 			return agentState{}, err
 		}
@@ -104,7 +118,7 @@ func ensureAgentIdentity(
 	if state.RegistrationApproval == nil ||
 		state.RegistrationApproval.ExpiresAt == nil ||
 		!time.Now().Before(*state.RegistrationApproval.ExpiresAt) {
-		state, err = registerAgent(ctx, states, client, target, state.Name, true)
+		state, err = registerAgent(ctx, states, client, target, state.Name, true, configuration)
 		if err != nil {
 			return agentState{}, err
 		}
@@ -112,7 +126,7 @@ func ensureAgentIdentity(
 	if err := prompt.Show(state.RegistrationApproval.VerificationURIComplete); err != nil {
 		return agentState{}, err
 	}
-	if err := waitForAgentApproval(ctx, client, state); err != nil {
+	if err := waitForAgentApproval(ctx, client, state, configuration); err != nil {
 		return agentState{}, err
 	}
 
@@ -121,14 +135,14 @@ func ensureAgentIdentity(
 		ctx,
 		client,
 		http.MethodPost,
-		state.Origin+"/api/agent/identity",
-		mustAgentJWT(state),
+		configuration.AgentIdentityEndpoint,
+		mustAgentJWT(state, configuration.Issuer),
 		map[string]any{"name": state.Name},
 		&identity,
 	); err != nil {
 		return agentState{}, err
 	}
-	if identity.Identity.Issuer == "" || identity.Identity.Subject == "" {
+	if identity.Identity.Issuer != configuration.AgentIdentityIssuer || identity.Identity.Subject == "" {
 		return agentState{}, errors.New("Agent identity response is missing issuer or subject")
 	}
 	state.Identity = &identity.Identity
@@ -139,6 +153,64 @@ func ensureAgentIdentity(
 	return state, nil
 }
 
+func discoverAgentConfiguration(
+	ctx context.Context,
+	client httpDoer,
+	origin string,
+) (agentConfiguration, error) {
+	var configuration agentConfiguration
+	if err := requestJSON(
+		ctx,
+		client,
+		http.MethodGet,
+		origin+"/.well-known/agent-configuration",
+		"",
+		nil,
+		&configuration,
+	); err != nil {
+		return agentConfiguration{}, fmt.Errorf("discover FlareAuth Agent support: %w", err)
+	}
+	if configuration.Version != "1.0-draft" ||
+		configuration.AgentIdentityIssuer == "" ||
+		configuration.AgentIdentityIssuer != configuration.Issuer ||
+		!contains(configuration.Algorithms, "Ed25519") {
+		return agentConfiguration{}, errors.New("Agent discovery has an incompatible issuer, version, or signing algorithm")
+	}
+	issuer, err := url.Parse(configuration.Issuer)
+	if err != nil || issuer.Scheme == "" || issuer.Host == "" {
+		return agentConfiguration{}, errors.New("Agent discovery issuer is invalid")
+	}
+	issuerOrigin := issuer.Scheme + "://" + issuer.Host
+	for _, endpoint := range []string{
+		configuration.Issuer,
+		configuration.AgentIdentityEndpoint,
+		configuration.Endpoints["register"],
+		configuration.Endpoints["status"],
+	} {
+		if !sameOrigin(endpoint, issuerOrigin) {
+			return agentConfiguration{}, errors.New("Agent discovery endpoints must use the discovered issuer origin")
+		}
+	}
+	return configuration, nil
+}
+
+func sameOrigin(value string, origin string) bool {
+	endpoint, err := url.Parse(value)
+	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {
+		return false
+	}
+	return endpoint.Scheme+"://"+endpoint.Host == origin
+}
+
+func contains(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func registerAgent(
 	ctx context.Context,
 	states stateStore,
@@ -146,18 +218,8 @@ func registerAgent(
 	target agentTarget,
 	name string,
 	replace bool,
+	configuration agentConfiguration,
 ) (agentState, error) {
-	if err := requestJSON(
-		ctx,
-		client,
-		http.MethodGet,
-		target.Origin+"/.well-known/agent-configuration",
-		"",
-		nil,
-		&map[string]any{},
-	); err != nil {
-		return agentState{}, fmt.Errorf("discover FlareAuth Agent support: %w", err)
-	}
 	hostPublicKey, hostPrivateKey, hostKeyID, err := newSigningKey("host")
 	if err != nil {
 		return agentState{}, err
@@ -167,7 +229,7 @@ func registerAgent(
 		return agentState{}, err
 	}
 	registrationJWT, err := signRegistrationJWT(
-		target.Origin,
+		configuration.Issuer,
 		hostPrivateKey,
 		hostKeyID,
 		hostPublicKey,
@@ -184,7 +246,7 @@ func registerAgent(
 		ctx,
 		client,
 		http.MethodPost,
-		target.Origin+"/api/auth/agent/register",
+		configuration.Endpoints["register"],
 		registrationJWT,
 		map[string]any{
 			"name":             name,
@@ -236,7 +298,12 @@ func registerAgent(
 	return state, err
 }
 
-func waitForAgentApproval(ctx context.Context, client httpDoer, state agentState) error {
+func waitForAgentApproval(
+	ctx context.Context,
+	client httpDoer,
+	state agentState,
+	configuration agentConfiguration,
+) error {
 	interval := time.Duration(state.RegistrationApproval.IntervalSeconds) * time.Second
 	if interval <= 0 {
 		interval = 5 * time.Second
@@ -247,8 +314,8 @@ func waitForAgentApproval(ctx context.Context, client httpDoer, state agentState
 			ctx,
 			client,
 			http.MethodGet,
-			state.Origin+"/api/auth/agent/status?agent_id="+url.QueryEscape(state.AgentID),
-			mustHostJWT(state),
+			configuration.Endpoints["status"]+"?agent_id="+url.QueryEscape(state.AgentID),
+			mustHostJWT(state, configuration.Issuer),
 			nil,
 			&status,
 		); err != nil {
@@ -352,16 +419,16 @@ func agentDisplayName() string {
 	return host + " Agent"
 }
 
-func mustAgentJWT(state agentState) string {
-	token, err := signAgentJWT(state, time.Now())
+func mustAgentJWT(state agentState, issuer string) string {
+	token, err := signAgentJWT(state, issuer, time.Now())
 	if err != nil {
 		panic(err)
 	}
 	return token
 }
 
-func mustHostJWT(state agentState) string {
-	token, err := signHostJWT(state, time.Now())
+func mustHostJWT(state agentState, issuer string) string {
+	token, err := signHostJWT(state, issuer, time.Now())
 	if err != nil {
 		panic(err)
 	}

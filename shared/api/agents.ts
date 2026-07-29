@@ -159,6 +159,15 @@ export const agentTokenRequestSchema = z.object({
   approvalId: z.string().trim().min(1).optional(),
 })
 
+export const agentAuthorityGrantType = 'urn:flareauth:params:oauth:grant-type:agent-authority'
+
+export const agentTokenFormSchema = z.object({
+  grant_type: z.literal(agentAuthorityGrantType),
+  grant_id: z.string().trim().min(1),
+  scope: z.string().trim().optional(),
+  approval_id: z.string().trim().min(1).optional(),
+})
+
 export const agentAuthorityApprovalSchema = z.object({
   id: z.string(),
   grantId: z.string(),

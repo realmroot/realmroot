@@ -11,7 +11,7 @@ import {
 } from '@server/db/schema'
 import { authenticateAgentAccessToken, issueAgentAccessToken } from '@server/usecases/agent-tokens'
 import { eq } from 'drizzle-orm'
-import { exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
+import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHarness, createUser, type Harness, seedAgent, signIn, signInAdmin } from './harness'
 
@@ -144,7 +144,7 @@ describe('Agent identity enrollment over real D1', () => {
     const approved = await approveIntent(harness, ownerCookie, firstIntent.id)
 
     expect(approved.identity).toMatchObject({
-      issuer: 'http://localhost',
+      issuer: 'http://localhost/api/auth',
       name: 'Release Agent',
       status: 'active',
       homeSpace: { type: 'personal', userId },
@@ -265,38 +265,43 @@ describe('Agent identity enrollment over real D1', () => {
     expect(grantResponse.status, await grantResponse.clone().text()).toBe(201)
     const grant = (await grantResponse.json()) as { id: string }
 
-    const proof = await createDpopProof('POST', 'http://localhost/api/agent/oauth2/token', 'atomic-token-proof')
+    const proof = await createDpopProof('POST', 'http://localhost/api/auth/oauth2/token', 'atomic-token-proof')
     const session = {
       agentId: seeded.agentId,
       agent: { id: seeded.agentId, hostId: seeded.hostId, mode: 'delegated' },
       host: { id: seeded.hostId, userId, status: 'active' },
     }
     const attempts = await Promise.allSettled([
-      issueAgentAccessToken(harness.deps, proof.request, { grantId: grant.id }, session),
-      issueAgentAccessToken(harness.deps, proof.request, { grantId: grant.id }, session),
+      issueAgentAccessToken(harness.deps, proof.request, { grantId: grant.id }, session, harness.agentTokenSigner),
+      issueAgentAccessToken(harness.deps, proof.request, { grantId: grant.id }, session, harness.agentTokenSigner),
     ])
     expect(attempts.filter((attempt) => attempt.status === 'fulfilled')).toHaveLength(1)
     expect(attempts.filter((attempt) => attempt.status === 'rejected')).toHaveLength(1)
     const issued = attempts.find((attempt) => attempt.status === 'fulfilled')
     if (!issued || issued.status !== 'fulfilled') throw new Error('expected one issued Agent access token')
-    const jwksResponse = await harness.request('/api/agent/jwks')
+    const jwksResponse = await harness.request('/api/auth/jwks')
     expect(jwksResponse.status).toBe(200)
     const jwks = (await jwksResponse.json()) as { keys: Array<JWK & { alg: string }> }
-    const verified = await jwtVerify(issued.value.access_token, await importJWK(jwks.keys[0]!, 'ES256'), {
-      issuer: 'http://localhost',
+    const verified = await jwtVerify(issued.value.access_token, await importJWK(jwks.keys[0]!, jwks.keys[0]!.alg), {
+      issuer: 'http://localhost/api/auth',
       audience: 'https://api.example.com',
     })
     expect(verified.payload).toMatchObject({
       sub: approved.identity.subject,
       scope: 'repo:read repo:write',
-      agent_identity: { iss: 'http://localhost', sub: approved.identity.subject },
+      agent_identity: { iss: 'http://localhost/api/auth', sub: approved.identity.subject },
       act: { sub: seeded.hostId, actor_type: 'host' },
     })
-    const oidcMetadata = await harness.request('/.well-known/openid-configuration')
+    expect(decodeProtectedHeader(issued.value.access_token)).toMatchObject({
+      alg: jwks.keys[0]!.alg,
+      kid: jwks.keys[0]!.kid,
+      typ: 'at+jwt',
+    })
+    const oidcMetadata = await harness.request('/api/auth/.well-known/openid-configuration')
     expect(await oidcMetadata.json()).toMatchObject({
-      issuer: 'http://localhost',
-      jwks_uri: 'http://localhost/api/agent/jwks',
-      token_endpoint: 'http://localhost/api/agent/oauth2/token',
+      issuer: 'http://localhost/api/auth',
+      jwks_uri: 'http://localhost/api/auth/jwks',
+      token_endpoint: 'http://localhost/api/auth/oauth2/token',
     })
 
     const revoke = await harness.request(
@@ -322,6 +327,7 @@ describe('Agent identity enrollment over real D1', () => {
             dpop: resourceRequest.compact,
           },
         }),
+        harness.agentAccessTokenVerifier,
       ),
     ).rejects.toMatchObject({ status: 401, message: 'Agent access token authority was revoked.' })
 
@@ -333,7 +339,7 @@ describe('Agent identity enrollment over real D1', () => {
         body: JSON.stringify({
           mode: 'autonomous',
           audience: 'https://high-risk.example.com',
-          scopes: ['deploy:write'],
+          scopes: ['deploy:read', 'deploy:write'],
           constraints: {
             allowedHostIds: [seeded.hostId],
             maxUses: 1,
@@ -345,17 +351,18 @@ describe('Agent identity enrollment over real D1', () => {
     const stepUpGrant = (await stepUpGrantResponse.json()) as { id: string }
     const initialStepUpProof = await createDpopProof(
       'POST',
-      'http://localhost/api/agent/oauth2/token',
+      'http://localhost/api/auth/oauth2/token',
       'step-up-initial',
     )
     const stepUpError = await issueAgentAccessToken(
       harness.deps,
       initialStepUpProof.request,
-      { grantId: stepUpGrant.id },
+      { grantId: stepUpGrant.id, scope: 'deploy:write' },
       session,
+      harness.agentTokenSigner,
     ).catch((error: unknown) => error)
-    expect(stepUpError).toMatchObject({ status: 403 })
-    const approvalId = (stepUpError as Error).message.split(': ').at(-1)
+    expect(stepUpError).toMatchObject({ status: 400, error: 'approval_required' })
+    const approvalId = (stepUpError as { parameters: { approval_id: string } }).parameters.approval_id
     expect(approvalId).toMatch(/^agapproval_/)
 
     const approve = await harness.request(
@@ -363,19 +370,45 @@ describe('Agent identity enrollment over real D1', () => {
       { method: 'POST', headers: { cookie: ownerCookie } },
     )
     expect(approve.status, await approve.clone().text()).toBe(200)
+    const broadenedProof = await createDpopProof(
+      'POST',
+      'http://localhost/api/auth/oauth2/token',
+      'step-up-broadened',
+      initialStepUpProof.privateKey,
+      initialStepUpProof.publicJwk,
+    )
+    await expect(
+      issueAgentAccessToken(
+        harness.deps,
+        broadenedProof.request,
+        {
+          grantId: stepUpGrant.id,
+          approvalId,
+          scope: 'deploy:read deploy:write',
+        },
+        session,
+        harness.agentTokenSigner,
+      ),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
     const approvedProof = await createDpopProof(
       'POST',
-      'http://localhost/api/agent/oauth2/token',
+      'http://localhost/api/auth/oauth2/token',
       'step-up-approved',
       initialStepUpProof.privateKey,
       initialStepUpProof.publicJwk,
     )
     await expect(
-      issueAgentAccessToken(harness.deps, approvedProof.request, { grantId: stepUpGrant.id, approvalId }, session),
+      issueAgentAccessToken(
+        harness.deps,
+        approvedProof.request,
+        { grantId: stepUpGrant.id, approvalId, scope: 'deploy:write' },
+        session,
+        harness.agentTokenSigner,
+      ),
     ).resolves.toMatchObject({ token_type: 'DPoP', scope: 'deploy:write' })
     const replayApprovalProof = await createDpopProof(
       'POST',
-      'http://localhost/api/agent/oauth2/token',
+      'http://localhost/api/auth/oauth2/token',
       'step-up-replay',
       initialStepUpProof.privateKey,
       initialStepUpProof.publicJwk,
@@ -384,10 +417,15 @@ describe('Agent identity enrollment over real D1', () => {
       issueAgentAccessToken(
         harness.deps,
         replayApprovalProof.request,
-        { grantId: stepUpGrant.id, approvalId },
+        { grantId: stepUpGrant.id, approvalId, scope: 'deploy:write' },
         session,
+        harness.agentTokenSigner,
       ),
-    ).rejects.toMatchObject({ status: 403, message: 'Step-up approval is invalid, expired, or already used.' })
+    ).rejects.toMatchObject({
+      status: 400,
+      error: 'invalid_grant',
+      message: 'Step-up approval is invalid, expired, or already used.',
+    })
   })
 
   it(`stores a generic Connector credential without exposing it and grants constrained use without changing ownership
@@ -482,7 +520,7 @@ describe('Agent identity enrollment over real D1', () => {
       },
     )
     const authority = (await authorityResponse.json()) as { id: string }
-    const tokenProof = await createDpopProof('POST', 'http://localhost/api/agent/oauth2/token', 'egress-token-proof')
+    const tokenProof = await createDpopProof('POST', 'http://localhost/api/auth/oauth2/token', 'egress-token-proof')
     const issued = await issueAgentAccessToken(
       harness.deps,
       tokenProof.request,
@@ -492,6 +530,7 @@ describe('Agent identity enrollment over real D1', () => {
         agent: { id: seeded.agentId, hostId: seeded.hostId, mode: 'delegated' },
         host: { id: seeded.hostId, userId, status: 'active' },
       },
+      harness.agentTokenSigner,
     )
     const upstream = vi.fn(async (request: Request) => {
       expect(request.url).toBe('https://build.example.com/v1/builds/42?view=summary')

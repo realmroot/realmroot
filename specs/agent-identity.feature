@@ -99,37 +99,41 @@ Feature: Agent identity and credential brokerage
       And its subject remains reserved for historical audit records
 
     @entrypoint:agent-protocol @journey:agent-stable-issuer
-    Scenario: Agent identity uses the deployment's canonical issuer
+    Scenario: Agent identity uses the deployment's existing OIDC issuer
       Given FlareAuth is reached through a non-canonical request origin
       When a controller approves an Agent enrollment
-      Then the Agent issuer is the configured canonical Agent identity issuer
+      Then the Agent issuer is the Better Auth OIDC issuer
       And preview or request origins do not change the Agent issuer and subject
+      And FlareAuth does not publish a second Agent-only OIDC issuer
 
   Rule: Tokens distinguish an Agent's identity from delegated authority
 
     @entrypoint:agent-protocol @journey:agent-autonomous-authority
     Scenario: An Agent can receive a token for its own authority
       Given an active Agent host proves possession of its registered key
-      When it requests a token for the Agent's own resources
+      When it requests a token from the Better Auth OAuth token endpoint for the Agent's own resources
       Then FlareAuth issues a short-lived audience-bound token
+      And the token uses the Better Auth issuer and signing keys
       And the token identifies the Agent as subject and the host as actor
       And the token carries only explicitly granted scopes
 
     @entrypoint:agent-protocol @journey:agent-delegated-authority
     Scenario: An Agent can receive explicitly delegated authority
       Given a user or organization granted authority to an Agent
-      When an active Agent host requests a token for that authority
+      When an active Agent host requests a token from the Better Auth OAuth token endpoint for that authority
       Then the token identifies the user or organization as subject
-      And the token identifies the Agent and host as the acting chain
+      And the token identifies the host and Agent through the RFC 8693 nested actor chain
       And the token is limited by the delegation's scopes, constraints, and expiry
 
     @entrypoint:agent-protocol @journey:agent-oidc-federation
-    Scenario: An OIDC relying party can associate an account with an Agent
-      Given a relying party trusts the FlareAuth issuer
-      When it validates an audience-bound token for an Agent
-      Then it associates the account by issuer and subject
-      And an Agent-aware relying party can distinguish the Agent subject and acting host
-      And a relying party never needs the Agent's long-lived public key as its account identifier
+    Scenario: An OAuth resource server can associate an account with an Agent
+      Given a resource server trusts the FlareAuth issuer and signing keys
+      When it validates an audience-bound JWT access token for an Agent
+      Then it validates the access-token type, signature, issuer, audience, and expiry
+      And it associates the account by issuer and subject
+      And an Agent-aware resource server can distinguish the Agent subject and acting host
+      And the resource server never needs the Agent's long-lived public key as its account identifier
+      And this access-token profile does not claim to be an Agent OIDC login flow
 
     @entrypoint:agent-protocol @journey:agent-grant-policy
     Scenario: Agent authority is denied unless an applicable grant allows it
@@ -138,6 +142,36 @@ Feature: Agent identity and credential brokerage
       Then FlareAuth denies the request
       When an applicable grant permits the request but requires step-up approval
       Then FlareAuth waits for an authorized controller to approve the high-risk use
+      And the approval is bound to the exact requested scopes, audience, grant, and host binding
+      And the approved request cannot be retried with broader authority
+
+    @entrypoint:agent-protocol @journey:agent-oauth-errors
+    Scenario: Agent token failures use OAuth and DPoP error contracts
+      Given an Agent requests or presents a DPoP-bound authority token
+      When its OAuth request, DPoP proof, or access token is invalid
+      Then the token endpoint returns a standard OAuth error response
+      And an invalid DPoP proof returns invalid_dpop_proof
+      And a protected resource returns a DPoP WWW-Authenticate challenge
+      And a step-up requirement returns structured approval details rather than an identifier embedded in prose
+
+  Rule: Workload token exchange preserves authorization boundaries
+
+    @entrypoint:agent-protocol @journey:workload-token-exchange-claims
+    Scenario: Introspection reports only authorization-server controlled security claims
+      Given a trusted workload assertion contains untrusted private claims
+      When FlareAuth exchanges and introspects its opaque access token
+      Then issuer, audience, client, scope, activity, token type, and lifetime come only from FlareAuth
+      And subject assertion claims cannot override introspection security fields
+      And only the confidential client that owns the exchange can introspect the token
+
+    @entrypoint:agent-protocol @journey:workload-refresh-security
+    Scenario: Token-exchange refresh tokens are confidential, rotating, and revocable
+      Given a confidential client received a token-exchange refresh token
+      When it refreshes with valid client authentication and an enabled federated credential
+      Then FlareAuth rotates the refresh token and invalidates the previous value
+      When the old token is replayed or the federated credential is disabled or deleted
+      Then FlareAuth rejects the refresh with invalid_grant
+      And disabling the client or rotating its secret also prevents refresh
 
   Rule: External accounts keep ownership separate from Agent access
 

@@ -54,6 +54,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/whoami',
     operationId: 'whoami',
     summary: 'Read the current Agent identity',
+    security: [{ agentAuth: [] }],
     response: agentProtocolIdentityResponseSchema,
   },
   ...agentGovernanceRoutes,
@@ -73,9 +74,9 @@ function createManagementOpenApiApp() {
     description: 'Authenticated administrator session.',
   })
   app.openAPIRegistry.registerComponent('securitySchemes', 'agentAuth', {
-    type: 'apiKey',
-    in: 'header',
-    name: 'Authorization',
+    type: 'http',
+    scheme: 'bearer',
+    bearerFormat: 'agent+jwt',
     description: 'AgentAuth possession proof supplied transparently by the FlareAuth Restish authentication adapter.',
   })
   for (const routeConfig of managementRoutes) app.openAPIRegistry.registerPath(createManagementRoute(routeConfig))

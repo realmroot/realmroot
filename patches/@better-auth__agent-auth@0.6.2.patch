@@ -1,0 +1,85 @@
+diff --git a/dist/index.js b/dist/index.js
+index 2b0aee610763da607022234b76cb9a21a5f3ae1d..5a91ef5bfc3f95821f5103b074585d27e04f4f69 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -4382,18 +4382,11 @@ function requestCapability(opts) {
+             { field: "status", value: "pending" }
+           ]
+         });
+-        if (existingApproval && new Date(existingApproval.expiresAt) > now) {
+-          return ctx.json({
+-            agent_id: agentSession.agent.id,
+-            status: "pending",
+-            agent_capability_grants: formatGrantsResponse(requestedGrants2, opts.capabilities),
+-            approval: {
+-              method: existingApproval.method,
+-              expires_in: Math.floor(
+-                (new Date(existingApproval.expiresAt).getTime() - now.getTime()) / 1e3
+-              ),
+-              interval: existingApproval.interval
+-            }
++        if (existingApproval) {
++          await ctx.context.adapter.update({
++            model: TABLE.approval,
++            where: [{ field: "id", value: existingApproval.id }],
++            update: { status: "expired", updatedAt: now }
+           });
+         }
+         const approval2 = await buildApprovalInfo(
+@@ -6952,8 +6945,12 @@ var SecondaryStorageJtiCache = class {
+ };
+ var JtiCacheProxy = class {
+   inner;
+-  constructor() {
++  consumeJti;
++  maxAgeSec;
++  constructor(consumeJti, maxAgeSec) {
+     this.inner = new MemoryJtiCache();
++    this.consumeJti = consumeJti;
++    this.maxAgeSec = maxAgeSec;
+   }
+   useSecondaryStorage(storage) {
+     if (this.inner instanceof MemoryJtiCache) {
+@@ -6962,9 +6959,15 @@ var JtiCacheProxy = class {
+     this.inner = new SecondaryStorageJtiCache(storage);
+   }
+   has(jti) {
++    if (this.consumeJti) {
++      return Promise.resolve(this.consumeJti(jti, this.maxAgeSec)).then((consumed) => !consumed);
++    }
+     return this.inner.has(jti);
+   }
+   add(jti, maxAgeSec) {
++    if (this.consumeJti) {
++      return;
++    }
+     return this.inner.add(jti, maxAgeSec);
+   }
+ };
+@@ -7095,7 +7098,7 @@ var agentAuth = (options) => {
+       }
+     }
+   }
+-  const jtiCache = new JtiCacheProxy();
++  const jtiCache = new JtiCacheProxy(options?.consumeJti, opts.jwtMaxAge + CLOCK_SKEW_TOLERANCE_SEC);
+   const jwksCache = new JwksCacheProxy();
+   const schema = mergeSchema(agentSchema(), opts.schema);
+   const routes = createAgentRoutes(opts, jtiCache, jwksCache);
+diff --git a/dist/types-DNZbytck.d.ts b/dist/types-DNZbytck.d.ts
+index b0ed3bcfd41fc42edf0745aeda4a88caecd6dba1..5213207d8cfcb3759b026103a9b06155b5b7a3c1 100644
+--- a/dist/types-DNZbytck.d.ts
++++ b/dist/types-DNZbytck.d.ts
+@@ -868,6 +868,13 @@ interface AgentAuthOptions {
+         hostId: string | null;
+         userId: string | null;
+     }) => number | null | undefined | Promise<number | null | undefined>;
++    /**
++     * Atomically consume a JWT identifier for replay protection.
++     *
++     * Return true only when the identifier was not consumed previously.
++     * Distributed runtimes should persist the identifier in shared storage.
++     */
++    consumeJti?: (jti: string, maxAgeSec: number) => boolean | Promise<boolean>;
+     /**
+      * Capabilities that are always blocked from being granted (§10.6).
+      * @default []

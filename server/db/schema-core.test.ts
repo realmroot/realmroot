@@ -12,7 +12,6 @@ import {
   agentHost,
   agentIdentity,
   agentIdentityBinding,
-  agentSigningKey,
   apiPermission,
   apiResource,
   apiScope,
@@ -318,9 +317,6 @@ describe('schema.test 1', () => {
   })
 
   it('separates signing, credential custody, grants, OAuth state, and audit storage', () => {
-    expect(columnNames(agentSigningKey)).toEqual(
-      expect.arrayContaining(['id', 'algorithm', 'public_jwk', 'encrypted_private_jwk', 'created_at']),
-    )
     expect(indexNames(agentAuthorityApproval)).toEqual(
       expect.arrayContaining([
         'agentAuthorityApproval_grantId_idx',

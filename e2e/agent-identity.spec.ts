@@ -27,7 +27,7 @@ test.describe('new Agent stable identity enrollment', () => {
 
       const result = await whoami.result
       expect(result.identity).toMatchObject({
-        issuer: baseURL,
+        issuer: `${baseURL}/api/auth`,
         name: 'E2E Build Agent',
         bindings: [{ status: 'active' }],
       })

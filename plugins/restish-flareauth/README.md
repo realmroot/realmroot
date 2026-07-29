@@ -5,8 +5,9 @@ unified OpenAPI contract. It contributes no commands. `whoami` and every
 resource operation are generated from `/api/openapi.json`.
 
 Registration and later Agent requests require Ed25519 possession proofs. The
-plugin owns those proof keys locally and adds a fresh AgentAuth proof before
-Restish sends each protected operation.
+plugin discovers the issuer and Agent endpoints from
+`/.well-known/agent-configuration`, owns the proof keys locally, and adds a
+fresh AgentAuth proof before Restish sends each protected operation.
 
 The first protected operation is a foreground device-style flow. The plugin
 prints one controller approval URL to the terminal, waits while the controller
@@ -53,9 +54,11 @@ the Restish command surface.
 
 ## Architecture
 
-- The plugin implements only Restish's `auth` hook.
+- The `auth` hook discovers endpoints, enrolls the Agent when needed, and signs
+  each request.
+- The `response-middleware` hook opens and waits for controller approval when
+  the generated `request-agent-capabilities` operation returns pending.
 - The OpenAPI credential marker activates it only for FlareAuth operations.
-- The hook has a ten-minute deadline so the original operation can wait for
-  controller approval.
+- Both hooks have a ten-minute deadline for their foreground approval flow.
 - The plugin never authenticates a CLI request as the approving user.
 - Business and governance commands remain owned by the OpenAPI contract.

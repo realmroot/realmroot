@@ -1,6 +1,6 @@
 import {
   agentIdentityParam,
-  agentTokenRequestSchema,
+  agentTokenFormSchema,
   agentTokenResponseSchema,
   jsonBody,
   listAgentAuditEventsResponseSchema,
@@ -15,7 +15,7 @@ import {
 export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   {
     method: 'post',
-    path: '/agent/oauth2/token',
+    path: '/auth/oauth2/token',
     operationId: 'issueAgentAccessToken',
     summary: 'Issue a short-lived Agent authority token',
     security: [{ agentAuth: [] }],
@@ -23,7 +23,13 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
       headers: z.object({
         DPoP: z.string().openapi({ param: { name: 'DPoP', in: 'header' } }),
       }),
-      body: jsonBody(agentTokenRequestSchema),
+      body: {
+        content: {
+          'application/x-www-form-urlencoded': {
+            schema: agentTokenFormSchema,
+          },
+        },
+      },
     },
     response: agentTokenResponseSchema,
   },
@@ -32,6 +38,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     path: '/capability-requests',
     operationId: 'requestAgentCapabilities',
     summary: 'Request additional Agent capabilities',
+    security: [{ agentAuth: [] }],
     request: { body: jsonBody(requestAgentCapabilitiesSchema) },
     response: requestAgentCapabilitiesResponseSchema,
   },

@@ -30,9 +30,9 @@ export default {
     await ensureSystemClients(env.DB, deps, config.baseURL)
     const auth = await getAuth(env, { ...config, securityPolicy })
     return createApp(auth, deps, {
+      baseURL: config.baseURL,
       trustedOrigins: config.trustedOrigins,
       securityPolicy,
-      agentIdentityIssuer: config.agentIdentityIssuer,
     }).fetch(request, env, ctx)
   },
 }

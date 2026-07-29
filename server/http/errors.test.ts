@@ -1,4 +1,4 @@
-import { ApiError, badRequest, forbidden, notFound, unauthorized } from '@server/domain/errors'
+import { ApiError, badRequest, forbidden, notFound, oauthError, unauthorized } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
 import { HTTPException } from 'hono/http-exception'
 import { describe, expect, it, vi } from 'vitest'
@@ -26,6 +26,30 @@ describe('API error boundary helpers', () => {
     await expectError(new HTTPException(409, { message: 'Conflict.' }), 409, 'internal_error')
     await expectError(new Error('Unexpected.'), 500, 'internal_error', 'Internal server error.')
   })
+
+  it('serializes OAuth and DPoP errors without the REST error envelope', async () => {
+    const header = vi.fn()
+    const c = context(header)
+    const response = handleApiError(
+      oauthError(
+        'approval_required',
+        'Controller approval is required.',
+        400,
+        { approval_id: 'approval-1', expires_in: 600 },
+        { 'WWW-Authenticate': 'DPoP error="invalid_token"' },
+      ),
+      c,
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'approval_required',
+      error_description: 'Controller approval is required.',
+      approval_id: 'approval-1',
+      expires_in: 600,
+    })
+    expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'DPoP error="invalid_token"')
+  })
 })
 
 async function expectError(error: Error, status: number, code: string, message?: string) {
@@ -37,9 +61,10 @@ async function expectError(error: Error, status: number, code: string, message?:
   })
 }
 
-function context() {
+function context(header = vi.fn()) {
   return {
     get: vi.fn().mockReturnValue({ id: 'request-1' }),
+    header,
     json: (body: unknown, status: number) => Response.json(body, { status }),
   } as never
 }

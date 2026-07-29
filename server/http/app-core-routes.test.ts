@@ -1,4 +1,6 @@
 import { createApp } from '@server/http/app'
+import * as agentTokens from '@server/usecases/agent-tokens'
+import { agentAuthorityGrantType } from '@shared/api/agents'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
 
@@ -34,6 +36,7 @@ describe('app.test 1', () => {
         'refresh_token',
         'client_credentials',
         'urn:ietf:params:oauth:grant-type:device_code',
+        agentAuthorityGrantType,
       ],
       code_challenge_methods_supported: ['S256'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
@@ -57,6 +60,7 @@ describe('app.test 1', () => {
         'refresh_token',
         'client_credentials',
         'urn:ietf:params:oauth:grant-type:device_code',
+        agentAuthorityGrantType,
       ],
       code_challenge_methods_supported: ['S256'],
     })
@@ -64,6 +68,116 @@ describe('app.test 1', () => {
       request: expect.any(Request),
       asResponse: false,
     })
+  })
+
+  it('issues Agent authority tokens through the Better Auth OAuth token endpoint [spec: agent-identity/agent-autonomous-authority]', async () => {
+    const session = {
+      agentId: 'protocol-agent-1',
+      agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated' },
+      host: { id: 'host-1', userId: 'user-1', status: 'active' },
+    }
+    const issue = vi.spyOn(agentTokens, 'issueAgentAccessToken').mockResolvedValue({
+      access_token: 'signed-agent-token',
+      issued_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+      token_type: 'DPoP',
+      expires_in: 300,
+      scope: 'repo:read',
+    })
+    const auth = createAuthMock()
+    auth.api.getAgentSession = vi.fn().mockResolvedValue(session)
+    auth.api.signJWT = vi.fn().mockResolvedValue({ token: 'signed-agent-token' })
+
+    const response = await createApp(auth, createTestDeps(), { baseURL: 'https://auth.example.com' }).request(
+      '/api/auth/oauth2/token',
+      {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer agent-proof',
+          'content-type': 'application/x-www-form-urlencoded',
+          dpop: 'dpop-proof',
+        },
+        body: new URLSearchParams({
+          grant_type: agentAuthorityGrantType,
+          grant_id: 'grant-1',
+          scope: 'repo:read',
+        }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(issue).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: 'POST', url: 'http://localhost/api/auth/oauth2/token' }),
+      { grantId: 'grant-1', scope: 'repo:read', approvalId: undefined },
+      session,
+      expect.objectContaining({ issuer: 'https://auth.example.com/api/auth', sign: expect.any(Function) }),
+    )
+  })
+
+  it('returns flat standard OAuth errors for invalid Agent token requests', async () => {
+    const auth = createAuthMock()
+    auth.api.getAgentSession.mockResolvedValue({
+      agentId: 'protocol-agent-1',
+      agent: { id: 'protocol-agent-1', hostId: 'host-1', mode: 'delegated' },
+      host: { id: 'host-1', userId: 'user-1', status: 'active' },
+    })
+    const invalidRequest = await createApp(auth, createTestDeps()).request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: agentAuthorityGrantType }),
+    })
+
+    expect(invalidRequest.status).toBe(400)
+    await expect(invalidRequest.json()).resolves.toEqual({
+      error: 'invalid_request',
+      error_description: 'Agent token request parameters are invalid.',
+    })
+
+    auth.api.getAgentSession.mockResolvedValue(null)
+    const invalidClient = await createApp(auth, createTestDeps()).request('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: agentAuthorityGrantType, grant_id: 'grant-1' }),
+    })
+    expect(invalidClient.status).toBe(401)
+    await expect(invalidClient.json()).resolves.toEqual({
+      error: 'invalid_client',
+      error_description: 'An active AgentAuth session is required.',
+    })
+  })
+
+  it('keeps provider introspection in Better Auth and rejects ambiguous custom-token client authentication', async () => {
+    const auth = createAuthMock()
+    auth.handler.mockResolvedValue(Response.json({ active: true, source: 'provider' }))
+    const app = createApp(auth, createTestDeps())
+
+    const providerResponse = await app.request('/api/auth/oauth2/introspect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token: 'provider-token' }),
+    })
+    expect(providerResponse.status).toBe(200)
+    await expect(providerResponse.json()).resolves.toEqual({ active: true, source: 'provider' })
+    expect(auth.handler).toHaveBeenCalledOnce()
+
+    const customResponse = await app.request('/api/auth/oauth2/introspect', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer malformed-client-auth',
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        token: 'fatx_unknown',
+        client_id: 'client-1',
+        client_secret: 'secret-1',
+      }),
+    })
+    expect(customResponse.status).toBe(401)
+    await expect(customResponse.json()).resolves.toEqual({
+      error: 'invalid_client',
+      error_description: 'Client authentication is required.',
+    })
+    expect(auth.handler).toHaveBeenCalledOnce()
   })
 
   it('serves OpenID metadata at the issuer-path well-known route', async () => {
@@ -102,7 +216,7 @@ describe('app.test 1', () => {
     })
   })
 
-  it('forwards root AgentAuth discovery to the mounted Better Auth issuer', async () => {
+  it('publishes one canonical Agent and OAuth issuer on the requested host', async () => {
     const getAgentConfiguration = vi.fn().mockResolvedValue({
       issuer: 'https://auth.example.com',
       default_location: 'https://auth.example.com/capability/execute',
@@ -113,6 +227,9 @@ describe('app.test 1', () => {
         execute: 'https://auth.example.com/capability/execute',
         status: 'https://auth.example.com/api/auth/agent/status',
       },
+      agent_identity_issuer: 'https://tenant.example.net/api/auth',
+      agent_token_endpoint: 'https://tenant.example.net/api/auth/oauth2/token',
+      agent_jwks_uri: 'https://tenant.example.net/api/auth/jwks',
     })
     const auth = {
       api: {
@@ -130,20 +247,30 @@ describe('app.test 1', () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
-      issuer: 'https://auth.example.com/api/auth',
-      default_location: 'https://auth.example.com/api/auth/capability/execute',
+      issuer: 'https://tenant.example.net/api/auth',
+      agent_identity_issuer: 'https://tenant.example.net/api/auth',
+      agent_identity_endpoint: 'https://tenant.example.net/api/agent/identity',
+      default_location: 'https://tenant.example.net/api/auth/capability/execute',
       modes: ['delegated'],
       approval_methods: ['device_authorization'],
       endpoints: {
-        register: 'https://auth.example.com/api/auth/agent/register',
-        execute: 'https://auth.example.com/api/auth/capability/execute',
-        status: 'https://auth.example.com/api/auth/agent/status',
+        register: 'https://tenant.example.net/api/auth/agent/register',
+        execute: 'https://tenant.example.net/api/auth/capability/execute',
+        status: 'https://tenant.example.net/api/auth/agent/status',
       },
     })
     expect(getAgentConfiguration).toHaveBeenCalledWith({
       request: expect.any(Request),
       asResponse: false,
     })
+  })
+
+  it('does not publish a second root OpenID issuer [spec: agent-identity/agent-stable-issuer]', async () => {
+    const response = await createApp(createAuthMock(), createTestDeps(), {
+      baseURL: 'https://auth.example.com',
+    }).request('/.well-known/openid-configuration')
+
+    expect(response.status).toBe(404)
   })
 
   it('returns not found when AgentAuth discovery is not installed', async () => {
@@ -227,6 +354,8 @@ function createAuthMock() {
       getOAuthServerConfig: vi.fn(),
       getOpenIdConfig: vi.fn(),
       getAgentConfiguration: vi.fn(),
+      getAgentSession: vi.fn().mockResolvedValue(null),
+      signJWT: vi.fn().mockResolvedValue({ token: 'signed-token' }),
       getSession: vi.fn().mockImplementation(({ headers }: { headers: Headers }) => {
         const id = headers.get('x-user-id')
         if (!id) return null

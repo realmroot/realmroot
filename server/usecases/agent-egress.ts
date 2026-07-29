@@ -1,5 +1,5 @@
 import { ApiError, badRequest, forbidden, unauthorized } from '@server/domain/errors'
-import { authenticateAgentAccessToken } from '@server/usecases/agent-tokens'
+import { type AgentAccessTokenVerifier, authenticateAgentAccessToken } from '@server/usecases/agent-tokens'
 import type { Deps } from '@server/usecases/deps'
 import type { ConnectorRecord, ExternalCredentialRecord } from '@server/usecases/ports'
 import { externalCredentialContext, resolveOAuthEndpoints } from './external-accounts'
@@ -28,6 +28,7 @@ const forwardedResponseHeaders = new Set([
 
 export async function proxyAgentEgress(
   deps: Deps,
+  verifier: AgentAccessTokenVerifier,
   request: Request,
   externalAccountId: string,
   rawRelativePath: string,
@@ -38,7 +39,7 @@ export async function proxyAgentEgress(
     targetPath: rawRelativePath,
   }
   try {
-    const response = await proxyAgentEgressInternal(deps, request, externalAccountId, rawRelativePath, audit)
+    const response = await proxyAgentEgressInternal(deps, verifier, request, externalAccountId, rawRelativePath, audit)
     await appendEgressAudit(deps, audit, 'allowed', null, { upstreamStatus: response.status })
     return response
   } catch (error) {
@@ -49,17 +50,18 @@ export async function proxyAgentEgress(
 
 async function proxyAgentEgressInternal(
   deps: Deps,
+  verifier: AgentAccessTokenVerifier,
   request: Request,
   externalAccountId: string,
   rawRelativePath: string,
   audit: EgressAuditContext,
 ) {
-  const token = await authenticateAgentAccessToken(deps, request)
+  const token = await authenticateAgentAccessToken(deps, request, verifier)
   audit.subjectIssuer = token.subjectIssuer
   audit.subject = token.subject
   audit.agentIdentityId = token.agentIdentityId
   audit.authorityGrantId = token.grantId
-  audit.hostId = actorHostId(token.actor)
+  audit.hostId = token.actor.sub as string
   audit.controllerUserId = (await deps.agentTokens.findGrant(token.grantId))?.grantedByUserId ?? null
   const [account, credential, grant] = await Promise.all([
     deps.externalAccounts.findAccount(externalAccountId),
@@ -96,7 +98,6 @@ async function proxyAgentEgressInternal(
   const targetOrigin = requirePublicApiOrigin(connector.apiBaseUrl)
   audit.targetOrigin = targetOrigin.origin
   const target = new URL(relativePath + new URL(request.url).search, targetOrigin)
-  if (target.origin !== targetOrigin.origin) throw forbidden('Egress target escaped the Connector origin.')
   const headers = copyRequestHeaders(request.headers, connector)
   await injectCredential(deps, headers, connector, credential)
 
@@ -158,15 +159,6 @@ async function appendEgressAudit(
     metadata,
     occurredAt: new Date(),
   })
-}
-
-function actorHostId(actor: Record<string, unknown>) {
-  if (actor.actor_type === 'host' && typeof actor.sub === 'string') return actor.sub
-  if (actor.host && typeof actor.host === 'object' && !Array.isArray(actor.host)) {
-    const host = actor.host as Record<string, unknown>
-    if (typeof host.sub === 'string') return host.sub
-  }
-  return null
 }
 
 async function injectCredential(
@@ -269,10 +261,7 @@ function copyRequestHeaders(input: Headers, connector: ConnectorRecord) {
   const injectedHeader = connector.credentialHeaderName?.toLowerCase()
   for (const [name, value] of input) {
     const lower = name.toLowerCase()
-    if (lower === 'authorization') {
-      if (/^DPoP\s+/i.test(value)) continue
-      throw badRequest(`Request header ${name} cannot be supplied to Agent egress.`)
-    }
+    if (lower === 'authorization') continue
     if (forbiddenRequestHeaders.has(lower) || lower === injectedHeader) {
       throw badRequest(`Request header ${name} cannot be supplied to Agent egress.`)
     }

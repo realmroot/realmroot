@@ -29,7 +29,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 		requests++
 		switch requests {
 		case 1:
-			return jsonResponse(200, map[string]any{"agent_identity_issuer": "https://auth.example.com"}), nil
+			return jsonResponse(200, testAgentConfiguration()), nil
 		case 2:
 			return jsonResponse(200, map[string]any{
 				"agent_id": "agent-123",
@@ -44,8 +44,10 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 			return jsonResponse(200, map[string]any{"status": "active"}), nil
 		case 4:
 			return jsonResponse(201, map[string]any{
-				"identity": map[string]any{"issuer": "https://auth.example.com", "subject": "agt_123"},
+				"identity": map[string]any{"issuer": "https://auth.example.com/api/auth", "subject": "agt_123"},
 			}), nil
+		case 5:
+			return jsonResponse(200, testAgentConfiguration()), nil
 		default:
 			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
 			return nil, nil
@@ -76,8 +78,22 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	if _, err := authenticateRequest(input, states, client, prompt); err != nil {
 		t.Fatal(err)
 	}
-	if requests != 4 {
+	if requests != 5 {
 		t.Fatalf("second request repeated enrollment; requests = %d", requests)
+	}
+}
+
+func testAgentConfiguration() map[string]any {
+	return map[string]any{
+		"version":                 "1.0-draft",
+		"issuer":                  "https://auth.example.com/api/auth",
+		"algorithms":              []string{"Ed25519"},
+		"agent_identity_issuer":   "https://auth.example.com/api/auth",
+		"agent_identity_endpoint": "https://auth.example.com/api/agent/identity",
+		"endpoints": map[string]any{
+			"register": "https://auth.example.com/api/auth/agent/register",
+			"status":   "https://auth.example.com/api/auth/agent/status",
+		},
 	}
 }
 

@@ -1,10 +1,9 @@
-import { badRequest, notFound, unauthorized } from '@server/domain/errors'
+import { badRequest, notFound, OAuthError, oauthError } from '@server/domain/errors'
 import { hashProviderSecret } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
 import type {
   CreateFederatedCredentialInput,
   JwksGateway,
-  OAuthClientRecord,
   ResolvedFederatedCredential,
   UpdateFederatedCredentialInput,
 } from '@server/usecases/ports'
@@ -17,19 +16,7 @@ export const jwtTokenType = 'urn:ietf:params:oauth:token-type:jwt'
 const defaultExpiresInSeconds = 60 * 60
 const defaultRefreshExpiresInSeconds = 30 * 24 * 60 * 60
 const refreshTokenPrefix = 'fatr_'
-
-type RefreshTokenPayload = {
-  typ: 'token_exchange_refresh'
-  clientId: string
-  credentialId: string
-  subject: string
-  subjectTokenIssuer: string
-  audience: string
-  scopes: string[]
-  claims: Record<string, unknown>
-  exp: number
-  iat: number
-}
+const subjectClaimsMember = 'urn:flareauth:params:oauth:token-exchange:subject-claims'
 
 export interface TokenExchangeRequest {
   grantType: string
@@ -74,43 +61,45 @@ export async function exchangeToken(
   client: { clientId: string; clientSecret: string | null },
 ) {
   if (input.grantType !== tokenExchangeGrantType) {
-    throw badRequest('Unsupported grant_type.')
+    throw oauthError('unsupported_grant_type', 'Unsupported grant_type.')
   }
   if (input.subjectTokenType !== jwtTokenType) {
-    throw badRequest('Only JWT subject_token_type is supported.')
+    throw oauthError('invalid_request', 'Only JWT subject_token_type is supported.')
   }
   if (input.requestedTokenType && input.requestedTokenType !== accessTokenType) {
-    throw badRequest('Only access_token requested_token_type is supported.')
+    throw oauthError('invalid_request', 'Only access_token requested_token_type is supported.')
   }
 
   const oauthClient = await authenticateClient(deps, client.clientId, client.clientSecret)
   const allowedGrantTypes = parseList(oauthClient.grantTypes)
   if (!allowedGrantTypes.includes(tokenExchangeGrantType)) {
-    throw unauthorized('Client is not allowed to use token exchange.')
+    throw oauthError('unauthorized_client', 'Client is not allowed to use token exchange.')
   }
 
   const scopes = normalizeScopes(input.scope, parseList(oauthClient.scopes))
   if (scopes.includes('offline_access') && !allowedGrantTypes.includes(refreshTokenGrantType)) {
-    throw badRequest('Client is not allowed to issue refresh tokens.')
+    throw oauthError('invalid_scope', 'Client is not allowed to issue refresh tokens.')
   }
   const assertion = parseJwt(input.subjectToken)
   const issuerValue = readString(assertion.payload.iss)
   const subject = readString(assertion.payload.sub)
-  if (!issuerValue || !subject) throw unauthorized('Subject token is missing required claims.')
+  if (!issuerValue || !subject) throw oauthError('invalid_grant', 'Subject token is missing required claims.')
 
   // Trust is scoped to the authenticated client's application: only a credential
   // registered under THIS application can be exchanged. The minted token then
   // represents the application, not the self-asserted external subject.
   const credential = await resolveCredential(deps, oauthClient.clientId, issuerValue, subject)
   if (credential.audience !== input.audience) {
-    throw unauthorized('Requested audience does not match the federated credential.')
+    throw oauthError('invalid_target', 'Requested audience does not match the federated credential.')
   }
 
   await verifySubjectToken(input.subjectToken, assertion, credential, deps.jwks)
 
-  const expiresIn = defaultExpiresInSeconds
   const now = new Date()
-  const expiresAt = new Date(now.getTime() + expiresIn * 1000)
+  const expiresAt = new Date(
+    Math.min(now.getTime() + defaultExpiresInSeconds * 1000, readNumber(assertion.payload.exp)! * 1000),
+  )
+  const expiresIn = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000))
   const accessToken = `fatx_${base64Url(randomBytes(32))}`
   const claims = tokenClaims(assertion.payload)
   await deps.tokenExchange.storeAccessToken({
@@ -134,7 +123,7 @@ export async function exchangeToken(
     scope: scopes.join(' '),
   }
   if (scopes.includes('offline_access')) {
-    response.refresh_token = await issueRefreshToken(oauthClient, {
+    response.refresh_token = await issueRefreshToken(deps, oauthClient.clientId, createId('trf'), {
       credentialId: credential.id,
       subject,
       subjectTokenIssuer: credential.issuer,
@@ -149,38 +138,66 @@ export async function exchangeToken(
 async function resolveCredential(deps: Deps, applicationClientId: string, issuer: string, subject: string) {
   const candidates = await deps.tokenExchange.findFederatedCredentials(applicationClientId, issuer)
   const credential = candidates.find((item) => item.enabled && subjectMatches(item.subject, subject))
-  if (!credential) throw unauthorized('No federated credential matches the subject token.')
+  if (!credential) throw oauthError('invalid_grant', 'No federated credential matches the subject token.')
   return credential
 }
 
-export async function refreshToken(deps: Deps, input: TokenRefreshRequest) {
+export async function refreshToken(
+  deps: Deps,
+  input: TokenRefreshRequest,
+  client: { clientId: string; clientSecret: string | null },
+) {
   if (input.grantType !== refreshTokenGrantType) {
-    throw badRequest('Unsupported grant_type.')
+    throw oauthError('unsupported_grant_type', 'Unsupported grant_type.')
   }
-  const oauthClient = await authenticateRefreshClient(deps, input.refreshToken)
+  const oauthClient = await authenticateClient(deps, client.clientId, client.clientSecret)
   if (!parseList(oauthClient.grantTypes).includes(refreshTokenGrantType)) {
-    throw unauthorized('Client is not allowed to use refresh tokens.')
+    throw oauthError('unauthorized_client', 'Client is not allowed to use refresh tokens.')
   }
 
-  const payload = await verifyRefreshToken(input.refreshToken, oauthClient)
-  if (payload.clientId !== oauthClient.clientId) {
-    throw unauthorized('Refresh token client does not match.')
+  const row = await deps.tokenExchange.findRefreshTokenByHash(await hashProviderSecret(input.refreshToken))
+  if (!row || row.clientId !== oauthClient.clientId) {
+    throw oauthError('invalid_grant', 'Refresh token is invalid.')
   }
-  const requestedScopes = input.scope ? normalizeScopes(input.scope, payload.scopes) : payload.scopes
-  const expiresIn = defaultExpiresInSeconds
   const now = new Date()
+  if (row.consumedAt) {
+    await deps.tokenExchange.revokeRefreshTokenFamily(row.familyId, now)
+    throw oauthError('invalid_grant', 'Refresh token reuse was detected.')
+  }
+  if (row.revokedAt || row.expiresAt.getTime() <= now.getTime()) {
+    throw oauthError('invalid_grant', 'Refresh token is invalid or expired.')
+  }
+  const credential = await deps.tokenExchange.findFederatedCredentialForClient(row.credentialId, oauthClient.clientId)
+  if (!credential?.enabled) {
+    throw oauthError('invalid_grant', 'The federated credential is no longer active.')
+  }
+  const requestedScopes = input.scope ? normalizeScopes(input.scope, row.scopes) : row.scopes
+  if (!(await deps.tokenExchange.consumeRefreshToken(row.id, now))) {
+    await deps.tokenExchange.revokeRefreshTokenFamily(row.familyId, now)
+    throw oauthError('invalid_grant', 'Refresh token reuse was detected.')
+  }
+
+  const expiresIn = defaultExpiresInSeconds
   const expiresAt = new Date(now.getTime() + expiresIn * 1000)
   const accessToken = `fatx_${base64Url(randomBytes(32))}`
+  const rotatedRefreshToken = await issueRefreshToken(deps, oauthClient.clientId, row.familyId, {
+    credentialId: row.credentialId,
+    subject: row.subject,
+    subjectTokenIssuer: row.subjectTokenIssuer,
+    audience: row.audience,
+    scopes: requestedScopes,
+    claims: row.claims,
+  })
   await deps.tokenExchange.storeAccessToken({
     id: createId('tex'),
     tokenHash: await hashProviderSecret(accessToken),
     clientId: oauthClient.clientId,
-    credentialId: payload.credentialId,
-    subject: payload.subject,
-    subjectTokenIssuer: payload.subjectTokenIssuer,
-    audience: payload.audience,
+    credentialId: row.credentialId,
+    subject: row.subject,
+    subjectTokenIssuer: row.subjectTokenIssuer,
+    audience: row.audience,
     scopes: requestedScopes,
-    claims: payload.claims,
+    claims: row.claims,
     expiresAt,
   })
 
@@ -190,6 +207,7 @@ export async function refreshToken(deps: Deps, input: TokenRefreshRequest) {
     token_type: 'Bearer',
     expires_in: expiresIn,
     scope: requestedScopes.join(' '),
+    refresh_token: rotatedRefreshToken,
   } satisfies TokenExchangeResponse
 }
 
@@ -197,14 +215,15 @@ export async function introspectToken(
   deps: Deps,
   token: string,
   client: { clientId: string; clientSecret: string | null },
+  issuer: string,
 ) {
   await authenticateClient(deps, client.clientId, client.clientSecret)
   const tokenHash = await hashProviderSecret(token)
   const row = await deps.tokenExchange.findAccessTokenByHash(tokenHash)
-  if (row && !row.revokedAt && row.expiresAt.getTime() > Date.now()) {
+  if (row && row.clientId === client.clientId && !row.revokedAt && row.expiresAt.getTime() > Date.now()) {
     return {
       active: true,
-      iss: row.subjectTokenIssuer,
+      iss: issuer,
       sub: row.subject,
       aud: row.audience,
       client_id: row.clientId,
@@ -212,25 +231,7 @@ export async function introspectToken(
       exp: Math.floor(row.expiresAt.getTime() / 1000),
       iat: Math.floor(row.createdAt.getTime() / 1000),
       token_type: 'Bearer',
-      ...row.claims,
-    } satisfies IntrospectionResponse
-  }
-
-  // Resource-server introspection: also resolve provider-issued opaque access
-  // tokens (e.g. a self-hosted runner's device-login token). Better Auth's own
-  // introspect rejects these because the calling client differs from the token's
-  // client; as the authorization server we report client_id so resource servers
-  // can authorize the runner.
-  const oauthRow = await deps.tokenExchange.findOAuthAccessTokenByHash(tokenHash)
-  if (oauthRow?.userId && oauthRow.expiresAt.getTime() > Date.now()) {
-    return {
-      active: true,
-      sub: oauthRow.userId,
-      client_id: oauthRow.clientId,
-      scope: oauthRow.scopes.join(' '),
-      exp: Math.floor(oauthRow.expiresAt.getTime() / 1000),
-      iat: Math.floor(oauthRow.createdAt.getTime() / 1000),
-      token_type: 'Bearer',
+      [subjectClaimsMember]: row.claims,
     } satisfies IntrospectionResponse
   }
 
@@ -257,6 +258,8 @@ export async function createFederatedCredential(
   if (!input.jwksUrl && !(input.publicKeys && input.publicKeys.length > 0)) {
     throw badRequest('A federated credential requires either jwksUrl or publicKeys.')
   }
+  if (input.jwksUrl) validateJwksUrl(input.jwksUrl)
+  if (input.publicKeys) validatePublicKeys(input.publicKeys)
   await ensureAudienceResource(deps, input.audienceResourceId)
   return deps.tokenExchange.createFederatedCredential(applicationId, input)
 }
@@ -267,7 +270,16 @@ export async function updateFederatedCredential(
   id: string,
   input: UpdateFederatedCredentialInput,
 ) {
+  const current = await deps.tokenExchange.getFederatedCredential(applicationId, id)
+  if (!current) throw notFound('Federated credential not found.')
   if (input.audienceResourceId) await ensureAudienceResource(deps, input.audienceResourceId)
+  const jwksUrl = input.jwksUrl === undefined ? current.jwksUrl : input.jwksUrl
+  const publicKeys = input.publicKeys === undefined ? current.publicKeys : input.publicKeys
+  if (!jwksUrl && !(publicKeys && publicKeys.length > 0)) {
+    throw badRequest('A federated credential requires either jwksUrl or publicKeys.')
+  }
+  if (jwksUrl) validateJwksUrl(jwksUrl)
+  if (publicKeys) validatePublicKeys(publicKeys)
   const row = await deps.tokenExchange.updateFederatedCredential(applicationId, id, input)
   if (!row) throw notFound('Federated credential not found.')
   return row
@@ -291,134 +303,87 @@ async function ensureAudienceResource(deps: Deps, id: string) {
 }
 
 async function authenticateClient(deps: Deps, clientId: string, clientSecret: string | null) {
-  if (!clientId || !clientSecret) throw unauthorized('Client authentication is required.')
+  if (!clientId || !clientSecret) throw invalidClient('Client authentication is required.')
   const client = await deps.tokenExchange.findClient(clientId)
-  if (!client || client.disabled) throw unauthorized('Invalid client credentials.')
+  if (!client || client.disabled) throw invalidClient('Invalid client credentials.')
   if (!client.clientSecret || client.clientSecret !== (await hashProviderSecret(clientSecret))) {
-    throw unauthorized('Invalid client credentials.')
+    throw invalidClient('Invalid client credentials.')
   }
   return client
 }
 
-async function authenticateRefreshClient(deps: Deps, refreshTokenValue: string) {
-  const payload = readUnsignedRefreshPayload(refreshTokenValue)
-  const client = await deps.tokenExchange.findClient(payload.clientId)
-  if (!client || client.disabled || !client.clientSecret) throw unauthorized('Invalid refresh token.')
-  return client
+function invalidClient(description: string) {
+  return oauthError('invalid_client', description, 401, {}, { 'WWW-Authenticate': 'Basic realm="FlareAuth OAuth"' })
 }
 
 export function parseBasicClientAuthorization(header: string | null) {
   if (!header) return null
   const match = /^Basic\s+(.+)$/i.exec(header.trim())
   if (!match?.[1]) return null
-  const decoded = atob(match[1])
-  const index = decoded.indexOf(':')
-  if (index < 0) return null
-  return {
-    clientId: decodeURIComponent(decoded.slice(0, index)),
-    clientSecret: decodeURIComponent(decoded.slice(index + 1)),
+  try {
+    const decoded = atob(match[1])
+    const index = decoded.indexOf(':')
+    if (index < 0) return null
+    return {
+      clientId: decodeFormComponent(decoded.slice(0, index)),
+      clientSecret: decodeFormComponent(decoded.slice(index + 1)),
+    }
+  } catch {
+    return null
   }
 }
 
 function normalizeScopes(scope: string | undefined, allowedScopes: string[]) {
-  const scopes = (scope || '').split(/\s+/).filter(Boolean)
+  const scopes = [...new Set((scope || '').split(/\s+/).filter(Boolean))]
   for (const item of scopes) {
-    if (!allowedScopes.includes(item)) throw badRequest(`Scope is not allowed for this client: ${item}`)
+    if (!allowedScopes.includes(item)) throw oauthError('invalid_scope', `Scope is not allowed: ${item}`)
   }
   return scopes
 }
 
 async function issueRefreshToken(
-  client: OAuthClientRecord,
-  input: Omit<RefreshTokenPayload, 'typ' | 'clientId' | 'exp' | 'iat'>,
+  deps: Deps,
+  clientId: string,
+  familyId: string,
+  input: {
+    credentialId: string
+    subject: string
+    subjectTokenIssuer: string
+    audience: string
+    scopes: string[]
+    claims: Record<string, unknown>
+  },
 ) {
-  const now = Math.floor(Date.now() / 1000)
-  const payload: RefreshTokenPayload = {
-    typ: 'token_exchange_refresh',
-    clientId: client.clientId,
+  const token = `${refreshTokenPrefix}${base64Url(randomBytes(32))}`
+  const now = new Date()
+  const stored = await deps.tokenExchange.storeRefreshToken({
+    id: createId('trt'),
+    familyId,
+    tokenHash: await hashProviderSecret(token),
+    clientId,
     ...input,
-    iat: now,
-    exp: now + defaultRefreshExpiresInSeconds,
-  }
-  return `${refreshTokenPrefix}${await signRefreshPayload(payload, client)}`
+    expiresAt: new Date(now.getTime() + defaultRefreshExpiresInSeconds * 1000),
+  })
+  if (!stored) throw oauthError('invalid_grant', 'Refresh token family was revoked.')
+  return token
 }
 
-async function verifyRefreshToken(token: string, client: OAuthClientRecord): Promise<RefreshTokenPayload> {
-  if (!token.startsWith(refreshTokenPrefix)) throw unauthorized('Invalid refresh token.')
-  const compact = token.slice(refreshTokenPrefix.length)
-  const parts = compact.split('.')
-  if (parts.length !== 2) throw unauthorized('Invalid refresh token.')
-  const [payloadPart, signaturePart] = parts
-  const expected = await signRefreshPayloadPart(payloadPart, client)
-  if (!(await timingSafeEqual(signaturePart, expected))) throw unauthorized('Invalid refresh token.')
-  const payload = readJsonPart(payloadPart)
-  if (!isRefreshTokenPayload(payload)) throw unauthorized('Invalid refresh token.')
-  if (payload.typ !== 'token_exchange_refresh') throw unauthorized('Invalid refresh token.')
-  if (payload.exp <= Math.floor(Date.now() / 1000)) throw unauthorized('Refresh token is expired.')
-  return payload
-}
-
-function readUnsignedRefreshPayload(token: string) {
-  if (!token.startsWith(refreshTokenPrefix)) throw unauthorized('Invalid refresh token.')
-  const compact = token.slice(refreshTokenPrefix.length)
-  const parts = compact.split('.')
-  if (parts.length !== 2) throw unauthorized('Invalid refresh token.')
-  const payload = readJsonPart(parts[0])
-  if (!isRefreshTokenPayload(payload)) throw unauthorized('Invalid refresh token.')
-  return payload
-}
-
-async function signRefreshPayload(payload: RefreshTokenPayload, client: OAuthClientRecord) {
-  const payloadPart = base64Url(new TextEncoder().encode(JSON.stringify(payload)))
-  return `${payloadPart}.${await signRefreshPayloadPart(payloadPart, client)}`
-}
-
-async function signRefreshPayloadPart(payloadPart: string, client: OAuthClientRecord) {
-  if (!client.clientSecret) throw unauthorized('Invalid client credentials.')
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(client.clientSecret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadPart))
-  return base64Url(new Uint8Array(signature))
-}
-
-async function timingSafeEqual(a: string, b: string) {
-  const left = new TextEncoder().encode(a)
-  const right = new TextEncoder().encode(b)
-  if (left.length !== right.length) return false
-  let diff = 0
-  for (let i = 0; i < left.length; i += 1) diff |= left[i] ^ right[i]
-  return diff === 0
-}
-
-function isRefreshTokenPayload(value: unknown): value is RefreshTokenPayload {
-  return (
-    isRecord(value) &&
-    value.typ === 'token_exchange_refresh' &&
-    typeof value.clientId === 'string' &&
-    typeof value.credentialId === 'string' &&
-    typeof value.subject === 'string' &&
-    typeof value.subjectTokenIssuer === 'string' &&
-    typeof value.audience === 'string' &&
-    Array.isArray(value.scopes) &&
-    value.scopes.every((item) => typeof item === 'string') &&
-    isRecord(value.claims) &&
-    typeof value.exp === 'number' &&
-    typeof value.iat === 'number'
-  )
+function decodeFormComponent(value: string) {
+  return decodeURIComponent(value.replaceAll('+', ' '))
 }
 
 function parseJwt(token: string) {
   const parts = token.split('.')
-  if (parts.length !== 3) throw unauthorized('Invalid subject token.')
-  const header = readJsonPart(parts[0])
-  const payload = readJsonPart(parts[1])
-  if (!isRecord(header) || !isRecord(payload)) throw unauthorized('Invalid subject token.')
-  return { header, payload, signingInput: `${parts[0]}.${parts[1]}`, signature: base64UrlDecode(parts[2]) }
+  if (parts.length !== 3) throw oauthError('invalid_grant', 'Invalid subject token.')
+  try {
+    const header = readJsonPart(parts[0])
+    const payload = readJsonPart(parts[1])
+    if (!isRecord(header) || !isRecord(payload)) throw oauthError('invalid_grant', 'Invalid subject token.')
+    return { header, payload, signingInput: `${parts[0]}.${parts[1]}`, signature: base64UrlDecode(parts[2]) }
+  } catch (error) {
+    if (error instanceof OAuthError) throw error
+    throw oauthError('invalid_grant', 'Invalid subject token.')
+  }
 }
 
 async function verifySubjectToken(
@@ -430,44 +395,36 @@ async function verifySubjectToken(
   const now = Math.floor(Date.now() / 1000)
   const exp = readNumber(assertion.payload.exp)
   const nbf = readNumber(assertion.payload.nbf)
-  if (exp === null || exp <= now) throw unauthorized('Subject token is expired or missing an exp claim.')
-  if (nbf !== null && nbf > now) throw unauthorized('Subject token is not active yet.')
+  if (exp === null || exp <= now) throw oauthError('invalid_grant', 'Subject token is expired or missing an exp claim.')
+  if (assertion.payload.nbf !== undefined && nbf === null) {
+    throw oauthError('invalid_grant', 'Subject token nbf claim is invalid.')
+  }
+  if (nbf !== null && nbf > now) throw oauthError('invalid_grant', 'Subject token is not active yet.')
   if (!audienceMatches(assertion.payload.aud, credential.audience)) {
-    throw unauthorized('Subject token audience is invalid.')
+    throw oauthError('invalid_grant', 'Subject token audience is invalid.')
   }
 
   const alg = readString(assertion.header.alg)
-  if (!alg || alg === 'none') throw unauthorized('Subject token algorithm is invalid.')
+  if (!alg || alg === 'none') throw oauthError('invalid_grant', 'Subject token algorithm is invalid.')
   const data = new TextEncoder().encode(assertion.signingInput)
 
   // Asymmetric (preferred): inline public JWK set or a fetched JWKS endpoint.
   if (alg === 'RS256' || alg === 'ES256') {
-    const jwk = await selectCredentialJwk(credential, jwks, readString(assertion.header.kid), alg)
-    const key = await importVerificationKey(jwk, alg)
-    const algorithm = verificationAlgorithm(alg)
-    if (!(await crypto.subtle.verify(algorithm, key, assertion.signature, data))) {
-      throw unauthorized('Subject token signature is invalid.')
+    try {
+      const jwk = await selectCredentialJwk(credential, jwks, readString(assertion.header.kid), alg)
+      const key = await importVerificationKey(jwk, alg)
+      const algorithm = verificationAlgorithm(alg)
+      if (!(await crypto.subtle.verify(algorithm, key, assertion.signature, data))) {
+        throw oauthError('invalid_grant', 'Subject token signature is invalid.')
+      }
+    } catch (error) {
+      if (error instanceof OAuthError) throw error
+      throw oauthError('invalid_grant', 'Subject token verification key is unavailable.')
     }
     return token
   }
 
-  // Legacy symmetric fallback (not exposed by the create API).
-  if (alg === 'HS256') {
-    if (!credential.sharedSecret) throw unauthorized('Federated credential does not allow HS256.')
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(credential.sharedSecret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['verify'],
-    )
-    if (!(await crypto.subtle.verify('HMAC', key, assertion.signature, data))) {
-      throw unauthorized('Subject token signature is invalid.')
-    }
-    return token
-  }
-
-  throw unauthorized(`Unsupported subject token algorithm: ${alg}`)
+  throw oauthError('invalid_grant', `Unsupported subject token algorithm: ${alg}`)
 }
 
 async function selectCredentialJwk(
@@ -477,15 +434,20 @@ async function selectCredentialJwk(
   alg: string,
 ) {
   const keys = credential.publicKeys ?? (credential.jwksUrl ? await fetchJwksKeys(jwks, credential.jwksUrl) : null)
-  if (!keys) throw unauthorized('Federated credential has no verification key.')
+  if (!keys) throw oauthError('invalid_grant', 'Federated credential has no verification key.')
+  if (!kid && keys.length !== 1) {
+    throw oauthError('invalid_grant', 'Subject token must identify one signing key.')
+  }
   const key = keys.find((item) => isRecord(item) && (!kid || item.kid === kid) && (!item.alg || item.alg === alg))
-  if (!isRecord(key)) throw unauthorized('Subject token signing key was not found.')
+  if (!isRecord(key)) throw oauthError('invalid_grant', 'Subject token signing key was not found.')
   return key as JsonWebKey
 }
 
 async function fetchJwksKeys(jwks: JwksGateway, jwksUrl: string): Promise<Record<string, unknown>[]> {
   const body = await jwks.fetchKeys(jwksUrl)
-  if (!isRecord(body) || !Array.isArray(body.keys)) throw unauthorized('Federated credential JWKS is invalid.')
+  if (!isRecord(body) || !Array.isArray(body.keys)) {
+    throw oauthError('invalid_grant', 'Federated credential JWKS is invalid.')
+  }
   return body.keys as Record<string, unknown>[]
 }
 
@@ -494,20 +456,74 @@ function subjectMatches(pattern: string, subject: string) {
   return pattern === subject
 }
 
+function validateJwksUrl(value: string) {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw badRequest('jwksUrl must be a valid public HTTPS URL.')
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.hash || isPrivateHostname(url.hostname)) {
+    throw badRequest('jwksUrl must be a valid public HTTPS URL.')
+  }
+}
+
+function validatePublicKeys(keys: Record<string, unknown>[]) {
+  const keyIds = new Set<string>()
+  for (const key of keys) {
+    const keyId = readString(key.kid)
+    if (keys.length > 1 && !keyId) throw badRequest('Each public key requires kid when multiple keys are configured.')
+    if (keyId) {
+      if (keyIds.has(keyId)) throw badRequest('Federated public key kid values must be unique.')
+      keyIds.add(keyId)
+    }
+    if ('d' in key || 'p' in key || 'q' in key || 'dp' in key || 'dq' in key || 'qi' in key || 'k' in key) {
+      throw badRequest('Federated credentials accept public verification keys only.')
+    }
+    const alg = readString(key.alg)
+    const use = readString(key.use)
+    const keyOps = key.key_ops
+    if (
+      (use && use !== 'sig') ||
+      (keyOps !== undefined &&
+        (!Array.isArray(keyOps) || !keyOps.includes('verify') || keyOps.some((operation) => operation !== 'verify'))) ||
+      (key.kty === 'RSA'
+        ? (alg && alg !== 'RS256') || !readString(key.n) || !readString(key.e)
+        : key.kty === 'EC'
+          ? (alg && alg !== 'ES256') || key.crv !== 'P-256' || !readString(key.x) || !readString(key.y)
+          : true)
+    ) {
+      throw badRequest('Federated public keys must be RS256 RSA or ES256 P-256 verification keys.')
+    }
+  }
+}
+
+function isPrivateHostname(hostname: string) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true
+  if (host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) return true
+  const parts = host.split('.').map(Number)
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false
+  return (
+    parts[0] === 10 ||
+    parts[0] === 127 ||
+    (parts[0] === 169 && parts[1] === 254) ||
+    (parts[0] === 172 && parts[1]! >= 16 && parts[1]! <= 31) ||
+    (parts[0] === 192 && parts[1] === 168) ||
+    parts[0] === 0
+  )
+}
+
 async function importVerificationKey(jwk: JsonWebKey, alg: string) {
   if (alg === 'RS256') {
     return crypto.subtle.importKey('jwk', jwk, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify'])
   }
-  if (alg === 'ES256') {
-    return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'])
-  }
-  throw unauthorized(`Unsupported subject token algorithm: ${alg}`)
+  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'])
 }
 
 function verificationAlgorithm(alg: string) {
   if (alg === 'RS256') return { name: 'RSASSA-PKCS1-v1_5' }
-  if (alg === 'ES256') return { name: 'ECDSA', hash: 'SHA-256' }
-  throw unauthorized(`Unsupported subject token algorithm: ${alg}`)
+  return { name: 'ECDSA', hash: 'SHA-256' }
 }
 
 function tokenClaims(payload: Record<string, unknown>) {

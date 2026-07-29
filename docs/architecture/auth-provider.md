@@ -21,6 +21,8 @@ The selected provider is configured in `server/auth.ts` with:
 - Dynamic client registration disabled by default.
 - Hashed client secrets and hashed stored OAuth tokens.
 - Better Auth `/token` disabled so the OAuth token boundary is `/oauth2/token`.
+- FlareAuth's Agent authority grant is handled at that same OAuth token
+  boundary and signed by the same Better Auth JWT/JWKS lifecycle.
 
 FlareAuth v1.0 is intentionally a single user pool auth realm. Multiple OIDC
 applications can share the same provider instance, but they share users,
@@ -61,6 +63,7 @@ OIDC discovery remains at:
 | Scopes | Supported | OIDC scopes remain `openid profile email offline_access`; API resource scopes are managed under `/api/management/api-resources/{id}/scopes` and are passed into the authorization claim builder for matching audience/resource requests. |
 | Resource indicators | Supported | API resources define valid audiences. When a token request includes a matching resource/audience, FlareAuth emits audience/resource authorization metadata and RBAC claims for that API resource. |
 | Client credentials | Supported | The selected plugin supports `client_credentials`; v1.0 treats these as machine tokens without a user subject. |
+| Agent authority | Supported as a FlareAuth OAuth extension | `urn:flareauth:params:oauth:grant-type:agent-authority` uses AgentAuth and DPoP proof at the shared `/api/auth/oauth2/token` endpoint. Stable Agent identities use this issuer and Better Auth's JWKS; no second Agent authorization server exists. |
 
 ## Token Shape
 
@@ -83,6 +86,21 @@ Authorization claims are added by the authorization module through the Better Au
 - `authorization.organization_id`: present for organization-scoped token construction
 - `authorization.resource` and `authorization.audience`: present when the requested audience matches an enabled API resource
 - Top-level `roles` and `permissions`: duplicated arrays for clients that expect simple RBAC claims
+
+Agent authority tokens use the same `iss` and JWKS but have their own
+audience-bound authorization shape: the stable Agent or delegator is `sub`,
+`agent_identity` carries the stable Agent pair, `act` carries the Agent/Host
+actor chain, and `cnf.jkt` binds the token to its DPoP key.
+
+Workload token exchange accepts only RS256 or ES256 assertions whose issuer,
+subject pattern, audience, and verification key are registered on the calling
+application's federated credential. Exchanged opaque tokens are introspectable
+only by that confidential client. Assertion-private claims are returned under
+`urn:flareauth:params:oauth:token-exchange:subject-claims`; they can never
+replace authorization-server-controlled introspection fields. `offline_access`
+uses hashed opaque refresh tokens with one-time rotation. Reuse revokes the
+whole token family, and every refresh rechecks client authentication, allowed
+scope, and federated-credential status.
 
 Role assignments can contribute extra token claims, but reserved claim names are rejected at assignment time. Role `tokenClaimName` values are emitted either at the top level or under the API resource `tokenClaimsNamespace` when the resource defines one. Team management remains out of scope; organization membership roles are included through the existing organization member model.
 
@@ -247,7 +265,7 @@ The response includes `device_code`, `user_code`, `verification_uri`, `verificat
 
 Only public native clients explicitly configured with Better Auth device approval can start the flow. Public SPA clients, confidential web clients, disabled clients, and clients requesting disallowed scopes are rejected before code issuance.
 
-FlareAuth patches Better Auth v1.6.10 so `@better-auth/oauth-provider` accepts `urn:ietf:params:oauth:grant-type:device_code` at `/api/auth/oauth2/token` after Better Auth device approval. Successful polling returns OAuth Provider token material: a JWKS-compatible access token when a resource audience is requested, an ID token when `openid` is granted, and a refresh token when `offline_access` is granted. OIDC discovery advertises `device_authorization_endpoint` and the device-code grant.
+FlareAuth patches Better Auth v1.6.25 so `@better-auth/oauth-provider` accepts `urn:ietf:params:oauth:grant-type:device_code` at `/api/auth/oauth2/token` after Better Auth device approval. Successful polling returns OAuth Provider token material: a JWKS-compatible access token when a resource audience is requested, an ID token when `openid` is granted, and a refresh token when `offline_access` is granted. OIDC discovery advertises `device_authorization_endpoint` and the device-code grant.
 
 ## v1.0 Better Auth Plugin Matrix
 

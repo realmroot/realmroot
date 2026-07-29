@@ -28,6 +28,10 @@ describe('auth.test 2', () => {
     expect(discovery.status).toBe(200)
     await expect(discovery.json()).resolves.toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
+      agent_identity_issuer: 'https://auth.example.com/api/auth',
+      agent_identity_endpoint: 'https://auth.example.com/api/agent/identity',
+      agent_token_endpoint: 'https://auth.example.com/api/auth/oauth2/token',
+      agent_jwks_uri: 'https://auth.example.com/api/auth/jwks',
       default_location: 'https://auth.example.com/api/auth/capability/execute',
       modes: ['delegated'],
       approval_methods: ['device_authorization'],

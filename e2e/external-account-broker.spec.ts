@@ -97,7 +97,7 @@ test.describe('external account credential brokerage', () => {
 
       const keyPair = await generateKeyPair('ES256')
       const publicJwk = await exportJWK(keyPair.publicKey)
-      const tokenProof = await dpopProof('POST', `${baseURL}/api/agent/oauth2/token`, keyPair.privateKey, publicJwk)
+      const tokenProof = await dpopProof('POST', `${baseURL}/api/auth/oauth2/token`, keyPair.privateKey, publicJwk)
       const token = plugin.requestAgentToken(authority.id, tokenProof)
       expect(token).toMatchObject({ token_type: 'DPoP', scope: 'repo:read' })
 

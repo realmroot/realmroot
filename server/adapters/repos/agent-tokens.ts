@@ -1,13 +1,7 @@
 import type { AgentTokenRepository } from '@server/usecases/ports'
 import { and, eq, gt, lt, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import {
-  agentAccessToken,
-  agentAuthorityApproval,
-  agentAuthorityGrant,
-  agentDpopJti,
-  agentSigningKey,
-} from '../../db/schema'
+import { agentAccessToken, agentAuthorityApproval, agentAuthorityGrant, agentDpopJti } from '../../db/schema'
 
 export function createDrizzleAgentTokenRepository(db: Database): AgentTokenRepository {
   return {
@@ -38,14 +32,12 @@ export function createDrizzleAgentTokenRepository(db: Database): AgentTokenRepos
       return Boolean(revoked)
     },
 
+    async consumeAgentAuthJti(input) {
+      return consumeJti(db, { ...input, keyThumbprint: 'agent-auth' })
+    },
+
     async consumeDpopJti(input) {
-      try {
-        await db.insert(agentDpopJti).values(input)
-        return true
-      } catch (error) {
-        if (isUniqueConstraint(error)) return false
-        throw error
-      }
+      return consumeJti(db, input)
     },
 
     async storeAccessToken(input) {
@@ -55,23 +47,6 @@ export function createDrizzleAgentTokenRepository(db: Database): AgentTokenRepos
     async findAccessTokenByHash(tokenHash) {
       const [token] = await db.select().from(agentAccessToken).where(eq(agentAccessToken.tokenHash, tokenHash)).limit(1)
       return token ?? null
-    },
-
-    async findSigningKey() {
-      const [key] = await db.select().from(agentSigningKey).orderBy(agentSigningKey.createdAt).limit(1)
-      return key ?? null
-    },
-
-    async createSigningKey(input) {
-      try {
-        const [created] = await db.insert(agentSigningKey).values(input).returning()
-        return created
-      } catch (error) {
-        if (!isUniqueConstraint(error)) throw error
-        const [existing] = await db.select().from(agentSigningKey).orderBy(agentSigningKey.createdAt).limit(1)
-        if (!existing) throw error
-        return existing
-      }
     },
 
     async consumeGrantUse(id, maxUses) {
@@ -117,7 +92,7 @@ export function createDrizzleAgentTokenRepository(db: Database): AgentTokenRepos
       return row ?? null
     },
 
-    async consumeApproval(id, grantId, bindingId, now) {
+    async consumeApproval(id, grantId, bindingId, requestedScopes, now) {
       const [row] = await db
         .update(agentAuthorityApproval)
         .set({ status: 'consumed', consumedAt: now, updatedAt: now })
@@ -126,6 +101,7 @@ export function createDrizzleAgentTokenRepository(db: Database): AgentTokenRepos
             eq(agentAuthorityApproval.id, id),
             eq(agentAuthorityApproval.grantId, grantId),
             eq(agentAuthorityApproval.bindingId, bindingId),
+            eq(agentAuthorityApproval.requestedScopes, requestedScopes),
             eq(agentAuthorityApproval.status, 'approved'),
             gt(agentAuthorityApproval.expiresAt, now),
           ),
@@ -136,6 +112,25 @@ export function createDrizzleAgentTokenRepository(db: Database): AgentTokenRepos
   }
 }
 
+async function consumeJti(
+  db: Database,
+  input: { jtiHash: string; keyThumbprint: string; expiresAt: Date; createdAt: Date },
+) {
+  try {
+    await db.delete(agentDpopJti).where(lt(agentDpopJti.expiresAt, input.createdAt))
+    await db.insert(agentDpopJti).values(input)
+    return true
+  } catch (error) {
+    if (isUniqueConstraint(error)) return false
+    throw error
+  }
+}
+
 function isUniqueConstraint(error: unknown) {
-  return error instanceof Error && /unique constraint|SQLITE_CONSTRAINT/i.test(error.message)
+  let current = error
+  while (current instanceof Error) {
+    if (/unique constraint|SQLITE_CONSTRAINT/i.test(current.message)) return true
+    current = current.cause
+  }
+  return false
 }

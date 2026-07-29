@@ -3,6 +3,7 @@ import { i18n } from '@better-auth/i18n'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
 import type { TransactionalEmailSender } from '@server/adapters/gateways/email/sender'
+import { createDrizzleAgentTokenRepository } from '@server/adapters/repos/agent-tokens'
 import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
@@ -118,6 +119,7 @@ export function createAuth(
     authorization: createDrizzleAuthorizationRepository(db),
     users: createUserRepository(db),
     agents: createDrizzleAgentRepository(db),
+    agentTokens: createDrizzleAgentTokenRepository(db),
   } as unknown as Deps
 
   return betterAuth({
@@ -269,6 +271,14 @@ export function createAuth(
         requireAuthForCapabilities: false,
         capabilities: agentCapabilities,
         validateCapabilities: areKnownAgentCapabilities,
+        consumeJti: async (jti, maxAgeSec) => {
+          const now = new Date()
+          return deps.agentTokens.consumeAgentAuthJti({
+            jtiHash: await sha256Base64Url(jti),
+            createdAt: now,
+            expiresAt: new Date(now.getTime() + maxAgeSec * 1000),
+          })
+        },
         onExecute: ({ capability, arguments: args, agentSession }) =>
           executeReadOnlyCapability(deps, { capability, arguments: args, agentSession }),
       }),
@@ -446,4 +456,12 @@ export function createDeviceAuthorizationOptions(applications: Pick<ApplicationR
       }
     },
   }
+}
+
+async function sha256Base64Url(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
 }

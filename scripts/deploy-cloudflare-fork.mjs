@@ -94,18 +94,6 @@ if (configuredCredentialEncryptionKey) {
   console.log('Reusing existing CREDENTIAL_ENCRYPTION_KEY.')
 }
 
-const agentIdentityIssuer = process.env.AGENT_IDENTITY_ISSUER?.trim()
-if (agentIdentityIssuer) {
-  run(
-    'pnpm',
-    ['exec', 'wrangler', 'secret', 'put', 'AGENT_IDENTITY_ISSUER', '--config', 'wrangler.deployment.toml'],
-    {},
-    agentIdentityIssuer,
-  )
-} else if (secrets.some(({ name }) => name === 'AGENT_IDENTITY_ISSUER')) {
-  console.log('Reusing existing AGENT_IDENTITY_ISSUER.')
-}
-
 run('pnpm', ['exec', 'wrangler', 'd1', 'migrations', 'apply', 'DB', '--remote', '--config', 'wrangler.deployment.toml'])
 run('pnpm', ['run', 'build'])
 const deployArguments = ['exec', 'wrangler', 'deploy', '--config', 'wrangler.deployment.toml']

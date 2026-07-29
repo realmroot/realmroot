@@ -197,6 +197,7 @@ describe('OAuth token exchange over real D1', () => {
         audience,
       }).toString(),
     })
-    expect(exchange.status).toBe(401)
+    expect(exchange.status).toBe(400)
+    await expect(exchange.json()).resolves.toMatchObject({ error: 'invalid_grant' })
   })
 })

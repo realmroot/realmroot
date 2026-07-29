@@ -23,7 +23,7 @@ func TestSignAgentJWTProducesVerifiablePossessionProof(t *testing.T) {
 		AgentPrivateKey: encodePrivateKey(privateKey),
 	}
 
-	token, err := signAgentJWT(state, now)
+	token, err := signAgentJWT(state, "https://auth.example.com/api/auth", now)
 	if err != nil {
 		t.Fatal(err)
 	}

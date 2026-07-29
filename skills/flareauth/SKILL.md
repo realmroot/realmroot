@@ -55,6 +55,15 @@ never replays the previously denied business operation, so run that operation
 again after the capability request succeeds. Every CLI request remains the
 Agent's stable `(issuer, subject)` principal.
 
+The stable Agent issuer is the same Better Auth OIDC issuer used by product
+clients: `AUTH_ORIGIN/api/auth`. FlareAuth publishes no second Agent-only
+issuer, token endpoint, or JWKS.
+
+Agent authority tokens are OAuth JWT access tokens for resource servers, not
+OIDC login or UserInfo tokens. Resource servers trust the shared issuer/JWKS
+and validate the token audience and DPoP binding; product OIDC sessions remain
+the human login surface.
+
 If the API was already connected, sync its OpenAPI contract before operating
 it. Restish continues to use the locally held Agent and Host keys.
 

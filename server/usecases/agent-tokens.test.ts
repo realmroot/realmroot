@@ -3,22 +3,25 @@ import type { Deps } from '@server/usecases/deps'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
+const tokenIssuer = 'https://auth.example.com/api/auth'
+const signer = { issuer: tokenIssuer, sign: vi.fn().mockResolvedValue('signed-agent-token') }
+
 describe('Agent token profile', () => {
   it('issues an Agent-subject, host-actor DPoP token [spec: agent-identity/agent-autonomous-authority]', async () => {
     const deps = await tokenDeps('autonomous')
     const request = await tokenRequest('autonomous-proof')
 
-    const response = await issueAgentAccessToken(deps, request, { grantId: 'grant-1' }, session())
+    const response = await issueAgentAccessToken(deps, request, { grantId: 'grant-1' }, session(), signer)
 
     expect(response).toMatchObject({ token_type: 'DPoP', expires_in: 300, scope: 'repo:read repo:write' })
     expect(deps.agentTokens.storeAccessToken).toHaveBeenCalledWith(
       expect.objectContaining({
-        subjectIssuer: 'https://auth.example.com',
+        subjectIssuer: tokenIssuer,
         subject: 'agt_stable',
         audience: 'https://api.example.com',
         scopes: ['repo:read', 'repo:write'],
         actor: {
-          iss: 'https://auth.example.com',
+          iss: tokenIssuer,
           sub: 'host-1',
           actor_type: 'host',
         },
@@ -30,17 +33,17 @@ describe('Agent token profile', () => {
     const deps = await tokenDeps('delegated')
     const request = await tokenRequest('delegated-proof')
 
-    await issueAgentAccessToken(deps, request, { grantId: 'grant-1', scope: 'repo:read' }, session())
+    await issueAgentAccessToken(deps, request, { grantId: 'grant-1', scope: 'repo:read' }, session(), signer)
 
     expect(deps.agentTokens.storeAccessToken).toHaveBeenCalledWith(
       expect.objectContaining({
         subject: 'user-1',
         scopes: ['repo:read'],
         actor: {
-          iss: 'https://auth.example.com',
-          sub: 'agt_stable',
-          actor_type: 'agent',
-          host: { sub: 'host-1', actor_type: 'host' },
+          iss: tokenIssuer,
+          sub: 'host-1',
+          actor_type: 'host',
+          act: { iss: tokenIssuer, sub: 'agt_stable', actor_type: 'agent' },
         },
       }),
     )
@@ -50,26 +53,30 @@ describe('Agent token profile', () => {
     const replayDeps = await tokenDeps('autonomous')
     replayDeps.agentTokens.consumeDpopJti.mockResolvedValue(false)
     await expect(
-      issueAgentAccessToken(replayDeps, await tokenRequest('replay'), { grantId: 'grant-1' }, session()),
-    ).rejects.toMatchObject({ status: 401 })
+      issueAgentAccessToken(replayDeps, await tokenRequest('replay'), { grantId: 'grant-1' }, session(), signer),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_dpop_proof' })
 
     const scopeDeps = await tokenDeps('autonomous')
     await expect(
-      issueAgentAccessToken(scopeDeps, await tokenRequest('scope'), { grantId: 'grant-1', scope: 'admin' }, session()),
-    ).rejects.toMatchObject({ status: 403 })
+      issueAgentAccessToken(
+        scopeDeps,
+        await tokenRequest('scope'),
+        { grantId: 'grant-1', scope: 'admin' },
+        session(),
+        signer,
+      ),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_scope' })
     expect(scopeDeps.agentTokens.consumeDpopJti).not.toHaveBeenCalled()
   })
 })
 
 async function tokenDeps(mode: 'autonomous' | 'delegated') {
-  const { privateKey } = await generateKeyPair('ES256', { extractable: true })
-  const privateJwk = await exportJWK(privateKey)
   return {
     agentIdentities: {
       findActiveByProtocolAgent: vi.fn().mockResolvedValue({
         identity: {
           id: 'identity-1',
-          issuer: 'https://auth.example.com',
+          issuer: tokenIssuer,
           subject: 'agt_stable',
           name: 'Agent',
           ownerUserId: 'user-1',
@@ -101,15 +108,7 @@ async function tokenDeps(mode: 'autonomous' | 'delegated') {
       }),
       consumeDpopJti: vi.fn().mockResolvedValue(true),
       storeAccessToken: vi.fn(),
-      findSigningKey: vi.fn().mockResolvedValue({
-        id: 'signing-key-1',
-        algorithm: 'ES256',
-        publicJwk: {},
-        encryptedPrivateJwk: 'encrypted-private-key',
-        createdAt: new Date(),
-      }),
     },
-    secrets: { open: vi.fn().mockResolvedValue(JSON.stringify(privateJwk)) },
   } as unknown as Deps & {
     agentTokens: {
       findGrant: ReturnType<typeof vi.fn>
@@ -130,7 +129,7 @@ function session() {
 async function tokenRequest(jti: string) {
   const { publicKey, privateKey } = await generateKeyPair('ES256')
   const jwk = await exportJWK(publicKey)
-  const url = 'https://auth.example.com/api/agent/oauth2/token'
+  const url = 'https://auth.example.com/api/auth/oauth2/token'
   const proof = await new SignJWT({
     jti,
     htm: 'POST',

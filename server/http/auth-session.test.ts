@@ -6,6 +6,7 @@ import type {
 } from '@server/auth-test-plugin-types'
 import type { Database } from '@server/db/client'
 import { createApp } from '@server/http/app'
+import { agentAuthorityGrantType } from '@shared/api/agents'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
 import { describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
@@ -41,6 +42,7 @@ describe('auth.test 1', () => {
         'client_credentials',
         'refresh_token',
         'urn:ietf:params:oauth:grant-type:device_code',
+        agentAuthorityGrantType,
       ],
       code_challenge_methods_supported: ['S256'],
       scopes_supported: ['openid', 'profile', 'email', 'offline_access', 'management:read', 'management:write'],

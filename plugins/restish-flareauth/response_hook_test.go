@@ -31,7 +31,12 @@ func (s capabilityStateRecorder) FindByOriginAndAgentID(origin string, agentID s
 func TestCapabilityApprovalResponseOpensAndWaitsForHostedApproval(t *testing.T) {
 	browser := &browserRecorder{}
 	state := capabilityTestState(t)
+	requests := 0
 	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return jsonResponse(200, testAgentConfiguration()), nil
+		}
 		if request.URL.String() != "https://auth.example.com/api/auth/agent/status" {
 			t.Fatalf("status URL = %q", request.URL)
 		}
@@ -86,7 +91,9 @@ func TestCapabilityApprovalResponseRejectsCrossOriginApprovalURL(t *testing.T) {
 		capabilityHookInput("https://attacker.example/agent/approve?code=ABCD"),
 		browser,
 		capabilityStateRecorder{},
-		roundTripFunc(nil),
+		roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+			return jsonResponse(200, testAgentConfiguration()), nil
+		}),
 	)
 
 	if err == nil {
@@ -112,6 +119,12 @@ func TestCapabilityApprovalWaitStopsOnDenial(t *testing.T) {
 		t.Context(),
 		client,
 		state,
+		agentConfiguration{
+			Issuer: "https://auth.example.com/api/auth",
+			Endpoints: map[string]string{
+				"status": "https://auth.example.com/api/auth/agent/status",
+			},
+		},
 		[]string{"management:read"},
 		time.Now().Add(time.Minute),
 		time.Millisecond,

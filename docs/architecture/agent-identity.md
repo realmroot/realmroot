@@ -30,10 +30,10 @@ FlareAuth owns three records outside AgentAuth's schema:
 `agent_host` is not changed. AgentAuth remains the protocol adapter and source
 of host-specific public keys.
 
-The issuer comes from `AGENT_IDENTITY_ISSUER`, falling back to the canonical
-Better Auth base URL only when the dedicated value is absent. Deployments must
-configure a stable production origin; request and preview origins are not
-identity inputs.
+The issuer is the deployment's existing Better Auth OIDC issuer,
+`AUTH_ORIGIN/api/auth`. Deployments configure one stable production
+`BETTER_AUTH_URL`; request and preview origins are not identity inputs. FlareAuth
+does not publish or operate a second Agent-only authorization server.
 
 Enrollment approval atomically inserts the identity when needed, inserts its
 binding, and consumes the intent. An AgentAuth registration with no active
@@ -56,10 +56,12 @@ RFC 8693 semantics. Agent-specific subject type and host claims are a documented
 FlareAuth extension; ordinary OIDC relying parties may treat the subject as a
 normal account, while Agent-aware parties can enforce the extension.
 
-FlareAuth exposes issuer metadata at `/.well-known/openid-configuration` and
-public signing keys at `/api/agent/jwks`. Agent access tokens are five-minute
-ES256 JWTs with an `at+jwt` type, audience, scopes, `cnf.jkt`, actor chain, and
-stable Agent identity. Signing private keys are encrypted at rest.
+FlareAuth exposes the shared issuer metadata at
+`/api/auth/.well-known/openid-configuration`, public signing keys at
+`/api/auth/jwks`, and all OAuth grants at `/api/auth/oauth2/token`. Agent access
+tokens are five-minute JWTs signed by Better Auth's managed issuer keys with an
+`at+jwt` type, audience, scopes, `cnf.jkt`, actor chain, and stable Agent
+identity.
 
 Every token request and brokered request requires a fresh DPoP proof. JTI state
 is consumed atomically, so a proof cannot be replayed. Token records remain in
@@ -80,7 +82,7 @@ activation time, total uses, expiry, and one-time controller approval. No
 authority is inferred from enrollment, ownership, or Connector configuration.
 
 For FlareAuth's own unified API, an autonomous grant with audience
-`AGENT_IDENTITY_ISSUER/api` and `management:read`, `management:write`, or
+`AUTH_ORIGIN/api` and `management:read`, `management:write`, or
 `management:*` authorizes tenant operations. The request principal remains the
 Agent `(issuer, subject)`; the user who approved the grant is authorization
 provenance, not an impersonated CLI identity. Use-limited and step-up grants are
@@ -119,7 +121,7 @@ browser sessions, query credentials, and custom signing schemes are not
 accepted.
 
 `CREDENTIAL_ENCRYPTION_KEY` supplies AES-GCM key material for Connector client
-secrets, external credentials, OAuth PKCE verifiers, and Agent signing keys.
+secrets, external credentials, and OAuth PKCE verifiers.
 Each envelope uses randomized nonces and purpose-specific authenticated
 context.
 

@@ -80,7 +80,6 @@ export function resetLocalData() {
     DELETE FROM agent_authority_grant;
     DELETE FROM agent_identity_binding;
     DELETE FROM agent_enrollment_intent;
-    DELETE FROM agent_signing_key;
     DELETE FROM agent_identity;
     DELETE FROM agent_capability_grant;
     DELETE FROM agent;

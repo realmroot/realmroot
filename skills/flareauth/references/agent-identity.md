@@ -61,6 +61,9 @@ pending enrollment.
 
 Persist `identity.issuer` and `identity.subject` as the Agent's account
 identifier. Later commands use the same Agent identity and require no login.
+`identity.issuer` is the shared Better Auth issuer
+`AUTH_ORIGIN/api/auth`; it is also the issuer discovered by product OIDC
+clients.
 
 ## Authority
 
@@ -86,9 +89,55 @@ missing capability. After the capability request succeeds, rerun the previously
 denied OpenAPI command. The adapter does not replay business operations. Do not
 switch profiles or authenticate as the controller.
 
+## Authority Tokens
+
+Authority tokens use the shared OAuth token endpoint and Better Auth signing
+keys:
+
+```text
+token endpoint: AUTH_ORIGIN/api/auth/oauth2/token
+JWKS:           AUTH_ORIGIN/api/auth/jwks
+grant type:     urn:flareauth:params:oauth:grant-type:agent-authority
+```
+
+Use the OpenAPI-generated `issue-agent-access-token` operation. The Restish
+adapter supplies the AgentAuth request proof and the caller supplies the DPoP
+proof plus form body:
+
+```bash
+restish API_NAME issue-agent-access-token "$DPOP_PROOF" \
+  --rsh-validate -o json <<'JSON'
+{
+  "grant_type": "urn:flareauth:params:oauth:grant-type:agent-authority",
+  "grant_id": "grant_123",
+  "scope": "repo:read"
+}
+JSON
+```
+
+The returned token is DPoP-bound and short-lived. Use the same DPoP key for
+resource proofs; never treat the token as a bearer credential.
+
+This is an OAuth resource-server access token profile, not an Agent OIDC login
+flow. A resource server validates `typ=at+jwt`, signature, shared issuer,
+audience, expiry, and `cnf.jkt`, then keys the Agent account by `(iss, sub)`.
+OIDC login still applies to human/product sessions; do not send an Agent access
+token to an OIDC UserInfo endpoint.
+
+Treat `/.well-known/agent-configuration` as authoritative for AgentAuth
+registration, status, stable-identity, issuer, and signing-algorithm details.
+Treat the shared OAuth/OIDC discovery documents as authoritative for token and
+JWKS endpoints. Do not derive either endpoint set from a product name or a
+provider-specific Connector.
+
 ## Failure Boundaries
 
 - `401`: AgentAuth proof is absent or invalid, or the local binding is inactive.
+- Agent token endpoint failures use flat OAuth fields such as `invalid_request`,
+  `invalid_grant`, `invalid_scope`, and `invalid_dpop_proof`; step-up returns
+  `approval_required` with a separate `approval_id`.
+- DPoP-protected resources return `401` with a `WWW-Authenticate: DPoP`
+  challenge when the access token or proof is invalid.
 - `403` with `management:read` or `management:write`: the Agent needs that
   AgentAuth capability.
 - Capability denial: explain the denial and stop; do not retry the protected

@@ -44,8 +44,6 @@ the explicit deployment version boundary.
    - `FLAREAUTH_D1_DATABASE`
    - `FLAREAUTH_R2_BUCKET`
    - `FLAREAUTH_EMAIL_QUEUE`
-   - `AGENT_IDENTITY_ISSUER`, the immutable public origin used in stable Agent
-     identities when the Worker has a custom domain
 
 6. Open **Actions > Deploy FlareAuth Fork > Run workflow**.
 
@@ -85,9 +83,8 @@ credentials first.
 
 These settings remain deployment-specific:
 
-- `BETTER_AUTH_URL`: optional canonical issuer origin.
-- `AGENT_IDENTITY_ISSUER`: immutable public origin for stable Agent identities;
-  set it when the Worker has a custom domain or more than one reachable origin.
+- `BETTER_AUTH_URL`: optional canonical deployment origin. The shared user and
+  Agent issuer is always `BETTER_AUTH_URL/api/auth`.
 - `TRUSTED_ORIGINS`: optional extra first-party FlareAuth origins.
 - OAuth provider credentials configured in the admin console or Management API.
 - `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, and `WEBAUTHN_ORIGINS` when passkeys

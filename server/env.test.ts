@@ -54,7 +54,6 @@ describe('validateEnv', () => {
     expect(validateEnv(env, 'https://tenant.example.com/api/health')).toEqual({
       authSecret: 'secret',
       baseURL: 'https://tenant.example.com',
-      agentIdentityIssuer: 'https://tenant.example.com',
       credentialEncryptionKey: 'credential-encryption-key-for-tests-2026',
       emailFrom: 'noreply@example.com',
       emailFromName: undefined,

@@ -384,8 +384,6 @@ export const federatedCredential = sqliteTable(
     // static JWK set (for issuers that are not publicly reachable, e.g. local dev).
     jwksUrl: text('jwks_url'),
     publicKeys: text('public_keys', { mode: 'json' }).$type<Record<string, unknown>[] | null>(),
-    // Legacy symmetric fallback — not exposed by the create API, dev/migration only.
-    sharedSecret: text('shared_secret'),
     enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown> | null>(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
@@ -431,5 +429,39 @@ export const tokenExchangeAccessToken = sqliteTable(
     index('tokenExchangeAccessToken_clientId_idx').on(table.clientId),
     index('tokenExchangeAccessToken_credentialId_idx').on(table.credentialId),
     index('tokenExchangeAccessToken_expiresAt_idx').on(table.expiresAt),
+  ],
+)
+
+// One-time refresh tokens for RFC 8693 exchanges. A family is revoked when a
+// consumed token is replayed so theft cannot remain silent.
+export const tokenExchangeRefreshToken = sqliteTable(
+  'token_exchange_refresh_token',
+  {
+    id: text('id').primaryKey(),
+    familyId: text('family_id').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    credentialId: text('credential_id')
+      .notNull()
+      .references(() => federatedCredential.id, { onDelete: 'cascade' }),
+    subject: text('subject').notNull(),
+    subjectTokenIssuer: text('subject_token_issuer').notNull(),
+    audience: text('audience').notNull(),
+    scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    claims: text('claims', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    consumedAt: integer('consumed_at', { mode: 'timestamp_ms' }),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    index('tokenExchangeRefreshToken_familyId_idx').on(table.familyId),
+    index('tokenExchangeRefreshToken_clientId_idx').on(table.clientId),
+    index('tokenExchangeRefreshToken_credentialId_idx').on(table.credentialId),
+    index('tokenExchangeRefreshToken_expiresAt_idx').on(table.expiresAt),
   ],
 )

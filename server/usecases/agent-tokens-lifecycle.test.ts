@@ -3,7 +3,6 @@ import {
   approveAgentAuthorityApproval,
   authenticateAgentAccessToken,
   createAgentAuthorityGrant,
-  getAgentJwks,
   issueAgentAccessToken,
   listAgentAuthorityGrants,
   type ProtocolAgentSession,
@@ -13,6 +12,9 @@ import type { Deps } from '@server/usecases/deps'
 import type { AgentAccessTokenRecord, AgentAuthorityGrantRecord, AgentIdentityAggregate } from '@server/usecases/ports'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
+
+const tokenIssuer = 'https://auth.example.com/api/auth'
+const signer = { issuer: tokenIssuer, sign: vi.fn().mockResolvedValue('signed-agent-token') }
 
 describe('Agent authority lifecycle', () => {
   it('creates autonomous, delegated-user, and delegated-organization grants', async () => {
@@ -141,7 +143,10 @@ describe('Agent token policy branches', () => {
   it('rejects missing identity, inactive host binding, and inactive authority', async () => {
     const missingIdentity = await tokenDeps()
     vi.mocked(missingIdentity.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(null)
-    await expect(issue(missingIdentity, 'missing-identity')).rejects.toMatchObject({ status: 403 })
+    await expect(issue(missingIdentity, 'missing-identity')).rejects.toMatchObject({
+      status: 400,
+      error: 'invalid_grant',
+    })
 
     for (const aggregate of [
       identity({ bindings: [] }),
@@ -150,7 +155,7 @@ describe('Agent token policy branches', () => {
     ]) {
       const deps = await tokenDeps()
       vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(aggregate)
-      await expect(issue(deps, crypto.randomUUID())).rejects.toMatchObject({ status: 403 })
+      await expect(issue(deps, crypto.randomUUID())).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
     }
 
     for (const invalidGrant of [
@@ -161,52 +166,87 @@ describe('Agent token policy branches', () => {
     ]) {
       const deps = await tokenDeps()
       vi.mocked(deps.agentTokens.findGrant).mockResolvedValue(invalidGrant)
-      await expect(issue(deps, crypto.randomUUID())).rejects.toMatchObject({ status: 403 })
+      await expect(issue(deps, crypto.randomUUID())).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
     }
   })
 
   it('enforces scopes, host, activation time, step-up, and maximum-use constraints', async () => {
     const scope = await tokenDeps()
-    await expect(issue(scope, 'empty-scope', { scope: '  ' })).rejects.toMatchObject({ status: 403 })
-    await expect(issue(scope, 'scope-escalation', { scope: 'admin' })).rejects.toMatchObject({ status: 403 })
+    await expect(issue(scope, 'empty-scope', { scope: '  ' })).rejects.toMatchObject({
+      status: 400,
+      error: 'invalid_scope',
+    })
+    await expect(issue(scope, 'scope-escalation', { scope: 'admin' })).rejects.toMatchObject({
+      status: 400,
+      error: 'invalid_scope',
+    })
 
     const host = await tokenDeps({ allowedHostIds: ['other-host'] })
-    await expect(issue(host, 'host')).rejects.toMatchObject({ status: 403 })
+    await expect(issue(host, 'host')).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
     const notBefore = await tokenDeps({ notBefore: new Date(Date.now() + 60_000).toISOString() })
-    await expect(issue(notBefore, 'not-before')).rejects.toMatchObject({ status: 403 })
+    await expect(issue(notBefore, 'not-before')).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
 
     const stepUp = await tokenDeps({ stepUpRequired: true })
     vi.mocked(stepUp.agentTokens.createApproval).mockResolvedValue(approval())
     await expect(issue(stepUp, 'step-up')).rejects.toMatchObject({
-      status: 403,
-      message: expect.stringContaining('approval-1'),
+      status: 400,
+      error: 'approval_required',
+      parameters: expect.objectContaining({ approval_id: 'approval-1' }),
     })
     vi.mocked(stepUp.agentTokens.consumeApproval).mockResolvedValue(false)
-    await expect(issue(stepUp, 'bad-approval', { approvalId: 'approval-1' })).rejects.toMatchObject({ status: 403 })
+    await expect(issue(stepUp, 'bad-approval', { approvalId: 'approval-1' })).rejects.toMatchObject({
+      status: 400,
+      error: 'invalid_grant',
+    })
     vi.mocked(stepUp.agentTokens.consumeApproval).mockResolvedValue(true)
     await expect(issue(stepUp, 'good-approval', { approvalId: 'approval-1' })).resolves.toMatchObject({
       token_type: 'DPoP',
     })
+    expect(stepUp.agentTokens.consumeApproval).toHaveBeenLastCalledWith(
+      'approval-1',
+      'grant-1',
+      'binding-1',
+      ['repo:read', 'repo:write'],
+      expect.any(Date),
+    )
 
     const maxUses = await tokenDeps({ maxUses: 1 })
     vi.mocked(maxUses.agentTokens.consumeGrantUse).mockResolvedValue(false)
-    await expect(issue(maxUses, 'max-uses')).rejects.toMatchObject({ status: 403 })
+    await expect(issue(maxUses, 'max-uses')).rejects.toMatchObject({ status: 400, error: 'invalid_grant' })
   })
 
-  it('rejects missing, malformed, structurally invalid, mismatched, stale, and replayed DPoP proofs', async () => {
+  it('never issues an access token beyond the authority grant expiry', async () => {
     const deps = await tokenDeps()
-    const url = 'https://auth.example.com/api/agent/oauth2/token'
+    const grantExpiresAt = new Date(Date.now() + 20_000)
+    vi.mocked(deps.agentTokens.findGrant).mockResolvedValue(grant({ expiresAt: grantExpiresAt }))
+    signer.sign.mockClear()
+
+    const response = await issue(deps, 'grant-expiry')
+    const claims = signer.sign.mock.calls.at(-1)?.[0] as { exp: number }
+
+    expect(claims.exp).toBe(Math.floor(grantExpiresAt.getTime() / 1000))
+    expect(response.expires_in).toBeGreaterThan(0)
+    expect(response.expires_in).toBeLessThanOrEqual(20)
+    expect(deps.agentTokens.storeAccessToken).toHaveBeenCalledWith(
+      expect.objectContaining({ expiresAt: grantExpiresAt }),
+    )
+  })
+
+  it('rejects missing, malformed, structurally invalid, mismatched, stale, and replayed DPoP proofs [spec: agent-identity/agent-oauth-errors]', async () => {
+    const deps = await tokenDeps()
+    const url = 'https://auth.example.com/api/auth/oauth2/token'
     await expect(
-      issueAgentAccessToken(deps, new Request(url, { method: 'POST' }), { grantId: 'grant-1' }, session()),
-    ).rejects.toMatchObject({ status: 401 })
+      issueAgentAccessToken(deps, new Request(url, { method: 'POST' }), { grantId: 'grant-1' }, session(), signer),
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_dpop_proof' })
     await expect(
       issueAgentAccessToken(
         deps,
         new Request(url, { method: 'POST', headers: { dpop: 'bad' } }),
         { grantId: 'grant-1' },
         session(),
+        signer,
       ),
-    ).rejects.toMatchObject({ status: 401 })
+    ).rejects.toMatchObject({ status: 400, error: 'invalid_dpop_proof' })
 
     for (const options of [
       { typ: 'JWT' },
@@ -223,49 +263,35 @@ describe('Agent token policy branches', () => {
           await dpopRequest(url, 'POST', crypto.randomUUID(), options),
           { grantId: 'grant-1' },
           session(),
+          signer,
         ),
-      ).rejects.toMatchObject({ status: 401 })
+      ).rejects.toMatchObject({ status: 400, error: 'invalid_dpop_proof' })
     }
 
     vi.mocked(deps.agentTokens.consumeDpopJti).mockResolvedValue(false)
-    await expect(issue(deps, 'replay')).rejects.toMatchObject({ status: 401 })
-  })
-
-  it('creates and reuses the Agent signing key for JWKS', async () => {
-    const deps = createTestDeps()
-    vi.mocked(deps.agentTokens.createSigningKey).mockImplementation(async (record) => record)
-    await expect(getAgentJwks(deps)).resolves.toMatchObject({
-      keys: [{ kid: expect.stringMatching(/^agsig_/), alg: 'ES256', use: 'sig' }],
-    })
-    expect(deps.secrets.seal).toHaveBeenCalledWith(
-      expect.stringContaining('"kty"'),
-      expect.stringMatching(/^agent-signing-key:agsig_.+:private-jwk$/),
-    )
-
-    vi.mocked(deps.agentTokens.findSigningKey).mockResolvedValue({
-      id: 'existing-key',
-      algorithm: 'ES256',
-      publicJwk: { kty: 'EC' },
-      encryptedPrivateJwk: 'sealed',
-      createdAt: new Date(),
-    })
-    await expect(getAgentJwks(deps)).resolves.toMatchObject({ keys: [{ kid: 'existing-key' }] })
+    await expect(issue(deps, 'replay')).rejects.toMatchObject({ status: 400, error: 'invalid_dpop_proof' })
   })
 })
 
 describe('Agent access token authentication', () => {
   it('accepts a live token with matching DPoP key and active authority', async () => {
     const fixture = await accessFixture()
-    await expect(authenticateAgentAccessToken(fixture.deps, fixture.request)).resolves.toMatchObject({ id: 'token-1' })
+    await expect(authenticateAgentAccessToken(fixture.deps, fixture.request, fixture.verifier)).resolves.toMatchObject({
+      id: 'token-1',
+    })
   })
 
   it('rejects absent, unknown, revoked, expired, or authority-revoked access tokens', async () => {
     const base = await accessFixture()
-    await expect(authenticateAgentAccessToken(base.deps, new Request(base.request.url))).rejects.toMatchObject({
+    await expect(
+      authenticateAgentAccessToken(base.deps, new Request(base.request.url), base.verifier),
+    ).rejects.toMatchObject({
       status: 401,
     })
     vi.mocked(base.deps.agentTokens.findAccessTokenByHash).mockResolvedValue(null)
-    await expect(authenticateAgentAccessToken(base.deps, base.request)).rejects.toMatchObject({ status: 401 })
+    await expect(authenticateAgentAccessToken(base.deps, base.request, base.verifier)).rejects.toMatchObject({
+      status: 401,
+    })
 
     for (const token of [
       { ...base.token, revokedAt: new Date() },
@@ -273,7 +299,9 @@ describe('Agent access token authentication', () => {
     ]) {
       const fixture = await accessFixture()
       vi.mocked(fixture.deps.agentTokens.findAccessTokenByHash).mockResolvedValue(token)
-      await expect(authenticateAgentAccessToken(fixture.deps, fixture.request)).rejects.toMatchObject({ status: 401 })
+      await expect(authenticateAgentAccessToken(fixture.deps, fixture.request, fixture.verifier)).rejects.toMatchObject(
+        { status: 401 },
+      )
     }
 
     for (const configure of [
@@ -289,18 +317,52 @@ describe('Agent access token authentication', () => {
     ]) {
       const fixture = await accessFixture()
       configure(fixture.deps)
-      await expect(authenticateAgentAccessToken(fixture.deps, fixture.request)).rejects.toMatchObject({ status: 401 })
+      await expect(authenticateAgentAccessToken(fixture.deps, fixture.request, fixture.verifier)).rejects.toMatchObject(
+        { status: 401 },
+      )
     }
   })
 
   it('rejects missing ath, wrong ath, wrong proof key, and replay', async () => {
     for (const options of [{ omitAccessTokenHash: true }, { accessTokenHash: 'wrong' }, { differentProofKey: true }]) {
       const fixture = await accessFixture(options)
-      await expect(authenticateAgentAccessToken(fixture.deps, fixture.request)).rejects.toMatchObject({ status: 401 })
+      await expect(authenticateAgentAccessToken(fixture.deps, fixture.request, fixture.verifier)).rejects.toMatchObject(
+        { status: 401 },
+      )
     }
     const replay = await accessFixture()
     vi.mocked(replay.deps.agentTokens.consumeDpopJti).mockResolvedValue(false)
-    await expect(authenticateAgentAccessToken(replay.deps, replay.request)).rejects.toMatchObject({ status: 401 })
+    await expect(authenticateAgentAccessToken(replay.deps, replay.request, replay.verifier)).rejects.toMatchObject({
+      status: 401,
+    })
+  })
+
+  it('rejects failed verification and JWT claims that diverge from persisted token state', async () => {
+    const signature = await accessFixture()
+    vi.mocked(signature.verifier.verify).mockRejectedValue(new Error('bad signature'))
+    await expect(
+      authenticateAgentAccessToken(signature.deps, signature.request, signature.verifier),
+    ).rejects.toMatchObject({ status: 401, error: 'invalid_token' })
+
+    for (const override of [
+      { iss: 'https://attacker.example.com' },
+      { aud: 'https://other.example.com' },
+      { jti: 'other-token' },
+      { client_id: 'other-agent' },
+      { scope: 'admin' },
+      { cnf: { jkt: 'other-key' } },
+      { iat: Math.floor(Date.now() / 1000) + 60 },
+      { exp: Math.floor(Date.now() / 1000) - 1 },
+      { agent_identity: { iss: tokenIssuer, sub: 'other-agent' } },
+      { act: { actor_type: 'host', sub: 'other-host' } },
+    ]) {
+      const fixture = await accessFixture()
+      const claims = await fixture.verifier.verify('', '')
+      vi.mocked(fixture.verifier.verify).mockResolvedValue({ ...claims, ...override })
+      await expect(authenticateAgentAccessToken(fixture.deps, fixture.request, fixture.verifier)).rejects.toMatchObject(
+        { status: 401, error: 'invalid_token' },
+      )
+    }
   })
 })
 
@@ -312,24 +374,20 @@ function lifecycleDeps() {
 
 async function tokenDeps(constraints: Record<string, unknown> | null = null) {
   const deps = createTestDeps()
-  const { privateKey } = await generateKeyPair('ES256', { extractable: true })
-  const privateJwk = await exportJWK(privateKey)
   vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(identity())
   vi.mocked(deps.agentTokens.findGrant).mockResolvedValue(grant({ constraints }))
-  vi.mocked(deps.agentTokens.findSigningKey).mockResolvedValue({
-    id: 'signing-key-1',
-    algorithm: 'ES256',
-    publicJwk: {},
-    encryptedPrivateJwk: 'sealed',
-    createdAt: new Date(),
-  })
-  vi.mocked(deps.secrets.open).mockResolvedValue(JSON.stringify(privateJwk))
   return deps
 }
 
 async function issue(deps: Deps, jti: string, input: { scope?: string; approvalId?: string } = {}) {
-  const url = 'https://auth.example.com/api/agent/oauth2/token'
-  return issueAgentAccessToken(deps, await dpopRequest(url, 'POST', jti), { grantId: 'grant-1', ...input }, session())
+  const url = 'https://auth.example.com/api/auth/oauth2/token'
+  return issueAgentAccessToken(
+    deps,
+    await dpopRequest(url, 'POST', jti),
+    { grantId: 'grant-1', ...input },
+    session(),
+    signer,
+  )
 }
 
 function session(): ProtocolAgentSession {
@@ -385,10 +443,24 @@ async function accessFixture(
   options: { omitAccessTokenHash?: boolean; accessTokenHash?: string; differentProofKey?: boolean } = {},
 ) {
   const deps = createTestDeps()
-  const accessToken = 'faat_access'
   const { publicKey, privateKey } = await generateKeyPair('ES256')
   const keyJwk = await exportJWK(publicKey)
   const thumbprint = await calculateJwkThumbprint(keyJwk)
+  const token = accessTokenRecord({ confirmationJkt: thumbprint })
+  const claims = {
+    iss: tokenIssuer,
+    sub: token.subject,
+    aud: token.audience,
+    jti: token.id,
+    client_id: token.protocolAgentId,
+    scope: token.scopes.join(' '),
+    cnf: { jkt: thumbprint },
+    iat: Math.floor(token.createdAt.getTime() / 1000),
+    exp: Math.floor(token.expiresAt.getTime() / 1000),
+    act: token.actor,
+    agent_identity: { iss: tokenIssuer, sub: 'agt_stable' },
+  }
+  const accessToken = compactJwt(claims)
   const proofPair = options.differentProofKey ? await generateKeyPair('ES256') : { publicKey, privateKey }
   const proofJwk = await exportJWK(proofPair.publicKey)
   const url = 'https://auth.example.com/api/agent/egress/account-1/v1/repos?limit=1'
@@ -404,11 +476,18 @@ async function accessFixture(
   const request = new Request(url, {
     headers: { authorization: `DPoP ${accessToken}`, dpop: proof },
   })
-  const token = accessTokenRecord({ confirmationJkt: thumbprint })
   vi.mocked(deps.agentTokens.findAccessTokenByHash).mockResolvedValue(token)
   vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(identity())
   vi.mocked(deps.agentTokens.findGrant).mockResolvedValue(grant())
-  return { deps, request, token }
+  return {
+    deps,
+    request,
+    token,
+    verifier: {
+      issuer: tokenIssuer,
+      verify: vi.fn().mockResolvedValue(claims),
+    },
+  }
 }
 
 function identity(
@@ -419,7 +498,7 @@ function identity(
   return {
     identity: {
       id: 'identity-1',
-      issuer: 'https://auth.example.com',
+      issuer: tokenIssuer,
       subject: 'agt_stable',
       name: 'Agent',
       ownerUserId: 'user-1',
@@ -495,9 +574,9 @@ function accessTokenRecord(overrides: Partial<AgentAccessTokenRecord> = {}): Age
     bindingId: 'binding-1',
     protocolAgentId: 'protocol-agent-1',
     grantId: 'grant-1',
-    subjectIssuer: 'https://auth.example.com',
+    subjectIssuer: tokenIssuer,
     subject: 'agt_stable',
-    actor: { actor_type: 'host', sub: 'host-1' },
+    actor: { iss: tokenIssuer, actor_type: 'host', sub: 'host-1' },
     audience: 'https://api.example.com',
     scopes: ['repo:read'],
     confirmationJkt: 'thumbprint',
@@ -533,4 +612,12 @@ async function digest(value: string) {
     .replaceAll('+', '-')
     .replaceAll('/', '_')
     .replace(/=+$/, '')
+}
+
+function compactJwt(payload: Record<string, unknown>) {
+  return `${encodeJwtPart({ typ: 'at+jwt', alg: 'RS256', kid: 'test' })}.${encodeJwtPart(payload)}.signature`
+}
+
+function encodeJwtPart(value: Record<string, unknown>) {
+  return btoa(JSON.stringify(value)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
 }

@@ -1,9 +1,20 @@
-import { ApiError, type ErrorCode } from '@server/domain/errors'
+import { ApiError, type ErrorCode, OAuthError } from '@server/domain/errors'
 import type { Context } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
 export function handleApiError(error: Error, c: Context) {
+  if (error instanceof OAuthError) {
+    for (const [name, value] of Object.entries(error.headers)) c.header(name, value)
+    return c.json(
+      {
+        error: error.error,
+        error_description: error.errorDescription,
+        ...error.parameters,
+      },
+      error.status as ContentfulStatusCode,
+    )
+  }
   if (error instanceof ApiError) {
     return errorResponse(c, error.status, error.code, error.message)
   }

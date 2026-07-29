@@ -1,5 +1,6 @@
 import { createTestDeps } from '@server/http/test-deps'
-import { proxyAgentEgress } from '@server/usecases/agent-egress'
+import { proxyAgentEgress as proxyAgentEgressVerified } from '@server/usecases/agent-egress'
+import type { AgentAccessTokenVerifier } from '@server/usecases/agent-tokens'
 import type {
   AgentAccessTokenRecord,
   AgentAuthorityGrantRecord,
@@ -10,6 +11,19 @@ import type {
 } from '@server/usecases/ports'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
+
+const egressVerifiers = new WeakMap<object, AgentAccessTokenVerifier>()
+
+function proxyAgentEgress(
+  deps: Parameters<typeof proxyAgentEgressVerified>[0],
+  request: Request,
+  externalAccountId: string,
+  rawRelativePath: string,
+) {
+  const verifier = egressVerifiers.get(deps)
+  if (!verifier) throw new Error('Test Agent access token verifier is not configured.')
+  return proxyAgentEgressVerified(deps, verifier, request, externalAccountId, rawRelativePath)
+}
 
 describe('Agent credential egress', () => {
   it(`injects a credential only after token, grant, method, path, and origin checks
@@ -36,7 +50,7 @@ describe('Agent credential egress', () => {
         action: 'external_account.egress',
         result: 'allowed',
         controllerUserId: 'user-1',
-        subjectIssuer: 'https://auth.example.com',
+        subjectIssuer: 'https://auth.example.com/api/auth',
         subject: 'agent-subject',
         agentIdentityId: 'identity-1',
         hostId: 'host-1',
@@ -159,12 +173,16 @@ describe('Agent credential egress', () => {
     })
     await expect(
       proxyAgentEgress(audience.deps, await audience.request('GET', '/v1/repos', 'audience'), 'account-1', '/v1/repos'),
-    ).rejects.toMatchObject({ status: 403 })
+    ).rejects.toMatchObject({ status: 401 })
 
     const scope = await egressFixture()
     vi.mocked(scope.deps.agentTokens.findAccessTokenByHash).mockResolvedValue({
       ...scope.token,
-      scopes: ['admin'],
+      scopes: ['repo:write'],
+    })
+    vi.mocked(scope.deps.agentTokens.findGrant).mockResolvedValue({
+      ...scope.authorityGrant,
+      scopes: ['repo:read', 'repo:write'],
     })
     await expect(
       proxyAgentEgress(scope.deps, await scope.request('GET', '/v1/repos', 'scope'), 'account-1', '/v1/repos'),
@@ -339,6 +357,22 @@ describe('Agent credential egress', () => {
       expect.objectContaining({ expiresAt: expect.any(Date) }),
     )
     expect(fixture.externalFetch.mock.calls[1]![0].headers.get('authorization')).toBe('Bearer refreshed')
+
+    const minimal = await oauthRefreshFixture()
+    minimal.externalFetch
+      .mockResolvedValueOnce(Response.json({ access_token: 'minimal-refreshed' }))
+      .mockResolvedValueOnce(Response.json({ ok: true }))
+    await proxyAgentEgress(
+      minimal.deps,
+      await minimal.request('GET', '/v1/repos', 'minimal-refresh'),
+      'account-1',
+      '/v1/repos',
+    )
+    expect(minimal.deps.externalAccounts.updateCredential).toHaveBeenCalledWith(
+      'credential-1',
+      expect.objectContaining({ expiresAt: null }),
+    )
+    expect(minimal.externalFetch.mock.calls[1]![0].headers.get('authorization')).toBe('Bearer minimal-refreshed')
   })
 
   it('rejects invalid credential payloads and OAuth refresh failures', async () => {
@@ -402,7 +436,47 @@ describe('Agent credential egress', () => {
     const delegated = await egressFixture()
     vi.mocked(delegated.deps.agentTokens.findAccessTokenByHash).mockResolvedValue({
       ...delegated.token,
-      actor: { actor_type: 'agent', sub: 'agt_stable', host: { sub: 'host-delegated' } },
+      actor: {
+        iss: 'https://auth.example.com/api/auth',
+        actor_type: 'host',
+        sub: 'host-delegated',
+        act: {
+          iss: 'https://auth.example.com/api/auth',
+          actor_type: 'agent',
+          sub: 'agent-subject',
+        },
+      },
+    })
+    vi.mocked(delegated.deps.agentTokens.findGrant).mockResolvedValue({
+      ...delegated.authorityGrant,
+      mode: 'delegated',
+    })
+    vi.mocked(delegated.deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue({
+      identity: {
+        id: 'identity-1',
+        issuer: 'https://auth.example.com/api/auth',
+        subject: 'agent-subject',
+        name: 'Agent',
+        ownerUserId: 'user-1',
+        ownerOrganizationId: null,
+        status: 'active',
+        retiredAt: null,
+        createdAt: delegated.token.createdAt,
+        updatedAt: delegated.token.createdAt,
+      },
+      bindings: [
+        {
+          id: 'binding-1',
+          agentIdentityId: 'identity-1',
+          protocolAgentId: 'protocol-agent-1',
+          hostId: 'host-delegated',
+          status: 'active',
+          boundAt: delegated.token.createdAt,
+          revokedAt: null,
+          createdAt: delegated.token.createdAt,
+          updatedAt: delegated.token.createdAt,
+        },
+      ],
     })
     await proxyAgentEgress(
       delegated.deps,
@@ -413,16 +487,12 @@ describe('Agent credential egress', () => {
     expect(delegated.deps.agentAudit.append).toHaveBeenCalledWith(expect.objectContaining({ hostId: 'host-delegated' }))
 
     const internal = await egressFixture()
-    vi.mocked(internal.deps.agentTokens.findAccessTokenByHash).mockResolvedValue({
-      ...internal.token,
-      actor: {},
-    })
     vi.mocked(internal.deps.secrets.open).mockResolvedValue('{')
     await expect(
       proxyAgentEgress(internal.deps, await internal.request('GET', '/v1/repos', 'internal'), 'account-1', '/v1/repos'),
     ).rejects.toBeInstanceOf(SyntaxError)
     expect(internal.deps.agentAudit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ hostId: null, reasonCode: 'internal_error' }),
+      expect.objectContaining({ hostId: 'host-1', reasonCode: 'internal_error' }),
     )
   })
 })
@@ -464,9 +534,9 @@ async function egressFixture() {
     bindingId: 'binding-1',
     protocolAgentId: 'protocol-agent-1',
     grantId: 'authority-1',
-    subjectIssuer: 'https://auth.example.com',
+    subjectIssuer: 'https://auth.example.com/api/auth',
     subject: 'agent-subject',
-    actor: { actor_type: 'host', sub: 'host-1' },
+    actor: { iss: 'https://auth.example.com/api/auth', actor_type: 'host', sub: 'host-1' },
     audience: 'https://api.example.com',
     scopes: ['repo:read'],
     confirmationJkt: thumbprint,
@@ -474,6 +544,14 @@ async function egressFixture() {
     revokedAt: null,
     createdAt: now,
   } satisfies AgentAccessTokenRecord
+  const accessToken = compactJwt(accessTokenClaims(token))
+  egressVerifiers.set(deps, {
+    issuer: token.subjectIssuer,
+    verify: vi.fn(async () => {
+      const current = await deps.agentTokens.findAccessTokenByHash('ignored-by-test')
+      return current ? accessTokenClaims(current) : null
+    }),
+  })
   vi.mocked(deps.agentTokens.findAccessTokenByHash).mockResolvedValue(token)
   const authorityGrant = {
     id: 'authority-1',
@@ -496,7 +574,7 @@ async function egressFixture() {
   vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue({
     identity: {
       id: 'identity-1',
-      issuer: 'https://auth.example.com',
+      issuer: 'https://auth.example.com/api/auth',
       subject: 'agent-subject',
       name: 'Agent',
       ownerUserId: 'user-1',
@@ -591,7 +669,6 @@ async function egressFixture() {
     token,
     authorityGrant,
     async request(method: string, path: string, jti: string, headers: Record<string, string> = {}) {
-      const accessToken = 'faat_access'
       const url = `https://auth.example.com/api/agent/egress/account-1${path}`
       const proof = await new SignJWT({
         jti,
@@ -608,6 +685,30 @@ async function egressFixture() {
       })
     },
   }
+}
+
+function compactJwt(payload: Record<string, unknown>) {
+  return `${encodeJwtPart({ typ: 'at+jwt', alg: 'RS256', kid: 'test' })}.${encodeJwtPart(payload)}.signature`
+}
+
+function accessTokenClaims(token: AgentAccessTokenRecord) {
+  return {
+    iss: token.subjectIssuer,
+    sub: token.subject,
+    aud: token.audience,
+    jti: token.id,
+    client_id: token.protocolAgentId,
+    scope: token.scopes.join(' '),
+    cnf: { jkt: token.confirmationJkt },
+    iat: Math.floor(token.createdAt.getTime() / 1000),
+    exp: Math.floor(token.expiresAt.getTime() / 1000),
+    act: token.actor,
+    agent_identity: { iss: token.subjectIssuer, sub: 'agent-subject' },
+  }
+}
+
+function encodeJwtPart(value: Record<string, unknown>) {
+  return btoa(JSON.stringify(value)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
 }
 
 async function sha256(value: string) {

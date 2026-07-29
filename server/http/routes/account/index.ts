@@ -73,11 +73,7 @@ import { toBoundaryError } from '../auth-api'
 import { readJson, readQuery } from '../validation'
 import { accountSecurityRoutes } from './security'
 
-export function accountRoutes(
-  authApi: ManagementAuthApi,
-  securityPolicy?: SecurityPolicy,
-  agentIdentityIssuer?: string,
-) {
+export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: SecurityPolicy, canonicalOrigin?: string) {
   const app = new Hono()
 
   app.use('*', requireAuth())
@@ -417,7 +413,7 @@ export function accountRoutes(
     const result = await approveAgentEnrollment(
       getDeps(c),
       c.req.param('intentId'),
-      agentIdentityIssuer ?? new URL(c.req.url).origin,
+      `${(canonicalOrigin ?? new URL(c.req.url).origin).replace(/\/$/, '')}/api/auth`,
       getAuthContext(c).user!.id,
     )
     return c.json(result, 201)
@@ -515,7 +511,7 @@ export function accountRoutes(
         getDeps(c),
         await readJson(c, createExternalOAuthIntentRequestSchema),
         getAuthContext(c).user!.id,
-        agentIdentityIssuer ?? new URL(c.req.url).origin,
+        canonicalOrigin ?? new URL(c.req.url).origin,
       ),
       201,
     )

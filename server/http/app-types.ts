@@ -13,7 +13,7 @@ export type AgentConfiguration = {
 }
 
 export interface AppConfig {
+  baseURL?: string
   trustedOrigins?: string[]
   securityPolicy?: SecurityPolicy
-  agentIdentityIssuer?: string
 }

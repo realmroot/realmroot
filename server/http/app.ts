@@ -1,8 +1,9 @@
 import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } from '@better-auth/oauth-provider'
 import type { Auth } from '@server/auth'
-import { forbidden, notFound } from '@server/domain/errors'
+import { forbidden, notFound, oauthError } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
 import { getAgentIdentityByProtocolAgent } from '@server/usecases/agent-identities'
+import { issueAgentAccessToken } from '@server/usecases/agent-tokens'
 import type { Deps } from '@server/usecases/deps'
 import {
   exchangeToken,
@@ -12,7 +13,12 @@ import {
   refreshTokenGrantType,
   tokenExchangeGrantType,
 } from '@server/usecases/token-exchange'
-import { requestAgentCapabilitiesResponseSchema, requestAgentCapabilitiesSchema } from '@shared/api/agents'
+import {
+  agentAuthorityGrantType,
+  agentTokenFormSchema,
+  requestAgentCapabilitiesResponseSchema,
+  requestAgentCapabilitiesSchema,
+} from '@shared/api/agents'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import {
@@ -39,7 +45,7 @@ import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
 import { unifiedOpenApi, unifiedOpenApiLinkHeader, unifiedOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
-import { createAgentTokenRoutes } from './routes/agent-tokens'
+import { createAgentProtocolRoutes } from './routes/agent-protocol'
 import { createAccountAssetRoutes, createAssetRoutes, createManagementAssetRoutes } from './routes/assets'
 import type { ManagementAuthApi } from './routes/auth-api'
 import { createConfigzRoutes } from './routes/configz'
@@ -58,6 +64,14 @@ type AuthHandler = Pick<Auth, 'handler'> & {
       headers: Headers
       asResponse: false
     }) => Promise<import('@server/usecases/agent-tokens').ProtocolAgentSession | null>
+    signJWT?: (context: {
+      body: { payload: Record<string, unknown>; overrideOptions?: { jwt?: { type?: string } } }
+      asResponse?: false
+    }) => Promise<{ token: string }>
+    verifyJWT?: (context: {
+      body: { token: string; issuer?: string; audience?: string | string[] }
+      asResponse?: false
+    }) => Promise<{ payload: Record<string, unknown> | null }>
   } & SessionReader['api']
 }
 
@@ -91,33 +105,24 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
 
   mountApiRoutes(app, auth, config)
 
-  app.get('/api/auth/.well-known/openid-configuration', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))
-  app.get('/.well-known/openid-configuration/api/auth', (c) => oauthProviderOpenIdConfigMetadata(auth)(c.req.raw))
+  app.get('/api/auth/.well-known/openid-configuration', async (c) =>
+    extendAgentOAuthMetadata(await oauthProviderOpenIdConfigMetadata(auth)(c.req.raw)),
+  )
+  app.get('/.well-known/openid-configuration/api/auth', async (c) =>
+    extendAgentOAuthMetadata(await oauthProviderOpenIdConfigMetadata(auth)(c.req.raw)),
+  )
   app.get('/.well-known/agent-configuration', (c) => {
     if (!auth.api.getAgentConfiguration) throw notFound('Agent configuration is not available.')
     return auth.api.getAgentConfiguration({ request: c.req.raw, asResponse: false }).then((configuration) => {
-      const mounted = mountAgentConfiguration(configuration)
-      const issuer = config.agentIdentityIssuer ?? new URL(c.req.url).origin
+      const issuer = oauthIssuer(config, c.req.url)
+      const mounted = mountAgentConfiguration({ ...configuration, issuer })
       return c.json({
         ...mounted,
         agent_identity_issuer: issuer,
-        agent_token_endpoint: `${issuer}/api/agent/oauth2/token`,
-        agent_jwks_uri: `${issuer}/api/agent/jwks`,
+        agent_identity_endpoint: new URL('/api/agent/identity', issuer).toString(),
+        agent_token_endpoint: `${issuer}/oauth2/token`,
+        agent_jwks_uri: `${issuer}/jwks`,
       })
-    })
-  })
-  app.get('/.well-known/openid-configuration', (c) => {
-    const issuer = config.agentIdentityIssuer ?? new URL(c.req.url).origin
-    return c.json({
-      issuer,
-      jwks_uri: `${issuer}/api/agent/jwks`,
-      token_endpoint: `${issuer}/api/agent/oauth2/token`,
-      subject_types_supported: ['public'],
-      id_token_signing_alg_values_supported: ['ES256'],
-      token_endpoint_auth_methods_supported: ['urn:flareauth:params:oauth:client-auth:agent-session'],
-      grant_types_supported: ['urn:flareauth:params:oauth:grant-type:agent-authority'],
-      scopes_supported: [],
-      claims_supported: ['iss', 'sub', 'aud', 'exp', 'iat', 'jti', 'scope', 'cnf', 'act', 'agent_identity'],
     })
   })
   app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
@@ -125,12 +130,14 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
     await requireHostedAuthMethodEnabled(c, configzOptions(c, config.securityPolicy))
     await requireLinkedSiweWallet(c, c.get('deps').wallets)
 
-    const tokenExchangeResponse = await maybeHandleTokenExchange(c)
+    const tokenExchangeResponse = await maybeHandleTokenExchange(c, auth, oauthIssuer(config, c.req.url))
     if (tokenExchangeResponse) return tokenExchangeResponse
 
     return auth.handler(c.req.raw)
   })
-  app.get('/.well-known/oauth-authorization-server/api/auth', (c) => oauthProviderAuthServerMetadata(auth)(c.req.raw))
+  app.get('/.well-known/oauth-authorization-server/api/auth', async (c) =>
+    extendAgentOAuthMetadata(await oauthProviderAuthServerMetadata(auth)(c.req.raw)),
+  )
   app.route('/api', createUnifiedApiRoutes(auth, config))
 
   return app
@@ -147,6 +154,8 @@ export type AppType = ReturnType<typeof createRpcApp>
 
 function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
   const managementApi = auth.api as unknown as ManagementAuthApi
+  const canonicalOrigin = config.baseURL ?? ''
+  const issuer = canonicalOrigin ? `${canonicalOrigin}/api/auth` : ''
   const api = app
     .get('/api/health', (c) => c.json(healthStatus))
     .route('/api/oauth/consent', oauthConsentRoute)
@@ -158,10 +167,10 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .route('/api/management', createManagementAssetRoutes())
     .route('/api/management', createManagementRoutes({ authApi: managementApi, securityPolicy: config.securityPolicy }))
     .route('/api/onboarding', onboardingRoutes())
-    .route('/api/account', accountRoutes(managementApi, config.securityPolicy, config.agentIdentityIssuer))
+    .route('/api/account', accountRoutes(managementApi, config.securityPolicy, canonicalOrigin || undefined))
     .route('/api/account', createAccountAssetRoutes(config.securityPolicy))
-    .route('/api/external-accounts', createExternalAccountRoutes(config.agentIdentityIssuer))
-    .route('/api/agent', createAgentTokenRoutes(auth.api, config.agentIdentityIssuer))
+    .route('/api/external-accounts', createExternalAccountRoutes(canonicalOrigin || undefined))
+    .route('/api/agent', createAgentProtocolRoutes(auth.api, issuer || undefined))
 
   return api
 }
@@ -170,15 +179,17 @@ function createUnifiedApiRoutes(auth: AuthHandler, config: AppConfig) {
   const app = new Hono()
   const managementApi = auth.api as unknown as ManagementAuthApi
   const authenticateAgent = agentPrincipalAuth(auth)
+  const authenticateAgentOnly = agentPrincipalAuth(auth, { allowSession: false })
 
   app.get('/openapi.json', (c) => c.json(unifiedOpenApi))
-  app.use('/whoami', authenticateAgent)
+  app.use('/whoami', authenticateAgentOnly)
   app.get('/whoami', async (c) => {
     const agent = getAuthContext(c).agent!
     return c.json({
       identity: await getAgentIdentityByProtocolAgent(c.get('deps'), agent.protocolAgentId),
     })
   })
+  app.use('/capability-requests', authenticateAgentOnly)
   app.post('/capability-requests', async (c) => {
     const body = await readJson(c, requestAgentCapabilitiesSchema)
     const headers = new Headers(c.req.raw.headers)
@@ -249,7 +260,7 @@ async function requireOnboardingComplete(deps: Deps) {
   }
 }
 
-async function maybeHandleTokenExchange(c: Context) {
+async function maybeHandleTokenExchange(c: Context, auth: AuthHandler, issuer: string) {
   if (c.req.method !== 'POST') return null
   if (c.req.path !== '/api/auth/oauth2/token' && c.req.path !== '/api/auth/oauth2/introspect') return null
 
@@ -260,6 +271,40 @@ async function maybeHandleTokenExchange(c: Context) {
   if (!form) return null
 
   const grantType = formString(form, 'grant_type')
+  if (c.req.path === '/api/auth/oauth2/introspect' && !(formString(form, 'token') ?? '').startsWith('fatx_')) {
+    return null
+  }
+  if (c.req.path === '/api/auth/oauth2/token' && grantType === agentAuthorityGrantType) {
+    const session = await auth.api.getAgentSession?.({ headers: c.req.raw.headers, asResponse: false })
+    if (!session) {
+      throw oauthError('invalid_client', 'An active AgentAuth session is required.', 401)
+    }
+    if (!auth.api.signJWT) throw new Error('Better Auth JWT signing is unavailable.')
+    const parsed = agentTokenFormSchema.safeParse(Object.fromEntries(form))
+    if (!parsed.success) throw oauthError('invalid_request', 'Agent token request parameters are invalid.')
+    const body = parsed.data
+    const response = await issueAgentAccessToken(
+      c.get('deps'),
+      c.req.raw,
+      {
+        grantId: body.grant_id,
+        scope: body.scope,
+        approvalId: body.approval_id,
+      },
+      session,
+      {
+        issuer,
+        sign: async (payload) =>
+          (
+            await auth.api.signJWT!({
+              body: { payload, overrideOptions: { jwt: { type: 'at+jwt' } } },
+              asResponse: false,
+            })
+          ).token,
+      },
+    )
+    return c.json(response)
+  }
   const tokenExchangeRefresh =
     grantType === refreshTokenGrantType && (formString(form, 'refresh_token') ?? '').startsWith('fatr_')
   if (c.req.path === '/api/auth/oauth2/token' && grantType !== tokenExchangeGrantType && !tokenExchangeRefresh) {
@@ -267,26 +312,29 @@ async function maybeHandleTokenExchange(c: Context) {
   }
 
   const client = readClientAuthentication(c.req.raw.headers, form)
-  if (!client && !tokenExchangeRefresh) {
-    return c.json({ error: 'invalid_client', error_description: 'Client authentication is required.' }, 401, {
-      'WWW-Authenticate': 'Basic realm="FlareAuth token endpoint"',
-    })
+  if (!client) {
+    throw oauthError(
+      'invalid_client',
+      'Client authentication is required.',
+      401,
+      {},
+      { 'WWW-Authenticate': 'Basic realm="FlareAuth token endpoint"' },
+    )
   }
 
   const deps = c.get('deps')
   if (c.req.path === '/api/auth/oauth2/token') {
     if (tokenExchangeRefresh) {
-      const response = await refreshToken(deps, {
-        grantType: grantType ?? '',
-        refreshToken: formString(form, 'refresh_token') ?? '',
-        scope: formString(form, 'scope') ?? undefined,
-      })
+      const response = await refreshToken(
+        deps,
+        {
+          grantType: grantType ?? '',
+          refreshToken: formString(form, 'refresh_token') ?? '',
+          scope: formString(form, 'scope') ?? undefined,
+        },
+        client,
+      )
       return c.json(response)
-    }
-    if (!client) {
-      return c.json({ error: 'invalid_client', error_description: 'Client authentication is required.' }, 401, {
-        'WWW-Authenticate': 'Basic realm="FlareAuth token endpoint"',
-      })
     }
     const response = await exchangeToken(
       deps,
@@ -303,19 +351,45 @@ async function maybeHandleTokenExchange(c: Context) {
     return c.json(response)
   }
 
-  if (!client) {
-    return c.json({ error: 'invalid_client', error_description: 'Client authentication is required.' }, 401, {
-      'WWW-Authenticate': 'Basic realm="FlareAuth token endpoint"',
-    })
-  }
-  const introspection = await introspectToken(deps, formString(form, 'token') ?? '', client)
-  if (!introspection.active) return null
+  const introspection = await introspectToken(deps, formString(form, 'token') ?? '', client, issuer)
   return c.json(introspection)
 }
 
+async function extendAgentOAuthMetadata(response: Response) {
+  const metadata = (await response.json()) as Record<string, unknown>
+  const headers = new Headers(response.headers)
+  headers.delete('content-length')
+  return Response.json(
+    {
+      ...metadata,
+      grant_types_supported: appendMetadataValue(metadata.grant_types_supported, agentAuthorityGrantType),
+      flareauth_agent_access_token_claims_supported: ['act', 'agent_identity', 'cnf'],
+      dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
+    },
+    { status: response.status, headers },
+  )
+}
+
+function appendMetadataValue(value: unknown, addition: string) {
+  return appendMetadataValues(value, [addition])
+}
+
+function appendMetadataValues(value: unknown, additions: string[]) {
+  return [
+    ...new Set([
+      ...(Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []),
+      ...additions,
+    ]),
+  ]
+}
+
+function oauthIssuer(config: AppConfig, requestUrl: string) {
+  return `${(config.baseURL ?? new URL(requestUrl).origin).replace(/\/$/, '')}/api/auth`
+}
+
 function readClientAuthentication(headers: Headers, form: FormData) {
-  const basic = parseBasicClientAuthorization(headers.get('authorization'))
-  if (basic) return basic
+  const authorization = headers.get('authorization')
+  if (authorization) return parseBasicClientAuthorization(authorization)
   const clientId = formString(form, 'client_id')
   const clientSecret = formString(form, 'client_secret')
   return clientId && clientSecret ? { clientId, clientSecret } : null

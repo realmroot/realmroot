@@ -1,16 +1,7 @@
-import { badRequest, forbidden, notFound, unauthorized } from '@server/domain/errors'
+import { badRequest, forbidden, notFound, OAuthError, oauthError } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import type { AgentAuthorityGrant, AgentTokenRequest, CreateAgentAuthorityGrantRequest } from '@shared/api/agents'
-import {
-  calculateJwkThumbprint,
-  decodeProtectedHeader,
-  exportJWK,
-  generateKeyPair,
-  importJWK,
-  type JWK,
-  jwtVerify,
-  SignJWT,
-} from 'jose'
+import { calculateJwkThumbprint, decodeProtectedHeader, importJWK, type JWK, jwtVerify } from 'jose'
 
 const accessTokenLifetimeSeconds = 5 * 60
 const dpopProofLifetimeSeconds = 60
@@ -28,6 +19,16 @@ interface ProtocolAgentSession {
     }>
   }
   host: { id: string; userId: string | null; status: string } | null
+}
+
+export interface AgentTokenSigner {
+  issuer: string
+  sign(payload: Record<string, unknown>): Promise<string>
+}
+
+export interface AgentAccessTokenVerifier {
+  issuer: string
+  verify(token: string, audience: string): Promise<Record<string, unknown> | null>
 }
 
 export async function createAgentAuthorityGrant(
@@ -111,14 +112,20 @@ export async function issueAgentAccessToken(
   request: Request,
   input: AgentTokenRequest,
   session: ProtocolAgentSession,
+  signer: AgentTokenSigner,
 ) {
   const protocolAgentId = session.agent.id
   const identity = await deps.agentIdentities.findActiveByProtocolAgent(protocolAgentId)
-  if (!identity) throw forbidden('Agent protocol registration is not bound to an active Agent identity.')
+  if (!identity) throw oauthError('invalid_grant', 'Agent registration is not bound to an active Agent identity.')
+  if (identity.identity.issuer !== signer.issuer) {
+    throw oauthError('invalid_grant', 'Agent identity does not belong to the active OAuth issuer.')
+  }
   const binding = identity.bindings.find(
     (candidate) => candidate.protocolAgentId === protocolAgentId && candidate.status === 'active',
   )
-  if (!binding || binding.hostId !== session.agent.hostId) throw forbidden('Agent host binding is not active.')
+  if (!binding || binding.hostId !== session.agent.hostId) {
+    throw oauthError('invalid_grant', 'Agent host binding is not active.')
+  }
 
   const grant = await deps.agentTokens.findGrant(input.grantId)
   if (
@@ -127,11 +134,11 @@ export async function issueAgentAccessToken(
     grant.status !== 'active' ||
     (grant.expiresAt && grant.expiresAt.getTime() <= Date.now())
   ) {
-    throw forbidden('No active Agent authority grant permits this token.')
+    throw oauthError('invalid_grant', 'No active Agent authority grant permits this token.')
   }
-  const requestedScopes = input.scope ? input.scope.split(/\s+/).filter(Boolean) : grant.scopes
+  const requestedScopes = [...new Set(input.scope ? input.scope.split(/\s+/).filter(Boolean) : grant.scopes)].sort()
   if (requestedScopes.length === 0 || requestedScopes.some((scope) => !grant.scopes.includes(scope))) {
-    throw forbidden('Requested scope exceeds the Agent authority grant.')
+    throw oauthError('invalid_scope', 'Requested scope exceeds the Agent authority grant.')
   }
   const constraints = grant.constraints as {
     allowedHostIds?: string[]
@@ -140,14 +147,14 @@ export async function issueAgentAccessToken(
     stepUpRequired?: boolean
   } | null
   if (constraints?.allowedHostIds && !constraints.allowedHostIds.includes(binding.hostId)) {
-    throw forbidden('Agent host is outside the authority grant.')
+    throw oauthError('invalid_grant', 'Agent host is outside the authority grant.')
   }
   if (constraints?.notBefore && new Date(constraints.notBefore).getTime() > Date.now()) {
-    throw forbidden('Agent authority grant is not active yet.')
+    throw oauthError('invalid_grant', 'Agent authority grant is not active yet.')
   }
 
   const proof = await verifyDpopProof(request)
-  if (!(await consumeDpopProof(deps, proof))) throw unauthorized('DPoP proof was already used.')
+  if (!(await consumeDpopProof(deps, proof))) throw invalidDpopToken('DPoP proof was already used.')
   if (constraints?.stepUpRequired) {
     if (!input.approvalId) {
       const now = new Date()
@@ -164,38 +171,36 @@ export async function issueAgentAccessToken(
         createdAt: now,
         updatedAt: now,
       })
-      throw forbidden(`Step-up approval is required: ${approval.id}`)
+      throw oauthError('approval_required', 'Controller approval is required.', 400, {
+        approval_id: approval.id,
+        expires_in: Math.max(0, Math.floor((approval.expiresAt.getTime() - now.getTime()) / 1000)),
+        scope: requestedScopes.join(' '),
+      })
     }
-    if (!(await deps.agentTokens.consumeApproval(input.approvalId, grant.id, binding.id, new Date()))) {
-      throw forbidden('Step-up approval is invalid, expired, or already used.')
+    if (
+      !(await deps.agentTokens.consumeApproval(input.approvalId, grant.id, binding.id, requestedScopes, new Date()))
+    ) {
+      throw oauthError('invalid_grant', 'Step-up approval is invalid, expired, or already used.')
     }
   }
   if (constraints?.maxUses !== undefined && !(await deps.agentTokens.consumeGrantUse(grant.id, constraints.maxUses))) {
-    throw forbidden('Agent authority grant usage limit is exhausted.')
+    throw oauthError('invalid_grant', 'Agent authority grant usage limit is exhausted.')
   }
 
   const now = new Date()
-  const expiresAt = new Date(now.getTime() + accessTokenLifetimeSeconds * 1000)
+  const maximumExpiresAt = new Date(now.getTime() + accessTokenLifetimeSeconds * 1000)
+  const expiresAt =
+    grant.expiresAt && grant.expiresAt.getTime() < maximumExpiresAt.getTime() ? grant.expiresAt : maximumExpiresAt
   const tokenId = createId('agat')
   const delegated = grant.mode === 'delegated'
-  const actor = delegated
-    ? {
-        iss: identity.identity.issuer,
-        sub: identity.identity.subject,
-        actor_type: 'agent',
-        host: { sub: binding.hostId, actor_type: 'host' },
-      }
-    : {
-        iss: identity.identity.issuer,
-        sub: binding.hostId,
-        actor_type: 'host',
-      }
-  const signingKey = await getAgentSigningKey(deps)
-  const privateKey = await importJWK(
-    JSON.parse(await deps.secrets.open(signingKey.encryptedPrivateJwk, agentSigningKeyContext(signingKey.id))) as JWK,
-    signingKey.algorithm,
-  )
-  const accessToken = await new SignJWT({
+  const actor = authorityActor(identity.identity.issuer, identity.identity.subject, binding.hostId, delegated)
+  const accessToken = await signer.sign({
+    iss: signer.issuer,
+    sub: delegated ? grant.subjectId : identity.identity.subject,
+    aud: grant.audience,
+    jti: tokenId,
+    iat: Math.floor(now.getTime() / 1000),
+    exp: Math.floor(expiresAt.getTime() / 1000),
     scope: requestedScopes.join(' '),
     client_id: protocolAgentId,
     cnf: { jkt: proof.keyThumbprint },
@@ -205,14 +210,6 @@ export async function issueAgentAccessToken(
       sub: identity.identity.subject,
     },
   })
-    .setProtectedHeader({ typ: 'at+jwt', alg: signingKey.algorithm, kid: signingKey.id })
-    .setIssuer(identity.identity.issuer)
-    .setSubject(delegated ? grant.subjectId : identity.identity.subject)
-    .setAudience(grant.audience)
-    .setJti(tokenId)
-    .setIssuedAt(Math.floor(now.getTime() / 1000))
-    .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
-    .sign(privateKey)
   await deps.agentTokens.storeAccessToken({
     id: tokenId,
     tokenHash: await sha256(accessToken),
@@ -220,7 +217,7 @@ export async function issueAgentAccessToken(
     bindingId: binding.id,
     protocolAgentId,
     grantId: grant.id,
-    subjectIssuer: identity.identity.issuer,
+    subjectIssuer: signer.issuer,
     subject: delegated ? grant.subjectId : identity.identity.subject,
     actor,
     audience: grant.audience,
@@ -235,76 +232,111 @@ export async function issueAgentAccessToken(
     access_token: accessToken,
     issued_token_type: accessTokenType,
     token_type: 'DPoP' as const,
-    expires_in: accessTokenLifetimeSeconds,
+    expires_in: Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
     scope: requestedScopes.join(' '),
   }
 }
 
-export async function getAgentJwks(deps: Deps) {
-  const key = await getAgentSigningKey(deps)
-  return {
-    keys: [
-      {
-        ...key.publicJwk,
-        kid: key.id,
-        alg: key.algorithm,
-        use: 'sig',
-      },
-    ],
-  }
-}
-
-async function getAgentSigningKey(deps: Deps) {
-  const existing = await deps.agentTokens.findSigningKey()
-  if (existing) return existing
-  const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true })
-  const id = createId('agsig')
-  return deps.agentTokens.createSigningKey({
-    id,
-    algorithm: 'ES256',
-    publicJwk: (await exportJWK(publicKey)) as Record<string, unknown>,
-    encryptedPrivateJwk: await deps.secrets.seal(
-      JSON.stringify(await exportJWK(privateKey)),
-      agentSigningKeyContext(id),
-    ),
-    createdAt: new Date(),
-  })
-}
-
-export async function authenticateAgentAccessToken(deps: Deps, request: Request) {
+export async function authenticateAgentAccessToken(deps: Deps, request: Request, verifier: AgentAccessTokenVerifier) {
   const authorization = request.headers.get('authorization')
   const match = authorization?.match(/^DPoP\s+(.+)$/i)
-  if (!match?.[1]) throw unauthorized('A DPoP access token is required.')
+  if (!match?.[1]) throw invalidDpopResource('A DPoP access token is required.')
   const rawToken = match[1]
   const token = await deps.agentTokens.findAccessTokenByHash(await sha256(rawToken))
   if (!token || token.revokedAt || token.expiresAt.getTime() <= Date.now())
-    throw unauthorized('Agent access token is invalid.')
+    throw invalidDpopResource('Agent access token is invalid.')
+  let header: ReturnType<typeof decodeProtectedHeader>
+  try {
+    header = decodeProtectedHeader(rawToken)
+  } catch {
+    throw invalidDpopResource('Agent access token is malformed.')
+  }
+  if (header.typ !== 'at+jwt' || header.alg !== 'RS256' || typeof header.kid !== 'string') {
+    throw invalidDpopResource('Agent access token header is invalid.')
+  }
+  let payload: Record<string, unknown> | null
+  try {
+    payload = await verifier.verify(rawToken, token.audience)
+  } catch {
+    throw invalidDpopResource('Agent access token signature is invalid.')
+  }
+  const confirmation = payload?.cnf
+  if (
+    !payload ||
+    payload.iss !== verifier.issuer ||
+    token.subjectIssuer !== verifier.issuer ||
+    payload.sub !== token.subject ||
+    !audienceContains(payload.aud, token.audience) ||
+    payload.jti !== token.id ||
+    payload.client_id !== token.protocolAgentId ||
+    payload.scope !== token.scopes.join(' ') ||
+    !confirmation ||
+    typeof confirmation !== 'object' ||
+    Array.isArray(confirmation) ||
+    (confirmation as Record<string, unknown>).jkt !== token.confirmationJkt ||
+    payload.iat !== Math.floor(token.createdAt.getTime() / 1000) ||
+    typeof payload.exp !== 'number' ||
+    payload.exp !== Math.floor(token.expiresAt.getTime() / 1000) ||
+    payload.exp <= Math.floor(Date.now() / 1000)
+  ) {
+    throw invalidDpopResource('Agent access token claims are invalid.')
+  }
   const [identity, grant] = await Promise.all([
     deps.agentIdentities.findActiveByProtocolAgent(token.protocolAgentId),
     deps.agentTokens.findGrant(token.grantId),
   ])
+  const activeBinding = identity?.bindings.find(
+    (binding) => binding.id === token.bindingId && binding.status === 'active',
+  )
   if (
-    !identity?.bindings.some((binding) => binding.id === token.bindingId && binding.status === 'active') ||
+    identity?.identity.id !== token.agentIdentityId ||
+    !activeBinding ||
     !grant ||
+    grant.agentIdentityId !== token.agentIdentityId ||
+    grant.audience !== token.audience ||
+    token.scopes.some((scope) => !grant.scopes.includes(scope)) ||
+    grant.subjectId !== token.subject ||
     grant.status !== 'active' ||
     (grant.expiresAt && grant.expiresAt.getTime() <= Date.now())
   ) {
-    throw unauthorized('Agent access token authority was revoked.')
+    throw invalidDpopResource('Agent access token authority was revoked.')
+  }
+  const expectedActor = authorityActor(
+    identity.identity.issuer,
+    identity.identity.subject,
+    activeBinding.hostId,
+    grant.mode === 'delegated',
+  )
+  const stableIdentity = payload.agent_identity
+  if (
+    !stableIdentity ||
+    typeof stableIdentity !== 'object' ||
+    Array.isArray(stableIdentity) ||
+    (stableIdentity as Record<string, unknown>).iss !== identity.identity.issuer ||
+    (stableIdentity as Record<string, unknown>).sub !== identity.identity.subject ||
+    !claimsEqual(token.actor, expectedActor) ||
+    !claimsEqual(payload.act, expectedActor)
+  ) {
+    throw invalidDpopResource('Agent access token identity claims are invalid.')
   }
   const proof = await verifyDpopProof(request, rawToken)
-  if (proof.keyThumbprint !== token.confirmationJkt) throw unauthorized('DPoP key does not match the access token.')
-  if (!(await consumeDpopProof(deps, proof))) throw unauthorized('DPoP proof was already used.')
+  if (proof.keyThumbprint !== token.confirmationJkt) {
+    throw invalidDpopResource('DPoP key does not match the access token.')
+  }
+  if (!(await consumeDpopProof(deps, proof))) throw invalidDpopResource('DPoP proof was already used.')
   return token
 }
 
 async function verifyDpopProof(request: Request, accessToken?: string) {
+  const invalidProof = (description: string) =>
+    accessToken ? invalidDpopResource(description, 'invalid_dpop_proof') : invalidDpopToken(description)
   const compact = request.headers.get('dpop')
-  if (!compact) throw unauthorized('DPoP proof is required.')
+  if (!compact) throw invalidProof('DPoP proof is required.')
   let header: ReturnType<typeof decodeProtectedHeader>
   try {
     header = decodeProtectedHeader(compact)
   } catch {
-    throw unauthorized('DPoP proof is malformed.')
+    throw invalidProof('DPoP proof is malformed.')
   }
   if (
     header.typ !== 'dpop+jwt' ||
@@ -312,7 +344,7 @@ async function verifyDpopProof(request: Request, accessToken?: string) {
     !header.jwk ||
     'd' in header.jwk
   ) {
-    throw unauthorized('DPoP proof header is invalid.')
+    throw invalidProof('DPoP proof header is invalid.')
   }
   try {
     const jwk = header.jwk as JWK
@@ -329,12 +361,12 @@ async function verifyDpopProof(request: Request, accessToken?: string) {
       payload.htm !== request.method ||
       payload.htu !== dpopTarget(request.url)
     ) {
-      throw unauthorized('DPoP proof claims do not match the request.')
+      throw invalidProof('DPoP proof claims do not match the request.')
     }
     if (accessToken) {
-      if (payload.ath !== (await sha256(accessToken))) throw unauthorized('DPoP access token hash is invalid.')
+      if (payload.ath !== (await sha256(accessToken))) throw invalidProof('DPoP access token hash is invalid.')
     } else if (payload.ath !== undefined) {
-      throw unauthorized('Token endpoint DPoP proof must not contain ath.')
+      throw invalidProof('Token endpoint DPoP proof must not contain ath.')
     }
     return {
       jti: payload.jti,
@@ -342,9 +374,64 @@ async function verifyDpopProof(request: Request, accessToken?: string) {
       expiresAt: new Date((payload.iat + dpopProofLifetimeSeconds + 5) * 1000),
     }
   } catch (error) {
-    if (error instanceof Error && error.name === 'ApiError') throw error
-    throw unauthorized('DPoP proof signature is invalid.')
+    if (error instanceof OAuthError) throw error
+    throw invalidProof('DPoP proof signature is invalid.')
   }
+}
+
+function invalidDpopToken(description: string) {
+  return oauthError('invalid_dpop_proof', description)
+}
+
+function invalidDpopResource(description: string, error = 'invalid_token') {
+  return oauthError(
+    error,
+    description,
+    401,
+    {},
+    { 'WWW-Authenticate': `DPoP error="${error}", error_description="${description}"` },
+  )
+}
+
+function audienceContains(value: unknown, audience: string) {
+  return value === audience || (Array.isArray(value) && value.includes(audience))
+}
+
+function authorityActor(issuer: string, agentSubject: string, hostId: string, delegated: boolean) {
+  return {
+    iss: issuer,
+    sub: hostId,
+    actor_type: 'host',
+    ...(delegated
+      ? {
+          act: {
+            iss: issuer,
+            sub: agentSubject,
+            actor_type: 'agent',
+          },
+        }
+      : {}),
+  }
+}
+
+function claimsEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((item, index) => claimsEqual(item, right[index]))
+    )
+  }
+  const leftRecord = left as Record<string, unknown>
+  const rightRecord = right as Record<string, unknown>
+  const keys = Object.keys(leftRecord)
+  return (
+    keys.length === Object.keys(rightRecord).length &&
+    keys.every((key) => Object.hasOwn(rightRecord, key) && claimsEqual(leftRecord[key], rightRecord[key]))
+  )
 }
 
 async function consumeDpopProof(deps: Deps, proof: { jti: string; keyThumbprint: string; expiresAt: Date }) {
@@ -410,10 +497,6 @@ function base64Url(value: Uint8Array) {
 
 function createId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
-}
-
-function agentSigningKeyContext(keyId: string) {
-  return `agent-signing-key:${keyId}:private-jwk`
 }
 
 export type { ProtocolAgentSession }
