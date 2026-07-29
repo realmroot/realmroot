@@ -97,6 +97,7 @@ describe('management API client', () => {
       identifier: 'management-api',
       name: 'Management API',
       audience: 'https://auth.example.com/api/management',
+      resourceUrl: 'https://auth.example.com/api/management',
     })
     await management.updateApiResource('resource-1', { enabled: false })
     await management.deleteApiResource('resource-1')
@@ -233,6 +234,7 @@ describe('management API client', () => {
             identifier: 'management-api',
             name: 'Management API',
             audience: 'https://auth.example.com/api/management',
+            resourceUrl: 'https://auth.example.com/api/management',
           },
         },
       ],

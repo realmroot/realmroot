@@ -227,6 +227,7 @@ describe('Agent identity enrollment over real D1', () => {
       identifier: 'native-api',
       name: 'Native API',
       audience: 'https://api.example.com',
+      resourceUrl: 'https://api.example.com',
       authorizationMode: 'native',
     })
     await createScope(harness.deps, resource.id, { value: 'repo:read' })

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,6 +23,25 @@ func handleCapabilityApprovalResponse(
 	}
 	requestURL, err := url.Parse(input.Request.URI)
 	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, nil
+	}
+	if grantID, ok := targetTokenGrantID(input.Request.Method, input.Request.URI); ok {
+		store, ok := states.(targetTokenStore)
+		if !ok {
+			return plugin.ResponseMiddlewareOutput{}, errors.New("Agent state store cannot persist target API tokens")
+		}
+		encoded, err := json.Marshal(input.Response.Body)
+		if err != nil {
+			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("encode target API token response: %w", err)
+		}
+		var token targetTokenResponse
+		if err := json.Unmarshal(encoded, &token); err != nil {
+			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("decode target API token response: %w", err)
+		}
+		requestOrigin := requestURL.Scheme + "://" + requestURL.Host
+		if err := store.StoreTargetToken(requestOrigin, grantID, token); err != nil {
+			return plugin.ResponseMiddlewareOutput{}, err
+		}
 		return plugin.ResponseMiddlewareOutput{}, nil
 	}
 	if input.Request.Method == http.MethodPost && requestURL.Path == "/api/agent/access-requests" {

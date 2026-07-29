@@ -133,6 +133,7 @@ export function createResource(deps: Deps, input: CreateApiResourceRequest) {
     identifier: input.identifier,
     name: input.name,
     audience: input.audience,
+    resourceUrl: input.resourceUrl,
     authorizationMode: input.authorizationMode ?? 'native',
     description: input.description ?? null,
     enabled: (input.authorizationMode ?? 'native') === 'external' ? false : (input.enabled ?? true),

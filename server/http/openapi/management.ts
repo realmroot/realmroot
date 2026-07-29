@@ -7,7 +7,6 @@ import {
   agentResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
-  createTargetTokenSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { z } from 'zod'
@@ -129,10 +128,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     operationId: 'issueTargetAccessToken',
     summary: 'Issue an API resource DPoP token',
     security: [{ agentAuth: [] }],
-    request: {
-      params: z.object({ grantId: z.string() }),
-      body: jsonBody(createTargetTokenSchema),
-    },
+    request: { params: z.object({ grantId: z.string() }) },
     response: targetTokenSchema,
   },
   ...agentGovernanceRoutes,

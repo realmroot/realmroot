@@ -28,6 +28,7 @@ describe('service.test 5', () => {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
+      resourceUrl: 'https://api.example.com/contacts',
     })
     const scope = await createScope(deps, resource.id, { value: 'contacts:read' })
     const permission = await createPermission(deps, resource.id, { key: 'contacts.read' })
@@ -64,6 +65,7 @@ describe('service.test 5', () => {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
+      resourceUrl: 'https://api.example.com/contacts',
     })
 
     await expect(updateMember(deps, organization.id, 'missing', { title: 'Owner' })).rejects.toMatchObject({

@@ -1,6 +1,6 @@
 ---
 name: flareauth
-description: Operate a FlareAuth deployment with Restish v2, establish and use a stable Agent identity, and guide product OIDC client integration. Use this when an agent needs to register itself, obtain an (issuer, sub) identity through controller approval, inspect Agent governance, configure credential brokerage, inspect or change FlareAuth resources, or configure public SPA, native, confidential web, or device-authorization OIDC clients.
+description: Operate FlareAuth and its registered API Resources with Restish v2, establish a stable Agent identity, request controller-approved access, call native or external target APIs with automatic DPoP, and guide product OIDC client integration. Use when an Agent needs enrollment, governance access, linked target accounts, API Resource discovery, target API invocation, or OIDC client configuration.
 ---
 
 # FlareAuth
@@ -60,16 +60,19 @@ clients: `AUTH_ORIGIN/api/auth`. FlareAuth publishes no second Agent-only
 issuer, token endpoint, or JWKS.
 
 For API access, first run `list-agent-api-resources` and inspect each resource's
-`authorizationMode`. Both modes use `create-agent-access-request`, controller
-approval, the returned `grantId`, and `issue-target-access-token`.
+`authorizationMode`, `resourceUrl`, permissions, connections, and grants. Both
+modes use `create-agent-access-request`, controller approval, the returned
+`grantId`, and `issue-target-access-token`.
 
 - `external`: select an exact `accountConnectionId`; the target platform issues
   the token.
 - `native`: omit `accountConnectionId`; FlareAuth issues the token for the
   controller identity. Do not ask the controller to create a grant first.
 
-Never infer an account connection from a display name. The complete command
-sequence and mode-specific DPoP target are in `references/restish-commands.md`.
+Never infer an account connection from a display name. The Restish plugin owns
+the independent DPoP key, RFC discovery, token cache, and request proofs; never
+construct them manually. The complete command sequence is in
+`references/restish-commands.md`.
 
 If the API was already connected, sync its OpenAPI contract before operating
 it. Restish continues to use the locally held Agent and Host keys.

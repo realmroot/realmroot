@@ -124,15 +124,16 @@ Feature: Agent identity and external API authorization
     Scenario: An administrator registers a native API that trusts FlareAuth
       Given a product uses FlareAuth as its OIDC provider and OAuth authorization server
       When an administrator creates an API resource with native authorization mode
-      Then the administrator configures its audience and requestable permissions
+      Then the administrator configures its audience, protected resource URL, and requestable permissions
       And no external authorization server, OAuth client, or account connection is configured
       And the product API validates FlareAuth access tokens with the published issuer and JWKS
+      And the protected resource advertises its OpenAPI contract with a standard service-desc link
 
     @entrypoint:agent-protocol @journey:native-api-resource-access-request
     Scenario: An Agent requests access to a native API
       Given an enabled native API resource belongs to the Agent's home space
       When the Agent lists available resources
-      Then FlareAuth returns that resource without requiring an account connection
+      Then FlareAuth returns that resource and its protected resource URL without requiring an account connection
       When the Agent requests an exact permission set
       Then FlareAuth creates the same pending access-request resource used for external APIs
       And it does not require a user-created authority grant or grant identifier
@@ -142,14 +143,18 @@ Feature: Agent identity and external API authorization
     @e2e @entrypoint:agent-protocol @journey:native-api-resource-token
     Scenario: An Agent calls a native API directly
       Given a controller approved an exact native API resource request
-      When the Agent requests a token from its access grant with a DPoP proof
+      When Restish requests a token from the Agent's access grant
+      Then the FlareAuth plugin creates and retains a separate DPoP key
+      And the plugin sends the DPoP proof in the standard DPoP header
       Then FlareAuth issues a short-lived audience-bound JWT access token
       And the token uses the Better Auth issuer and signing keys
       And the token identifies the controller as subject and the Agent and host in the RFC 8693 actor chain
       And the token carries only the approved permissions
       And the token is bound to the Agent's DPoP key
-      When the Agent calls the product API
-      Then the Agent sends the request directly to the product API
+      When the Agent connects Restish to the discovered protected resource URL
+      Then Restish discovers the target OpenAPI contract from its standard service-desc link
+      When the Agent invokes a generated target operation
+      Then the plugin sends the access token and a fresh DPoP proof directly to the product API
       And the product API validates the token type, signature, issuer, audience, expiry, permissions, and DPoP binding
 
     @entrypoint:agent-protocol @journey:agent-resource-grant-policy
@@ -188,9 +193,17 @@ Feature: Agent identity and external API authorization
       Given a target resource publishes protected-resource and authorization-server metadata
       When an administrator creates an external API resource from its resource URL
       Then FlareAuth discovers its issuer, OAuth endpoints, supported scopes, token exchange, DPoP, and revocation
+      And the resource URL advertises its OpenAPI contract with a standard service-desc link
       And FlareAuth registers or uses an explicitly configured OAuth client
       And the resource cannot be enabled for Agents when a required capability is absent
       And no identity Connector or HTTP proxy configuration is created
+
+    @entrypoint:restish @journey:external-api-resource-reconfiguration
+    Scenario: Changing an external API resource URL reconfigures its protocol boundary
+      Given an external API resource has active authorization-server metadata and OAuth client configuration
+      When an administrator changes its resource URL
+      Then the same request must provide replacement authorization configuration
+      And FlareAuth rediscovers the target metadata before enabling the changed resource
 
     @entrypoint:restish @journey:external-api-resource-canonical-callback
     Scenario: External OAuth registration uses the deployment's canonical callback
@@ -212,7 +225,7 @@ Feature: Agent identity and external API authorization
     Scenario: An Agent discovers accounts and requests exact resource authority
       Given connected resource accounts exist in the Agent's home space
       When the Agent lists available resources
-      Then FlareAuth returns enabled resources, requestable scopes, redacted accounts, and active grants
+      Then FlareAuth returns enabled resources, protected resource URLs, requestable scopes, redacted accounts, and active grants
       When the Agent requests an account and exact scope set without an applicable grant
       Then FlareAuth creates one pending access request and returns a hosted approval URL
       And it does not require a pre-existing Agent resource grant
@@ -228,7 +241,9 @@ Feature: Agent identity and external API authorization
     @e2e @entrypoint:agent-protocol @journey:agent-direct-resource-access
     Scenario: An Agent calls an external API directly with a target-issued token
       Given a controller approved an exact external API resource request
-      When the Agent requests a token from its access grant with a DPoP proof for the target token endpoint
+      When Restish requests a token from the Agent's access grant
+      Then the FlareAuth plugin creates and retains a separate DPoP key
+      And the plugin sends a standard DPoP header bound to the target token endpoint
       Then FlareAuth submits a signed Agent assertion with the RFC 7523 JWT bearer grant
       And the target platform issues an Agent access token
       And FlareAuth exchanges the connected user's subject token and the target-issued Agent access token with RFC 8693
@@ -236,8 +251,10 @@ Feature: Agent identity and external API authorization
       And the token identifies the target user as subject and the Agent in the RFC 8693 actor claim
       And no FlareAuth-specific metadata, grant type, token type, or claim is required
       And FlareAuth returns no refresh token
-      When the Agent calls the target API
-      Then the Agent sends the request directly to the target platform
+      When the Agent connects Restish to the discovered protected resource URL
+      Then Restish discovers the target OpenAPI contract from its standard service-desc link
+      When the Agent invokes a generated target operation
+      Then the plugin sends the access token and a fresh DPoP proof directly to the target platform
       And no FlareAuth egress or credential injection endpoint exists
 
     @e2e @entrypoint:agent-protocol @journey:agent-resource-revocation

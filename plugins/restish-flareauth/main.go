@@ -8,13 +8,13 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-const pluginVersion = "0.1.0"
+const pluginVersion = "0.2.0"
 
 func main() {
 	manifest := plugin.Manifest{
 		Name:              "flareauth",
 		Version:           pluginVersion,
-		Description:       "Authenticate Restish requests as a stable FlareAuth Agent identity",
+		Description:       "Authenticate FlareAuth and DPoP-bound target API requests as a stable Agent identity",
 		RestishAPIVersion: 2,
 		Hooks:             []string{"auth", "response-middleware"},
 		HookTimeouts: map[string]time.Duration{

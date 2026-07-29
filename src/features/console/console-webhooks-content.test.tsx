@@ -168,6 +168,7 @@ describe('admin console webhooks-content', () => {
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'billing-api' } })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Billing API' } })
     fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'https://billing.example.com' } })
+    fireEvent.change(screen.getByLabelText('Resource URL'), { target: { value: 'https://billing.example.com' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Billing resource' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -187,6 +188,7 @@ describe('admin console webhooks-content', () => {
             identifier: 'billing-api',
             name: 'Billing API',
             audience: 'https://billing.example.com',
+            resourceUrl: 'https://billing.example.com',
             authorizationMode: 'native',
             description: 'Billing resource',
           },

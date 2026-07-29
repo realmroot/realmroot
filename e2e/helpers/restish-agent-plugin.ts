@@ -37,6 +37,14 @@ export interface RestishAgentPlugin {
   whoami(): PluginIdentityResult
   requestCapabilities(capabilities: string[], reason: string): PendingCapabilityRequest
   agentRequest<T>(path: string, init?: RequestInit): Promise<T>
+  issueTargetAccessToken(grantId: string): {
+    accessToken: string
+    tokenType: 'DPoP'
+    permissions: string[]
+    resourceUrl: string
+  }
+  connectTarget(apiName: string, resourceUrl: string): void
+  targetRequest<T>(apiName: string, operation: string): T
   listApplications(): { applications: unknown[] }
   dispose(): void
 }
@@ -85,6 +93,24 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     }
     try {
       return JSON.parse(execFileSync('restish', [apiName, operation, '--rsh-output-format', 'json'], options)) as T
+    } catch (error) {
+      const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
+      throw new Error(
+        `Restish ${operation} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
+        { cause: error },
+      )
+    }
+  }
+
+  const invokeWithArguments = <T>(operation: string, args: string[]): T => {
+    try {
+      return JSON.parse(
+        execFileSync('restish', [apiName, operation, ...args, '--rsh-output-format', 'json'], {
+          cwd: repoRoot,
+          env: environment,
+          encoding: 'utf8',
+        }),
+      ) as T
     } catch (error) {
       const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
       throw new Error(
@@ -162,6 +188,37 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     whoami: () => invoke<PluginIdentityResult>('get-current-agent'),
     requestCapabilities: (capabilities, reason) =>
       invokePending<CapabilityRequestResult>('request-agent-management-access', { capabilities, reason }),
+    issueTargetAccessToken: (grantId) =>
+      invokeWithArguments<{
+        accessToken: string
+        tokenType: 'DPoP'
+        permissions: string[]
+        resourceUrl: string
+      }>('issue-target-access-token', [grantId]),
+    connectTarget: (targetAPIName, resourceUrl) => {
+      execFileSync('restish', ['api', 'connect', targetAPIName, resourceUrl, '--replace', '--yes'], {
+        cwd: repoRoot,
+        env: environment,
+        encoding: 'utf8',
+      })
+    },
+    targetRequest: <T>(targetAPIName: string, operation: string) => {
+      try {
+        return JSON.parse(
+          execFileSync('restish', [targetAPIName, operation, '--rsh-output-format', 'json'], {
+            cwd: repoRoot,
+            env: environment,
+            encoding: 'utf8',
+          }),
+        ) as T
+      } catch (error) {
+        const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
+        throw new Error(
+          `Restish ${targetAPIName} ${operation} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
+          { cause: error },
+        )
+      }
+    },
     agentRequest: async <T>(path: string, init: RequestInit = {}) => {
       const state = readAgentState(stateDir)
       const raw = Buffer.from(state.agent_private_key, 'base64url')

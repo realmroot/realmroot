@@ -33,11 +33,13 @@ describe('service.test 4', () => {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
+      resourceUrl: 'https://api.example.com/contacts',
     })
     const billingResource = await createResource(deps, {
       identifier: 'billing-api',
       name: 'Billing API',
       audience: 'https://api.example.com/billing',
+      resourceUrl: 'https://api.example.com/billing',
     })
     const contactsScope = await createScope(deps, contactsResource.id, { value: 'contacts:read' })
     const billingPermission = await createPermission(deps, billingResource.id, { key: 'billing.read' })
@@ -105,11 +107,13 @@ describe('service.test 4', () => {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
+      resourceUrl: 'https://api.example.com/contacts',
     })
     const otherResource = await createResource(deps, {
       identifier: 'billing-api',
       name: 'Billing API',
       audience: 'https://api.example.com/billing',
+      resourceUrl: 'https://api.example.com/billing',
     })
     const scope = await createScope(deps, resource.id, { value: 'contacts:read' })
     const permission = await createPermission(deps, resource.id, { key: 'contacts.read' })

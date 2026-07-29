@@ -79,7 +79,12 @@ describe('management resource routes', () => {
       app,
       '/api-resources',
       'POST',
-      { identifier: 'contacts', name: 'Contacts', audience: 'https://api.example.com' },
+      {
+        identifier: 'contacts',
+        name: 'Contacts',
+        audience: 'https://api.example.com',
+        resourceUrl: 'https://api.example.com',
+      },
       201,
     )
     await expectJson(app, '/api-resources/resource-1', 'GET', undefined, 200)
@@ -127,9 +132,9 @@ describe('management resource routes', () => {
         identifier: 'projects',
         name: 'Projects',
         audience: 'https://projects.example.com/api',
+        resourceUrl: 'https://projects.example.com/api',
         authorizationMode: 'external',
         authorization: {
-          resourceUrl: 'https://projects.example.com/api',
           registrationMode: 'dynamic',
         },
       }),
@@ -140,7 +145,6 @@ describe('management resource routes', () => {
       expect.anything(),
       'resource-1',
       {
-        resourceUrl: 'https://projects.example.com/api',
         registrationMode: 'dynamic',
       },
       'https://auth.example.com',
@@ -217,6 +221,7 @@ async function loadAuthorizationRoutes() {
     identifier: 'contacts',
     name: 'Contacts',
     audience: 'https://api.example.com',
+    resourceUrl: 'https://api.example.com',
     description: null,
     authorizationMode: 'native' as const,
     enabled: true,

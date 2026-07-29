@@ -45,6 +45,7 @@ describe('OAuth token claim building over real D1', () => {
         identifier: 'contacts-api',
         name: 'Contacts API',
         audience,
+        resourceUrl: audience,
       })
     ).json()) as { id: string }
     const scope = (await (

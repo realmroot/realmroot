@@ -34,6 +34,7 @@ describe('service.test 2', () => {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
+      resourceUrl: 'https://api.example.com/contacts',
     })
     const accessOnlyScope = await createScope(deps, resource.id, {
       value: 'contacts:read',

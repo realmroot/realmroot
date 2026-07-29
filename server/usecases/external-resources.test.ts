@@ -59,7 +59,7 @@ describe('external API resource authorization', () => {
       configureExternalResourceAuthorization(
         deps,
         'resource-1',
-        { resourceUrl: 'https://projects.example.com/api', registrationMode: 'dynamic' },
+        { registrationMode: 'dynamic' },
         'https://auth.example.com',
       ),
     ).resolves.toMatchObject({
@@ -275,8 +275,10 @@ describe('external API resource authorization', () => {
       accessToken: 'target-dpop-access',
       tokenType: 'DPoP',
       expiresIn: 300,
+      expiresAt: expect.any(String),
       permissions: ['projects:read'],
       apiResource: 'https://projects.example.com/api',
+      resourceUrl: 'https://projects.example.com/api',
     })
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -345,6 +347,7 @@ function resource(): ApiResourceResponse {
     identifier: 'projects',
     name: 'Projects API',
     audience: 'https://projects.example.com/api',
+    resourceUrl: 'https://projects.example.com/api',
     authorizationMode: 'external',
     description: null,
     enabled: true,

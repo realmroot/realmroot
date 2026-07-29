@@ -85,7 +85,7 @@ describe('OAuth token exchange over real D1', () => {
     const createResource = await harness.request('/api/management/api-resources', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ identifier: audience, name: 'Example API', audience }),
+      body: JSON.stringify({ identifier: audience, name: 'Example API', audience, resourceUrl: audience }),
     })
     expect(createResource.status, await createResource.clone().text()).toBe(201)
     const resource = (await createResource.json()) as { id: string }

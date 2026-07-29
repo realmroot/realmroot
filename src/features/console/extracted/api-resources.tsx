@@ -122,8 +122,8 @@ export function ApiResourcesPage() {
             ['identifier', 'Identifier'],
             ['name', 'Name'],
             ['audience', 'Audience'],
+            ['resourceUrl', 'Resource URL'],
             ['description', 'Description'],
-            ...(createMode === 'external' ? [['resourceUrl', 'Protected resource URL'] as [string, string]] : []),
           ]}
           onClose={() => setDialogOpen(false)}
           onSubmit={(form) => {
@@ -134,10 +134,7 @@ export function ApiResourcesPage() {
             createMutation.mutate(
               createApiResourceSchema.parse({
                 ...resource,
-                authorization:
-                  createMode === 'external'
-                    ? { resourceUrl: form.resourceUrl, registrationMode: 'dynamic' }
-                    : undefined,
+                authorization: createMode === 'external' ? { registrationMode: 'dynamic' } : undefined,
               }),
             )
           }}
@@ -342,6 +339,7 @@ export function ApiResourceDetailPage({
                         identifier: resource.identifier,
                         name: resource.name,
                         audience: resource.audience,
+                        resourceUrl: resource.resourceUrl,
                         description: resource.description ?? '',
                         tokenClaimsNamespace: resource.tokenClaimsNamespace ?? '',
                       }}
@@ -350,17 +348,24 @@ export function ApiResourceDetailPage({
                         ['identifier', 'Identifier'],
                         ['name', 'Name'],
                         ['audience', 'Audience'],
+                        ...(resource.authorizationMode === 'native'
+                          ? ([['resourceUrl', 'Resource URL']] as [string, string][])
+                          : []),
                         ['description', 'Description'],
                         ['tokenClaimsNamespace', 'Token claims namespace'],
                       ]}
-                      onSubmit={(form) =>
-                        updateMutation.mutate(
-                          parseForm(updateApiResourceRequestSchema, {
-                            ...form,
-                            tokenClaimsNamespace: nullableString(form.tokenClaimsNamespace ?? ''),
-                          }),
-                        )
-                      }
+                      onSubmit={(form) => {
+                        const input = parseForm(updateApiResourceRequestSchema, {
+                          ...form,
+                          tokenClaimsNamespace: nullableString(form.tokenClaimsNamespace ?? ''),
+                        })
+                        if (resource.authorizationMode === 'native') {
+                          updateMutation.mutate(input)
+                          return
+                        }
+                        const { resourceUrl: _resourceUrl, ...externalInput } = input
+                        updateMutation.mutate(externalInput)
+                      }}
                       pending={updateMutation.isPending}
                     />
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -389,7 +394,11 @@ export function ApiResourceDetailPage({
                   </CardContent>
                 </Card>
                 {resource.authorizationMode === 'external' ? (
-                  <ExternalAuthorizationCard authorization={resource.authorization} resourceId={resource.id} />
+                  <ExternalAuthorizationCard
+                    authorization={resource.authorization}
+                    resourceId={resource.id}
+                    resourceUrl={resource.resourceUrl}
+                  />
                 ) : null}
               </>
             ) : null}
@@ -524,9 +533,11 @@ export function ApiResourceDetailPage({
 function ExternalAuthorizationCard({
   authorization,
   resourceId,
+  resourceUrl,
 }: {
   authorization: ApiResource['authorization']
   resourceId: string
+  resourceUrl: string
 }) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState({
@@ -538,15 +549,17 @@ function ExternalAuthorizationCard({
   useEffect(() => {
     if (!authorization) return
     setForm({
-      resourceUrl: authorization.resourceUrl,
+      resourceUrl,
       registrationMode: authorization.registrationMode,
       clientId: authorization.clientId,
       clientSecret: '',
     })
-  }, [authorization])
+  }, [authorization, resourceUrl])
   const mutation = useMutation({
-    mutationFn: (input: z.infer<typeof configureExternalResourceAuthorizationRequestSchema>) =>
-      updateApiResource(resourceId, { authorization: input }),
+    mutationFn: (input: {
+      resourceUrl: string
+      authorization: z.infer<typeof configureExternalResourceAuthorizationRequestSchema>
+    }) => updateApiResource(resourceId, input),
     onSuccess: (updated) => queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated),
   })
   return (
@@ -562,14 +575,14 @@ function ExternalAuthorizationCard({
           className="grid gap-4"
           onSubmit={(event) => {
             event.preventDefault()
-            mutation.mutate(
-              configureExternalResourceAuthorizationRequestSchema.parse({
-                resourceUrl: form.resourceUrl,
+            mutation.mutate({
+              resourceUrl: createApiResourceRequestSchema.shape.resourceUrl.parse(form.resourceUrl),
+              authorization: configureExternalResourceAuthorizationRequestSchema.parse({
                 registrationMode: form.registrationMode,
                 clientId: form.registrationMode === 'manual' ? form.clientId : undefined,
                 clientSecret: form.registrationMode === 'manual' ? form.clientSecret : undefined,
               }),
-            )
+            })
           }}
         >
           <Field label={tt('Protected resource URL')}>

@@ -177,8 +177,10 @@ describe('Agent protocol routes', () => {
       accessToken: 'flareauth-access-token',
       tokenType: 'DPoP',
       expiresIn: 300,
+      expiresAt: '2026-01-01T00:05:00.000Z',
       permissions: ['projects:read'],
       apiResource: 'https://projects.example.com/api',
+      resourceUrl: 'https://projects.example.com/api',
     })
     const app = createRouteApp(
       {
@@ -190,8 +192,7 @@ describe('Agent protocol routes', () => {
 
     const response = await app.request('https://preview.example.net/api/agent/access-grants/grant-1/tokens', {
       method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ dpopProof: 'dpop-proof' }),
+      headers: { ...jsonHeaders(), DPoP: 'dpop-proof' },
     })
 
     expect(response.status).toBe(200)

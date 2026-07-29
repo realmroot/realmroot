@@ -31,12 +31,14 @@ describe('service.test 6', () => {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
+      resourceUrl: 'https://api.example.com/contacts',
       tokenClaimsNamespace: 'https://claims.example.com/contacts',
     })
     const billingResource = await createResource(deps, {
       identifier: 'billing-api',
       name: 'Billing API',
       audience: 'https://api.example.com/billing',
+      resourceUrl: 'https://api.example.com/billing',
     })
     const contactsPermission = await createPermission(deps, contactsResource.id, {
       key: 'contacts.read',

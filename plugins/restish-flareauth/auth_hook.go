@@ -42,6 +42,36 @@ type identityResponse struct {
 	Agent stableIdentity `json:"agent"`
 }
 
+type agentAPIResourcesResponse struct {
+	Items []struct {
+		ID                string `json:"id"`
+		ResourceURL       string `json:"resourceUrl"`
+		AuthorizationMode string `json:"authorizationMode"`
+		AccessGrants      []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"accessGrants"`
+	} `json:"items"`
+}
+
+type targetTokenResponse struct {
+	AccessToken string    `json:"accessToken"`
+	TokenType   string    `json:"tokenType"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+	ResourceURL string    `json:"resourceUrl"`
+}
+
+type protectedResourceMetadata struct {
+	Resource             string   `json:"resource"`
+	AuthorizationServers []string `json:"authorization_servers"`
+}
+
+type authorizationServerMetadata struct {
+	Issuer         string   `json:"issuer"`
+	TokenEndpoint  string   `json:"token_endpoint"`
+	DPoPAlgorithms []string `json:"dpop_signing_alg_values_supported"`
+}
+
 type agentConfiguration struct {
 	Version                 string            `json:"version"`
 	Issuer                  string            `json:"issuer"`
@@ -69,7 +99,11 @@ func authenticateRequest(
 	prompt approvalPrompt,
 ) (plugin.AuthHookOutput, error) {
 	if input.Params["provider"] != authProvider {
-		return plugin.AuthHookOutput{}, nil
+		credentials, ok := states.(resourceCredentialStore)
+		if !ok {
+			return plugin.AuthHookOutput{}, nil
+		}
+		return authenticateTargetRequest(input, credentials, client)
 	}
 	origin, err := flareAuthOrigin(input.Request.URI)
 	if err != nil {
@@ -88,11 +122,235 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
+	headers := map[string]any{"Authorization": "Bearer " + token}
+	if grantID, ok := targetTokenGrantID(input.Request.Method, input.Request.URI); ok {
+		credential, updatedState, err := ensureDPoPCredential(
+			context.Background(),
+			states,
+			client,
+			target,
+			state,
+			configuration,
+			grantID,
+		)
+		if err != nil {
+			return plugin.AuthHookOutput{}, err
+		}
+		state = updatedState
+		proofTarget, err := dpopTokenTarget(context.Background(), client, state.Origin, grantID, credential)
+		if err != nil {
+			return plugin.AuthHookOutput{}, err
+		}
+		proof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, proofTarget, "", time.Now())
+		if err != nil {
+			return plugin.AuthHookOutput{}, err
+		}
+		headers["DPoP"] = proof
+	}
 	return plugin.AuthHookOutput{
 		Request: &plugin.HookRequestHeaderUpdate{
-			Headers: map[string]any{"Authorization": "Bearer " + token},
+			Headers: headers,
 		},
 	}, nil
+}
+
+func authenticateTargetRequest(
+	input plugin.AuthHookInput,
+	states resourceCredentialStore,
+	client httpDoer,
+) (plugin.AuthHookOutput, error) {
+	reference, err := states.FindByResourceURL(input.Request.URI)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return plugin.AuthHookOutput{}, nil
+		}
+		return plugin.AuthHookOutput{}, err
+	}
+	credential := reference.credential
+	if credential.AccessToken == "" || credential.ExpiresAt == nil || !time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
+		credential, err = refreshTargetToken(context.Background(), client, reference.state, credential)
+		if err != nil {
+			return plugin.AuthHookOutput{}, err
+		}
+		if err := states.UpdateCredential(reference, credential); err != nil {
+			return plugin.AuthHookOutput{}, err
+		}
+	}
+	proof, err := signDPoPProof(
+		credential.PrivateKey,
+		input.Request.Method,
+		input.Request.URI,
+		credential.AccessToken,
+		time.Now(),
+	)
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
+	return plugin.AuthHookOutput{Request: &plugin.HookRequestHeaderUpdate{Headers: map[string]any{
+		"Authorization": "DPoP " + credential.AccessToken,
+		"DPoP":          proof,
+	}}}, nil
+}
+
+func ensureDPoPCredential(
+	ctx context.Context,
+	states stateStore,
+	client httpDoer,
+	target agentTarget,
+	state agentState,
+	configuration agentConfiguration,
+	grantID string,
+) (dpopCredential, agentState, error) {
+	if credential, ok := state.DPoPCredentials[grantID]; ok {
+		return credential, state, nil
+	}
+	var resources agentAPIResourcesResponse
+	if err := requestJSON(
+		ctx,
+		client,
+		http.MethodGet,
+		state.Origin+"/api/agent/api-resources?limit=100&offset=0",
+		mustAgentJWT(state, configuration.Issuer),
+		nil,
+		&resources,
+	); err != nil {
+		return dpopCredential{}, state, fmt.Errorf("discover Agent API resource grant: %w", err)
+	}
+	for _, resource := range resources.Items {
+		for _, grant := range resource.AccessGrants {
+			if grant.ID != grantID || grant.Status != "active" {
+				continue
+			}
+			privateKey, err := newDPoPPrivateKey()
+			if err != nil {
+				return dpopCredential{}, state, err
+			}
+			credential := dpopCredential{
+				GrantID:           grantID,
+				ResourceID:        resource.ID,
+				ResourceURL:       resource.ResourceURL,
+				AuthorizationMode: resource.AuthorizationMode,
+				PrivateKey:        privateKey,
+			}
+			if state.DPoPCredentials == nil {
+				state.DPoPCredentials = make(map[string]dpopCredential)
+			}
+			state.DPoPCredentials[grantID] = credential
+			if err := states.Update(target, state); err != nil {
+				return dpopCredential{}, state, err
+			}
+			return credential, state, nil
+		}
+	}
+	return dpopCredential{}, state, errors.New("active Agent access grant was not found in API resource discovery")
+}
+
+func refreshTargetToken(
+	ctx context.Context,
+	client httpDoer,
+	state agentState,
+	credential dpopCredential,
+) (dpopCredential, error) {
+	configuration, err := discoverAgentConfiguration(ctx, client, state.Origin)
+	if err != nil {
+		return dpopCredential{}, err
+	}
+	tokenURL := state.Origin + "/api/agent/access-grants/" + url.PathEscape(credential.GrantID) + "/tokens"
+	proofTarget, err := dpopTokenTarget(ctx, client, state.Origin, credential.GrantID, credential)
+	if err != nil {
+		return dpopCredential{}, err
+	}
+	proof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, proofTarget, "", time.Now())
+	if err != nil {
+		return dpopCredential{}, err
+	}
+	var token targetTokenResponse
+	if err := requestJSONHeaders(
+		ctx,
+		client,
+		http.MethodPost,
+		tokenURL,
+		map[string]string{
+			"Authorization": "Bearer " + mustAgentJWT(state, configuration.Issuer),
+			"DPoP":          proof,
+		},
+		nil,
+		&token,
+	); err != nil {
+		return dpopCredential{}, fmt.Errorf("issue target API access token: %w", err)
+	}
+	if token.TokenType != "DPoP" || token.AccessToken == "" || token.ResourceURL != credential.ResourceURL ||
+		!token.ExpiresAt.After(time.Now()) {
+		return dpopCredential{}, errors.New("FlareAuth returned an invalid target API access token")
+	}
+	credential.AccessToken = token.AccessToken
+	credential.ExpiresAt = &token.ExpiresAt
+	return credential, nil
+}
+
+func dpopTokenTarget(
+	ctx context.Context,
+	client httpDoer,
+	flareAuthOrigin string,
+	grantID string,
+	credential dpopCredential,
+) (string, error) {
+	if credential.AuthorizationMode == "native" {
+		return flareAuthOrigin + "/api/agent/access-grants/" + url.PathEscape(grantID) + "/tokens", nil
+	}
+	resourceURL, err := validatedAbsoluteURL(credential.ResourceURL)
+	if err != nil {
+		return "", fmt.Errorf("external API resource URL is invalid: %w", err)
+	}
+	resourcePath := strings.TrimSuffix(resourceURL.EscapedPath(), "/")
+	metadataURL := resourceURL.Scheme + "://" + resourceURL.Host + "/.well-known/oauth-protected-resource" + resourcePath
+	var protected protectedResourceMetadata
+	if err := requestJSON(ctx, client, http.MethodGet, metadataURL, "", nil, &protected); err != nil {
+		return "", fmt.Errorf("discover external protected resource metadata: %w", err)
+	}
+	if protected.Resource != credential.ResourceURL || len(protected.AuthorizationServers) != 1 {
+		return "", errors.New("external protected resource metadata does not match the registered API resource")
+	}
+	issuer, err := validatedAbsoluteURL(protected.AuthorizationServers[0])
+	if err != nil {
+		return "", fmt.Errorf("external authorization server issuer is invalid: %w", err)
+	}
+	issuerPath := strings.TrimSuffix(issuer.EscapedPath(), "/")
+	authorizationMetadataURL := issuer.Scheme + "://" + issuer.Host + "/.well-known/oauth-authorization-server" + issuerPath
+	var metadata authorizationServerMetadata
+	if err := requestJSON(ctx, client, http.MethodGet, authorizationMetadataURL, "", nil, &metadata); err != nil {
+		return "", fmt.Errorf("discover external authorization server metadata: %w", err)
+	}
+	if metadata.Issuer != strings.TrimSuffix(issuer.String(), "/") ||
+		metadata.TokenEndpoint == "" ||
+		!contains(metadata.DPoPAlgorithms, "ES256") {
+		return "", errors.New("external authorization server metadata is incompatible with ES256 DPoP")
+	}
+	if _, err := validatedAbsoluteURL(metadata.TokenEndpoint); err != nil {
+		return "", fmt.Errorf("external token endpoint is invalid: %w", err)
+	}
+	return metadata.TokenEndpoint, nil
+}
+
+func targetTokenGrantID(method string, requestURI string) (string, bool) {
+	if method != http.MethodPost {
+		return "", false
+	}
+	parsed, err := url.Parse(requestURI)
+	if err != nil {
+		return "", false
+	}
+	const prefix = "/api/agent/access-grants/"
+	const suffix = "/tokens"
+	if !strings.HasPrefix(parsed.EscapedPath(), prefix) || !strings.HasSuffix(parsed.EscapedPath(), suffix) {
+		return "", false
+	}
+	encoded := strings.TrimSuffix(strings.TrimPrefix(parsed.EscapedPath(), prefix), suffix)
+	if encoded == "" || strings.Contains(encoded, "/") {
+		return "", false
+	}
+	grantID, err := url.PathUnescape(encoded)
+	return grantID, err == nil && grantID != ""
 }
 
 func ensureAgentIdentity(
@@ -352,6 +610,22 @@ func requestJSON(
 	body any,
 	output any,
 ) error {
+	headers := make(map[string]string)
+	if bearer != "" {
+		headers["Authorization"] = "Bearer " + bearer
+	}
+	return requestJSONHeaders(ctx, client, method, uri, headers, body, output)
+}
+
+func requestJSONHeaders(
+	ctx context.Context,
+	client httpDoer,
+	method string,
+	uri string,
+	headers map[string]string,
+	body any,
+	output any,
+) error {
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -368,8 +642,8 @@ func requestJSON(
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	if bearer != "" {
-		request.Header.Set("Authorization", "Bearer "+bearer)
+	for name, value := range headers {
+		request.Header.Set(name, value)
 	}
 	response, err := client.Do(request)
 	if err != nil {

@@ -47,8 +47,8 @@ export async function configureExternalResourceAuthorization(
   input: ConfigureExternalResourceAuthorizationRequest,
   callbackOrigin: string,
 ) {
-  await requireExternalResource(deps, resourceId)
-  const resourceUrl = requireNetworkUrl(input.resourceUrl, 'resource URL')
+  const resource = await requireExternalResource(deps, resourceId)
+  const resourceUrl = requireNetworkUrl(resource.resourceUrl, 'resource URL')
   const protectedMetadata = await fetchObject(
     deps,
     protectedResourceMetadataUrl(resourceUrl),
@@ -386,6 +386,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       identifier: resource.identifier,
       name: resource.name,
       audience: resource.audience,
+      resourceUrl: resource.resourceUrl,
       authorizationMode: resource.authorizationMode,
       scopes: scopes.map(({ value, description }) => ({ value, description })),
       connections:
@@ -419,6 +420,7 @@ export async function listAgentApiResources(
     identifier: resource.identifier,
     name: resource.name,
     audience: resource.audience,
+    resourceUrl: resource.resourceUrl,
     authorizationMode: resource.authorizationMode,
     permissions: resource.scopes,
     accountConnections: resource.connections.map((connection) => ({
@@ -840,8 +842,10 @@ export async function issueTargetAccessToken(
     accessToken,
     tokenType: 'DPoP' as const,
     expiresIn,
+    expiresAt: new Date(now.getTime() + expiresIn * 1000).toISOString(),
     permissions: request.scopes,
     apiResource: resource.audience,
+    resourceUrl: resource.resourceUrl,
   }
 }
 
@@ -929,8 +933,10 @@ async function issueNativeAccessToken(
     accessToken,
     tokenType: 'DPoP' as const,
     expiresIn: Math.max(1, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
+    expiresAt: expiresAt.toISOString(),
     permissions: request.scopes,
     apiResource: resource.audience,
+    resourceUrl: resource.resourceUrl,
   }
 }
 

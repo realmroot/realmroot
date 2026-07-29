@@ -189,6 +189,7 @@ export const apiResource = sqliteTable(
     identifier: text('identifier').notNull().unique(),
     name: text('name').notNull(),
     audience: text('audience').notNull(),
+    resourceUrl: text('resource_url').notNull(),
     authorizationMode: text('authorization_mode').notNull().default('native'),
     description: text('description'),
     enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),

@@ -1,12 +1,16 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rest-sh/restish/v2/plugin"
 )
@@ -85,6 +89,67 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	}
 }
 
+func TestAuthHookSignsTargetAPIRequestWithCachedDPoPToken(t *testing.T) {
+	_, agentPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, hostPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dpopPrivateKey, err := newDPoPPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiresAt := time.Now().Add(time.Minute)
+	states := &memoryStateStore{
+		exists: true,
+		state: agentState{
+			Version:         1,
+			Origin:          "https://auth.example.com",
+			AgentID:         "agent-123",
+			HostID:          "host-123",
+			AgentKeyID:      "agent-key",
+			HostKeyID:       "host-key",
+			AgentPrivateKey: encodePrivateKey(agentPrivateKey),
+			HostPrivateKey:  encodePrivateKey(hostPrivateKey),
+			DPoPCredentials: map[string]dpopCredential{
+				"grant-1": {
+					GrantID:           "grant-1",
+					ResourceID:        "resource-1",
+					ResourceURL:       "https://api.example.com/v1",
+					AuthorizationMode: "native",
+					PrivateKey:        dpopPrivateKey,
+					AccessToken:       "access-token",
+					ExpiresAt:         &expiresAt,
+				},
+			},
+		},
+	}
+	input := plugin.AuthHookInput{
+		API:     "projects",
+		Profile: "default",
+		Request: plugin.HookRequest{Method: http.MethodGet, URI: "https://api.example.com/v1/projects?limit=20"},
+	}
+
+	output, err := authenticateRequest(input, states, roundTripFunc(nil), &promptRecorder{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Request.Headers["Authorization"] != "DPoP access-token" {
+		t.Fatalf("authorization = %#v", output.Request.Headers["Authorization"])
+	}
+	proof, _ := output.Request.Headers["DPoP"].(string)
+	if proof == "" {
+		t.Fatal("missing DPoP proof")
+	}
+	claims := decodeJWTPayload(t, proof)
+	if claims["htm"] != http.MethodGet || claims["htu"] != input.Request.URI || claims["ath"] == "" {
+		t.Fatalf("unexpected DPoP claims: %#v", claims)
+	}
+}
+
 func testAgentConfiguration() map[string]any {
 	return map[string]any{
 		"version":                   "1.0-draft",
@@ -146,4 +211,43 @@ func (s *memoryStateStore) Update(_ agentTarget, state agentState) error {
 	s.state = state
 	s.exists = true
 	return nil
+}
+
+func (s *memoryStateStore) FindByResourceURL(resourceURL string) (resourceCredentialReference, error) {
+	for _, credential := range s.state.DPoPCredentials {
+		if resourceURLMatches(credential.ResourceURL, resourceURL) {
+			return resourceCredentialReference{state: s.state, credential: credential}, nil
+		}
+	}
+	return resourceCredentialReference{}, os.ErrNotExist
+}
+
+func (s *memoryStateStore) UpdateCredential(_ resourceCredentialReference, credential dpopCredential) error {
+	s.state.DPoPCredentials[credential.GrantID] = credential
+	return nil
+}
+
+func (s *memoryStateStore) StoreTargetToken(_ string, grantID string, token targetTokenResponse) error {
+	credential := s.state.DPoPCredentials[grantID]
+	credential.AccessToken = token.AccessToken
+	credential.ExpiresAt = &token.ExpiresAt
+	s.state.DPoPCredentials[grantID] = credential
+	return nil
+}
+
+func decodeJWTPayload(t *testing.T, token string) map[string]any {
+	t.Helper()
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("invalid JWT: %q", token)
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		t.Fatal(err)
+	}
+	return claims
 }

@@ -11,7 +11,6 @@ export const externalClientRegistrationModeSchema = z.enum(['dynamic', 'manual']
 
 export const configureExternalResourceAuthorizationRequestSchema = z
   .object({
-    resourceUrl: z.url(),
     registrationMode: externalClientRegistrationModeSchema,
     clientId: nonEmptyString.optional(),
     clientSecret: nonEmptyString.optional(),
@@ -166,6 +165,7 @@ export const agentResourceDiscoverySchema = z.object({
       name: z.string(),
       audience: z.string(),
       authorizationMode: z.enum(['native', 'external']),
+      resourceUrl: z.url(),
       scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       connections: z.array(
         z.object({
@@ -180,18 +180,6 @@ export const agentResourceDiscoverySchema = z.object({
   ),
 })
 
-export const createExternalTokenLeaseRequestSchema = z.object({
-  dpopProof: nonEmptyString,
-})
-
-export const externalTokenLeaseSchema = z.object({
-  accessToken: z.string(),
-  tokenType: z.literal('DPoP'),
-  expiresIn: z.number().int().positive().max(3600),
-  scope: z.string(),
-  resource: z.string(),
-})
-
 export type ConfigureExternalResourceAuthorizationRequest = z.infer<
   typeof configureExternalResourceAuthorizationRequestSchema
 >
@@ -199,7 +187,6 @@ export type ExternalResourceAuthorizationRecord = z.infer<typeof externalResourc
 export type CreateResourceConnectionIntentRequest = z.infer<typeof createResourceConnectionIntentRequestSchema>
 export type CreateAgentAccessRequest = z.infer<typeof createAgentAccessRequestSchema>
 export type DecideAgentAccessRequest = z.infer<typeof decideAgentAccessRequestSchema>
-export type CreateExternalTokenLeaseRequest = z.infer<typeof createExternalTokenLeaseRequestSchema>
 export type ConnectableExternalResourcesResponse = z.infer<typeof connectableExternalResourcesResponseSchema>
 export type ListResourceConnectionsResponse = z.infer<typeof listResourceConnectionsResponseSchema>
 export type ResourceConnectionIntentResponse = z.infer<typeof resourceConnectionIntentResponseSchema>

@@ -331,6 +331,7 @@ export const operationsWithoutRequestBody = new Set([
   'POST /management/users/{param}/unban',
   'POST /management/webhooks/endpoints/{param}/secrets',
   'POST /management/webhooks/requests/{param}/retries',
+  'POST /agent/access-grants/{param}/tokens',
 ])
 
 export interface HonoRoute {

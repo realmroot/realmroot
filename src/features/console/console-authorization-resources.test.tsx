@@ -323,6 +323,7 @@ describe('console authorization resources', () => {
           name: 'Orders API',
           description: 'Management surface',
           audience: 'https://auth.example.com/api/management',
+          resourceUrl: 'https://auth.example.com/api/management',
           tokenClaimsNamespace: null,
         },
       }),

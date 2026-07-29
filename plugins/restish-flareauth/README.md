@@ -18,9 +18,24 @@ The unified contract also generates `list-agent-api-resources`,
 `create-agent-access-request`, `get-agent-access-request`, and
 `issue-target-access-token`. When an exact resource request is
 pending, the response hook opens the hosted controller decision page and waits
-for approval. The issued token belongs to the target platform and is used by
-the Agent against that platform directly; the plugin never routes target API
-traffic through FlareAuth.
+for approval.
+
+For each access grant, the plugin creates a separate P-256 DPoP key. It discovers
+the proof target from RFC 9728 and RFC 8414 for external resources, uses the
+FlareAuth token operation for native resources, adds the standard `DPoP` header,
+and stores the resulting short-lived token with the protected Agent state.
+
+The API resource's `resourceUrl` can then be connected directly:
+
+```bash
+restish api connect projects https://api.example.com --replace --yes
+restish projects list-projects -o json
+```
+
+Restish follows the resource's RFC 8631 `service-desc` link to its OpenAPI
+contract. The global auth hook recognizes the registered resource URL and adds
+`Authorization: DPoP ...` plus a fresh request proof. The token belongs to the
+target platform and target traffic never passes through FlareAuth.
 
 ## Development
 
@@ -52,9 +67,10 @@ The default root is:
 ```
 
 Set `FLAREAUTH_PLUGIN_STATE_DIR` to use an explicit protected directory. State
-files contain Agent and Host private keys, are created with mode `0600`, and
-must not be committed or copied into logs. The plugin rejects state files that
-are symlinks or accessible to group/other users.
+files contain Agent, Host, and grant-specific DPoP private keys plus short-lived
+target tokens. They are created with mode `0600` and must not be committed or
+copied into logs. The plugin rejects state files that are symlinks or accessible
+to group/other users.
 
 The current filesystem backend is intentionally isolated behind `stateStore`.
 A platform keychain or hardware-backed signer can replace it without changing
@@ -62,11 +78,12 @@ the Restish command surface.
 
 ## Architecture
 
-- The `auth` hook discovers endpoints, enrolls the Agent when needed, and signs
-  each request.
+- The `auth` hook discovers endpoints, enrolls the Agent when needed, signs
+  FlareAuth requests, and authenticates matching target API requests.
 - The `response-middleware` hook opens and waits for controller approval when
   a generated capability or external resource access operation returns pending.
-- The OpenAPI credential marker activates it only for FlareAuth operations.
+- The FlareAuth OpenAPI credential marker activates AgentAuth; registered target
+  resource URLs activate DPoP authentication through the global hook.
 - Both hooks have a ten-minute deadline for their foreground approval flow.
 - The plugin never authenticates a CLI request as the approving user.
 - Business and governance commands remain owned by the OpenAPI contract.

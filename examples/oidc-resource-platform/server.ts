@@ -92,6 +92,26 @@ app.get('/.well-known/openid-configuration', (_request, response) => {
 
 app.get('/jwks', (_request, response) => response.json({ keys: [publicJwk] }))
 
+app.get('/api', (_request, response) => {
+  response
+    .set('Link', `<${origin}/openapi-external.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"`)
+    .json({ resource, serviceDescription: `${origin}/openapi-external.json` })
+})
+
+app.get('/flareauth-api', (_request, response) => {
+  response
+    .set('Link', `<${origin}/openapi-native.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"`)
+    .json({ resource: flareauthResource, serviceDescription: `${origin}/openapi-native.json` })
+})
+
+app.get('/openapi-external.json', (_request, response) => {
+  response.type('application/vnd.oai.openapi+json').json(projectsOpenAPI('External Projects API', resource))
+})
+
+app.get('/openapi-native.json', (_request, response) => {
+  response.type('application/vnd.oai.openapi+json').json(projectsOpenAPI('FlareAuth-native Projects API', flareauthResource))
+})
+
 app.post('/register', (request, response) => {
   const redirectUri = firstString(request.body.redirect_uris)
   const jwksUri = requiredString(request.body.jwks_uri, 'jwks_uri')
@@ -204,6 +224,46 @@ app.listen(port, '127.0.0.1', () => {
   console.log(`OIDC resource platform listening at ${origin}`)
   console.log(`Protected API resource: ${resource}`)
 })
+
+function projectsOpenAPI(title: string, serverUrl: string) {
+  return {
+    openapi: '3.1.0',
+    info: { title, version: '1.0.0' },
+    servers: [{ url: serverUrl }],
+    paths: {
+      '/projects': {
+        get: {
+          operationId: 'listProjects',
+          summary: 'List projects available to the delegated Agent',
+          responses: {
+            '200': {
+              description: 'Projects visible through the granted account authority',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['projects', 'authorization'],
+                    properties: {
+                      projects: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          required: ['id', 'name'],
+                          properties: { id: { type: 'string' }, name: { type: 'string' } },
+                        },
+                      },
+                      authorization: { type: 'object', additionalProperties: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }
+}
 
 function authorizationCodeGrant(request: Request, response: Response, client: Client) {
   const code = requiredString(request.body.code, 'code')

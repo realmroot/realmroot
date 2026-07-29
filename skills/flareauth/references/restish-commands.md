@@ -148,67 +148,34 @@ request ID to resume inspection:
 restish API_NAME get-agent-access-request request_123 -o json
 ```
 
-Generate a DPoP key locally and keep it for both token issuance and the target
-request. Create the issuance proof with:
-
-```text
-typ: dpop+jwt
-alg: an algorithm advertised by the target authorization server
-jwk: the public DPoP key
-htm: POST
-htu: the mode-specific issuance target
-jti: a fresh random identifier
-iat: the current time
-```
-
-Use the target token endpoint discovered through RFC 9728 and RFC 8414 for
-`external`. Use
-`AUTH_ORIGIN/api/agent/access-grants/GRANT_ID/tokens` for `native`.
-
-For `external`, start with the protected resource metadata URL advertised by
-the API resource:
-
-```bash
-curl -fsS "https://api.example.com/.well-known/oauth-protected-resource"
-```
-
-Read `authorization_servers[0]` from that RFC 9728 response, then retrieve its
-RFC 8414 metadata. For an issuer without a path:
-
-```bash
-curl -fsS "https://issuer.example.com/.well-known/oauth-authorization-server"
-```
-
-For an issuer with a path, insert the well-known segment before the issuer
-path. For example, issuer `https://issuer.example.com/oauth` is discovered at:
-
-```bash
-curl -fsS \
-  "https://issuer.example.com/.well-known/oauth-authorization-server/oauth"
-```
-
-Use the exact `token_endpoint` and an advertised
-`dpop_signing_alg_values_supported` value. Do not construct either endpoint
-from the API resource name.
-
 Issue the target-platform token:
 
 ```bash
-restish API_NAME issue-target-access-token grant_123 \
-  --rsh-validate -o json <<JSON
-{
-  "dpopProof": "$DPOP_PROOF"
-}
-JSON
+restish API_NAME issue-target-access-token grant_123 -o json
 ```
 
-The result contains `accessToken`, `tokenType`, `expiresIn`, `permissions`, and
-`apiResource`. It is not a FlareAuth session token. The token issuer is the
-target authorization server for `external` and FlareAuth for `native`. Call
-the target API directly with `Authorization: DPoP ACCESS_TOKEN` and a fresh DPoP
-proof for the target method and URL. Include `ath` over the access token and
-reuse the same DPoP key.
+The adapter creates a separate grant-specific DPoP key, performs RFC 9728 and
+RFC 8414 discovery when the mode is `external`, sends the RFC 9449 proof header,
+and stores the returned token. The result includes `resourceUrl`; it is not a
+FlareAuth session token.
+
+Connect the target resource directly. Its resource URL must advertise an
+OpenAPI contract with an RFC 8631 `service-desc` Link header:
+
+```bash
+TARGET_API=projects
+RESOURCE_URL=https://api.example.com
+restish api connect "$TARGET_API" "$RESOURCE_URL" --replace --yes
+restish "$TARGET_API" --help
+restish "$TARGET_API" list-projects -o json
+```
+
+Use the actual generated operation shown by `--help`. The plugin matches the
+request against the registered `resourceUrl`, injects `Authorization: DPoP ...`
+and a fresh proof, and refreshes reusable grants when needed. Do not use curl,
+manually discover token endpoints, expose the access token, or construct DPoP
+JWTs.
 
 If an `external` resource has no account connection, tell the controller to
-connect that target account in Account Center. An empty account connection list
-is expected for `native`.
+connect that target account at `AUTH_ORIGIN/connections`. An empty account
+connection list is expected for `native`.

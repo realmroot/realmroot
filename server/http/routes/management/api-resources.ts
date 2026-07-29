@@ -1,3 +1,4 @@
+import { badRequest } from '@server/domain/errors'
 import {
   createPermission,
   createResource,
@@ -61,6 +62,12 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
   app.patch('/:resourceId', async (c) => {
     const input = await readJson(c, updateApiResourceSchema)
     const { authorization, ...resourceInput } = input
+    if (resourceInput.resourceUrl !== undefined && !authorization) {
+      const current = await getApiResource(getDeps(c), c.req.param('resourceId'))
+      if (current.authorizationMode === 'external' && current.resourceUrl !== resourceInput.resourceUrl) {
+        throw badRequest('Changing an external API resource URL requires authorization reconfiguration.')
+      }
+    }
     if (Object.keys(resourceInput).length > 0) {
       await updateResource(getDeps(c), c.req.param('resourceId'), resourceInput)
     }

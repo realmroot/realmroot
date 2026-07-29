@@ -35,6 +35,7 @@ describe('service.test 1', () => {
       identifier: 'contacts-api',
       name: 'Contacts API',
       audience: 'https://api.example.com/contacts',
+      resourceUrl: 'https://api.example.com/contacts',
       tokenClaimsNamespace: 'https://claims.example.com/contacts',
     })
     const scope = await createScope(deps, resource.id, {

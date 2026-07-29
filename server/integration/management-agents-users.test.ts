@@ -255,6 +255,7 @@ describe('federated credential management over real D1', () => {
         identifier: 'https://api.example.com',
         name: 'Example API',
         audience: 'https://api.example.com',
+        resourceUrl: 'https://api.example.com',
       }),
     })
     const resource = (await createResource.json()) as { id: string }

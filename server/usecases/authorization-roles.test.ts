@@ -20,6 +20,7 @@ describe('service.test 3', () => {
       identifier: 'orders-api',
       name: 'Orders API',
       audience: 'https://api.example.com/orders',
+      resourceUrl: 'https://api.example.com/orders',
     })
     const role = await createRole(deps, {
       key: 'orders-reader',

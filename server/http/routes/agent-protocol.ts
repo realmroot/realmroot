@@ -18,7 +18,6 @@ import {
   agentResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
-  createTargetTokenSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
@@ -103,11 +102,12 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   app.post('/access-grants/:grantId/tokens', async (c) => {
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
-    const input = await readJson(c, createTargetTokenSchema)
+    const dpopProof = c.req.header('DPoP')
+    if (!dpopProof) throw unauthorized('A DPoP proof is required.')
     const result = await issueTargetAccessToken(
       getDeps(c),
       c.req.param('grantId'),
-      input.dpopProof,
+      dpopProof,
       `${new URL(requireOidcIssuer()).origin}/api/agent/access-grants/${encodeURIComponent(c.req.param('grantId'))}/tokens`,
       principal,
       {

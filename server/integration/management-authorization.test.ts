@@ -1,4 +1,5 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
+import { createResource } from '@server/usecases/authorization'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, createUser, type Harness, signIn, signInAdmin } from './harness'
 
@@ -53,6 +54,28 @@ describe('authorization management over real D1', () => {
     expect(response.status).toBe(400)
   })
 
+  it('requires authorization reconfiguration when an external resource URL changes [spec: agent-identity/external-api-resource-reconfiguration]', async () => {
+    const cookie = await signInAdmin(harness)
+    const resource = await createResource(harness.deps, {
+      identifier: 'projects-api',
+      name: 'Projects API',
+      audience: 'https://projects.example.com/api',
+      resourceUrl: 'https://projects.example.com/api',
+      authorizationMode: 'external',
+    })
+
+    const response = await harness.request(`/api/management/api-resources/${resource.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ resourceUrl: 'https://new-projects.example.com/api' }),
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { message: 'Changing an external API resource URL requires authorization reconfiguration.' },
+    })
+  })
+
   it('runs the full api-resource / scope / permission lifecycle through real SQL [spec: management-api/management-restish-api-resource-crud]', async () => {
     const cookie = await signInAdmin(harness)
 
@@ -61,6 +84,7 @@ describe('authorization management over real D1', () => {
         identifier: 'https://api.example.com',
         name: 'Example API',
         audience: 'https://api.example.com',
+        resourceUrl: 'https://api.example.com',
       })
     ).json()) as { id: string }
 
@@ -155,6 +179,7 @@ describe('authorization management over real D1', () => {
         identifier: 'https://roles.example.com',
         name: 'Roles API',
         audience: 'https://roles.example.com',
+        resourceUrl: 'https://roles.example.com',
       })
     ).json()) as { id: string }
     const permission = (await (

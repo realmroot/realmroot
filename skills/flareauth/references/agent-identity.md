@@ -6,14 +6,24 @@ host; they are credentials, not the identity itself.
 
 ## Install The Authentication Adapter
 
-Build and install the trusted repository plugin:
+The adapter requires Restish v2.3 or newer and Go 1.25.3 or newer. Verify both
+before installation:
 
 ```bash
-pnpm run plugin:test
-pnpm run plugin:build
-restish plugin install ./plugins/restish-flareauth/restish-flareauth --yes
+restish --version
+go version
+```
+
+Install the trusted plugin directly from the repository:
+
+```bash
+go install github.com/saltbo/flareauth/plugins/restish-flareauth@latest
+restish plugin install "$(go env GOPATH)/bin/restish-flareauth" --yes
 restish plugin list
 ```
+
+For repository development, `pnpm run plugin:test && pnpm run plugin:build`
+builds the same adapter locally.
 
 Its manifest must list plugin `flareauth` with the `auth` and
 `response-middleware` hooks. It must not expose `login`, `whoami`, or any other
@@ -100,7 +110,7 @@ same Agent operations:
    reason, and an account connection only for `external` mode;
 3. `get-agent-access-request` or `list-agent-access-grants` to read the
    resulting grant;
-4. `issue-target-access-token` with the grant ID and a DPoP proof.
+4. `issue-target-access-token` with the grant ID.
 
 The adapter opens the hosted resource approval page when a new request is
 pending and keeps `create-agent-access-request` waiting. Approval creates the
@@ -115,11 +125,11 @@ For `native` mode, omit the account connection. The product uses FlareAuth as
 its OIDC provider and OAuth authorization server, and its API validates the
 FlareAuth issuer, JWKS, audience, permissions, and DPoP binding.
 
-The Agent generates and retains its own DPoP key. For `external`, discover the
-target token endpoint through RFC 9728 and RFC 8414 and bind the issuance proof
-to that endpoint. For `native`, bind the issuance proof to the
-`issue-target-access-token` request URL. Use the same key for the resource
-request proof and include `ath` for the issued access token.
+The adapter generates and retains a separate P-256 DPoP key for each grant. For
+`external`, it discovers the target token endpoint through RFC 9728 and RFC
+8414. For `native`, it binds the proof to the FlareAuth token operation. It sends
+the proof in the RFC 9449 `DPoP` header, stores the issued token, and reuses the
+same key with a fresh proof and `ath` for each target request.
 
 The returned token is short-lived, audience-restricted, and DPoP-bound. Its
 issuer is selected only by `authorizationMode`: the target platform for
@@ -130,8 +140,11 @@ Authorization: DPoP TARGET_ACCESS_TOKEN
 DPoP: RESOURCE_REQUEST_PROOF
 ```
 
-FlareAuth never proxies target API traffic. The target resource server validates
-the selected issuer, audience, expiry, permissions, and DPoP binding.
+Connect the discovered `resourceUrl` with Restish. The resource advertises its
+OpenAPI contract using an RFC 8631 `service-desc` link; generated operations are
+then authenticated automatically. FlareAuth never proxies target API traffic.
+The target resource server validates the selected issuer, audience, expiry,
+permissions, and DPoP binding.
 
 Treat `/.well-known/agent-configuration` as authoritative only for AgentAuth
 registration and stable identity. For `external`, treat RFC 9728 and RFC 8414

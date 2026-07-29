@@ -110,6 +110,7 @@ export const agentApiResourcesResponseSchema = z.object({
       identifier: z.string(),
       name: z.string(),
       audience: z.string(),
+      resourceUrl: z.url(),
       authorizationMode: z.enum(['native', 'external']),
       permissions: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       accountConnections: z.array(
@@ -255,16 +256,14 @@ export const accessGrantsResponseSchema = z.object({
   pagination: paginationMetadataSchema,
 })
 
-export const createTargetTokenSchema = z.object({
-  dpopProof: nonEmptyString,
-})
-
 export const targetTokenSchema = z.object({
   accessToken: z.string(),
   tokenType: z.literal('DPoP'),
   expiresIn: z.number().int().positive().max(3600),
+  expiresAt: z.iso.datetime(),
   permissions: z.array(z.string()),
   apiResource: z.string(),
+  resourceUrl: z.url(),
 })
 
 export type Agent = z.infer<typeof agentSchema>
