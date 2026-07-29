@@ -38,11 +38,13 @@ Deployment-specific values belong in GitHub Actions secrets and variables, not
 in committed application files:
 
 - secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and optionally
-  `BETTER_AUTH_SECRET`
+  `BETTER_AUTH_SECRET` and `CREDENTIAL_ENCRYPTION_KEY`
 - required variable: `FLAREAUTH_EMAIL_FROM`
 - optional variables: `FLAREAUTH_EMAIL_FROM_NAME`, `FLAREAUTH_WORKER_NAME`,
   `FLAREAUTH_D1_DATABASE`, `FLAREAUTH_R2_BUCKET`, and
   `FLAREAUTH_EMAIL_QUEUE`
+- deployments with a custom domain should set `AGENT_IDENTITY_ISSUER` to that
+  immutable public origin
 
 Resource override variables are primarily for adopting an existing deployment
 whose names do not match the fork-name convention.

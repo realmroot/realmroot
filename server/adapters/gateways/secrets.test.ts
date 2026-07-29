@@ -10,6 +10,8 @@ describe('secret cipher', () => {
     expect(first).toMatch(/^v1\./)
     expect(first).not.toBe(second)
     expect(first).not.toContain('client-secret')
+    expect(cipher.isSealed(first)).toBe(true)
+    expect(cipher.isSealed('legacy-client-secret')).toBe(false)
     await expect(cipher.open(first, 'connector:one:client-secret')).resolves.toBe('client-secret')
     await expect(cipher.open(first, 'connector:two:client-secret')).rejects.toThrow()
   })

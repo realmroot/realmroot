@@ -333,6 +333,7 @@ export interface ConnectorRepository {
 }
 
 export interface SecretCipher {
+  isSealed(value: string): boolean
   seal(plaintext: string, context: string): Promise<string>
   open(envelope: string, context: string): Promise<string>
 }

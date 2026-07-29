@@ -1,5 +1,5 @@
 import type { ConnectorRepository, SecretCipher } from '@server/usecases/ports'
-import { count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { identityProviderConnector } from '../../db/schema'
 
@@ -17,17 +17,20 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
         .offset(page.offset)
       const [total] = await db.select({ value: count() }).from(identityProviderConnector)
 
-      return { items: await Promise.all(rows.map((row) => decryptConnector(row, secrets))), total: total?.value ?? 0 }
+      return {
+        items: await Promise.all(rows.map((row) => decryptConnector(db, row, secrets))),
+        total: total?.value ?? 0,
+      }
     },
 
     async listEnabled() {
       const rows = await db.select().from(identityProviderConnector).where(eq(identityProviderConnector.enabled, true))
-      return Promise.all(rows.map((row) => decryptConnector(row, secrets)))
+      return Promise.all(rows.map((row) => decryptConnector(db, row, secrets)))
     },
 
     async findById(id) {
       const [row] = await db.select().from(identityProviderConnector).where(eq(identityProviderConnector.id, id))
-      return row ? decryptConnector(row, secrets) : null
+      return row ? decryptConnector(db, row, secrets) : null
     },
 
     async findByProviderId(providerId) {
@@ -35,7 +38,7 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
         .select()
         .from(identityProviderConnector)
         .where(eq(identityProviderConnector.providerId, providerId))
-      return row ? decryptConnector(row, secrets) : null
+      return row ? decryptConnector(db, row, secrets) : null
     },
 
     async create(input) {
@@ -48,7 +51,7 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
             : input.clientSecret,
         })
         .returning()
-      return decryptConnector(row, secrets)
+      return decryptConnector(db, row, secrets)
     },
 
     async update(id, input) {
@@ -61,7 +64,7 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
         .set(encryptedInput)
         .where(eq(identityProviderConnector.id, id))
         .returning()
-      return row ? decryptConnector(row, secrets) : null
+      return row ? decryptConnector(db, row, secrets) : null
     },
 
     async delete(id) {
@@ -70,11 +73,25 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
   }
 }
 
-async function decryptConnector(row: ConnectorRow, secrets: SecretCipher): Promise<ConnectorRow> {
+async function decryptConnector(db: Database, row: ConnectorRow, secrets: SecretCipher): Promise<ConnectorRow> {
+  const clientSecret = await readConnectorSecret(db, row, secrets)
   return {
     ...row,
-    clientSecret: row.clientSecret ? await secrets.open(row.clientSecret, connectorSecretContext(row.id)) : null,
+    clientSecret,
   }
+}
+
+async function readConnectorSecret(db: Database, row: ConnectorRow, secrets: SecretCipher) {
+  if (!row.clientSecret) return null
+  const context = connectorSecretContext(row.id)
+  if (secrets.isSealed(row.clientSecret)) return secrets.open(row.clientSecret, context)
+
+  const encrypted = await secrets.seal(row.clientSecret, context)
+  await db
+    .update(identityProviderConnector)
+    .set({ clientSecret: encrypted })
+    .where(and(eq(identityProviderConnector.id, row.id), eq(identityProviderConnector.clientSecret, row.clientSecret)))
+  return row.clientSecret
 }
 
 function connectorSecretContext(connectorId: string) {

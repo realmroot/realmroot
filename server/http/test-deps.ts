@@ -172,6 +172,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
     },
     secrets: {
+      isSealed: vi.fn((value: string) => value.startsWith('sealed:')),
       seal: vi.fn(async (value: string) => `sealed:${value}`),
       open: vi.fn(async (value: string) => value.replace(/^sealed:/, '')),
     },
