@@ -7,6 +7,7 @@ import type {
   AccountWalletAddressLinkInput,
 } from '@shared/api/account'
 import type { AgentEnrollmentIntent, AgentIdentity } from '@shared/api/agents'
+import type { CreateResourceConnectionIntentRequest, DecideAgentAccessRequest } from '@shared/api/external-resources'
 import type {
   SecurityPasskeyRegistrationOptionsInput,
   SecurityTotpDisableInput,
@@ -135,6 +136,53 @@ export function revokeAccountAgent(agentId: string) {
 
 export function revokeAccountAgentCapabilityGrant(grantId: string) {
   return readRpcResponse(apiClient.api.account['agent-capability-grants'][':grantId'].$delete({ param: { grantId } }))
+}
+
+export function listExternalApiResources() {
+  return fetch('/api/account/external-api-resources', { credentials: 'same-origin' }).then((response) =>
+    readJsonResponse<import('@shared/api/external-resources').ConnectableExternalResourcesResponse>(response),
+  )
+}
+
+export function listResourceConnections() {
+  return fetch('/api/account/resource-connections', { credentials: 'same-origin' }).then((response) =>
+    readJsonResponse<import('@shared/api/external-resources').ListResourceConnectionsResponse>(response),
+  )
+}
+
+export function createResourceConnectionIntent(resourceId: string, input: CreateResourceConnectionIntentRequest) {
+  return fetch(`/api/account/resource-connections/${encodeURIComponent(resourceId)}/authorization-intents`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  }).then((response) =>
+    readJsonResponse<import('@shared/api/external-resources').ResourceConnectionIntentResponse>(response),
+  )
+}
+
+export function revokeResourceConnection(connectionId: string) {
+  return fetch(`/api/account/resource-connections/${encodeURIComponent(connectionId)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  }).then((response) => {
+    if (!response.ok) return readJsonResponse<never>(response)
+  })
+}
+
+export function getAgentResourceApproval(token: string) {
+  return fetch(`/api/account/agent-access-requests/approval?token=${encodeURIComponent(token)}`, {
+    credentials: 'same-origin',
+  }).then((response) => readJsonResponse<import('@shared/api/external-resources').AgentAccessRequest>(response))
+}
+
+export function decideAgentResourceApproval(token: string, input: DecideAgentAccessRequest) {
+  return fetch('/api/account/agent-access-requests/approval', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token, ...input }),
+  }).then((response) => readJsonResponse<import('@shared/api/external-resources').AgentAccessRequest>(response))
 }
 
 export function getAccountSecurity() {

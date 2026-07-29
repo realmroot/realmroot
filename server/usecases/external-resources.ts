@@ -1,0 +1,1141 @@
+import { badRequest, forbidden, notFound, unauthorized } from '@server/domain/errors'
+import type { Deps } from '@server/usecases/deps'
+import type {
+  AgentAccessGrantRecord,
+  AgentAccessRequestRecord,
+  ExternalResourceAuthorizationRecord,
+  ResourceAccountConnectionRecord,
+} from '@server/usecases/ports'
+import type {
+  ConfigureExternalResourceAuthorizationRequest,
+  CreateAgentAccessRequest,
+  CreateResourceConnectionIntentRequest,
+  DecideAgentAccessRequest,
+} from '@shared/api/external-resources'
+import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
+
+const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
+const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
+const accessTokenType = 'urn:ietf:params:oauth:token-type:access_token'
+const page = { limit: 100, offset: 0 }
+
+export interface AgentResourcePrincipal {
+  issuer: string
+  subject: string
+  identityId: string
+  protocolAgentId: string
+  hostId: string
+}
+
+export interface AgentAssertionSigner {
+  sign(payload: Record<string, unknown>): Promise<string>
+}
+
+export async function configureExternalResourceAuthorization(
+  deps: Deps,
+  resourceId: string,
+  input: ConfigureExternalResourceAuthorizationRequest,
+  callbackOrigin: string,
+) {
+  await requireExternalResource(deps, resourceId)
+  const resourceUrl = requireNetworkUrl(input.resourceUrl, 'resource URL')
+  const protectedMetadata = await fetchObject(
+    deps,
+    protectedResourceMetadataUrl(resourceUrl),
+    'Protected resource metadata discovery failed.',
+  )
+  if (protectedMetadata.resource !== resourceUrl) {
+    throw badRequest('Protected resource metadata does not match the configured resource URL.')
+  }
+  const authorizationServers = stringArray(protectedMetadata.authorization_servers)
+  if (authorizationServers.length !== 1) {
+    throw badRequest('External API resource must advertise exactly one authorization server.')
+  }
+  const issuer = requireNetworkUrl(authorizationServers[0]!, 'authorization server issuer').replace(/\/$/, '')
+  const metadata = await fetchObject(
+    deps,
+    authorizationServerMetadataUrl(issuer),
+    'Authorization server metadata discovery failed.',
+  )
+  if (metadata.issuer !== issuer) {
+    throw badRequest('Authorization server metadata issuer does not match the protected resource.')
+  }
+
+  const authorizationEndpoint = requiredMetadataUrl(metadata, 'authorization_endpoint')
+  const tokenEndpoint = requiredMetadataUrl(metadata, 'token_endpoint')
+  const revocationEndpoint = requiredMetadataUrl(metadata, 'revocation_endpoint')
+  const jwksUri = requiredMetadataUrl(metadata, 'jwks_uri')
+  const userInfoEndpoint = requiredMetadataUrl(metadata, 'userinfo_endpoint')
+  const registrationEndpoint =
+    typeof metadata.registration_endpoint === 'string'
+      ? requireNetworkUrl(metadata.registration_endpoint, 'registration endpoint')
+      : null
+  const scopesSupported = stringArray(metadata.scopes_supported)
+  const grants = stringArray(metadata.grant_types_supported)
+  if (
+    !grants.includes('authorization_code') ||
+    !grants.includes('refresh_token') ||
+    !grants.includes(jwtBearerGrantType) ||
+    !grants.includes(tokenExchangeGrantType)
+  ) {
+    throw badRequest(
+      'Authorization server must support authorization_code, refresh_token, the RFC 7523 JWT bearer grant, and RFC 8693 token exchange.',
+    )
+  }
+  if (stringArray(metadata.dpop_signing_alg_values_supported).length === 0) {
+    throw badRequest('Authorization server must advertise RFC 9449 DPoP support.')
+  }
+  let clientId = input.clientId ?? null
+  let clientSecret = input.clientSecret ?? null
+  let registrationAccessToken: string | null = null
+  if (input.registrationMode === 'dynamic') {
+    if (!registrationEndpoint) throw badRequest('Authorization server does not support dynamic client registration.')
+    const registration = await registerClient(deps, registrationEndpoint, callbackOrigin)
+    clientId = registration.clientId
+    clientSecret = registration.clientSecret
+    registrationAccessToken = registration.registrationAccessToken
+  }
+  if (!clientId || !clientSecret) throw badRequest('External API resource OAuth client is incomplete.')
+
+  const now = new Date()
+  const record: ExternalResourceAuthorizationRecord = {
+    resourceId,
+    resourceUrl,
+    issuer,
+    authorizationEndpoint,
+    tokenEndpoint,
+    registrationEndpoint,
+    revocationEndpoint,
+    jwksUri,
+    userInfoEndpoint,
+    registrationMode: input.registrationMode,
+    clientId,
+    encryptedClientSecret: await deps.secrets.seal(clientSecret, clientSecretContext(resourceId)),
+    encryptedRegistrationAccessToken: registrationAccessToken
+      ? await deps.secrets.seal(registrationAccessToken, registrationTokenContext(resourceId))
+      : null,
+    scopesSupported,
+    metadata,
+    status: 'active',
+    createdAt: now,
+    updatedAt: now,
+  }
+  const configured = await deps.externalResources.upsertAuthorization(record)
+  await deps.authorization.updateResource(resourceId, { enabled: true })
+  return toExternalAuthorization(configured)
+}
+
+export async function getExternalResourceAuthorization(deps: Deps, resourceId: string) {
+  await requireExternalResource(deps, resourceId)
+  const authorization = await deps.externalResources.findAuthorization(resourceId)
+  if (!authorization) throw notFound('External API resource authorization was not found.')
+  return toExternalAuthorization(authorization)
+}
+
+export async function createResourceConnectionIntent(
+  deps: Deps,
+  resourceId: string,
+  input: CreateResourceConnectionIntentRequest,
+  actorUserId: string,
+  callbackOrigin: string,
+) {
+  const resource = await requireExternalResource(deps, resourceId)
+  const authorization = await requireActiveExternalAuthorization(deps, resourceId)
+  await requireConnectionOwnerControl(deps, input.owner, actorUserId)
+  const configuredScopes = (await deps.authorization.listScopes(resourceId, page)).items.map((scope) => scope.value)
+  const scopes = input.scopes ?? configuredScopes
+  assertScopeSubset(scopes, configuredScopes, 'API resource')
+  assertScopeSubset(scopes, authorization.scopesSupported, 'authorization server')
+  const requestedScopes = [...new Set([...scopes, 'openid', 'offline_access'])].sort()
+  const id = createId('resconnint')
+  const state = randomToken()
+  const verifier = randomToken()
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
+  await deps.externalResources.createConnectionIntent({
+    id,
+    stateHash: await sha256(state),
+    resourceId,
+    ownerUserId: actorUserId,
+    ownerOrganizationId: input.owner.type === 'organization' ? input.owner.organizationId : null,
+    scopes: requestedScopes,
+    encryptedPkceVerifier: await deps.secrets.seal(verifier, connectionIntentContext(id)),
+    status: 'pending',
+    expiresAt,
+    completedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  })
+  const redirectUri = resourceConnectionCallbackUrl(callbackOrigin)
+  const url = new URL(authorization.authorizationEndpoint)
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('client_id', authorization.clientId)
+  url.searchParams.set('redirect_uri', redirectUri)
+  url.searchParams.set('resource', resource.audience)
+  url.searchParams.set('scope', requestedScopes.join(' '))
+  url.searchParams.set('state', state)
+  url.searchParams.set('code_challenge', await sha256(verifier))
+  url.searchParams.set('code_challenge_method', 'S256')
+  return { authorizationUrl: url.toString(), expiresAt: expiresAt.toISOString() }
+}
+
+export async function completeResourceConnectionIntent(
+  deps: Deps,
+  input: { state: string; code: string },
+  callbackOrigin: string,
+) {
+  const now = new Date()
+  const intent = await deps.externalResources.consumeConnectionIntent(await sha256(input.state), now)
+  if (!intent) throw badRequest('Resource connection state is invalid, expired, or already used.')
+  const authorization = await requireActiveExternalAuthorization(deps, intent.resourceId)
+  const clientSecret = await deps.secrets.open(
+    authorization.encryptedClientSecret,
+    clientSecretContext(intent.resourceId),
+  )
+  const verifier = await deps.secrets.open(intent.encryptedPkceVerifier, connectionIntentContext(intent.id))
+  const token = await postForm(
+    deps,
+    authorization.tokenEndpoint,
+    {
+      grant_type: 'authorization_code',
+      code: input.code,
+      redirect_uri: resourceConnectionCallbackUrl(callbackOrigin),
+      code_verifier: verifier,
+    },
+    authorization.clientId,
+    clientSecret,
+  )
+  const accessToken = requiredString(token, 'access_token', 'OAuth token response')
+  const refreshToken = requiredString(token, 'refresh_token', 'OAuth token response')
+  const profile = await fetchObject(
+    deps,
+    authorization.userInfoEndpoint!,
+    'OIDC userinfo request failed.',
+    new Headers({ authorization: `Bearer ${accessToken}` }),
+  )
+  const externalSubject = requiredString(profile, 'sub', 'OIDC userinfo response')
+  const displayName =
+    optionalString(profile, 'name') ?? optionalString(profile, 'preferred_username') ?? externalSubject
+  const expiresAt = tokenExpiry(token, now)
+  const connectionId = createId('resconn')
+  const grantedScopes = scopeString(token.scope) ?? intent.scopes
+  const record: ResourceAccountConnectionRecord = {
+    id: connectionId,
+    resourceId: intent.resourceId,
+    ownerUserId: intent.ownerOrganizationId ? null : intent.ownerUserId,
+    ownerOrganizationId: intent.ownerOrganizationId,
+    externalSubject,
+    displayName,
+    encryptedTokens: await deps.secrets.seal(
+      JSON.stringify({ accessToken, refreshToken, scope: grantedScopes.join(' ') }),
+      connectionTokensContext(connectionId),
+    ),
+    grantedScopes,
+    status: 'active',
+    credentialExpiresAt: expiresAt,
+    revokedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  return toResourceConnection(await deps.externalResources.createConnection(record))
+}
+
+export async function listResourceConnections(deps: Deps, actorUserId: string) {
+  const connections = await deps.externalResources.listConnectionsByUser(actorUserId)
+  return { connections: connections.map(toResourceConnection) }
+}
+
+export async function listConnectableExternalResources(deps: Deps) {
+  const resources = (await deps.authorization.listResources(page)).items.filter(
+    (resource) => resource.enabled && resource.authorizationMode === 'external',
+  )
+  const connectable = []
+  for (const resource of resources) {
+    const authorization = await deps.externalResources.findAuthorization(resource.id)
+    if (authorization?.status !== 'active') continue
+    const scopes = (await deps.authorization.listScopes(resource.id, page)).items
+    connectable.push({
+      id: resource.id,
+      identifier: resource.identifier,
+      name: resource.name,
+      audience: resource.audience,
+      resourceUrl: authorization.resourceUrl,
+      scopes: scopes.map(({ value, description }) => ({ value, description })),
+    })
+  }
+  return { resources: connectable }
+}
+
+export async function revokeResourceConnection(deps: Deps, connectionId: string, actorUserId: string) {
+  const connection = await requireControlledConnection(deps, connectionId, actorUserId)
+  const grants = await deps.externalResources.listActiveGrantsByConnection(connection.id)
+  for (const grant of grants) await revokeAgentAccessGrant(deps, grant.id, actorUserId)
+  if (!(await deps.externalResources.revokeConnection(connectionId, new Date()))) {
+    throw badRequest('Resource account connection is already revoked.')
+  }
+}
+
+export async function discoverAgentResources(deps: Deps, principal: AgentResourcePrincipal) {
+  const identity = await requireActiveIdentityAndBinding(deps, principal)
+  const connections = identity.identity.ownerUserId
+    ? await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId)
+    : await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId!])
+  const activeConnections = connections.filter((connection) => connection.status === 'active')
+  const grants = await deps.externalResources.listActiveGrantsByAgent(principal.identityId)
+  const resources = []
+  for (const resourceId of [...new Set(activeConnections.map((connection) => connection.resourceId))]) {
+    const resource = await deps.authorization.findResource(resourceId)
+    const authorization = await deps.externalResources.findAuthorization(resourceId)
+    if (!resource?.enabled || resource.authorizationMode !== 'external' || authorization?.status !== 'active') continue
+    const scopes = (await deps.authorization.listScopes(resourceId, page)).items
+    resources.push({
+      id: resource.id,
+      identifier: resource.identifier,
+      name: resource.name,
+      audience: resource.audience,
+      scopes: scopes.map(({ value, description }) => ({ value, description })),
+      connections: activeConnections
+        .filter((connection) => connection.resourceId === resourceId)
+        .map((connection) => ({
+          id: connection.id,
+          displayName: connection.displayName,
+          subjectHint: redactSubject(connection.externalSubject),
+          grantedScopes: connection.grantedScopes,
+        })),
+      grants: grants
+        .filter(
+          (grant) => grant.resourceId === resourceId && (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
+        )
+        .map(toAgentAccessGrant),
+    })
+  }
+  return { resources }
+}
+
+export async function createAgentAccessRequest(
+  deps: Deps,
+  input: CreateAgentAccessRequest,
+  principal: AgentResourcePrincipal,
+  approvalOrigin: string,
+) {
+  const identity = await requireActiveIdentityAndBinding(deps, principal)
+  const resource = await requireExternalResource(deps, input.resourceId)
+  const connection = await deps.externalResources.findConnection(input.connectionId)
+  if (!connection || connection.resourceId !== resource.id || connection.status !== 'active') {
+    throw notFound('Active resource account connection was not found.')
+  }
+  assertConnectionInHomeSpace(connection, identity.identity.ownerUserId, identity.identity.ownerOrganizationId)
+  const configuredScopes = (await deps.authorization.listScopes(resource.id, page)).items.map((scope) => scope.value)
+  assertScopeSubset(input.scopes, configuredScopes, 'API resource')
+  assertScopeSubset(input.scopes, connection.grantedScopes, 'connected account')
+  const scopes = [...new Set(input.scopes)].sort()
+  const existingGrant = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).find(
+    (grant) =>
+      grant.connectionId === connection.id &&
+      grant.resourceId === resource.id &&
+      exactScopes(grant.scopes, scopes) &&
+      (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
+  )
+  const binding = identity.bindings.find(
+    (candidate) => candidate.hostId === principal.hostId && candidate.protocolAgentId === principal.protocolAgentId,
+  )!
+  const now = new Date()
+  const pending = (await deps.externalResources.listPendingAccessRequestsByAgent(principal.identityId, now)).find(
+    (request) => request.connectionId === connection.id && exactScopes(request.scopes, scopes),
+  )
+  if (pending) {
+    const token = await deps.secrets.open(pending.encryptedApprovalToken, accessRequestTokenContext(pending.id))
+    return toAgentAccessRequest(pending, principal.hostId, approvalUrl(approvalOrigin, token))
+  }
+  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
+  const rawApprovalToken = randomToken()
+  const requestId = createId('accessreq')
+  const request: AgentAccessRequestRecord = {
+    id: requestId,
+    resourceId: resource.id,
+    connectionId: connection.id,
+    agentIdentityId: principal.identityId,
+    bindingId: binding.id,
+    scopes,
+    reason: input.reason ?? null,
+    status: existingGrant ? 'approved' : 'pending',
+    approvalTokenHash: await sha256(rawApprovalToken),
+    encryptedApprovalToken: await deps.secrets.seal(rawApprovalToken, accessRequestTokenContext(requestId)),
+    grantId: existingGrant?.id ?? null,
+    expiresAt,
+    decidedAt: existingGrant ? now : null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const created = await deps.externalResources.createAccessRequest(request)
+  await appendResourceAudit(deps, {
+    action: 'external_resource.access_requested',
+    result: existingGrant ? 'allowed' : 'pending',
+    principal,
+    connection,
+    grantId: existingGrant?.id ?? null,
+    scopes,
+    reasonCode: null,
+  })
+  return toAgentAccessRequest(
+    created,
+    principal.hostId,
+    existingGrant ? null : approvalUrl(approvalOrigin, rawApprovalToken),
+  )
+}
+
+export async function getAgentAccessRequest(deps: Deps, requestId: string, principal: AgentResourcePrincipal) {
+  await requireActiveIdentityAndBinding(deps, principal)
+  const request = await deps.externalResources.findAccessRequest(requestId)
+  if (!request || request.agentIdentityId !== principal.identityId)
+    throw notFound('Agent access request was not found.')
+  return toAgentAccessRequest(request, principal.hostId, null)
+}
+
+export async function listControllerAccessRequests(deps: Deps, actorUserId: string) {
+  const connections = await deps.externalResources.listConnectionsByUser(actorUserId)
+  const requests = await deps.externalResources.listPendingAccessRequestsByConnections(
+    connections.map((connection) => connection.id),
+  )
+  return {
+    requests: await Promise.all(
+      requests.map(async (request) => toAgentAccessRequest(request, await requestHostId(deps, request), null)),
+    ),
+  }
+}
+
+export async function getControllerAccessRequestByToken(deps: Deps, token: string, actorUserId: string) {
+  const request = await requirePendingAccessRequestByToken(deps, token)
+  await requireControlledConnection(deps, request.connectionId, actorUserId)
+  return toAgentAccessRequest(request, await requestHostId(deps, request), null)
+}
+
+export async function decideAgentAccessRequestByToken(
+  deps: Deps,
+  token: string,
+  input: DecideAgentAccessRequest,
+  actorUserId: string,
+) {
+  const request = await requirePendingAccessRequestByToken(deps, token)
+  return decideAgentAccessRequest(deps, request.id, input, actorUserId)
+}
+
+export async function decideAgentAccessRequest(
+  deps: Deps,
+  requestId: string,
+  input: DecideAgentAccessRequest,
+  actorUserId: string,
+) {
+  const request = await deps.externalResources.findAccessRequest(requestId)
+  if (!request || request.status !== 'pending' || request.expiresAt.getTime() <= Date.now()) {
+    throw notFound('Pending Agent access request was not found.')
+  }
+  const connection = await requireControlledConnection(deps, request.connectionId, actorUserId)
+  const now = new Date()
+  if (input.decision === 'deny') {
+    const decided = await deps.externalResources.decideAccessRequest(request.id, {
+      status: 'denied',
+      grantId: null,
+      decidedAt: now,
+      updatedAt: now,
+    })
+    if (!decided) throw badRequest('Agent access request was already decided.')
+    await appendResourceAudit(deps, {
+      action: 'external_resource.access_decided',
+      result: 'denied',
+      connection,
+      request,
+      grantId: null,
+      controllerUserId: actorUserId,
+      scopes: request.scopes,
+      reasonCode: 'controller_denied',
+    })
+    return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
+  }
+
+  const expiresAt = input.mode === 'until' ? new Date(input.expiresAt!) : null
+  if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Grant expiry must be in the future.')
+  const grant = await deps.externalResources.createGrant({
+    id: createId('accessgrant'),
+    resourceId: request.resourceId,
+    connectionId: request.connectionId,
+    agentIdentityId: request.agentIdentityId,
+    scopes: request.scopes,
+    mode: input.mode!,
+    status: 'active',
+    grantedByUserId: actorUserId,
+    expiresAt,
+    revokedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  })
+  const decided = await deps.externalResources.decideAccessRequest(request.id, {
+    status: 'approved',
+    grantId: grant.id,
+    decidedAt: now,
+    updatedAt: now,
+  })
+  if (!decided) throw badRequest('Agent access request was already decided.')
+  await appendResourceAudit(deps, {
+    action: 'external_resource.access_decided',
+    result: 'allowed',
+    connection,
+    request,
+    grantId: grant.id,
+    controllerUserId: actorUserId,
+    scopes: request.scopes,
+    reasonCode: null,
+  })
+  return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
+}
+
+export async function issueExternalTokenLease(
+  deps: Deps,
+  requestId: string,
+  dpopProof: string,
+  principal: AgentResourcePrincipal,
+  signer: AgentAssertionSigner,
+) {
+  await requireActiveIdentityAndBinding(deps, principal)
+  const request = await deps.externalResources.findAccessRequest(requestId)
+  if (
+    !request ||
+    request.agentIdentityId !== principal.identityId ||
+    request.status !== 'approved' ||
+    request.expiresAt.getTime() <= Date.now() ||
+    !request.grantId
+  ) {
+    throw forbidden('Approved Agent access request is required.')
+  }
+  const [grant, connection, resource, authorization] = await Promise.all([
+    deps.externalResources.findGrant(request.grantId),
+    deps.externalResources.findConnection(request.connectionId),
+    deps.authorization.findResource(request.resourceId),
+    deps.externalResources.findAuthorization(request.resourceId),
+  ])
+  if (
+    !grant ||
+    grant.status !== 'active' ||
+    (grant.expiresAt && grant.expiresAt.getTime() <= Date.now()) ||
+    !connection ||
+    connection.status !== 'active' ||
+    !resource?.enabled ||
+    resource.authorizationMode !== 'external' ||
+    authorization?.status !== 'active'
+  ) {
+    throw forbidden('Active external API resource grant is required.')
+  }
+  const confirmationJkt = await dpopThumbprint(deps, dpopProof, authorization.tokenEndpoint)
+  const subjectToken = await refreshConnectionToken(deps, connection, authorization)
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const agentAssertion = await signer.sign({
+    iss: principal.issuer,
+    sub: principal.subject,
+    aud: authorization.tokenEndpoint,
+    iat: nowSeconds,
+    exp: nowSeconds + 300,
+    jti: crypto.randomUUID(),
+  })
+  const clientSecret = await deps.secrets.open(authorization.encryptedClientSecret, clientSecretContext(resource.id))
+  const actorGrant = await postForm(
+    deps,
+    authorization.tokenEndpoint,
+    {
+      grant_type: jwtBearerGrantType,
+      assertion: agentAssertion,
+    },
+    authorization.clientId,
+    clientSecret,
+  )
+  const actorToken = requiredString(actorGrant, 'access_token', 'RFC 7523 JWT bearer grant response')
+  const token = await postForm(
+    deps,
+    authorization.tokenEndpoint,
+    {
+      grant_type: tokenExchangeGrantType,
+      subject_token: subjectToken,
+      subject_token_type: accessTokenType,
+      actor_token: actorToken,
+      actor_token_type: accessTokenType,
+      requested_token_type: accessTokenType,
+      resource: resource.audience,
+      scope: request.scopes.join(' '),
+    },
+    authorization.clientId,
+    clientSecret,
+    new Headers({ dpop: dpopProof }),
+  )
+  const accessToken = requiredString(token, 'access_token', 'Token exchange response')
+  if (String(token.token_type).toLowerCase() !== 'dpop') {
+    throw unauthorized('Target authorization server did not issue a DPoP-bound access token.')
+  }
+  const expiresIn = Math.min(requiredPositiveInteger(token, 'expires_in', 'Token exchange response'), 3600)
+  const issuedScope = scopeString(token.scope) ?? request.scopes
+  if (!exactScopes(issuedScope, request.scopes)) {
+    throw unauthorized('Target authorization server issued a different scope set.')
+  }
+  const now = new Date()
+  const leaseId = createId('tokenlease')
+  await deps.externalResources.createTokenLease({
+    id: leaseId,
+    grantId: grant.id,
+    requestId: request.id,
+    bindingId: request.bindingId,
+    encryptedAccessToken: await deps.secrets.seal(accessToken, tokenLeaseContext(leaseId)),
+    tokenHash: await sha256(accessToken),
+    confirmationJkt,
+    scopes: request.scopes,
+    expiresAt: new Date(now.getTime() + expiresIn * 1000),
+    revokedAt: null,
+    createdAt: now,
+  })
+  await deps.externalResources.consumeAccessRequest(request.id, now)
+  if (grant.mode === 'once') await deps.externalResources.consumeGrant(grant.id, now)
+  await appendResourceAudit(deps, {
+    action: 'external_resource.token_issued',
+    result: 'allowed',
+    principal,
+    connection,
+    request,
+    grantId: grant.id,
+    scopes: request.scopes,
+    reasonCode: null,
+  })
+  return {
+    accessToken,
+    tokenType: 'DPoP' as const,
+    expiresIn,
+    scope: request.scopes.join(' '),
+    resource: resource.audience,
+  }
+}
+
+export async function revokeAgentAccessGrant(deps: Deps, grantId: string, actorUserId: string) {
+  const grant = await deps.externalResources.findGrant(grantId)
+  if (!grant) throw notFound('Agent access grant was not found.')
+  const connection = await requireControlledConnection(deps, grant.connectionId, actorUserId)
+  const now = new Date()
+  await revokeGrantTokenLeases(deps, grant, now)
+  if (grant.status === 'active') await deps.externalResources.revokeGrant(grant.id, now)
+  await appendResourceAudit(deps, {
+    action: 'external_resource.access_revoked',
+    result: 'allowed',
+    connection,
+    grantId: grant.id,
+    controllerUserId: actorUserId,
+    scopes: grant.scopes,
+    reasonCode: null,
+  })
+}
+
+export async function revokeAgentResourceAccess(deps: Deps, agentIdentityId: string) {
+  const now = new Date()
+  for (const grant of await deps.externalResources.listActiveGrantsByAgent(agentIdentityId)) {
+    await revokeGrantTokenLeases(deps, grant, now)
+    await deps.externalResources.revokeGrant(grant.id, now)
+  }
+}
+
+export async function revokeAgentResourceLeasesForBinding(deps: Deps, bindingId: string) {
+  const now = new Date()
+  for (const lease of await deps.externalResources.listActiveTokenLeasesByBinding(bindingId, now)) {
+    const grant = await deps.externalResources.findGrant(lease.grantId)
+    if (!grant) continue
+    await revokeTokenLeaseAtTarget(deps, grant.resourceId, lease, now)
+  }
+}
+
+async function revokeGrantTokenLeases(deps: Deps, grant: AgentAccessGrantRecord, now: Date) {
+  for (const lease of await deps.externalResources.listActiveTokenLeasesByGrant(grant.id, now)) {
+    await revokeTokenLeaseAtTarget(deps, grant.resourceId, lease, now)
+  }
+}
+
+async function revokeTokenLeaseAtTarget(
+  deps: Deps,
+  resourceId: string,
+  lease: Awaited<ReturnType<Deps['externalResources']['listActiveTokenLeasesByGrant']>>[number],
+  now: Date,
+) {
+  const authorization = await requireActiveExternalAuthorization(deps, resourceId)
+  const clientSecret = await deps.secrets.open(authorization.encryptedClientSecret, clientSecretContext(resourceId))
+  const token = await deps.secrets.open(lease.encryptedAccessToken, tokenLeaseContext(lease.id))
+  await postEmptyForm(
+    deps,
+    authorization.revocationEndpoint,
+    { token, token_type_hint: 'access_token' },
+    authorization.clientId,
+    clientSecret,
+  )
+  await deps.externalResources.revokeTokenLease(lease.id, now)
+}
+
+async function registerClient(deps: Deps, endpoint: string, callbackOrigin: string) {
+  const response = await deps.externalHttp.fetch(
+    new Request(endpoint, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'FlareAuth External API Resource',
+        redirect_uris: [resourceConnectionCallbackUrl(callbackOrigin)],
+        grant_types: ['authorization_code', 'refresh_token', jwtBearerGrantType, tokenExchangeGrantType],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_basic',
+        scope: 'openid offline_access',
+        jwks_uri: `${callbackOrigin.replace(/\/$/, '')}/api/auth/jwks`,
+      }),
+    }),
+  )
+  if (!response.ok) throw badRequest('Dynamic client registration failed.')
+  const body = await readObject(response, 'Dynamic client registration response is invalid.')
+  return {
+    clientId: requiredString(body, 'client_id', 'Dynamic client registration response'),
+    clientSecret: requiredString(body, 'client_secret', 'Dynamic client registration response'),
+    registrationAccessToken: optionalString(body, 'registration_access_token'),
+  }
+}
+
+async function refreshConnectionToken(
+  deps: Deps,
+  connection: ResourceAccountConnectionRecord,
+  authorization: ExternalResourceAuthorizationRecord,
+) {
+  const payload = JSON.parse(
+    await deps.secrets.open(connection.encryptedTokens, connectionTokensContext(connection.id)),
+  ) as Record<string, unknown>
+  if (connection.credentialExpiresAt && connection.credentialExpiresAt.getTime() > Date.now() + 30_000) {
+    return requiredString(payload, 'accessToken', 'Stored resource connection')
+  }
+  const refreshToken = requiredString(payload, 'refreshToken', 'Stored resource connection')
+  const clientSecret = await deps.secrets.open(
+    authorization.encryptedClientSecret,
+    clientSecretContext(connection.resourceId),
+  )
+  const token = await postForm(
+    deps,
+    authorization.tokenEndpoint,
+    { grant_type: 'refresh_token', refresh_token: refreshToken },
+    authorization.clientId,
+    clientSecret,
+  )
+  const accessToken = requiredString(token, 'access_token', 'OAuth refresh response')
+  const nextRefreshToken = optionalString(token, 'refresh_token') ?? refreshToken
+  const scopes = scopeString(token.scope) ?? connection.grantedScopes
+  const now = new Date()
+  await deps.externalResources.updateConnectionTokens(connection.id, {
+    encryptedTokens: await deps.secrets.seal(
+      JSON.stringify({ accessToken, refreshToken: nextRefreshToken, scope: scopes.join(' ') }),
+      connectionTokensContext(connection.id),
+    ),
+    credentialExpiresAt: tokenExpiry(token, now),
+    updatedAt: now,
+  })
+  return accessToken
+}
+
+async function dpopThumbprint(deps: Deps, proof: string, tokenEndpoint: string) {
+  const header = decodeProtectedHeader(proof)
+  if (header.typ?.toLowerCase() !== 'dpop+jwt' || !header.alg || header.alg === 'none' || !header.jwk) {
+    throw badRequest('A public-key DPoP proof is required.')
+  }
+  let payload: Record<string, unknown>
+  try {
+    const key = await importJWK(header.jwk as JWK, header.alg)
+    const verified = await compactVerify(proof, key)
+    payload = JSON.parse(new TextDecoder().decode(verified.payload)) as Record<string, unknown>
+  } catch {
+    throw badRequest('DPoP proof signature is invalid.')
+  }
+  if (payload.htm !== 'POST' || payload.htu !== tokenEndpoint || typeof payload.jti !== 'string') {
+    throw badRequest('DPoP proof is not bound to the target token endpoint.')
+  }
+  if (typeof payload.iat !== 'number' || Math.abs(Date.now() / 1000 - payload.iat) > 300) {
+    throw badRequest('DPoP proof is outside the accepted time window.')
+  }
+  const thumbprint = await calculateJwkThumbprint(header.jwk as JWK)
+  if (
+    !(await deps.agentTokens.consumeDpopJti({
+      jtiHash: await sha256(payload.jti),
+      keyThumbprint: thumbprint,
+      expiresAt: new Date((payload.iat + 300) * 1000),
+      createdAt: new Date(),
+    }))
+  ) {
+    throw badRequest('DPoP proof was already used.')
+  }
+  return thumbprint
+}
+
+async function requirePendingAccessRequestByToken(deps: Deps, token: string) {
+  const request = await deps.externalResources.findAccessRequestByApprovalTokenHash(await sha256(token))
+  if (!request || request.status !== 'pending' || request.expiresAt.getTime() <= Date.now()) {
+    throw notFound('Pending Agent access request was not found.')
+  }
+  return request
+}
+
+async function requestHostId(deps: Deps, request: AgentAccessRequestRecord) {
+  const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
+  const binding = identity?.bindings.find((candidate) => candidate.id === request.bindingId)
+  if (!binding) throw notFound('Agent host binding was not found.')
+  return binding.hostId
+}
+
+async function requireExternalResource(deps: Deps, resourceId: string) {
+  const resource = await deps.authorization.findResource(resourceId)
+  if (!resource || resource.authorizationMode !== 'external') throw notFound('External API resource was not found.')
+  return resource
+}
+
+async function requireActiveExternalAuthorization(deps: Deps, resourceId: string) {
+  const authorization = await deps.externalResources.findAuthorization(resourceId)
+  if (!authorization || authorization.status !== 'active') {
+    throw notFound('Active external API resource authorization was not found.')
+  }
+  return authorization
+}
+
+async function requireActiveIdentityAndBinding(deps: Deps, principal: AgentResourcePrincipal) {
+  const identity = await deps.agentIdentities.findIdentity(principal.identityId)
+  const binding = identity?.bindings.find(
+    (candidate) =>
+      candidate.status === 'active' &&
+      candidate.hostId === principal.hostId &&
+      candidate.protocolAgentId === principal.protocolAgentId,
+  )
+  if (!identity || identity.identity.status !== 'active' || !binding) {
+    throw forbidden('An active Agent identity and host binding are required.')
+  }
+  return identity
+}
+
+async function requireControlledConnection(deps: Deps, connectionId: string, actorUserId: string) {
+  const connection = await deps.externalResources.findConnection(connectionId)
+  if (!connection) throw notFound('Resource account connection was not found.')
+  if (connection.ownerUserId === actorUserId) return connection
+  if (connection.ownerOrganizationId) {
+    const member = await deps.authorization.findMemberByOrganizationUser(connection.ownerOrganizationId, actorUserId)
+    if (member?.role === 'owner' || member?.role === 'admin' || member?.role === 'credential_manager') {
+      return connection
+    }
+  }
+  throw forbidden('Resource account controller access is required.')
+}
+
+async function requireConnectionOwnerControl(
+  deps: Deps,
+  owner: CreateResourceConnectionIntentRequest['owner'],
+  actorUserId: string,
+) {
+  if (owner.type === 'user') return
+  const member = await deps.authorization.findMemberByOrganizationUser(owner.organizationId, actorUserId)
+  if (member?.role !== 'owner' && member?.role !== 'admin' && member?.role !== 'credential_manager') {
+    throw forbidden('Organization credential manager access is required.')
+  }
+}
+
+function assertConnectionInHomeSpace(
+  connection: ResourceAccountConnectionRecord,
+  ownerUserId: string | null,
+  ownerOrganizationId: string | null,
+) {
+  if (
+    (ownerUserId && connection.ownerUserId === ownerUserId) ||
+    (ownerOrganizationId && connection.ownerOrganizationId === ownerOrganizationId)
+  ) {
+    return
+  }
+  throw forbidden('Resource account connection is outside the Agent home space.')
+}
+
+async function appendResourceAudit(
+  deps: Deps,
+  input: {
+    action: string
+    result: string
+    principal?: AgentResourcePrincipal
+    request?: AgentAccessRequestRecord
+    connection: ResourceAccountConnectionRecord
+    grantId: string | null
+    controllerUserId?: string
+    scopes: string[]
+    reasonCode: string | null
+  },
+) {
+  await deps.agentAudit.append({
+    id: createId('agaudit'),
+    action: input.action,
+    result: input.result,
+    controllerUserId: input.controllerUserId ?? null,
+    subjectIssuer: input.principal?.issuer ?? null,
+    subject: input.principal?.subject ?? null,
+    agentIdentityId: input.principal?.identityId ?? input.request?.agentIdentityId ?? null,
+    hostId: input.principal?.hostId ?? null,
+    authorityGrantId: null,
+    resourceId: input.connection.resourceId,
+    resourceConnectionId: input.connection.id,
+    accessGrantId: input.grantId,
+    scopes: input.scopes,
+    reasonCode: input.reasonCode,
+    metadata: null,
+    occurredAt: new Date(),
+  })
+}
+
+async function fetchObject(
+  deps: Deps,
+  url: string,
+  message: string,
+  headers = new Headers({ accept: 'application/json' }),
+) {
+  const response = await deps.externalHttp.fetch(new Request(url, { headers }))
+  if (!response.ok) throw badRequest(message)
+  return readObject(response, message)
+}
+
+async function postForm(
+  deps: Deps,
+  url: string,
+  body: Record<string, string>,
+  clientId: string,
+  clientSecret: string,
+  extraHeaders = new Headers(),
+) {
+  const headers = new Headers(extraHeaders)
+  headers.set('accept', 'application/json')
+  headers.set('authorization', `Basic ${base64(`${clientId}:${clientSecret}`)}`)
+  headers.set('content-type', 'application/x-www-form-urlencoded')
+  const response = await deps.externalHttp.fetch(
+    new Request(url, { method: 'POST', headers, body: new URLSearchParams(body) }),
+  )
+  if (!response.ok) throw unauthorized('External authorization server rejected the token request.')
+  return readObject(response, 'External authorization server response is invalid.')
+}
+
+async function postEmptyForm(
+  deps: Deps,
+  url: string,
+  body: Record<string, string>,
+  clientId: string,
+  clientSecret: string,
+) {
+  const headers = new Headers({
+    authorization: `Basic ${base64(`${clientId}:${clientSecret}`)}`,
+    'content-type': 'application/x-www-form-urlencoded',
+  })
+  const response = await deps.externalHttp.fetch(
+    new Request(url, { method: 'POST', headers, body: new URLSearchParams(body) }),
+  )
+  if (!response.ok) throw unauthorized('External authorization server rejected the revocation request.')
+}
+
+async function readObject(response: Response, message: string) {
+  const value = await response.json().catch(() => null)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw badRequest(message)
+  return value as Record<string, unknown>
+}
+
+function protectedResourceMetadataUrl(resourceUrl: string) {
+  const resource = new URL(resourceUrl)
+  const path = resource.pathname === '/' ? '' : resource.pathname
+  const metadata = new URL(`/.well-known/oauth-protected-resource${path}`, resource.origin)
+  metadata.search = resource.search
+  return metadata.toString()
+}
+
+function authorizationServerMetadataUrl(issuer: string) {
+  const url = new URL(issuer)
+  return new URL(
+    `/.well-known/oauth-authorization-server${url.pathname === '/' ? '' : url.pathname}`,
+    url.origin,
+  ).toString()
+}
+
+function requiredMetadataUrl(metadata: Record<string, unknown>, field: string) {
+  return requireNetworkUrl(requiredString(metadata, field, 'Authorization server metadata'), field)
+}
+
+function requireNetworkUrl(value: string, label: string) {
+  const url = new URL(value)
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1'
+  if ((url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) || url.username || url.password) {
+    throw badRequest(`${label} must use HTTPS, except for loopback development URLs, and contain no userinfo.`)
+  }
+  return url.toString()
+}
+
+function requiredString(value: Record<string, unknown>, field: string, label: string) {
+  const result = value[field]
+  if (typeof result !== 'string' || result.length === 0) throw badRequest(`${label} is missing ${field}.`)
+  return result
+}
+
+function optionalString(value: Record<string, unknown>, field: string) {
+  return typeof value[field] === 'string' && value[field].length > 0 ? value[field] : null
+}
+
+function requiredPositiveInteger(value: Record<string, unknown>, field: string, label: string) {
+  const result = value[field]
+  if (typeof result !== 'number' || !Number.isInteger(result) || result <= 0) {
+    throw badRequest(`${label} has invalid ${field}.`)
+  }
+  return result
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : []
+}
+
+function scopeString(value: unknown) {
+  return typeof value === 'string' ? value.split(/\s+/).filter(Boolean).sort() : null
+}
+
+function tokenExpiry(token: Record<string, unknown>, now: Date) {
+  return typeof token.expires_in === 'number' && Number.isFinite(token.expires_in) && token.expires_in > 0
+    ? new Date(now.getTime() + token.expires_in * 1000)
+    : null
+}
+
+function assertScopeSubset(requested: string[], allowed: string[], boundary: string) {
+  if (requested.some((scope) => !allowed.includes(scope))) {
+    throw badRequest(`Requested scope exceeds the ${boundary} boundary.`)
+  }
+}
+
+function exactScopes(left: string[], right: string[]) {
+  return left.length === right.length && [...left].sort().every((value, index) => value === [...right].sort()[index])
+}
+
+function toExternalAuthorization(record: ExternalResourceAuthorizationRecord) {
+  return {
+    resourceId: record.resourceId,
+    resourceUrl: record.resourceUrl,
+    issuer: record.issuer,
+    authorizationEndpoint: record.authorizationEndpoint,
+    tokenEndpoint: record.tokenEndpoint,
+    registrationEndpoint: record.registrationEndpoint,
+    revocationEndpoint: record.revocationEndpoint,
+    jwksUri: record.jwksUri,
+    userInfoEndpoint: record.userInfoEndpoint,
+    registrationMode: record.registrationMode as 'dynamic' | 'manual',
+    clientId: record.clientId,
+    clientSecretConfigured: true as const,
+    scopesSupported: record.scopesSupported,
+    status: record.status as 'pending' | 'active' | 'invalid',
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  }
+}
+
+function toResourceConnection(record: ResourceAccountConnectionRecord) {
+  return {
+    id: record.id,
+    resourceId: record.resourceId,
+    owner: record.ownerUserId
+      ? { type: 'user' as const, userId: record.ownerUserId }
+      : { type: 'organization' as const, organizationId: record.ownerOrganizationId! },
+    externalSubject: record.externalSubject,
+    displayName: record.displayName,
+    grantedScopes: record.grantedScopes,
+    status: record.status as 'active' | 'revoked',
+    credentialExpiresAt: record.credentialExpiresAt?.toISOString() ?? null,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  }
+}
+
+function toAgentAccessRequest(record: AgentAccessRequestRecord, hostId: string, approvalUrl: string | null) {
+  return {
+    id: record.id,
+    resourceId: record.resourceId,
+    connectionId: record.connectionId,
+    agentIdentityId: record.agentIdentityId,
+    hostId,
+    scopes: record.scopes,
+    reason: record.reason,
+    status: record.status as 'pending' | 'approved' | 'denied' | 'consumed' | 'expired',
+    approvalUrl,
+    grantId: record.grantId,
+    expiresAt: record.expiresAt.toISOString(),
+    decidedAt: record.decidedAt?.toISOString() ?? null,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  }
+}
+
+function toAgentAccessGrant(record: AgentAccessGrantRecord) {
+  return {
+    id: record.id,
+    resourceId: record.resourceId,
+    connectionId: record.connectionId,
+    agentIdentityId: record.agentIdentityId,
+    scopes: record.scopes,
+    mode: record.mode as 'once' | 'until' | 'persistent',
+    status: record.status as 'active' | 'revoked' | 'consumed' | 'expired',
+    grantedByUserId: record.grantedByUserId,
+    expiresAt: record.expiresAt?.toISOString() ?? null,
+    revokedAt: record.revokedAt?.toISOString() ?? null,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  }
+}
+
+function redactSubject(subject: string) {
+  return subject.length <= 4 ? '••••' : `••••${subject.slice(-4)}`
+}
+
+function resourceConnectionCallbackUrl(origin: string) {
+  return `${origin.replace(/\/$/, '')}/api/resource-connections/oauth/callback`
+}
+
+function clientSecretContext(resourceId: string) {
+  return `external-resource:${resourceId}:client-secret`
+}
+
+function registrationTokenContext(resourceId: string) {
+  return `external-resource:${resourceId}:registration-token`
+}
+
+function connectionIntentContext(intentId: string) {
+  return `resource-connection-intent:${intentId}:pkce-verifier`
+}
+
+function connectionTokensContext(connectionId: string) {
+  return `resource-connection:${connectionId}:tokens`
+}
+
+function tokenLeaseContext(leaseId: string) {
+  return `external-token-lease:${leaseId}:access-token`
+}
+
+function accessRequestTokenContext(requestId: string) {
+  return `agent-access-request:${requestId}:approval-token`
+}
+
+function approvalUrl(origin: string, token: string) {
+  return `${origin.replace(/\/$/, '')}/agent/resource-access/approve#token=${token}`
+}
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return base64Url(new Uint8Array(digest))
+}
+
+function randomToken() {
+  return base64Url(crypto.getRandomValues(new Uint8Array(32)))
+}
+
+function base64(value: string) {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(value)))
+}
+
+function base64Url(value: Uint8Array) {
+  return btoa(String.fromCharCode(...value))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
+}
+
+function createId(prefix: string) {
+  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
+}

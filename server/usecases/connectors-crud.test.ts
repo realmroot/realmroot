@@ -188,68 +188,6 @@ describe('service.test 2', () => {
       message: 'Enabled generic OAuth connector uses either issuer discovery or explicit endpoints, not both.',
     })
   })
-
-  it('creates only complete generic API brokerage connectors', async () => {
-    const valid = connector({
-      providerType: 'generic_api',
-      providerId: 'generic-api',
-      clientId: null,
-      clientSecret: null,
-      apiBaseUrl: 'https://api.example.com',
-      credentialModes: ['bearer'],
-      allowedMethods: ['GET'],
-      allowedPathPrefixes: ['/'],
-    })
-    const deps = {
-      connectors: createRepository({ createResult: valid }),
-    } as unknown as Deps
-
-    await expect(
-      createConnector(deps, {
-        providerType: 'generic_api',
-        providerId: 'generic-api',
-        displayName: 'Generic API',
-        apiBaseUrl: 'https://api.example.com',
-        credentialModes: ['bearer'],
-      }),
-    ).resolves.toMatchObject({
-      providerType: 'generic_api',
-      credentialModes: ['bearer'],
-      allowedMethods: ['GET'],
-      allowedPathPrefixes: ['/'],
-    })
-
-    for (const input of [
-      {
-        providerType: 'generic_api' as const,
-        providerId: 'missing-origin',
-        displayName: 'Missing origin',
-        credentialModes: ['bearer' as const],
-      },
-      {
-        providerType: 'generic_api' as const,
-        providerId: 'missing-mode',
-        displayName: 'Missing mode',
-        apiBaseUrl: 'https://api.example.com',
-      },
-      {
-        providerType: 'generic_api' as const,
-        providerId: 'oauth-mode',
-        displayName: 'OAuth mode',
-        apiBaseUrl: 'https://api.example.com',
-        credentialModes: ['oauth' as const],
-      },
-      {
-        providerType: 'generic_api' as const,
-        providerId: 'header-mode',
-        displayName: 'Header mode',
-        apiBaseUrl: 'https://api.example.com',
-        credentialModes: ['header' as const],
-      },
-    ]) {
-      await expect(createConnector(deps, input)).rejects.toMatchObject({ status: 400 })
-    }
-  })
 })
 
 function createRepository(
@@ -294,10 +232,5 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     createdAt: now,
     updatedAt: now,
     ...overrides,
-    apiBaseUrl: overrides.apiBaseUrl ?? null,
-    credentialModes: overrides.credentialModes ?? null,
-    credentialHeaderName: overrides.credentialHeaderName ?? null,
-    allowedMethods: overrides.allowedMethods ?? null,
-    allowedPathPrefixes: overrides.allowedPathPrefixes ?? null,
   }
 }

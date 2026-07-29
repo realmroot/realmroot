@@ -85,11 +85,6 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest)
     userInfoEndpoint: input.userInfoEndpoint ?? null,
     jwksEndpoint: input.jwksEndpoint ?? null,
     scopes: input.scopes ?? null,
-    apiBaseUrl: input.apiBaseUrl ?? null,
-    credentialModes: input.credentialModes ?? (input.providerType === 'generic_oauth' ? ['oauth'] : null),
-    credentialHeaderName: input.credentialHeaderName ?? null,
-    allowedMethods: input.allowedMethods ?? (input.apiBaseUrl ? ['GET'] : null),
-    allowedPathPrefixes: input.allowedPathPrefixes ?? (input.apiBaseUrl ? ['/'] : null),
     attributeMapping: null,
     providerMetadata: input.providerMetadata ?? null,
     createdAt: now,
@@ -198,10 +193,6 @@ function assertSupportedProvider(providerType: ConnectorProviderType, providerId
 
 function assertComplete(connector: ConnectorRecord) {
   if (!connector.enabled) return
-  if (connector.providerType === 'generic_api') {
-    assertGenericApiComplete(connector)
-    return
-  }
   if (!connector.clientId) throw badRequest('Enabled connector requires clientId.')
   if (!connector.clientSecret) throw badRequest('Enabled connector requires clientSecret.')
   assertSupportedProvider(connector.providerType as ConnectorProviderType, connector.providerId)
@@ -234,19 +225,6 @@ function assertGenericOAuthComplete(connector: ConnectorRecord) {
   }
   if (!connector.issuer && !connector.tokenEndpoint) {
     throw badRequest('Enabled generic OAuth connector requires tokenEndpoint when issuer is not provided.')
-  }
-}
-
-function assertGenericApiComplete(connector: ConnectorRecord) {
-  if (!connector.apiBaseUrl) throw badRequest('Enabled generic API connector requires apiBaseUrl.')
-  if (!connector.credentialModes?.length) {
-    throw badRequest('Enabled generic API connector requires at least one credential mode.')
-  }
-  if (connector.credentialModes.includes('oauth')) {
-    throw badRequest('Use a generic OAuth connector for OAuth credentials.')
-  }
-  if (connector.credentialModes.includes('header') && !connector.credentialHeaderName) {
-    throw badRequest('Header credentials require credentialHeaderName.')
   }
 }
 
@@ -338,11 +316,6 @@ function toResponse(row: ConnectorRecord): ConnectorResponse {
     userInfoEndpoint: row.userInfoEndpoint,
     jwksEndpoint: row.jwksEndpoint,
     scopes: row.scopes ?? [],
-    apiBaseUrl: row.apiBaseUrl,
-    credentialModes: (row.credentialModes ?? []) as ConnectorResponse['credentialModes'],
-    credentialHeaderName: row.credentialHeaderName,
-    allowedMethods: (row.allowedMethods ?? []) as ConnectorResponse['allowedMethods'],
-    allowedPathPrefixes: row.allowedPathPrefixes ?? [],
     providerMetadata: row.providerMetadata ?? {},
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

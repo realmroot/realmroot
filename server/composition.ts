@@ -17,7 +17,7 @@ import { createDrizzleAssetRepository } from '@server/adapters/repos/assets'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
-import { createExternalAccountRepository } from '@server/adapters/repos/external-accounts'
+import { createExternalResourceRepository } from '@server/adapters/repos/external-resources'
 import { createOnboardingRepository } from '@server/adapters/repos/onboarding'
 import { createSecurityRepository } from '@server/adapters/repos/security'
 import { createTokenExchangeRepository } from '@server/adapters/repos/token-exchange'
@@ -46,7 +46,7 @@ export function createDeps(env: Env, config: RuntimeConfig): Deps {
     authorization: createDrizzleAuthorizationRepository(db),
     configz: createDrizzleConfigzRepository(db),
     connectors: createConnectorRepository(db, secrets),
-    externalAccounts: createExternalAccountRepository(db),
+    externalResources: createExternalResourceRepository(db),
     externalHttp: { fetch: (request) => (env.EXTERNAL_HTTP ? env.EXTERNAL_HTTP.fetch(request) : fetch(request)) },
     onboarding: createOnboardingRepository(env.DB),
     security: createSecurityRepository(db, config.securityPolicy),

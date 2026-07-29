@@ -164,6 +164,13 @@ export function toManagementOperationKey(route: HonoRoute) {
   if (route.path === '/api/capability-requests') {
     return `${route.method} /capability-requests`
   }
+  if (
+    route.path === '/api/agent/resources' ||
+    route.path === '/api/agent/access-requests' ||
+    route.path.startsWith('/api/agent/access-requests/:')
+  ) {
+    return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
+  }
   if (route.path === '/api/auth/*' && route.method === 'POST') {
     return `${route.method} /auth/oauth2/token`
   }

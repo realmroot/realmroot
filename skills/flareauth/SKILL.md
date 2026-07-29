@@ -243,5 +243,5 @@ device authorization support.
 - Asset upload endpoints use `multipart/form-data` with a single `file` field.
 - Raw secrets are returned only once on creation or rotation; never expect list/detail responses to reveal secret material.
 - Generate Agent and Host private keys locally. Never place them in Restish request bodies, approval URLs, logs, or chat.
-- An Agent may initiate login, but it must not approve its own login, grants, or external-account access.
+- An Agent may initiate login, but it must not approve its own login, grants, or external API resource access.
 - For large changes, read current state first, apply the smallest patch, then read back the resource to verify.

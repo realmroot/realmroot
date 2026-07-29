@@ -86,7 +86,7 @@ export function AgentApproval() {
           <p className="text-sm text-muted-foreground">
             {isCapabilityRequest
               ? 'This grants the listed permissions to the existing Agent identity. It does not sign the Agent in as you.'
-              : 'This creates a stable Agent identity and binds this Host to it. Login alone grants no external account access.'}
+              : 'This creates a stable Agent identity and binds this Host to it. Login alone grants no external API resource access.'}
           </p>
         </div>
 

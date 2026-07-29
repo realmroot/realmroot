@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from 'vitest'
 
 describe('Connector API schemas', () => {
-  it('accepts disabled, social, discovered OAuth, explicit OAuth, and generic API inputs', () => {
+  it('accepts disabled, social, discovered OAuth, and explicit OAuth inputs', () => {
     for (const input of [
       { providerType: 'social', providerId: 'google', displayName: 'Google', enabled: false },
       {
@@ -35,16 +35,6 @@ describe('Connector API schemas', () => {
         authorizationEndpoint: 'https://issuer.example.com/authorize',
         tokenEndpoint: 'https://issuer.example.com/token',
       },
-      {
-        providerType: 'generic_api',
-        providerId: 'api',
-        displayName: 'API',
-        apiBaseUrl: 'https://api.example.com',
-        credentialModes: ['header'],
-        credentialHeaderName: 'X-API-Key',
-        allowedMethods: ['GET'],
-        allowedPathPrefixes: ['/v1'],
-      },
     ]) {
       expect(createConnectorRequestSchema.safeParse(input).success).toBe(true)
     }
@@ -54,27 +44,6 @@ describe('Connector API schemas', () => {
     const invalid = [
       { providerType: 'social', providerId: 'google', displayName: 'Google', clientSecret: 'secret' },
       { providerType: 'social', providerId: 'google', displayName: 'Google', clientId: 'client' },
-      { providerType: 'generic_api', providerId: 'api', displayName: 'API', credentialModes: ['bearer'] },
-      {
-        providerType: 'generic_api',
-        providerId: 'api',
-        displayName: 'API',
-        apiBaseUrl: 'https://api.example.com',
-      },
-      {
-        providerType: 'generic_api',
-        providerId: 'api',
-        displayName: 'API',
-        apiBaseUrl: 'https://api.example.com',
-        credentialModes: ['oauth'],
-      },
-      {
-        providerType: 'generic_api',
-        providerId: 'api',
-        displayName: 'API',
-        apiBaseUrl: 'https://api.example.com',
-        credentialModes: ['header'],
-      },
       {
         providerType: 'generic_oauth',
         providerId: 'oauth',
@@ -109,23 +78,18 @@ describe('Connector API schemas', () => {
       connectorResponseSchema.parse({
         id: 'connector-1',
         slug: 'connector',
-        providerType: 'generic_api',
-        providerId: 'api',
-        displayName: 'API',
+        providerType: 'generic_oauth',
+        providerId: 'oauth',
+        displayName: 'OAuth',
         enabled: true,
-        clientId: null,
-        clientSecretConfigured: false,
-        issuer: null,
+        clientId: 'client',
+        clientSecretConfigured: true,
+        issuer: 'https://issuer.example.com',
         authorizationEndpoint: null,
         tokenEndpoint: null,
         userInfoEndpoint: null,
         jwksEndpoint: null,
         scopes: [],
-        apiBaseUrl: 'https://api.example.com',
-        credentialModes: ['bearer'],
-        credentialHeaderName: null,
-        allowedMethods: ['GET'],
-        allowedPathPrefixes: ['/'],
         providerMetadata: {},
         createdAt: now,
         updatedAt: now,

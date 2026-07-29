@@ -15,8 +15,8 @@ import type {
   ConfigzRepository,
   ConnectorRepository,
   EmailGateway,
-  ExternalAccountRepository,
   ExternalHttpGateway,
+  ExternalResourceRepository,
   JwksGateway,
   OnboardingRepository,
   SecretCipher,
@@ -38,7 +38,7 @@ export interface Deps {
   authorization: AuthorizationRepository
   configz: ConfigzRepository
   connectors: ConnectorRepository
-  externalAccounts: ExternalAccountRepository
+  externalResources: ExternalResourceRepository
   externalHttp: ExternalHttpGateway
   onboarding: OnboardingRepository
   security: SecurityRepository

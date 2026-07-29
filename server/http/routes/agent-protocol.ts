@@ -1,17 +1,30 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
-import { proxyAgentEgress } from '@server/usecases/agent-egress'
 import {
   createAgentEnrollmentIntent,
   createAgentLoginIdentity,
   getAgentIdentityByProtocolAgent,
 } from '@server/usecases/agent-identities'
 import type { ProtocolAgentSession } from '@server/usecases/agent-tokens'
+import type { Deps } from '@server/usecases/deps'
+import {
+  createAgentAccessRequest,
+  discoverAgentResources,
+  getAgentAccessRequest,
+  issueExternalTokenLease,
+} from '@server/usecases/external-resources'
 import {
   agentProtocolEnrollmentIntentResponseSchema,
   agentProtocolIdentityResponseSchema,
   createAgentLoginIdentityRequestSchema,
   createAgentProtocolEnrollmentIntentRequestSchema,
 } from '@shared/api/agents'
+import {
+  agentAccessRequestSchema,
+  agentResourceDiscoverySchema,
+  createAgentAccessRequestSchema,
+  createExternalTokenLeaseRequestSchema,
+  externalTokenLeaseSchema,
+} from '@shared/api/external-resources'
 import { Hono } from 'hono'
 import { getDeps } from '../middleware/deps'
 import { toBoundaryError } from './auth-api'
@@ -23,6 +36,10 @@ interface AgentSessionApi {
     body: { token: string; issuer?: string; audience?: string | string[] }
     asResponse: false
   }) => Promise<{ payload: Record<string, unknown> | null }>
+  signJWT?: (context: {
+    body: { payload: Record<string, unknown>; overrideOptions?: { jwt?: { type?: string } } }
+    asResponse: false
+  }) => Promise<{ token: string }>
 }
 
 export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?: string) {
@@ -74,31 +91,55 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
   })
 
-  app.all('/egress/:externalAccountId/*', async (c) => {
-    const externalAccountId = c.req.param('externalAccountId')
-    const routePrefix = `/api/agent/egress/${externalAccountId}`
-    const relativePath = new URL(c.req.url).pathname.slice(routePrefix.length) || '/'
-    const issuer = oidcIssuer ?? new URL('/api/auth', c.req.url).toString()
-    if (!authApi.verifyJWT) throw unauthorized('Agent access token verification is unavailable.')
-    return proxyAgentEgress(
+  app.get('/resources', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    return c.json(agentResourceDiscoverySchema.parse(await discoverAgentResources(getDeps(c), principal)))
+  })
+
+  app.post('/access-requests', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const result = await createAgentAccessRequest(
       getDeps(c),
-      {
-        issuer,
-        verify: async (token, audience) =>
-          (
-            await authApi.verifyJWT!({
-              body: { token, issuer, audience },
-              asResponse: false,
-            })
-          ).payload,
-      },
-      c.req.raw,
-      externalAccountId,
-      relativePath,
+      await readJson(c, createAgentAccessRequestSchema),
+      principal,
+      new URL(c.req.url).origin,
+    )
+    return c.json(agentAccessRequestSchema.parse(result), 201)
+  })
+
+  app.get('/access-requests/:requestId', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    return c.json(
+      agentAccessRequestSchema.parse(await getAgentAccessRequest(getDeps(c), c.req.param('requestId'), principal)),
     )
   })
 
+  app.post('/access-requests/:requestId/token-leases', async (c) => {
+    if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const input = await readJson(c, createExternalTokenLeaseRequestSchema)
+    const result = await issueExternalTokenLease(getDeps(c), c.req.param('requestId'), input.dpopProof, principal, {
+      sign: (payload) =>
+        authApi.signJWT!({ body: { payload, overrideOptions: { jwt: { type: 'JWT' } } }, asResponse: false }).then(
+          ({ token }) => token,
+        ),
+    })
+    return c.json(externalTokenLeaseSchema.parse(result), 201)
+  })
+
   return app
+}
+
+async function resourcePrincipal(authApi: AgentSessionApi, deps: Deps, headers: Headers) {
+  const session = await requireAgentSession(authApi, headers)
+  const identity = await getAgentIdentityByProtocolAgent(deps, session.agent.id)
+  return {
+    issuer: identity.issuer,
+    subject: identity.subject,
+    identityId: identity.id,
+    protocolAgentId: session.agent.id,
+    hostId: session.agent.hostId,
+  }
 }
 
 async function requireAgentSession(authApi: AgentSessionApi, headers: Headers): Promise<ProtocolAgentSession> {

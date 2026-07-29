@@ -1,4 +1,9 @@
 import {
+  configureExternalResourceAuthorizationRequestSchema,
+  type ExternalResourceAuthorizationRecord,
+} from '@shared/api/external-resources'
+import {
+  configureExternalApiResourceAuthorization,
   consoleQueryKeys,
   createApiPermission,
   createApiResource,
@@ -7,6 +12,7 @@ import {
   deleteApiResource,
   deleteApiScope,
   getApiResource,
+  getExternalApiResourceAuthorization,
   listApiPermissions,
   listApiResources,
   listApiScopes,
@@ -25,7 +31,9 @@ import {
   createApiPermissionRequestSchema,
   createApiResourceRequestSchema,
   createApiScopeRequestSchema,
+  Field,
   Plus,
+  SelectInput,
   Table,
   TableBody,
   TableCell,
@@ -69,6 +77,7 @@ export function ApiResourcesPage() {
   })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [createMode, setCreateMode] = useState<'flareauth' | 'external'>('flareauth')
   const [search, setSearch] = useState('')
   const createMutation = useAdminMutation({
     mutationFn: createApiResource,
@@ -90,9 +99,25 @@ export function ApiResourcesPage() {
       title={tt('API resources')}
       description={tt('Register protected APIs, audiences, scopes, and permission surfaces.')}
       action={
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus data-icon="inline-start" /> {tt('New resource')}{' '}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => {
+              setCreateMode('flareauth')
+              setDialogOpen(true)
+            }}
+          >
+            <Plus data-icon="inline-start" /> {tt('New local resource')}{' '}
+          </Button>
+          <Button
+            onClick={() => {
+              setCreateMode('external')
+              setDialogOpen(true)
+            }}
+            variant="secondary"
+          >
+            <Plus data-icon="inline-start" /> {tt('New external resource')}{' '}
+          </Button>
+        </div>
       }
       auxiliary={
         <SimpleCreateDialog
@@ -104,10 +129,12 @@ export function ApiResourcesPage() {
             ['description', 'Description'],
           ]}
           onClose={() => setDialogOpen(false)}
-          onSubmit={(form) => createMutation.mutate(parseForm(createApiResourceRequestSchema, form))}
+          onSubmit={(form) =>
+            createMutation.mutate(parseForm(createApiResourceRequestSchema, { ...form, authorizationMode: createMode }))
+          }
           open={dialogOpen}
           pending={createMutation.isPending}
-          title={tt('Create API resource')}
+          title={tt(createMode === 'external' ? 'Create external API resource' : 'Create local API resource')}
         />
       }
       error={query.error}
@@ -132,6 +159,7 @@ export function ApiResourcesPage() {
           <TableRow>
             <TableHead>{tt('Resource')}</TableHead>
             <TableHead>{tt('Audience')}</TableHead>
+            <TableHead>{tt('Authorization')}</TableHead>
             <TableHead>{tt('Status')}</TableHead>
           </TableRow>
         </TableHeader>
@@ -147,13 +175,16 @@ export function ApiResourcesPage() {
                 </TableCell>
                 <TableCell>{resource.audience}</TableCell>
                 <TableCell>
+                  {resource.authorizationMode === 'external' ? tt('External issuer') : tt('FlareAuth')}
+                </TableCell>
+                <TableCell>
                   <StatusBadge active={resource.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
                 </TableCell>
               </TableRow>
             ))
           ) : (
             <TableEmptyRow
-              colSpan={3}
+              colSpan={4}
               description={
                 search
                   ? tt('No API resources match the current search.')
@@ -190,6 +221,12 @@ export function ApiResourceDetailPage({
     queryKey: [...consoleQueryKeys.apiResources, resourceId, 'permissions'],
     queryFn: () => listApiPermissions(resourceId),
     enabled: selectedTab === 'permissions',
+  })
+  const externalAuthorizationQuery = useQuery({
+    queryKey: [...consoleQueryKeys.apiResources, resourceId, 'external-authorization'],
+    queryFn: () => getExternalApiResourceAuthorization(resourceId),
+    enabled: resourceQuery.data?.authorizationMode === 'external',
+    retry: false,
   })
   const resource = resourceQuery.data
   const refreshChildren = () =>
@@ -286,67 +323,75 @@ export function ApiResourceDetailPage({
           />
           <div className="grid gap-4 xl:grid-cols-2">
             {selectedTab === 'settings' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{tt('Resource settings')}</CardTitle>
-                  <CardDescription>
-                    {' '}
-                    {tt('Audience is emitted into authorization claims for matching OAuth resource requests.')}{' '}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <AuthorizationForm
-                    buttonLabel="Save resource"
-                    defaults={{
-                      identifier: resource.identifier,
-                      name: resource.name,
-                      audience: resource.audience,
-                      description: resource.description ?? '',
-                      tokenClaimsNamespace: resource.tokenClaimsNamespace ?? '',
-                    }}
-                    error={updateMutation.error}
-                    fields={[
-                      ['identifier', 'Identifier'],
-                      ['name', 'Name'],
-                      ['audience', 'Audience'],
-                      ['description', 'Description'],
-                      ['tokenClaimsNamespace', 'Token claims namespace'],
-                    ]}
-                    onSubmit={(form) =>
-                      updateMutation.mutate(
-                        parseForm(updateApiResourceRequestSchema, {
-                          ...form,
-                          tokenClaimsNamespace: nullableString(form.tokenClaimsNamespace ?? ''),
-                        }),
-                      )
-                    }
-                    pending={updateMutation.isPending}
-                  />
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      disabled={updateMutation.isPending}
-                      onClick={() =>
-                        updateMutation.mutate({
-                          enabled: !resource.enabled,
-                        })
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{tt('Resource settings')}</CardTitle>
+                    <CardDescription>
+                      {' '}
+                      {tt('Audience is emitted into authorization claims for matching OAuth resource requests.')}{' '}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <AuthorizationForm
+                      buttonLabel="Save resource"
+                      defaults={{
+                        identifier: resource.identifier,
+                        name: resource.name,
+                        audience: resource.audience,
+                        description: resource.description ?? '',
+                        tokenClaimsNamespace: resource.tokenClaimsNamespace ?? '',
+                      }}
+                      error={updateMutation.error}
+                      fields={[
+                        ['identifier', 'Identifier'],
+                        ['name', 'Name'],
+                        ['audience', 'Audience'],
+                        ['description', 'Description'],
+                        ['tokenClaimsNamespace', 'Token claims namespace'],
+                      ]}
+                      onSubmit={(form) =>
+                        updateMutation.mutate(
+                          parseForm(updateApiResourceRequestSchema, {
+                            ...form,
+                            tokenClaimsNamespace: nullableString(form.tokenClaimsNamespace ?? ''),
+                          }),
+                        )
                       }
-                      type="button"
-                      variant="secondary"
-                    >
-                      {resource.enabled ? 'Disable' : 'Enable'}
-                    </Button>
-                    <Button
-                      disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate()}
-                      type="button"
-                      variant="danger"
-                    >
-                      <Trash2 data-icon="inline-start" /> {tt('Delete resource')}{' '}
-                    </Button>
-                  </div>
-                  <MutationError error={deleteMutation.error} />
-                </CardContent>
-              </Card>
+                      pending={updateMutation.isPending}
+                    />
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        disabled={updateMutation.isPending}
+                        onClick={() =>
+                          updateMutation.mutate({
+                            enabled: !resource.enabled,
+                          })
+                        }
+                        type="button"
+                        variant="secondary"
+                      >
+                        {resource.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate()}
+                        type="button"
+                        variant="danger"
+                      >
+                        <Trash2 data-icon="inline-start" /> {tt('Delete resource')}{' '}
+                      </Button>
+                    </div>
+                    <MutationError error={deleteMutation.error} />
+                  </CardContent>
+                </Card>
+                {resource.authorizationMode === 'external' ? (
+                  <ExternalAuthorizationCard
+                    authorization={externalAuthorizationQuery.data ?? null}
+                    resourceId={resource.id}
+                  />
+                ) : null}
+              </>
             ) : null}
 
             {selectedTab === 'scopes' ? (
@@ -473,5 +518,113 @@ export function ApiResourceDetailPage({
         </div>
       ) : null}
     </ResourcePage>
+  )
+}
+
+function ExternalAuthorizationCard({
+  authorization,
+  resourceId,
+}: {
+  authorization: ExternalResourceAuthorizationRecord | null
+  resourceId: string
+}) {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    resourceUrl: '',
+    registrationMode: 'dynamic' as 'dynamic' | 'manual',
+    clientId: '',
+    clientSecret: '',
+  })
+  useEffect(() => {
+    if (!authorization) return
+    setForm({
+      resourceUrl: authorization.resourceUrl,
+      registrationMode: authorization.registrationMode,
+      clientId: authorization.clientId,
+      clientSecret: '',
+    })
+  }, [authorization])
+  const mutation = useMutation({
+    mutationFn: (input: z.infer<typeof configureExternalResourceAuthorizationRequestSchema>) =>
+      configureExternalApiResourceAuthorization(resourceId, input),
+    onSuccess: (configured) =>
+      queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId, 'external-authorization'], configured),
+  })
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{tt('External authorization server')}</CardTitle>
+        <CardDescription>
+          {tt('Discover the protected resource and configure the OAuth client used for direct Agent token exchange.')}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            mutation.mutate(
+              configureExternalResourceAuthorizationRequestSchema.parse({
+                resourceUrl: form.resourceUrl,
+                registrationMode: form.registrationMode,
+                clientId: form.registrationMode === 'manual' ? form.clientId : undefined,
+                clientSecret: form.registrationMode === 'manual' ? form.clientSecret : undefined,
+              }),
+            )
+          }}
+        >
+          <Field label={tt('Protected resource URL')}>
+            <TextInput
+              onChange={(event) => setForm((current) => ({ ...current, resourceUrl: event.target.value }))}
+              required
+              type="url"
+              value={form.resourceUrl}
+            />
+          </Field>
+          <Field label={tt('Client registration')}>
+            <SelectInput
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  registrationMode: event.target.value as 'dynamic' | 'manual',
+                }))
+              }
+              value={form.registrationMode}
+            >
+              <option value="dynamic">{tt('Dynamic registration (RFC 7591)')}</option>
+              <option value="manual">{tt('Pre-registered client')}</option>
+            </SelectInput>
+          </Field>
+          {form.registrationMode === 'manual' ? (
+            <>
+              <Field label={tt('Client ID')}>
+                <TextInput
+                  onChange={(event) => setForm((current) => ({ ...current, clientId: event.target.value }))}
+                  required
+                  value={form.clientId}
+                />
+              </Field>
+              <Field label={tt('Client secret')}>
+                <TextInput
+                  onChange={(event) => setForm((current) => ({ ...current, clientSecret: event.target.value }))}
+                  required
+                  type="password"
+                  value={form.clientSecret}
+                />
+              </Field>
+            </>
+          ) : null}
+          {authorization ? (
+            <p className="text-xs text-muted-foreground">
+              {tt('Issuer')}: {authorization.issuer} · {tt('Status')}: {authorization.status}
+            </p>
+          ) : null}
+          <MutationError error={mutation.error} />
+          <Button disabled={mutation.isPending} type="submit">
+            {mutation.isPending ? tt('Discovering...') : tt('Discover and configure')}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   )
 }

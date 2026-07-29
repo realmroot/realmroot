@@ -13,11 +13,10 @@ export const agentAuditEvent = sqliteTable(
     agentIdentityId: text('agent_identity_id'),
     hostId: text('host_id'),
     authorityGrantId: text('authority_grant_id'),
-    externalAccountId: text('external_account_id'),
-    externalAccountGrantId: text('external_account_grant_id'),
-    targetOrigin: text('target_origin'),
-    targetPath: text('target_path'),
-    method: text('method'),
+    resourceId: text('resource_id'),
+    resourceConnectionId: text('resource_connection_id'),
+    accessGrantId: text('access_grant_id'),
+    scopes: text('scopes', { mode: 'json' }).$type<string[]>(),
     reasonCode: text('reason_code'),
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
     occurredAt: integer('occurred_at', { mode: 'timestamp_ms' })
@@ -27,7 +26,7 @@ export const agentAuditEvent = sqliteTable(
   (table) => [
     index('agentAuditEvent_occurredAt_idx').on(table.occurredAt),
     index('agentAuditEvent_agentIdentityId_idx').on(table.agentIdentityId),
-    index('agentAuditEvent_externalAccountId_idx').on(table.externalAccountId),
+    index('agentAuditEvent_resourceId_idx').on(table.resourceId),
     index('agentAuditEvent_result_idx').on(table.result),
   ],
 )

@@ -1,12 +1,14 @@
-import { AppWindow, Bot, Link2, Wallet } from 'lucide-react'
+import { AppWindow, Bot, KeyRound, Link2, Wallet } from 'lucide-react'
 import { ProviderIcon } from '@/components/provider-icon'
 import { Button } from '@/components/ui/button'
 import {
+  createResourceConnectionIntent,
   linkAccount,
   retirePersonalAgentIdentity,
   revokeAccountAgent,
   revokeAccountAgentCapabilityGrant,
   revokeApplicationConsent,
+  revokeResourceConnection,
   unlinkAccount,
   unlinkWalletAddress,
 } from '@/lib/api/account'
@@ -27,7 +29,9 @@ import {
   useAccountProfile,
   useAgentIdentities,
   useConsentedApplications,
+  useExternalApiResources,
   useLinkedAccounts,
+  useResourceConnections,
 } from './queries'
 import { defaultAccountCenterSettings } from './settings'
 import type {
@@ -50,9 +54,20 @@ export function AccountConnectionsPage() {
   const applicationsQuery = useConsentedApplications(accountCenter.connectedAccountsEnabled)
   const agentsQuery = useAccountAgents()
   const agentIdentitiesQuery = useAgentIdentities()
+  const externalResourcesQuery = useExternalApiResources()
+  const resourceConnectionsQuery = useResourceConnections()
   const mutate = useAccountMutation()
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
-  const queries = [configQuery, profileQuery, linkedAccountsQuery, applicationsQuery, agentsQuery, agentIdentitiesQuery]
+  const queries = [
+    configQuery,
+    profileQuery,
+    linkedAccountsQuery,
+    applicationsQuery,
+    agentsQuery,
+    agentIdentitiesQuery,
+    externalResourcesQuery,
+    resourceConnectionsQuery,
+  ]
   const error = queries.find((query) => query.error)?.error
   if (queries.some((query) => query.isLoading)) return <AccountPageLoading config={config} />
   if (error)
@@ -69,6 +84,12 @@ export function AccountConnectionsPage() {
           providers={config?.identityProviders ?? []}
           walletProvider={config?.builtInProviders.web3Wallet}
         />
+        <ResourceConnectionsPanel
+          connections={resourceConnectionsQuery.data?.connections ?? []}
+          confirm={setConfirmation}
+          mutate={mutate}
+          resources={externalResourcesQuery.data?.resources ?? []}
+        />
         <ApplicationsPanel
           applications={applicationsQuery.data?.applications ?? []}
           confirm={setConfirmation}
@@ -83,6 +104,89 @@ export function AccountConnectionsPage() {
       </div>
       <DestructiveConfirmationDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
     </AccountPageShell>
+  )
+}
+
+function ResourceConnectionsPanel({
+  resources,
+  connections,
+  confirm,
+  mutate,
+}: {
+  resources: import('@shared/api/external-resources').ConnectableExternalResourcesResponse['resources']
+  connections: import('@shared/api/external-resources').ListResourceConnectionsResponse['connections']
+  confirm: ConfirmDestructiveHandler
+  mutate: MutationHandler
+}) {
+  async function connect(resourceId: string) {
+    const intent = await mutate('Redirecting to the external platform.', () =>
+      createResourceConnectionIntent(resourceId, { owner: { type: 'user' } }),
+    )
+    if (intent) window.location.assign(intent.authorizationUrl)
+  }
+
+  return (
+    <section className="accountPanelGroup" aria-label={tt('API resource accounts')}>
+      <div className="accountPanelHeader">
+        <PanelTitle
+          description={tt('Accounts used to authorize direct Agent access to external APIs.')}
+          icon={<KeyRound size={18} />}
+          title={tt('API resource accounts')}
+        />
+      </div>
+      <section className="settingsPanel">
+        <SubsectionTitle
+          title={tt('Connected resource accounts')}
+          description={tt('Connecting an account grants no Agent access until you approve an exact request.')}
+        />
+        <ItemList
+          empty={tt('No external API resources are available.')}
+          emptyDescription={tt('An administrator must configure an external API Resource first.')}
+          items={resources.flatMap((resource) => {
+            const matches = connections.filter(
+              (connection) => connection.resourceId === resource.id && connection.status === 'active',
+            )
+            if (matches.length === 0) {
+              return [
+                {
+                  id: resource.id,
+                  icon: <KeyRound size={16} />,
+                  title: resource.name,
+                  meta: `${resource.resourceUrl} · ${resource.scopes.map((scope) => scope.value).join(', ')}`,
+                  status: tt('Not connected'),
+                  action: <Button onClick={() => void connect(resource.id)}>{tt('Connect')}</Button>,
+                },
+              ]
+            }
+            return matches.map((connection) => ({
+              id: connection.id,
+              icon: <KeyRound size={16} />,
+              title: `${resource.name} · ${connection.displayName}`,
+              meta: connection.grantedScopes.join(', '),
+              status: tt('Connected'),
+              action: (
+                <Button
+                  onClick={() =>
+                    confirm({
+                      title: tt('Disconnect resource account'),
+                      description: tt('Active Agent grants and token leases for this account will be revoked.'),
+                      actionLabel: tt('Disconnect'),
+                      onConfirm: () =>
+                        mutate('Resource account disconnected.', () => revokeResourceConnection(connection.id), {
+                          invalidate: [accountQueryKeys.resourceConnections],
+                        }),
+                    })
+                  }
+                  variant="ghost"
+                >
+                  {tt('Disconnect')}
+                </Button>
+              ),
+            }))
+          })}
+        />
+      </section>
+    </section>
   )
 }
 

@@ -176,6 +176,8 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
     http.get(`${base}/api/account/applications`, () => HttpResponse.json({ applications: store.applications })),
     http.get(`${base}/api/account/agents`, () => HttpResponse.json({ agents: store.agents })),
     http.get(`${base}/api/account/agent-identities`, () => HttpResponse.json({ identities: store.agentIdentities })),
+    http.get(`${base}/api/account/external-api-resources`, () => HttpResponse.json({ resources: [] })),
+    http.get(`${base}/api/account/resource-connections`, () => HttpResponse.json({ connections: [] })),
   ] as unknown as Handlers
 }
 

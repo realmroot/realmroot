@@ -133,8 +133,9 @@ export function createResource(deps: Deps, input: CreateApiResourceRequest) {
     identifier: input.identifier,
     name: input.name,
     audience: input.audience,
+    authorizationMode: input.authorizationMode ?? 'flareauth',
     description: input.description ?? null,
-    enabled: input.enabled ?? true,
+    enabled: (input.authorizationMode ?? 'flareauth') === 'external' ? false : (input.enabled ?? true),
     tokenClaimsNamespace: input.tokenClaimsNamespace ?? null,
   })
 }
@@ -152,7 +153,13 @@ export async function getResource(deps: Deps, id: string) {
 }
 
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
-  await getResource(deps, id)
+  const resource = await getResource(deps, id)
+  if (resource.authorizationMode === 'external' && input.enabled === true) {
+    const authorization = await deps.externalResources.findAuthorization(id)
+    if (authorization?.status !== 'active') {
+      throw badRequest('External API resource authorization must be configured before enabling the resource.')
+    }
+  }
   await deps.authorization.updateResource(id, input)
   return getResource(deps, id)
 }

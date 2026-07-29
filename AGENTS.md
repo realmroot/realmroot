@@ -67,7 +67,7 @@ Spec index:
 - `specs/management-api.feature`: Management API discovery and Restish
   command-line administration entry point.
 - `specs/agent-identity.feature`: durable Agent identities, host credentials,
-  external accounts, credential brokerage, and governance.
+  external API resource authorization, direct token exchange, and governance.
 
 ## Checks
 

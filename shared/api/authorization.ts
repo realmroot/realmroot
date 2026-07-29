@@ -84,6 +84,7 @@ export const apiResourceResponseSchema = z.object({
   identifier: z.string(),
   name: z.string(),
   audience: z.string(),
+  authorizationMode: z.enum(['flareauth', 'external']),
   description: z.string().nullable(),
   enabled: z.boolean(),
   tokenClaimsNamespace: z.string().nullable(),
@@ -95,6 +96,7 @@ export const createApiResourceRequestSchema = z.object({
   identifier: nonEmptyString,
   name: nonEmptyString,
   audience: nonEmptyString,
+  authorizationMode: z.enum(['flareauth', 'external']).default('flareauth'),
   description: optionalText,
   enabled: z.boolean().optional(),
   tokenClaimsNamespace: z.url().nullable().optional(),
@@ -244,7 +246,7 @@ export type ListApiResourcesResponse = z.infer<typeof listApiResourcesResponseSc
 export type ListOrganizationsResponse = z.infer<typeof listOrganizationsResponseSchema>
 export type ListRolesResponse = z.infer<typeof listRolesResponseSchema>
 export type RolePermissionsResponse = z.infer<typeof rolePermissionsResponseSchema>
-export type CreateApiResourceRequest = z.infer<typeof createApiResourceRequestSchema>
+export type CreateApiResourceRequest = z.input<typeof createApiResourceRequestSchema>
 export type UpdateApiResourceRequest = z.infer<typeof updateApiResourceRequestSchema>
 export type ApiScopeResponse = z.infer<typeof apiScopeResponseSchema>
 export type ListApiScopesResponse = z.infer<typeof listApiScopesResponseSchema>

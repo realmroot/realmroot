@@ -58,6 +58,10 @@ import type {
   ListConnectorTemplatesResponse,
 } from '@shared/api/connectors'
 import type {
+  ConfigureExternalResourceAuthorizationRequest,
+  ExternalResourceAuthorizationRecord,
+} from '@shared/api/external-resources'
+import type {
   CreateManagementConnectorRequest,
   CreateManagementFederatedCredentialRequest,
   CreateManagementFederatedCredentialResponse,
@@ -425,6 +429,13 @@ export type RpcSchema = {
     $get: RpcEndpoint<{ param: { id: string } }, ApiResourceResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateApiResourceRequest }, ApiResourceResponse>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
+  }
+  '/api/management/api-resources/:id/external-authorization': {
+    $get: RpcEndpoint<{ param: { id: string } }, ExternalResourceAuthorizationRecord>
+    $put: RpcEndpoint<
+      { param: { id: string }; json: ConfigureExternalResourceAuthorizationRequest },
+      ExternalResourceAuthorizationRecord
+    >
   }
   '/api/management/api-resources/:id/scopes': {
     $get: RpcEndpoint<

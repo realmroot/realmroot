@@ -21,9 +21,17 @@ func handleCapabilityApprovalResponse(
 		return plugin.ResponseMiddlewareOutput{}, nil
 	}
 	requestURL, err := url.Parse(input.Request.URI)
-	if err != nil ||
-		input.Request.Method != http.MethodPost ||
-		requestURL.Path != "/api/capability-requests" {
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, nil
+	}
+	if input.Request.Method == http.MethodPost && requestURL.Path == "/api/agent/access-requests" {
+		finder, ok := states.(resourceStateFinder)
+		if !ok {
+			return plugin.ResponseMiddlewareOutput{}, errors.New("Agent state store cannot resolve resource requests")
+		}
+		return handleResourceAccessApproval(input, opener, finder, client, requestURL)
+	}
+	if input.Request.Method != http.MethodPost || requestURL.Path != "/api/capability-requests" {
 		return plugin.ResponseMiddlewareOutput{}, nil
 	}
 	body, ok := input.Response.Body.(map[string]any)
@@ -93,6 +101,70 @@ func handleCapabilityApprovalResponse(
 			"agent_capability_grants": status.AgentCapabilityGrants,
 		}},
 	}, nil
+}
+
+func handleResourceAccessApproval(
+	input plugin.ResponseMiddlewareInput,
+	opener browserOpener,
+	states resourceStateFinder,
+	client httpDoer,
+	requestURL *url.URL,
+) (plugin.ResponseMiddlewareOutput, error) {
+	body, ok := input.Response.Body.(map[string]any)
+	if !ok || body["status"] != "pending" {
+		return plugin.ResponseMiddlewareOutput{}, nil
+	}
+	requestID, _ := body["id"].(string)
+	hostID, _ := body["hostId"].(string)
+	verificationURI, _ := body["approvalUrl"].(string)
+	expiresRaw, _ := body["expiresAt"].(string)
+	if requestID == "" || hostID == "" || verificationURI == "" || expiresRaw == "" {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("pending resource request is missing approval data")
+	}
+	expiresAt, err := time.Parse(time.RFC3339, expiresRaw)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("resource approval expiry is invalid")
+	}
+	requestOrigin := requestURL.Scheme + "://" + requestURL.Host
+	configuration, err := discoverAgentConfiguration(context.Background(), client, requestOrigin)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	approvalURL, err := url.Parse(verificationURI)
+	if err != nil || !sameOrigin(verificationURI, requestOrigin) || approvalURL.Path != "/agent/resource-access/approve" {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("resource approval URL must use the discovered issuer origin")
+	}
+	if err := opener.Open(verificationURI); err != nil {
+		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open resource approval: %w", err)
+	}
+	state, err := states.FindByOriginAndHostID(requestOrigin, hostID)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	for time.Now().Before(expiresAt) {
+		var resolved map[string]any
+		if err := requestJSON(
+			context.Background(),
+			client,
+			http.MethodGet,
+			requestOrigin+"/api/agent/access-requests/"+url.PathEscape(requestID),
+			mustAgentJWT(state, configuration.Issuer),
+			nil,
+			&resolved,
+		); err != nil {
+			return plugin.ResponseMiddlewareOutput{}, err
+		}
+		status, _ := resolved["status"].(string)
+		switch status {
+		case "approved", "consumed":
+			return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: resolved}}, nil
+		case "denied", "expired":
+			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("controller %s the Agent resource request", status)
+		}
+		timer := time.NewTimer(2 * time.Second)
+		<-timer.C
+	}
+	return plugin.ResponseMiddlewareOutput{}, errors.New("controller resource approval expired; invoke the request again")
 }
 
 func waitForCapabilityDecision(

@@ -73,10 +73,12 @@ export function resetLocalData() {
     DELETE FROM agent_dpop_jti;
     DELETE FROM agent_access_token;
     DELETE FROM agent_authority_approval;
-    DELETE FROM external_account_grant;
-    DELETE FROM external_credential;
-    DELETE FROM external_oauth_intent;
-    DELETE FROM external_account;
+    DELETE FROM external_token_lease;
+    DELETE FROM agent_access_grant;
+    DELETE FROM agent_access_request;
+    DELETE FROM resource_connection_intent;
+    DELETE FROM resource_account_connection;
+    DELETE FROM external_resource_authorization;
     DELETE FROM agent_authority_grant;
     DELETE FROM agent_identity_binding;
     DELETE FROM agent_enrollment_intent;

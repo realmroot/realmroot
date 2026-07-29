@@ -11,7 +11,7 @@ export type ConnectorProviderRow = {
   description: string
   icon: string
   providerId: string
-  providerType: 'builtin' | 'social' | 'generic_oauth' | 'generic_api'
+  providerType: 'builtin' | 'social' | 'generic_oauth'
   typeLabel: string
   configurationLabel: string
   enabled: boolean
@@ -60,7 +60,7 @@ export function connectorProviderRows(
       key: `${connector.providerType}:${connector.id}`,
       displayName: connector.displayName,
       description: connectorDescription(connector.providerType),
-      icon: connector.providerType === 'generic_api' ? 'api' : 'oauth',
+      icon: 'oauth',
       providerId: connector.providerId,
       providerType: connector.providerType,
       typeLabel: connectorTypeLabel(connector.providerType),
@@ -140,14 +140,12 @@ export function connectorProviderRows(
   ]
 }
 
-function connectorTypeLabel(providerType: 'social' | 'generic_oauth' | 'generic_api') {
+function connectorTypeLabel(providerType: 'social' | 'generic_oauth') {
   if (providerType === 'generic_oauth') return 'Generic OAuth'
-  if (providerType === 'generic_api') return 'Generic API'
   return 'Social'
 }
 
-function connectorDescription(providerType: 'social' | 'generic_oauth' | 'generic_api') {
+function connectorDescription(providerType: 'social' | 'generic_oauth') {
   if (providerType === 'generic_oauth') return 'Standards-based OAuth/OIDC connector'
-  if (providerType === 'generic_api') return 'Credential-broker API boundary'
   return 'Social sign-in provider'
 }

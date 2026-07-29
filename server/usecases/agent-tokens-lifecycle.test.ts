@@ -463,7 +463,7 @@ async function accessFixture(
   const accessToken = compactJwt(claims)
   const proofPair = options.differentProofKey ? await generateKeyPair('ES256') : { publicKey, privateKey }
   const proofJwk = await exportJWK(proofPair.publicKey)
-  const url = 'https://auth.example.com/api/agent/egress/account-1/v1/repos?limit=1'
+  const url = 'https://projects.example.com/api/projects?limit=1'
   const proof = await new SignJWT({
     jti: crypto.randomUUID(),
     htm: 'GET',

@@ -48,8 +48,6 @@ export function connectorUpdateForm(form: FormState) {
     ...form,
     clientId: nullableFormValue(form.clientId),
     issuer: nullableFormValue(form.issuer),
-    apiBaseUrl: nullableFormValue(form.apiBaseUrl),
-    credentialHeaderName: nullableFormValue(form.credentialHeaderName),
     authorizationEndpoint: nullableFormValue(form.authorizationEndpoint),
     tokenEndpoint: nullableFormValue(form.tokenEndpoint),
     userInfoEndpoint: nullableFormValue(form.userInfoEndpoint),
@@ -80,11 +78,6 @@ export function connectorToForm(connector: ConnectorResponse | null): FormState 
     userInfoEndpoint: connector.userInfoEndpoint ?? '',
     jwksEndpoint: connector.jwksEndpoint ?? '',
     scopes: connector.scopes.join(' '),
-    apiBaseUrl: connector.apiBaseUrl ?? '',
-    credentialModes: connector.credentialModes.join(' '),
-    credentialHeaderName: connector.credentialHeaderName ?? '',
-    allowedMethods: connector.allowedMethods.join(' '),
-    allowedPathPrefixes: connector.allowedPathPrefixes.join('\n'),
     providerMetadata: JSON.stringify(connector.providerMetadata, null, 2),
     ...Object.fromEntries(
       Object.entries(connector.providerMetadata).flatMap(([key, value]) =>

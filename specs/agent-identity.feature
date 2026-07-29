@@ -1,7 +1,7 @@
-Feature: Agent identity and credential brokerage
+Feature: Agent identity and external API authorization
   As an Agent controller
-  I want Agents to have durable identities and constrained access to external accounts
-  So that Agents can act independently or by delegation without receiving long-lived secrets
+  I want Agents to have durable identities and request constrained access to connected API resources
+  So that Agents can act independently or by delegation without receiving refresh tokens
 
   Background:
     Given a first admin exists
@@ -23,7 +23,7 @@ Feature: Agent identity and credential brokerage
       And the original whoami operation resumes and returns the stable issuer and subject
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
       And later OpenAPI operations reuse the Agent identity without another login command
-      And enrollment alone grants no management or external account access
+      And enrollment alone grants no management or external API resource access
       And an unbound protocol registration cannot exercise Agent identity capabilities
 
     @entrypoint:restish @journey:agent-single-cli-principal
@@ -88,7 +88,7 @@ Feature: Agent identity and credential brokerage
       Given an Agent's host credentials may be compromised
       When an authorized controller recovers the Agent
       Then every existing host credential and session is revoked
-      And external account grants are frozen
+      And external API resource grants are frozen
       And the Agent keeps the same issuer and subject
 
     @entrypoint:product-ui @journey:agent-identity-retirement
@@ -173,62 +173,65 @@ Feature: Agent identity and credential brokerage
       Then FlareAuth rejects the refresh with invalid_grant
       And disabling the client or rotating its secret also prevents refresh
 
-  Rule: External accounts keep ownership separate from Agent access
+  Rule: External API resources use target-issued authorization
 
-    @entrypoint:product-ui @journey:external-account-ownership
-    Scenario: An external account has an explicit owner
-      Given a Connector is configured for an external platform
-      When a credential manager links an external account
-      Then the account is owned by exactly one user, organization, or Agent
-      And granting its use to an Agent does not transfer or copy ownership
+    @entrypoint:product-ui @journey:external-api-resource-registration
+    Scenario: An administrator registers an external API resource by protocol
+      Given a target resource publishes protected-resource and authorization-server metadata
+      When an administrator creates an external API resource from its resource URL
+      Then FlareAuth discovers its issuer, OAuth endpoints, supported scopes, token exchange, DPoP, and revocation
+      And FlareAuth registers or uses an explicitly configured OAuth client
+      And the resource cannot be enabled for Agents when a required capability is absent
+      And no identity Connector or HTTP proxy configuration is created
 
-    @e2e @entrypoint:product-ui @journey:external-account-connection
-    Scenario: A credential manager establishes an Agent-usable external account
-      Given an Agent requested access through a configured Connector
-      When a credential manager completes OAuth authorization or supplies a header credential
-      Then FlareAuth stores the resulting credential for the external account
-      And the credential manager explicitly grants selected use to the Agent
-      And the Agent cannot retrieve the long-lived credential
+    @e2e @entrypoint:product-ui @journey:resource-account-connection
+    Scenario: A user connects an account to an external API resource
+      Given an external API resource is enabled
+      When a user completes authorization code with PKCE in Account Center
+      Then FlareAuth records a resource account connection owned by the user's home space
+      And stores its refresh credential encrypted
+      And never exposes the refresh credential through an API, audit event, or error
+      And connecting the account grants no Agent permission
 
-    @entrypoint:product-ui @journey:external-account-secret-custody
-    Scenario: Connector and external account secrets remain confidential
-      Given Connector client secrets and external account credentials are configured
-      When an administrator or controller reads their configuration
-      Then FlareAuth reports only whether each secret is configured
-      And no API, audit event, or error response reveals secret material
-      And replacing a secret does not return its previous value
+    @entrypoint:agent-protocol @journey:agent-resource-discovery
+    Scenario: An Agent discovers accounts and requests exact resource authority
+      Given connected resource accounts exist in the Agent's home space
+      When the Agent lists available resources
+      Then FlareAuth returns enabled resources, requestable scopes, redacted accounts, and active grants
+      When the Agent requests an account and exact scope set without an applicable grant
+      Then FlareAuth creates one pending access request and returns a hosted approval URL
+      And it does not require a pre-existing Agent resource grant
 
-    @entrypoint:product-ui @journey:external-account-credential-boundary
-    Scenario: External accounts accept only supported API credentials
-      Given a credential manager configures an external account
-      When the credential uses OAuth, a bearer token, or a fixed header API key
-      Then FlareAuth can store it for credential brokerage
-      But passwords, cookies, browser sessions, query credentials, and custom request signatures are rejected
+    @entrypoint:product-ui @journey:agent-resource-approval
+    Scenario: A controller decides an Agent resource request in one step
+      Given an Agent resource access request is pending
+      When an authorized controller approves it
+      Then the controller confirms the resource account, exact scopes, and one-time, limited, or persistent mode
+      And scope expansion, another account, or another resource requires a new approval
+      And a denied request cannot issue a token lease
 
-  Rule: The credential broker remains platform independent
+    @e2e @entrypoint:agent-protocol @journey:agent-direct-resource-access
+    Scenario: An Agent calls an external API directly with a target-issued token
+      Given a controller approved an exact external API resource request
+      When the Agent requests a token lease with a DPoP proof for the target token endpoint
+      Then FlareAuth submits a signed Agent assertion with the RFC 7523 JWT bearer grant
+      And the target platform issues an Agent access token
+      And FlareAuth exchanges the connected user's subject token and the target-issued Agent access token with RFC 8693
+      And the target platform issues a short-lived DPoP-bound access token
+      And the token identifies the target user as subject and the Agent in the RFC 8693 actor claim
+      And no FlareAuth-specific metadata, grant type, token type, or claim is required
+      And FlareAuth returns no refresh token
+      When the Agent calls the target API
+      Then the Agent sends the request directly to the target platform
+      And no FlareAuth egress or credential injection endpoint exists
 
-    @e2e @entrypoint:agent-protocol @journey:agent-egress-proxy
-    Scenario: An Agent uses an external account through constrained HTTP egress
-      Given an Agent has a grant for an external account
-      And its Connector fixes the target API origin and credential injection rule
-      When an active host sends an allowed method and relative path through FlareAuth
-      Then FlareAuth injects the external credential and forwards the request
-      And the target response status, body, and permitted headers are returned
-      And the Agent never receives the injected credential
-
-    @entrypoint:agent-protocol @journey:agent-egress-boundaries
-    Scenario: Egress cannot escape Connector and grant boundaries
-      Given an Agent has a constrained external account grant
-      When its host requests a forbidden method, path, origin, port, or redirect
-      Then FlareAuth rejects the request before sending external credentials
-      And the host cannot override authorization, cookie, host, or credential injection headers
-
-    @e2e @entrypoint:agent-protocol @journey:agent-egress-revocation
-    Scenario: Revocation immediately blocks credential brokerage
-      Given an Agent host can use an external account through egress
-      When a controller revokes the host, Agent, or external account grant
-      Then subsequent token and egress requests are rejected
-      And unrelated hosts and grants remain active
+    @e2e @entrypoint:agent-protocol @journey:agent-resource-revocation
+    Scenario: Revocation stops direct external API access
+      Given an Agent has an active external token lease
+      When a controller revokes its grant, resource account, host, or Agent
+      Then FlareAuth calls the target revocation endpoint for active leases
+      And subsequent lease requests are rejected
+      And unrelated Agents, accounts, and grants remain active
 
   Rule: Controllers and administrators can govern Agent activity
 
@@ -242,7 +245,7 @@ Feature: Agent identity and credential brokerage
 
     @entrypoint:product-ui @journey:agent-audit-chain
     Scenario: Audit records reconstruct an Agent authorization decision
-      Given an Agent host attempts to use an external account
+      Given an Agent host attempts to request external API resource authority
       When FlareAuth allows or denies the request
-      Then the audit record identifies the controller authority, subject, Agent, host, grant, target, and result
+      Then the audit record identifies the controller authority, resource account, Agent, host, grant, scopes, and result
       And it excludes credentials, authorization headers, and complete request or response bodies

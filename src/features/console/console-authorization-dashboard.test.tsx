@@ -193,10 +193,10 @@ describe('console authorization dashboard', () => {
     renderWithQuery(<ApiResourcesPage />)
     expect(await screen.findByText('No API resources yet')).toBeTruthy()
     expect(screen.getByRole('table')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New resource' }))
-    expect(await screen.findByRole('heading', { name: 'Create API resource' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New local resource' }))
+    expect(await screen.findByRole('heading', { name: 'Create local API resource' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('heading', { name: 'Create API resource' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Create local API resource' })).toBeNull()
   })
 
   it('creates native applications with device login enabled from the applications page [spec: admin-console/admin-create-application]', async () => {

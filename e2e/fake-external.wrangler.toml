@@ -1,8 +1,0 @@
-name = "fake-external-platform-e2e"
-main = "./fake-external-platform.ts"
-compatibility_date = "2026-04-12"
-workers_dev = false
-preview_urls = false
-
-[observability]
-enabled = false

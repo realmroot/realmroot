@@ -1,9 +1,18 @@
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
+import {
+  agentAccessRequestSchema,
+  agentResourceDiscoverySchema,
+  createAgentAccessRequestSchema,
+  createExternalTokenLeaseRequestSchema,
+  externalTokenLeaseSchema,
+} from '@shared/api/external-resources'
+import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
 import {
   agentProtocolIdentityResponseSchema,
   errorResponse,
+  jsonBody,
   jsonContentType,
   type ManagementRouteConfig,
   managementSecurity,
@@ -56,6 +65,46 @@ const managementRoutes: ManagementRouteConfig[] = [
     summary: 'Read the current Agent identity',
     security: [{ agentAuth: [] }],
     response: agentProtocolIdentityResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/agent/resources',
+    operationId: 'listAgentResources',
+    summary: 'Discover connected external API resources',
+    security: [{ agentAuth: [] }],
+    response: agentResourceDiscoverySchema,
+  },
+  {
+    method: 'post',
+    path: '/agent/access-requests',
+    operationId: 'requestAgentResourceAccess',
+    summary: 'Request exact external API resource access',
+    security: [{ agentAuth: [] }],
+    request: { body: jsonBody(createAgentAccessRequestSchema) },
+    response: agentAccessRequestSchema,
+    status: 201,
+  },
+  {
+    method: 'get',
+    path: '/agent/access-requests/{requestId}',
+    operationId: 'getAgentResourceAccessRequest',
+    summary: 'Read an external API resource access request',
+    security: [{ agentAuth: [] }],
+    request: { params: z.object({ requestId: z.string() }) },
+    response: agentAccessRequestSchema,
+  },
+  {
+    method: 'post',
+    path: '/agent/access-requests/{requestId}/token-leases',
+    operationId: 'issueExternalResourceTokenLease',
+    summary: 'Issue a target-platform DPoP token lease',
+    security: [{ agentAuth: [] }],
+    request: {
+      params: z.object({ requestId: z.string() }),
+      body: jsonBody(createExternalTokenLeaseRequestSchema),
+    },
+    response: externalTokenLeaseSchema,
+    status: 201,
   },
   ...agentGovernanceRoutes,
   ...applicationAuthorizationRoutes,

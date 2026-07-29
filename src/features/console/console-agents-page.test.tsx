@@ -52,7 +52,7 @@ describe('console delegated agents page', () => {
     expect(screen.getByText('Stable Build Agent')).toBeTruthy()
     expect(screen.getByText('Retired Personal Agent')).toBeTruthy()
     expect(screen.getByText('User user-2')).toBeTruthy()
-    expect(screen.getByText('external_account.egress')).toBeTruthy()
+    expect(screen.getByText('external_resource.token_issued')).toBeTruthy()
     expect(screen.getByText('agent.token.denied')).toBeTruthy()
 
     for (const button of screen.getAllByRole('button', { name: 'Revoke' })) {
@@ -180,7 +180,7 @@ const agentAudit = {
   events: [
     {
       id: 'audit-1',
-      action: 'external_account.egress',
+      action: 'external_resource.token_issued',
       result: 'allowed',
       controllerUserId: 'user-1',
       subjectIssuer: 'https://auth.example.com',
@@ -188,11 +188,10 @@ const agentAudit = {
       agentIdentityId: 'identity-1',
       hostId: 'host-1',
       authorityGrantId: 'authority-1',
-      externalAccountId: 'account-1',
-      externalAccountGrantId: 'external-grant-1',
-      targetOrigin: 'https://api.example.com',
-      targetPath: '/v1/builds',
-      method: 'GET',
+      resourceId: 'resource-1',
+      resourceConnectionId: 'connection-1',
+      accessGrantId: 'access-grant-1',
+      scopes: ['projects:read'],
       reasonCode: null,
       metadata: { upstreamStatus: 200 },
       occurredAt: timestamp,
@@ -207,18 +206,17 @@ const agentAudit = {
       agentIdentityId: null,
       hostId: null,
       authorityGrantId: null,
-      externalAccountId: null,
-      externalAccountGrantId: null,
-      targetOrigin: null,
-      targetPath: null,
-      method: null,
+      resourceId: null,
+      resourceConnectionId: null,
+      accessGrantId: null,
+      scopes: null,
       reasonCode: 'forbidden',
       metadata: null,
       occurredAt: timestamp,
     },
     {
       id: 'audit-3',
-      action: 'external_account.checked',
+      action: 'external_resource.access_decided',
       result: 'denied',
       controllerUserId: null,
       subjectIssuer: null,
@@ -226,11 +224,10 @@ const agentAudit = {
       agentIdentityId: null,
       hostId: null,
       authorityGrantId: null,
-      externalAccountId: null,
-      externalAccountGrantId: null,
-      targetOrigin: null,
-      targetPath: null,
-      method: null,
+      resourceId: null,
+      resourceConnectionId: null,
+      accessGrantId: null,
+      scopes: null,
       reasonCode: null,
       metadata: null,
       occurredAt: timestamp,

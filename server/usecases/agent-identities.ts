@@ -1,5 +1,6 @@
 import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
+import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
 import type { AgentEnrollmentIntentRecord, AgentIdentityAggregate, AgentIdentityRecord } from '@server/usecases/ports'
 import type {
   AgentEnrollmentIntent,
@@ -93,6 +94,7 @@ export async function emergencyRetireAgentIdentity(deps: Deps, identityId: strin
   if (!(await deps.agentIdentities.retireIdentity(identityId, new Date()))) {
     throw badRequest('Agent identity is already retired.')
   }
+  await revokeAgentResourceAccess(deps, identityId)
 }
 
 export async function createAgentEnrollmentIntent(
@@ -223,6 +225,8 @@ export async function revokeAgentIdentityHost(
   if (!(await deps.agentIdentities.revokeBinding(identityId, protocolAgentId, new Date()))) {
     throw notFound('Active Agent host binding was not found.')
   }
+  const binding = identity.bindings.find((candidate) => candidate.protocolAgentId === protocolAgentId)
+  if (binding) await revokeAgentResourceLeasesForBinding(deps, binding.id)
 }
 
 export async function recoverAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
@@ -230,6 +234,7 @@ export async function recoverAgentIdentity(deps: Deps, identityId: string, actor
   if (!(await deps.agentIdentities.recoverIdentity(identityId, new Date()))) {
     throw badRequest('Only an active Agent identity can be recovered.')
   }
+  await revokeAgentResourceAccess(deps, identityId)
 }
 
 export async function retireAgentIdentity(deps: Deps, identityId: string, actorUserId: string) {
@@ -237,6 +242,7 @@ export async function retireAgentIdentity(deps: Deps, identityId: string, actorU
   if (!(await deps.agentIdentities.retireIdentity(identityId, new Date()))) {
     throw badRequest('Agent identity is already retired.')
   }
+  await revokeAgentResourceAccess(deps, identityId)
 }
 
 export async function requireActiveAgentIdentity(deps: Deps, protocolAgentId: string) {

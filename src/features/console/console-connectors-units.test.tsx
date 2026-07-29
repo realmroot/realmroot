@@ -61,55 +61,7 @@ describe('connector provider rows', () => {
     expect(byKey['social:google'].enabled).toBe(false)
   })
 
-  it('keeps arbitrary platform-independent API connectors visible', () => {
-    const generic = {
-      ...connector,
-      id: 'connector-build',
-      providerId: 'build-api',
-      providerType: 'generic_api',
-      displayName: 'Build API',
-      apiBaseUrl: 'https://build.example.com',
-      credentialModes: ['header'],
-      credentialHeaderName: 'X-API-Key',
-      allowedMethods: ['GET'],
-      allowedPathPrefixes: ['/v1/builds'],
-    } as ConnectorResponse
-    const rows = connectorProviderRows(templates, [generic], undefined, undefined)
-    const row = rows.find((candidate) => candidate.connector?.id === generic.id)
-
-    expect(row).toMatchObject({
-      displayName: 'Build API',
-      providerId: 'build-api',
-      providerType: 'generic_api',
-      typeLabel: 'Generic API',
-      configurationLabel: 'Boundary configured',
-    })
-  })
-
-  it('labels configured generic templates and unmatched OAuth connectors', () => {
-    const genericTemplate = {
-      providerType: 'generic_api',
-      providerId: 'build-api',
-      displayName: 'Build API',
-      icon: 'api',
-      requiredFields: [],
-      optionalFields: [],
-      defaultScopes: [],
-      endpoints: {
-        issuer: null,
-        authorizationEndpoint: null,
-        tokenEndpoint: null,
-        userInfoEndpoint: null,
-        jwksEndpoint: null,
-      },
-    } as ConnectorTemplate
-    const configuredGeneric = {
-      ...connector,
-      id: 'connector-build',
-      providerId: 'build-api',
-      providerType: 'generic_api',
-      displayName: 'Build API',
-    } as ConnectorResponse
+  it('labels unmatched OAuth connectors', () => {
     const unmatchedOAuth = {
       ...connector,
       id: 'connector-oauth',
@@ -124,15 +76,9 @@ describe('connector provider rows', () => {
       clientSecretConfigured: false,
     } as ConnectorResponse
 
-    const rows = connectorProviderRows(
-      [...templates, genericTemplate],
-      [configuredGeneric, unmatchedOAuth, googleWithoutSecret],
-      undefined,
-      undefined,
-    )
+    const rows = connectorProviderRows(templates, [unmatchedOAuth, googleWithoutSecret], undefined, undefined)
     const byProvider = Object.fromEntries(rows.map((row) => [row.providerId, row]))
 
-    expect(byProvider['build-api'].configurationLabel).toBe('Boundary configured')
     expect(byProvider.google.configurationLabel).toBe('Credentials required')
     expect(byProvider['partner-oauth'].icon).toBe('oauth')
   })
@@ -232,28 +178,15 @@ describe('ConnectorDynamicFields', () => {
 describe('GenericConnectorFields', () => {
   it('renders and updates the generic OAuth field set for create and edit', () => {
     const setForm = vi.fn()
-    const { rerender } = render(
-      <GenericConnectorFields form={{}} isExisting={false} providerType="generic_oauth" setForm={setForm} />,
-    )
+    const { rerender } = render(<GenericConnectorFields form={{}} isExisting={false} setForm={setForm} />)
     expect(screen.getByLabelText('Client Secret').getAttribute('type')).toBe('password')
     expect(screen.getByLabelText('Client Secret').hasAttribute('required')).toBe(true)
-    expect(screen.getByText('Use oauth.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-1' } })
     expect(setForm).toHaveBeenCalled()
 
-    rerender(<GenericConnectorFields form={{}} isExisting providerType="generic_oauth" setForm={setForm} />)
+    rerender(<GenericConnectorFields form={{}} isExisting setForm={setForm} />)
     expect(screen.getByText('Leave blank to keep the current secret.')).toBeTruthy()
     expect(screen.getByLabelText('Client Secret').hasAttribute('required')).toBe(false)
-  })
-
-  it('renders the generic API boundaries and updates path prefixes', () => {
-    const setForm = vi.fn()
-    render(<GenericConnectorFields form={{}} isExisting={false} providerType="generic_api" setForm={setForm} />)
-    expect(screen.queryByLabelText('Client ID')).toBeNull()
-    expect(screen.getByLabelText('API base URL').hasAttribute('required')).toBe(true)
-    expect(screen.getByText('Space-separated: bearer header.')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Allowed path prefixes'), { target: { value: '/v1\\n/v2' } })
-    expect(setForm).toHaveBeenCalled()
   })
 
   it('copies the callback URL', () => {

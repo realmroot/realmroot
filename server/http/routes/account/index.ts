@@ -26,12 +26,16 @@ import {
 import { revokeConsent } from '@server/usecases/applications'
 import { getConfig } from '@server/usecases/configz'
 import {
-  createExternalAccount,
-  createExternalAccountGrant,
-  createExternalOAuthIntent,
-  listExternalAccounts,
-  revokeExternalAccountGrant,
-} from '@server/usecases/external-accounts'
+  createResourceConnectionIntent,
+  decideAgentAccessRequest,
+  decideAgentAccessRequestByToken,
+  getControllerAccessRequestByToken,
+  listConnectableExternalResources,
+  listControllerAccessRequests,
+  listResourceConnections,
+  revokeAgentAccessGrant,
+  revokeResourceConnection,
+} from '@server/usecases/external-resources'
 import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import {
   accountEmailChangeConfirmSchema,
@@ -51,12 +55,15 @@ import {
 } from '@shared/api/agents'
 import { linkAccountRequestSchema, unlinkAccountQuerySchema } from '@shared/api/connectors'
 import {
-  createExternalAccountGrantRequestSchema,
-  createExternalAccountRequestSchema,
-  createExternalOAuthIntentRequestSchema,
-  externalAccountGrantSchema,
-  externalAccountSchema,
-} from '@shared/api/external-accounts'
+  agentAccessApprovalTokenQuerySchema,
+  agentAccessRequestSchema,
+  connectableExternalResourcesResponseSchema,
+  createResourceConnectionIntentRequestSchema,
+  decideAgentAccessRequestByTokenSchema,
+  decideAgentAccessRequestSchema,
+  listResourceConnectionsResponseSchema,
+  resourceConnectionIntentResponseSchema,
+} from '@shared/api/external-resources'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
@@ -491,49 +498,69 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     return c.body(null, 204)
   })
 
-  app.get('/external-accounts', async (c) => {
-    const result = await listExternalAccounts(getDeps(c), getAuthContext(c).user!.id)
-    return c.json({ externalAccounts: result.externalAccounts.map((account) => externalAccountSchema.parse(account)) })
-  })
-
-  app.post('/external-accounts', async (c) => {
-    const account = await createExternalAccount(
-      getDeps(c),
-      await readJson(c, createExternalAccountRequestSchema),
-      getAuthContext(c).user!.id,
-    )
-    return c.json(externalAccountSchema.parse(account), 201)
-  })
-
-  app.post('/external-oauth-intents', async (c) => {
+  app.get('/resource-connections', async (c) => {
     return c.json(
-      await createExternalOAuthIntent(
-        getDeps(c),
-        await readJson(c, createExternalOAuthIntentRequestSchema),
-        getAuthContext(c).user!.id,
-        canonicalOrigin ?? new URL(c.req.url).origin,
+      listResourceConnectionsResponseSchema.parse(
+        await listResourceConnections(getDeps(c), getAuthContext(c).user!.id),
       ),
-      201,
     )
   })
 
-  app.post('/external-accounts/:externalAccountId/grants', async (c) => {
-    const grant = await createExternalAccountGrant(
-      getDeps(c),
-      c.req.param('externalAccountId'),
-      await readJson(c, createExternalAccountGrantRequestSchema),
-      getAuthContext(c).user!.id,
-    )
-    return c.json(externalAccountGrantSchema.parse(grant), 201)
+  app.get('/external-api-resources', async (c) => {
+    return c.json(connectableExternalResourcesResponseSchema.parse(await listConnectableExternalResources(getDeps(c))))
   })
 
-  app.delete('/external-accounts/:externalAccountId/grants/:grantId', async (c) => {
-    await revokeExternalAccountGrant(
+  app.post('/resource-connections/:resourceId/authorization-intents', async (c) => {
+    const result = await createResourceConnectionIntent(
       getDeps(c),
-      c.req.param('externalAccountId'),
-      c.req.param('grantId'),
+      c.req.param('resourceId'),
+      await readJson(c, createResourceConnectionIntentRequestSchema),
+      getAuthContext(c).user!.id,
+      canonicalOrigin ?? new URL(c.req.url).origin,
+    )
+    return c.json(resourceConnectionIntentResponseSchema.parse(result), 201)
+  })
+
+  app.delete('/resource-connections/:connectionId', async (c) => {
+    await revokeResourceConnection(getDeps(c), c.req.param('connectionId'), getAuthContext(c).user!.id)
+    return c.body(null, 204)
+  })
+
+  app.get('/agent-access-requests', async (c) => {
+    const result = await listControllerAccessRequests(getDeps(c), getAuthContext(c).user!.id)
+    return c.json({ requests: result.requests.map((request) => agentAccessRequestSchema.parse(request)) })
+  })
+
+  app.get('/agent-access-requests/approval', async (c) => {
+    const { token } = readQuery(c, agentAccessApprovalTokenQuerySchema)
+    return c.json(
+      agentAccessRequestSchema.parse(
+        await getControllerAccessRequestByToken(getDeps(c), token, getAuthContext(c).user!.id),
+      ),
+    )
+  })
+
+  app.post('/agent-access-requests/approval', async (c) => {
+    const body = await readJson(c, decideAgentAccessRequestByTokenSchema)
+    return c.json(
+      agentAccessRequestSchema.parse(
+        await decideAgentAccessRequestByToken(getDeps(c), body.token, body, getAuthContext(c).user!.id),
+      ),
+    )
+  })
+
+  app.post('/agent-access-requests/:requestId/decisions', async (c) => {
+    const result = await decideAgentAccessRequest(
+      getDeps(c),
+      c.req.param('requestId'),
+      await readJson(c, decideAgentAccessRequestSchema),
       getAuthContext(c).user!.id,
     )
+    return c.json(agentAccessRequestSchema.parse(result))
+  })
+
+  app.delete('/agent-access-grants/:grantId', async (c) => {
+    await revokeAgentAccessGrant(getDeps(c), c.req.param('grantId'), getAuthContext(c).user!.id)
     return c.body(null, 204)
   })
 

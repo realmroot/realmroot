@@ -490,6 +490,7 @@ export function assignMemberRole(input: AssignRoleRequest) {
 }
 
 export {
+  configureExternalApiResourceAuthorization,
   createApiPermission,
   createApiResource,
   createApiScope,
@@ -497,6 +498,7 @@ export {
   deleteApiResource,
   deleteApiScope,
   getApiResource,
+  getExternalApiResourceAuthorization,
   listApiPermissions,
   listApiResources,
   listApiScopes,

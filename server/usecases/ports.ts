@@ -285,11 +285,6 @@ export interface ConnectorRecord {
   userInfoEndpoint: string | null
   jwksEndpoint: string | null
   scopes: string[] | null
-  apiBaseUrl: string | null
-  credentialModes: string[] | null
-  credentialHeaderName: string | null
-  allowedMethods: string[] | null
-  allowedPathPrefixes: string[] | null
   attributeMapping: Record<string, string> | null
   providerMetadata: Record<string, unknown> | null
   createdAt: Date
@@ -311,11 +306,6 @@ export interface ConnectorRecordInput {
   userInfoEndpoint?: string | null
   jwksEndpoint?: string | null
   scopes?: string[] | null
-  apiBaseUrl?: string | null
-  credentialModes?: string[] | null
-  credentialHeaderName?: string | null
-  allowedMethods?: string[] | null
-  allowedPathPrefixes?: string[] | null
   attributeMapping?: Record<string, string> | null
   providerMetadata?: Record<string, unknown> | null
   createdAt?: Date
@@ -352,11 +342,10 @@ export interface AgentAuditEventRecord {
   agentIdentityId: string | null
   hostId: string | null
   authorityGrantId: string | null
-  externalAccountId: string | null
-  externalAccountGrantId: string | null
-  targetOrigin: string | null
-  targetPath: string | null
-  method: string | null
+  resourceId: string | null
+  resourceConnectionId: string | null
+  accessGrantId: string | null
+  scopes: string[] | null
   reasonCode: string | null
   metadata: Record<string, unknown> | null
   occurredAt: Date
@@ -367,54 +356,49 @@ export interface AgentAuditRepository {
   list(page: PaginationInput): Promise<PaginatedResult<AgentAuditEventRecord>>
 }
 
-export interface ExternalAccountRecord {
+export interface ExternalResourceAuthorizationRecord {
+  resourceId: string
+  resourceUrl: string
+  issuer: string
+  authorizationEndpoint: string
+  tokenEndpoint: string
+  registrationEndpoint: string | null
+  revocationEndpoint: string
+  jwksUri: string
+  userInfoEndpoint: string | null
+  registrationMode: string
+  clientId: string
+  encryptedClientSecret: string
+  encryptedRegistrationAccessToken: string | null
+  scopesSupported: string[]
+  metadata: Record<string, unknown>
+  status: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ResourceAccountConnectionRecord {
   id: string
-  connectorId: string
+  resourceId: string
   ownerUserId: string | null
   ownerOrganizationId: string | null
-  ownerAgentIdentityId: string | null
-  externalSubject: string | null
+  externalSubject: string
   displayName: string
+  encryptedTokens: string
+  grantedScopes: string[]
   status: string
-  metadata: Record<string, unknown> | null
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface ExternalCredentialRecord {
-  id: string
-  externalAccountId: string
-  kind: string
-  encryptedPayload: string
-  status: string
-  expiresAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface ExternalAccountGrantRecord {
-  id: string
-  externalAccountId: string
-  agentIdentityId: string
-  scopes: string[]
-  allowedMethods: string[]
-  allowedPathPrefixes: string[]
-  status: string
-  grantedByUserId: string
-  expiresAt: Date | null
+  credentialExpiresAt: Date | null
   revokedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
 
-export interface ExternalOAuthIntentRecord {
+export interface ResourceConnectionIntentRecord {
   id: string
   stateHash: string
-  connectorId: string
+  resourceId: string
   ownerUserId: string
-  agentIdentityId: string | null
   ownerOrganizationId: string | null
-  displayName: string
   scopes: string[]
   encryptedPkceVerifier: string
   status: string
@@ -424,29 +408,87 @@ export interface ExternalOAuthIntentRecord {
   updatedAt: Date
 }
 
-export interface ExternalAccountRepository {
-  createAccountWithCredential(
-    account: ExternalAccountRecord,
-    credential: ExternalCredentialRecord,
-  ): Promise<{ account: ExternalAccountRecord; credential: ExternalCredentialRecord }>
-  listByOwnerUser(
-    userId: string,
-  ): Promise<Array<{ account: ExternalAccountRecord; credential: ExternalCredentialRecord }>>
-  listByOwnerAgents(
-    agentIdentityIds: string[],
-  ): Promise<Array<{ account: ExternalAccountRecord; credential: ExternalCredentialRecord }>>
-  findAccount(id: string): Promise<ExternalAccountRecord | null>
-  findCredential(externalAccountId: string): Promise<ExternalCredentialRecord | null>
-  updateCredential(
+export interface AgentAccessRequestRecord {
+  id: string
+  resourceId: string
+  connectionId: string
+  agentIdentityId: string
+  bindingId: string
+  scopes: string[]
+  reason: string | null
+  status: string
+  approvalTokenHash: string
+  encryptedApprovalToken: string
+  grantId: string | null
+  expiresAt: Date
+  decidedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AgentAccessGrantRecord {
+  id: string
+  resourceId: string
+  connectionId: string
+  agentIdentityId: string
+  scopes: string[]
+  mode: string
+  status: string
+  grantedByUserId: string
+  expiresAt: Date | null
+  revokedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ExternalTokenLeaseRecord {
+  id: string
+  grantId: string
+  requestId: string
+  bindingId: string
+  encryptedAccessToken: string
+  tokenHash: string
+  confirmationJkt: string
+  scopes: string[]
+  expiresAt: Date
+  revokedAt: Date | null
+  createdAt: Date
+}
+
+export interface ExternalResourceRepository {
+  upsertAuthorization(input: ExternalResourceAuthorizationRecord): Promise<ExternalResourceAuthorizationRecord>
+  findAuthorization(resourceId: string): Promise<ExternalResourceAuthorizationRecord | null>
+  createConnection(input: ResourceAccountConnectionRecord): Promise<ResourceAccountConnectionRecord>
+  listConnectionsByUser(userId: string): Promise<ResourceAccountConnectionRecord[]>
+  listConnectionsByOrganizations(organizationIds: string[]): Promise<ResourceAccountConnectionRecord[]>
+  findConnection(id: string): Promise<ResourceAccountConnectionRecord | null>
+  updateConnectionTokens(
     id: string,
-    input: { encryptedPayload: string; expiresAt: Date | null; updatedAt: Date },
-  ): Promise<ExternalCredentialRecord | null>
-  createGrant(input: ExternalAccountGrantRecord): Promise<ExternalAccountGrantRecord>
-  findGrant(id: string): Promise<ExternalAccountGrantRecord | null>
-  findActiveGrant(externalAccountId: string, agentIdentityId: string): Promise<ExternalAccountGrantRecord | null>
+    input: { encryptedTokens: string; credentialExpiresAt: Date | null; updatedAt: Date },
+  ): Promise<ResourceAccountConnectionRecord | null>
+  revokeConnection(id: string, now: Date): Promise<boolean>
+  createConnectionIntent(input: ResourceConnectionIntentRecord): Promise<ResourceConnectionIntentRecord>
+  consumeConnectionIntent(stateHash: string, now: Date): Promise<ResourceConnectionIntentRecord | null>
+  createAccessRequest(input: AgentAccessRequestRecord): Promise<AgentAccessRequestRecord>
+  findAccessRequest(id: string): Promise<AgentAccessRequestRecord | null>
+  findAccessRequestByApprovalTokenHash(tokenHash: string): Promise<AgentAccessRequestRecord | null>
+  listPendingAccessRequestsByAgent(agentIdentityId: string, now: Date): Promise<AgentAccessRequestRecord[]>
+  decideAccessRequest(
+    id: string,
+    input: { status: 'approved' | 'denied'; grantId: string | null; decidedAt: Date; updatedAt: Date },
+  ): Promise<AgentAccessRequestRecord | null>
+  consumeAccessRequest(id: string, now: Date): Promise<boolean>
+  listPendingAccessRequestsByConnections(connectionIds: string[]): Promise<AgentAccessRequestRecord[]>
+  createGrant(input: AgentAccessGrantRecord): Promise<AgentAccessGrantRecord>
+  findGrant(id: string): Promise<AgentAccessGrantRecord | null>
+  listActiveGrantsByAgent(agentIdentityId: string): Promise<AgentAccessGrantRecord[]>
+  listActiveGrantsByConnection(connectionId: string): Promise<AgentAccessGrantRecord[]>
   revokeGrant(id: string, now: Date): Promise<boolean>
-  createOAuthIntent(input: ExternalOAuthIntentRecord): Promise<ExternalOAuthIntentRecord>
-  consumeOAuthIntent(stateHash: string, now: Date): Promise<ExternalOAuthIntentRecord | null>
+  consumeGrant(id: string, now: Date): Promise<boolean>
+  createTokenLease(input: ExternalTokenLeaseRecord): Promise<ExternalTokenLeaseRecord>
+  listActiveTokenLeasesByGrant(grantId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
+  listActiveTokenLeasesByBinding(bindingId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
+  revokeTokenLease(id: string, now: Date): Promise<boolean>
 }
 
 // --- agents -----------------------------------------------------------------

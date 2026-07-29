@@ -305,11 +305,6 @@ function ConnectorProviderDrawer({
       clientId: '',
       clientSecret: '',
       scopes: provider.template?.defaultScopes.join(' ') ?? '',
-      apiBaseUrl: '',
-      credentialModes: provider.providerType === 'generic_oauth' ? 'oauth' : '',
-      credentialHeaderName: '',
-      allowedMethods: 'GET',
-      allowedPathPrefixes: '/',
       providerMetadata: '',
     })
   }, [provider, activeConnector])
@@ -350,23 +345,6 @@ function ConnectorProviderDrawer({
               try {
                 setValidationError(null)
                 const scopes = form.scopes?.split(/\s+/).filter(Boolean)
-                const isGenericConnector =
-                  provider.providerType === 'generic_oauth' || provider.providerType === 'generic_api'
-                const credentialModes =
-                  isGenericConnector && form.credentialModes?.trim()
-                    ? form.credentialModes.split(/\s+/).filter(Boolean)
-                    : undefined
-                const allowedMethods =
-                  isGenericConnector && form.allowedMethods?.trim()
-                    ? form.allowedMethods
-                        .split(/\s+/)
-                        .filter(Boolean)
-                        .map((method) => method.toUpperCase())
-                    : undefined
-                const allowedPathPrefixes =
-                  isGenericConnector && form.allowedPathPrefixes?.trim()
-                    ? form.allowedPathPrefixes.split(/\s+/).filter(Boolean)
-                    : undefined
                 const providerMetadata = parseConnectorMetadata(form)
                 if (isExisting) {
                   onUpdate(
@@ -375,9 +353,6 @@ function ConnectorProviderDrawer({
                       ...connectorUpdateForm(form),
                       enabled: form.enabled === 'true',
                       scopes,
-                      credentialModes,
-                      allowedMethods,
-                      allowedPathPrefixes,
                       providerMetadata,
                     }),
                   )
@@ -392,9 +367,6 @@ function ConnectorProviderDrawer({
                     providerId: provider.providerId,
                     displayName: provider.displayName,
                     scopes,
-                    credentialModes,
-                    allowedMethods,
-                    allowedPathPrefixes,
                     providerMetadata,
                   }),
                 )
@@ -441,13 +413,8 @@ function ConnectorProviderDrawer({
                     type="button"
                   />
                 </div>
-                {provider.providerType === 'generic_oauth' || provider.providerType === 'generic_api' ? (
-                  <GenericConnectorFields
-                    form={form}
-                    isExisting={isExisting}
-                    providerType={provider.providerType}
-                    setForm={setForm}
-                  />
+                {provider.providerType === 'generic_oauth' ? (
+                  <GenericConnectorFields form={form} isExisting={isExisting} setForm={setForm} />
                 ) : (
                   <ConnectorDynamicFields
                     form={form}
@@ -456,9 +423,7 @@ function ConnectorProviderDrawer({
                     template={provider.template}
                   />
                 )}
-                {provider.providerType !== 'generic_api' ? (
-                  <CallbackUrlField value={connectorCallbackUrl(provider.providerId)} />
-                ) : null}
+                <CallbackUrlField value={connectorCallbackUrl(provider.providerId)} />
               </div>
             </div>
             <SheetFooter className="border-t border-border sm:flex-row sm:justify-end">

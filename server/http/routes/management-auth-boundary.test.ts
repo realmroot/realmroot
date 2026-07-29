@@ -336,6 +336,7 @@ describe('management routes 1', () => {
     })
 
     expect(response.status).toBe(200)
+    expect(auth.api.getAgentSession).not.toHaveBeenCalled()
     const body = (await response.json()) as {
       approval: { verification_uri_complete: string }
     }

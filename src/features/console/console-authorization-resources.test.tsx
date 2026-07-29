@@ -85,7 +85,7 @@ describe('console authorization resources', () => {
     renderWithQuery(<ApiResourcesPage />)
 
     expect(await screen.findByText('Management API')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New resource' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New local resource' }))
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'billing-api' } })
     fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
 

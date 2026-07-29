@@ -38,9 +38,5 @@ migrations_dir = "../migrations"
 binding = "EMAIL_QUEUE"
 queue = "flareauth-email-e2e"
 
-[[services]]
-binding = "EXTERNAL_HTTP"
-service = "fake-external-platform-e2e"
-
 [observability]
 enabled = false

@@ -84,26 +84,10 @@ export const connectorTemplates: ConnectorTemplate[] = [
       jwksEndpoint: null,
     },
   },
-  {
-    providerType: 'generic_api',
-    providerId: 'generic-api',
-    displayName: 'Generic API',
-    icon: 'api',
-    requiredFields: ['apiBaseUrl', 'credentialModes'],
-    optionalFields: ['credentialHeaderName', 'allowedMethods', 'allowedPathPrefixes'],
-    defaultScopes: [],
-    endpoints: {
-      issuer: null,
-      authorizationEndpoint: null,
-      tokenEndpoint: null,
-      userInfoEndpoint: null,
-      jwksEndpoint: null,
-    },
-  },
 ]
 
 export function isSupportedProvider(providerType: ConnectorProviderType, providerId: string) {
-  if (providerType === 'generic_oauth' || providerType === 'generic_api') return true
+  if (providerType === 'generic_oauth') return true
   return socialProviderIds.includes(providerId as (typeof socialProviderIds)[number])
 }
 

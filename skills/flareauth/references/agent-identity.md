@@ -67,7 +67,7 @@ clients.
 
 ## Authority
 
-Enrollment grants no tenant management or external-account access. For
+Enrollment grants no tenant management or external API resource access. For
 FlareAuth administration, the Agent requests one or both coarse AgentAuth
 capabilities:
 

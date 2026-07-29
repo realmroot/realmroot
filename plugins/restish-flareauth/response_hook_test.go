@@ -28,6 +28,17 @@ func (s capabilityStateRecorder) FindByOriginAndAgentID(origin string, agentID s
 	return s.state, nil
 }
 
+type resourceStateRecorder struct {
+	capabilityStateRecorder
+}
+
+func (s resourceStateRecorder) FindByOriginAndHostID(origin string, hostID string) (agentState, error) {
+	if origin != s.state.Origin || hostID != s.state.HostID {
+		return agentState{}, http.ErrMissingFile
+	}
+	return s.state, nil
+}
+
 func TestCapabilityApprovalResponseOpensAndWaitsForHostedApproval(t *testing.T) {
 	browser := &browserRecorder{}
 	state := capabilityTestState(t)
@@ -61,6 +72,65 @@ func TestCapabilityApprovalResponseOpensAndWaitsForHostedApproval(t *testing.T) 
 	body := output.Response.Body.(map[string]any)
 	if body["status"] != "active" {
 		t.Fatalf("response body = %#v", body)
+	}
+}
+
+func TestResourceApprovalResponseOpensAndWaitsForHostedApproval(t *testing.T) {
+	browser := &browserRecorder{}
+	state := capabilityTestState(t)
+	requests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return jsonResponse(200, testAgentConfiguration()), nil
+		}
+		if request.URL.String() != "https://auth.example.com/api/agent/access-requests/request-1" {
+			t.Fatalf("status URL = %q", request.URL)
+		}
+		return jsonResponse(200, map[string]any{
+			"id":          "request-1",
+			"hostId":      state.HostID,
+			"status":      "approved",
+			"approvalUrl": nil,
+			"grantId":     "grant-1",
+			"expiresAt":   time.Now().Add(time.Minute).Format(time.RFC3339),
+		}), nil
+	})
+	approvalURL := "https://auth.example.com/agent/resource-access/approve#token=secret"
+	input := plugin.ResponseMiddlewareInput{
+		Request: plugin.HookRequest{
+			Method: "POST",
+			URI:    "https://auth.example.com/api/agent/access-requests",
+		},
+		Response: plugin.HookResponse{
+			Status: 201,
+			Body: map[string]any{
+				"id":          "request-1",
+				"hostId":      state.HostID,
+				"status":      "pending",
+				"approvalUrl": approvalURL,
+				"expiresAt":   time.Now().Add(time.Minute).Format(time.RFC3339),
+			},
+		},
+	}
+
+	output, err := handleCapabilityApprovalResponse(
+		input,
+		browser,
+		resourceStateRecorder{capabilityStateRecorder{state: state}},
+		client,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if browser.uri != approvalURL {
+		t.Fatalf("opened %q", browser.uri)
+	}
+	if output.Response.Body.(map[string]any)["status"] != "approved" {
+		t.Fatalf("response body = %#v", output.Response.Body)
+	}
+	if output.Response.Body.(map[string]any)["grantId"] != "grant-1" {
+		t.Fatalf("response body = %#v", output.Response.Body)
 	}
 }
 

@@ -55,6 +55,10 @@ type capabilityStateFinder interface {
 	FindByOriginAndAgentID(origin string, agentID string) (agentState, error)
 }
 
+type resourceStateFinder interface {
+	FindByOriginAndHostID(origin string, hostID string) (agentState, error)
+}
+
 type fileStateStore struct {
 	root string
 }
@@ -150,6 +154,14 @@ func (s *fileStateStore) Update(target agentTarget, state agentState) error {
 }
 
 func (s *fileStateStore) FindByOriginAndAgentID(origin string, agentID string) (agentState, error) {
+	return s.find(origin, func(state agentState) bool { return state.AgentID == agentID }, "capability request")
+}
+
+func (s *fileStateStore) FindByOriginAndHostID(origin string, hostID string) (agentState, error) {
+	return s.find(origin, func(state agentState) bool { return state.HostID == hostID }, "resource request")
+}
+
+func (s *fileStateStore) find(origin string, matches func(agentState) bool, label string) (agentState, error) {
 	var matched *agentState
 	err := filepath.WalkDir(s.root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -176,14 +188,14 @@ func (s *fileStateStore) FindByOriginAndAgentID(origin string, agentID string) (
 		if err := json.Unmarshal(data, &state); err != nil {
 			return nil
 		}
-		if state.Origin != origin || state.AgentID != agentID {
+		if state.Origin != origin || !matches(state) {
 			return nil
 		}
 		if err := validateAgentStateCredentials(state); err != nil {
 			return err
 		}
 		if matched != nil {
-			return errors.New("multiple local Agent states match the capability request")
+			return fmt.Errorf("multiple local Agent states match the %s", label)
 		}
 		matched = &state
 		return nil
@@ -192,7 +204,7 @@ func (s *fileStateStore) FindByOriginAndAgentID(origin string, agentID string) (
 		return agentState{}, fmt.Errorf("find local Agent state: %w", err)
 	}
 	if matched == nil {
-		return agentState{}, errors.New("local Agent state was not found for the capability request")
+		return agentState{}, fmt.Errorf("local Agent state was not found for the %s", label)
 	}
 	return *matched, nil
 }

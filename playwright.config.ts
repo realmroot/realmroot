@@ -29,12 +29,13 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
-      command: `wrangler dev --config e2e/fake-external.wrangler.toml --ip 127.0.0.1 --port ${String(externalPort)}`,
-      url: `${externalOrigin}/.well-known/openid-configuration`,
+      command: 'pnpm run example:resource-platform',
+      url: `${externalOrigin}/.well-known/oauth-protected-resource/api`,
       timeout: 30_000,
       reuseExistingServer: !process.env.CI,
       env: {
-        E2E_EXTERNAL_PORT: String(externalPort),
+        PORT: String(externalPort),
+        ORIGIN: externalOrigin,
       },
     },
     {

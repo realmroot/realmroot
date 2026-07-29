@@ -63,10 +63,10 @@ tokens are five-minute JWTs signed by Better Auth's managed issuer keys with an
 `at+jwt` type, audience, scopes, `cnf.jkt`, actor chain, and stable Agent
 identity.
 
-Every token request and brokered request requires a fresh DPoP proof. JTI state
-is consumed atomically, so a proof cannot be replayed. Token records remain in
-D1 so host, identity, authority-grant, and external-account-grant revocation
-takes effect immediately instead of waiting for JWT expiry.
+Every token request requires a fresh DPoP proof. JTI state is consumed
+atomically, so a proof cannot be replayed. Token records remain in D1 so host,
+identity, authority-grant, and external-resource-grant revocation takes effect
+immediately instead of waiting for JWT expiry.
 
 ## Authority
 
@@ -102,57 +102,73 @@ waits for one controller approval, binds the stable identity, signs the original
 request, and lets it continue. It does not expose `login`, `whoami`, or resource
 commands. Every later command-line request is authenticated as the same Agent.
 
-## Connector and credential brokerage
+## Connectors and external API Resources
 
-The existing Connector resource is the platform abstraction. FlareAuth does not
-contain vendor-specific brokerage implementations. `generic_oauth` Connectors
-use OIDC discovery or explicit OAuth endpoints; `generic_api` Connectors
-describe a fixed API origin and bearer or fixed-header credential injection.
-Both define the maximum HTTP methods and path prefixes that a downstream grant
-may use.
+Connectors authenticate people to FlareAuth. They remain limited to social and
+generic OAuth/OIDC sign-in providers. They do not describe business APIs,
+credentials, request paths, or proxy behavior.
 
-External accounts have exactly one user, organization, or Agent owner. The
-credential is a separate encrypted record and is never returned through a read
-API. OAuth authorization uses authorization code with PKCE, one-time state, and
-optional user-info subject discovery. Access and refresh tokens are encrypted;
-expired access tokens are refreshed only at the network boundary. Bearer tokens
-and fixed-header API keys use the same custody boundary. Passwords, cookies,
-browser sessions, query credentials, and custom signing schemes are not
-accepted.
+API Resources authorize access. An API Resource in `external` authorization
+mode points to a target protected resource and is configured from its RFC 9728
+resource URL. FlareAuth discovers RFC 8414 metadata and requires authorization
+code with PKCE and refresh, the RFC 7523 JWT bearer grant, RFC 8693 token
+exchange, RFC 9449 DPoP, and RFC 7009 revocation. The target can use RFC 7591
+dynamic client registration or an administrator can enter a client ID and
+secret. Dynamic registration records FlareAuth's standard `jwks_uri`; no
+FlareAuth-specific discovery or registration fields are used.
+
+Account Center lets a user or authorized organization controller connect a
+target account through authorization code with S256 PKCE. The connection's
+refresh credential is encrypted and never returned by an API. Connecting an
+account grants no Agent permission.
+
+An Agent discovers enabled resources and redacted accounts in its home space,
+then requests one account and an exact scope set. An authorized controller
+approves or denies that request in one step and chooses one token lease,
+time-limited, or persistent authority. Scope expansion, a different account, or
+a different resource requires a new decision.
 
 `CREDENTIAL_ENCRYPTION_KEY` supplies AES-GCM key material for Connector client
-secrets, external credentials, and OAuth PKCE verifiers.
-Each envelope uses randomized nonces and purpose-specific authenticated
-context.
+secrets, external-resource client secrets, OAuth PKCE verifiers, connected
+account refresh credentials, and active token leases. Each envelope uses
+randomized nonces and purpose-specific authenticated context.
 
-## Constrained egress
+## Direct target access
 
-Agents call `/api/agent/egress/{externalAccountId}/{relativePath}` with a DPoP
-access token. FlareAuth intersects four independent boundaries before injecting
-a credential:
+FlareAuth is not an HTTP proxy. After approval, the Agent presents a fresh DPoP
+proof for the target token endpoint. FlareAuth refreshes the connected user's
+subject token when required and signs a short-lived JWT assertion whose subject
+is the stable Agent identity. FlareAuth submits that assertion through the RFC
+7523 JWT bearer grant. The target validates it with the client's registered
+`jwks_uri` and issues an Agent access token. FlareAuth then sends the user's
+access token as `subject_token` and the target-issued Agent access token as
+`actor_token` to the RFC 8693 token endpoint. Both token type parameters use the
+standard access-token identifier. The target intersects the user's scopes with
+the approved Agent scopes and issues its own short-lived DPoP-bound access
+token.
 
-1. the active stable identity and host binding;
-2. the active authority grant and token audience/scopes;
-3. the active external-account grant;
-4. the Connector origin, method, path, and credential mode.
+FlareAuth returns that target access token without a refresh token. The Agent
+calls the target API directly and proves possession of the same DPoP key. The
+target token identifies the connected user as subject and the stable Agent in
+the standard `act.sub` claim. Host identity remains internal governance and
+audit context in FlareAuth; it is not a target-platform protocol claim.
 
-Only public HTTPS origins are accepted. Requests cannot override authorization,
-cookies, host, transport headers, or the configured credential header.
-Non-canonical paths and redirects are rejected, request and response headers are
-allow-listed, and bodies are streamed without entering audit records.
+Grant or connection revocation sends active target leases to the target RFC
+7009 endpoint. Subsequent lease requests fail immediately. No credential
+injection or FlareAuth egress endpoint exists.
 
 ## Governance and audit
 
 Account Center exposes personally owned stable identities, including permanent
 retirement. Organization settings expose organization-owned identities.
-Console exposes tenant-wide identity inventory, egress decision audit, and
-emergency retirement. The unified OpenAPI publishes the same governance
-operations for Restish clients.
+Console exposes tenant-wide identity inventory, external resource authorization
+audit, and emergency retirement. The unified OpenAPI publishes the same
+governance operations for Restish clients.
 
-Every allowed or denied egress decision records controller authority, subject,
-Agent identity, host, grants, target origin/path/method, result, and a bounded
-reason or upstream status. Credentials, authorization headers, and complete
-request or response bodies are excluded.
+Every resource request, controller decision, token issuance, and revocation
+records controller authority, subject, Agent identity, host, resource,
+connection, grant, exact scopes, result, and a bounded reason. Credentials,
+authorization headers, and complete request or response bodies are excluded.
 
 ## Consequences
 
@@ -161,5 +177,5 @@ request or response bodies are excluded.
 - A protocol Agent may exist temporarily without a stable identity, but it has
   no identity-level authority until binding succeeds.
 - One stable Agent may have multiple active hosts without sharing private keys.
-- Connector, external credential, DPoP, egress, and audit designs build on the
-  stable identity but remain separate components.
+- Connector authentication and external API Resource authorization are separate
+  protocol surfaces that both build on the stable identity.

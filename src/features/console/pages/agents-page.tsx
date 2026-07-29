@@ -219,10 +219,10 @@ function AgentAuditTable({ events }: { events: AgentAuditEvent[] }) {
                     <p className="text-xs text-muted-foreground">{event.hostId ?? tt('Unknown host')}</p>
                   </TableCell>
                   <TableCell>
-                    {event.method} {event.targetOrigin}
-                    {event.targetPath}
+                    {event.resourceId ?? tt('Unknown resource')}
+                    {event.scopes?.length ? ` · ${event.scopes.join(' ')}` : null}
                   </TableCell>
-                  <TableCell>{event.externalAccountGrantId ?? event.reasonCode ?? tt('None')}</TableCell>
+                  <TableCell>{event.accessGrantId ?? event.reasonCode ?? tt('None')}</TableCell>
                   <TableCell>{new Date(event.occurredAt).toLocaleString()}</TableCell>
                 </TableRow>
               ))
@@ -230,7 +230,7 @@ function AgentAuditTable({ events }: { events: AgentAuditEvent[] }) {
               <TableEmptyRow
                 colSpan={5}
                 title={tt('No Agent audit events.')}
-                description={tt('Credential-broker decisions will appear here.')}
+                description={tt('External API authorization decisions will appear here.')}
               />
             )}
           </TableBody>

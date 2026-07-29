@@ -29,6 +29,7 @@
     "test:coverage": "vitest run --project unit --project web --coverage",
     "spec:check": "node scripts/verify-specs.mjs",
     "e2e": "playwright test",
+    "example:resource-platform": "tsx examples/oidc-resource-platform/server.ts",
     "test:e2e": "pnpm run spec:check && playwright test",
     "test:watch": "vitest",
     "lint": "biome check .",
@@ -57,6 +58,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
+    "express": "5.2.1",
     "hono": "^4.12.18",
     "i18next": "^26.1.0",
     "jose": "6.2.4",
@@ -83,6 +85,7 @@
     "@tanstack/router-plugin": "^1.168.6",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/express": "5.0.6",
     "@types/node": "^25.9.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -107,7 +110,7 @@
         "description": "Signing secret for auth sessions. Generate with: `openssl rand -base64 32`"
       },
       "CREDENTIAL_ENCRYPTION_KEY": {
-        "description": "Master secret for AES-GCM encryption of Connector and external account credentials"
+        "description": "Master secret for AES-GCM encryption of Connector and external API resource credentials"
       },
       "DB": {
         "description": "D1 database for FlareAuth identity data"

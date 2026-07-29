@@ -87,7 +87,7 @@ describe('console collections', () => {
       },
       { action: 'New role', component: <RolesPage />, heading: 'Roles', searchLabel: 'Search roles' },
       {
-        action: 'New resource',
+        action: 'New local resource',
         component: <ApiResourcesPage />,
         heading: 'API resources',
         searchLabel: 'Search API resources',

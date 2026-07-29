@@ -14,6 +14,10 @@ import {
   updateScope,
 } from '@server/usecases/authorization'
 import {
+  configureExternalResourceAuthorization,
+  getExternalResourceAuthorization,
+} from '@server/usecases/external-resources'
+import {
   createApiPermissionRequestSchema,
   createApiResourceRequestSchema,
   createApiScopeRequestSchema,
@@ -22,6 +26,10 @@ import {
   updateApiResourceRequestSchema,
   updateApiScopeRequestSchema,
 } from '@shared/api/authorization'
+import {
+  configureExternalResourceAuthorizationRequestSchema,
+  externalResourceAuthorizationSchema,
+} from '@shared/api/external-resources'
 import { Hono } from 'hono'
 import { requireAdmin } from '../../middleware/admin'
 import { getDeps } from '../../middleware/deps'
@@ -37,6 +45,25 @@ managementApiResourcesRoute.get('/', async (c) =>
 
 managementApiResourcesRoute.post('/', async (c) =>
   c.json(await createResource(getDeps(c), await readJson(c, createApiResourceRequestSchema)), 201),
+)
+
+managementApiResourcesRoute.get('/:id/external-authorization', async (c) =>
+  c.json(
+    externalResourceAuthorizationSchema.parse(await getExternalResourceAuthorization(getDeps(c), c.req.param('id'))),
+  ),
+)
+
+managementApiResourcesRoute.put('/:id/external-authorization', async (c) =>
+  c.json(
+    externalResourceAuthorizationSchema.parse(
+      await configureExternalResourceAuthorization(
+        getDeps(c),
+        c.req.param('id'),
+        await readJson(c, configureExternalResourceAuthorizationRequestSchema),
+        new URL(c.req.url).origin,
+      ),
+    ),
+  ),
 )
 
 managementApiResourcesRoute.get('/:resourceId', async (c) =>

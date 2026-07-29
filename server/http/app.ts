@@ -49,10 +49,10 @@ import { createAgentProtocolRoutes } from './routes/agent-protocol'
 import { createAccountAssetRoutes, createAssetRoutes, createManagementAssetRoutes } from './routes/assets'
 import type { ManagementAuthApi } from './routes/auth-api'
 import { createConfigzRoutes } from './routes/configz'
-import { createExternalAccountRoutes } from './routes/external-accounts'
 import { createManagementRoutes } from './routes/management'
 import { oauthConsentRoute } from './routes/oauth/consent'
 import { onboardingRoutes } from './routes/onboarding'
+import { createResourceConnectionRoutes } from './routes/resource-connections'
 import { readJson } from './routes/validation'
 
 type AuthHandler = Pick<Auth, 'handler'> & {
@@ -169,7 +169,7 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .route('/api/onboarding', onboardingRoutes())
     .route('/api/account', accountRoutes(managementApi, config.securityPolicy, canonicalOrigin || undefined))
     .route('/api/account', createAccountAssetRoutes(config.securityPolicy))
-    .route('/api/external-accounts', createExternalAccountRoutes(canonicalOrigin || undefined))
+    .route('/api/resource-connections', createResourceConnectionRoutes(canonicalOrigin || undefined))
     .route('/api/agent', createAgentProtocolRoutes(auth.api, issuer || undefined))
 
   return api
@@ -189,7 +189,6 @@ function createUnifiedApiRoutes(auth: AuthHandler, config: AppConfig) {
       identity: await getAgentIdentityByProtocolAgent(c.get('deps'), agent.protocolAgentId),
     })
   })
-  app.use('/capability-requests', authenticateAgentOnly)
   app.post('/capability-requests', async (c) => {
     const body = await readJson(c, requestAgentCapabilitiesSchema)
     const headers = new Headers(c.req.raw.headers)

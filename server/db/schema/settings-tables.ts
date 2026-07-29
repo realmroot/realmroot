@@ -21,11 +21,6 @@ export const identityProviderConnector = sqliteTable(
     userInfoEndpoint: text('user_info_endpoint'),
     jwksEndpoint: text('jwks_endpoint'),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>(),
-    apiBaseUrl: text('api_base_url'),
-    credentialModes: text('credential_modes', { mode: 'json' }).$type<string[]>(),
-    credentialHeaderName: text('credential_header_name'),
-    allowedMethods: text('allowed_methods', { mode: 'json' }).$type<string[]>(),
-    allowedPathPrefixes: text('allowed_path_prefixes', { mode: 'json' }).$type<string[]>(),
     attributeMapping: text('attribute_mapping', { mode: 'json' }).$type<Record<string, string>>(),
     providerMetadata: text('provider_metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })

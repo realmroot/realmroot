@@ -164,7 +164,7 @@ describe('admin console webhooks-content', () => {
     expect(screen.getByRole('columnheader', { name: 'Resource' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Audience' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New resource' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New local resource' }))
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'billing-api' } })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Billing API' } })
     fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'https://billing.example.com' } })
@@ -187,6 +187,7 @@ describe('admin console webhooks-content', () => {
             identifier: 'billing-api',
             name: 'Billing API',
             audience: 'https://billing.example.com',
+            authorizationMode: 'flareauth',
             description: 'Billing resource',
           },
         },

@@ -2,6 +2,8 @@ import {
   account,
   accountCenterSetting,
   agent,
+  agentAccessGrant,
+  agentAccessRequest,
   agentAccessToken,
   agentAuditEvent,
   agentAuthorityApproval,
@@ -26,10 +28,8 @@ import {
   deploymentSetting,
   deviceCode,
   emailServiceConfig,
-  externalAccount,
-  externalAccountGrant,
-  externalCredential,
-  externalOAuthIntent,
+  externalResourceAuthorization,
+  externalTokenLease,
   identityProviderConnector,
   invitation,
   jwks,
@@ -41,6 +41,8 @@ import {
   oauthRefreshToken,
   organization,
   passkey,
+  resourceAccountConnection,
+  resourceConnectionIntent,
   role,
   rolePermission,
   session,
@@ -324,34 +326,36 @@ describe('schema.test 1', () => {
         'agentAuthorityApproval_expiresAt_idx',
       ]),
     )
-    expect(indexNames(externalAccount)).toEqual(
+    expect(getTableConfig(externalResourceAuthorization).name).toBe('external_resource_authorization')
+    expect(indexNames(resourceAccountConnection)).toEqual(
       expect.arrayContaining([
-        'externalAccount_connectorId_idx',
-        'externalAccount_ownerUserId_idx',
-        'externalAccount_ownerOrganizationId_idx',
-        'externalAccount_ownerAgentIdentityId_idx',
+        'resourceAccountConnection_resourceId_idx',
+        'resourceAccountConnection_ownerUserId_idx',
+        'resourceAccountConnection_ownerOrganizationId_idx',
+        'resourceAccountConnection_status_idx',
       ]),
     )
-    expect(indexNames(externalCredential)).toContain('externalCredential_externalAccountId_unique')
-    expect(indexNames(externalAccountGrant)).toEqual(
+    expect(indexNames(agentAccessGrant)).toEqual(
       expect.arrayContaining([
-        'externalAccountGrant_account_agent_unique',
-        'externalAccountGrant_agentIdentityId_idx',
-        'externalAccountGrant_status_idx',
+        'agentAccessGrant_resourceId_idx',
+        'agentAccessGrant_agentIdentityId_idx',
+        'agentAccessGrant_status_idx',
       ]),
     )
-    expect(indexNames(externalOAuthIntent)).toEqual(
+    expect(indexNames(resourceConnectionIntent)).toEqual(
       expect.arrayContaining([
-        'externalOAuthIntent_connectorId_idx',
-        'externalOAuthIntent_status_idx',
-        'externalOAuthIntent_expiresAt_idx',
+        'resourceConnectionIntent_resourceId_idx',
+        'resourceConnectionIntent_status_idx',
+        'resourceConnectionIntent_expiresAt_idx',
       ]),
     )
+    expect(indexNames(agentAccessRequest)).toContain('agentAccessRequest_status_idx')
+    expect(indexNames(externalTokenLease)).toContain('externalTokenLease_grantId_idx')
     expect(indexNames(agentAuditEvent)).toEqual(
       expect.arrayContaining([
         'agentAuditEvent_occurredAt_idx',
         'agentAuditEvent_agentIdentityId_idx',
-        'agentAuditEvent_externalAccountId_idx',
+        'agentAuditEvent_resourceId_idx',
         'agentAuditEvent_result_idx',
       ]),
     )

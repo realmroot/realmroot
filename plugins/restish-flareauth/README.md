@@ -14,6 +14,14 @@ prints one controller approval URL to the terminal, waits while the controller
 reviews it, creates the stable identity, signs the original request, and lets
 that same operation continue.
 
+The unified contract also generates `list-agent-resources`,
+`request-agent-resource-access`, `get-agent-resource-access-request`, and
+`issue-external-resource-token-lease`. When an exact resource request is
+pending, the response hook opens the hosted controller decision page and waits
+for approval. The issued token belongs to the target platform and is used by
+the Agent against that platform directly; the plugin never routes target API
+traffic through FlareAuth.
+
 ## Development
 
 From the repository root:
@@ -57,7 +65,7 @@ the Restish command surface.
 - The `auth` hook discovers endpoints, enrolls the Agent when needed, and signs
   each request.
 - The `response-middleware` hook opens and waits for controller approval when
-  the generated `request-agent-capabilities` operation returns pending.
+  a generated capability or external resource access operation returns pending.
 - The OpenAPI credential marker activates it only for FlareAuth operations.
 - Both hooks have a ten-minute deadline for their foreground approval flow.
 - The plugin never authenticates a CLI request as the approving user.

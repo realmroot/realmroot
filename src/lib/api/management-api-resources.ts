@@ -11,6 +11,8 @@ import type {
   UpdateApiResourceRequest,
   UpdateApiScopeRequest,
 } from '@shared/api/authorization'
+import type { ConfigureExternalResourceAuthorizationRequest } from '@shared/api/external-resources'
+import { externalResourceAuthorizationSchema } from '@shared/api/external-resources'
 import { apiClient, readRpcResponse } from '@/lib/api'
 
 export function listApiResources() {
@@ -31,6 +33,26 @@ export function updateApiResource(id: string, input: UpdateApiResourceRequest) {
 
 export function deleteApiResource(id: string) {
   return readRpcResponse(apiClient.api.management['api-resources'][':id'].$delete({ param: { id } }))
+}
+
+export function getExternalApiResourceAuthorization(resourceId: string) {
+  return readRpcResponse(
+    apiClient.api.management['api-resources'][':id']['external-authorization'].$get({
+      param: { id: resourceId },
+    }),
+  ).then((value) => externalResourceAuthorizationSchema.parse(value))
+}
+
+export function configureExternalApiResourceAuthorization(
+  resourceId: string,
+  input: ConfigureExternalResourceAuthorizationRequest,
+) {
+  return readRpcResponse(
+    apiClient.api.management['api-resources'][':id']['external-authorization'].$put({
+      param: { id: resourceId },
+      json: input,
+    }),
+  ).then((value) => externalResourceAuthorizationSchema.parse(value))
 }
 
 export function listApiScopes(resourceId: string): Promise<ListApiScopesResponse> {

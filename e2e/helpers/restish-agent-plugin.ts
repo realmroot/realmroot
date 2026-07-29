@@ -1,8 +1,9 @@
 import { type ExecFileSyncOptionsWithStringEncoding, execFileSync, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { importJWK, SignJWT } from 'jose'
 
 export interface PluginIdentityResult {
   authenticated?: boolean
@@ -44,6 +45,7 @@ export interface RestishAgentPlugin {
   whoami(): PluginIdentityResult
   requestCapabilities(capabilities: string[], reason: string): PendingCapabilityRequest
   requestAgentToken(grantId: string, dpopProof: string): AgentTokenResult
+  agentRequest<T>(path: string, init?: RequestInit): Promise<T>
   listApplications(): { applications: unknown[] }
   dispose(): void
 }
@@ -192,7 +194,54 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
         grant_type: 'urn:flareauth:params:oauth:grant-type:agent-authority',
         grant_id: grantId,
       }),
+    agentRequest: async <T>(path: string, init: RequestInit = {}) => {
+      const state = readAgentState(stateDir)
+      const raw = Buffer.from(state.agent_private_key, 'base64url')
+      const key = await importJWK(
+        {
+          kty: 'OKP',
+          crv: 'Ed25519',
+          x: raw.subarray(32).toString('base64url'),
+          d: raw.subarray(0, 32).toString('base64url'),
+        },
+        'EdDSA',
+      )
+      const proof = await new SignJWT({})
+        .setProtectedHeader({ alg: 'EdDSA', typ: 'agent+jwt', kid: state.agent_key_id })
+        .setIssuer(state.host_id)
+        .setSubject(state.agent_id)
+        .setAudience(`${origin}/api/auth`)
+        .setJti(crypto.randomUUID())
+        .setIssuedAt()
+        .setExpirationTime('2m')
+        .sign(key)
+      const headers = new Headers(init.headers)
+      headers.set('authorization', `Bearer ${proof}`)
+      if (init.body) headers.set('content-type', 'application/json')
+      const response = await fetch(`${origin}${path}`, { ...init, headers })
+      if (!response.ok) throw new Error(`Agent request failed with ${response.status}: ${await response.text()}`)
+      return response.json() as Promise<T>
+    },
     listApplications: () => invoke<{ applications: unknown[] }>('list-applications'),
     dispose: () => rmSync(root, { recursive: true, force: true }),
+  }
+}
+
+function readAgentState(root: string) {
+  const files: string[] = []
+  const visit = (directory: string) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) visit(path)
+      else if (entry.name.endsWith('.json')) files.push(path)
+    }
+  }
+  visit(root)
+  if (files.length !== 1) throw new Error(`Expected exactly one local Agent state, found ${files.length}.`)
+  return JSON.parse(readFileSync(files[0]!, 'utf8')) as {
+    agent_id: string
+    host_id: string
+    agent_key_id: string
+    agent_private_key: string
   }
 }

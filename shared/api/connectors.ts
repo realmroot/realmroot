@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
-export const connectorProviderTypes = ['social', 'generic_oauth', 'generic_api'] as const
+export const connectorProviderTypes = ['social', 'generic_oauth'] as const
 
 export const connectorProviderTypeSchema = z.enum(connectorProviderTypes)
 
@@ -9,8 +9,6 @@ const nonEmptyString = z.string().trim().min(1)
 const optionalUrl = z.url().optional()
 const nullableUrl = z.url().nullable()
 const scopesSchema = z.array(nonEmptyString)
-const credentialModeSchema = z.enum(['oauth', 'bearer', 'header'])
-const httpMethodSchema = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 
 export const connectorProviderMetadataSchema = z.record(z.string(), z.unknown())
 
@@ -48,11 +46,6 @@ export const connectorResponseSchema = z.object({
   userInfoEndpoint: z.string().nullable(),
   jwksEndpoint: z.string().nullable(),
   scopes: z.array(z.string()),
-  apiBaseUrl: z.string().nullable(),
-  credentialModes: z.array(credentialModeSchema),
-  credentialHeaderName: z.string().nullable(),
-  allowedMethods: z.array(httpMethodSchema),
-  allowedPathPrefixes: z.array(z.string()),
   providerMetadata: connectorProviderMetadataSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -91,11 +84,6 @@ export const createConnectorRequestSchema = z
     userInfoEndpoint: optionalUrl,
     jwksEndpoint: optionalUrl,
     scopes: scopesSchema.optional(),
-    apiBaseUrl: optionalUrl,
-    credentialModes: z.array(credentialModeSchema).min(1).optional(),
-    credentialHeaderName: nonEmptyString.optional(),
-    allowedMethods: z.array(httpMethodSchema).min(1).optional(),
-    allowedPathPrefixes: z.array(z.string().startsWith('/')).min(1).optional(),
     providerMetadata: connectorProviderMetadataSchema.optional(),
   })
   .superRefine((input, ctx) => {
@@ -119,11 +107,6 @@ export const updateConnectorRequestSchema = z.object({
   userInfoEndpoint: nullableUrl.optional(),
   jwksEndpoint: nullableUrl.optional(),
   scopes: scopesSchema.optional(),
-  apiBaseUrl: nullableUrl.optional(),
-  credentialModes: z.array(credentialModeSchema).min(1).optional(),
-  credentialHeaderName: nonEmptyString.nullable().optional(),
-  allowedMethods: z.array(httpMethodSchema).min(1).optional(),
-  allowedPathPrefixes: z.array(z.string().startsWith('/')).min(1).optional(),
   providerMetadata: connectorProviderMetadataSchema.optional(),
 })
 
@@ -152,42 +135,15 @@ type ConnectorBoundaryInput = z.infer<typeof createConnectorRequestSchema>
 
 function validateConnectorFields(input: ConnectorBoundaryInput, ctx: z.RefinementCtx) {
   if (input.enabled === false) return
-  if (input.providerType !== 'generic_api' && !input.clientId) {
+  if (!input.clientId) {
     ctx.addIssue({ code: 'custom', path: ['clientId'], message: 'clientId is required.' })
   }
-  if (input.providerType !== 'generic_api' && !input.clientSecret) {
+  if (!input.clientSecret) {
     ctx.addIssue({
       code: 'custom',
       path: ['clientSecret'],
       message: 'clientSecret is required.',
     })
-  }
-  if (input.providerType === 'generic_api') {
-    if (!input.apiBaseUrl) {
-      ctx.addIssue({ code: 'custom', path: ['apiBaseUrl'], message: 'Generic API requires apiBaseUrl.' })
-    }
-    if (!input.credentialModes?.length) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['credentialModes'],
-        message: 'Generic API requires at least one credential mode.',
-      })
-    }
-    if (input.credentialModes?.includes('oauth')) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['credentialModes'],
-        message: 'Use Generic OAuth for OAuth credentials.',
-      })
-    }
-    if (input.credentialModes?.includes('header') && !input.credentialHeaderName) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['credentialHeaderName'],
-        message: 'Header credentials require credentialHeaderName.',
-      })
-    }
-    return
   }
   if (input.providerType !== 'generic_oauth') return
 
