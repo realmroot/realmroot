@@ -114,6 +114,39 @@ describe('management resource routes', () => {
     expect(authorizationService.assignMemberRole).toHaveBeenCalledWith(assignmentBody(), 'admin-1')
   })
 
+  it('uses the configured origin for dynamic external client registration [spec: agent-identity/external-api-resource-canonical-callback]', async () => {
+    const configure = vi
+      .spyOn(externalResourcesUsecase, 'configureExternalResourceAuthorization')
+      .mockResolvedValue({} as never)
+    const { app } = await loadAuthorizationRoutes()
+
+    const response = await app.request('https://preview.example.net/api-resources', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        identifier: 'projects',
+        name: 'Projects',
+        audience: 'https://projects.example.com/api',
+        authorizationMode: 'external',
+        authorization: {
+          resourceUrl: 'https://projects.example.com/api',
+          registrationMode: 'dynamic',
+        },
+      }),
+    })
+
+    expect(response.status).toBe(201)
+    expect(configure).toHaveBeenCalledWith(
+      expect.anything(),
+      'resource-1',
+      {
+        resourceUrl: 'https://projects.example.com/api',
+        registrationMode: 'dynamic',
+      },
+      'https://auth.example.com',
+    )
+  })
+
   it('routes management connector requests to the connector service', async () => {
     const { app, connectorService } = await loadConnectorRoutes()
 
@@ -203,15 +236,15 @@ async function loadAuthorizationRoutes() {
     vi.spyOn(usecaseModule, name).mockImplementation((_d: unknown, ...args: unknown[]) => delegate(...args))
   }
 
-  const { managementApiResourcesRoute } = await import('@server/http/routes/management/api-resources')
+  const { createManagementApiResourcesRoute } = await import('@server/http/routes/management/api-resources')
   const { managementOrganizationsRoute } = await import('@server/http/routes/management/organizations')
   const { managementRolesRoute } = await import('@server/http/routes/management/roles')
   const { createManagementRoutes } = await import('@server/http/routes/management')
   const app = withAdminContext()
-  app.route('/api-resources', managementApiResourcesRoute)
+  app.route('/api-resources', createManagementApiResourcesRoute('https://auth.example.com'))
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)
-  app.route('/', createManagementRoutes({ authApi: {} as never }))
+  app.route('/', createManagementRoutes({ authApi: {} as never, canonicalOrigin: 'https://auth.example.com' }))
   return { app, authorizationService }
 }
 

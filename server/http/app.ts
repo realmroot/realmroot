@@ -161,7 +161,14 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .use('/api/management', agentPrincipalAuth(auth))
     .use('/api/management/*', agentPrincipalAuth(auth))
     .route('/api/management', createManagementAssetRoutes())
-    .route('/api/management', createManagementRoutes({ authApi: managementApi, securityPolicy: config.securityPolicy }))
+    .route(
+      '/api/management',
+      createManagementRoutes({
+        authApi: managementApi,
+        canonicalOrigin: config.baseURL,
+        securityPolicy: config.securityPolicy,
+      }),
+    )
     .route('/api/onboarding', onboardingRoutes())
     .route('/api/account', accountRoutes(managementApi, config.securityPolicy, canonicalOrigin || undefined))
     .route('/api/account', createAccountAssetRoutes(config.securityPolicy))

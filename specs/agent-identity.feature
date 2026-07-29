@@ -115,6 +115,7 @@ Feature: Agent identity and external API authorization
       When a controller approves an Agent enrollment
       Then the Agent issuer is the Better Auth OIDC issuer
       And preview or request origins do not change the Agent issuer and subject
+      And hosted Agent approval URLs use the configured deployment origin
       And FlareAuth does not publish a second Agent-only OIDC issuer
 
   Rule: Tokens distinguish an Agent's identity from delegated authority
@@ -194,6 +195,13 @@ Feature: Agent identity and external API authorization
       And FlareAuth registers or uses an explicitly configured OAuth client
       And the resource cannot be enabled for Agents when a required capability is absent
       And no identity Connector or HTTP proxy configuration is created
+
+    @entrypoint:restish @journey:external-api-resource-canonical-callback
+    Scenario: External OAuth registration uses the deployment's canonical callback
+      Given FlareAuth is reached through a non-canonical request origin
+      When an administrator dynamically registers an external API resource
+      Then the OAuth redirect URI and JWKS URI use the configured deployment origin
+      And a later Account Center authorization request uses that same redirect URI
 
     @e2e @entrypoint:product-ui @journey:resource-account-connection
     Scenario: A user connects an account to an external API resource

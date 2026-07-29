@@ -442,7 +442,7 @@ func newHTTPClient() *http.Client {
 }
 
 func (systemPromptWriter) Show(verificationURI string) error {
-	message := "Approve this Agent in your browser:\n" + verificationURI + "\nWaiting for approval...\n"
+	message := "Waiting for Agent approval...\n"
 	openErr := (systemBrowserOpener{}).Open(verificationURI)
 	if openErr != nil {
 		message = "Could not open the approval page automatically: " + openErr.Error() + "\n" + message

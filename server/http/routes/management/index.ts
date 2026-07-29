@@ -8,7 +8,7 @@ import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { readJson } from '../validation'
 import { managementAgentsRoute } from './agents'
-import { managementApiResourcesRoute } from './api-resources'
+import { createManagementApiResourcesRoute } from './api-resources'
 import { managementApplicationsRoute } from './applications'
 import { createManagementConnectorRoutes } from './connectors'
 import { managementOrganizationsRoute } from './organizations'
@@ -21,6 +21,7 @@ import { createManagementWebhookRoutes } from './webhooks'
 
 interface ManagementRoutesOptions {
   authApi: ManagementAuthApi
+  canonicalOrigin?: string
   securityPolicy?: SecurityPolicy
 }
 
@@ -28,7 +29,7 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   const app = new Hono()
 
   app.route('/applications', managementApplicationsRoute)
-  app.route('/api-resources', managementApiResourcesRoute)
+  app.route('/api-resources', createManagementApiResourcesRoute(options.canonicalOrigin))
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)

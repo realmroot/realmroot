@@ -53,7 +53,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     const identity = await createAgentLoginIdentity(
       getDeps(c),
       { protocolAgentId: session.agent.id, name: body.name },
-      oidcIssuer ?? new URL('/api/auth', c.req.url).toString(),
+      requireOidcIssuer(),
       session.host.userId,
     )
     c.header('Location', '/api/agent')
@@ -75,7 +75,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
       getDeps(c),
       await readJson(c, createAccessRequestSchema),
       principal,
-      new URL(c.req.url).origin,
+      new URL(requireOidcIssuer()).origin,
     )
     c.header('Location', `/api/agent/access-requests/${encodeURIComponent(result.id)}`)
     return c.json(accessRequestSchema.parse(result), 201)
@@ -114,6 +114,11 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   return app
+
+  function requireOidcIssuer() {
+    if (!oidcIssuer) throw new Error('Agent operations require the configured OIDC issuer.')
+    return oidcIssuer
+  }
 }
 
 async function resourcePrincipal(authApi: AgentSessionApi, deps: Deps, headers: Headers) {
