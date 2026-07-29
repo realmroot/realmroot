@@ -139,9 +139,8 @@ export function decideAgentCapability(input: {
   action: 'approve' | 'deny'
   capabilities?: string[]
 }) {
-  return nativeAuth('/agent/approve-capability', {
-    agent_id: input.agentId,
-    user_code: input.userCode,
+  return postAccount(`/api/account/agent-approvals/${encodeURIComponent(input.agentId)}/decisions`, {
+    userCode: input.userCode,
     action: input.action,
     ...(input.capabilities ? { capabilities: input.capabilities } : {}),
   })
@@ -191,6 +190,18 @@ export async function nativeAuth(
   }
   if (response.status === 204) return {}
   return response.json() as Promise<NativeAuthResult>
+}
+
+async function postAccount(path: string, body: Record<string, unknown>) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: authHeaders(body),
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    throw new ApiRequestError(await responseMessage(response), response.status)
+  }
+  return response.json() as Promise<Record<string, unknown>>
 }
 
 function authHeaders(body: Record<string, unknown> | undefined) {

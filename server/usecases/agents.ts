@@ -105,6 +105,28 @@ export function revokeAccountCapabilityGrant(deps: Deps, grantId: string, userId
   return deps.agents.revokeCapabilityGrantForUser(grantId, userId)
 }
 
+export async function decideAgentApproval(
+  deps: Deps,
+  input: {
+    agentId: string
+    userCode: string
+    action: 'approve' | 'deny'
+    capabilities?: string[]
+  },
+  userId: string,
+) {
+  return {
+    status: await deps.agents.decideApproval({
+      agentId: input.agentId,
+      userCodeHash: await hashAgentUserCode(input.userCode),
+      action: input.action,
+      capabilities: input.capabilities,
+      userId,
+      now: new Date(),
+    }),
+  }
+}
+
 export function revokeAgent(deps: Deps, agentId: string) {
   return deps.agents.revokeAgent(agentId)
 }
@@ -115,6 +137,16 @@ export function revokeAgentHost(deps: Deps, hostId: string) {
 
 export function revokeAgentCapabilityGrant(deps: Deps, grantId: string) {
   return deps.agents.revokeCapabilityGrant(grantId)
+}
+
+async function hashAgentUserCode(userCode: string) {
+  const stripped = userCode.replaceAll(/[^A-Z0-9]/gi, '').toUpperCase()
+  const normalized = stripped.length === 8 ? `${stripped.slice(0, 4)}-${stripped.slice(4)}` : userCode.toUpperCase()
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized))
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
 }
 
 function hostSummary(host: Awaited<ReturnType<AgentRepository['listHostsForAgents']>>[number]) {

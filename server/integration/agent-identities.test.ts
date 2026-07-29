@@ -1,5 +1,14 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { agent, agentAuditEvent, agentIdentity, agentIdentityBinding, externalCredential } from '@server/db/schema'
+import {
+  agent,
+  agentAuditEvent,
+  agentCapabilityGrant,
+  agentHost,
+  agentIdentity,
+  agentIdentityBinding,
+  approvalRequest,
+  externalCredential,
+} from '@server/db/schema'
 import { authenticateAgentAccessToken, issueAgentAccessToken } from '@server/usecases/agent-tokens'
 import { eq } from 'drizzle-orm'
 import { exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
@@ -27,6 +36,97 @@ describe('Agent identity enrollment over real D1', () => {
       password: 'identity-owner-password-2026',
     })
     ownerCookie = await signIn(harness, 'identity-owner@example.com', 'identity-owner-password-2026')
+  })
+
+  it('commits controller approval decisions through the FlareAuth account boundary [spec: agent-identity/agent-identity-enrollment] [spec: agent-identity/agent-management-authority]', async () => {
+    const createdAt = new Date('2026-07-29T00:00:00.000Z')
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+    await harness.db.insert(agentHost).values({
+      id: 'approval-host',
+      name: 'Approval Host',
+      status: 'pending',
+      createdAt,
+      updatedAt: createdAt,
+    })
+    await harness.db.insert(agent).values({
+      id: 'approval-agent',
+      name: 'Approval Agent',
+      hostId: 'approval-host',
+      status: 'pending',
+      mode: 'delegated',
+      publicKey: '{"kty":"OKP","crv":"Ed25519","x":"approval"}',
+      createdAt,
+      updatedAt: createdAt,
+    })
+    await harness.db.insert(approvalRequest).values({
+      id: 'approval-login',
+      method: 'device_authorization',
+      agentId: 'approval-agent',
+      hostId: 'approval-host',
+      status: 'pending',
+      userCodeHash: await hashApprovalCode('ABCD-1234'),
+      interval: 5,
+      expiresAt,
+      createdAt,
+      updatedAt: createdAt,
+    })
+
+    const loginApproval = await harness.request('/api/account/agent-approvals/approval-agent/decisions', {
+      method: 'POST',
+      headers: jsonHeaders(ownerCookie),
+      body: JSON.stringify({ userCode: 'ABCD-1234', action: 'approve' }),
+    })
+    expect(loginApproval.status, await loginApproval.clone().text()).toBe(200)
+    await expect(loginApproval.json()).resolves.toEqual({ status: 'approved' })
+
+    const [[approvedAgent], [approvedHost], [approvedLogin]] = await Promise.all([
+      harness.db.select().from(agent).where(eq(agent.id, 'approval-agent')),
+      harness.db.select().from(agentHost).where(eq(agentHost.id, 'approval-host')),
+      harness.db.select().from(approvalRequest).where(eq(approvalRequest.id, 'approval-login')),
+    ])
+    expect(approvedAgent).toMatchObject({ status: 'active', userId })
+    expect(approvedHost).toMatchObject({ status: 'active', userId })
+    expect(approvedLogin.status).toBe('approved')
+
+    await harness.db.insert(agentCapabilityGrant).values({
+      id: 'approval-management-grant',
+      agentId: 'approval-agent',
+      capability: 'management:read',
+      status: 'pending',
+      createdAt,
+      updatedAt: createdAt,
+    })
+    await harness.db.insert(approvalRequest).values({
+      id: 'approval-management',
+      method: 'device_authorization',
+      agentId: 'approval-agent',
+      hostId: 'approval-host',
+      capabilities: 'management:read',
+      status: 'pending',
+      userCodeHash: await hashApprovalCode('WXYZ-5678'),
+      interval: 5,
+      expiresAt,
+      createdAt,
+      updatedAt: createdAt,
+    })
+
+    const capabilityApproval = await harness.request('/api/account/agent-approvals/approval-agent/decisions', {
+      method: 'POST',
+      headers: jsonHeaders(ownerCookie),
+      body: JSON.stringify({
+        userCode: 'WXYZ-5678',
+        action: 'approve',
+        capabilities: ['management:read'],
+      }),
+    })
+    expect(capabilityApproval.status, await capabilityApproval.clone().text()).toBe(200)
+
+    const [[grant], [capabilityRequest]] = await Promise.all([
+      harness.db.select().from(agentCapabilityGrant).where(eq(agentCapabilityGrant.id, 'approval-management-grant')),
+      harness.db.select().from(approvalRequest).where(eq(approvalRequest.id, 'approval-management')),
+    ])
+    expect(grant).toMatchObject({ status: 'active', grantedBy: userId })
+    expect(capabilityRequest.status).toBe('approved')
   })
 
   it(`enrolls a stable identity, adds and revokes hosts, recovers, and permanently retires it
@@ -637,6 +737,12 @@ async function approveIntent(harness: Harness, cookie: string, intentId: string)
 
 function jsonHeaders(cookie: string) {
   return { 'content-type': 'application/json', cookie }
+}
+
+function hashApprovalCode(code: string) {
+  const stripped = code.replaceAll(/[^A-Z0-9]/gi, '').toUpperCase()
+  const normalized = stripped.length === 8 ? `${stripped.slice(0, 4)}-${stripped.slice(4)}` : code.toUpperCase()
+  return sha256(normalized)
 }
 
 async function createDpopProof(

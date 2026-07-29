@@ -17,7 +17,12 @@ import {
   listAgentAuthorityGrants,
   revokeAgentAuthorityGrant,
 } from '@server/usecases/agent-tokens'
-import { listAccountAgents, revokeAccountAgent, revokeAccountCapabilityGrant } from '@server/usecases/agents'
+import {
+  decideAgentApproval,
+  listAccountAgents,
+  revokeAccountAgent,
+  revokeAccountCapabilityGrant,
+} from '@server/usecases/agents'
 import { revokeConsent } from '@server/usecases/applications'
 import { getConfig } from '@server/usecases/configz'
 import {
@@ -41,6 +46,8 @@ import {
   createAdditionalAgentEnrollmentIntentRequestSchema,
   createAgentAuthorityGrantRequestSchema,
   createAgentEnrollmentIntentRequestSchema,
+  decideAgentApprovalRequestSchema,
+  decideAgentApprovalResponseSchema,
 } from '@shared/api/agents'
 import { linkAccountRequestSchema, unlinkAccountQuerySchema } from '@shared/api/connectors'
 import {
@@ -362,6 +369,18 @@ export function accountRoutes(
   app.get('/agents', async (c) => {
     const authContext = getAuthContext(c)
     return c.json(await listAccountAgents(getDeps(c), authContext.user!.id, readQuery(c, paginationQuerySchema)))
+  })
+
+  app.post('/agent-approvals/:agentId/decisions', async (c) => {
+    const result = await decideAgentApproval(
+      getDeps(c),
+      {
+        agentId: c.req.param('agentId'),
+        ...(await readJson(c, decideAgentApprovalRequestSchema)),
+      },
+      getAuthContext(c).user!.id,
+    )
+    return c.json(decideAgentApprovalResponseSchema.parse(result))
   })
 
   app.get('/agent-identities', async (c) => {

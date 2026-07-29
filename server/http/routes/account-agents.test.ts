@@ -9,6 +9,26 @@ afterEach(() => {
 })
 
 describe('account agent routes', () => {
+  it('submits a controller decision through the account approval boundary [spec: agent-identity/agent-identity-enrollment]', async () => {
+    const decide = vi.spyOn(agentsUsecase, 'decideAgentApproval').mockResolvedValue({ status: 'approved' } as const)
+    const app = withAccountContext()
+    app.route('/account', accountRoutes({} as never))
+
+    const response = await app.request('/account/agent-approvals/agent-1/decisions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userCode: 'ABCD-1234', action: 'approve' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ status: 'approved' })
+    expect(decide).toHaveBeenCalledWith(
+      expect.anything(),
+      { agentId: 'agent-1', userCode: 'ABCD-1234', action: 'approve' },
+      'user-1',
+    )
+  })
+
   it('lists and revokes delegated agents for the signed-in account [spec: account-center/account-agent-management]', async () => {
     const agents = {
       listAccountAgents: vi.fn().mockResolvedValue({

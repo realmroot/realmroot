@@ -2,6 +2,7 @@ import type { AgentSession } from '@better-auth/agent-auth'
 import { agentCapabilities } from '@server/auth-capabilities'
 import { areKnownAgentCapabilities } from '@server/domain/agents/capabilities'
 import {
+  decideAgentApproval,
   executeReadOnlyCapability,
   listAccountAgents,
   listAgentApprovalRequests,
@@ -208,6 +209,61 @@ describe('AgentService', () => {
     expect(repository.revokeCapabilityGrant).toHaveBeenCalledWith('grant-1')
   })
 
+  it('normalizes and hashes the Agent approval code before persisting an approval', async () => {
+    const repository = createAgentRepositoryMock()
+    repository.decideApproval.mockResolvedValue('approved')
+    const deps = { agents: repository } as unknown as Deps
+
+    await expect(
+      decideAgentApproval(
+        deps,
+        {
+          agentId: 'agent-1',
+          userCode: 'abcd1234',
+          action: 'approve',
+          capabilities: ['management:read'],
+        },
+        'user-1',
+      ),
+    ).resolves.toEqual({ status: 'approved' })
+
+    expect(repository.decideApproval).toHaveBeenCalledWith({
+      agentId: 'agent-1',
+      userCodeHash: await sha256Base64url('ABCD-1234'),
+      action: 'approve',
+      capabilities: ['management:read'],
+      userId: 'user-1',
+      now: expect.any(Date),
+    })
+  })
+
+  it('preserves a nonstandard Agent approval code shape and returns denial', async () => {
+    const repository = createAgentRepositoryMock()
+    repository.decideApproval.mockResolvedValue('denied')
+    const deps = { agents: repository } as unknown as Deps
+
+    await expect(
+      decideAgentApproval(
+        deps,
+        {
+          agentId: 'agent-2',
+          userCode: 'bad-code',
+          action: 'deny',
+        },
+        'user-2',
+      ),
+    ).resolves.toEqual({ status: 'denied' })
+
+    expect(repository.decideApproval).toHaveBeenCalledWith({
+      agentId: 'agent-2',
+      userCodeHash: await sha256Base64url('BAD-CODE'),
+      action: 'deny',
+      capabilities: undefined,
+      userId: 'user-2',
+      now: expect.any(Date),
+    })
+  })
+
   it('declares account data capabilities and coarse unified API management permissions', () => {
     expect(agentCapabilities.map((capability) => capability.name)).toEqual([
       'account.profile.read',
@@ -248,12 +304,21 @@ function createAgentRepositoryMock() {
     listAgentsForUser: vi.fn(),
     listHostsForAgents: vi.fn(),
     listCapabilityGrantsForUser: vi.fn(),
+    decideApproval: vi.fn(),
     revokeAgentForUser: vi.fn(),
     revokeCapabilityGrantForUser: vi.fn(),
     revokeAgent: vi.fn(),
     revokeHost: vi.fn(),
     revokeCapabilityGrant: vi.fn(),
   }
+}
+
+async function sha256Base64url(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
 }
 
 function createAgentIdentityRepositoryMock() {

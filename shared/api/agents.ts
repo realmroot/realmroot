@@ -108,6 +108,16 @@ export const requestAgentCapabilitiesResponseSchema = z.object({
   approval: agentCapabilityApprovalSchema.optional(),
 })
 
+export const decideAgentApprovalRequestSchema = z.object({
+  userCode: z.string().trim().min(1),
+  action: z.enum(['approve', 'deny']),
+  capabilities: z.array(z.string().trim().min(1)).optional(),
+})
+
+export const decideAgentApprovalResponseSchema = z.object({
+  status: z.enum(['approved', 'denied']),
+})
+
 export const approveAgentEnrollmentResponseSchema = z.object({
   identity: agentIdentitySchema,
 })

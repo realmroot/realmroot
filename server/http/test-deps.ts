@@ -49,6 +49,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       listAgentsForUser: vi.fn().mockResolvedValue(emptyPage()),
       listHostsForAgents: vi.fn().mockResolvedValue([]),
       listCapabilityGrantsForUser: vi.fn().mockResolvedValue([]),
+      decideApproval: vi.fn(),
       revokeAgentForUser: vi.fn().mockResolvedValue(undefined),
       revokeCapabilityGrantForUser: vi.fn().mockResolvedValue(undefined),
       revokeAgent: vi.fn().mockResolvedValue(undefined),
