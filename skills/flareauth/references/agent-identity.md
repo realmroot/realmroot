@@ -89,53 +89,54 @@ missing capability. After the capability request succeeds, rerun the previously
 denied OpenAPI command. The adapter does not replay business operations. Do not
 switch profiles or authenticate as the controller.
 
-## Authority Tokens
+## External API Resource Access
 
-Authority tokens use the shared OAuth token endpoint and Better Auth signing
-keys:
+An Agent does not receive external access during enrollment. The controller
+first connects a target-platform account in Account Center. The Agent then uses
+the unified OpenAPI operations:
+
+1. `list-agent-api-resources` to discover API resources, connected accounts,
+   supported permissions, and existing grants;
+2. `create-agent-access-request` with one exact API resource, account
+   connection, permission set, and reason;
+3. `get-agent-access-request` or `list-agent-access-grants` to read the
+   resulting grant;
+4. `issue-target-access-token` with the grant ID and a DPoP proof.
+
+The adapter opens the hosted resource approval page when a new request is
+pending and keeps `create-agent-access-request` waiting. The controller approves
+the exact target account and permissions. Approval never gives the Agent the
+user's refresh token or target-platform credentials.
+
+The Agent generates and retains its own DPoP key. Discover the target token
+endpoint from the API resource's RFC 9728 protected-resource metadata and its
+authorization server's RFC 8414 metadata. The proof supplied to
+`issue-target-access-token` uses `typ=dpop+jwt`, the public JWK, `htm=POST`, and
+`htu` equal to that discovered target token endpoint. Use the same key for the
+resource request proof and include `ath` for the issued access token.
+
+The returned token is short-lived, target-platform issued, audience-restricted,
+and DPoP-bound. Send it directly to the target API:
 
 ```text
-token endpoint: AUTH_ORIGIN/api/auth/oauth2/token
-JWKS:           AUTH_ORIGIN/api/auth/jwks
-grant type:     urn:flareauth:params:oauth:grant-type:agent-authority
+Authorization: DPoP TARGET_ACCESS_TOKEN
+DPoP: RESOURCE_REQUEST_PROOF
 ```
 
-Use the OpenAPI-generated `issue-agent-access-token` operation. The Restish
-adapter supplies the AgentAuth request proof and the caller supplies the DPoP
-proof plus form body:
+FlareAuth brokers the standard OAuth exchange but does not proxy target API
+traffic. The target resource server validates its own token, audience, expiry,
+permissions, and DPoP binding.
 
-```bash
-restish API_NAME issue-agent-access-token "$DPOP_PROOF" \
-  --rsh-validate -o json <<'JSON'
-{
-  "grant_type": "urn:flareauth:params:oauth:grant-type:agent-authority",
-  "grant_id": "grant_123",
-  "scope": "repo:read"
-}
-JSON
-```
-
-The returned token is DPoP-bound and short-lived. Use the same DPoP key for
-resource proofs; never treat the token as a bearer credential.
-
-This is an OAuth resource-server access token profile, not an Agent OIDC login
-flow. A resource server validates `typ=at+jwt`, signature, shared issuer,
-audience, expiry, and `cnf.jkt`, then keys the Agent account by `(iss, sub)`.
-OIDC login still applies to human/product sessions; do not send an Agent access
-token to an OIDC UserInfo endpoint.
-
-Treat `/.well-known/agent-configuration` as authoritative for AgentAuth
-registration, status, stable-identity, issuer, and signing-algorithm details.
-Treat the shared OAuth/OIDC discovery documents as authoritative for token and
-JWKS endpoints. Do not derive either endpoint set from a product name or a
-provider-specific Connector.
+Treat `/.well-known/agent-configuration` as authoritative only for AgentAuth
+registration and stable identity. Treat RFC 9728 and RFC 8414 metadata as
+authoritative for each target platform. Do not derive endpoints from names or
+provider-specific Connector configuration.
 
 ## Failure Boundaries
 
 - `401`: AgentAuth proof is absent or invalid, or the local binding is inactive.
-- Agent token endpoint failures use flat OAuth fields such as `invalid_request`,
-  `invalid_grant`, `invalid_scope`, and `invalid_dpop_proof`; step-up returns
-  `approval_required` with a separate `approval_id`.
+- Target-token failures surface the target OAuth boundary error; do not fall
+  back to stored user credentials or a proxy path.
 - DPoP-protected resources return `401` with a `WWW-Authenticate: DPoP`
   challenge when the access token or proof is invalid.
 - `403` with `management:read` or `management:write`: the Agent needs that
@@ -144,6 +145,8 @@ provider-specific Connector.
   operation automatically.
 - Capability approval timeout: invoke `request-agent-management-access` again and use
   the newly opened approval page.
+- Resource approval denial or expiry: stop or invoke
+  `create-agent-access-request` again; never reuse the old approval URL.
 - Enrollment timeout: invoke `get-current-agent` again; do not seed identity rows.
 - Missing adapter: inspect `restish plugin list` and reinstall the repository
   binary.

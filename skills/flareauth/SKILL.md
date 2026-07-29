@@ -46,7 +46,7 @@ administrator OAuth identity in the CLI.
 
 Enrollment grants only the Agent's self-service identity. Tenant management
 operations require the AgentAuth capabilities `management:read` or
-`management:write`. Request them with the generated `request-agent-capabilities`
+`management:write`. Request them with the generated `request-agent-management-access`
 operation. FlareAuth reuses its existing Agent capability approval request and
 hosted approval page. The Restish adapter opens that page in the controller's
 browser automatically and keeps the capability-request command waiting. An
@@ -63,6 +63,14 @@ Agent authority tokens are OAuth JWT access tokens for resource servers, not
 OIDC login or UserInfo tokens. Resource servers trust the shared issuer/JWKS
 and validate the token audience and DPoP binding; product OIDC sessions remain
 the human login surface.
+
+For an external API resource, first run `list-agent-api-resources`. Select exact
+`apiResourceId`, `accountConnectionId`, and permission values from that response.
+Then use `create-agent-access-request`; never infer an account connection from a
+display name. The adapter opens the controller approval page and keeps the
+request waiting. After approval, use the returned `grantId` with
+`issue-target-access-token`. The complete command sequence and DPoP requirements
+are in `references/restish-commands.md`.
 
 If the API was already connected, sync its OpenAPI contract before operating
 it. Restish continues to use the locally held Agent and Host keys.
