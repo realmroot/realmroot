@@ -1,7 +1,15 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, createUser, type Harness, seedAgent, signIn, signInAdmin } from './harness'
+import {
+  createHarness,
+  createUser,
+  type Harness,
+  resourceOpenApiFetch,
+  seedAgent,
+  signIn,
+  signInAdmin,
+} from './harness'
 
 afterEach(async () => {
   await reset()
@@ -13,6 +21,7 @@ describe('agent protocol management over real D1', () => {
 
   beforeEach(async () => {
     harness = await createHarness()
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
   })
 
   it('rejects anonymous stable Agent reads with 401', async () => {
@@ -85,6 +94,7 @@ describe('user management over real D1', () => {
 
   beforeEach(async () => {
     harness = await createHarness()
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
   })
 
   it('rejects anonymous reads with 401', async () => {
@@ -224,6 +234,7 @@ describe('federated credential management over real D1', () => {
 
   beforeEach(async () => {
     harness = await createHarness()
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
   })
 
   async function createAppAndResource(cookie: string) {

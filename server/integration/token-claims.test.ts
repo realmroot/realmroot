@@ -1,7 +1,7 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { buildTokenClaims } from '@server/usecases/authorization'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, createUser, type Harness, signInAdmin } from './harness'
+import { createHarness, createUser, type Harness, resourceOpenApiFetch, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -23,6 +23,7 @@ describe('OAuth token claim building over real D1', () => {
 
   beforeEach(async () => {
     harness = await createHarness()
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
   })
 
   // Exercises the authorization repo read paths that only fire during token-claim

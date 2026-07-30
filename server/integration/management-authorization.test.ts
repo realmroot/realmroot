@@ -1,7 +1,7 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { createResource } from '@server/usecases/authorization'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, createUser, type Harness, signIn, signInAdmin } from './harness'
+import { createHarness, createUser, type Harness, resourceOpenApiFetch, signIn, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -308,10 +308,3 @@ describe('authorization management over real D1', () => {
     )
   })
 })
-
-async function resourceOpenApiFetch(request: Request) {
-  if (new URL(request.url).pathname.endsWith('/openapi.json')) {
-    return Response.json({ openapi: '3.1.0', paths: {} })
-  }
-  return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
-}

@@ -244,6 +244,13 @@ export async function seedAgent(harness: Harness, userId: string, suffix = '1'):
   return { hostId, agentId, grantId }
 }
 
+export async function resourceOpenApiFetch(request: Request) {
+  if (new URL(request.url).pathname.endsWith('/openapi.json')) {
+    return Response.json({ openapi: '3.1.0', paths: {} })
+  }
+  return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+}
+
 /**
  * A minimal in-memory R2 stand-in. R2 is the only storage boundary the crown
  * fakes; backing it with a real store lets the asset upload + read round-trip

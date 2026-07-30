@@ -1,6 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createHarness, type Harness, signInAdmin } from './harness'
+import { createHarness, type Harness, resourceOpenApiFetch, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -60,6 +60,7 @@ describe('OAuth token exchange over real D1', () => {
 
   beforeEach(async () => {
     harness = await createHarness()
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
   })
 
   it('exchanges an ES256 subject token via a federated credential, then introspects it (real SQL)', async () => {
