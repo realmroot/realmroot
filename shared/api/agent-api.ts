@@ -109,6 +109,7 @@ export const agentApiResourcesResponseSchema = z.object({
       id: z.string(),
       identifier: z.string(),
       name: z.string(),
+      description: z.string().nullable(),
       audience: z.string(),
       resourceUrl: z.url(),
       authorizationMode: z.enum(['native', 'external']),

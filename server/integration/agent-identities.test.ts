@@ -229,6 +229,7 @@ describe('Agent identity enrollment over real D1', () => {
       audience: 'https://api.example.com',
       resourceUrl: 'https://api.example.com',
       authorizationMode: 'native',
+      description: 'Read private code repositories',
     })
     harness.deps.externalHttp.fetch = resourceOpenApiFetch(resource.resourceUrl, 'repo:read')
     const resourceRole = await createRole(harness.deps, {
@@ -250,6 +251,7 @@ describe('Agent identity enrollment over real D1', () => {
     expect(discovery.items).toEqual([
       expect.objectContaining({
         id: resource.id,
+        description: 'Read private code repositories',
         authorizationMode: 'native',
         accountConnections: [],
       }),

@@ -281,8 +281,9 @@ Feature: Agent identity and external API authorization
       Given enabled native and externally authorized API resources exist
       When the Agent lists available resources
       Then Realmroot returns enabled resources even when an external resource has no connected account
-      And returns protected resource URLs, redacted accounts, and active grants
-      When Restish reads a target OpenAPI operation and the Agent requests an account and its exact scope set without an applicable grant
+      And returns catalog descriptions, protected resource URLs, redacted accounts, and active grants
+      When Restish connects directly to a candidate resource and reads the target OpenAPI operation
+      And the Agent requests an account and its exact scope set without an applicable grant
       Then Realmroot validates that scope set against the current target OpenAPI contract
       And assigned resource roles restrict the request when present
       And the connected account permits every requested scope

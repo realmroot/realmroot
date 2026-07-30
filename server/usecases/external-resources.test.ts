@@ -216,6 +216,7 @@ describe('external API resource authorization', () => {
       resources: [
         {
           id: 'resource-1',
+          description: 'Manage private projects',
           scopes: [{ value: 'projects:read', description: 'Read projects' }],
           connections: [],
         },
@@ -1821,7 +1822,7 @@ function resource(): ApiResourceResponse {
     audience: 'https://projects.example.com/api',
     resourceUrl: 'https://projects.example.com/api',
     authorizationMode: 'external',
-    description: null,
+    description: 'Manage private projects',
     enabled: true,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
