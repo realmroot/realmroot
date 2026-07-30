@@ -33,17 +33,15 @@ It advertises `/openapi.json` through a `service-desc` Link header. The demo
 authorization endpoint selects `demo-user` automatically; a production target
 uses its normal sign-in and consent experience.
 
-Create an external API Resource in Realmroot with:
+Create a dynamic standard OIDC Connector for this server, then create an
+external API Resource in Realmroot with the returned Connector ID:
 
 ```json
 {
   "identifier": "external-projects",
   "name": "External Projects API",
   "resourceUrl": "http://127.0.0.1:4100/api",
-  "authorizationMode": "external",
-  "authorization": {
-    "registrationMode": "dynamic"
-  }
+  "connectorId": "idp_example"
 }
 ```
 

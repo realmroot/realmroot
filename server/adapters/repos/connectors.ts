@@ -42,10 +42,7 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
     },
 
     async countResourceReferences(id) {
-      const [result] = await db
-        .select({ value: count() })
-        .from(apiResource)
-        .where(eq(apiResource.authorizationConnectorId, id))
+      const [result] = await db.select({ value: count() }).from(apiResource).where(eq(apiResource.connectorId, id))
       return result?.value ?? 0
     },
 

@@ -211,6 +211,7 @@ describe('service.test 2', () => {
           userinfo_endpoint: 'https://idp.example.com/userinfo',
           jwks_uri: 'https://idp.example.com/jwks',
           registration_endpoint: 'https://idp.example.com/register',
+          grant_types_supported: ['authorization_code'],
         }),
       )
       .mockResolvedValueOnce(
@@ -244,6 +245,11 @@ describe('service.test 2', () => {
       ],
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
     })
+    expect(deps.connectors.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({ grant_types_supported: ['authorization_code'] }),
+      }),
+    )
   })
 })
 

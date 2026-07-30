@@ -108,9 +108,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       updateBrandingAsset: vi.fn(),
     },
     assetStorage: { put: vi.fn(), get: vi.fn().mockResolvedValue(null) },
-    authorization: {
-      associateResourceConnector: vi.fn().mockResolvedValue(false),
-    },
+    authorization: {},
     configz: {
       getSettings: vi.fn().mockResolvedValue(null),
       getBranding: vi.fn().mockResolvedValue(null),

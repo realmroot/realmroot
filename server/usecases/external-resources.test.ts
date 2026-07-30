@@ -1,6 +1,5 @@
 import { createTestDeps } from '@server/http/test-deps'
 import {
-  associateExternalResourceConnector,
   completeResourceConnectionIntent,
   createAccessRequest,
   createAccountConnection,
@@ -41,6 +40,7 @@ import type {
   ResourceAccountConnectionRecord,
   ResourceConnectionIntentRecord,
 } from '@server/usecases/ports'
+import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import { exportJWK, generateKeyPair, type JWTHeaderParameters, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
@@ -48,10 +48,9 @@ import { describe, expect, it, vi } from 'vitest'
 const now = new Date('2026-07-29T12:00:00.000Z')
 
 describe('external API resource authorization', () => {
-  it('associates a resource with a reusable OIDC connector [spec: agent-identity/external-api-resource-registration]', async () => {
+  it('validates a reusable OIDC connector when creating an external resource [spec: agent-identity/external-api-resource-registration]', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    vi.mocked(deps.authorization.associateResourceConnector).mockResolvedValue(true)
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
       if (request.url === new URL(resource().resourceUrl).toString()) {
         return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
@@ -68,27 +67,14 @@ describe('external API resource authorization', () => {
       return new Response(null, { status: 404 })
     })
 
-    await expect(associateExternalResourceConnector(deps, 'resource-1', 'connector-1')).resolves.toMatchObject({
-      id: 'resource-1',
-      authorizationConnectorId: 'connector-1',
-      authorization: {
-        connectorId: 'connector-1',
-        issuer: 'https://projects.example.com',
-        clientId: 'realmroot-client',
-        status: 'active',
-      },
-    })
-    expect(deps.authorization.associateResourceConnector).toHaveBeenCalledWith(
-      'resource-1',
-      'connector-1',
-      expect.any(Date),
-    )
+    await expect(
+      validateExternalResourceConnector(deps, 'https://projects.example.com/api', 'connector-1'),
+    ).resolves.toBeUndefined()
   })
 
   it('rejects a connector whose issuer does not authorize the resource', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    vi.mocked(deps.authorization.associateResourceConnector).mockResolvedValue(true)
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
       if (request.url === 'https://projects.example.com/api') {
         return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
@@ -105,26 +91,9 @@ describe('external API resource authorization', () => {
       return new Response(null, { status: 404 })
     })
 
-    await expect(associateExternalResourceConnector(deps, 'resource-1', 'connector-1')).rejects.toThrow(
-      'authorization server does not match',
-    )
-    expect(deps.authorization.associateResourceConnector).not.toHaveBeenCalled()
-  })
-
-  it('detaches a connector and disables the external resource', async () => {
-    const deps = createTestDeps()
-    authorizationDeps(deps)
-    const detached = {
-      ...resource(),
-      authorizationConnectorId: null,
-      enabled: false,
-    }
-    vi.mocked(deps.authorization.findResource).mockResolvedValue(detached)
-    vi.mocked(deps.authorization.associateResourceConnector).mockResolvedValue(true)
-
-    await expect(associateExternalResourceConnector(deps, 'resource-1', null)).resolves.toMatchObject(detached)
-    expect(deps.authorization.associateResourceConnector).toHaveBeenCalledWith('resource-1', null, expect.any(Date))
-    expect(deps.externalHttp.fetch).not.toHaveBeenCalled()
+    await expect(
+      validateExternalResourceConnector(deps, 'https://projects.example.com/api', 'connector-1'),
+    ).rejects.toThrow('authorization server does not match')
   })
 
   it('connects the user account with authorization code and PKCE [spec: agent-identity/resource-account-connection]', async () => {
@@ -953,7 +922,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.createAccessRequest).mockImplementation(async (record) => record)
 
     await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
-      resources: [{ authorizationMode: 'native', connections: [], grants: [{ id: 'grant-1' }] }],
+      resources: [{ connectorId: null, connections: [], grants: [{ id: 'grant-1' }] }],
     })
     await expect(listAgentApiResources(deps, principal(), { limit: 10, offset: 0 })).resolves.toMatchObject({
       items: [
@@ -1911,8 +1880,7 @@ function resource(): ApiResourceResponse {
     identifier: 'projects',
     name: 'Projects API',
     resourceUrl: 'https://projects.example.com/api',
-    authorizationMode: 'external',
-    authorizationConnectorId: 'connector-1',
+    connectorId: 'connector-1',
     description: 'Manage private projects',
     enabled: true,
     archivedAt: null,
@@ -1924,7 +1892,7 @@ function resource(): ApiResourceResponse {
 function nativeResource(): ApiResourceResponse {
   return {
     ...resource(),
-    authorizationMode: 'native',
+    connectorId: null,
     resourceUrl: 'https://auth.example.com/api/projects',
   }
 }

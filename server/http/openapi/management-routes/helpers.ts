@@ -45,10 +45,7 @@ export {
   updateRoleRequestSchema,
 } from '@shared/api/authorization'
 export { connectorReadinessResponseSchema, listConnectorTemplatesResponseSchema } from '@shared/api/connectors'
-export {
-  associateExternalResourceConnectorRequestSchema,
-  externalResourceAuthorizationSchema,
-} from '@shared/api/external-resources'
+export { externalResourceAuthorizationSchema } from '@shared/api/external-resources'
 export {
   createManagementConnectorRequestSchema,
   createManagementFederatedCredentialRequestSchema,

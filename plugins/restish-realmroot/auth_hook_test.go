@@ -180,7 +180,7 @@ func testEnsureDPoPCredentialReplacesGrantForSameResource(t *testing.T) {
 			"items": []map[string]any{{
 				"id":                "resource-1",
 				"resourceUrl":       "https://api.example.com/v1",
-				"authorizationMode": "native",
+				"connectorId":       nil,
 				"accessGrants": []map[string]any{{
 					"id": "grant-new", "mode": "persistent", "status": "active",
 				}},

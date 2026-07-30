@@ -5,12 +5,7 @@ import {
   restoreResource,
   updateResource,
 } from '@server/usecases/authorization'
-import {
-  associateExternalResourceConnector,
-  getApiResource,
-  listApiResources,
-  validateExternalResourceConnector,
-} from '@server/usecases/external-resources'
+import { getApiResource, listApiResources } from '@server/usecases/external-resources'
 import {
   apiResourceSchema,
   apiResourcesResponseSchema,
@@ -18,7 +13,6 @@ import {
   updateApiResourceSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/authorization'
-import { associateExternalResourceConnectorRequestSchema } from '@shared/api/external-resources'
 import { Hono } from 'hono'
 import { getPrincipal } from '../../middleware/authn'
 import { getDeps } from '../../middleware/deps'
@@ -44,16 +38,6 @@ export function createManagementApiResourcesRoute() {
 
   app.patch('/:resourceId', async (c) => {
     const input = await readJson(c, updateApiResourceSchema)
-    if (input.resourceUrl !== undefined) {
-      const current = await getApiResource(getDeps(c), c.req.param('resourceId'))
-      if (
-        current.authorizationMode === 'external' &&
-        current.resourceUrl !== input.resourceUrl &&
-        current.authorizationConnectorId
-      ) {
-        await validateExternalResourceConnector(getDeps(c), input.resourceUrl, current.authorizationConnectorId)
-      }
-    }
     await updateResource(getDeps(c), c.req.param('resourceId'), input)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
   })
@@ -64,14 +48,6 @@ export function createManagementApiResourcesRoute() {
   })
 
   return app
-    .put('/:resourceId/authorization-connector', async (c) => {
-      const input = await readJson(c, associateExternalResourceConnectorRequestSchema)
-      return c.json(
-        apiResourceSchema.parse(
-          await associateExternalResourceConnector(getDeps(c), c.req.param('resourceId'), input.connectorId),
-        ),
-      )
-    })
     .put('/:resourceId/archival', async (c) => {
       await archiveResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
       return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))

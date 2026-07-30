@@ -78,7 +78,7 @@ Create an API Resource with:
 
 | Field | Value |
 | --- | --- |
-| `authorizationMode` | `native` |
+| `connectorId` | Omit this field. |
 | `resourceUrl` | The protected API identifier and base URL that the API accepts as its audience and that advertises OpenAPI. |
 | `enabled` | Enable after discovery and token validation are configured. |
 
@@ -92,7 +92,6 @@ A representative Resource API body is:
   "identifier": "projects-api",
   "name": "Projects API",
   "resourceUrl": "https://api.example.com",
-  "authorizationMode": "native",
   "enabled": true
 }
 ```
@@ -174,23 +173,23 @@ registry, authorization server, signing keys, and access-token lifecycle.
 Realmroot acts as a standards-based OAuth client; the final access token is
 issued and validated entirely by the target platform.
 
-Register the API Resource with the target resource URL. Select
-dynamic registration when the target publishes `registration_endpoint`:
+First create a standard OIDC Connector for the target authorization server.
+Select dynamic registration when the target publishes `registration_endpoint`,
+or supply the pre-registered `clientId` and `clientSecret` for manual mode.
+Then register the API Resource and select that Connector:
 
 ```json
 {
   "identifier": "external-projects-api",
   "name": "External Projects API",
   "resourceUrl": "https://api.example.com/v1",
-  "authorizationMode": "external",
-  "authorization": {
-    "registrationMode": "dynamic"
-  }
+  "connectorId": "idp_target"
 }
 ```
 
-For a pre-registered client, use `registrationMode: manual` and provide its
-`clientId` and `clientSecret` in the authorization object.
+The presence of `connectorId` makes the resource externally authorized. Its
+authorization mode cannot change after creation, although it may switch to
+another compatible OIDC Connector.
 
 ### Publish Protected Resource Metadata
 

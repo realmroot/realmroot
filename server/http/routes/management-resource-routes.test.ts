@@ -110,49 +110,6 @@ describe('management resource routes', () => {
     expect(authorizationService.assignAgentRole).toHaveBeenCalledWith(assignmentBody(), 'admin-1')
   })
 
-  it('associates an external resource with an OIDC connector [spec: agent-identity/external-api-resource-registration]', async () => {
-    const associate = vi.spyOn(externalResourcesUsecase, 'associateExternalResourceConnector').mockResolvedValue({
-      id: 'resource-1',
-      identifier: 'projects',
-      name: 'Projects',
-      resourceUrl: 'https://projects.example.com/api',
-      description: null,
-      authorizationMode: 'external',
-      authorizationConnectorId: 'connector-1',
-      enabled: true,
-      archivedAt: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-      authorization: {
-        connectorId: 'connector-1',
-        resourceUrl: 'https://projects.example.com/api',
-        issuer: 'https://projects.example.com',
-        authorizationEndpoint: 'https://projects.example.com/authorize',
-        tokenEndpoint: 'https://projects.example.com/token',
-        registrationEndpoint: 'https://projects.example.com/register',
-        revocationEndpoint: 'https://projects.example.com/revoke',
-        jwksUri: 'https://projects.example.com/jwks',
-        userInfoEndpoint: 'https://projects.example.com/userinfo',
-        registrationMode: 'dynamic',
-        clientId: 'client',
-        clientSecretConfigured: true,
-        status: 'active',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      },
-    })
-    const { app } = await loadAuthorizationRoutes()
-
-    const response = await app.request('https://preview.example.net/api-resources/resource-1/authorization-connector', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ connectorId: 'connector-1' }),
-    })
-
-    expect(response.status).toBe(200)
-    expect(associate).toHaveBeenCalledWith(expect.anything(), 'resource-1', 'connector-1')
-  })
-
   it('routes management connector requests to the connector service', async () => {
     const { app, connectorService } = await loadConnectorRoutes()
 
@@ -224,8 +181,7 @@ async function loadAuthorizationRoutes() {
     name: 'Contacts',
     resourceUrl: 'https://api.example.com',
     description: null,
-    authorizationMode: 'native' as const,
-    authorizationConnectorId: null,
+    connectorId: null,
     enabled: true,
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',

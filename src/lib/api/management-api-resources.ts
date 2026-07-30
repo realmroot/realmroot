@@ -1,6 +1,6 @@
 import type { ApiResource, createApiResourceSchema, updateApiResourceSchema } from '@shared/api/agent-api'
 import type { z } from 'zod'
-import { apiClient, readJsonResponse, readRpcResponse } from '@/lib/api'
+import { apiClient, readRpcResponse } from '@/lib/api'
 
 export function listApiResources() {
   return readRpcResponse(apiClient.api['api-resources'].$get())
@@ -16,16 +16,6 @@ export function createApiResource(input: z.input<typeof createApiResourceSchema>
 
 export function updateApiResource(id: string, input: z.infer<typeof updateApiResourceSchema>) {
   return readRpcResponse(apiClient.api['api-resources'][':id'].$patch({ param: { id }, json: input }))
-}
-
-export async function associateApiResourceConnector(id: string, connectorId: string | null): Promise<ApiResource> {
-  return readJsonResponse<ApiResource>(
-    await fetch(`/api/api-resources/${encodeURIComponent(id)}/authorization-connector`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ connectorId }),
-    }),
-  )
 }
 
 export function deleteApiResource(id: string) {

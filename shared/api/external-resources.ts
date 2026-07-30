@@ -28,10 +28,6 @@ export const externalResourceAuthorizationSchema = z.object({
   updatedAt: z.iso.datetime(),
 })
 
-export const associateExternalResourceConnectorRequestSchema = z.object({
-  connectorId: nonEmptyString.nullable(),
-})
-
 export const resourceConnectionOwnerSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('user') }),
   z.object({ type: z.literal('organization'), organizationId: nonEmptyString }),
@@ -151,7 +147,7 @@ export const agentResourceDiscoverySchema = z.object({
       id: z.string(),
       identifier: z.string(),
       name: z.string(),
-      authorizationMode: z.enum(['native', 'external']),
+      connectorId: z.string().nullable(),
       resourceUrl: z.url(),
       scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       connections: z.array(
@@ -167,7 +163,6 @@ export const agentResourceDiscoverySchema = z.object({
   ),
 })
 
-export type AssociateExternalResourceConnectorRequest = z.infer<typeof associateExternalResourceConnectorRequestSchema>
 export type ExternalResourceAuthorizationRecord = z.infer<typeof externalResourceAuthorizationSchema>
 export type CreateResourceConnectionIntentRequest = z.infer<typeof createResourceConnectionIntentRequestSchema>
 export type CreateAgentAccessRequest = z.infer<typeof createAgentAccessRequestSchema>

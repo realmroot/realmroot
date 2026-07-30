@@ -1,6 +1,5 @@
-import { createApiResourceSchema, decideAccessRequestSchema } from '@shared/api/agent-api'
+import { createApiResourceSchema, decideAccessRequestSchema, updateApiResourceSchema } from '@shared/api/agent-api'
 import {
-  associateExternalResourceConnectorRequestSchema,
   createAgentAccessRequestSchema,
   createResourceConnectionIntentRequestSchema,
   decideAgentAccessRequestByTokenSchema,
@@ -8,18 +7,17 @@ import {
 import { describe, expect, it } from 'vitest'
 
 describe('Agent resource schemas', () => {
-  it('creates external API resources separately from connector association', () => {
+  it('creates external API resources by selecting a connector', () => {
     const input = {
       identifier: 'projects',
       name: 'Projects',
       resourceUrl: 'https://projects.example.com',
-      authorizationMode: 'external',
+      connectorId: 'connector-1',
     }
 
     expect(createApiResourceSchema.safeParse(input).success).toBe(true)
-    expect(associateExternalResourceConnectorRequestSchema.safeParse({ connectorId: 'connector-1' }).success).toBe(true)
-    expect(associateExternalResourceConnectorRequestSchema.safeParse({ connectorId: null }).success).toBe(true)
-    expect(associateExternalResourceConnectorRequestSchema.safeParse({ connectorId: '' }).success).toBe(false)
+    expect(createApiResourceSchema.safeParse({ ...input, connectorId: '' }).success).toBe(false)
+    expect(updateApiResourceSchema.safeParse({ connectorId: null }).success).toBe(true)
   })
 
   it('requires approval mode and expiry for limited access decisions', () => {

@@ -82,8 +82,7 @@ const resource: ApiResourceResponse = {
   identifier: 'projects',
   name: 'Projects',
   resourceUrl: 'https://api.example.com',
-  authorizationMode: 'native',
-  authorizationConnectorId: null,
+  connectorId: null,
   description: null,
   enabled: true,
   archivedAt: null,
@@ -196,11 +195,46 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.createResource.mockResolvedValue(resource)
     authorization.listResources.mockResolvedValue({ items: [resource], pagination })
     authorization.findResource.mockResolvedValue(resource)
-    const connectors = { findById: vi.fn() }
+    const canonicalResourceUrl = new URL(resource.resourceUrl).toString()
+    const connector = {
+      id: 'connector-1',
+      providerType: 'generic_oauth',
+      enabled: true,
+      clientId: 'client-1',
+      clientSecret: 'secret',
+      issuer: resource.resourceUrl,
+      authorizationEndpoint: `${resource.resourceUrl}/authorize`,
+      tokenEndpoint: `${resource.resourceUrl}/token`,
+      userInfoEndpoint: `${resource.resourceUrl}/userinfo`,
+      jwksEndpoint: `${resource.resourceUrl}/jwks`,
+      revocationEndpoint: `${resource.resourceUrl}/revoke`,
+      providerMetadata: {
+        grant_types_supported: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          'urn:ietf:params:oauth:grant-type:token-exchange',
+        ],
+        dpop_signing_alg_values_supported: ['ES256'],
+      },
+    }
+    const connectors = { findById: vi.fn().mockResolvedValue(connector) }
+    const openApiFetch = resourceOpenApiFetch(resource.resourceUrl)
     const deps = {
       authorization,
       connectors,
-      externalHttp: { fetch: vi.fn(resourceOpenApiFetch(resource.resourceUrl)) },
+      externalHttp: {
+        fetch: vi.fn((request: Request) =>
+          request.url.endsWith('/.well-known/oauth-protected-resource')
+            ? Promise.resolve(
+                Response.json({
+                  resource: canonicalResourceUrl,
+                  authorization_servers: [resource.resourceUrl],
+                }),
+              )
+            : openApiFetch(request),
+        ),
+      },
     } as unknown as Deps
 
     await createResource(deps, {
@@ -210,7 +244,7 @@ describe('authorization CRUD and assignment policy', () => {
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        authorizationMode: 'native',
+        connectorId: null,
         description: null,
         enabled: true,
       }),
@@ -219,11 +253,11 @@ describe('authorization CRUD and assignment policy', () => {
       identifier: 'external',
       name: 'External',
       resourceUrl: resource.resourceUrl,
-      authorizationMode: 'external',
+      connectorId: 'connector-1',
       enabled: true,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
-      expect.objectContaining({ authorizationMode: 'external', enabled: false }),
+      expect.objectContaining({ connectorId: 'connector-1', enabled: true }),
     )
     await expect(listResources(deps, { limit: 20, offset: 0 })).resolves.toEqual({
       resources: [resource],
@@ -231,6 +265,17 @@ describe('authorization CRUD and assignment policy', () => {
     })
     await expect(getResource(deps, resource.id)).resolves.toBe(resource)
     await expect(updateResource(deps, resource.id, { name: 'Projects 2' })).resolves.toBe(resource)
+    authorization.updateResource.mockClear()
+    await expect(updateResource(deps, resource.id, { connectorId: 'connector-1' })).rejects.toThrow(
+      'authorization mode cannot change',
+    )
+    expect(authorization.updateResource).not.toHaveBeenCalled()
+    authorization.findResource.mockResolvedValue({ ...resource, connectorId: 'connector-1' })
+    await expect(updateResource(deps, resource.id, { connectorId: null })).rejects.toThrow(
+      'authorization mode cannot change',
+    )
+    expect(authorization.updateResource).not.toHaveBeenCalled()
+    authorization.findResource.mockResolvedValue(resource)
     authorization.archiveResource.mockResolvedValue(undefined)
     await expect(archiveResource(deps, resource.id, actor)).resolves.toBe(resource)
     expect(authorization.archiveResource).toHaveBeenCalledWith(
@@ -325,20 +370,16 @@ describe('authorization CRUD and assignment policy', () => {
       },
     })
 
-    authorization.findResource.mockResolvedValue({ ...resource, authorizationMode: 'external' })
-    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({ status: 400 })
     authorization.findResource.mockResolvedValue({
       ...resource,
-      authorizationMode: 'external',
-      authorizationConnectorId: 'connector-1',
+      connectorId: 'connector-1',
     })
-    connectors.findById.mockResolvedValue({ enabled: false })
+    connectors.findById.mockResolvedValue({ ...connector, enabled: false })
     await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({ status: 400 })
-    connectors.findById.mockResolvedValue({ enabled: true })
+    connectors.findById.mockResolvedValue(connector)
     await expect(updateResource(deps, resource.id, { enabled: true })).resolves.toEqual({
       ...resource,
-      authorizationMode: 'external',
-      authorizationConnectorId: 'connector-1',
+      connectorId: 'connector-1',
     })
     authorization.findResource.mockResolvedValue(null)
     await expect(getResource(deps, 'missing')).rejects.toMatchObject({ status: 404 })

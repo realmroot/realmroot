@@ -190,8 +190,7 @@ export const apiResource = sqliteTable(
     identifier: text('identifier').notNull().unique(),
     name: text('name').notNull(),
     resourceUrl: text('resource_url').notNull(),
-    authorizationMode: text('authorization_mode').notNull().default('native'),
-    authorizationConnectorId: text('authorization_connector_id').references(() => identityProviderConnector.id, {
+    connectorId: text('connector_id').references(() => identityProviderConnector.id, {
       onDelete: 'restrict',
     }),
     description: text('description'),
@@ -208,7 +207,7 @@ export const apiResource = sqliteTable(
   (table) => [
     uniqueIndex('apiResource_resourceUrl_unique').on(table.resourceUrl),
     index('apiResource_enabled_idx').on(table.enabled),
-    index('apiResource_authorizationConnectorId_idx').on(table.authorizationConnectorId),
+    index('apiResource_connectorId_idx').on(table.connectorId),
   ],
 )
 

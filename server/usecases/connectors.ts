@@ -94,7 +94,7 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest,
     registrationAccessTokenContext: null,
     scopes: input.scopes ?? null,
     attributeMapping: null,
-    providerMetadata: input.providerMetadata ?? null,
+    providerMetadata: oidc?.metadata ?? input.providerMetadata ?? null,
     createdAt: now,
     updatedAt: now,
   }

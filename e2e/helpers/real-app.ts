@@ -76,7 +76,6 @@ export function resetLocalData() {
     DELETE FROM agent_access_request;
     DELETE FROM resource_connection_intent;
     DELETE FROM resource_account_connection;
-    DELETE FROM external_resource_authorization;
     DELETE FROM agent_identity_binding;
     DELETE FROM agent_enrollment_intent;
     DELETE FROM agent_role_assignment;

@@ -451,7 +451,6 @@ export function assignAgentRole(input: AssignRoleRequest) {
 
 export {
   archiveApiResource,
-  associateApiResourceConnector,
   createApiResource,
   deleteApiResource,
   getApiResource,

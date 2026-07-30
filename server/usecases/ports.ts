@@ -913,7 +913,6 @@ export interface AuthorizationRepository {
   findResource(id: string): Promise<ApiResourceResponse | null>
   findResourceByResourceUrl(resourceUrl: string): Promise<ApiResourceResponse | null>
   updateResource(id: string, patch: UpdateApiResourceRequest): Promise<boolean>
-  associateResourceConnector(id: string, connectorId: string | null, now: Date): Promise<boolean>
   archiveResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
   restoreResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
   deleteResource(id: string): Promise<ApiResourceReferenceCounts | null>

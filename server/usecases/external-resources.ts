@@ -22,7 +22,7 @@ import type {
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
 import { getAgentRoleAuthorization } from './authorization'
-import { readDeclaredScopes, validateRequestedScopes, validateResourceContract } from './resource-openapi'
+import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
@@ -42,69 +42,6 @@ export interface AgentAssertionSigner {
 
 type ResolvedExternalAuthorization = ExternalResourceAuthorizationRecord & {
   resolvedClientSecret?: string
-}
-
-export async function associateExternalResourceConnector(deps: Deps, resourceId: string, connectorId: string | null) {
-  const resource = await requireExternalResource(deps, resourceId)
-  if (resource.archivedAt) throw badRequest('Archived API resources must be restored before configuration.')
-  if (connectorId) await validateExternalResourceConnector(deps, resource.resourceUrl, connectorId)
-  if (!(await deps.authorization.associateResourceConnector(resourceId, connectorId, new Date()))) {
-    throw notFound('External API resource was not found.')
-  }
-  return getApiResource(deps, resourceId)
-}
-
-export async function validateExternalResourceConnector(deps: Deps, resourceUrlInput: string, connectorId: string) {
-  const connector = await deps.connectors.findById(connectorId)
-  if (!connector || connector.providerType !== 'generic_oauth') {
-    throw notFound('OIDC connector was not found.')
-  }
-  if (!connector.enabled || !connector.clientId || !connector.clientSecret || !connector.issuer) {
-    throw badRequest('OIDC connector must be enabled and have complete client credentials.')
-  }
-  if (
-    !connector.authorizationEndpoint ||
-    !connector.tokenEndpoint ||
-    !connector.userInfoEndpoint ||
-    !connector.jwksEndpoint ||
-    !connector.revocationEndpoint
-  ) {
-    throw badRequest('OIDC connector is missing endpoints required for external API access.')
-  }
-
-  const resourceUrl = requireNetworkUrl(resourceUrlInput, 'resource URL')
-  await validateResourceContract(deps, resourceUrl)
-  const protectedMetadata = await fetchObject(
-    deps,
-    protectedResourceMetadataUrl(resourceUrl),
-    'Protected resource metadata discovery failed.',
-  )
-  if (protectedMetadata.resource !== resourceUrl) {
-    throw badRequest('Protected resource metadata does not match the configured resource URL.')
-  }
-  const authorizationServers = stringArray(protectedMetadata.authorization_servers)
-  if (authorizationServers.length !== 1) {
-    throw badRequest('External API resource must advertise exactly one authorization server.')
-  }
-  const issuer = requireNetworkUrl(authorizationServers[0]!, 'authorization server issuer').replace(/\/$/, '')
-  if (issuer !== connector.issuer.replace(/\/$/, '')) {
-    throw badRequest('External API resource authorization server does not match the selected OIDC connector.')
-  }
-
-  const grants = stringArray(connector.providerMetadata?.grant_types_supported)
-  if (
-    !grants.includes('authorization_code') ||
-    !grants.includes('refresh_token') ||
-    !grants.includes(jwtBearerGrantType) ||
-    !grants.includes(tokenExchangeGrantType)
-  ) {
-    throw badRequest(
-      'OIDC connector must support authorization_code, refresh_token, the RFC 7523 JWT bearer grant, and RFC 8693 token exchange.',
-    )
-  }
-  if (stringArray(connector.providerMetadata?.dpop_signing_alg_values_supported).length === 0) {
-    throw badRequest('OIDC connector must advertise RFC 9449 DPoP support for external API access.')
-  }
 }
 
 export async function getExternalResourceAuthorization(deps: Deps, resourceId: string) {
@@ -283,7 +220,7 @@ export async function createAccountConnection(
     if (request.id !== input.accessRequestId) throw notFound('Agent access request was not found.')
     await requireControlledRequestTarget(deps, request, actorUserId)
     const resource = await requireEnabledResource(deps, request.resourceId)
-    if (resource.authorizationMode !== 'external') {
+    if (!resource.connectorId) {
       throw badRequest('Native API resources do not use account connections.')
     }
     const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
@@ -328,7 +265,7 @@ export async function listAccessRequestConnections(
   const request = await requirePendingAccessRequestByToken(deps, approvalToken)
   await requireControlledRequestTarget(deps, request, actorUserId)
   const resource = await requireEnabledResource(deps, request.resourceId)
-  if (resource.authorizationMode !== 'external') {
+  if (!resource.connectorId) {
     return { items: [], pagination: paginationMetadata({ ...pagination, total: 0 }) }
   }
   const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
@@ -360,7 +297,7 @@ export async function getAccountConnection(
 
 export async function listConnectableExternalResources(deps: Deps) {
   const resources = (await deps.authorization.listEnabledResources()).filter(
-    (resource) => resource.authorizationMode === 'external',
+    (resource) => resource.connectorId !== null,
   )
   const connectable = []
   for (const resource of resources) {
@@ -404,7 +341,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
     if (
       !resource?.enabled ||
       resource.archivedAt ||
-      (resource.authorizationMode === 'external' && authorization?.status !== 'active')
+      (resource.connectorId !== null && authorization?.status !== 'active')
     ) {
       continue
     }
@@ -415,11 +352,11 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       name: resource.name,
       description: resource.description,
       resourceUrl: resource.resourceUrl,
-      authorizationMode: resource.authorizationMode,
+      connectorId: resource.connectorId,
       status: scopes ? 'available' : 'unavailable',
       scopes: scopes ?? [],
       connections:
-        resource.authorizationMode === 'external'
+        resource.connectorId !== null
           ? activeConnections
               .filter((connection) => connection.resourceId === resourceId)
               .map((connection) => ({
@@ -460,7 +397,7 @@ export async function listAgentApiResources(
     name: resource.name,
     description: resource.description,
     resourceUrl: resource.resourceUrl,
-    authorizationMode: resource.authorizationMode,
+    connectorId: resource.connectorId,
     status: resource.status,
     scopes: resource.scopes,
     accountConnections: resource.connections.map((connection) => ({
@@ -501,7 +438,7 @@ export async function createAgentAccessRequest(
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const resource = await requireEnabledResource(deps, input.resourceId)
   const connection = input.connectionId ? await deps.externalResources.findConnection(input.connectionId) : null
-  if (resource.authorizationMode === 'external') {
+  if (resource.connectorId !== null) {
     if (
       input.connectionId &&
       (!connection || connection.resourceId !== resource.id || connection.status !== 'active')
@@ -735,7 +672,7 @@ export async function decideAgentAccessRequest(
   )
   const connectionId = input.accountConnectionId ?? request.connectionId
   let connection: ResourceAccountConnectionRecord | null = null
-  if (resource.authorizationMode === 'external') {
+  if (resource.connectorId !== null) {
     if (!connectionId) throw badRequest('An account connection is required to approve external API access.')
     connection = await requireControlledConnection(deps, connectionId, actorUserId)
     if (connection.resourceId !== resource.id || connection.status !== 'active') {
@@ -828,7 +765,7 @@ export async function issueTargetAccessToken(
     identity.identity.ownerOrganizationId,
     grant.scopes,
   )
-  if (resource.authorizationMode === 'native') {
+  if (resource.connectorId === null) {
     return issueNativeAccessToken(
       deps,
       { grant, request, resource, identity, roleAuthorization },
@@ -1110,7 +1047,7 @@ async function revokeTokenLeaseAtTarget(
 ) {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource) throw notFound('API resource was not found.')
-  if (resource.authorizationMode === 'native') {
+  if (resource.connectorId === null) {
     await deps.externalResources.revokeTokenLease(lease.id, now)
     return
   }
@@ -1219,7 +1156,7 @@ async function requestHostId(deps: Deps, request: AgentAccessRequestRecord) {
 
 async function requireExternalResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
-  if (!resource || resource.authorizationMode !== 'external') throw notFound('External API resource was not found.')
+  if (!resource?.connectorId) throw notFound('External API resource was not found.')
   return resource
 }
 
@@ -1236,8 +1173,8 @@ async function findExternalAuthorization(
   resourceId: string,
 ): Promise<ResolvedExternalAuthorization | null> {
   const resource = await deps.authorization.findResource(resourceId)
-  if (!resource?.authorizationConnectorId) return null
-  const connector = await deps.connectors.findById(resource.authorizationConnectorId)
+  if (!resource?.connectorId) return null
+  const connector = await deps.connectors.findById(resource.connectorId)
   if (
     !connector ||
     connector.providerType !== 'generic_oauth' ||
@@ -1287,7 +1224,7 @@ function openAuthorizationClientSecret(deps: Deps, authorization: ResolvedExtern
 async function requireEnabledResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource?.enabled || resource.archivedAt) throw notFound('Enabled API resource was not found.')
-  if (resource.authorizationMode === 'external') {
+  if (resource.connectorId !== null) {
     await requireActiveExternalAuthorization(deps, resourceId)
   }
   return resource
@@ -1451,23 +1388,6 @@ async function readObject(response: Response, message: string) {
   return value as Record<string, unknown>
 }
 
-function protectedResourceMetadataUrl(resourceUrl: string) {
-  const resource = new URL(resourceUrl)
-  const path = resource.pathname === '/' ? '' : resource.pathname
-  const metadata = new URL(`/.well-known/oauth-protected-resource${path}`, resource.origin)
-  metadata.search = resource.search
-  return metadata.toString()
-}
-
-function requireNetworkUrl(value: string, label: string) {
-  const url = new URL(value)
-  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1'
-  if ((url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) || url.username || url.password) {
-    throw badRequest(`${label} must use HTTPS, except for loopback development URLs, and contain no userinfo.`)
-  }
-  return url.toString()
-}
-
 function requiredString(value: Record<string, unknown>, field: string, label: string) {
   const result = value[field]
   if (typeof result !== 'string' || result.length === 0) throw badRequest(`${label} is missing ${field}.`)
@@ -1484,10 +1404,6 @@ function requiredPositiveInteger(value: Record<string, unknown>, field: string, 
     throw badRequest(`${label} has invalid ${field}.`)
   }
   return result
-}
-
-function stringArray(value: unknown) {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : []
 }
 
 function scopeString(value: unknown) {

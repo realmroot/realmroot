@@ -95,7 +95,7 @@ export const agentApiResourcesResponseSchema = z.object({
       name: z.string(),
       description: z.string().nullable(),
       resourceUrl: z.url(),
-      authorizationMode: z.enum(['native', 'external']),
+      connectorId: z.string().nullable(),
       status: z.enum(['available', 'unavailable']),
       scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       accountConnections: z.array(

@@ -1,7 +1,6 @@
 import { type ApiResource, createApiResourceSchema } from '@shared/api/agent-api'
 import {
   archiveApiResource,
-  associateApiResourceConnector,
   consoleQueryKeys,
   createApiResource,
   deleteApiResource,
@@ -20,6 +19,10 @@ import {
   CardHeader,
   CardTitle,
   createApiResourceRequestSchema,
+  Dialog,
+  emptyForm,
+  Field,
+  type FormState,
   Plus,
   SelectInput,
   Table,
@@ -42,7 +45,7 @@ import {
   useState,
   type z,
 } from '../console-shared'
-import { SimpleCreateDialog } from '../helpers/helpers-create'
+import { FormDialog } from '../helpers/helpers-create'
 import { DangerConfirmDialog, MutationError, StatusBadge } from '../helpers/helpers-dialogs'
 import { AuthorizationForm } from '../helpers/helpers-forms'
 import {
@@ -53,7 +56,7 @@ import {
   ObjectHeader,
   ResourcePage,
 } from '../helpers/helpers-resource'
-import { parseForm, useAdminMutation } from '../helpers/helpers-utils'
+import { parseForm, setValue, useAdminMutation } from '../helpers/helpers-utils'
 import { ApiResourceSummaryCard } from './api-resource-summary-card'
 
 export function ApiResourcesPage() {
@@ -63,7 +66,13 @@ export function ApiResourcesPage() {
   })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [createMode, setCreateMode] = useState<'native' | 'external'>('native')
+  const connectorsQuery = useQuery({
+    queryKey: consoleQueryKeys.connectors,
+    queryFn: listConnectors,
+  })
+  const oidcConnectors = (connectorsQuery.data?.connectors ?? []).filter(
+    (connector) => connector.providerType === 'generic_oauth' && connector.enabled,
+  )
   const [search, setSearch] = useState('')
   const createMutation = useAdminMutation({
     mutationFn: createApiResource,
@@ -85,50 +94,20 @@ export function ApiResourcesPage() {
       title={tt('API resources')}
       description={tt('Register protected APIs, OpenAPI contracts, and permission surfaces.')}
       action={
-        <div className="flex gap-2">
-          <Button
-            onClick={() => {
-              setCreateMode('native')
-              setDialogOpen(true)
-            }}
-          >
-            <Plus data-icon="inline-start" /> {tt('New local resource')}{' '}
-          </Button>
-          <Button
-            onClick={() => {
-              setCreateMode('external')
-              setDialogOpen(true)
-            }}
-            variant="secondary"
-          >
-            <Plus data-icon="inline-start" /> {tt('New external resource')}{' '}
-          </Button>
-        </div>
+        <Button onClick={() => setDialogOpen(true)}>
+          <Plus data-icon="inline-start" /> {tt('New API resource')}{' '}
+        </Button>
       }
       auxiliary={
-        <SimpleCreateDialog
+        <ApiResourceCreateDialog
+          connectors={oidcConnectors}
           error={createMutation.errorMessage}
-          fields={[
-            ['identifier', 'Identifier'],
-            ['name', 'Name'],
-            ['resourceUrl', 'Resource URL'],
-            ['description', 'Description'],
-          ]}
           onClose={() => setDialogOpen(false)}
           onSubmit={(form) => {
-            const resource = parseForm(createApiResourceRequestSchema, {
-              ...form,
-              authorizationMode: createMode,
-            })
-            createMutation.mutate(
-              createApiResourceSchema.parse({
-                ...resource,
-              }),
-            )
+            createMutation.mutate(createApiResourceSchema.parse(parseForm(createApiResourceRequestSchema, form)))
           }}
           open={dialogOpen}
           pending={createMutation.isPending}
-          title={tt(createMode === 'external' ? 'Create external API resource' : 'Create local API resource')}
         />
       }
       error={query.error}
@@ -168,9 +147,7 @@ export function ApiResourcesPage() {
                   <div className="text-xs text-muted-foreground">{resource.identifier}</div>
                 </TableCell>
                 <TableCell>{resource.resourceUrl}</TableCell>
-                <TableCell>
-                  {resource.authorizationMode === 'external' ? tt('External issuer') : tt('Native (Realmroot)')}
-                </TableCell>
+                <TableCell>{resource.connectorId ? tt('External issuer') : tt('Native (Realmroot)')}</TableCell>
                 <TableCell>
                   <StatusBadge
                     active={resource.enabled && !resource.archivedAt}
@@ -196,6 +173,71 @@ export function ApiResourcesPage() {
     </ResourcePage>
   )
 }
+
+function ApiResourceCreateDialog({
+  connectors,
+  error,
+  onClose,
+  onSubmit,
+  open,
+  pending,
+}: {
+  connectors: Array<{ id: string; displayName: string; issuer: string | null }>
+  error: string | null
+  onClose: () => void
+  onSubmit: (form: FormState) => void
+  open: boolean
+  pending: boolean
+}) {
+  const [form, setForm] = useState<FormState>(emptyForm)
+  const [validationError, setValidationError] = useState<string | null>(null)
+  return (
+    <Dialog open={open}>
+      <FormDialog
+        error={validationError ?? error}
+        onClose={onClose}
+        onSubmit={(event) => {
+          event.preventDefault()
+          try {
+            setValidationError(null)
+            onSubmit(form)
+          } catch (submitError) {
+            setValidationError(submitError instanceof Error ? tt(submitError.message) : tt('Invalid form input.'))
+          }
+        }}
+        pending={pending}
+        title={tt('Create API resource')}
+      >
+        <Field label={tt('Identifier')}>
+          <TextInput onChange={(event) => setValue(setForm, 'identifier', event.target.value)} required />
+        </Field>
+        <Field label={tt('Name')}>
+          <TextInput onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
+        </Field>
+        <Field label={tt('Resource URL')}>
+          <TextInput onChange={(event) => setValue(setForm, 'resourceUrl', event.target.value)} required />
+        </Field>
+        <Field label={tt('OIDC connector')}>
+          <SelectInput
+            onChange={(event) => setValue(setForm, 'connectorId', event.target.value)}
+            value={form.connectorId ?? ''}
+          >
+            <option value="">{tt('None — use native authorization')}</option>
+            {connectors.map((connector) => (
+              <option key={connector.id} value={connector.id}>
+                {connector.displayName} — {connector.issuer}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label={tt('Description')}>
+          <TextInput onChange={(event) => setValue(setForm, 'description', event.target.value)} />
+        </Field>
+      </FormDialog>
+    </Dialog>
+  )
+}
+
 export function ApiResourceDetailPage({
   resourceId,
   section = 'settings',
@@ -312,19 +354,11 @@ export function ApiResourceDetailPage({
                           fields={[
                             ['identifier', 'Identifier'],
                             ['name', 'Name'],
-                            ...(resource.authorizationMode === 'native'
-                              ? ([['resourceUrl', 'Resource URL']] as [string, string][])
-                              : []),
+                            ['resourceUrl', 'Resource URL'],
                             ['description', 'Description'],
                           ]}
                           onSubmit={(form) => {
-                            const input = parseForm(updateApiResourceRequestSchema, form)
-                            if (resource.authorizationMode === 'native') {
-                              updateMutation.mutate(input)
-                              return
-                            }
-                            const { resourceUrl: _resourceUrl, ...externalInput } = input
-                            updateMutation.mutate(externalInput)
+                            updateMutation.mutate(parseForm(updateApiResourceRequestSchema, form))
                           }}
                           pending={updateMutation.isPending}
                         />
@@ -364,9 +398,10 @@ export function ApiResourceDetailPage({
                     <MutationError error={deleteMutation.error} />
                   </CardContent>
                 </Card>
-                {resource.authorizationMode === 'external' && !resource.archivedAt ? (
+                {resource.connectorId && !resource.archivedAt ? (
                   <ExternalAuthorizationCard
                     authorization={resource.authorization}
+                    currentConnectorId={resource.connectorId}
                     resourceId={resource.id}
                     resourceUrl={resource.resourceUrl}
                   />
@@ -396,10 +431,12 @@ export function ApiResourceDetailPage({
 
 function ExternalAuthorizationCard({
   authorization,
+  currentConnectorId,
   resourceId,
   resourceUrl,
 }: {
   authorization: ApiResource['authorization']
+  currentConnectorId: string
   resourceId: string
   resourceUrl: string
 }) {
@@ -413,10 +450,10 @@ function ExternalAuthorizationCard({
   )
   const [connectorId, setConnectorId] = useState('')
   useEffect(() => {
-    setConnectorId(authorization?.connectorId ?? '')
-  }, [authorization])
+    setConnectorId(currentConnectorId)
+  }, [currentConnectorId])
   const mutation = useMutation({
-    mutationFn: (nextConnectorId: string | null) => associateApiResourceConnector(resourceId, nextConnectorId),
+    mutationFn: (nextConnectorId: string) => updateApiResource(resourceId, { connectorId: nextConnectorId }),
     onSuccess: (updated) => {
       queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
       return queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
@@ -480,21 +517,7 @@ function ExternalAuthorizationCard({
                 onClick={() => mutation.mutate(connectorId)}
                 type="button"
               >
-                {mutation.isPending
-                  ? tt('Validating...')
-                  : authorization
-                    ? tt('Change connector')
-                    : tt('Associate connector')}
-              </Button>
-            ) : null}
-            {authorization ? (
-              <Button
-                disabled={mutation.isPending}
-                onClick={() => mutation.mutate(null)}
-                type="button"
-                variant="secondary"
-              >
-                {tt('Detach connector')}
+                {mutation.isPending ? tt('Validating...') : tt('Change connector')}
               </Button>
             ) : null}
           </div>

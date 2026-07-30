@@ -192,17 +192,6 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return Boolean(row)
     },
 
-    async associateResourceConnector(id, connectorId, now) {
-      const [row] = await db
-        .update(apiResource)
-        .set({ authorizationConnectorId: connectorId, enabled: connectorId !== null, updatedAt: now })
-        .where(
-          and(eq(apiResource.id, id), eq(apiResource.authorizationMode, 'external'), isNull(apiResource.archivedAt)),
-        )
-        .returning({ id: apiResource.id })
-      return Boolean(row)
-    },
-
     async archiveResource(id, now, audit) {
       await db.batch([
         db.insert(agentAuditEvent).select(

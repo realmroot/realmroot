@@ -101,12 +101,6 @@ describe('authorization management over real D1', () => {
 
   it('requires authorization reconfiguration when an external resource URL changes [spec: agent-identity/external-api-resource-reconfiguration]', async () => {
     const cookie = await signInAdmin(harness)
-    const resource = await createResource(harness.deps, {
-      identifier: 'projects-api',
-      name: 'Projects API',
-      resourceUrl: 'https://projects.example.com/api',
-      authorizationMode: 'external',
-    })
     const now = new Date()
     const connector = await harness.deps.connectors.create({
       id: 'connector-projects',
@@ -143,16 +137,25 @@ describe('authorization management over real D1', () => {
       createdAt: now,
       updatedAt: now,
     })
-    await harness.deps.authorization.associateResourceConnector(resource.id, connector.id, now)
     harness.deps.externalHttp.fetch = async (request) => {
       if (request.url.endsWith('/.well-known/oauth-protected-resource/api')) {
         return Response.json({
-          resource: 'https://new-projects.example.com/api',
-          authorization_servers: ['https://different.example.com'],
+          resource: request.url.includes('new-projects')
+            ? 'https://new-projects.example.com/api'
+            : 'https://projects.example.com/api',
+          authorization_servers: [
+            request.url.includes('new-projects') ? 'https://different.example.com' : connector.issuer,
+          ],
         })
       }
       return resourceOpenApiFetch(request)
     }
+    const resource = await createResource(harness.deps, {
+      identifier: 'projects-api',
+      name: 'Projects API',
+      resourceUrl: 'https://projects.example.com/api',
+      connectorId: connector.id,
+    })
 
     const response = await harness.request(`/api/api-resources/${resource.id}`, {
       method: 'PATCH',
@@ -254,15 +257,8 @@ describe('authorization management over real D1', () => {
     ).resolves.toEqual([{ id: 'connection-history' }])
   })
 
-  it('associates an OIDC connector only while the resource is unarchived [spec: management-api/management-api-resource-archival]', async () => {
+  it('changes an OIDC connector only while the resource is unarchived [spec: management-api/management-api-resource-archival]', async () => {
     const cookie = await signInAdmin(harness)
-    const resource = await createResource(harness.deps, {
-      identifier: 'conditional-external',
-      name: 'Conditional external API',
-      resourceUrl: 'https://conditional.example.com/api',
-      authorizationMode: 'external',
-      enabled: false,
-    })
     const now = new Date()
     const connector = await harness.deps.connectors.create({
       id: 'connector-conditional',
@@ -302,34 +298,32 @@ describe('authorization management over real D1', () => {
     harness.deps.externalHttp.fetch = async (request) => {
       if (request.url.endsWith('/.well-known/oauth-protected-resource/api')) {
         return Response.json({
-          resource: resource.resourceUrl,
+          resource: 'https://conditional.example.com/api',
           authorization_servers: [connector.issuer],
         })
       }
       return resourceOpenApiFetch(request)
     }
-
-    const associated = await harness.request(`/api/api-resources/${resource.id}/authorization-connector`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ connectorId: connector.id }),
+    const resource = await createResource(harness.deps, {
+      identifier: 'conditional-external',
+      name: 'Conditional external API',
+      resourceUrl: 'https://conditional.example.com/api',
+      connectorId: connector.id,
     })
-    expect(associated.status, await associated.clone().text()).toBe(200)
-    await expect(harness.deps.authorization.findResource(resource.id)).resolves.toMatchObject({ enabled: true })
 
     const archived = await harness.request(`/api/api-resources/${resource.id}/archival`, {
       method: 'PUT',
       headers: { cookie },
     })
     expect(archived.status).toBe(200)
-    const lateAssociation = await harness.request(`/api/api-resources/${resource.id}/authorization-connector`, {
-      method: 'PUT',
+    const lateAssociation = await harness.request(`/api/api-resources/${resource.id}`, {
+      method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ connectorId: connector.id }),
     })
     expect(lateAssociation.status).toBe(400)
     await expect(harness.deps.authorization.findResource(resource.id)).resolves.toMatchObject({
-      authorizationConnectorId: connector.id,
+      connectorId: connector.id,
       archivedAt: expect.any(String),
     })
   })

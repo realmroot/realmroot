@@ -228,7 +228,6 @@ describe('Agent identity enrollment over real D1', () => {
       identifier: 'native-api',
       name: 'Native API',
       resourceUrl: 'https://api.example.com',
-      authorizationMode: 'native',
       description: 'Read private code repositories',
     })
     const resourceRole = await createRole(harness.deps, {
@@ -251,7 +250,7 @@ describe('Agent identity enrollment over real D1', () => {
       expect.objectContaining({
         id: resource.id,
         description: 'Read private code repositories',
-        authorizationMode: 'native',
+        connectorId: null,
         accountConnections: [],
       }),
     ])
