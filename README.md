@@ -141,10 +141,23 @@ for administration and automation.
 
 ## Use From Agents
 
-Install the skill:
+Install the Realmroot skill globally, selecting the Agent runtime that should
+use it:
 
 ```bash
-npx skills install saltbo/realmroot
+npx skills add realmroot/realmroot -g --skill realmroot
+```
+
+For a non-interactive Codex installation:
+
+```bash
+npx skills add realmroot/realmroot -g --skill realmroot --agent codex -y
+```
+
+Verify the installed source and scope:
+
+```bash
+npx skills list -g
 ```
 
 Then tell your agent what to configure:
@@ -154,6 +167,27 @@ Use Realmroot to add identity and delegated Agent access to this project.
 ```
 
 The agent will ask for the Realmroot deployment and application details it needs.
+
+### Update The Agent Skill
+
+Update the global installation from the latest `realmroot/realmroot` revision:
+
+```bash
+npx skills update realmroot -g -y
+```
+
+If the installation source or generated Agent links are inconsistent, perform a
+clean reinstall:
+
+```bash
+npx skills remove realmroot -g -y
+npx skills add realmroot/realmroot -g --skill realmroot --agent codex -y
+```
+
+Use the `skills` CLI to manage the installation. Do not manually copy
+`skills/realmroot` into `~/.agents/skills` or an Agent-specific skill directory;
+manual copies are not tracked by `skills update` and can leave conflicting
+versions installed.
 
 ## Documentation
 
