@@ -108,7 +108,9 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       updateBrandingAsset: vi.fn(),
     },
     assetStorage: { put: vi.fn(), get: vi.fn().mockResolvedValue(null) },
-    authorization: {},
+    authorization: {
+      associateResourceConnector: vi.fn().mockResolvedValue(false),
+    },
     configz: {
       getSettings: vi.fn().mockResolvedValue(null),
       getBranding: vi.fn().mockResolvedValue(null),
@@ -123,14 +125,12 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       listEnabled: vi.fn().mockResolvedValue([]),
       findById: vi.fn().mockResolvedValue(null),
       findByProviderId: vi.fn().mockResolvedValue(null),
+      countResourceReferences: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     },
     externalResources: {
-      createResourceWithAuthorization: vi.fn(),
-      configureAuthorization: vi.fn(),
-      findAuthorization: vi.fn().mockResolvedValue(null),
       createConnection: vi.fn().mockImplementation(async (input) => input),
       findConnectionByOwnerResource: vi.fn().mockResolvedValue(null),
       replaceConnectionAuthorization: vi.fn().mockResolvedValue(null),

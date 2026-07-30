@@ -1,12 +1,13 @@
 import { type ApiResource, createApiResourceSchema } from '@shared/api/agent-api'
-import { configureExternalResourceAuthorizationRequestSchema } from '@shared/api/external-resources'
 import {
   archiveApiResource,
+  associateApiResourceConnector,
   consoleQueryKeys,
   createApiResource,
   deleteApiResource,
   getApiResource,
   listApiResources,
+  listConnectors,
   restoreApiResource,
   updateApiResource,
 } from '@/lib/api/management'
@@ -19,7 +20,6 @@ import {
   CardHeader,
   CardTitle,
   createApiResourceRequestSchema,
-  Field,
   Plus,
   SelectInput,
   Table,
@@ -123,7 +123,6 @@ export function ApiResourcesPage() {
             createMutation.mutate(
               createApiResourceSchema.parse({
                 ...resource,
-                authorization: createMode === 'external' ? { registrationMode: 'dynamic' } : undefined,
               }),
             )
           }}
@@ -405,102 +404,101 @@ function ExternalAuthorizationCard({
   resourceUrl: string
 }) {
   const queryClient = useQueryClient()
-  const [form, setForm] = useState({
-    resourceUrl: '',
-    registrationMode: 'dynamic' as 'dynamic' | 'manual',
-    clientId: '',
-    clientSecret: '',
+  const connectorsQuery = useQuery({
+    queryKey: consoleQueryKeys.connectors,
+    queryFn: listConnectors,
   })
+  const oidcConnectors = (connectorsQuery.data?.connectors ?? []).filter(
+    (connector) => connector.providerType === 'generic_oauth',
+  )
+  const [connectorId, setConnectorId] = useState('')
   useEffect(() => {
-    if (!authorization) return
-    setForm({
-      resourceUrl,
-      registrationMode: authorization.registrationMode,
-      clientId: authorization.clientId,
-      clientSecret: '',
-    })
-  }, [authorization, resourceUrl])
+    setConnectorId(authorization?.connectorId ?? '')
+  }, [authorization])
   const mutation = useMutation({
-    mutationFn: (input: {
-      resourceUrl: string
-      authorization: z.infer<typeof configureExternalResourceAuthorizationRequestSchema>
-    }) => updateApiResource(resourceId, input),
-    onSuccess: (updated) => queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated),
+    mutationFn: (nextConnectorId: string | null) => associateApiResourceConnector(resourceId, nextConnectorId),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
+      return queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
+    },
   })
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{tt('External authorization server')}</CardTitle>
+        <CardTitle>{tt('OIDC connector')}</CardTitle>
         <CardDescription>
-          {tt('Discover the protected resource and configure the OAuth client used for direct Agent token exchange.')}
+          {tt('Associate a reusable OIDC client for account authorization and direct Agent token exchange.')}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form
-          className="grid gap-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            mutation.mutate({
-              resourceUrl: createApiResourceRequestSchema.shape.resourceUrl.parse(form.resourceUrl),
-              authorization: configureExternalResourceAuthorizationRequestSchema.parse({
-                registrationMode: form.registrationMode,
-                clientId: form.registrationMode === 'manual' ? form.clientId : undefined,
-                clientSecret: form.registrationMode === 'manual' ? form.clientSecret : undefined,
-              }),
-            })
-          }}
-        >
-          <Field label={tt('Protected resource URL')}>
-            <TextInput
-              onChange={(event) => setForm((current) => ({ ...current, resourceUrl: event.target.value }))}
-              required
-              type="url"
-              value={form.resourceUrl}
-            />
-          </Field>
-          <Field label={tt('Client registration')}>
-            <SelectInput
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  registrationMode: event.target.value as 'dynamic' | 'manual',
-                }))
-              }
-              value={form.registrationMode}
-            >
-              <option value="dynamic">{tt('Dynamic registration (RFC 7591)')}</option>
-              <option value="manual">{tt('Pre-registered client')}</option>
-            </SelectInput>
-          </Field>
-          {form.registrationMode === 'manual' ? (
-            <>
-              <Field label={tt('Client ID')}>
-                <TextInput
-                  onChange={(event) => setForm((current) => ({ ...current, clientId: event.target.value }))}
-                  required
-                  value={form.clientId}
-                />
-              </Field>
-              <Field label={tt('Client secret')}>
-                <TextInput
-                  onChange={(event) => setForm((current) => ({ ...current, clientSecret: event.target.value }))}
-                  required
-                  type="password"
-                  value={form.clientSecret}
-                />
-              </Field>
-            </>
-          ) : null}
+        <div className="grid gap-4">
+          <p className="text-sm text-muted-foreground">
+            {tt('Protected resource URL')}: {resourceUrl}
+          </p>
           {authorization ? (
-            <p className="text-xs text-muted-foreground">
-              {tt('Issuer')}: {authorization.issuer} · {tt('Status')}: {authorization.status}
+            <div className="rounded-md border border-border p-3 text-sm">
+              <div className="font-medium">
+                {oidcConnectors.find((connector) => connector.id === authorization.connectorId)?.displayName ??
+                  authorization.connectorId}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {authorization.issuer} · {tt('Status')}: {tt(authorization.status)}
+              </div>
+            </div>
+          ) : null}
+          {oidcConnectors.length ? (
+            <SelectInput
+              aria-label={tt('OIDC connector')}
+              onChange={(event) => setConnectorId(event.target.value)}
+              value={connectorId}
+            >
+              <option value="">{tt('Select an OIDC connector')}</option>
+              {oidcConnectors.map((connector) => (
+                <option disabled={!connector.enabled} key={connector.id} value={connector.id}>
+                  {connector.displayName} — {connector.issuer}
+                </option>
+              ))}
+            </SelectInput>
+          ) : !authorization ? (
+            <p className="text-sm text-muted-foreground">
+              {tt('Create an OIDC connector on the Connectors page before enabling this resource.')}{' '}
+              <a className="font-medium underline" href="/console/connectors">
+                {tt('Open Connectors')}
+              </a>
             </p>
           ) : null}
           <MutationError error={mutation.error} />
-          <Button disabled={mutation.isPending} type="submit">
-            {mutation.isPending ? tt('Discovering...') : tt('Discover and configure')}
-          </Button>
-        </form>
+          <div className="flex flex-wrap gap-2">
+            {oidcConnectors.length ? (
+              <Button
+                disabled={
+                  !connectorId ||
+                  connectorId === authorization?.connectorId ||
+                  !oidcConnectors.find((connector) => connector.id === connectorId)?.enabled ||
+                  mutation.isPending
+                }
+                onClick={() => mutation.mutate(connectorId)}
+                type="button"
+              >
+                {mutation.isPending
+                  ? tt('Validating...')
+                  : authorization
+                    ? tt('Change connector')
+                    : tt('Associate connector')}
+              </Button>
+            ) : null}
+            {authorization ? (
+              <Button
+                disabled={mutation.isPending}
+                onClick={() => mutation.mutate(null)}
+                type="button"
+                variant="secondary"
+              >
+                {tt('Detach connector')}
+              </Button>
+            ) : null}
+          </div>
+        </div>
       </CardContent>
     </Card>
   )

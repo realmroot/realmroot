@@ -168,7 +168,7 @@ describe('console authorization dashboard', () => {
     renderWithQuery(<ConnectorsPage />)
     expect(await screen.findByText('Email')).toBeTruthy()
     expect(screen.getByText('Phone (SMS)')).toBeTruthy()
-    expect(screen.getByRole('table')).toBeTruthy()
+    expect(screen.getAllByRole('table')).toHaveLength(2)
 
     cleanup()
     renderWithQuery(<OrganizationsPage />)

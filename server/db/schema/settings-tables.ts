@@ -1,42 +1,8 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { uploadedAsset } from './agent-tables'
 import { user } from './auth-tables'
 import { application, organization } from './authorization-tables'
-
-export const identityProviderConnector = sqliteTable(
-  'identity_provider_connector',
-  {
-    id: text('id').primaryKey(),
-    slug: text('slug').notNull().unique(),
-    providerType: text('provider_type').notNull(),
-    providerId: text('provider_id').notNull(),
-    displayName: text('display_name').notNull(),
-    enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
-    clientId: text('client_id'),
-    clientSecret: text('client_secret'),
-    issuer: text('issuer'),
-    authorizationEndpoint: text('authorization_endpoint'),
-    tokenEndpoint: text('token_endpoint'),
-    userInfoEndpoint: text('user_info_endpoint'),
-    jwksEndpoint: text('jwks_endpoint'),
-    scopes: text('scopes', { mode: 'json' }).$type<string[]>(),
-    attributeMapping: text('attribute_mapping', { mode: 'json' }).$type<Record<string, string>>(),
-    providerMetadata: text('provider_metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    index('identityProviderConnector_providerType_idx').on(table.providerType),
-    uniqueIndex('identityProviderConnector_providerId_unique').on(table.providerId),
-    index('identityProviderConnector_enabled_idx').on(table.enabled),
-  ],
-)
 
 export const emailServiceConfig = sqliteTable('email_service_config', {
   id: text('id').primaryKey(),

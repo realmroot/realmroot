@@ -83,6 +83,7 @@ export const apiResourceResponseSchema = z.object({
   name: z.string(),
   resourceUrl: z.url(),
   authorizationMode: z.enum(['native', 'external']),
+  authorizationConnectorId: z.string().nullable(),
   description: z.string().nullable(),
   enabled: z.boolean(),
   archivedAt: z.iso.datetime().nullable(),

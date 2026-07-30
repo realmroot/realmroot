@@ -83,6 +83,7 @@ const resource: ApiResourceResponse = {
   name: 'Projects',
   resourceUrl: 'https://api.example.com',
   authorizationMode: 'native',
+  authorizationConnectorId: null,
   description: null,
   enabled: true,
   archivedAt: null,
@@ -195,10 +196,10 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.createResource.mockResolvedValue(resource)
     authorization.listResources.mockResolvedValue({ items: [resource], pagination })
     authorization.findResource.mockResolvedValue(resource)
-    const externalResources = { findAuthorization: vi.fn() }
+    const connectors = { findById: vi.fn() }
     const deps = {
       authorization,
-      externalResources,
+      connectors,
       externalHttp: { fetch: vi.fn(resourceOpenApiFetch(resource.resourceUrl)) },
     } as unknown as Deps
 
@@ -325,14 +326,19 @@ describe('authorization CRUD and assignment policy', () => {
     })
 
     authorization.findResource.mockResolvedValue({ ...resource, authorizationMode: 'external' })
-    externalResources.findAuthorization.mockResolvedValue(null)
     await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({ status: 400 })
-    externalResources.findAuthorization.mockResolvedValue({ status: 'pending' })
+    authorization.findResource.mockResolvedValue({
+      ...resource,
+      authorizationMode: 'external',
+      authorizationConnectorId: 'connector-1',
+    })
+    connectors.findById.mockResolvedValue({ enabled: false })
     await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({ status: 400 })
-    externalResources.findAuthorization.mockResolvedValue({ status: 'active' })
+    connectors.findById.mockResolvedValue({ enabled: true })
     await expect(updateResource(deps, resource.id, { enabled: true })).resolves.toEqual({
       ...resource,
       authorizationMode: 'external',
+      authorizationConnectorId: 'connector-1',
     })
     authorization.findResource.mockResolvedValue(null)
     await expect(getResource(deps, 'missing')).rejects.toMatchObject({ status: 404 })

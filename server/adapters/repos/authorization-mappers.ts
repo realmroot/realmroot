@@ -48,6 +48,7 @@ export function toResource(row: typeof apiResource.$inferSelect) {
     name: row.name,
     resourceUrl: row.resourceUrl,
     authorizationMode: row.authorizationMode as 'native' | 'external',
+    authorizationConnectorId: row.authorizationConnectorId,
     description: row.description,
     enabled: row.enabled,
     archivedAt: row.archivedAt?.toISOString() ?? null,

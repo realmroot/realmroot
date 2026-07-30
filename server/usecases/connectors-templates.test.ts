@@ -24,12 +24,10 @@ describe('service.test 1', () => {
           requiredFields: ['clientId', 'clientSecret'],
           endpoints: expect.objectContaining({ issuer: null }),
         }),
-        expect.objectContaining({
-          providerType: 'generic_oauth',
-          providerId: 'generic-oauth',
-          requiredFields: ['clientId', 'clientSecret', 'issuer or authorizationEndpoint + tokenEndpoint'],
-        }),
       ]),
+    )
+    expect(listConnectorTemplates().templates).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ providerType: 'generic_oauth' })]),
     )
   })
 
@@ -49,6 +47,10 @@ describe('service.test 1', () => {
             providerId: 'okta-main',
             clientSecret: 'okta-secret',
             issuer: 'https://idp.example.com/oauth2/default',
+            authorizationEndpoint: 'https://idp.example.com/oauth2/default/authorize',
+            tokenEndpoint: 'https://idp.example.com/oauth2/default/token',
+            userInfoEndpoint: 'https://idp.example.com/oauth2/default/userinfo',
+            jwksEndpoint: 'https://idp.example.com/oauth2/default/jwks',
             scopes: ['openid', 'email'],
             providerMetadata: { pkce: true, requireIssuerValidation: true },
           }),
@@ -69,7 +71,7 @@ describe('service.test 1', () => {
         providerId: 'okta-main',
         clientId: 'client-id',
         clientSecret: 'okta-secret',
-        discoveryUrl: 'https://idp.example.com/oauth2/default/.well-known/openid-configuration',
+        discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration/oauth2/default',
         pkce: true,
         requireIssuerValidation: true,
       }),
@@ -169,7 +171,7 @@ describe('service.test 1', () => {
     expect(repository.create).not.toHaveBeenCalled()
   })
 
-  it('rejects enabled generic OAuth writes missing endpoint requirements', async () => {
+  it('rejects OIDC writes without an issuer', async () => {
     const repository = createRepository()
     const deps = { connectors: repository } as unknown as Deps
 
@@ -180,25 +182,10 @@ describe('service.test 1', () => {
         displayName: 'Missing authorization',
         clientId: 'client-id',
         clientSecret: 'generic-secret',
-        tokenEndpoint: 'https://idp.example.com/token',
       }),
     ).rejects.toMatchObject({
       status: 400,
-      message: 'Enabled generic OAuth connector requires issuer or authorizationEndpoint.',
-    })
-
-    await expect(
-      createConnector(deps, {
-        providerType: 'generic_oauth',
-        providerId: 'missing-token',
-        displayName: 'Missing token',
-        clientId: 'client-id',
-        clientSecret: 'generic-secret',
-        authorizationEndpoint: 'https://idp.example.com/authorize',
-      }),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Enabled generic OAuth connector requires tokenEndpoint when issuer is not provided.',
+      message: 'OIDC connectors require an issuer.',
     })
     expect(repository.create).not.toHaveBeenCalled()
   })
@@ -317,17 +304,18 @@ describe('service.test 1', () => {
     ).resolves.toMatchObject({ trustedProviders: [], socialProviders: {} })
   })
 
-  it('accepts disabled incomplete connectors and generic OAuth endpoint configuration', async () => {
+  it('accepts disabled incomplete connectors and loads discovered OIDC configuration', async () => {
     const disabled = connector({ enabled: false, clientId: null, clientSecret: null })
     const repository = createRepository({ createResult: disabled })
     const deps = { connectors: repository } as unknown as Deps
     const endpointConfigured = connector({
       providerType: 'generic_oauth',
       providerId: 'generic-oauth',
-      issuer: null,
+      issuer: 'https://idp.example.com',
       authorizationEndpoint: 'https://idp.example.com/authorize',
       tokenEndpoint: 'https://idp.example.com/token',
       userInfoEndpoint: 'https://idp.example.com/userinfo',
+      jwksEndpoint: 'https://idp.example.com/jwks',
       clientSecret: 'GENERIC_CLIENT_SECRET',
       scopes: null,
     })
@@ -344,6 +332,7 @@ describe('service.test 1', () => {
     expect(config.genericOAuthProviders).toEqual([
       expect.objectContaining({
         providerId: 'generic-oauth',
+        discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
         authorizationUrl: 'https://idp.example.com/authorize',
         tokenUrl: 'https://idp.example.com/token',
         userInfoUrl: 'https://idp.example.com/userinfo',
@@ -389,14 +378,15 @@ describe('service.test 1', () => {
     })
   })
 
-  it('reports generic OAuth issuer mixed with explicit optional endpoints as not ready', async () => {
+  it('reports OIDC connectors missing discovered endpoints as not ready', async () => {
     const connectorRow = connector({
       id: 'idp_generic',
       providerType: 'generic_oauth',
       providerId: 'generic-oauth',
       clientSecret: 'GENERIC_SECRET',
       issuer: 'https://idp.example.com',
-      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      authorizationEndpoint: null,
+      tokenEndpoint: null,
     })
     const deps = { connectors: createRepository({ byId: connectorRow }) } as unknown as Deps
 
@@ -407,7 +397,7 @@ describe('service.test 1', () => {
         expect.objectContaining({
           key: 'oauthEndpoints',
           ok: false,
-          message: 'Use issuer discovery or explicit endpoints, not both.',
+          message: 'OIDC issuer or required discovered endpoints are missing.',
         }),
       ]),
     })
@@ -428,6 +418,7 @@ function createRepository(
     listEnabled: vi.fn().mockResolvedValue(overrides.enabled ?? []),
     findById: vi.fn().mockResolvedValue(overrides.byId ?? null),
     findByProviderId: vi.fn().mockResolvedValue(overrides.existingProvider ?? null),
+    countResourceReferences: vi.fn().mockResolvedValue(0),
     create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
     update: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
     delete: vi.fn(),
@@ -443,13 +434,20 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     providerId: 'google',
     displayName: 'Google',
     enabled: true,
+    loginEnabled: true,
     clientId: 'client-id',
     clientSecret: 'GOOGLE_CLIENT_SECRET',
+    clientSecretContext: null,
     issuer: null,
     authorizationEndpoint: null,
     tokenEndpoint: null,
     userInfoEndpoint: null,
     jwksEndpoint: null,
+    registrationEndpoint: null,
+    revocationEndpoint: null,
+    registrationMode: null,
+    registrationAccessToken: null,
+    registrationAccessTokenContext: null,
     scopes: null,
     attributeMapping: null,
     providerMetadata: null,

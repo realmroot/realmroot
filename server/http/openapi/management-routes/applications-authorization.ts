@@ -9,6 +9,7 @@ import {
   applicationIdParam,
   applicationResponseSchema,
   assignmentRoutes,
+  associateExternalResourceConnectorRequestSchema,
   createApplicationRequestSchema,
   createApplicationResponseSchema,
   createInvitationRequestSchema,
@@ -106,6 +107,14 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'List application redirect URIs',
     request: { params: idParam, query: paginationQuerySchema },
     response: listRedirectUrisResponseSchema,
+  },
+  {
+    method: 'put',
+    path: '/api-resources/{id}/authorization-connector',
+    operationId: 'associateApiResourceAuthorizationConnector',
+    summary: 'Associate an OIDC connector with an external API resource',
+    request: { params: idParam, body: jsonBody(associateExternalResourceConnectorRequestSchema) },
+    response: apiResourceSchema,
   },
   {
     method: 'put',

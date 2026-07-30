@@ -46,7 +46,7 @@ export {
 } from '@shared/api/authorization'
 export { connectorReadinessResponseSchema, listConnectorTemplatesResponseSchema } from '@shared/api/connectors'
 export {
-  configureExternalResourceAuthorizationRequestSchema,
+  associateExternalResourceConnectorRequestSchema,
   externalResourceAuthorizationSchema,
 } from '@shared/api/external-resources'
 export {

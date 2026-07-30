@@ -22,20 +22,29 @@ export function GenericConnectorFields({
 }) {
   return (
     <div className="grid gap-4">
-      <ConnectorTextField form={form} field="clientId" label="Client ID" setForm={setForm} required />
       <ConnectorTextField
         form={form}
-        field="clientSecret"
-        help={isExisting ? 'Leave blank to keep the current secret.' : undefined}
-        label="Client Secret"
+        field="issuer"
+        help={isExisting ? 'The issuer is fixed after discovery. Recreate the connector to change it.' : undefined}
+        label="OIDC issuer"
+        readOnly={isExisting}
         setForm={setForm}
-        required={!isExisting}
-        secret
+        required
       />
-      <ConnectorTextField form={form} field="issuer" label="OIDC issuer" setForm={setForm} />
-      <ConnectorTextField form={form} field="authorizationEndpoint" label="Authorization endpoint" setForm={setForm} />
-      <ConnectorTextField form={form} field="tokenEndpoint" label="Token endpoint" setForm={setForm} />
-      <ConnectorTextField form={form} field="userInfoEndpoint" label="UserInfo endpoint" setForm={setForm} />
+      {form.registrationMode !== 'dynamic' ? (
+        <>
+          <ConnectorTextField form={form} field="clientId" label="Client ID" setForm={setForm} required />
+          <ConnectorTextField
+            form={form}
+            field="clientSecret"
+            help={isExisting ? 'Leave blank to keep the current secret.' : undefined}
+            label="Client Secret"
+            setForm={setForm}
+            required={!isExisting}
+            secret
+          />
+        </>
+      ) : null}
       <ConnectorTextField
         form={form}
         field="scopes"
@@ -52,6 +61,7 @@ function ConnectorTextField({
   form,
   help,
   label,
+  readOnly,
   required,
   secret,
   setForm,
@@ -60,6 +70,7 @@ function ConnectorTextField({
   form: FormState
   help?: string
   label: string
+  readOnly?: boolean
   required?: boolean
   secret?: boolean
   setForm: (value: SetStateAction<FormState>) => void
@@ -68,6 +79,7 @@ function ConnectorTextField({
     <Field help={help} label={label}>
       <TextInput
         onChange={(event) => setValue(setForm, field, event.target.value)}
+        readOnly={readOnly}
         required={required}
         type={secret ? 'password' : 'text'}
         value={form[field] ?? ''}

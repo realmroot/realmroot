@@ -1,6 +1,6 @@
 import { createApiResourceSchema, decideAccessRequestSchema } from '@shared/api/agent-api'
 import {
-  configureExternalResourceAuthorizationRequestSchema,
+  associateExternalResourceConnectorRequestSchema,
   createAgentAccessRequestSchema,
   createResourceConnectionIntentRequestSchema,
   decideAgentAccessRequestByTokenSchema,
@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from 'vitest'
 
 describe('Agent resource schemas', () => {
-  it('requires authorization configuration for external API resources', () => {
+  it('creates external API resources separately from connector association', () => {
     const input = {
       identifier: 'projects',
       name: 'Projects',
@@ -16,13 +16,10 @@ describe('Agent resource schemas', () => {
       authorizationMode: 'external',
     }
 
-    expect(createApiResourceSchema.safeParse(input).success).toBe(false)
-    expect(
-      createApiResourceSchema.safeParse({
-        ...input,
-        authorization: { registrationMode: 'dynamic' },
-      }).success,
-    ).toBe(true)
+    expect(createApiResourceSchema.safeParse(input).success).toBe(true)
+    expect(associateExternalResourceConnectorRequestSchema.safeParse({ connectorId: 'connector-1' }).success).toBe(true)
+    expect(associateExternalResourceConnectorRequestSchema.safeParse({ connectorId: null }).success).toBe(true)
+    expect(associateExternalResourceConnectorRequestSchema.safeParse({ connectorId: '' }).success).toBe(false)
   })
 
   it('requires approval mode and expiry for limited access decisions', () => {
@@ -36,28 +33,6 @@ describe('Agent resource schemas', () => {
       }).success,
     ).toBe(true)
     expect(decideAccessRequestSchema.safeParse({ decision: 'deny' }).success).toBe(true)
-  })
-
-  it('validates manual client registration credentials', () => {
-    expect(configureExternalResourceAuthorizationRequestSchema.safeParse({ registrationMode: 'manual' }).success).toBe(
-      false,
-    )
-    expect(
-      configureExternalResourceAuthorizationRequestSchema.safeParse({
-        registrationMode: 'manual',
-        clientId: 'client-1',
-      }).success,
-    ).toBe(false)
-    expect(
-      configureExternalResourceAuthorizationRequestSchema.safeParse({
-        registrationMode: 'manual',
-        clientId: 'client-1',
-        clientSecret: 'secret-1',
-      }).success,
-    ).toBe(true)
-    expect(configureExternalResourceAuthorizationRequestSchema.safeParse({ registrationMode: 'dynamic' }).success).toBe(
-      true,
-    )
   })
 
   it('normalizes connection and access-request scopes', () => {

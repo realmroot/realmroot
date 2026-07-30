@@ -128,6 +128,7 @@ describe('admin console connectors', () => {
             slug: 'cognito',
             displayName: 'Amazon Cognito',
             enabled: true,
+            loginEnabled: true,
             providerId: 'cognito',
             providerType: 'social',
             clientId: 'cognito-client',
@@ -176,7 +177,18 @@ describe('admin console connectors', () => {
     expect(await screen.findByText('3600s')).toBeTruthy()
   })
 
-  it('renders independent MFA, security, connector, and OIDC settings surfaces [spec: admin-console/admin-connector-inventory] [spec: admin-console/admin-security-policy]', async () => {
+  it('renders independent MFA, security, connector, and OIDC settings surfaces [spec: admin-console/admin-connector-inventory] [spec: admin-console/admin-oidc-connector-inventory] [spec: admin-console/admin-security-policy]', async () => {
+    const oidcConnector = {
+      ...connector,
+      id: 'connector-oidc',
+      slug: 'projects',
+      providerType: 'generic_oauth' as const,
+      providerId: 'projects',
+      displayName: 'Projects OIDC',
+      loginEnabled: false,
+      issuer: 'https://projects.example.com',
+      registrationMode: 'manual' as const,
+    }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
@@ -184,7 +196,7 @@ describe('admin console connectors', () => {
       if (url === '/api/readiness') return Promise.resolve(jsonResponse(readinessIncomplete))
       if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+        return Promise.resolve(jsonResponse({ connectors: [connector, oidcConnector], pagination }))
       }
       return consoleSharedFetch(input, init)
     })
@@ -217,6 +229,9 @@ describe('admin console connectors', () => {
     expect(screen.getByRole('button', { name: /Email.*Runtime enabled.*Enabled/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Phone \(SMS\).*Runtime disabled.*Not enabled/ })).toBeTruthy()
     expect(screen.queryByLabelText('Search social connectors')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'OIDC connectors' })).toBeTruthy()
+    expect(screen.getByText('Projects OIDC')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Add OIDC connector' })).toBeTruthy()
 
     cleanup()
     renderWithQuery(<DeploymentSettingsPage />)

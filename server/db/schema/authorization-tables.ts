@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { uploadedAsset } from './agent-tables'
 import { oauthClient, user } from './auth-tables'
+import { identityProviderConnector } from './connector-tables'
 
 export const organization = sqliteTable(
   'organization',
@@ -190,6 +191,9 @@ export const apiResource = sqliteTable(
     name: text('name').notNull(),
     resourceUrl: text('resource_url').notNull(),
     authorizationMode: text('authorization_mode').notNull().default('native'),
+    authorizationConnectorId: text('authorization_connector_id').references(() => identityProviderConnector.id, {
+      onDelete: 'restrict',
+    }),
     description: text('description'),
     enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
     archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
@@ -204,6 +208,7 @@ export const apiResource = sqliteTable(
   (table) => [
     uniqueIndex('apiResource_resourceUrl_unique').on(table.resourceUrl),
     index('apiResource_enabled_idx').on(table.enabled),
+    index('apiResource_authorizationConnectorId_idx').on(table.authorizationConnectorId),
   ],
 )
 

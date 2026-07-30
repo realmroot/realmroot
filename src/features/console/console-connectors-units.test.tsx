@@ -61,7 +61,7 @@ describe('connector provider rows', () => {
     expect(byKey['social:google'].enabled).toBe(false)
   })
 
-  it('labels unmatched OAuth connectors', () => {
+  it('keeps OIDC connectors out of the built-in and social provider rows', () => {
     const unmatchedOAuth = {
       ...connector,
       id: 'connector-oauth',
@@ -80,7 +80,7 @@ describe('connector provider rows', () => {
     const byProvider = Object.fromEntries(rows.map((row) => [row.providerId, row]))
 
     expect(byProvider.google.configurationLabel).toBe('Credentials required')
-    expect(byProvider['partner-oauth'].icon).toBe('oauth')
+    expect(byProvider['partner-oauth']).toBeUndefined()
   })
 })
 

@@ -110,19 +110,21 @@ describe('management resource routes', () => {
     expect(authorizationService.assignAgentRole).toHaveBeenCalledWith(assignmentBody(), 'admin-1')
   })
 
-  it('uses the configured origin for dynamic external client registration [spec: agent-identity/external-api-resource-canonical-callback]', async () => {
-    const createExternal = vi.spyOn(externalResourcesUsecase, 'createExternalApiResource').mockResolvedValue({
+  it('associates an external resource with an OIDC connector [spec: agent-identity/external-api-resource-registration]', async () => {
+    const associate = vi.spyOn(externalResourcesUsecase, 'associateExternalResourceConnector').mockResolvedValue({
       id: 'resource-1',
       identifier: 'projects',
       name: 'Projects',
       resourceUrl: 'https://projects.example.com/api',
       description: null,
       authorizationMode: 'external',
+      authorizationConnectorId: 'connector-1',
       enabled: true,
       archivedAt: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       authorization: {
+        connectorId: 'connector-1',
         resourceUrl: 'https://projects.example.com/api',
         issuer: 'https://projects.example.com',
         authorizationEndpoint: 'https://projects.example.com/authorize',
@@ -141,34 +143,14 @@ describe('management resource routes', () => {
     })
     const { app } = await loadAuthorizationRoutes()
 
-    const response = await app.request('https://preview.example.net/api-resources', {
-      method: 'POST',
+    const response = await app.request('https://preview.example.net/api-resources/resource-1/authorization-connector', {
+      method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        identifier: 'projects',
-        name: 'Projects',
-        resourceUrl: 'https://projects.example.com/api',
-        authorizationMode: 'external',
-        authorization: {
-          registrationMode: 'dynamic',
-        },
-      }),
+      body: JSON.stringify({ connectorId: 'connector-1' }),
     })
 
-    expect(response.status).toBe(201)
-    expect(createExternal).toHaveBeenCalledWith(
-      expect.anything(),
-      {
-        identifier: 'projects',
-        name: 'Projects',
-        resourceUrl: 'https://projects.example.com/api',
-        authorizationMode: 'external',
-      },
-      {
-        registrationMode: 'dynamic',
-      },
-      'https://auth.example.com',
-    )
+    expect(response.status).toBe(200)
+    expect(associate).toHaveBeenCalledWith(expect.anything(), 'resource-1', 'connector-1')
   })
 
   it('routes management connector requests to the connector service', async () => {
@@ -243,6 +225,7 @@ async function loadAuthorizationRoutes() {
     resourceUrl: 'https://api.example.com',
     description: null,
     authorizationMode: 'native' as const,
+    authorizationConnectorId: null,
     enabled: true,
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -267,7 +250,7 @@ async function loadAuthorizationRoutes() {
   const { managementRolesRoute } = await import('@server/http/routes/management/roles')
   const { createProtectedResourceRoutes } = await import('@server/http/routes/management')
   const app = withAdminContext()
-  app.route('/api-resources', createManagementApiResourcesRoute('https://auth.example.com'))
+  app.route('/api-resources', createManagementApiResourcesRoute())
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)
   app.route('/', createProtectedResourceRoutes({ authApi: {} as never, canonicalOrigin: 'https://auth.example.com' }))
@@ -387,6 +370,7 @@ function connectorServiceMock() {
     providerId: 'github',
     displayName: 'GitHub',
     enabled: true,
+    loginEnabled: true,
     clientId: 'client-id',
     clientSecretConfigured: true,
     issuer: null,
@@ -394,6 +378,9 @@ function connectorServiceMock() {
     tokenEndpoint: null,
     userInfoEndpoint: null,
     jwksEndpoint: null,
+    registrationEndpoint: null,
+    revocationEndpoint: null,
+    registrationMode: null,
     scopes: [],
     providerMetadata: {},
     createdAt: '2026-01-01T00:00:00.000Z',

@@ -87,6 +87,14 @@ Feature: Admin Console
     When I open social connector settings
     Then provider settings and availability are visible
 
+  @entrypoint:product-ui @journey:admin-oidc-connector-inventory
+  Scenario: Connectors page manages multiple standard OIDC clients
+    Given multiple OIDC connectors are configured
+    When I open connectors
+    Then the existing sign-in provider inventory remains visible
+    And a separate OIDC connectors table appears below it
+    And I can create, edit, enable for login, and delete each OIDC connector independently
+
   @entrypoint:product-ui @journey:admin-sign-in-settings
   Scenario: Sign-in settings persist legal links and hosted auth copy
     When I update sign-in settings

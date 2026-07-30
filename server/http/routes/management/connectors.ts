@@ -19,7 +19,7 @@ import { Hono } from 'hono'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
-export function createManagementConnectorRoutes() {
+export function createManagementConnectorRoutes(canonicalOrigin?: string) {
   const app = new Hono()
 
   app.get('/templates', async (c) => c.json(listConnectorTemplatesResponseSchema.parse(listConnectorTemplates())))
@@ -33,7 +33,11 @@ export function createManagementConnectorRoutes() {
   )
 
   app.post('/', async (c) => {
-    const connector = await createConnector(getDeps(c), await readJson(c, createManagementConnectorRequestSchema))
+    const connector = await createConnector(
+      getDeps(c),
+      await readJson(c, createManagementConnectorRequestSchema),
+      canonicalOrigin,
+    )
     return c.json(managementConnectorResponseSchema.parse(connector), 201)
   })
 

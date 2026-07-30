@@ -146,6 +146,7 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     name: input.name,
     resourceUrl: input.resourceUrl,
     authorizationMode,
+    authorizationConnectorId: null,
     description: input.description ?? null,
     enabled,
   })
@@ -168,10 +169,11 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
   if (resource.archivedAt) throw badRequest('Archived API resources must be restored before updating.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (resource.authorizationMode === 'external' && input.enabled === true) {
-    const authorization = await deps.externalResources.findAuthorization(id)
-    if (authorization?.status !== 'active') {
-      throw badRequest('External API resource authorization must be configured before enabling the resource.')
+    if (!resource.authorizationConnectorId) {
+      throw badRequest('External API resource requires an associated OIDC connector before it can be enabled.')
     }
+    const connector = await deps.connectors.findById(resource.authorizationConnectorId)
+    if (!connector?.enabled) throw badRequest('Associated OIDC connector must be enabled before the resource.')
   }
   const enabled = input.enabled ?? resource.enabled
   if (enabled && (input.enabled === true || input.resourceUrl !== undefined)) {

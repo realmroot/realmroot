@@ -204,7 +204,6 @@ describe('console API resources and roles', () => {
         method: 'POST',
         body: expect.objectContaining({
           authorizationMode: 'external',
-          authorization: { registrationMode: 'dynamic' },
         }),
       }),
     )
@@ -261,14 +260,23 @@ describe('console API resources and roles', () => {
     expect(await screen.findByText(/Invalid input/)).toBeTruthy()
   })
 
-  it('updates native resources and configures manual external authorization', async () => {
+  it('updates native resources and associates an external resource connector [spec: agent-identity/external-api-resource-registration]', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
-    const external = {
+    const external: ApiResource = {
       ...apiResource,
       name: 'Projects API',
       authorizationMode: 'external' as const,
+      authorizationConnectorId: null,
       resourceUrl: 'https://projects.example.com/api',
+      enabled: false,
+      authorization: null,
+    }
+    const associated: ApiResource = {
+      ...external,
+      authorizationConnectorId: 'connector-1',
+      enabled: true,
       authorization: {
+        connectorId: 'connector-1',
         resourceUrl: 'https://projects.example.com/api',
         issuer: 'https://projects.example.com',
         authorizationEndpoint: 'https://projects.example.com/authorize',
@@ -285,6 +293,29 @@ describe('console API resources and roles', () => {
         updatedAt: apiResource.updatedAt,
       },
     }
+    const oidcConnector = {
+      id: 'connector-1',
+      slug: 'projects',
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects OIDC',
+      enabled: true,
+      loginEnabled: false,
+      clientId: 'realmroot',
+      clientSecretConfigured: true,
+      issuer: 'https://projects.example.com',
+      authorizationEndpoint: 'https://projects.example.com/authorize',
+      tokenEndpoint: 'https://projects.example.com/token',
+      userInfoEndpoint: 'https://projects.example.com/userinfo',
+      jwksEndpoint: 'https://projects.example.com/jwks',
+      registrationEndpoint: 'https://projects.example.com/register',
+      revocationEndpoint: 'https://projects.example.com/revoke',
+      registrationMode: 'manual',
+      scopes: ['openid'],
+      providerMetadata: {},
+      createdAt: apiResource.createdAt,
+      updatedAt: apiResource.updatedAt,
+    }
     let selected: ApiResource = { ...apiResource, authorization: null }
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
@@ -298,6 +329,15 @@ describe('console API resources and roles', () => {
       if (request.url === '/api/api-resources/resource-1' && request.method === 'DELETE') {
         requests.push({ ...request, body: null })
         return new Response(null, { status: 204 })
+      }
+      if (request.url.startsWith('/api/connectors') && request.method === 'GET') {
+        return jsonResponse({ connectors: [oidcConnector], pagination: emptyPagination })
+      }
+      if (request.url === '/api/api-resources/resource-1/authorization-connector' && request.method === 'PUT') {
+        const body = await request.body
+        requests.push({ ...request, body })
+        selected = body.connectorId === null ? external : associated
+        return jsonResponse(selected)
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
@@ -337,7 +377,7 @@ describe('console API resources and roles', () => {
     cleanup()
     selected = external
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect(await screen.findByText(/Issuer.*https:\/\/projects\.example\.com/)).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'OIDC connector' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'External API' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save resource' }))
     await waitFor(() =>
@@ -347,22 +387,22 @@ describe('console API resources and roles', () => {
         body: expect.not.objectContaining({ resourceUrl: expect.anything() }),
       }),
     )
-    fireEvent.change(screen.getByLabelText('Client registration'), { target: { value: 'manual' } })
-    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'manual-client' } })
-    fireEvent.change(screen.getByLabelText('Client secret'), { target: { value: 'secret' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover and configure' }))
+    fireEvent.change(screen.getByLabelText('OIDC connector'), { target: { value: 'connector-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Associate connector' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/api-resources/resource-1',
-        method: 'PATCH',
-        body: {
-          resourceUrl: 'https://projects.example.com/api',
-          authorization: {
-            registrationMode: 'manual',
-            clientId: 'manual-client',
-            clientSecret: 'secret',
-          },
-        },
+        url: '/api/api-resources/resource-1/authorization-connector',
+        method: 'PUT',
+        body: { connectorId: 'connector-1' },
+      }),
+    )
+    expect((await screen.findAllByText(/https:\/\/projects\.example\.com/)).length).toBeGreaterThan(0)
+    fireEvent.click(await screen.findByRole('button', { name: 'Detach connector' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/api-resources/resource-1/authorization-connector',
+        method: 'PUT',
+        body: { connectorId: null },
       }),
     )
   })
@@ -419,7 +459,7 @@ describe('console API resources and roles', () => {
     })
   })
 
-  it('retries resource queries and dynamically configures an unconfigured external resource', async () => {
+  it('retries resource queries and directs unconfigured resources to OIDC connectors', async () => {
     let listFailed = true
     let detailFailed = true
     const requests: Array<{ url: string; method: string; body: unknown }> = []
@@ -445,6 +485,9 @@ describe('console API resources and roles', () => {
         requests.push({ ...request, body: await request.body })
         return jsonResponse(external)
       }
+      if (request.url.startsWith('/api/connectors') && request.method === 'GET') {
+        return jsonResponse({ connectors: [], pagination: emptyPagination })
+      }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
@@ -460,21 +503,10 @@ describe('console API resources and roles', () => {
     detailFailed = false
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('button', { name: 'Enable' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }))
-    fireEvent.change(screen.getByLabelText('Protected resource URL'), {
-      target: { value: 'https://projects.example.com/api' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover and configure' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/api-resources/resource-1',
-        method: 'PATCH',
-        body: {
-          resourceUrl: 'https://projects.example.com/api',
-          authorization: { registrationMode: 'dynamic' },
-        },
-      }),
+    expect((await screen.findByRole('link', { name: 'Open Connectors' })).getAttribute('href')).toBe(
+      '/console/connectors',
     )
+    expect(requests).toEqual([])
   })
 
   it('updates and deletes custom roles while disabling scopes for global roles', async () => {

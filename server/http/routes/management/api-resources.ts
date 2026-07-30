@@ -1,4 +1,3 @@
-import { badRequest } from '@server/domain/errors'
 import {
   archiveResource,
   createResource,
@@ -7,10 +6,10 @@ import {
   updateResource,
 } from '@server/usecases/authorization'
 import {
-  configureExternalResourceAuthorization,
-  createExternalApiResource,
+  associateExternalResourceConnector,
   getApiResource,
   listApiResources,
+  validateExternalResourceConnector,
 } from '@server/usecases/external-resources'
 import {
   apiResourceSchema,
@@ -19,12 +18,13 @@ import {
   updateApiResourceSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/authorization'
+import { associateExternalResourceConnectorRequestSchema } from '@shared/api/external-resources'
 import { Hono } from 'hono'
 import { getPrincipal } from '../../middleware/authn'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
-export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
+export function createManagementApiResourcesRoute() {
   const app = new Hono()
 
   app.get('/', async (c) =>
@@ -33,15 +33,9 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
-    const { authorization, ...resourceInput } = input
-    const resource = authorization
-      ? await createExternalApiResource(getDeps(c), resourceInput, authorization, requireCanonicalOrigin())
-      : await createResource(getDeps(c), resourceInput)
+    const resource = await createResource(getDeps(c), input)
     c.header('Location', `/api/api-resources/${encodeURIComponent(resource.id)}`)
-    return c.json(
-      apiResourceSchema.parse(authorization ? resource : await getApiResource(getDeps(c), resource.id)),
-      201,
-    )
+    return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
   })
 
   app.get('/:resourceId', async (c) =>
@@ -50,24 +44,17 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
 
   app.patch('/:resourceId', async (c) => {
     const input = await readJson(c, updateApiResourceSchema)
-    const { authorization, ...resourceInput } = input
-    if (resourceInput.resourceUrl !== undefined && !authorization) {
+    if (input.resourceUrl !== undefined) {
       const current = await getApiResource(getDeps(c), c.req.param('resourceId'))
-      if (current.authorizationMode === 'external' && current.resourceUrl !== resourceInput.resourceUrl) {
-        throw badRequest('Changing an external API resource URL requires authorization reconfiguration.')
+      if (
+        current.authorizationMode === 'external' &&
+        current.resourceUrl !== input.resourceUrl &&
+        current.authorizationConnectorId
+      ) {
+        await validateExternalResourceConnector(getDeps(c), input.resourceUrl, current.authorizationConnectorId)
       }
     }
-    if (Object.keys(resourceInput).length > 0) {
-      await updateResource(getDeps(c), c.req.param('resourceId'), resourceInput)
-    }
-    if (authorization) {
-      await configureExternalResourceAuthorization(
-        getDeps(c),
-        c.req.param('resourceId'),
-        authorization,
-        requireCanonicalOrigin(),
-      )
-    }
+    await updateResource(getDeps(c), c.req.param('resourceId'), input)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
   })
 
@@ -77,6 +64,14 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
   })
 
   return app
+    .put('/:resourceId/authorization-connector', async (c) => {
+      const input = await readJson(c, associateExternalResourceConnectorRequestSchema)
+      return c.json(
+        apiResourceSchema.parse(
+          await associateExternalResourceConnector(getDeps(c), c.req.param('resourceId'), input.connectorId),
+        ),
+      )
+    })
     .put('/:resourceId/archival', async (c) => {
       await archiveResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
       return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
@@ -85,11 +80,6 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
       await restoreResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
       return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
     })
-
-  function requireCanonicalOrigin() {
-    if (!canonicalOrigin) throw new Error('External API resource registration requires the configured base URL.')
-    return canonicalOrigin.replace(/\/$/, '')
-  }
 }
 
 function resourceMutationActor(c: Parameters<typeof getPrincipal>[0]) {

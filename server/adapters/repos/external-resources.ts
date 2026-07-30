@@ -5,7 +5,6 @@ import {
   agentAccessGrant,
   agentAccessRequest,
   apiResource,
-  externalResourceAuthorization,
   externalTokenLease,
   resourceAccountConnection,
   resourceConnectionIntent,
@@ -13,87 +12,6 @@ import {
 
 export function createExternalResourceRepository(db: Database): ExternalResourceRepository {
   return {
-    async createResourceWithAuthorization(resource, authorization) {
-      const now = new Date()
-      await db.batch([
-        db.insert(apiResource).values({ ...resource, createdAt: now, updatedAt: now }),
-        db.insert(externalResourceAuthorization).values(authorization),
-      ])
-    },
-
-    async configureAuthorization(input) {
-      const authorizationWrite = db
-        .insert(externalResourceAuthorization)
-        .select(
-          db
-            .select({
-              resourceId: apiResource.id,
-              resourceUrl: sql<string>`${input.resourceUrl}`.as('resource_url'),
-              issuer: sql<string>`${input.issuer}`.as('issuer'),
-              authorizationEndpoint: sql<string>`${input.authorizationEndpoint}`.as('authorization_endpoint'),
-              tokenEndpoint: sql<string>`${input.tokenEndpoint}`.as('token_endpoint'),
-              registrationEndpoint: sql<string | null>`${input.registrationEndpoint}`.as('registration_endpoint'),
-              revocationEndpoint: sql<string>`${input.revocationEndpoint}`.as('revocation_endpoint'),
-              jwksUri: sql<string>`${input.jwksUri}`.as('jwks_uri'),
-              userInfoEndpoint: sql<string | null>`${input.userInfoEndpoint}`.as('userinfo_endpoint'),
-              registrationMode: sql<string>`${input.registrationMode}`.as('registration_mode'),
-              clientId: sql<string>`${input.clientId}`.as('client_id'),
-              encryptedClientSecret: sql<string>`${input.encryptedClientSecret}`.as('encrypted_client_secret'),
-              encryptedRegistrationAccessToken: sql<string | null>`${input.encryptedRegistrationAccessToken}`.as(
-                'encrypted_registration_access_token',
-              ),
-              metadata: sql<Record<string, unknown>>`${JSON.stringify(input.metadata)}`.as('metadata'),
-              status: sql<string>`${input.status}`.as('status'),
-              createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
-              updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
-            })
-            .from(apiResource)
-            .where(and(eq(apiResource.id, input.resourceId), isNull(apiResource.archivedAt))),
-        )
-        .onConflictDoUpdate({
-          target: externalResourceAuthorization.resourceId,
-          set: {
-            resourceUrl: input.resourceUrl,
-            issuer: input.issuer,
-            authorizationEndpoint: input.authorizationEndpoint,
-            tokenEndpoint: input.tokenEndpoint,
-            registrationEndpoint: input.registrationEndpoint,
-            revocationEndpoint: input.revocationEndpoint,
-            jwksUri: input.jwksUri,
-            userInfoEndpoint: input.userInfoEndpoint,
-            registrationMode: input.registrationMode,
-            clientId: input.clientId,
-            encryptedClientSecret: input.encryptedClientSecret,
-            encryptedRegistrationAccessToken: input.encryptedRegistrationAccessToken,
-            metadata: input.metadata,
-            status: input.status,
-            updatedAt: input.updatedAt,
-          },
-        })
-      await db.batch([
-        authorizationWrite,
-        db
-          .update(apiResource)
-          .set({ enabled: true, updatedAt: input.updatedAt })
-          .where(and(eq(apiResource.id, input.resourceId), isNull(apiResource.archivedAt))),
-      ])
-      const [row] = await db
-        .select()
-        .from(externalResourceAuthorization)
-        .where(eq(externalResourceAuthorization.resourceId, input.resourceId))
-        .limit(1)
-      return row?.updatedAt.getTime() === input.updatedAt.getTime() ? row : null
-    },
-
-    async findAuthorization(resourceId) {
-      const [row] = await db
-        .select()
-        .from(externalResourceAuthorization)
-        .where(eq(externalResourceAuthorization.resourceId, resourceId))
-        .limit(1)
-      return row ?? null
-    },
-
     async createConnection(input) {
       const [row] = await db
         .insert(resourceAccountConnection)

@@ -28,6 +28,7 @@ const resource: ApiResourceResponse = {
   name: 'Documents API',
   resourceUrl: 'https://api.example.com',
   authorizationMode: 'native',
+  authorizationConnectorId: null,
   description: null,
   enabled: true,
   archivedAt: null,

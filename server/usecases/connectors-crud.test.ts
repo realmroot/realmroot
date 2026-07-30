@@ -5,7 +5,7 @@ import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 2', () => {
-  it('reports generic OAuth endpoint readiness modes', async () => {
+  it('reports OIDC discovery readiness', async () => {
     const deps = {
       connectors: createRepository({
         byId: connector({
@@ -29,33 +29,35 @@ describe('service.test 2', () => {
         }),
         expect.objectContaining({
           key: 'oauthEndpoints',
-          ok: true,
-          message: 'Issuer discovery is configured.',
+          ok: false,
+          message: 'OIDC issuer or required discovered endpoints are missing.',
         }),
       ]),
     })
 
-    const explicitDeps = {
+    const discoveredDeps = {
       connectors: createRepository({
         byId: connector({
-          id: 'idp_generic_explicit',
+          id: 'idp_generic_discovered',
           providerType: 'generic_oauth',
           providerId: 'generic-oauth',
           clientSecret: 'GENERIC_SECRET',
-          issuer: null,
+          issuer: 'https://idp.example.com',
           authorizationEndpoint: 'https://idp.example.com/authorize',
           tokenEndpoint: 'https://idp.example.com/token',
+          userInfoEndpoint: 'https://idp.example.com/userinfo',
+          jwksEndpoint: 'https://idp.example.com/jwks',
         }),
       }),
     } as unknown as Deps
-    await expect(connectorReadiness(explicitDeps, 'idp_generic_explicit')).resolves.toEqual({
-      connectorId: 'idp_generic_explicit',
+    await expect(connectorReadiness(discoveredDeps, 'idp_generic_discovered')).resolves.toEqual({
+      connectorId: 'idp_generic_discovered',
       ready: true,
       checks: expect.arrayContaining([
         expect.objectContaining({
           key: 'oauthEndpoints',
           ok: true,
-          message: 'Explicit authorization and token endpoints are configured.',
+          message: 'OIDC issuer and discovered endpoints are configured.',
         }),
       ]),
     })
@@ -80,7 +82,7 @@ describe('service.test 2', () => {
         expect.objectContaining({
           key: 'oauthEndpoints',
           ok: false,
-          message: 'Configure issuer discovery or explicit authorization and token endpoints.',
+          message: 'OIDC issuer or required discovered endpoints are missing.',
         }),
       ]),
     })
@@ -173,19 +175,74 @@ describe('service.test 2', () => {
         }),
       ),
     ).resolves.toMatchObject({ trustedProviders: [] })
-    await expect(
-      createConnector(deps, {
-        providerType: 'generic_oauth',
-        providerId: 'mixed',
-        displayName: 'Mixed',
-        clientId: 'mixed-client',
-        clientSecret: 'MIXED_SECRET',
-        issuer: 'https://idp.example.com',
-        authorizationEndpoint: 'https://idp.example.com/authorize',
+  })
+
+  it('loads only OIDC connectors enabled for hosted login [spec: connectors-and-methods/oidc-login]', async () => {
+    const oidc = {
+      providerType: 'generic_oauth' as const,
+      issuer: 'https://idp.example.com',
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      jwksEndpoint: 'https://idp.example.com/jwks',
+      clientSecret: 'OIDC_SECRET',
+    }
+    const config = await loadAuthConnectorConfig(
+      createRepository({
+        enabled: [
+          connector({ ...oidc, providerId: 'login-oidc', loginEnabled: true }),
+          connector({ ...oidc, providerId: 'resource-only-oidc', loginEnabled: false }),
+        ],
       }),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Enabled generic OAuth connector uses either issuer discovery or explicit endpoints, not both.',
+    )
+
+    expect(config.trustedProviders).toEqual(['login-oidc'])
+    expect(config.genericOAuthProviders).toEqual([expect.objectContaining({ providerId: 'login-oidc' })])
+  })
+
+  it('uses canonical callbacks for dynamic OIDC registration [spec: agent-identity/external-api-resource-canonical-callback]', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          issuer: 'https://idp.example.com',
+          authorization_endpoint: 'https://idp.example.com/authorize',
+          token_endpoint: 'https://idp.example.com/token',
+          userinfo_endpoint: 'https://idp.example.com/userinfo',
+          jwks_uri: 'https://idp.example.com/jwks',
+          registration_endpoint: 'https://idp.example.com/register',
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          client_id: 'registered-client',
+          client_secret: 'registered-secret',
+        }),
+      )
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch },
+    } as unknown as Deps
+
+    await createConnector(
+      deps,
+      {
+        providerType: 'generic_oauth',
+        providerId: 'projects',
+        displayName: 'Projects',
+        issuer: 'https://idp.example.com',
+        registrationMode: 'dynamic',
+      },
+      'https://auth.example.com',
+    )
+
+    const registrationRequest = fetch.mock.calls[1]?.[0] as Request
+    await expect(registrationRequest.json()).resolves.toMatchObject({
+      redirect_uris: [
+        'https://auth.example.com/api/auth/callback/projects',
+        'https://auth.example.com/api/account-connections/oauth/callback',
+      ],
+      jwks_uri: 'https://auth.example.com/api/auth/jwks',
     })
   })
 })
@@ -204,6 +261,7 @@ function createRepository(
     listEnabled: vi.fn().mockResolvedValue(overrides.enabled ?? []),
     findById: vi.fn().mockResolvedValue(overrides.byId ?? null),
     findByProviderId: vi.fn().mockResolvedValue(overrides.existingProvider ?? null),
+    countResourceReferences: vi.fn().mockResolvedValue(0),
     create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
     update: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
     delete: vi.fn(),
@@ -219,13 +277,20 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     providerId: 'google',
     displayName: 'Google',
     enabled: true,
+    loginEnabled: true,
     clientId: 'client-id',
     clientSecret: 'GOOGLE_CLIENT_SECRET',
+    clientSecretContext: null,
     issuer: null,
     authorizationEndpoint: null,
     tokenEndpoint: null,
     userInfoEndpoint: null,
     jwksEndpoint: null,
+    registrationEndpoint: null,
+    revocationEndpoint: null,
+    registrationMode: null,
+    registrationAccessToken: null,
+    registrationAccessTokenContext: null,
     scopes: null,
     attributeMapping: null,
     providerMetadata: null,

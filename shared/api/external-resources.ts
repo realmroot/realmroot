@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { oidcClientRegistrationModeSchema } from './connectors'
 
 const nonEmptyString = z.string().trim().min(1)
 const scopeListSchema = z
@@ -7,26 +8,10 @@ const scopeListSchema = z
   .transform((values) => [...new Set(values)].sort())
 
 export const externalAuthorizationStatusSchema = z.enum(['pending', 'active', 'invalid'])
-export const externalClientRegistrationModeSchema = z.enum(['dynamic', 'manual'])
-
-export const configureExternalResourceAuthorizationRequestSchema = z
-  .object({
-    registrationMode: externalClientRegistrationModeSchema,
-    clientId: nonEmptyString.optional(),
-    clientSecret: nonEmptyString.optional(),
-  })
-  .superRefine((input, ctx) => {
-    if (input.registrationMode !== 'manual') return
-    if (!input.clientId) {
-      ctx.addIssue({ code: 'custom', path: ['clientId'], message: 'Manual registration requires clientId.' })
-    }
-    if (!input.clientSecret) {
-      ctx.addIssue({ code: 'custom', path: ['clientSecret'], message: 'Manual registration requires clientSecret.' })
-    }
-  })
 
 export const externalResourceAuthorizationSchema = z.object({
   resourceId: z.string(),
+  connectorId: z.string(),
   resourceUrl: z.url(),
   issuer: z.url(),
   authorizationEndpoint: z.url(),
@@ -35,12 +20,16 @@ export const externalResourceAuthorizationSchema = z.object({
   revocationEndpoint: z.url(),
   jwksUri: z.url(),
   userInfoEndpoint: z.url().nullable(),
-  registrationMode: externalClientRegistrationModeSchema,
+  registrationMode: oidcClientRegistrationModeSchema,
   clientId: z.string(),
   clientSecretConfigured: z.literal(true),
   status: externalAuthorizationStatusSchema,
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+})
+
+export const associateExternalResourceConnectorRequestSchema = z.object({
+  connectorId: nonEmptyString.nullable(),
 })
 
 export const resourceConnectionOwnerSchema = z.discriminatedUnion('type', [
@@ -178,9 +167,7 @@ export const agentResourceDiscoverySchema = z.object({
   ),
 })
 
-export type ConfigureExternalResourceAuthorizationRequest = z.infer<
-  typeof configureExternalResourceAuthorizationRequestSchema
->
+export type AssociateExternalResourceConnectorRequest = z.infer<typeof associateExternalResourceConnectorRequestSchema>
 export type ExternalResourceAuthorizationRecord = z.infer<typeof externalResourceAuthorizationSchema>
 export type CreateResourceConnectionIntentRequest = z.infer<typeof createResourceConnectionIntentRequestSchema>
 export type CreateAgentAccessRequest = z.infer<typeof createAgentAccessRequestSchema>

@@ -16,10 +16,13 @@ import {
   type ConnectorResponse,
   createManagementConnectorRequestSchema,
   emptyForm,
+  Field,
   type FormState,
   type ManagementSignInSettingsResponse,
+  Plus,
   ProviderIcon,
   type SecurityPolicy,
+  SelectInput,
   Sheet,
   SheetClose,
   SheetContent,
@@ -30,9 +33,11 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableEmptyRow,
   TableHead,
   TableHeader,
   TableRow,
+  TextInput,
   Trash2,
   tt,
   updateManagementConnectorRequestSchema,
@@ -95,7 +100,14 @@ export function ConnectorsPage() {
   const connectors = query.data?.connectors ?? []
   const templates = templatesQuery.data?.templates ?? []
   const providerRows = connectorProviderRows(templates, connectors, signInQuery.data, securityQuery.data?.policy)
-  const selectedProvider = providerRows.find((provider) => provider.key === selectedProviderKey) ?? null
+  const oidcConnectors = connectors.filter((connector) => connector.providerType === 'generic_oauth')
+  const selectedOidc =
+    selectedProviderKey?.startsWith('oidc:') && selectedProviderKey !== 'oidc:new'
+      ? (oidcConnectors.find((connector) => `oidc:${connector.id}` === selectedProviderKey) ?? null)
+      : null
+  const selectedProvider =
+    providerRows.find((provider) => provider.key === selectedProviderKey) ??
+    (selectedProviderKey === 'oidc:new' ? oidcProviderRow(null) : selectedOidc ? oidcProviderRow(selectedOidc) : null)
   const selectedConnectorId = selectedProvider?.connector?.id ?? null
   const detailQuery = useQuery({
     queryKey: [...consoleQueryKeys.connectors, selectedConnectorId],
@@ -191,6 +203,61 @@ export function ConnectorsPage() {
           ))}
         </TableBody>
       </Table>
+      <div className="mt-8 flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold">{tt('OIDC connectors')}</h2>
+          <p className="text-sm text-muted-foreground">
+            {tt('Manage reusable OIDC clients for login and external API resources.')}
+          </p>
+        </div>
+        <Button onClick={() => setSelectedProviderKey('oidc:new')} type="button" variant="secondary">
+          <Plus data-icon="inline-start" /> {tt('Add OIDC connector')}
+        </Button>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{tt('Name')}</TableHead>
+            <TableHead>{tt('Issuer')}</TableHead>
+            <TableHead>{tt('Client ID')}</TableHead>
+            <TableHead>{tt('Login')}</TableHead>
+            <TableHead>{tt('Status')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {oidcConnectors.length ? (
+            oidcConnectors.map((connector) => (
+              <TableRow
+                className="cursor-pointer"
+                key={connector.id}
+                onClick={() => setSelectedProviderKey(`oidc:${connector.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') setSelectedProviderKey(`oidc:${connector.id}`)
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <TableCell>
+                  <div className="font-medium">{connector.displayName}</div>
+                  <div className="text-xs text-muted-foreground">{connector.providerId}</div>
+                </TableCell>
+                <TableCell>{connector.issuer}</TableCell>
+                <TableCell>{connector.clientId}</TableCell>
+                <TableCell>{connector.loginEnabled ? tt('Enabled') : tt('Disabled')}</TableCell>
+                <TableCell>
+                  <StatusBadge active={connector.enabled} activeLabel="Ready" inactiveLabel="Disabled" />
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableEmptyRow
+              colSpan={5}
+              description={tt('Add a standard OIDC client for hosted login or external API authorization.')}
+              title={tt('No OIDC connectors yet')}
+            />
+          )}
+        </TableBody>
+      </Table>
       <ConnectorProviderDrawer
         connector={detailQuery.data ?? selectedProvider?.connector ?? null}
         createError={createMutation.errorMessage}
@@ -245,6 +312,23 @@ export function ConnectorsPage() {
     </ResourcePage>
   )
 }
+
+function oidcProviderRow(connector: ConnectorResponse | null): ConnectorProviderRow {
+  return {
+    key: connector ? `oidc:${connector.id}` : 'oidc:new',
+    displayName: connector?.displayName ?? 'New OIDC connector',
+    description: 'Standard OpenID Connect client',
+    icon: 'oauth',
+    providerId: connector?.providerId ?? '',
+    providerType: 'generic_oauth',
+    typeLabel: 'OIDC',
+    configurationLabel: connector?.clientSecretConfigured ? 'Credentials configured' : 'Credentials required',
+    enabled: connector?.enabled ?? true,
+    connector,
+    template: null,
+  }
+}
+
 function ConnectorProviderDrawer({
   builtInProviders,
   connector,
@@ -301,7 +385,11 @@ function ConnectorProviderDrawer({
       return
     }
     setForm({
-      enabled: 'false',
+      enabled: provider.providerType === 'generic_oauth' ? 'true' : 'false',
+      loginEnabled: provider.providerType === 'generic_oauth' ? 'false' : 'true',
+      registrationMode: 'manual',
+      slug: '',
+      displayName: '',
       clientId: '',
       clientSecret: '',
       scopes: provider.template?.defaultScopes.join(' ') ?? '',
@@ -352,6 +440,8 @@ function ConnectorProviderDrawer({
                     parseForm(updateManagementConnectorRequestSchema, {
                       ...connectorUpdateForm(form),
                       enabled: form.enabled === 'true',
+                      loginEnabled: form.loginEnabled === 'true',
+                      registrationMode: form.registrationMode,
                       scopes,
                       providerMetadata,
                     }),
@@ -361,11 +451,13 @@ function ConnectorProviderDrawer({
                 onCreate(
                   parseForm(createManagementConnectorRequestSchema, {
                     ...form,
-                    slug: provider.providerId,
+                    slug: provider.providerType === 'generic_oauth' ? form.slug : provider.providerId,
                     enabled: form.enabled === 'true',
+                    loginEnabled: form.loginEnabled === 'true',
                     providerType: provider.providerType,
-                    providerId: provider.providerId,
-                    displayName: provider.displayName,
+                    providerId: provider.providerType === 'generic_oauth' ? form.slug : provider.providerId,
+                    displayName: provider.providerType === 'generic_oauth' ? form.displayName : provider.displayName,
+                    registrationMode: provider.providerType === 'generic_oauth' ? form.registrationMode : undefined,
                     scopes,
                     providerMetadata,
                   }),
@@ -385,7 +477,13 @@ function ConnectorProviderDrawer({
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium">{tt('Enabled')}</p>
-                    <p className="text-xs text-muted-foreground">{tt('Show this provider on hosted sign-in.')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {tt(
+                        provider.providerType === 'generic_oauth'
+                          ? 'Allow this connector to serve login or associated API resources.'
+                          : 'Show this provider on hosted sign-in.',
+                      )}
+                    </p>
                   </div>
                   <Switch
                     aria-label={tt('Enabled')}
@@ -394,6 +492,53 @@ function ConnectorProviderDrawer({
                     type="button"
                   />
                 </div>
+                {provider.providerType === 'generic_oauth' ? (
+                  <>
+                    {!isExisting ? (
+                      <>
+                        <Field label={tt('Name')}>
+                          <TextInput
+                            onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
+                            required
+                            value={form.displayName ?? ''}
+                          />
+                        </Field>
+                        <Field label={tt('Provider ID')}>
+                          <TextInput
+                            onChange={(event) => setValue(setForm, 'slug', event.target.value)}
+                            required
+                            value={form.slug ?? ''}
+                          />
+                        </Field>
+                      </>
+                    ) : null}
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">{tt('Allow hosted login')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {tt('Offer this OIDC connector as a Realmroot sign-in method.')}
+                        </p>
+                      </div>
+                      <Switch
+                        aria-label={tt('Allow hosted login')}
+                        checked={form.loginEnabled === 'true'}
+                        onCheckedChange={(enabled) => setValue(setForm, 'loginEnabled', String(enabled))}
+                        type="button"
+                      />
+                    </div>
+                    {!isExisting ? (
+                      <Field label={tt('Client registration')}>
+                        <SelectInput
+                          onChange={(event) => setValue(setForm, 'registrationMode', event.target.value)}
+                          value={form.registrationMode ?? 'manual'}
+                        >
+                          <option value="manual">{tt('Pre-registered client')}</option>
+                          <option value="dynamic">{tt('Dynamic registration (RFC 7591)')}</option>
+                        </SelectInput>
+                      </Field>
+                    ) : null}
+                  </>
+                ) : null}
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium">{tt('Allow users without an email')}</p>
@@ -423,7 +568,7 @@ function ConnectorProviderDrawer({
                     template={provider.template}
                   />
                 )}
-                <CallbackUrlField value={connectorCallbackUrl(provider.providerId)} />
+                {provider.providerId ? <CallbackUrlField value={connectorCallbackUrl(provider.providerId)} /> : null}
               </div>
             </div>
             <SheetFooter className="border-t border-border sm:flex-row sm:justify-end">
