@@ -15,12 +15,13 @@ Feature: Unified Realmroot API Restish entry
     And Restish v2 exposes the current Agent and resource operations from the same contract
 
 
-  @entrypoint:restish @journey:management-restish-oauth-auth
+  @entrypoint:restish @journey:management-restish-agent-auth
   Scenario: Restish transparently authenticates as an Agent
     Given Restish is connected to the unified Realmroot API
     When a new Agent invokes its first protected OpenAPI operation
     Then the Restish authentication adapter starts Agent enrollment without a login command
     And the adapter uses the endpoints and issuer published by AgentAuth discovery
+    And Realmroot does not provision a shared CLI OAuth application
     And the original operation waits for one controller approval
     And every later command-line request is authenticated as the same Agent issuer and subject
     And the approving user's identity is never used as the command-line principal

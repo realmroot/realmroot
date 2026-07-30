@@ -230,7 +230,6 @@ Prefer the product's OIDC library device-flow support.
   origin explicitly supplied for the task, obtain confirmation before mutating
   the tenant.
 - Never let the Agent approve its own enrollment or management request.
-- Never modify or delete system-managed applications such as `realmroot-cli`.
 - Treat asset uploads as `multipart/form-data` with one `file` field.
 - Treat raw secrets as create/rotation-only output; never expect list/detail
   operations to reveal them.

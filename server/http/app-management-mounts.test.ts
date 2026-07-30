@@ -324,7 +324,6 @@ function applicationResponse(overrides: Record<string, unknown> = {}) {
     public: true,
     firstParty: false,
     trusted: false,
-    systemManaged: false,
     disabled: false,
     disabledReason: null,
     redirectUris: ['https://app.example.com/callback'],

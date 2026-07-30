@@ -49,7 +49,6 @@ export const application = {
   public: true,
   firstParty: true,
   trusted: true,
-  systemManaged: false,
   disabled: false,
   disabledReason: null,
   redirectUris: ['https://app.example.com/callback'],

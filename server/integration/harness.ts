@@ -6,7 +6,6 @@ import { createDb } from '@server/db/client'
 import { agent, agentCapabilityGrant, agentHost, approvalRequest } from '@server/db/schema'
 import type { Env, RuntimeConfig } from '@server/env'
 import { createApp } from '@server/http/app'
-import { ensureSystemClients } from '@server/usecases/applications'
 import type { AgentAssertionSigner } from '@server/usecases/external-resources'
 import type { SecurityPolicy } from '@shared/api/security'
 
@@ -78,14 +77,11 @@ export interface Harness {
 }
 
 /**
- * Build the production app over real D1. System OAuth clients are seeded the
- * same way `worker.ts` does so management/token endpoints behave for real.
+ * Build the production app over real D1.
  */
 export async function createHarness(): Promise<Harness> {
   const config = integrationConfig()
   const deps = createDeps(integrationEnv(), config)
-  await ensureSystemClients(deps, config.baseURL)
-
   const db = createDb(env.DB)
   const emailSender = createEmailSender(integrationEnv().EMAIL, {
     from: config.emailFrom,
@@ -169,69 +165,6 @@ export async function signIn(harness: Harness, email: string, password: string):
 export async function signInAdmin(harness: Harness): Promise<string> {
   await bootstrapAdmin(harness)
   return signIn(harness, admin.email, admin.password)
-}
-
-async function pkceChallenge(verifier: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
-  return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-}
-
-/**
- * Bootstraps the admin and runs the real authorization-code + PKCE + consent flow
- * against the seeded `realmroot-cli` client to obtain a management API access
- * token. Returns the `Authorization: Bearer ...` header value, which drives the
- * bearer-authenticated management surface (the user admin-CRUD repository paths).
- */
-export async function signInManagementBearer(harness: Harness): Promise<string> {
-  const cookie = await signInAdmin(harness)
-  const verifier = 'realmroot-crown-pkce-verifier-0123456789abcdefghijklmnop'
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: 'realmroot-cli',
-    redirect_uri: 'http://127.0.0.1:8484/callback',
-    scope: 'openid management:read management:write',
-    state: 'crown',
-    code_challenge: await pkceChallenge(verifier),
-    code_challenge_method: 'S256',
-  })
-
-  const authorize = await harness.request(`/api/auth/oauth2/authorize?${params.toString()}`, {
-    headers: { cookie },
-    redirect: 'manual',
-  })
-  const consentQuery = (authorize.headers.get('location') ?? '').split('?')[1] ?? ''
-
-  const consent = await harness.request('/api/auth/oauth2/consent', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', cookie, origin: baseURL },
-    body: JSON.stringify({ accept: true, oauth_query: consentQuery }),
-  })
-  if (consent.status !== 200) {
-    throw new Error(`oauth consent failed (${consent.status}): ${await consent.text()}`)
-  }
-  const { url } = (await consent.json()) as { url: string }
-  const code = new URL(url, baseURL).searchParams.get('code')
-  if (!code) throw new Error('oauth consent did not return an authorization code')
-
-  const token = await harness.request('/api/auth/oauth2/token', {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: baseURL },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: 'realmroot-cli',
-      code,
-      redirect_uri: 'http://127.0.0.1:8484/callback',
-      code_verifier: verifier,
-    }).toString(),
-  })
-  if (token.status !== 200) {
-    throw new Error(`oauth token exchange failed (${token.status}): ${await token.text()}`)
-  }
-  const { access_token } = (await token.json()) as { access_token: string }
-  return `Bearer ${access_token}`
 }
 
 interface ManagedUser {

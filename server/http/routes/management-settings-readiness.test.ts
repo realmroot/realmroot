@@ -348,27 +348,6 @@ describe('management routes 3', () => {
     expect(body.required.every((item: { status: string }) => item.status === 'complete')).toBe(true)
   })
 
-  it('does not count the system CLI client as the tenant OIDC application for readiness', async () => {
-    vi.spyOn(applications, 'listApplications').mockResolvedValue({
-      applications: [
-        { ...applicationFixture(), id: 'app_realmroot_cli', clientId: 'realmroot-cli', systemManaged: true },
-      ],
-      pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
-    } as unknown as ListApplicationsResponse)
-    vi.spyOn(configz, 'getConfig').mockResolvedValue(readinessConfig())
-    const app = createApp(createAuthMock(), createTestDeps())
-
-    const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
-
-    expect(readiness.status).toBe(200)
-    const body = managementReadinessResponseSchema.parse(await readiness.json())
-    expect(body.admin).toEqual({
-      setupRequired: true,
-      setupHref: '/console/onboarding',
-      missing: ['oidc_application'],
-    })
-  })
-
   it('does not count social sign-in as ready without a configured provider or connector', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
       applications: [applicationFixture()],

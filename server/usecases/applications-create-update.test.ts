@@ -1,14 +1,11 @@
 import {
   createApplication,
   deleteApplication,
-  ensureCliApplication,
-  ensureSystemClients,
   getApplication,
   listApplicationSecrets,
   listApplications,
   replaceRedirectUris,
   rotateApplicationSecret,
-  systemCliApplication,
   updateApplication,
 } from '@server/usecases/applications'
 import type { Deps } from '@server/usecases/deps'
@@ -122,50 +119,6 @@ describe('service.test 1', () => {
     await expect(rotateApplicationSecret(deps, created.id, 'admin-1')).rejects.toMatchObject({
       status: 400,
       message: 'Public clients do not have client secrets.',
-    })
-  })
-
-  it('upserts the system-managed CLI public native client without a secret', async () => {
-    const repository = new InMemoryApplicationRepository()
-    const deps = { applications: repository } as unknown as Deps
-    const issuer = 'https://auth.example.com'
-
-    await ensureSystemClients(deps, issuer)
-    const created = await ensureCliApplication(deps, issuer)
-    const updated = await ensureCliApplication(deps, issuer)
-
-    expect(created).toMatchObject({
-      id: systemCliApplication.id,
-      slug: systemCliApplication.slug,
-      name: systemCliApplication.name,
-      clientId: systemCliApplication.clientId,
-      clientType: 'public_native',
-      public: true,
-      firstParty: true,
-      trusted: false,
-      systemManaged: true,
-      requirePkce: true,
-      tokenEndpointAuthMethod: 'none',
-      redirectUris: systemCliApplication.redirectUris,
-      allowedGrantTypes: ['authorization_code', 'refresh_token'],
-      allowedScopes: ['openid', 'profile', 'email', 'offline_access', 'management:read', 'management:write'],
-      secretMetadata: [],
-    })
-    expect(updated.id).toBe(created.id)
-    expect(repository.applicationCount()).toBe(1)
-    await expect(updateApplication(deps, issuer, systemCliApplication.id, { disabled: true })).rejects.toMatchObject({
-      status: 400,
-      message: 'System-managed applications cannot be modified.',
-    })
-    await expect(
-      replaceRedirectUris(deps, issuer, systemCliApplication.id, { redirectUris: ['http://localhost:8484/callback'] }),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'System-managed applications cannot be modified.',
-    })
-    await expect(deleteApplication(deps, systemCliApplication.id)).rejects.toMatchObject({
-      status: 400,
-      message: 'System-managed applications cannot be deleted.',
     })
   })
 
@@ -395,19 +348,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     if (input.clientSecret) {
       this.secrets.set(application.id, [{ ...input.clientSecret, createdAt: now, expiresAt: null, revokedAt: null }])
     }
-    return application
-  }
-
-  async upsertSystem(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>) {
-    const existing = this.applications.get(input.id)
-    const now = new Date('2026-05-18T12:30:00.000Z')
-    const application = {
-      ...input,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    }
-    this.applications.set(application.id, application)
-    this.secrets.delete(application.id)
     return application
   }
 

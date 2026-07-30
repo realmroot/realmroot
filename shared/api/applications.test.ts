@@ -52,7 +52,6 @@ describe('application API pagination contracts', () => {
       public: false,
       firstParty: false,
       trusted: false,
-      systemManaged: false,
       disabled: false,
       disabledReason: null,
       redirectUris: ['https://app.example.com/callback'],

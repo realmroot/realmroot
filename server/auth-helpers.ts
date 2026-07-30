@@ -1,11 +1,7 @@
 import type { TransactionalEmailSender } from '@server/adapters/gateways/email/sender'
 import { type AuthorizationTokenClaimInput, buildTokenClaims } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
-import {
-  type ApplicationOidcClaims,
-  defaultApplicationOidcClaims,
-  managementApplicationScopes,
-} from '../shared/api/applications'
+import { type ApplicationOidcClaims, defaultApplicationOidcClaims } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 
 export function siweDomain(baseURL: string, configuredDomain: string) {
@@ -225,13 +221,6 @@ export function readString(metadata: Record<string, unknown> | undefined, key: s
 
 export function readUserId(user: unknown) {
   return typeof user === 'object' && user !== null && 'id' in user && typeof user.id === 'string' ? user.id : undefined
-}
-
-export function hasManagementScope(scopes: Iterable<string>) {
-  for (const scope of scopes) {
-    if (managementApplicationScopes.includes(scope as (typeof managementApplicationScopes)[number])) return true
-  }
-  return false
 }
 
 export function readUserRole(user: unknown) {

@@ -13,7 +13,6 @@ const corsOriginsMetadataKey = 'corsOrigins'
 const customDataMetadataKey = 'customData'
 const iconUrlMetadataKey = 'iconUrl'
 const oidcClaimsMetadataKey = 'oidcClaims'
-const systemManagedMetadataKey = 'systemManaged'
 
 export function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>, now: Date) {
   return {
@@ -32,7 +31,6 @@ export function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt
       corsOrigins: input.corsOrigins.length > 0 ? input.corsOrigins : undefined,
       customData: Object.keys(input.customData).length > 0 ? input.customData : undefined,
       oidcClaims: input.oidcClaims,
-      systemManaged: input.systemManaged,
     }),
     createdAt: now,
     updatedAt: now,
@@ -82,7 +80,6 @@ export function toAggregate(app: ApplicationRow, client: OAuthClientRow): Applic
     public: client.public ?? false,
     firstParty: app.firstParty,
     trusted: app.trusted,
-    systemManaged: readSystemManaged(app.metadata),
     disabled: app.disabled || !!client.disabled,
     disabledReason: app.disabledReason,
     redirectUris: parseList(client.redirectUris),
@@ -175,15 +172,6 @@ export function readOidcClaims(metadata: unknown): ApplicationOidcClaims {
   }
 }
 
-export function readSystemManaged(metadata: unknown) {
-  return Boolean(
-    typeof metadata === 'object' &&
-      metadata !== null &&
-      systemManagedMetadataKey in metadata &&
-      metadata[systemManagedMetadataKey] === true,
-  )
-}
-
 export function readClaimSelection(value: unknown): ApplicationOidcClaims['accessToken'] {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
   const input = value as Record<string, unknown>
@@ -210,7 +198,6 @@ export function writeApplicationMetadata(
     corsOrigins?: string[]
     customData?: Record<string, unknown>
     oidcClaims?: ApplicationOidcClaims
-    systemManaged?: boolean
   },
 ) {
   const next = { ...(current ?? {}) }
@@ -221,10 +208,6 @@ export function writeApplicationMetadata(
   if (patch.corsOrigins !== undefined) next[corsOriginsMetadataKey] = patch.corsOrigins
   if (patch.customData !== undefined) next[customDataMetadataKey] = patch.customData
   if (patch.oidcClaims !== undefined) next[oidcClaimsMetadataKey] = patch.oidcClaims
-  if (patch.systemManaged !== undefined) {
-    if (patch.systemManaged) next[systemManagedMetadataKey] = true
-    else delete next[systemManagedMetadataKey]
-  }
   return Object.keys(next).length ? next : null
 }
 

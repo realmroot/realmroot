@@ -27,7 +27,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
       listApplications(deps, issuerFor(c), { limit: 100, offset: 0 }),
       getConfig(deps, configzOptions(c, securityPolicy)),
     ])
-    const hasOidcApplication = applications.applications.some((application) => !application.systemManaged)
+    const hasOidcApplication = applications.applications.length > 0
     const identityProviderCount =
       'identityProviders' in config && Array.isArray(config.identityProviders) ? config.identityProviders.length : 0
     const hasSocialSignInMethod = config.signIn.socialLoginEnabled && identityProviderCount > 0

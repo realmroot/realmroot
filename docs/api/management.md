@@ -55,20 +55,19 @@ authorization code with PKCE under `/api/auth/*`.
 
 ## Authentication And Authorization
 
-Every protected Management API route accepts either an authenticated administrator browser session or a Bearer token issued to the built-in Realmroot CLI OAuth client. Requests without valid authentication return `401`; authenticated users without admin or equivalent management authorization return `403`. The OpenAPI discovery document is public so API clients can discover the service before authenticating.
+Every protected Management API route accepts either an authenticated
+administrator browser session or an AgentAuth proof from an enrolled Agent.
+Requests without valid authentication return `401`; principals without the
+required authority return `403`. The OpenAPI discovery document is public so
+API clients can discover the service before authenticating.
 
-The built-in CLI client is system-managed and stable:
-
-- `client_id`: `realmroot-cli`
-- Name: `Realmroot CLI`
-- Client type: public native
-- Client secret: none
-- PKCE: required
-- Redirect URIs: `http://127.0.0.1:8484/callback`, `http://localhost:8484/callback`
-- Grant types: `authorization_code`, `refresh_token`
-- Management scopes: `management:read`, `management:write`
-
-Restish can use the Authorization Code + PKCE flow with its local callback server on port 8484. Request `openid offline_access management:read management:write` when configuring CLI access. The public client is only a login entrypoint: Management API authorization still comes from the authenticated user role or token authorization claims, so a non-admin user token receives `403`.
+Restish uses the AgentAuth configuration published in the OpenAPI contract. On
+the first protected operation, its Realmroot authentication provider creates a
+local Agent and Host identity, starts controller approval, and resumes the
+operation after approval. Later operations reuse that Agent identity and its
+approved `management:read` or `management:write` capabilities. Realmroot does
+not provision a shared CLI OAuth application, and Restish does not need an OAuth
+client ID or localhost callback.
 
 ## Error Shape
 
@@ -117,7 +116,7 @@ Collection responses include:
 - Connectors: `GET /connectors`, `POST /connectors`, `GET /connectors/templates`, `GET /connectors/{id}`, `GET /connectors/{id}/readiness`, `PATCH /connectors/{id}`, `DELETE /connectors/{id}`.
 - Webhooks: `/webhooks/endpoints`, `/webhooks/endpoints/{id}`, `/webhooks/endpoints/{id}/secrets`, `/webhooks/requests`, `/webhooks/requests/{id}`, `/webhooks/requests/{id}/retries`.
 
-Application resources are OIDC clients. `POST /applications` returns the created application; confidential clients include `clientSecret` in that creation response only. `GET /applications/{id}` returns client metadata, redirect URIs, post sign-out redirect URIs, CORS origins, custom data, allowed grant types, allowed scopes, system-managed state, token endpoint auth method, and discovery endpoint URLs. `PATCH /applications/{id}` updates metadata, redirect/origin sets, custom data, and lifecycle fields including `disabled`; lifecycle transitions do not use action endpoints. `DELETE /applications/{id}` deletes the application and its provider client. System-managed applications such as `realmroot-cli` are not deletable through the Management API.
+Application resources are OIDC clients. `POST /applications` returns the created application; confidential clients include `clientSecret` in that creation response only. `GET /applications/{id}` returns client metadata, redirect URIs, post sign-out redirect URIs, CORS origins, custom data, allowed grant types, allowed scopes, token endpoint auth method, and discovery endpoint URLs. `PATCH /applications/{id}` updates metadata, redirect/origin sets, custom data, and lifecycle fields including `disabled`; lifecycle transitions do not use action endpoints. `DELETE /applications/{id}` deletes the application and its provider client.
 
 Redirect URIs are replaced as a set with `PUT /applications/{id}/redirect-uris`:
 

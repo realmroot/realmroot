@@ -5,7 +5,6 @@ import {
   applicationGrantTypes,
   applicationScopeSchema,
   deviceCodeGrantType,
-  managementApplicationScopes,
   type PaginationQuery,
 } from '@shared/api/applications'
 
@@ -22,7 +21,6 @@ export function normalizeClientSettings(
   redirectUris: string[],
   grantTypes: ApplicationResponse['allowedGrantTypes'] = ['authorization_code', 'refresh_token'],
   scopes: ApplicationResponse['allowedScopes'] = ['openid', 'profile', 'email'],
-  options: { allowManagementScopes?: boolean } = {},
 ) {
   const normalizedGrantTypes = dedupe(grantTypes)
   const normalizedScopes = dedupe(scopes)
@@ -46,12 +44,6 @@ export function normalizeClientSettings(
   for (const scope of normalizedScopes) {
     if (!applicationScopeSchema.safeParse(scope).success) {
       throw badRequest(`Unsupported scope: ${scope}`)
-    }
-    if (
-      !options.allowManagementScopes &&
-      managementApplicationScopes.includes(scope as (typeof managementApplicationScopes)[number])
-    ) {
-      throw badRequest('Management scopes are reserved for the system CLI client.')
     }
   }
   for (const grantType of normalizedGrantTypes) {

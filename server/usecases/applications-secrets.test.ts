@@ -192,7 +192,7 @@ describe('service.test 2', () => {
       ),
     ).rejects.toMatchObject({
       status: 400,
-      message: 'Management scopes are reserved for the system CLI client.',
+      message: 'Unsupported scope: management:read',
     })
     await expect(
       createApplication(
@@ -372,19 +372,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     if (input.clientSecret) {
       this.secrets.set(application.id, [{ ...input.clientSecret, createdAt: now, expiresAt: null, revokedAt: null }])
     }
-    return application
-  }
-
-  async upsertSystem(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>) {
-    const existing = this.applications.get(input.id)
-    const now = new Date('2026-05-18T12:30:00.000Z')
-    const application = {
-      ...input,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    }
-    this.applications.set(application.id, application)
-    this.secrets.delete(application.id)
     return application
   }
 

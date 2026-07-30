@@ -1,15 +1,7 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
 import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  createHarness,
-  createUser,
-  type Harness,
-  seedAgent,
-  signIn,
-  signInAdmin,
-  signInManagementBearer,
-} from './harness'
+import { createHarness, createUser, type Harness, seedAgent, signIn, signInAdmin } from './harness'
 
 afterEach(async () => {
   await reset()
@@ -112,12 +104,12 @@ describe('user management over real D1', () => {
     expect((await harness.request('/api/management/users', { headers: { cookie: memberCookie } })).status).toBe(403)
   })
 
-  it('runs the bearer-authenticated admin user CRUD through the user repository (real SQL) [spec: management-api/management-restish-user-crud]', async () => {
-    const bearer = await signInManagementBearer(harness)
+  it('runs admin user CRUD through the user repository (real SQL)', async () => {
+    const cookie = await signInAdmin(harness)
 
     const created = await harness.request('/api/management/users', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: bearer },
+      headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
         email: 'managed@example.com',
         username: 'managed',
@@ -130,17 +122,17 @@ describe('user management over real D1', () => {
     const userId = ((await created.json()) as { user: { id: string } }).user.id
 
     // listManagedUsers (repository search/pagination).
-    const list = await harness.request('/api/management/users?search=managed', { headers: { authorization: bearer } })
+    const list = await harness.request('/api/management/users?search=managed', { headers: { cookie } })
     expect(list.status).toBe(200)
     expect(((await list.json()) as { users: Array<{ id: string }> }).users.some((u) => u.id === userId)).toBe(true)
 
-    const fetched = await harness.request(`/api/management/users/${userId}`, { headers: { authorization: bearer } })
+    const fetched = await harness.request(`/api/management/users/${userId}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
 
     // updateManagedUser.
     const updated = await harness.request(`/api/management/users/${userId}`, {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json', authorization: bearer },
+      headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ displayName: 'Renamed Managed' }),
     })
     expect(updated.status, await updated.clone().text()).toBe(200)
@@ -148,16 +140,16 @@ describe('user management over real D1', () => {
     // deleteManagedUser.
     const removed = await harness.request(`/api/management/users/${userId}`, {
       method: 'DELETE',
-      headers: { authorization: bearer },
+      headers: { cookie },
     })
-    expect(removed.status).toBe(204)
+    expect(removed.status).toBe(200)
   })
 
-  it('rejects an invalid bearer create payload with 400', async () => {
-    const bearer = await signInManagementBearer(harness)
+  it('rejects an invalid admin create payload with 400', async () => {
+    const cookie = await signInAdmin(harness)
     const response = await harness.request('/api/management/users', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: bearer },
+      headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ username: 'no-email' }),
     })
     expect(response.status).toBe(400)

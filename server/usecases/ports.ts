@@ -746,7 +746,6 @@ export interface ApplicationAggregate {
   public: boolean
   firstParty: boolean
   trusted: boolean
-  systemManaged: boolean
   disabled: boolean
   disabledReason: string | null
   redirectUris: string[]
@@ -790,7 +789,6 @@ export interface ApplicationRepository {
     application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
     clientSecret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'> | null
   }): Promise<ApplicationAggregate>
-  upsertSystem(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>): Promise<ApplicationAggregate>
   list(pagination: PaginationQuery): Promise<ApplicationPaginatedResult<ApplicationAggregate>>
   findById(id: string): Promise<ApplicationAggregate | null>
   findByClientId(clientId: string): Promise<ApplicationAggregate | null>

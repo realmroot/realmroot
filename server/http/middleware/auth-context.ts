@@ -1,9 +1,7 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
 import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
-import { systemCliClientId } from '@shared/api/applications'
 import type { Context, MiddlewareHandler } from 'hono'
-import { decodeProtectedHeader } from 'jose'
 import { toBoundaryError } from '../routes/auth-api'
 
 export interface AuthUser {
@@ -35,33 +33,14 @@ export interface AuthContext {
     hostId: string
     scopes: string[]
   } | null
-  bearer?: {
-    clientId: string | null
-    scopes: string[]
-  } | null
 }
 
 export interface SessionReader {
   handler?: (request: Request) => Promise<Response>
   api: {
     getSession: (context: { headers: Headers; asResponse: false }) => Promise<AuthSessionResult | null>
-    oauth2UserInfo?: (context: { headers: Headers; asResponse: false }) => Promise<OAuthUserInfo>
     getAgentSession?: (context: { headers: Headers; asResponse: false }) => Promise<ProtocolAgentSession | null>
   }
-}
-
-interface OAuthUserInfo {
-  sub: string
-  email?: string
-  name?: string
-  picture?: string
-  role?: string | null
-  scope?: string
-  client_id?: string
-  authorization?: {
-    roles?: unknown
-  }
-  roles?: unknown
 }
 
 declare module 'hono' {
@@ -88,7 +67,7 @@ export function getAuthContext(c: Context): AuthContext {
 export function agentPrincipalAuth(auth: SessionReader, options: { allowSession?: boolean } = {}): MiddlewareHandler {
   return async (c, next) => {
     const current = getAuthContext(c)
-    if (current.agent || current.bearer || (options.allowSession !== false && current.session)) {
+    if (current.agent || (options.allowSession !== false && current.session)) {
       await next()
       return
     }
@@ -141,107 +120,5 @@ export function getActorUserId(c: Context): string | null {
 
 export function isAutomationPrincipal(c: Context) {
   const auth = getAuthContext(c)
-  return Boolean(auth.bearer || auth.agent)
-}
-
-export function managementBearerAuth(auth: SessionReader): MiddlewareHandler {
-  return async (c, next) => {
-    const token = bearerToken(c.req.raw.headers)
-    if (!token || isAgentAuthProof(token)) {
-      await next()
-      return
-    }
-
-    const userInfo = await readOAuthUserInfo(auth, c)
-
-    const scopes = scopeList(userInfo.scope)
-    const clientId = userInfo.client_id ?? null
-    if (clientId !== systemCliClientId) {
-      throw forbidden()
-    }
-    if (!hasRequiredManagementScope(c.req.method, scopes)) {
-      throw forbidden()
-    }
-
-    c.set('authContext', {
-      session: null,
-      user: {
-        id: userInfo.sub,
-        email: userInfo.email,
-        name: userInfo.name ?? null,
-        image: userInfo.picture ?? null,
-        role: managementRole(userInfo),
-      },
-      bearer: {
-        clientId,
-        scopes,
-      },
-    })
-
-    await next()
-  }
-}
-
-function isAgentAuthProof(token: string) {
-  try {
-    return decodeProtectedHeader(token).typ === 'agent+jwt'
-  } catch {
-    return false
-  }
-}
-
-async function readOAuthUserInfo(auth: SessionReader, c: Context) {
-  if (auth.handler) {
-    const url = new URL('/api/auth/oauth2/userinfo', c.req.url)
-    try {
-      const response = await auth.handler(new Request(url, { headers: c.req.raw.headers }))
-      if (!response.ok) throw unauthorized('Invalid bearer token.')
-      return (await response.json()) as OAuthUserInfo
-    } catch {
-      throw unauthorized('Invalid bearer token.')
-    }
-  }
-
-  if (!auth.api.oauth2UserInfo) {
-    throw unauthorized('Invalid bearer token.')
-  }
-
-  try {
-    return await auth.api.oauth2UserInfo({ headers: c.req.raw.headers, asResponse: false })
-  } catch {
-    throw unauthorized('Invalid bearer token.')
-  }
-}
-
-function bearerToken(headers: Headers) {
-  const authorization = headers.get('authorization')
-  if (!authorization) return null
-  const value = authorization.trim()
-  if (!/^Bearer(?:\s|$)/i.test(value)) return null
-  const match = /^Bearer\s+(.+)$/i.exec(value)
-  if (!match?.[1]) throw unauthorized('Invalid bearer token.')
-  return match[1]
-}
-
-function scopeList(scope: string | undefined) {
-  return (scope ?? '').split(/\s+/).filter(Boolean)
-}
-
-function hasRequiredManagementScope(method: string, scopes: string[]) {
-  if (method === 'GET' || method === 'HEAD') {
-    return scopes.includes('management:read') || scopes.includes('management:write')
-  }
-  return scopes.includes('management:write')
-}
-
-function managementRole(userInfo: OAuthUserInfo) {
-  if (userInfo.role === 'admin') return 'admin'
-  if (stringList(userInfo.authorization?.roles).includes('admin') || stringList(userInfo.roles).includes('admin')) {
-    return 'admin'
-  }
-  return userInfo.role ?? null
-}
-
-function stringList(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+  return Boolean(auth.agent)
 }

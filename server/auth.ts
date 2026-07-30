@@ -29,12 +29,7 @@ import { organization } from 'better-auth/plugins/organization'
 import { username } from 'better-auth/plugins/username'
 import { verifyMessage } from 'viem'
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
-import {
-  deviceCodeGrantType,
-  managementApplicationScopes,
-  systemCliClientId,
-  userConfigurableApplicationScopes,
-} from '../shared/api/applications'
+import { deviceCodeGrantType, userConfigurableApplicationScopes } from '../shared/api/applications'
 import type { ManagementSignInSettingsResponse } from '../shared/api/management'
 import type { SecurityPolicy } from '../shared/api/security'
 import { agentCapabilities } from './auth-capabilities'
@@ -43,9 +38,7 @@ import {
   buildOAuthIdTokenClaims,
   buildOAuthUserInfoClaims,
   createNonce,
-  hasManagementScope,
   readString,
-  readUserRole,
   sendPasswordChangedNotification,
   sendSmsOtp,
   siweDomain,
@@ -60,7 +53,7 @@ export { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, buildOAuthUserInf
 
 import { createUserRepository } from '@server/adapters/repos/users'
 
-const oauthScopes = ['openid', 'profile', 'email', 'offline_access', ...managementApplicationScopes]
+const oauthScopes = ['openid', 'profile', 'email', 'offline_access']
 const organizationAccessControl = createAccessControl({
   organization: ['create', 'read', 'update', 'delete'],
   member: ['create', 'read', 'update', 'delete'],
@@ -390,17 +383,7 @@ export function createAuth(
         customAccessTokenClaims: (input) => buildOAuthAccessTokenClaims(deps, input),
         customUserInfoClaims: async ({ user, scopes, jwt }) => {
           const clientId = readString(jwt, 'client_id') ?? readString(jwt, 'azp')
-          if (clientId !== systemCliClientId) {
-            return buildOAuthUserInfoClaims(deps, applications, { clientId, user, scopes, jwt })
-          }
-          if (!hasManagementScope(scopes)) return {}
-          return {
-            role: readUserRole(user),
-            scope: jwt.scope,
-            client_id: clientId,
-            authorization: jwt.authorization,
-            roles: jwt.roles,
-          }
+          return buildOAuthUserInfoClaims(deps, applications, { clientId, user, scopes, jwt })
         },
         customIdTokenClaims: (input) => buildOAuthIdTokenClaims(deps, input),
         clientRegistrationDefaultScopes: ['openid', 'profile', 'email'],

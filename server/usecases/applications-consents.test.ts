@@ -118,19 +118,6 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     return application
   }
 
-  async upsertSystem(input: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>) {
-    const existing = this.applications.get(input.id)
-    const now = new Date('2026-05-18T12:30:00.000Z')
-    const application = {
-      ...input,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    }
-    this.applications.set(application.id, application)
-    this.secrets.delete(application.id)
-    return application
-  }
-
   applicationCount() {
     return this.applications.size
   }

@@ -97,12 +97,12 @@ export function resetLocalData() {
     DELETE FROM api_resource;
     DELETE FROM application_consent;
     DELETE FROM application_client_secret;
-    DELETE FROM application_client_metadata WHERE application_id <> 'app_realmroot_cli';
-    DELETE FROM application WHERE id <> 'app_realmroot_cli';
+    DELETE FROM application_client_metadata;
+    DELETE FROM application;
     DELETE FROM oauth_access_token;
     DELETE FROM oauth_refresh_token;
     DELETE FROM oauth_consent;
-    DELETE FROM oauth_client WHERE client_id <> 'realmroot-cli';
+    DELETE FROM oauth_client;
     DELETE FROM passkey;
     DELETE FROM wallet_address;
     DELETE FROM two_factor;

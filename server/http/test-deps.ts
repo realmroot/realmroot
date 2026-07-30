@@ -82,7 +82,6 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     },
     applications: {
       create: vi.fn(),
-      upsertSystem: vi.fn(),
       list: vi.fn().mockResolvedValue({
         items: [],
         pagination: { limit: 100, offset: 0, total: 0, hasMore: false, nextOffset: null },

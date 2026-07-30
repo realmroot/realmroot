@@ -26,7 +26,6 @@ const _corsOriginsMetadataKey = 'corsOrigins'
 const _customDataMetadataKey = 'customData'
 const _iconUrlMetadataKey = 'iconUrl'
 const _oidcClaimsMetadataKey = 'oidcClaims'
-const _systemManagedMetadataKey = 'systemManaged'
 
 export function createDrizzleApplicationRepository(db: Database): ApplicationRepository {
   return {
@@ -53,69 +52,6 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       await db.batch(statements)
       return {
         ...input.application,
-        createdAt: now,
-        updatedAt: now,
-      }
-    },
-
-    async upsertSystem(input) {
-      const now = new Date()
-      await db.batch([
-        db
-          .insert(oauthClient)
-          .values(toOAuthClientInsert(input, null, now))
-          .onConflictDoUpdate({
-            target: oauthClient.clientId,
-            set: {
-              clientSecret: null,
-              disabled: input.disabled,
-              skipConsent: input.trusted,
-              enableEndSession: true,
-              name: input.name,
-              uri: input.homepageUrl,
-              icon: input.iconUrl,
-              redirectUris: serializeList(input.redirectUris),
-              postLogoutRedirectUris: serializeList(input.postLogoutRedirectUris),
-              tokenEndpointAuthMethod: input.tokenEndpointAuthMethod,
-              grantTypes: serializeList(input.allowedGrantTypes),
-              responseTypes: serializeList(['code']),
-              public: input.public,
-              type: input.clientType,
-              requirePKCE: input.requirePkce,
-              scopes: serializeList(input.allowedScopes),
-              metadata: JSON.stringify({ applicationId: input.id, oidcClaims: input.oidcClaims }),
-              updatedAt: now,
-            },
-          }),
-        db
-          .insert(application)
-          .values(toApplicationInsert(input, now))
-          .onConflictDoUpdate({
-            target: application.id,
-            set: {
-              oauthClientId: input.clientId,
-              slug: input.slug,
-              name: input.name,
-              description: input.description,
-              homepageUrl: input.homepageUrl,
-              firstParty: input.firstParty,
-              trusted: input.trusted,
-              disabled: input.disabled,
-              disabledReason: input.disabledReason,
-              metadata: writeApplicationMetadata(null, {
-                iconUrl: input.iconUrl,
-                corsOrigins: input.corsOrigins,
-                customData: input.customData,
-                oidcClaims: input.oidcClaims,
-                systemManaged: input.systemManaged,
-              }),
-              updatedAt: now,
-            },
-          }),
-        db.insert(applicationClientMetadata).values({ applicationId: input.id }).onConflictDoNothing(),
-      ])
-      return {
-        ...input,
         createdAt: now,
         updatedAt: now,
       }

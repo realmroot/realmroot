@@ -11,17 +11,15 @@ export const applicationGrantTypes = [
   deviceCodeGrantType,
   tokenExchangeGrantType,
 ] as const
-export const systemCliClientId = 'realmroot-cli'
-export const managementApplicationScopes = ['management:read', 'management:write'] as const
 export const userConfigurableApplicationScopes = ['openid', 'profile', 'email', 'offline_access'] as const
-export const applicationScopes = [...userConfigurableApplicationScopes, ...managementApplicationScopes] as const
+export const applicationScopes = userConfigurableApplicationScopes
 export const customApplicationScopeSchema = z
   .string()
   .trim()
   .min(1)
   .max(120)
   .regex(/^[A-Za-z0-9._-]+:[A-Za-z0-9:._-]+$/)
-  .refine((value) => !managementApplicationScopes.includes(value as (typeof managementApplicationScopes)[number]), {
+  .refine((value) => value !== 'management:read' && value !== 'management:write', {
     message: 'Management scopes are reserved.',
   })
 
@@ -103,7 +101,6 @@ export const applicationResponseSchema = z
     public: z.boolean(),
     firstParty: z.boolean(),
     trusted: z.boolean(),
-    systemManaged: z.boolean(),
     disabled: z.boolean(),
     disabledReason: z.string().nullable(),
     redirectUris: z.array(z.string()),

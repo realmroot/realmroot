@@ -382,7 +382,6 @@ export function applicationFixture() {
     clientId: 'client-1',
     clientType: 'public_spa',
     redirectUris: ['https://app.example.com/callback'],
-    systemManaged: false,
     disabled: false,
   }
 }

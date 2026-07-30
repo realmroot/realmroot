@@ -24,7 +24,6 @@ export function createAuthMock() {
           },
         }
       }),
-      oauth2UserInfo: vi.fn(),
       getAgentSession: vi.fn().mockResolvedValue(null),
       listUsers: vi.fn().mockResolvedValue({ users: [], total: 0 }),
       getUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
@@ -40,10 +39,7 @@ export function createAuthMock() {
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
       changePassword: vi.fn().mockResolvedValue({ status: true }),
     },
-    handler: vi.fn(async (request: Request) => {
-      if (!auth.api.oauth2UserInfo) return new Response(null, { status: 404 })
-      return Response.json(await auth.api.oauth2UserInfo({ headers: request.headers, asResponse: false }))
-    }),
+    handler: vi.fn(),
   }
   return auth
 }

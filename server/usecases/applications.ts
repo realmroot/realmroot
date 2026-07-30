@@ -25,27 +25,8 @@ import {
   type PaginationQuery,
   type ReplaceRedirectUrisRequest,
   type RotateClientSecretResponse,
-  systemCliClientId,
   type UpdateApplicationRequest,
 } from '@shared/api/applications'
-
-export const systemCliApplication = {
-  id: 'app_realmroot_cli',
-  slug: 'realmroot-cli',
-  name: 'Realmroot CLI',
-  clientId: systemCliClientId,
-  redirectUris: ['http://127.0.0.1:8484/callback', 'http://localhost:8484/callback'],
-  allowedGrantTypes: ['authorization_code', 'refresh_token'],
-  allowedScopes: ['openid', 'profile', 'email', 'offline_access', 'management:read', 'management:write'],
-} as const satisfies {
-  id: string
-  slug: string
-  name: string
-  clientId: string
-  redirectUris: string[]
-  allowedGrantTypes: ApplicationResponse['allowedGrantTypes']
-  allowedScopes: ApplicationResponse['allowedScopes']
-}
 
 export interface ApplicationServiceOptions {
   issuer: string
@@ -82,7 +63,6 @@ export async function createApplication(
       public: input.clientType !== 'confidential_web',
       firstParty: input.firstParty ?? false,
       trusted: input.trusted ?? false,
-      systemManaged: false,
       disabled: false,
       disabledReason: null,
       redirectUris: settings.redirectUris,
@@ -134,46 +114,6 @@ export async function listApplications(
   }
 }
 
-export async function ensureSystemClients(deps: Deps, issuer: string) {
-  await ensureCliApplication(deps, issuer)
-}
-
-export async function ensureCliApplication(deps: Deps, issuer: string): Promise<ApplicationResponse> {
-  const settings = normalizeClientSettings(
-    'public_native',
-    [...systemCliApplication.redirectUris],
-    [...systemCliApplication.allowedGrantTypes],
-    [...systemCliApplication.allowedScopes],
-    { allowManagementScopes: true },
-  )
-  const application = await deps.applications.upsertSystem({
-    id: systemCliApplication.id,
-    slug: systemCliApplication.slug,
-    name: systemCliApplication.name,
-    description: 'System-managed public native OAuth client for Restish and CLI Management API access.',
-    homepageUrl: null,
-    iconUrl: null,
-    clientId: systemCliApplication.clientId,
-    clientType: 'public_native',
-    public: true,
-    firstParty: true,
-    trusted: false,
-    systemManaged: true,
-    disabled: false,
-    disabledReason: null,
-    redirectUris: settings.redirectUris,
-    postLogoutRedirectUris: [],
-    corsOrigins: [],
-    customData: {},
-    allowedGrantTypes: settings.allowedGrantTypes,
-    allowedScopes: settings.allowedScopes,
-    requirePkce: true,
-    tokenEndpointAuthMethod: 'none',
-    oidcClaims: defaultApplicationOidcClaims,
-  })
-  return toResponse(issuer, application, [])
-}
-
 export async function getApplication(deps: Deps, issuer: string, id: string): Promise<ApplicationResponse> {
   const application = await requireApplication(deps, id)
   return toResponse(issuer, application, (await deps.applications.listSecrets(id, defaultPagination())).items)
@@ -186,9 +126,6 @@ export async function updateApplication(
   input: UpdateApplicationRequest,
 ): Promise<ApplicationResponse> {
   const application = await requireApplication(deps, id)
-  if (application.systemManaged) {
-    throw badRequest('System-managed applications cannot be modified.')
-  }
   const settings =
     input.redirectUris || input.allowedGrantTypes || input.allowedScopes
       ? normalizeClientSettings(
@@ -233,9 +170,6 @@ export async function replaceRedirectUris(
   input: ReplaceRedirectUrisRequest,
 ): Promise<ApplicationResponse> {
   const application = await requireApplication(deps, id)
-  if (application.systemManaged) {
-    throw badRequest('System-managed applications cannot be modified.')
-  }
   const settings = normalizeClientSettings(
     application.clientType,
     input.redirectUris,
@@ -247,10 +181,7 @@ export async function replaceRedirectUris(
 }
 
 export async function deleteApplication(deps: Deps, id: string): Promise<void> {
-  const application = await requireApplication(deps, id)
-  if (application.systemManaged) {
-    throw badRequest('System-managed applications cannot be deleted.')
-  }
+  await requireApplication(deps, id)
   await deps.applications.delete(id)
 }
 
@@ -402,7 +333,6 @@ function toResponse(
     public: application.public,
     firstParty: application.firstParty,
     trusted: application.trusted,
-    systemManaged: application.systemManaged,
     disabled: application.disabled,
     disabledReason: application.disabledReason,
     redirectUris: application.redirectUris,

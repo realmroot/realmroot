@@ -77,7 +77,7 @@ describe('auth.test 2', () => {
     })
   })
 
-  it('limits management userinfo claims to the system CLI client', async () => {
+  it('keeps management capabilities out of OAuth client scopes and userinfo', async () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
@@ -87,34 +87,14 @@ describe('auth.test 2', () => {
       createSecurityPolicy(),
     )
     const oauth = findPlugin<OAuthProviderPluginOptions>(auth, 'oauth-provider').options
-    const user = { ...createUser(), role: 'admin' }
-    const jwt = {
-      scope: 'openid management:read',
-      authorization: { roles: ['admin'] },
-      roles: ['admin'],
-    }
-
     expect(oauth.clientRegistrationAllowedScopes).toEqual(['openid', 'profile', 'email', 'offline_access'])
     await expect(
       oauth.customUserInfoClaims({
-        user,
+        user: createUser(),
         scopes: ['openid', 'management:read'],
-        jwt,
+        jwt: {},
       }),
     ).resolves.toEqual({})
-    await expect(
-      oauth.customUserInfoClaims({
-        user,
-        scopes: ['openid', 'management:read'],
-        jwt: { ...jwt, azp: 'realmroot-cli' },
-      }),
-    ).resolves.toEqual({
-      role: 'admin',
-      scope: 'openid management:read',
-      client_id: 'realmroot-cli',
-      authorization: { roles: ['admin'] },
-      roles: ['admin'],
-    })
   })
 
   it('maps OAuth provider context into authorization token claims', async () => {

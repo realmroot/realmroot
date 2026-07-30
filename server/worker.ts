@@ -7,17 +7,14 @@ import { createDeps } from '@server/composition'
 import { createDb } from '@server/db/client'
 import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp, healthStatus } from '@server/http/app'
-import { ensureSystemClients as ensureSystemClientsUsecase } from '@server/usecases/applications'
 import { defaultBuiltInProviders } from '@server/usecases/configz'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
-import type { Deps } from '@server/usecases/deps'
 import { managementBuiltInProviderSettingsSchema } from '@shared/api/management'
 
 let cachedAuth: Auth | null = null
 let cachedKey: string | null = null
 let cachedDb: D1Database | null = null
 let cachedEmail: Env['EMAIL'] | null = null
-let cachedSystemClientDb: D1Database | null = null
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -27,7 +24,6 @@ export default {
     const config = validateEnv(env, request.url)
     const deps = createDeps(env, config)
     const securityPolicy = await deps.security.getPolicy()
-    await ensureSystemClients(env.DB, deps, config.baseURL)
     const auth = await getAuth(env, { ...config, securityPolicy })
     return createApp(auth, deps, {
       baseURL: config.baseURL,
@@ -35,12 +31,6 @@ export default {
       securityPolicy,
     }).fetch(request, env, ctx)
   },
-}
-
-async function ensureSystemClients(rawDb: D1Database, deps: Deps, issuer: string) {
-  if (cachedSystemClientDb === rawDb) return
-  await ensureSystemClientsUsecase(deps, issuer)
-  cachedSystemClientDb = rawDb
 }
 
 async function getAuth(env: Env, config: RuntimeConfig): Promise<Auth> {

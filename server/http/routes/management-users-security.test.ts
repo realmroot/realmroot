@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from '../test-deps'
 import {
   adminHeaders,
-  bearerHeaders,
   createAuthMock,
   createPage,
   createSecurityRepositoryMock,
@@ -16,50 +15,6 @@ import {
 describe('management routes 2', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
-  })
-
-  it('does not promote Management permission strings without an admin role claim', async () => {
-    const auth = createAuthMock()
-    auth.api.oauth2UserInfo.mockResolvedValue({
-      sub: 'user-1',
-      email: 'user-1@example.com',
-      client_id: 'realmroot-cli',
-      scope: 'openid management:read',
-      authorization: {
-        permissions: ['management:write'],
-      },
-    })
-
-    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
-      '/api/management/users',
-      {
-        headers: bearerHeaders('permissions-admin-token'),
-      },
-    )
-
-    expect(response.status).toBe(403)
-    expect(auth.api.listUsers).not.toHaveBeenCalled()
-  })
-
-  it('accepts Management Bearer tokens on management routes', async () => {
-    const auth = createAuthMock()
-    auth.api.oauth2UserInfo.mockResolvedValue({
-      sub: 'admin-1',
-      email: 'admin-1@example.com',
-      role: 'admin',
-      client_id: 'realmroot-cli',
-      scope: 'openid management:read management:write',
-    })
-
-    const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
-      '/api/management/users',
-      {
-        headers: bearerHeaders('valid-admin-token'),
-      },
-    )
-
-    expect(response.status).toBe(200)
-    expect(auth.api.oauth2UserInfo).toHaveBeenCalled()
   })
 
   it('preserves existing admin-session auth behavior on management routes', async () => {
@@ -93,7 +48,6 @@ describe('management routes 2', () => {
       headers: expect.any(Headers),
       asResponse: false,
     })
-    expect(auth.api.oauth2UserInfo).not.toHaveBeenCalled()
   })
 
   it('enforces managed password and blocklist policy for management user creation', async () => {

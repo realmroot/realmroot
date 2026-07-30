@@ -43,7 +43,7 @@ describe('auth.test 1', () => {
         'urn:ietf:params:oauth:grant-type:device_code',
       ],
       code_challenge_methods_supported: ['S256'],
-      scopes_supported: ['openid', 'profile', 'email', 'offline_access', 'management:read', 'management:write'],
+      scopes_supported: ['openid', 'profile', 'email', 'offline_access'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
       id_token_signing_alg_values_supported: ['RS256'],
     })

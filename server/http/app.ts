@@ -25,7 +25,7 @@ import { configzOptions } from './app-config'
 import type { RpcSchema } from './app-rpc-schema'
 import type { AgentConfiguration, AppConfig } from './app-types'
 import { accessLog } from './middleware/access-log'
-import { agentPrincipalAuth, authContext, managementBearerAuth, type SessionReader } from './middleware/auth-context'
+import { agentPrincipalAuth, authContext, type SessionReader } from './middleware/auth-context'
 import { trustedOriginCors } from './middleware/cors'
 import { depsMiddleware } from './middleware/deps'
 import { requestContext } from './middleware/request-context'
@@ -150,8 +150,6 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .route('/api/configz', createConfigzRoutes(config.securityPolicy))
     .route('/api/assets', createAssetRoutes())
     .use('/api/*', unifiedOpenApiDiscoveryHeader())
-    .use('/api/management', managementBearerAuth(auth))
-    .use('/api/management/*', managementBearerAuth(auth))
     .use('/api/management', agentPrincipalAuth(auth))
     .use('/api/management/*', agentPrincipalAuth(auth))
     .route('/api/management', createManagementAssetRoutes())

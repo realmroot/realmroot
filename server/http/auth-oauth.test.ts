@@ -430,7 +430,6 @@ function deviceApplication(overrides: Partial<ApplicationAggregate> = {}): Appli
     public: true,
     firstParty: false,
     trusted: false,
-    systemManaged: false,
     disabled: false,
     disabledReason: null,
     redirectUris: ['com.example.native:/callback'],
