@@ -40,9 +40,7 @@ export interface AgentAssertionSigner {
   sign(payload: Record<string, unknown>, type: 'JWT' | 'at+jwt'): Promise<string>
 }
 
-type ResolvedExternalAuthorization = ExternalResourceAuthorizationRecord & {
-  resolvedClientSecret?: string
-}
+type ResolvedExternalAuthorization = ExternalResourceAuthorizationRecord
 
 export async function getExternalResourceAuthorization(deps: Deps, resourceId: string) {
   await requireExternalResource(deps, resourceId)
@@ -137,7 +135,7 @@ export async function completeResourceConnectionIntent(
   const intent = await deps.externalResources.consumeConnectionIntent(await sha256(input.state), now)
   if (!intent) throw badRequest('Resource connection state is invalid, expired, or already used.')
   const authorization = await requireActiveExternalAuthorization(deps, intent.resourceId)
-  const clientSecret = await openAuthorizationClientSecret(deps, authorization)
+  const clientSecret = authorizationClientSecret(authorization)
   const verifier = await deps.secrets.open(intent.encryptedPkceVerifier, connectionIntentContext(intent.id))
   const token = await postForm(
     deps,
@@ -798,7 +796,7 @@ export async function issueTargetAccessToken(
     },
     'JWT',
   )
-  const clientSecret = await openAuthorizationClientSecret(deps, authorization)
+  const clientSecret = authorizationClientSecret(authorization)
   const actorGrant = await postForm(
     deps,
     authorization.tokenEndpoint,
@@ -1052,7 +1050,7 @@ async function revokeTokenLeaseAtTarget(
     return
   }
   const authorization = await requireActiveExternalAuthorization(deps, resourceId)
-  const clientSecret = await openAuthorizationClientSecret(deps, authorization)
+  const clientSecret = authorizationClientSecret(authorization)
   const token = await deps.secrets.open(lease.encryptedAccessToken, tokenLeaseContext(lease.id))
   await postEmptyForm(
     deps,
@@ -1076,7 +1074,7 @@ async function refreshConnectionToken(
     return requiredString(payload, 'accessToken', 'Stored resource connection')
   }
   const refreshToken = requiredString(payload, 'refreshToken', 'Stored resource connection')
-  const clientSecret = await openAuthorizationClientSecret(deps, authorization)
+  const clientSecret = authorizationClientSecret(authorization)
   const token = await postForm(
     deps,
     authorization.tokenEndpoint,
@@ -1203,22 +1201,16 @@ async function findExternalAuthorization(
     registrationMode: connector.registrationMode ?? 'manual',
     clientId: connector.clientId,
     encryptedClientSecret: connector.clientSecret,
-    clientSecretContext: connector.clientSecretContext ?? undefined,
     encryptedRegistrationAccessToken: null,
     metadata: connector.providerMetadata ?? {},
     status: connector.enabled ? 'active' : 'invalid',
     createdAt: connector.createdAt,
     updatedAt: connector.updatedAt,
-    resolvedClientSecret: connector.clientSecret,
   }
 }
 
-function openAuthorizationClientSecret(deps: Deps, authorization: ResolvedExternalAuthorization) {
-  if (authorization.resolvedClientSecret) return Promise.resolve(authorization.resolvedClientSecret)
-  return deps.secrets.open(
-    authorization.encryptedClientSecret,
-    authorization.clientSecretContext ?? clientSecretContext(authorization.resourceId),
-  )
+function authorizationClientSecret(authorization: ResolvedExternalAuthorization) {
+  return authorization.encryptedClientSecret
 }
 
 async function requireEnabledResource(deps: Deps, resourceId: string) {
@@ -1443,7 +1435,7 @@ function exactScopes(left: string[], right: string[]) {
 function toExternalAuthorization(record: ExternalResourceAuthorizationRecord) {
   return {
     resourceId: record.resourceId,
-    connectorId: record.connectorId ?? record.resourceId,
+    connectorId: record.connectorId,
     resourceUrl: record.resourceUrl,
     issuer: record.issuer,
     authorizationEndpoint: record.authorizationEndpoint,
@@ -1611,10 +1603,6 @@ function redactSubject(subject: string) {
 
 function resourceConnectionCallbackUrl(origin: string) {
   return `${origin.replace(/\/$/, '')}/api/account-connections/oauth/callback`
-}
-
-function clientSecretContext(resourceId: string) {
-  return `external-resource:${resourceId}:client-secret`
 }
 
 function connectionIntentContext(intentId: string) {

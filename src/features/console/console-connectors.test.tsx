@@ -40,6 +40,185 @@ import {
 } from './console.test-utils'
 
 describe('admin console connectors', () => {
+  it('creates a reusable manual OIDC connector [spec: admin-console/admin-oidc-connector-inventory]', async () => {
+    const requests: Array<{ method: string; body: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/connectors' && init?.method === 'POST') {
+        requests.push({ method: init.method, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(
+          jsonResponse(
+            {
+              ...connector,
+              id: 'connector-oidc',
+              slug: 'projects',
+              providerType: 'generic_oauth',
+              providerId: 'projects',
+              displayName: 'Projects OIDC',
+              loginEnabled: true,
+              issuer: 'https://idp.example.com',
+              registrationMode: 'manual',
+            },
+            201,
+          ),
+        )
+      }
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+    expect(await screen.findByText('No OIDC connectors yet')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add OIDC connector' }))
+    expect(await screen.findByRole('heading', { name: 'New OIDC connector' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Projects OIDC' } })
+    fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'projects' } })
+    fireEvent.change(screen.getByLabelText('OIDC issuer'), { target: { value: 'https://idp.example.com' } })
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-1' } })
+    fireEvent.change(screen.getByLabelText('Client Secret'), { target: { value: 'secret-1' } })
+    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'openid profile' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          method: 'POST',
+          body: expect.objectContaining({
+            slug: 'projects',
+            providerId: 'projects',
+            providerType: 'generic_oauth',
+            displayName: 'Projects OIDC',
+            issuer: 'https://idp.example.com',
+            registrationMode: 'manual',
+            clientId: 'client-1',
+            clientSecret: 'secret-1',
+            loginEnabled: true,
+            scopes: ['openid', 'profile'],
+          }),
+        },
+      ]),
+    )
+  })
+
+  it('creates an OIDC connector with dynamic registration', async () => {
+    const requests: unknown[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/connectors' && init?.method === 'POST') {
+        requests.push(JSON.parse(String(init.body)))
+        return Promise.resolve(
+          jsonResponse(
+            {
+              ...connector,
+              id: 'connector-dynamic',
+              slug: 'dynamic-oidc',
+              providerType: 'generic_oauth',
+              providerId: 'dynamic-oidc',
+              displayName: 'Dynamic OIDC',
+              issuer: 'https://dynamic.example.com',
+              registrationMode: 'dynamic',
+            },
+            201,
+          ),
+        )
+      }
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add OIDC connector' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Dynamic OIDC' } })
+    fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: 'dynamic-oidc' } })
+    fireEvent.change(screen.getByLabelText('Client registration'), { target: { value: 'dynamic' } })
+    fireEvent.change(screen.getByLabelText('OIDC issuer'), { target: { value: 'https://dynamic.example.com' } })
+    expect(screen.queryByLabelText('Client ID')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        expect.objectContaining({
+          providerId: 'dynamic-oidc',
+          registrationMode: 'dynamic',
+          issuer: 'https://dynamic.example.com',
+        }),
+      ]),
+    )
+  })
+
+  it('updates and deletes an existing OIDC connector', async () => {
+    const oidcConnector = {
+      ...connector,
+      id: 'connector-oidc',
+      slug: 'projects',
+      providerType: 'generic_oauth' as const,
+      providerId: 'projects',
+      displayName: 'Projects OIDC',
+      enabled: false,
+      loginEnabled: true,
+      clientSecretConfigured: false,
+      issuer: 'https://idp.example.com',
+      registrationMode: 'manual' as const,
+    }
+    const requests: Array<{ method: string; body?: unknown }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/connectors/connector-oidc' && init?.method === 'PATCH') {
+        requests.push({ method: init.method, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse({ ...oidcConnector, enabled: true, loginEnabled: false }))
+      }
+      if (url === '/api/connectors/connector-oidc' && init?.method === 'DELETE') {
+        requests.push({ method: init.method })
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url === '/api/connectors/connector-oidc') return Promise.resolve(jsonResponse(oidcConnector))
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [oidcConnector], pagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+    const row = await screen.findByRole('button', { name: /Projects OIDC/ })
+    fireEvent.keyDown(row, { key: 'Enter' })
+    expect(await screen.findByRole('heading', { name: 'Projects OIDC' })).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false))
+    expect(screen.getByLabelText('OIDC issuer')).toHaveProperty('readOnly', true)
+    fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow hosted login' }))
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        method: 'PATCH',
+        body: expect.objectContaining({
+          enabled: true,
+          loginEnabled: false,
+          clientId: 'client-2',
+        }),
+      }),
+    )
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Projects OIDC' })).toBeNull())
+    fireEvent.keyDown(screen.getByRole('button', { name: /Projects OIDC/ }), { key: ' ' })
+    expect(await screen.findByRole('heading', { name: 'Projects OIDC' })).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', false))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE' }))
+  })
+
   it('shows connector form validation errors', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)

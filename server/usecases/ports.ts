@@ -368,7 +368,7 @@ export interface AgentAuditRepository {
 
 export interface ExternalResourceAuthorizationRecord {
   resourceId: string
-  connectorId?: string
+  connectorId: string
   resourceUrl: string
   issuer: string
   authorizationEndpoint: string
@@ -380,7 +380,6 @@ export interface ExternalResourceAuthorizationRecord {
   registrationMode: string
   clientId: string
   encryptedClientSecret: string
-  clientSecretContext?: string
   encryptedRegistrationAccessToken: string | null
   metadata: Record<string, unknown>
   status: string

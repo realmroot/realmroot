@@ -207,6 +207,30 @@ describe('helpers-create dialogs', () => {
     expect(onSubmit).toHaveBeenCalled()
   })
 
+  it.each([
+    [new Error('Invalid widget'), 'Invalid widget'],
+    ['invalid widget', 'Invalid form input.'],
+  ])('surfaces simple create validation failures', (failure, message) => {
+    render(
+      <SimpleCreateDialog
+        error={null}
+        fields={[['name', 'Name']]}
+        onClose={vi.fn()}
+        onSubmit={() => {
+          throw failure
+        }}
+        open
+        pending={false}
+        title="Create thing"
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Widget' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByText(message)).toBeTruthy()
+    cleanup()
+  })
+
   it('renders the confirm dialog pending state', () => {
     render(
       <ConfirmDialog

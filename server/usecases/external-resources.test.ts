@@ -48,6 +48,25 @@ import { describe, expect, it, vi } from 'vitest'
 const now = new Date('2026-07-29T12:00:00.000Z')
 
 describe('external API resource authorization', () => {
+  it('rejects an archived external resource connection intent', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({
+      ...resource(),
+      archivedAt: now.toISOString(),
+    })
+
+    await expect(
+      createResourceConnectionIntent(
+        deps,
+        'resource-1',
+        { owner: { type: 'user' }, scopes: [] },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Enabled external API resource was not found.')
+  })
+
   it('validates a reusable OIDC connector when creating an external resource [spec: agent-identity/external-api-resource-registration]', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
@@ -679,6 +698,22 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('defaults optional connector authorization metadata', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        registrationMode: null,
+        clientSecretContext: 'connector:connector-1:client-secret',
+        providerMetadata: null,
+      }),
+    )
+
+    await expect(getExternalResourceAuthorization(deps, 'resource-1')).resolves.toMatchObject({
+      registrationMode: 'manual',
+    })
+  })
+
   it('creates and revokes account connections, including organization control', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
@@ -775,6 +810,14 @@ describe('external API resource authorization', () => {
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).rejects.toThrow('A resource home space cannot have more than one active account connection.')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(nativeResource())
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toEqual({
+      items: [],
+      pagination: expect.objectContaining({ total: 0 }),
+    })
   })
 
   it('enforces first-access connection context boundaries', async () => {
@@ -1822,6 +1865,9 @@ describe('external API resource authorization', () => {
     ])
     await revokeAgentResourceAccess(deps, 'identity-1')
     expect(deps.externalResources.revokeTokenLease).toHaveBeenCalledWith('lease-native', expect.any(Date))
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(null)
+    await expect(revokeAgentResourceAccess(deps, 'identity-1')).rejects.toThrow('API resource was not found.')
   })
 
   it('rejects unknown grants and missing host bindings in account views', async () => {

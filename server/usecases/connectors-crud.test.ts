@@ -1,5 +1,12 @@
 import type { ConnectorRow } from '@server/adapters/repos/connectors'
-import { connectorReadiness, createConnector, loadAuthConnectorConfig } from '@server/usecases/connectors'
+import {
+  connectorReadiness,
+  createConnector,
+  deleteConnector,
+  getConnector,
+  loadAuthConnectorConfig,
+  updateConnector,
+} from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
@@ -251,7 +258,266 @@ describe('service.test 2', () => {
       }),
     )
   })
+
+  it.each([
+    ['a missing issuer', { issuer: undefined }, undefined, 'OIDC connectors require an issuer.'],
+    [
+      'an issuer query',
+      { issuer: 'https://idp.example.com?tenant=one' },
+      undefined,
+      'OIDC issuer cannot contain a query or fragment.',
+    ],
+    ['an unsafe issuer', { issuer: 'http://idp.example.com' }, undefined, 'OIDC issuer must use HTTPS'],
+    [
+      'failed discovery',
+      { issuer: 'https://idp.example.com' },
+      new Response(null, { status: 503 }),
+      'OIDC discovery failed.',
+    ],
+    [
+      'invalid discovery JSON',
+      { issuer: 'https://idp.example.com' },
+      new Response('invalid', { headers: { 'content-type': 'application/json' } }),
+      'OIDC discovery response is invalid.',
+    ],
+    [
+      'a mismatched discovery issuer',
+      { issuer: 'https://idp.example.com' },
+      Response.json({
+        ...discoveryMetadata(),
+        issuer: 'https://other.example.com',
+      }),
+      'OIDC discovery issuer does not match',
+    ],
+  ])('rejects OIDC connector creation with %s', async (_label, input, discovery, message) => {
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch: vi.fn().mockResolvedValue(discovery) },
+    } as unknown as Deps
+
+    await expect(
+      createConnector(deps, {
+        providerType: 'generic_oauth',
+        providerId: 'projects',
+        displayName: 'Projects',
+        clientId: 'client-1',
+        clientSecret: 'secret-1',
+        ...input,
+      }),
+    ).rejects.toThrow(message)
+  })
+
+  it.each([
+    ['client ID', { clientSecret: 'secret-1' }],
+    ['client secret', { clientId: 'client-1' }],
+  ])('requires a %s for manual OIDC registration', async (_label, credentials) => {
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch: vi.fn().mockResolvedValue(Response.json(discoveryMetadata())) },
+    } as unknown as Deps
+
+    await expect(
+      createConnector(deps, {
+        providerType: 'generic_oauth',
+        providerId: 'projects',
+        displayName: 'Projects',
+        issuer: 'https://idp.example.com',
+        registrationMode: 'manual',
+        ...credentials,
+      }),
+    ).rejects.toThrow('Manual OIDC registration requires client credentials.')
+  })
+
+  it.each([
+    [
+      'without provider registration support',
+      discoveryMetadata(),
+      'https://auth.example.com',
+      undefined,
+      'OIDC provider does not support dynamic client registration.',
+    ],
+    [
+      'without a callback origin',
+      discoveryMetadata({ registration_endpoint: 'https://idp.example.com/register' }),
+      undefined,
+      undefined,
+      'Dynamic OIDC registration requires the configured base URL.',
+    ],
+    [
+      'when registration fails',
+      discoveryMetadata({ registration_endpoint: 'https://idp.example.com/register' }),
+      'https://auth.example.com',
+      new Response(null, { status: 503 }),
+      'Dynamic OIDC client registration failed.',
+    ],
+    [
+      'when registration omits the client ID',
+      discoveryMetadata({ registration_endpoint: 'https://idp.example.com/register' }),
+      'https://auth.example.com',
+      Response.json({ client_secret: 'secret-1' }),
+      'Dynamic OIDC client registration response requires client_id.',
+    ],
+  ])('rejects dynamic OIDC registration %s', async (_label, discovery, callbackOrigin, registration, message) => {
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json(discovery))
+    if (registration) fetch.mockResolvedValueOnce(registration)
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch },
+    } as unknown as Deps
+
+    await expect(
+      createConnector(
+        deps,
+        {
+          providerType: 'generic_oauth',
+          providerId: 'projects',
+          displayName: 'Projects',
+          issuer: 'https://idp.example.com',
+          registrationMode: 'dynamic',
+        },
+        callbackOrigin,
+      ),
+    ).rejects.toThrow(message)
+  })
+
+  it('stores optional OIDC discovery and dynamic registration metadata', async () => {
+    const discovery = discoveryMetadata({
+      registration_endpoint: 'https://idp.example.com/register',
+      revocation_endpoint: 'https://idp.example.com/revoke',
+    })
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: {
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce(Response.json(discovery))
+          .mockResolvedValueOnce(
+            Response.json({
+              client_id: 'registered-client',
+              client_secret: 'registered-secret',
+              registration_access_token: 'registration-token',
+            }),
+          ),
+      },
+    } as unknown as Deps
+
+    await createConnector(
+      deps,
+      {
+        providerType: 'generic_oauth',
+        providerId: 'projects',
+        displayName: 'Projects',
+        issuer: 'https://idp.example.com',
+        registrationMode: 'dynamic',
+      },
+      'https://auth.example.com/',
+    )
+
+    expect(deps.connectors.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        revocationEndpoint: 'https://idp.example.com/revoke',
+        registrationAccessToken: 'registration-token',
+      }),
+    )
+  })
+
+  it('creates a manually registered OIDC connector from discovery metadata', async () => {
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch: vi.fn().mockResolvedValue(Response.json(discoveryMetadata())) },
+    } as unknown as Deps
+
+    await createConnector(deps, {
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects',
+      issuer: 'https://idp.example.com',
+      registrationMode: 'manual',
+      clientId: 'client-1',
+      clientSecret: 'secret-1',
+    })
+
+    expect(deps.connectors.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: 'client-1',
+        clientSecret: 'secret-1',
+        registrationMode: 'manual',
+      }),
+    )
+  })
+
+  it('surfaces missing connector CRUD records', async () => {
+    const missing = { connectors: createRepository() } as unknown as Deps
+    await expect(getConnector(missing, 'missing')).rejects.toThrow('Connector not found.')
+    await expect(connectorReadiness(missing, 'missing')).rejects.toThrow('Connector not found.')
+    await expect(updateConnector(missing, 'missing', { enabled: false })).rejects.toThrow('Connector not found.')
+    await expect(deleteConnector(missing, 'missing')).rejects.toThrow('Connector not found.')
+
+    const disappeared = {
+      connectors: createRepository({ byId: connector(), updateResult: null }),
+    } as unknown as Deps
+    await expect(updateConnector(disappeared, 'idp_1', { enabled: false })).rejects.toThrow('Connector not found.')
+  })
+
+  it('keeps referenced connectors from being deleted', async () => {
+    const deps = {
+      connectors: createRepository({
+        byId: connector(),
+        resourceReferenceCount: 2,
+      }),
+    } as unknown as Deps
+
+    await expect(deleteConnector(deps, 'idp_1')).rejects.toMatchObject({
+      status: 409,
+      details: { apiResources: 2 },
+    })
+    expect(deps.connectors.delete).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['client ID', { clientId: null }, 'Enabled connector requires clientId.'],
+    ['issuer', { issuer: null }, 'Enabled OIDC connector requires issuer discovery.'],
+    [
+      'authorization endpoint',
+      { authorizationEndpoint: null },
+      'Enabled OIDC connector requires discovered authorization, token, and userinfo endpoints.',
+    ],
+    [
+      'token endpoint',
+      { tokenEndpoint: null },
+      'Enabled OIDC connector requires discovered authorization, token, and userinfo endpoints.',
+    ],
+    [
+      'userinfo endpoint',
+      { userInfoEndpoint: null },
+      'Enabled OIDC connector requires discovered authorization, token, and userinfo endpoints.',
+    ],
+  ])('rejects an enabled OIDC connector without its %s', async (_label, overrides, message) => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      issuer: 'https://idp.example.com',
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      ...overrides,
+    })
+    const deps = { connectors: createRepository({ byId: current }) } as unknown as Deps
+
+    await expect(updateConnector(deps, current.id, {})).rejects.toThrow(message)
+  })
 })
+
+function discoveryMetadata(overrides: Record<string, unknown> = {}) {
+  return {
+    issuer: 'https://idp.example.com',
+    authorization_endpoint: 'https://idp.example.com/authorize',
+    token_endpoint: 'https://idp.example.com/token',
+    userinfo_endpoint: 'https://idp.example.com/userinfo',
+    jwks_uri: 'https://idp.example.com/jwks',
+    ...overrides,
+  }
+}
 
 function createRepository(
   overrides: {
@@ -259,6 +525,7 @@ function createRepository(
     byId?: ConnectorRow | null
     existingProvider?: ConnectorRow | null
     createResult?: ConnectorRow
+    resourceReferenceCount?: number
     updateResult?: ConnectorRow | null
   } = {},
 ): ConnectorRepository {
@@ -267,9 +534,9 @@ function createRepository(
     listEnabled: vi.fn().mockResolvedValue(overrides.enabled ?? []),
     findById: vi.fn().mockResolvedValue(overrides.byId ?? null),
     findByProviderId: vi.fn().mockResolvedValue(overrides.existingProvider ?? null),
-    countResourceReferences: vi.fn().mockResolvedValue(0),
+    countResourceReferences: vi.fn().mockResolvedValue(overrides.resourceReferenceCount ?? 0),
     create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
-    update: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
+    update: vi.fn().mockResolvedValue(overrides.updateResult === undefined ? connector() : overrides.updateResult),
     delete: vi.fn(),
   }
 }
