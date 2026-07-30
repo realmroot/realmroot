@@ -40,6 +40,7 @@ export const managementErrorResponseSchema = z.object({
       'not_found',
       'conflict',
       'resource_in_use',
+      'bad_gateway',
       'internal_error',
     ]),
     message: z.string(),

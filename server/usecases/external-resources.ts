@@ -306,28 +306,41 @@ export async function completeResourceConnectionIntent(
   const displayName =
     optionalString(profile, 'name') ?? optionalString(profile, 'preferred_username') ?? externalSubject
   const expiresAt = tokenExpiry(token, now)
-  const connectionId = intent.id
-  const grantedScopes = scopeString(token.scope) ?? intent.scopes
-  const record: ResourceAccountConnectionRecord = {
-    id: connectionId,
+  const ownerUserId = intent.ownerOrganizationId ? null : intent.ownerUserId
+  const existing = await deps.externalResources.findConnectionByOwnerSubject({
     resourceId: intent.resourceId,
-    ownerUserId: intent.ownerOrganizationId ? null : intent.ownerUserId,
-    ownerOrganizationId: intent.ownerOrganizationId,
     externalSubject,
+    ownerUserId,
+    ownerOrganizationId: intent.ownerOrganizationId,
+  })
+  const connectionId = existing?.id ?? intent.id
+  const grantedScopes = scopeString(token.scope) ?? intent.scopes
+  const authorizationInput = {
     displayName,
     encryptedTokens: await deps.secrets.seal(
       JSON.stringify({ accessToken, refreshToken, scope: grantedScopes.join(' ') }),
       connectionTokensContext(connectionId),
     ),
     grantedScopes,
-    status: 'active',
+    status: 'active' as const,
     credentialExpiresAt: expiresAt,
     revokedAt: null,
-    createdAt: now,
     updatedAt: now,
   }
+  const connection = existing
+    ? await deps.externalResources.replaceConnectionAuthorization(existing.id, authorizationInput)
+    : await deps.externalResources.createConnection({
+        id: connectionId,
+        resourceId: intent.resourceId,
+        ownerUserId,
+        ownerOrganizationId: intent.ownerOrganizationId,
+        externalSubject,
+        ...authorizationInput,
+        createdAt: now,
+      })
+  if (!connection) throw notFound('Resource account connection was not found.')
   return {
-    ...toResourceConnection(await deps.externalResources.createConnection(record)),
+    ...toResourceConnection(connection),
     returnTo: intent.returnTo,
   }
 }

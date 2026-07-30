@@ -1,5 +1,6 @@
 import {
   ApiError,
+  badGateway,
   badRequest,
   forbidden,
   notFound,
@@ -23,6 +24,12 @@ describe('API error boundary helpers', () => {
       message: 'In use.',
       details: { agentAccessGrants: 1 },
     })
+    expect(badGateway('Unavailable.', { stage: 'resource' })).toMatchObject({
+      status: 502,
+      code: 'bad_gateway',
+      message: 'Unavailable.',
+      details: { stage: 'resource' },
+    })
 
     const response = handleApiError(new ApiError(400, 'bad_request', 'Invalid request.'), context())
 
@@ -38,6 +45,7 @@ describe('API error boundary helpers', () => {
     await expectError(new HTTPException(403, { message: 'No access.' }), 403, 'forbidden')
     await expectError(new HTTPException(404, { message: 'Missing.' }), 404, 'not_found')
     await expectError(new HTTPException(409, { message: 'Conflict.' }), 409, 'conflict')
+    await expectError(new HTTPException(502, { message: 'Upstream unavailable.' }), 502, 'bad_gateway')
     await expectError(new Error('Unexpected.'), 500, 'internal_error', 'Internal server error.')
   })
 

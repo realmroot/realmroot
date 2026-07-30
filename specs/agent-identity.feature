@@ -146,9 +146,10 @@ Feature: Agent identity and external API authorization
 
     @entrypoint:product-ui @journey:api-resource-contract-validation
     Scenario: Enabled API resources require a discoverable OpenAPI contract
-      Given an API resource URL does not return a successful service-desc response
+      Given an API resource URL cannot be reached or does not return a successful service-desc response
       When an administrator creates or enables the API resource
       Then Realmroot rejects the request without enabling the resource
+      And a network failure identifies whether the resource or its OpenAPI document was unreachable
       But the administrator can save the API resource as a disabled draft
       When the administrator enables the draft or changes an enabled resource URL
       Then Realmroot validates the exact resource URL before saving the change
@@ -286,6 +287,14 @@ Feature: Agent identity and external API authorization
       And never exposes the refresh credential through an API, audit event, or error
       And binds that connection to the request and grant
       And the Agent can obtain a DPoP-bound target access token
+
+    @entrypoint:product-ui @journey:resource-account-reauthorization
+    Scenario: A controller reauthorizes a connected external resource account
+      Given the controller's home space already has an account connection for an external API resource
+      When OAuth returns the same external subject with replacement credentials and scopes
+      Then Realmroot preserves the account connection identity
+      And replaces its encrypted credentials, scopes, display name, and expiry
+      And restores the connection when it was previously revoked
 
     @entrypoint:agent-protocol @journey:agent-resource-discovery
     Scenario: An Agent discovers accounts and requests exact resource authority

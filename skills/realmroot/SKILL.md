@@ -18,6 +18,11 @@ ordinary public resources.
 
 - Be **discovery-driven**: select exact IDs, URLs, scopes, accounts, and
   operations from API responses or published metadata.
+- Keep **API identity separate from request context**: one Restish API name
+  identifies one logical service. Use profiles for every environment, deployment,
+  account, tenant, or credential context. Never encode a context such as
+  `local`, `staging`, or `production` in either the Realmroot API name or a
+  registered resource service's API name.
 - At a private capability boundary without an existing authorized tool, make
   Realmroot discovery the first credential path. Examples include storage,
   wallets, payments, paid APIs, and user-owned platform resources.

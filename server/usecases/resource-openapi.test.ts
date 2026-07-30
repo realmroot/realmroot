@@ -161,6 +161,39 @@ paths:
     expect(deps.externalHttp.fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('identifies which OpenAPI discovery request lost its network connection [spec: agent-identity/api-resource-contract-validation]', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockRejectedValueOnce(new Error('Network connection lost.'))
+
+    await expect(readDeclaredScopes(deps, 'https://orders.example.com/api')).rejects.toMatchObject({
+      status: 502,
+      code: 'bad_gateway',
+      message: 'Business resource could not be reached during OpenAPI discovery.',
+      details: {
+        stage: 'resource',
+        url: 'https://orders.example.com/api',
+      },
+    })
+
+    vi.mocked(deps.externalHttp.fetch)
+      .mockResolvedValueOnce(
+        new Response(null, {
+          headers: { link: '</openapi.json>; rel="service-desc"' },
+        }),
+      )
+      .mockRejectedValueOnce(new Error('Network connection lost.'))
+
+    await expect(readDeclaredScopes(deps, 'https://orders.example.com/api')).rejects.toMatchObject({
+      status: 502,
+      code: 'bad_gateway',
+      message: 'Business resource OpenAPI document could not be reached.',
+      details: {
+        stage: 'openapi_document',
+        url: 'https://orders.example.com/openapi.json',
+      },
+    })
+  })
+
   it.each([
     ['https://api.example.com', true],
     ['http://localhost:4100/api', true],
