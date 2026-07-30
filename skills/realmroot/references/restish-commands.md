@@ -1,91 +1,44 @@
-# Restish Command Reference
+# Registered API Resource Commands
 
-Realmroot publishes one OpenAPI 3.1 contract:
-
-```text
-API base: AUTH_ORIGIN/api
-contract: AUTH_ORIGIN/api/openapi.json
-```
-
-The contract contains `get-current-agent` and every scope-gated resource
-operation. This reference covers only the Agent's self-service API Resource
-workflow. For explicit tenant-administration work, read `management.md`.
+Use this reference after Step 1 in `SKILL.md`. Realmroot publishes its generated
+operations from `AUTH_ORIGIN/api/openapi.json`.
 
 ## Contents
 
-- [Connect](#connect)
-- [Generated operations](#generated-operations)
-- [API Resource access](#api-resource-access)
+- [Discover the resource](#discover-the-resource)
+- [Request access](#request-access)
+- [Issue target credentials](#issue-target-credentials)
+- [Invoke the target](#invoke-the-target)
+- [Diagnostics](#diagnostics)
 
-## Connect
+## Discover The Resource
 
-These instructions require Restish v2 and the Realmroot authentication adapter
-installed as described in `../SKILL.md`.
-
-```bash
-AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://id.realmroot.dev}}"
-API_NAME="${API_NAME:-realmroot}"
-restish --version
-restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --replace --yes
-restish "$API_NAME" get-current-agent -o json
-```
-
-The first `get-current-agent` may wait for controller approval. It is both the
-authentication trigger and the original API operation; do not run a separate
-login command.
-
-Refresh an existing connection after a server upgrade:
-
-```bash
-restish api sync "$API_NAME"
-```
-
-Add another isolated Restish profile without creating another API name:
-
-```bash
-PROFILE_NAME=staging
-PROFILE_ORIGIN=https://auth.example.com
-restish api set "$API_NAME" \
-  "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
-restish api inspect "$API_NAME"
-restish -p "$PROFILE_NAME" "$API_NAME" get-current-agent -o json
-```
-
-The new profile has its own credential configuration. Do not copy or inherit it
-from `default`; invoke the profile's first protected operation explicitly. The
-adapter establishes or reuses stable Agent state according to runtime and
-issuer, never according to profile name.
-
-## Generated Operations
-
-Use commands generated from OpenAPI `operationId` values:
-
-```bash
-restish "$API_NAME" --help
-restish "$API_NAME" get-current-agent -o json
-```
-
-Use `restish doctor api "$API_NAME"` for discovery problems and
-`restish api auth inspect "$API_NAME" --redact` for shareable auth diagnostics.
-
-## API Resource Access
-
-The Agent's own identity is sufficient for this workflow. Do not request
-`applications:read` or `applications:write`.
-
-Discover the exact API resource, authorization mode, protected resource URL,
-requestable scopes, linked accounts where applicable, and any grants:
+List the Agent-visible resources and existing grants:
 
 ```bash
 restish "$API_NAME" list-agent-api-resources -o json
 restish "$API_NAME" list-agent-access-grants -o json
 ```
 
-Use the exact resource ID, `resourceUrl`, scope values, and connection ID from
-the discovery response. Do not infer a resource URL from its name, construct a
-target path, or invent scope values.
+Select the exact `apiResourceId`, `authorizationMode`, `resourceUrl`, requested
+scope values, and—only for `external`—`accountConnectionId` from the response.
+An external resource without a linked account requires the controller to
+connect one at `$AUTH_ORIGIN/connections`. A native resource has no account
+connection.
 
-For an `external` resource, include the exact connected target account:
+When several resources or accounts satisfy the request and the user's task does
+not determine one, present their discovered identifiers and labels for
+selection. Reuse an active grant only when its resource, account, and scope set
+exactly match the selected request; otherwise create a new least-privilege
+request.
+
+Discovery is complete when every value needed by the access request is present
+in a response. Tenant-management capabilities are outside this branch.
+
+## Request Access
+
+When no exact active grant exists, request access. For an `external` resource,
+include the discovered account:
 
 ```bash
 restish "$API_NAME" create-agent-access-request --rsh-validate -o json <<'JSON'
@@ -101,7 +54,7 @@ restish "$API_NAME" create-agent-access-request --rsh-validate -o json <<'JSON'
 JSON
 ```
 
-For a `native` resource, omit the account connection:
+For a `native` resource, use a request without an account:
 
 ```bash
 restish "$API_NAME" create-agent-access-request --rsh-validate -o json <<'JSON'
@@ -116,46 +69,73 @@ restish "$API_NAME" create-agent-access-request --rsh-validate -o json <<'JSON'
 JSON
 ```
 
-When approval is required, the adapter opens the hosted controller page and
-keeps this command waiting. An approved response contains `grantId`. A denial
-or expiry exits with an error; do not reuse that approval URL. Never ask the
-controller to pre-create a grant.
+Replace every example value with an exact discovered value and request only the
+scopes needed by the user's task. The adapter opens the controller approval
+page and keeps the request waiting.
 
-If the command is interrupted after creating the request, use the returned
-request ID to resume inspection:
+If interrupted after request creation, resume inspection with the returned
+request ID:
 
 ```bash
 restish "$API_NAME" get-agent-access-request request_123 -o json
 ```
 
-Issue the target-platform token:
+Access approval is complete only when the response contains an active
+`grantId`. Denial or expiry closes that request; a retry starts with a fresh
+access request.
+
+## Issue Target Credentials
+
+Issue credentials for the exact approved grant:
 
 ```bash
 restish "$API_NAME" issue-target-access-token grant_123 -o json
 ```
 
-The adapter creates a separate grant-specific DPoP key, performs RFC 9728 and
-RFC 8414 discovery when the mode is `external`, sends the RFC 9449 proof header,
-and stores the returned token. Restish output contains safe token metadata,
-including `resourceUrl`, but not the raw access token.
+Use only the safe metadata returned by Restish.
 
-Connect the target resource directly. Its resource URL must advertise an
-OpenAPI contract with an RFC 8631 `service-desc` Link header:
+Credential issuance is complete when the response confirms the grant and exact
+`resourceUrl`. It is an intermediate result, not completion of the user's API
+task.
+
+## Invoke The Target
+
+Connect the discovered `resourceUrl`, inspect its generated operations, and run
+the operation matching the user's request:
 
 ```bash
-TARGET_API=projects
+TARGET_API=corp-projects
 RESOURCE_URL=https://api.example.com
-restish api connect "$TARGET_API" "$RESOURCE_URL" --replace --yes
+restish api connect "$TARGET_API" "$RESOURCE_URL" --yes
+restish api inspect "$TARGET_API"
 restish "$TARGET_API" --help
 restish "$TARGET_API" list-projects -o json
 ```
 
-Use the actual generated operation shown by `--help`. The plugin matches the
-request against the registered `resourceUrl`, injects `Authorization: DPoP ...`
-and a fresh proof, and refreshes reusable grants when needed. Do not use curl,
-manually discover token endpoints, expose the access token, or construct DPoP
-JWTs.
+Use a user-supplied or unused local `TARGET_API` name. Reuse an existing name
+only when inspection shows the exact `resourceUrl`; retarget it with
+`--replace` only when the user explicitly selects that change.
 
-If an `external` resource has no account connection, tell the controller to
-connect that target account at `$AUTH_ORIGIN/connections`. An empty account
-connection list is expected for `native`.
+The target publishes its OpenAPI contract through a `service-desc` link. The
+adapter authenticates requests matching the registered `resourceUrl` and
+refreshes reusable grants when needed.
+
+For collection requests, inspect the generated pagination arguments and fetch
+every page unless the user requested a bounded result.
+
+## Diagnostics
+
+Use generated operation names from:
+
+```bash
+restish "$API_NAME" --help
+```
+
+Diagnose discovery and authentication with redacted output:
+
+```bash
+restish doctor api "$API_NAME"
+restish api auth inspect "$API_NAME" --redact
+```
+
+Surface target OAuth or DPoP errors and stop at that boundary.

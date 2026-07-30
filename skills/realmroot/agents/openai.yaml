@@ -1,6 +1,6 @@
 interface:
   display_name: "Realmroot"
-  short_description: "Operate Realmroot and Agent-authorized APIs"
-  default_prompt: "Use $realmroot to establish my Agent identity and call a registered API Resource with Restish."
+  short_description: "Operate Realmroot and registered APIs"
+  default_prompt: "Use $realmroot to operate Realmroot or a registered API with discovery-driven, least-privilege access."
 policy:
   allow_implicit_invocation: true
