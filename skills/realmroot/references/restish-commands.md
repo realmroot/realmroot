@@ -23,7 +23,7 @@ These instructions require Restish v2 and the Realmroot authentication adapter
 installed as described in `../SKILL.md`.
 
 ```bash
-AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://realmroot.dev}}"
+AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://id.realmroot.dev}}"
 API_NAME="${API_NAME:-realmroot}"
 restish --version
 restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --replace --yes

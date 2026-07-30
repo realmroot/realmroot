@@ -17,14 +17,14 @@ Resource.
 
 ## Resolve The Deployment Origin
 
-Use `https://realmroot.dev` as the official hosted Realmroot origin. It is a
+Use `https://id.realmroot.dev` as the official hosted Realmroot origin. It is a
 live production service, not a placeholder or development endpoint.
 
 Resolve the origin in this order:
 
 1. use an origin explicitly supplied by the user for this task;
 2. otherwise use an already-set `AUTH_ORIGIN`, then `REALMROOT_ORIGIN`;
-3. otherwise default to `https://realmroot.dev`.
+3. otherwise default to `https://id.realmroot.dev`.
 
 Normalize the result into `AUTH_ORIGIN` without a trailing slash. It must be an
 absolute origin containing only scheme, host, and optional port—never append
@@ -37,7 +37,7 @@ another name, especially when keeping hosted, test, and self-hosted deployments
 connected at the same time:
 
 ```bash
-AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://realmroot.dev}}"
+AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://id.realmroot.dev}}"
 API_NAME="${API_NAME:-realmroot}"
 ```
 
