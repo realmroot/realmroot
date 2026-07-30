@@ -23,7 +23,7 @@ import type {
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
 import { getAgentRoleAuthorization } from './authorization'
-import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
+import { readDeclaredScopes, validateRequestedScopes, validateResourceContract } from './resource-openapi'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
@@ -51,6 +51,7 @@ export async function configureExternalResourceAuthorization(
 ) {
   const resource = await requireExternalResource(deps, resourceId)
   const resourceUrl = requireNetworkUrl(resource.resourceUrl, 'resource URL')
+  await validateResourceContract(deps, resourceUrl)
   const protectedMetadata = await fetchObject(
     deps,
     protectedResourceMetadataUrl(resourceUrl),

@@ -9,6 +9,20 @@ export interface ResourceScopeDefinition {
   description: string | null
 }
 
+export function validateResourceUrl(resourceUrl: string) {
+  const url = new URL(resourceUrl)
+  const loopback =
+    url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1' || url.hostname === '[::1]'
+  if ((url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) || url.username || url.password) {
+    throw badRequest('Resource URL must use HTTPS, except for loopback development URLs, and contain no userinfo.')
+  }
+}
+
+export async function validateResourceContract(deps: Deps, resourceUrl: string) {
+  validateResourceUrl(resourceUrl)
+  await readDeclaredScopes(deps, resourceUrl)
+}
+
 export async function validateRequestedScopes(deps: Deps, resourceUrl: string, requestedScopes: string[]) {
   if (requestedScopes.length === 0) return
   const declaredScopes = new Set((await readDeclaredScopes(deps, resourceUrl)).map((scope) => scope.value))
@@ -23,6 +37,7 @@ export async function readDeclaredScopes(deps: Deps, resourceUrl: string): Promi
       headers: { accept: 'application/json, application/problem+json, */*' },
     }),
   )
+  if (!resourceResponse.ok) throw badRequest('Business resource discovery failed.')
   const documentUrl = serviceDescriptionUrl(resourceResponse.headers.get('link'), resourceUrl)
   const documentResponse = await deps.externalHttp.fetch(
     new Request(documentUrl, {

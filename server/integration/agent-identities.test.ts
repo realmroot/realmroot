@@ -223,6 +223,7 @@ describe('Agent identity enrollment over real D1', () => {
       protocolAgentId: seeded.agentId,
     })
     const approved = await approveIntent(harness, ownerCookie, intent.id)
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch('https://api.example.com', 'repo:read')
     const resource = await createResource(harness.deps, {
       identifier: 'native-api',
       name: 'Native API',
@@ -231,7 +232,6 @@ describe('Agent identity enrollment over real D1', () => {
       authorizationMode: 'native',
       description: 'Read private code repositories',
     })
-    harness.deps.externalHttp.fetch = resourceOpenApiFetch(resource.resourceUrl, 'repo:read')
     const resourceRole = await createRole(harness.deps, {
       key: 'native-api-reader',
       name: 'Native API reader',

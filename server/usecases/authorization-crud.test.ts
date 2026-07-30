@@ -193,7 +193,11 @@ describe('authorization CRUD and assignment policy', () => {
     authorization.listResources.mockResolvedValue({ items: [resource], pagination })
     authorization.findResource.mockResolvedValue(resource)
     const externalResources = { findAuthorization: vi.fn() }
-    const deps = { authorization, externalResources } as unknown as Deps
+    const deps = {
+      authorization,
+      externalResources,
+      externalHttp: { fetch: vi.fn(resourceOpenApiFetch(resource.resourceUrl)) },
+    } as unknown as Deps
 
     await createResource(deps, {
       identifier: 'native',
@@ -239,6 +243,39 @@ describe('authorization CRUD and assignment policy', () => {
     })
     authorization.findResource.mockResolvedValue(null)
     await expect(getResource(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('validates the resource contract before enabling it [spec: agent-identity/api-resource-contract-validation]', async () => {
+    const authorization = repository()
+    authorization.createResource.mockResolvedValue(resource)
+    authorization.findResource.mockResolvedValue(resource)
+    const externalHttp = { fetch: vi.fn().mockResolvedValue(new Response('<html></html>')) }
+    const deps = {
+      authorization,
+      externalResources: { findAuthorization: vi.fn() },
+      externalHttp,
+    } as unknown as Deps
+    const input = {
+      identifier: 'projects',
+      name: 'Projects',
+      audience: resource.audience,
+      resourceUrl: resource.resourceUrl,
+    }
+
+    await expect(createResource(deps, input)).rejects.toThrow('Business resource must advertise its OpenAPI document')
+    expect(authorization.createResource).not.toHaveBeenCalled()
+
+    await expect(createResource(deps, { ...input, enabled: false })).resolves.toBe(resource)
+    expect(authorization.createResource).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }))
+    expect(externalHttp.fetch).toHaveBeenCalledTimes(1)
+
+    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toThrow(
+      'Business resource must advertise its OpenAPI document',
+    )
+    await expect(updateResource(deps, resource.id, { resourceUrl: 'https://wrong.example.com/api' })).rejects.toThrow(
+      'Business resource must advertise its OpenAPI document',
+    )
+    expect(authorization.updateResource).not.toHaveBeenCalled()
   })
 
   it('manages roles and validates immutable ownership fields', async () => {
@@ -460,5 +497,17 @@ function repository() {
     listApplicationRoleAssignments: vi.fn().mockResolvedValue([]),
     listMemberRoleAssignments: vi.fn().mockResolvedValue([]),
     listAgentRoleAssignments: vi.fn().mockResolvedValue([]),
+  }
+}
+
+function resourceOpenApiFetch(resourceUrl: string) {
+  return async (request: Request) => {
+    if (request.url === new URL(resourceUrl).toString()) {
+      return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+    }
+    if (request.url === new URL('/openapi.json', resourceUrl).toString()) {
+      return Response.json({ openapi: '3.1.0', paths: {} })
+    }
+    return new Response(null, { status: 404 })
   }
 }

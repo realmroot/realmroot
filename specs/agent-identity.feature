@@ -143,6 +143,15 @@ Feature: Agent identity and external API authorization
       And Realmroot derives every requestable scope from the OpenAPI security requirements
       And Realmroot does not store or administer a separate scope catalog
 
+    @entrypoint:product-ui @journey:api-resource-contract-validation
+    Scenario: Enabled API resources require a discoverable OpenAPI contract
+      Given an API resource URL does not return a successful service-desc response
+      When an administrator creates or enables the API resource
+      Then Realmroot rejects the request without enabling the resource
+      But the administrator can save the API resource as a disabled draft
+      When the administrator enables the draft or changes an enabled resource URL
+      Then Realmroot validates the exact resource URL before saving the change
+
     @entrypoint:agent-protocol @journey:native-api-resource-access-request
     Scenario: An Agent requests access to a native API
       Given an enabled native API resource belongs to the Agent's home space

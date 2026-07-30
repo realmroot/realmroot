@@ -53,6 +53,12 @@ describe('external API resource authorization', () => {
     authorizationDeps(deps)
     vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      if (request.url === new URL(resource().resourceUrl).toString()) {
+        return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+      }
+      if (request.url === new URL('/openapi.json', resource().resourceUrl).toString()) {
+        return Response.json({ openapi: '3.1.0', paths: {} })
+      }
       if (request.url.endsWith('/.well-known/oauth-protected-resource/api')) {
         return Response.json({
           resource: 'https://projects.example.com/api',
@@ -1028,10 +1034,21 @@ describe('external API resource authorization', () => {
       authorizationDeps(deps)
       vi.mocked(deps.authorization.findResource).mockResolvedValue(configuredResource)
       vi.mocked(deps.externalResources.upsertAuthorization).mockImplementation(async (record) => record)
-      vi.mocked(deps.externalHttp.fetch)
-        .mockResolvedValueOnce(protectedResponse ?? Response.json(protectedBody))
-        .mockResolvedValueOnce(serverResponse ?? Response.json(serverBody))
-      if (registrationResponse) vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(registrationResponse)
+      const protocolResponses = [
+        protectedResponse ?? Response.json(protectedBody),
+        serverResponse ?? Response.json(serverBody),
+        ...(registrationResponse ? [registrationResponse] : []),
+      ]
+      vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+        const resourceUrl = configuredResource?.resourceUrl ?? resource().resourceUrl
+        if (request.url === new URL(resourceUrl).toString()) {
+          return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+        }
+        if (request.url === new URL('/openapi.json', resourceUrl).toString()) {
+          return Response.json({ openapi: '3.1.0', paths: {} })
+        }
+        return protocolResponses.shift() ?? new Response(null, { status: 404 })
+      })
       return configureExternalResourceAuthorization(deps, 'resource-1', input, 'https://auth.example.com/')
     }
 

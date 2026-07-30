@@ -1,5 +1,10 @@
 import { createTestDeps } from '@server/http/test-deps'
-import { extractResourceScopes, readDeclaredScopes, validateRequestedScopes } from '@server/usecases/resource-openapi'
+import {
+  extractResourceScopes,
+  readDeclaredScopes,
+  validateRequestedScopes,
+  validateResourceUrl,
+} from '@server/usecases/resource-openapi'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('business resource OpenAPI scope discovery', () => {
@@ -8,7 +13,6 @@ describe('business resource OpenAPI scope discovery', () => {
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
       if (request.url === 'https://orders.example.com/') {
         return new Response(null, {
-          status: 401,
           headers: {
             link: '</openapi.yaml>; rel="service-desc"; type="application/yaml"',
           },
@@ -91,9 +95,7 @@ paths:
     ['</openapi.json>; rel="alternate"', 'Business resource must advertise its OpenAPI document'],
   ])('requires a service-desc link (%s)', async (link, message) => {
     const deps = createTestDeps()
-    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
-      new Response(null, { status: 401, headers: link ? { link } : undefined }),
-    )
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(new Response(null, { headers: link ? { link } : undefined }))
 
     await expect(readDeclaredScopes(deps, 'https://orders.example.com/api')).rejects.toThrow(message)
   })
@@ -103,7 +105,6 @@ paths:
     vi.mocked(deps.externalHttp.fetch)
       .mockResolvedValueOnce(
         new Response(null, {
-          status: 401,
           headers: { link: '</other>; rel=alternate, <openapi.json>; rel=service-desc' },
         }),
       )
@@ -143,6 +144,35 @@ paths:
       { value: 'orders:read', description: '  Read orders  ' },
     ])
     expect(vi.mocked(deps.externalHttp.fetch).mock.calls[1]![0].url).toBe('https://orders.example.com/api/openapi.json')
+  })
+
+  it('requires a successful response from the exact resource URL [spec: agent-identity/api-resource-contract-validation]', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockResolvedValue(
+      new Response(null, {
+        status: 404,
+        headers: { link: '</openapi.json>; rel="service-desc"' },
+      }),
+    )
+
+    await expect(readDeclaredScopes(deps, 'https://orders.example.com/api')).rejects.toThrow(
+      'Business resource discovery failed.',
+    )
+    expect(deps.externalHttp.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['https://api.example.com', true],
+    ['http://localhost:4100/api', true],
+    ['http://127.0.0.1:4100/api', true],
+    ['http://[::1]:4100/api', true],
+    ['http://api.example.com', false],
+    ['ftp://api.example.com', false],
+    ['https://user:password@api.example.com', false],
+  ])('validates protected resource URL boundaries (%s)', (resourceUrl, valid) => {
+    const validate = () => validateResourceUrl(resourceUrl)
+    if (valid) expect(validate).not.toThrow()
+    else expect(validate).toThrow('Resource URL must use HTTPS')
   })
 
   it('surfaces document fetch and parsing failures', async () => {

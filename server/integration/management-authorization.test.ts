@@ -23,6 +23,7 @@ describe('authorization management over real D1', () => {
 
   beforeEach(async () => {
     harness = await createHarness()
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch
   })
 
   it('rejects anonymous reads with 401', async () => {
@@ -52,6 +53,35 @@ describe('authorization management over real D1', () => {
       body: JSON.stringify({ name: 'missing identifier' }),
     })
     expect(response.status).toBe(400)
+  })
+
+  it('rejects an undiscoverable enabled resource but saves a disabled draft', async () => {
+    const cookie = await signInAdmin(harness)
+    harness.deps.externalHttp.fetch = async () => new Response('<html></html>')
+    const input = {
+      identifier: 'projects-api',
+      name: 'Projects API',
+      audience: 'https://projects.example.com/api',
+      resourceUrl: 'https://projects.example.com/api',
+    }
+
+    const enabled = await harness.request('/api/api-resources', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify(input),
+    })
+    expect(enabled.status).toBe(400)
+
+    const draft = await postJson(harness, cookie, '/api/api-resources', { ...input, enabled: false })
+    const resource = (await draft.json()) as { id: string; enabled: boolean }
+    expect(resource.enabled).toBe(false)
+
+    const enable = await harness.request(`/api/api-resources/${resource.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ enabled: true }),
+    })
+    expect(enable.status).toBe(400)
   })
 
   it('requires authorization reconfiguration when an external resource URL changes [spec: agent-identity/external-api-resource-reconfiguration]', async () => {
@@ -278,3 +308,10 @@ describe('authorization management over real D1', () => {
     )
   })
 })
+
+async function resourceOpenApiFetch(request: Request) {
+  if (new URL(request.url).pathname.endsWith('/openapi.json')) {
+    return Response.json({ openapi: '3.1.0', paths: {} })
+  }
+  return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+}

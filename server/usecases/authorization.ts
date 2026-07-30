@@ -7,7 +7,11 @@ import {
 } from '@server/usecases/authorization-utils'
 import type { Deps } from '@server/usecases/deps'
 import type { RoleAssignmentScope } from '@server/usecases/ports'
-import { validateRequestedScopes } from '@server/usecases/resource-openapi'
+import {
+  validateRequestedScopes,
+  validateResourceContract,
+  validateResourceUrl,
+} from '@server/usecases/resource-openapi'
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
 
@@ -121,16 +125,20 @@ export async function cancelInvitation(deps: Deps, organizationId: string, id: s
   return deps.authorization.cancelInvitation(id)
 }
 
-export function createResource(deps: Deps, input: CreateApiResourceRequest) {
+export async function createResource(deps: Deps, input: CreateApiResourceRequest) {
+  const authorizationMode = input.authorizationMode ?? 'native'
+  const enabled = authorizationMode === 'external' ? false : (input.enabled ?? true)
+  validateResourceUrl(input.resourceUrl)
+  if (enabled) await validateResourceContract(deps, input.resourceUrl)
   return deps.authorization.createResource({
     id: createId('res'),
     identifier: input.identifier,
     name: input.name,
     audience: input.audience,
     resourceUrl: input.resourceUrl,
-    authorizationMode: input.authorizationMode ?? 'native',
+    authorizationMode,
     description: input.description ?? null,
-    enabled: (input.authorizationMode ?? 'native') === 'external' ? false : (input.enabled ?? true),
+    enabled,
   })
 }
 
@@ -148,11 +156,16 @@ export async function getResource(deps: Deps, id: string) {
 
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
   const resource = await getResource(deps, id)
+  if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (resource.authorizationMode === 'external' && input.enabled === true) {
     const authorization = await deps.externalResources.findAuthorization(id)
     if (authorization?.status !== 'active') {
       throw badRequest('External API resource authorization must be configured before enabling the resource.')
     }
+  }
+  const enabled = input.enabled ?? resource.enabled
+  if (enabled && (input.enabled === true || input.resourceUrl !== undefined)) {
+    await validateResourceContract(deps, input.resourceUrl ?? resource.resourceUrl)
   }
   await deps.authorization.updateResource(id, input)
   return getResource(deps, id)
