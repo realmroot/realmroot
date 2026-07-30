@@ -157,6 +157,14 @@ Feature: Agent identity and external API authorization
       When an authorized controller approves the request
       Then Realmroot creates the same access-grant resource used for external APIs
 
+    @entrypoint:agent-protocol @journey:agent-resource-discovery-isolation
+    Scenario: An unavailable API resource does not block resource discovery
+      Given multiple enabled API resources are visible to an Agent
+      And one resource cannot publish its current OpenAPI contract
+      When the Agent lists available resources
+      Then Realmroot returns the resource with unavailable status and no requestable scopes
+      And returns every available resource with available status and its current requestable scopes
+
     @entrypoint:agent-protocol @journey:agent-resource-access-without-role
     Scenario: An Agent requests resource access without a role
       Given an enabled API resource publishes the requested scope in its OpenAPI contract

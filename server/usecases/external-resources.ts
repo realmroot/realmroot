@@ -421,6 +421,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
     if (!resource?.enabled || (resource.authorizationMode === 'external' && authorization?.status !== 'active')) {
       continue
     }
+    const scopes = await discoverAgentResourceScopes(deps, resource.resourceUrl)
     resources.push({
       id: resource.id,
       identifier: resource.identifier,
@@ -428,7 +429,8 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       audience: resource.audience,
       resourceUrl: resource.resourceUrl,
       authorizationMode: resource.authorizationMode,
-      scopes: await readDeclaredScopes(deps, resource.resourceUrl),
+      status: scopes ? 'available' : 'unavailable',
+      scopes: scopes ?? [],
       connections:
         resource.authorizationMode === 'external'
           ? activeConnections
@@ -452,6 +454,14 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
   return { resources }
 }
 
+async function discoverAgentResourceScopes(deps: Deps, resourceUrl: string) {
+  try {
+    return await readDeclaredScopes(deps, resourceUrl)
+  } catch {
+    return null
+  }
+}
+
 export async function listAgentApiResources(
   deps: Deps,
   principal: AgentResourcePrincipal,
@@ -464,6 +474,7 @@ export async function listAgentApiResources(
     audience: resource.audience,
     resourceUrl: resource.resourceUrl,
     authorizationMode: resource.authorizationMode,
+    status: resource.status,
     scopes: resource.scopes,
     accountConnections: resource.connections.map((connection) => ({
       id: connection.id,

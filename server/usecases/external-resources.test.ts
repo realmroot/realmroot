@@ -805,6 +805,40 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('[spec: agent-identity/agent-resource-discovery-isolation] marks one unavailable OpenAPI contract without hiding healthy resources', async () => {
+    const deps = createTestDeps()
+    const healthy = nativeResource()
+    const unavailable = {
+      ...nativeResource(),
+      id: 'resource-unavailable',
+      identifier: 'unavailable',
+      resourceUrl: 'https://unavailable.example.com/api',
+    }
+    Object.assign(deps.authorization, {
+      listResources: vi.fn().mockResolvedValue({
+        items: [unavailable, healthy],
+        pagination: { total: 2, limit: 100, offset: 0, hasMore: false, nextOffset: null },
+      }),
+      findResource: vi.fn().mockImplementation(async (id) => {
+        if (id === healthy.id) return healthy
+        if (id === unavailable.id) return unavailable
+        return null
+      }),
+    })
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(null)
+    vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
+    mockResourceOpenApi(deps, healthy.resourceUrl)
+
+    await expect(listAgentApiResources(deps, principal(), { limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [
+        { id: unavailable.id, status: 'unavailable', scopes: [] },
+        { id: healthy.id, status: 'available', scopes: [{ value: 'projects:read' }] },
+      ],
+      pagination: { total: 2 },
+    })
+  })
+
   it('lists, reads, denies, and approves controlled access requests', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)

@@ -112,6 +112,7 @@ export const agentApiResourcesResponseSchema = z.object({
       audience: z.string(),
       resourceUrl: z.url(),
       authorizationMode: z.enum(['native', 'external']),
+      status: z.enum(['available', 'unavailable']),
       scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       accountConnections: z.array(
         z.object({
