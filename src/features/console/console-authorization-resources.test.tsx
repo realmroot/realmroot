@@ -367,6 +367,52 @@ describe('console API resources and roles', () => {
     )
   })
 
+  it('[spec: admin-console/admin-archive-api-resource] archives and restores an API resource as disabled', async () => {
+    const requests: Array<{ url: string; method: string }> = []
+    let selected: ApiResource = { ...apiResource, authorization: null }
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = requestParts(input, init)
+      if (request.url === '/api/api-resources/resource-1' && request.method === 'GET') {
+        return jsonResponse(selected)
+      }
+      if (request.url === '/api/api-resources/resource-1/archival' && request.method === 'PUT') {
+        requests.push({ url: request.url, method: request.method })
+        selected = {
+          ...selected,
+          enabled: false,
+          archivedAt: '2026-07-30T19:00:00.000Z',
+        }
+        return jsonResponse(selected)
+      }
+      if (request.url === '/api/api-resources/resource-1/archival' && request.method === 'DELETE') {
+        requests.push({ url: request.url, method: request.method })
+        selected = { ...selected, enabled: false, archivedAt: null }
+        return jsonResponse(selected)
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    })
+
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive resource' }))
+
+    expect(await screen.findByText('Archived')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Restore resource' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Save resource' })).toBeNull()
+    expect(requests).toContainEqual({
+      url: '/api/api-resources/resource-1/archival',
+      method: 'PUT',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore resource' }))
+
+    expect(await screen.findByText('Disabled')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Archive resource' })).toBeTruthy()
+    expect(requests).toContainEqual({
+      url: '/api/api-resources/resource-1/archival',
+      method: 'DELETE',
+    })
+  })
+
   it('retries resource queries and dynamically configures an unconfigured external resource', async () => {
     let listFailed = true
     let detailFailed = true

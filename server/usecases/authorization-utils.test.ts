@@ -31,6 +31,7 @@ const resource: ApiResourceResponse = {
   authorizationMode: 'native',
   description: null,
   enabled: true,
+  archivedAt: null,
   createdAt: timestamp,
   updatedAt: timestamp,
 }

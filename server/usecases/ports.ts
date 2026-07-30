@@ -837,7 +837,7 @@ export interface RoleAssignmentRecord {
 export type OrganizationRecordInput = Omit<OrganizationResponse, 'createdAt' | 'updatedAt'>
 export type MemberRecordInput = Omit<MemberResponse, 'createdAt' | 'updatedAt'>
 export type InvitationRecordInput = Omit<InvitationResponse, 'createdAt' | 'acceptedAt' | 'revokedAt'>
-export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'createdAt' | 'updatedAt'>
+export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'archivedAt' | 'createdAt' | 'updatedAt'>
 export type RoleRecordInput = Omit<RoleResponse, 'createdAt' | 'updatedAt'>
 export type RoleAssignmentInput = AssignRoleRequest & { id: string; assignedByUserId: string | null }
 
@@ -882,6 +882,8 @@ export interface AuthorizationRepository {
   findResource(id: string): Promise<ApiResourceResponse | null>
   findResourceByResourceUrl(resourceUrl: string): Promise<ApiResourceResponse | null>
   updateResource(id: string, patch: UpdateApiResourceRequest): Promise<void>
+  archiveResource(id: string, now: Date): Promise<void>
+  restoreResource(id: string, now: Date): Promise<void>
   deleteResource(id: string): Promise<ApiResourceReferenceCounts | null>
   createRole(input: RoleRecordInput): Promise<RoleResponse>
   listRoles(pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<RoleResponse>>

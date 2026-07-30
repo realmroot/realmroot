@@ -1,5 +1,11 @@
 import { badRequest } from '@server/domain/errors'
-import { createResource, deleteResource, updateResource } from '@server/usecases/authorization'
+import {
+  archiveResource,
+  createResource,
+  deleteResource,
+  restoreResource,
+  updateResource,
+} from '@server/usecases/authorization'
 import {
   configureExternalResourceAuthorization,
   createExternalApiResource,
@@ -70,6 +76,14 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
   })
 
   return app
+    .put('/:resourceId/archival', async (c) => {
+      await archiveResource(getDeps(c), c.req.param('resourceId'))
+      return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
+    })
+    .delete('/:resourceId/archival', async (c) => {
+      await restoreResource(getDeps(c), c.req.param('resourceId'))
+      return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
+    })
 
   function requireCanonicalOrigin() {
     if (!canonicalOrigin) throw new Error('External API resource registration requires the configured base URL.')

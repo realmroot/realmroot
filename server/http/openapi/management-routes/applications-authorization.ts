@@ -210,6 +210,22 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
       409: 'The API resource has authorization history and cannot be permanently deleted.',
     },
   },
+  {
+    method: 'put',
+    path: '/api-resources/{id}/archival',
+    operationId: 'archiveApiResource',
+    summary: 'Archive API resource',
+    request: { params: idParam },
+    response: apiResourceSchema,
+  },
+  {
+    method: 'delete',
+    path: '/api-resources/{id}/archival',
+    operationId: 'restoreApiResource',
+    summary: 'Restore API resource',
+    request: { params: idParam },
+    response: apiResourceSchema,
+  },
 
   {
     method: 'get',

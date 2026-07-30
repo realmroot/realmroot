@@ -1118,6 +1118,9 @@ describe('external API resource authorization', () => {
     await expect(configure({ configuredResource: { ...resource(), authorizationMode: 'native' } })).rejects.toThrow(
       'External API resource was not found.',
     )
+    await expect(configure({ configuredResource: { ...resource(), archivedAt: now.toISOString() } })).rejects.toThrow(
+      'Archived API resources must be restored before reconfiguration.',
+    )
     await expect(
       configure({ configuredResource: { ...resource(), resourceUrl: 'http://projects.example.com/api' } }),
     ).rejects.toThrow('resource URL must use HTTPS')
@@ -1902,6 +1905,7 @@ function resource(): ApiResourceResponse {
     authorizationMode: 'external',
     description: 'Manage private projects',
     enabled: true,
+    archivedAt: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   }

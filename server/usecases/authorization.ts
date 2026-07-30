@@ -155,6 +155,7 @@ export async function getResource(deps: Deps, id: string) {
 
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
   const resource = await getResource(deps, id)
+  if (resource.archivedAt) throw badRequest('Archived API resources must be restored before updating.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (resource.authorizationMode === 'external' && input.enabled === true) {
     const authorization = await deps.externalResources.findAuthorization(id)
@@ -167,6 +168,18 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     await validateResourceContract(deps, input.resourceUrl ?? resource.resourceUrl)
   }
   await deps.authorization.updateResource(id, input)
+  return getResource(deps, id)
+}
+
+export async function archiveResource(deps: Deps, id: string) {
+  const resource = await getResource(deps, id)
+  if (!resource.archivedAt) await deps.authorization.archiveResource(id, new Date())
+  return getResource(deps, id)
+}
+
+export async function restoreResource(deps: Deps, id: string) {
+  const resource = await getResource(deps, id)
+  if (resource.archivedAt) await deps.authorization.restoreResource(id, new Date())
   return getResource(deps, id)
 }
 

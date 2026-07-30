@@ -1,0 +1,1 @@
+ALTER TABLE `api_resource` ADD `archived_at` integer;

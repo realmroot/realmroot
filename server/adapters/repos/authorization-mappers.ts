@@ -50,6 +50,7 @@ export function toResource(row: typeof apiResource.$inferSelect) {
     authorizationMode: row.authorizationMode as 'native' | 'external',
     description: row.description,
     enabled: row.enabled,
+    archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }

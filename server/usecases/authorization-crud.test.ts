@@ -1,5 +1,6 @@
 import {
   addMember,
+  archiveResource,
   assignAgentRole,
   assignApplicationRole,
   assignMemberRole,
@@ -25,6 +26,7 @@ import {
   listRoles,
   removeMember,
   replaceRoleScopes,
+  restoreResource,
   updateMember,
   updateOrganization,
   updateResource,
@@ -82,6 +84,7 @@ const resource: ApiResourceResponse = {
   authorizationMode: 'native',
   description: null,
   enabled: true,
+  archivedAt: null,
   createdAt: timestamp,
   updatedAt: timestamp,
 }
@@ -226,6 +229,32 @@ describe('authorization CRUD and assignment policy', () => {
     })
     await expect(getResource(deps, resource.id)).resolves.toBe(resource)
     await expect(updateResource(deps, resource.id, { name: 'Projects 2' })).resolves.toBe(resource)
+    authorization.archiveResource.mockResolvedValue(undefined)
+    await expect(archiveResource(deps, resource.id)).resolves.toBe(resource)
+    expect(authorization.archiveResource).toHaveBeenCalledWith(resource.id, expect.any(Date))
+
+    authorization.findResource.mockResolvedValueOnce({ ...resource, archivedAt: timestamp }).mockResolvedValue(resource)
+    authorization.restoreResource.mockResolvedValue(undefined)
+    await expect(restoreResource(deps, resource.id)).resolves.toBe(resource)
+    expect(authorization.restoreResource).toHaveBeenCalledWith(resource.id, expect.any(Date))
+
+    authorization.archiveResource.mockClear()
+    authorization.findResource.mockResolvedValue({ ...resource, archivedAt: timestamp })
+    await archiveResource(deps, resource.id)
+    expect(authorization.archiveResource).not.toHaveBeenCalled()
+
+    authorization.restoreResource.mockClear()
+    authorization.findResource.mockResolvedValue(resource)
+    await restoreResource(deps, resource.id)
+    expect(authorization.restoreResource).not.toHaveBeenCalled()
+
+    authorization.findResource.mockResolvedValue({ ...resource, archivedAt: timestamp })
+    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({
+      status: 400,
+      message: 'Archived API resources must be restored before updating.',
+    })
+
+    authorization.findResource.mockResolvedValue(resource)
     authorization.deleteResource.mockResolvedValue(null)
     await expect(deleteResource(deps, resource.id)).resolves.toBeUndefined()
 
@@ -497,6 +526,8 @@ function repository() {
     findResource: vi.fn().mockResolvedValue(null),
     findResourceByResourceUrl: vi.fn().mockResolvedValue(null),
     updateResource: vi.fn(),
+    archiveResource: vi.fn(),
+    restoreResource: vi.fn(),
     deleteResource: vi.fn(),
     createRole: vi.fn(),
     listRoles: vi.fn(),

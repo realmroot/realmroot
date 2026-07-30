@@ -51,6 +51,7 @@ export async function configureExternalResourceAuthorization(
   callbackOrigin: string,
 ) {
   const resource = await requireExternalResource(deps, resourceId)
+  if (resource.archivedAt) throw badRequest('Archived API resources must be restored before reconfiguration.')
   const record = await prepareExternalResourceAuthorization(
     deps,
     resourceId,
@@ -217,6 +218,7 @@ export async function createResourceConnectionIntent(
   callbackOrigin: string,
 ) {
   const resource = await requireExternalResource(deps, resourceId)
+  if (!resource.enabled || resource.archivedAt) throw notFound('Enabled external API resource was not found.')
   const authorization = await requireActiveExternalAuthorization(deps, resourceId)
   await requireConnectionOwnerControl(deps, input.owner, actorUserId)
   const scopes = input.scopes

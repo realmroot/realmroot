@@ -1,11 +1,13 @@
 import { type ApiResource, createApiResourceSchema } from '@shared/api/agent-api'
 import { configureExternalResourceAuthorizationRequestSchema } from '@shared/api/external-resources'
 import {
+  archiveApiResource,
   consoleQueryKeys,
   createApiResource,
   deleteApiResource,
   getApiResource,
   listApiResources,
+  restoreApiResource,
   updateApiResource,
 } from '@/lib/api/management'
 import {
@@ -171,7 +173,11 @@ export function ApiResourcesPage() {
                   {resource.authorizationMode === 'external' ? tt('External issuer') : tt('Native (Realmroot)')}
                 </TableCell>
                 <TableCell>
-                  <StatusBadge active={resource.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                  <StatusBadge
+                    active={resource.enabled && !resource.archivedAt}
+                    activeLabel="Enabled"
+                    inactiveLabel={resource.archivedAt ? 'Archived' : 'Disabled'}
+                  />
                 </TableCell>
               </TableRow>
             ))
@@ -224,6 +230,15 @@ export function ApiResourceDetailPage({
       await navigate({ href: '/console/api-resources' })
     },
   })
+  const archivalMutation = useMutation({
+    mutationFn: () => (resource?.archivedAt ? restoreApiResource(resourceId) : archiveApiResource(resourceId)),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
+      return queryClient.invalidateQueries({
+        queryKey: consoleQueryKeys.apiResources,
+      })
+    },
+  })
   useEffect(() => setSelectedTab(section), [section])
   return (
     <ResourcePage
@@ -240,7 +255,7 @@ export function ApiResourceDetailPage({
             <Undo2 data-icon="inline-start" /> {tt('Back to API resources')}{' '}
           </a>
           <ObjectHeader
-            badge={resource.enabled ? 'Enabled' : 'Disabled'}
+            badge={resource.archivedAt ? 'Archived' : resource.enabled ? 'Enabled' : 'Disabled'}
             id={resource.identifier}
             title={resource.name}
           />
@@ -265,60 +280,89 @@ export function ApiResourceDetailPage({
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <AuthorizationForm
-                      buttonLabel="Save resource"
-                      defaults={{
-                        identifier: resource.identifier,
-                        name: resource.name,
-                        resourceUrl: resource.resourceUrl,
-                        description: resource.description ?? '',
-                      }}
-                      error={updateMutation.error}
-                      fields={[
-                        ['identifier', 'Identifier'],
-                        ['name', 'Name'],
-                        ...(resource.authorizationMode === 'native'
-                          ? ([['resourceUrl', 'Resource URL']] as [string, string][])
-                          : []),
-                        ['description', 'Description'],
-                      ]}
-                      onSubmit={(form) => {
-                        const input = parseForm(updateApiResourceRequestSchema, form)
-                        if (resource.authorizationMode === 'native') {
-                          updateMutation.mutate(input)
-                          return
-                        }
-                        const { resourceUrl: _resourceUrl, ...externalInput } = input
-                        updateMutation.mutate(externalInput)
-                      }}
-                      pending={updateMutation.isPending}
-                    />
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button
-                        disabled={updateMutation.isPending}
-                        onClick={() =>
-                          updateMutation.mutate({
-                            enabled: !resource.enabled,
-                          })
-                        }
-                        type="button"
-                        variant="secondary"
-                      >
-                        {resource.enabled ? 'Disable' : 'Enable'}
-                      </Button>
-                      <Button
-                        disabled={deleteMutation.isPending}
-                        onClick={() => deleteMutation.mutate()}
-                        type="button"
-                        variant="danger"
-                      >
-                        <Trash2 data-icon="inline-start" /> {tt('Delete resource')}{' '}
-                      </Button>
-                    </div>
+                    {resource.archivedAt ? (
+                      <div className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          {tt(
+                            'Archived resources remain available for authorization history but cannot be enabled or edited.',
+                          )}
+                        </p>
+                        <Button
+                          disabled={archivalMutation.isPending}
+                          onClick={() => archivalMutation.mutate()}
+                          type="button"
+                          variant="secondary"
+                        >
+                          {tt('Restore resource')}
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <AuthorizationForm
+                          buttonLabel="Save resource"
+                          defaults={{
+                            identifier: resource.identifier,
+                            name: resource.name,
+                            resourceUrl: resource.resourceUrl,
+                            description: resource.description ?? '',
+                          }}
+                          error={updateMutation.error}
+                          fields={[
+                            ['identifier', 'Identifier'],
+                            ['name', 'Name'],
+                            ...(resource.authorizationMode === 'native'
+                              ? ([['resourceUrl', 'Resource URL']] as [string, string][])
+                              : []),
+                            ['description', 'Description'],
+                          ]}
+                          onSubmit={(form) => {
+                            const input = parseForm(updateApiResourceRequestSchema, form)
+                            if (resource.authorizationMode === 'native') {
+                              updateMutation.mutate(input)
+                              return
+                            }
+                            const { resourceUrl: _resourceUrl, ...externalInput } = input
+                            updateMutation.mutate(externalInput)
+                          }}
+                          pending={updateMutation.isPending}
+                        />
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button
+                            disabled={updateMutation.isPending}
+                            onClick={() =>
+                              updateMutation.mutate({
+                                enabled: !resource.enabled,
+                              })
+                            }
+                            type="button"
+                            variant="secondary"
+                          >
+                            {resource.enabled ? 'Disable' : 'Enable'}
+                          </Button>
+                          <Button
+                            disabled={archivalMutation.isPending}
+                            onClick={() => archivalMutation.mutate()}
+                            type="button"
+                            variant="secondary"
+                          >
+                            {tt('Archive resource')}
+                          </Button>
+                          <Button
+                            disabled={deleteMutation.isPending}
+                            onClick={() => deleteMutation.mutate()}
+                            type="button"
+                            variant="danger"
+                          >
+                            <Trash2 data-icon="inline-start" /> {tt('Delete resource')}{' '}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                    <MutationError error={archivalMutation.error} />
                     <MutationError error={deleteMutation.error} />
                   </CardContent>
                 </Card>
-                {resource.authorizationMode === 'external' ? (
+                {resource.authorizationMode === 'external' && !resource.archivedAt ? (
                   <ExternalAuthorizationCard
                     authorization={resource.authorization}
                     resourceId={resource.id}
