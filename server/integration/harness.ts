@@ -11,7 +11,7 @@ import type { AgentAssertionSigner } from '@server/usecases/external-resources'
 import type { SecurityPolicy } from '@shared/api/security'
 
 export const baseURL = 'http://localhost'
-const authSecret = 'integration-secret-with-enough-entropy-2026-flareauth'
+const authSecret = 'integration-secret-with-enough-entropy-2026-realmroot'
 
 /**
  * The crown wires the real composition root over the pool's real D1. Only the
@@ -30,7 +30,7 @@ function integrationEnv(): Env {
     BETTER_AUTH_URL: baseURL,
     TRUSTED_ORIGINS: baseURL,
     EMAIL_FROM: 'noreply@example.com',
-    EMAIL_FROM_NAME: 'FlareAuth',
+    EMAIL_FROM_NAME: 'Realmroot',
   } as unknown as Env
 }
 
@@ -40,7 +40,7 @@ function integrationConfig(): RuntimeConfig {
     baseURL,
     credentialEncryptionKey: 'integration-credential-encryption-key-2026',
     emailFrom: 'noreply@example.com',
-    emailFromName: 'FlareAuth',
+    emailFromName: 'Realmroot',
     trustedOrigins: [baseURL],
     securityPolicy: integrationSecurityPolicy(),
   }
@@ -49,7 +49,7 @@ function integrationConfig(): RuntimeConfig {
 function integrationSecurityPolicy(): SecurityPolicy {
   return {
     mfa: { mode: 'optional', authenticatorAppEnabled: true, emailOtpEnabled: false, backupCodesEnabled: true },
-    passkeys: { enabled: true, rpId: 'localhost', rpName: 'FlareAuth', origins: [baseURL] },
+    passkeys: { enabled: true, rpId: 'localhost', rpName: 'Realmroot', origins: [baseURL] },
     sessions: {
       expiresInSeconds: 60 * 60 * 24 * 7,
       updateAgeSeconds: 60 * 60 * 24,
@@ -126,7 +126,7 @@ export async function createHarness(): Promise<Harness> {
 const admin = {
   email: 'admin@example.com',
   username: 'admin',
-  name: 'FlareAuth Admin',
+  name: 'Realmroot Admin',
   password: 'admin-password-2026',
 }
 
@@ -181,16 +181,16 @@ async function pkceChallenge(verifier: string): Promise<string> {
 
 /**
  * Bootstraps the admin and runs the real authorization-code + PKCE + consent flow
- * against the seeded `flareauth-cli` client to obtain a management API access
+ * against the seeded `realmroot-cli` client to obtain a management API access
  * token. Returns the `Authorization: Bearer ...` header value, which drives the
  * bearer-authenticated management surface (the user admin-CRUD repository paths).
  */
 export async function signInManagementBearer(harness: Harness): Promise<string> {
   const cookie = await signInAdmin(harness)
-  const verifier = 'flareauth-crown-pkce-verifier-0123456789abcdefghijklmnop'
+  const verifier = 'realmroot-crown-pkce-verifier-0123456789abcdefghijklmnop'
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: 'flareauth-cli',
+    client_id: 'realmroot-cli',
     redirect_uri: 'http://127.0.0.1:8484/callback',
     scope: 'openid management:read management:write',
     state: 'crown',
@@ -221,7 +221,7 @@ export async function signInManagementBearer(harness: Harness): Promise<string> 
     headers: { 'content-type': 'application/x-www-form-urlencoded', origin: baseURL },
     body: new URLSearchParams({
       grant_type: 'authorization_code',
-      client_id: 'flareauth-cli',
+      client_id: 'realmroot-cli',
       code,
       redirect_uri: 'http://127.0.0.1:8484/callback',
       code_verifier: verifier,

@@ -4,7 +4,7 @@ import { createRestishAgentPlugin } from './helpers/restish-agent-plugin'
 
 const externalOrigin = `http://127.0.0.1:${process.env.E2E_EXTERNAL_PORT ?? '4399'}`
 const externalResource = `${externalOrigin}/api`
-const flareauthResource = `${externalOrigin}/flareauth-api`
+const realmrootResource = `${externalOrigin}/realmroot-api`
 
 test.describe('external API resource authorization', () => {
   test.beforeEach(resetAndBootstrap)
@@ -114,12 +114,12 @@ test.describe('external API resource authorization', () => {
 
   test(`[spec: agent-identity/native-api-resource-token]
         [spec: agent-identity/agent-resource-approval-sign-in]
-        an Agent calls an API that uses FlareAuth for identity and authorization`, async ({ page }) => {
+        an Agent calls an API that uses Realmroot for identity and authorization`, async ({ page }) => {
     await signIn(page)
     const plugin = createRestishAgentPlugin(baseURL)
 
     try {
-      const whoami = plugin.firstWhoami('FlareAuth Resource E2E Agent')
+      const whoami = plugin.firstWhoami('Realmroot Resource E2E Agent')
       await page.goto(await whoami.approvalUrl)
       await page.getByRole('button', { name: 'Approve login' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
@@ -127,10 +127,10 @@ test.describe('external API resource authorization', () => {
 
       const resourceResponse = await page.request.post('/api/management/api-resources', {
         data: {
-          identifier: 'e2e-flareauth-projects',
-          name: 'E2E FlareAuth Projects API',
-          audience: flareauthResource,
-          resourceUrl: flareauthResource,
+          identifier: 'e2e-realmroot-projects',
+          name: 'E2E Realmroot Projects API',
+          audience: realmrootResource,
+          resourceUrl: realmrootResource,
           authorizationMode: 'native',
         },
       })
@@ -154,7 +154,7 @@ test.describe('external API resource authorization', () => {
         expect.objectContaining({
           id: resource.id,
           authorizationMode: 'native',
-          resourceUrl: flareauthResource,
+          resourceUrl: realmrootResource,
           scopes: expect.arrayContaining([expect.objectContaining({ value: 'projects:read' })]),
           accountConnections: [],
         }),
@@ -185,9 +185,9 @@ test.describe('external API resource authorization', () => {
       expect(lease).toMatchObject({ tokenType: 'DPoP', scopes: ['projects:read'] })
       expect(lease).not.toHaveProperty('accessToken')
 
-      plugin.connectTarget('native-projects', flareauthResource)
+      plugin.connectTarget('native-projects', realmrootResource)
       expect(plugin.targetRequest('native-projects', 'list-projects')).toMatchObject({
-        projects: [{ id: 'project-1', name: 'FlareAuth-native project' }],
+        projects: [{ id: 'project-1', name: 'Realmroot-native project' }],
         authorization: {
           sub: expect.any(String),
           act: {

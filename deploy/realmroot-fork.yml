@@ -1,7 +1,7 @@
-name: Deploy FlareAuth Fork
+name: Deploy Realmroot Fork
 
 # Install this file as .github/workflows/deploy.yml in a deployment fork.
-# The canonical saltbo/flareauth repository does not use this workflow.
+# The canonical saltbo/realmroot repository does not use this workflow.
 on:
   push:
     branches:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: flareauth-deploy
+  group: realmroot-deploy
   cancel-in-progress: false
 
 jobs:
@@ -42,10 +42,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           CREDENTIAL_ENCRYPTION_KEY: ${{ secrets.CREDENTIAL_ENCRYPTION_KEY }}
-          FLAREAUTH_WORKER_NAME: ${{ vars.FLAREAUTH_WORKER_NAME }}
-          FLAREAUTH_D1_DATABASE: ${{ vars.FLAREAUTH_D1_DATABASE }}
-          FLAREAUTH_R2_BUCKET: ${{ vars.FLAREAUTH_R2_BUCKET }}
-          FLAREAUTH_EMAIL_QUEUE: ${{ vars.FLAREAUTH_EMAIL_QUEUE }}
-          FLAREAUTH_EMAIL_FROM: ${{ vars.FLAREAUTH_EMAIL_FROM }}
-          FLAREAUTH_EMAIL_FROM_NAME: ${{ vars.FLAREAUTH_EMAIL_FROM_NAME }}
+          REALMROOT_WORKER_NAME: ${{ vars.REALMROOT_WORKER_NAME }}
+          REALMROOT_D1_DATABASE: ${{ vars.REALMROOT_D1_DATABASE }}
+          REALMROOT_R2_BUCKET: ${{ vars.REALMROOT_R2_BUCKET }}
+          REALMROOT_EMAIL_QUEUE: ${{ vars.REALMROOT_EMAIL_QUEUE }}
+          REALMROOT_EMAIL_FROM: ${{ vars.REALMROOT_EMAIL_FROM }}
+          REALMROOT_EMAIL_FROM_NAME: ${{ vars.REALMROOT_EMAIL_FROM_NAME }}
         run: pnpm run deploy:fork

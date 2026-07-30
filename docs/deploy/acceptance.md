@@ -16,7 +16,7 @@ checklist for product validation.
 pnpm run db:migrate:staging
 ```
 
-3. Open the preview URL and confirm `/api/health` returns `{ "ok": true, "service": "flareauth" }`.
+3. Open the preview URL and confirm `/api/health` returns `{ "ok": true, "service": "realmroot" }`.
 4. If the preview D1 database is fresh, open `/onboarding` on the preview URL and create the first admin.
 5. Sign in as the admin user.
 6. Open `/console` and verify the dashboard loads.

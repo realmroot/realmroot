@@ -22,7 +22,7 @@ func (systemBrowserOpener) Open(rawURL string) error {
 		return errors.New("approval URL must be an absolute HTTP(S) URL")
 	}
 	writeApprovalURLToTerminal(rawURL)
-	if path := strings.TrimSpace(os.Getenv("FLAREAUTH_PLUGIN_APPROVAL_FILE")); path != "" {
+	if path := strings.TrimSpace(os.Getenv("REALMROOT_PLUGIN_APPROVAL_FILE")); path != "" {
 		if err := os.WriteFile(path, []byte(rawURL+"\n"), 0o600); err != nil {
 			return fmt.Errorf("write approval handoff: %w", err)
 		}

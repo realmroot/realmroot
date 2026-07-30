@@ -237,7 +237,7 @@ export function SignInPage() {
     <AuthLayout
       config={config}
       eyebrow="Hosted sign-in"
-      title={authContext.title ?? localizedHostedCopy(config?.copy.headline, 'Sign in to FlareAuth')}
+      title={authContext.title ?? localizedHostedCopy(config?.copy.headline, 'Sign in to Realmroot')}
       description={
         authContext.description ??
         localizedHostedCopy(config?.copy.description, 'Use your account to continue securely.')

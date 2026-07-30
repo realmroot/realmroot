@@ -15,10 +15,10 @@ const port = Number(process.env.PORT ?? 4100)
 const origin = process.env.ORIGIN ?? `http://127.0.0.1:${port}`
 const issuer = origin
 const resource = `${origin}/api`
-const flareauthOrigin = process.env.FLAREAUTH_ORIGIN ?? 'http://localhost:4189'
-const flareauthIssuer = `${flareauthOrigin}/api/auth`
-const flareauthResource = `${origin}/flareauth-api`
-const flareauthJwks = createRemoteJWKSet(new URL(`${flareauthIssuer}/jwks`))
+const realmrootOrigin = process.env.REALMROOT_ORIGIN ?? 'http://localhost:4189'
+const realmrootIssuer = `${realmrootOrigin}/api/auth`
+const realmrootResource = `${origin}/realmroot-api`
+const realmrootJwks = createRemoteJWKSet(new URL(`${realmrootIssuer}/jwks`))
 const db = new DatabaseSync(process.env.DATABASE_PATH ?? ':memory:')
 const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true })
 const publicJwk = { ...(await exportJWK(publicKey)), kid: 'target-signing-key', use: 'sig', alg: 'ES256' }
@@ -98,10 +98,10 @@ app.get('/api', (_request, response) => {
     .json({ resource, serviceDescription: `${origin}/openapi-external.json` })
 })
 
-app.get('/flareauth-api', (_request, response) => {
+app.get('/realmroot-api', (_request, response) => {
   response
     .set('Link', `<${origin}/openapi-native.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"`)
-    .json({ resource: flareauthResource, serviceDescription: `${origin}/openapi-native.json` })
+    .json({ resource: realmrootResource, serviceDescription: `${origin}/openapi-native.json` })
 })
 
 app.get('/openapi-external.json', (_request, response) => {
@@ -109,7 +109,7 @@ app.get('/openapi-external.json', (_request, response) => {
 })
 
 app.get('/openapi-native.json', (_request, response) => {
-  response.type('application/vnd.oai.openapi+json').json(projectsOpenAPI('FlareAuth-native Projects API', flareauthResource))
+  response.type('application/vnd.oai.openapi+json').json(projectsOpenAPI('Realmroot-native Projects API', realmrootResource))
 })
 
 app.post('/register', (request, response) => {
@@ -208,9 +208,9 @@ app.get('/api/projects', requireDpopAccess, (request, response) => {
   })
 })
 
-app.get('/flareauth-api/projects', requireFlareAuthDpopAccess, (_request, response) => {
+app.get('/realmroot-api/projects', requireRealmrootDpopAccess, (_request, response) => {
   response.json({
-    projects: [{ id: 'project-1', name: 'FlareAuth-native project' }],
+    projects: [{ id: 'project-1', name: 'Realmroot-native project' }],
     authorization: response.locals.authorization,
   })
 })
@@ -388,12 +388,12 @@ async function requireDpopAccess(request: Request, response: Response, next: Nex
   }
 }
 
-async function requireFlareAuthDpopAccess(request: Request, response: Response, next: NextFunction) {
+async function requireRealmrootDpopAccess(request: Request, response: Response, next: NextFunction) {
   try {
     const token = dpopBearer(request)
-    const verified = await jwtVerify(token, flareauthJwks, {
-      issuer: flareauthIssuer,
-      audience: flareauthResource,
+    const verified = await jwtVerify(token, realmrootJwks, {
+      issuer: realmrootIssuer,
+      audience: realmrootResource,
       typ: 'at+jwt',
     })
     const proof = await verifyDpop(request, `${origin}${request.originalUrl}`, 'GET')

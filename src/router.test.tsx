@@ -149,7 +149,7 @@ const user = {
 
 const configz = {
   branding: { logoUrl: null, faviconUrl: null, primaryColor: null, backgroundColor: null, customCss: null },
-  copy: { productName: 'FlareAuth' },
+  copy: { productName: 'Realmroot' },
 }
 
 function jsonResponse(body: unknown, status = 200) {

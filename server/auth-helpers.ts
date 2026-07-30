@@ -26,7 +26,7 @@ export function sendPasswordChangedNotification(emailSender: TransactionalEmailS
       template: {
         type: 'security-notification',
         title: 'Your password was changed',
-        body: 'Your FlareAuth password was changed. If this was not you, reset your password immediately.',
+        body: 'Your Realmroot password was changed. If this was not you, reset your password immediately.',
       },
     })
     .catch((error: unknown) => {

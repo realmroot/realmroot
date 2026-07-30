@@ -30,9 +30,9 @@ import {
 } from '@shared/api/applications'
 
 export const systemCliApplication = {
-  id: 'app_flareauth_cli',
-  slug: 'flareauth-cli',
-  name: 'FlareAuth CLI',
+  id: 'app_realmroot_cli',
+  slug: 'realmroot-cli',
+  name: 'Realmroot CLI',
   clientId: systemCliClientId,
   redirectUris: ['http://127.0.0.1:8484/callback', 'http://localhost:8484/callback'],
   allowedGrantTypes: ['authorization_code', 'refresh_token'],

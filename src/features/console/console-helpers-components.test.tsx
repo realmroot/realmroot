@@ -582,7 +582,7 @@ describe('PreviewBrandMark', () => {
 describe('HostedAuthPreview', () => {
   const basePreview = {
     description: 'Use your account to continue securely.',
-    headline: 'Sign in to FlareAuth',
+    headline: 'Sign in to Realmroot',
     productName: 'Acme',
     passwordEnabled: true,
     signupEnabled: true,
@@ -660,8 +660,8 @@ describe('HostedAuthPreview', () => {
       <HostedAuthPreview
         preview={{
           description: 'Use your account to continue securely.',
-          headline: 'Sign in to FlareAuth',
-          productName: 'FlareAuth',
+          headline: 'Sign in to Realmroot',
+          productName: 'Realmroot',
           passwordEnabled: false,
           emailOtpEnabled: true,
           signupEnabled: false,

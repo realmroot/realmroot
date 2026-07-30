@@ -10,7 +10,7 @@ afterEach(() => {
 
 describe('OidcCallbackRoute', () => {
   it('validates code and state from the local OIDC callback [spec: hosted-auth/oidc-client-callback]', () => {
-    window.sessionStorage.setItem('flareauth.oidc.state', 'state-1')
+    window.sessionStorage.setItem('realmroot.oidc.state', 'state-1')
     window.history.pushState(null, '', '/oidc/callback?code=code-1&state=state-1')
 
     render(<OidcCallbackRoute />)
@@ -21,7 +21,7 @@ describe('OidcCallbackRoute', () => {
   })
 
   it('rejects missing or mismatched callback state', () => {
-    window.sessionStorage.setItem('flareauth.oidc.state', 'state-1')
+    window.sessionStorage.setItem('realmroot.oidc.state', 'state-1')
     window.history.pushState(null, '', '/oidc/callback?code=code-1&state=bad-state')
 
     render(<OidcCallbackRoute />)
@@ -55,8 +55,8 @@ describe('OidcCallbackRoute', () => {
     expect(redirect.searchParams.get('redirect_uri')).toBe('http://localhost:4173/oidc/callback')
     expect(redirect.searchParams.get('scope')).toBe('openid email')
     expect(redirect.searchParams.get('code_challenge_method')).toBe('S256')
-    expect(window.sessionStorage.getItem('flareauth.oidc.state')).toBe(redirect.searchParams.get('state'))
-    expect(window.sessionStorage.getItem('flareauth.oidc.verifier')).toBeTruthy()
+    expect(window.sessionStorage.getItem('realmroot.oidc.state')).toBe(redirect.searchParams.get('state'))
+    expect(window.sessionStorage.getItem('realmroot.oidc.verifier')).toBeTruthy()
   })
 
   it('runs the default OIDC start authorization effect', async () => {
@@ -70,7 +70,7 @@ describe('OidcCallbackRoute', () => {
     render(<OidcStartRoute />)
 
     expect(await screen.findByRole('heading', { name: 'Starting client sign-in' })).toBeTruthy()
-    await vi.waitFor(() => expect(window.sessionStorage.getItem('flareauth.oidc.state')).toBeTruthy())
+    await vi.waitFor(() => expect(window.sessionStorage.getItem('realmroot.oidc.state')).toBeTruthy())
   })
 
   it('builds a PKCE authorization redirect by default', async () => {
@@ -89,7 +89,7 @@ describe('OidcCallbackRoute', () => {
     expect(redirect.searchParams.get('code_challenge')).toBe('AgME')
     expect(redirect.searchParams.get('code_challenge_method')).toBe('S256')
     expect(redirect.searchParams.get('state')).toBeTruthy()
-    expect(window.sessionStorage.getItem('flareauth.oidc.state')).toBeTruthy()
-    expect(window.sessionStorage.getItem('flareauth.oidc.verifier')).toBeTruthy()
+    expect(window.sessionStorage.getItem('realmroot.oidc.state')).toBeTruthy()
+    expect(window.sessionStorage.getItem('realmroot.oidc.verifier')).toBeTruthy()
   })
 })

@@ -1,4 +1,4 @@
-module github.com/saltbo/flareauth/plugins/restish-flareauth
+module github.com/saltbo/realmroot/plugins/restish-realmroot
 
 go 1.25.3
 

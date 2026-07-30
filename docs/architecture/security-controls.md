@@ -1,6 +1,6 @@
 # Security Controls
 
-FlareAuth uses Better Auth for MFA, passkey, and session enforcement. Product APIs under `/api/account/security` and `/api/management/security` wrap those Better Auth capabilities with resource-oriented account and admin views.
+Realmroot uses Better Auth for MFA, passkey, and session enforcement. Product APIs under `/api/account/security` and `/api/management/security` wrap those Better Auth capabilities with resource-oriented account and admin views.
 
 ## Deployment Policy
 
@@ -20,7 +20,7 @@ Security policy is deployment-level in v1.0:
 Passkey registration and authentication use explicit WebAuthn config:
 
 - `WEBAUTHN_RP_ID`: the relying party ID. Defaults to the hostname of `BETTER_AUTH_URL` or the request origin.
-- `WEBAUTHN_RP_NAME`: display name shown by authenticators. Defaults to `FlareAuth`.
+- `WEBAUTHN_RP_NAME`: display name shown by authenticators. Defaults to `Realmroot`.
 - `WEBAUTHN_ORIGINS`: comma-separated origin allowlist for WebAuthn ceremonies. Defaults to `TRUSTED_ORIGINS`.
 
 Production should use the stable auth hostname as `WEBAUTHN_RP_ID`, or a parent domain only when every production auth origin is a subdomain of that parent. Cloudflare preview deployments should use the exact preview hostname as the RP ID and the exact preview origin in `WEBAUTHN_ORIGINS`. Preview passkeys are intentionally isolated from production passkeys.

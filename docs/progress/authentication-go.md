@@ -2,7 +2,7 @@
 
 ## Objective
 
-Validate FlareAuth authentication end to end to production-readiness standard. Use manual browser automation for acceptance first, fix discovered issues, run at least five additional bug-hunting passes, then codify the accepted flows as Cucumber E2E scenarios and run them.
+Validate Realmroot authentication end to end to production-readiness standard. Use manual browser automation for acceptance first, fix discovered issues, run at least five additional bug-hunting passes, then codify the accepted flows as Cucumber E2E scenarios and run them.
 
 ## Verification Rule
 
@@ -135,7 +135,7 @@ Every covered authentication capability must end in exactly one of these buckets
 
 ### Verified With External-Boundary Mock
 
-- Social login through enabled generic OAuth connector using a local mock IdP outside the FlareAuth app boundary: hosted sign-in showed `Continue with CLI OAuth`, Better Auth completed the callback, Profile showed `Social CLI User`, and Profile Linked accounts showed `CLI OAuth` as Linked.
+- Social login through enabled generic OAuth connector using a local mock IdP outside the Realmroot app boundary: hosted sign-in showed `Continue with CLI OAuth`, Better Auth completed the callback, Profile showed `Social CLI User`, and Profile Linked accounts showed `CLI OAuth` as Linked.
 - Profile linked-account management with external-boundary mock IdP: after deleting the local test link row, Profile showed `CLI OAuth` as Available; clicking Connect used Better Auth native `/api/auth/oauth2/link`, completed the external OAuth callback, and Profile returned to `CLI OAuth` Linked. For unlink, a credential-backed user with a seeded external account showed Linked, confirmed Unlink, and Profile returned to Available.
 - Web3 wallet sign-in using an external wallet boundary signer on `127.0.0.1:4566`: hosted sign-in requested a real SIWE nonce, signed the real message through the external signer, verified through Better Auth SIWE, created the session, and persisted wallet/account rows.
 
@@ -188,7 +188,7 @@ For any item in this bucket, record the missing dependency, why it blocks verifi
 - 2026-05-21 Playwright CLI manually verified Application/OIDC flow: created trusted and third-party applications, used `/oidc/start`, verified trusted callback, third-party consent screen, deny callback, and approve callback.
 - 2026-05-21 Playwright CLI manual Phone/SMS check found a product bug: enabling Phone (SMS) in settings still rendered `Continue with Phone` disabled on hosted sign-in and there was no phone OTP form. Fixed by exposing public built-in provider enabled flags through configz, wiring the hosted Phone OTP form to Better Auth native phone endpoints, and making Live Preview use the same enabled state.
 - 2026-05-21 Playwright CLI reverified Phone/SMS after the fix: hosted sign-in and Live Preview render enabled `Continue with Phone`; clicking opens a Phone field and Send code button; submitting hits the real backend and fails at Twilio delivery because only dummy Twilio credentials are present.
-- 2026-05-21 code audit found Web3 wallet is configuration-only in the current product: Better Auth SIWE exists in dependencies, but FlareAuth does not register `siwe()` in `server/auth.ts`, does not render wallet login in hosted sign-in, and has no wallet-address table migration. Marked unverified/product gap.
+- 2026-05-21 code audit found Web3 wallet is configuration-only in the current product: Better Auth SIWE exists in dependencies, but Realmroot does not register `siwe()` in `server/auth.ts`, does not render wallet login in hosted sign-in, and has no wallet-address table migration. Marked unverified/product gap.
 - 2026-05-21 code audit found OneTap is only partially wired: the server plugin can be enabled, but the hosted sign-in UI never initializes Google One Tap or calls the callback endpoint. Marked unverified/product gap.
 - 2026-05-21 fixed OneTap hosted client wiring: public runtime config now exposes the non-secret OneTap client options, hosted sign-in renders `Continue with OneTap` when enabled, loads Google Identity Services, initializes One Tap, and calls Better Auth's native `/api/auth/one-tap/callback` with the returned ID token.
 - 2026-05-21 Playwright CLI OneTap pass with dummy external Google config found a UX bug: when Google returns no credential, the hosted sign-in form stayed in loading state. Fixed prompt skipped/dismissed/not-displayed handling so the form recovers and shows a visible error. With the dummy Client ID, Google returned `Google One Tap was skipped: unknown_reason.`; full sign-in remains unverified until a real Google Client ID/token is available.

@@ -12,13 +12,13 @@ Agent. A durable identity must survive host replacement and key rotation, retain
 one home space, and remain addressable as an immutable `(issuer, subject)` pair.
 
 OIDC remains the federation vocabulary, but OIDC Core describes an End-User
-subject. FlareAuth therefore publishes an Agent profile on top of OAuth/OIDC
+subject. Realmroot therefore publishes an Agent profile on top of OAuth/OIDC
 rather than representing the public key or an AgentAuth row as the account
 identifier.
 
 ## Decision
 
-FlareAuth owns three records outside AgentAuth's schema:
+Realmroot owns three records outside AgentAuth's schema:
 
 - `agent_identity` is the stable product identity and has exactly one personal
   or organization home space.
@@ -32,7 +32,7 @@ of host-specific public keys.
 
 The issuer is the deployment's existing Better Auth OIDC issuer,
 `AUTH_ORIGIN/api/auth`. Deployments configure one stable production
-`BETTER_AUTH_URL`; request and preview origins are not identity inputs. FlareAuth
+`BETTER_AUTH_URL`; request and preview origins are not identity inputs. Realmroot
 does not publish or operate a second Agent-only authorization server.
 
 Enrollment approval atomically inserts the identity when needed, inserts its
@@ -53,7 +53,7 @@ current presenter, not the durable identity. For a native API resource, the
 access token uses the controlling user or organization as `sub` and represents
 the Agent and host in the RFC 8693 actor chain.
 
-FlareAuth exposes shared issuer metadata at
+Realmroot exposes shared issuer metadata at
 `/api/auth/.well-known/openid-configuration` and public signing keys at
 `/api/auth/jwks`. Access tokens for native API resources are five-minute
 JWTs signed by Better Auth's managed issuer keys with an `at+jwt` type,
@@ -79,7 +79,7 @@ not issue product API tokens or impersonate the approving controller.
 
 ## Restish and the unified API
 
-FlareAuth publishes one automation contract at `/api/openapi.json`, with `/api`
+Realmroot publishes one automation contract at `/api/openapi.json`, with `/api`
 as its server root. `get-current-agent` and permission-gated resource operations are
 generated from that contract. `/api/management` remains a compatibility path
 for existing clients but is not a separate Restish command or identity model.
@@ -92,17 +92,17 @@ commands. Every later command-line request is authenticated as the same Agent.
 
 ## Connectors and API Resources
 
-Connectors authenticate people to FlareAuth. They remain limited to social and
+Connectors authenticate people to Realmroot. They remain limited to social and
 generic OAuth/OIDC sign-in providers. They do not describe business APIs,
 credentials, request paths, or proxy behavior.
 
 API Resources authorize access and declare one mode:
 
-- `native`: the product uses FlareAuth as its OIDC provider and authorization
-  server. Its API trusts the FlareAuth issuer/JWKS and requires no account
+- `native`: the product uses Realmroot as its OIDC provider and authorization
+  server. Its API trusts the Realmroot issuer/JWKS and requires no account
   connection.
 - `external`: the target owns its user and authorization system. It publishes
-  RFC 9728 metadata; FlareAuth discovers RFC 8414 metadata and requires
+  RFC 9728 metadata; Realmroot discovers RFC 8414 metadata and requires
   authorization code with PKCE and refresh, RFC 7523, RFC 8693, RFC 9449, and
   RFC 7009. The target can use RFC 7591 dynamic client registration or an
   administrator-configured client.
@@ -126,28 +126,28 @@ randomized nonces and purpose-specific authenticated context.
 
 ## Direct API access
 
-FlareAuth is not an HTTP proxy. Both modes use the same Access Grant token
+Realmroot is not an HTTP proxy. Both modes use the same Access Grant token
 operation.
 
-For `native`, FlareAuth signs an audience- and permission-bound `at+jwt` for
+For `native`, Realmroot signs an audience- and permission-bound `at+jwt` for
 the controlling identity. The token contains the Agent/host actor chain and the
-Agent's DPoP key thumbprint. The product API validates the FlareAuth issuer,
+Agent's DPoP key thumbprint. The product API validates the Realmroot issuer,
 JWKS, audience, expiry, permissions, and DPoP proof.
 
-For `external`, FlareAuth refreshes the connected user's subject token when
+For `external`, Realmroot refreshes the connected user's subject token when
 required and submits a stable-Agent assertion through RFC 7523. It then uses the
 user token and target-issued Agent token in RFC 8693 token exchange. The target
 intersects the user's scopes with the approved Agent scopes and issues its own
 short-lived DPoP-bound access token.
 
-FlareAuth returns no refresh token. The Agent calls the API directly and proves
+Realmroot returns no refresh token. The Agent calls the API directly and proves
 possession of the same DPoP key. External target tokens identify the connected
-user as subject and the stable Agent in `act.sub`; FlareAuth-issued tokens
+user as subject and the stable Agent in `act.sub`; Realmroot-issued tokens
 identify the controller as subject and include Agent and host actors.
 
 Grant or connection revocation sends active target leases to the target RFC
 7009 endpoint. Subsequent lease requests fail immediately. No credential
-injection or FlareAuth egress endpoint exists.
+injection or Realmroot egress endpoint exists.
 
 ## Governance and audit
 

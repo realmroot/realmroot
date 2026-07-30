@@ -16,7 +16,7 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-const authProvider = "flareauth-agent"
+const authProvider = "realmroot-agent"
 
 type registrationResponse struct {
 	AgentID  string `json:"agent_id"`
@@ -105,7 +105,7 @@ func authenticateRequest(
 		}
 		return authenticateTargetRequest(input, credentials, client)
 	}
-	origin, err := flareAuthOrigin(input.Request.URI)
+	origin, err := realmrootOrigin(input.Request.URI)
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
@@ -281,7 +281,7 @@ func refreshTargetToken(
 	}
 	if token.TokenType != "DPoP" || token.AccessToken == "" || token.ResourceURL != credential.ResourceURL ||
 		!token.ExpiresAt.After(time.Now()) {
-		return dpopCredential{}, errors.New("FlareAuth returned an invalid target API access token")
+		return dpopCredential{}, errors.New("Realmroot returned an invalid target API access token")
 	}
 	credential.AccessToken = token.AccessToken
 	credential.ExpiresAt = &token.ExpiresAt
@@ -291,12 +291,12 @@ func refreshTargetToken(
 func dpopTokenTarget(
 	ctx context.Context,
 	client httpDoer,
-	flareAuthOrigin string,
+	realmrootOrigin string,
 	grantID string,
 	credential dpopCredential,
 ) (string, error) {
 	if credential.AuthorizationMode == "native" {
-		return flareAuthOrigin + "/api/agent/access-grants/" + url.PathEscape(grantID) + "/tokens", nil
+		return realmrootOrigin + "/api/agent/access-grants/" + url.PathEscape(grantID) + "/tokens", nil
 	}
 	resourceURL, err := validatedAbsoluteURL(credential.ResourceURL)
 	if err != nil {
@@ -427,7 +427,7 @@ func discoverAgentConfiguration(
 		nil,
 		&configuration,
 	); err != nil {
-		return agentConfiguration{}, fmt.Errorf("discover FlareAuth Agent support: %w", err)
+		return agentConfiguration{}, fmt.Errorf("discover Realmroot Agent support: %w", err)
 	}
 	if configuration.Version != "1.0-draft" ||
 		configuration.AgentIdentityIssuer == "" ||
@@ -636,7 +636,7 @@ func requestJSONHeaders(
 	}
 	request, err := http.NewRequestWithContext(ctx, method, uri, reader)
 	if err != nil {
-		return fmt.Errorf("create FlareAuth request: %w", err)
+		return fmt.Errorf("create Realmroot request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
 	if body != nil {
@@ -647,26 +647,26 @@ func requestJSONHeaders(
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("call FlareAuth: %w", err)
+		return fmt.Errorf("call Realmroot: %w", err)
 	}
 	defer response.Body.Close()
 	encoded, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
-		return fmt.Errorf("read FlareAuth response: %w", err)
+		return fmt.Errorf("read Realmroot response: %w", err)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("FlareAuth returned HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(encoded)))
+		return fmt.Errorf("Realmroot returned HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(encoded)))
 	}
 	if output == nil || len(encoded) == 0 {
 		return nil
 	}
 	if err := json.Unmarshal(encoded, output); err != nil {
-		return fmt.Errorf("decode FlareAuth response: %w", err)
+		return fmt.Errorf("decode Realmroot response: %w", err)
 	}
 	return nil
 }
 
-func flareAuthOrigin(requestURI string) (string, error) {
+func realmrootOrigin(requestURI string) (string, error) {
 	parsed, err := url.Parse(requestURI)
 	if err != nil {
 		return "", fmt.Errorf("parse Restish request URI: %w", err)
@@ -675,7 +675,7 @@ func flareAuthOrigin(requestURI string) (string, error) {
 		return "", errors.New("Restish request URI must be absolute")
 	}
 	if parsed.EscapedPath() != "/api" && !strings.HasPrefix(parsed.EscapedPath(), "/api/") {
-		return "", fmt.Errorf("Restish request URI %q is not a FlareAuth API operation", requestURI)
+		return "", fmt.Errorf("Restish request URI %q is not a Realmroot API operation", requestURI)
 	}
 	parsed.Path = ""
 	parsed.RawPath = ""
@@ -685,7 +685,7 @@ func flareAuthOrigin(requestURI string) (string, error) {
 }
 
 func agentDisplayName() string {
-	if value := strings.TrimSpace(os.Getenv("FLAREAUTH_AGENT_NAME")); value != "" {
+	if value := strings.TrimSpace(os.Getenv("REALMROOT_AGENT_NAME")); value != "" {
 		return value
 	}
 	host, err := os.Hostname()
@@ -723,7 +723,7 @@ func (systemPromptWriter) Show(verificationURI string) error {
 	}
 	terminal, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
 	if err != nil {
-		if os.Getenv("FLAREAUTH_PLUGIN_APPROVAL_FILE") != "" || openErr == nil {
+		if os.Getenv("REALMROOT_PLUGIN_APPROVAL_FILE") != "" || openErr == nil {
 			return nil
 		}
 		return fmt.Errorf("cannot open or display Agent approval URL: %w", openErr)

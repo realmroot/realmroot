@@ -23,7 +23,7 @@ describe('management routes 2', () => {
     auth.api.oauth2UserInfo.mockResolvedValue({
       sub: 'user-1',
       email: 'user-1@example.com',
-      client_id: 'flareauth-cli',
+      client_id: 'realmroot-cli',
       scope: 'openid management:read',
       authorization: {
         permissions: ['management:write'],
@@ -47,7 +47,7 @@ describe('management routes 2', () => {
       sub: 'admin-1',
       email: 'admin-1@example.com',
       role: 'admin',
-      client_id: 'flareauth-cli',
+      client_id: 'realmroot-cli',
       scope: 'openid management:read management:write',
     })
 
@@ -350,7 +350,7 @@ describe('management routes 2', () => {
         password: {
           minLength: 14,
           requiredCharacterTypes: 3,
-          customWords: ['flareauth'],
+          customWords: ['realmroot'],
           rejectUserInfo: true,
           rejectSequential: true,
           rejectCustomWords: true,

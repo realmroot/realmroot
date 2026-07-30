@@ -5,8 +5,8 @@ import { initReactI18next } from 'react-i18next'
 export const supportedLanguages = ['en', 'zh'] as const
 export type SupportedLanguage = (typeof supportedLanguages)[number]
 
-export const languageStorageKey = 'flareauth.language'
-export const localeCookieName = 'flareauth_locale'
+export const languageStorageKey = 'realmroot.language'
+export const localeCookieName = 'realmroot_locale'
 
 import { zhFlatTranslations } from './i18n-zh'
 

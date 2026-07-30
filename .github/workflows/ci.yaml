@@ -38,8 +38,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: plugins/restish-flareauth/go.mod
-          cache-dependency-path: plugins/restish-flareauth/go.sum
+          go-version-file: plugins/restish-realmroot/go.mod
+          cache-dependency-path: plugins/restish-realmroot/go.sum
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -108,8 +108,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: plugins/restish-flareauth/go.mod
-          cache-dependency-path: plugins/restish-flareauth/go.sum
+          go-version-file: plugins/restish-realmroot/go.mod
+          cache-dependency-path: plugins/restish-realmroot/go.sum
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

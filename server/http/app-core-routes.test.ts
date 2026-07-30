@@ -17,7 +17,7 @@ describe('app.test 1', () => {
 
     await expect(response.json()).resolves.toEqual({
       ok: true,
-      service: 'flareauth',
+      service: 'realmroot',
     })
   })
 
@@ -467,7 +467,7 @@ function securityPolicy() {
     passkeys: {
       enabled: true,
       rpId: 'auth.example.com',
-      rpName: 'FlareAuth',
+      rpName: 'Realmroot',
       origins: ['https://auth.example.com'],
     },
     sessions: {

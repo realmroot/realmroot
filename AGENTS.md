@@ -2,7 +2,7 @@
 
 ## Project
 
-FlareAuth is a TypeScript auth service for Cloudflare Workers. It uses Hono,
+Realmroot is a TypeScript auth service for Cloudflare Workers. It uses Hono,
 Better Auth, Drizzle, React, Vite, Vitest, Biome, Wrangler, and Cloudflare D1.
 
 ## Development

@@ -60,7 +60,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 		}
 	})
 	input := plugin.AuthHookInput{
-		API:     "flareauth",
+		API:     "realmroot",
 		Profile: "default",
 		Params:  map[string]string{"provider": authProvider},
 		Request: plugin.HookRequest{Method: "GET", URI: "https://auth.example.com/api/agent"},

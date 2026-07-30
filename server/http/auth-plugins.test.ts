@@ -106,12 +106,12 @@ describe('auth.test 2', () => {
       oauth.customUserInfoClaims({
         user,
         scopes: ['openid', 'management:read'],
-        jwt: { ...jwt, azp: 'flareauth-cli' },
+        jwt: { ...jwt, azp: 'realmroot-cli' },
       }),
     ).resolves.toEqual({
       role: 'admin',
       scope: 'openid management:read',
-      client_id: 'flareauth-cli',
+      client_id: 'realmroot-cli',
       authorization: { roles: ['admin'] },
       roles: ['admin'],
     })
@@ -221,7 +221,7 @@ function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {
     passkeys: {
       enabled: true,
       rpId: 'auth.example.com',
-      rpName: 'FlareAuth',
+      rpName: 'Realmroot',
       origins: ['https://auth.example.com'],
       ...overrides.passkeys,
     },

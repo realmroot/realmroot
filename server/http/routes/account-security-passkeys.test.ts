@@ -244,7 +244,7 @@ function createAuthMock() {
           },
         }
       }),
-      enableTwoFactor: vi.fn().mockResolvedValue({ totpURI: 'otpauth://totp/FlareAuth', backupCodes: [] }),
+      enableTwoFactor: vi.fn().mockResolvedValue({ totpURI: 'otpauth://totp/Realmroot', backupCodes: [] }),
       disableTwoFactor: vi.fn().mockResolvedValue({ status: true }),
       verifyTOTP: vi.fn().mockResolvedValue({ status: true }),
       generateBackupCodes: vi.fn().mockResolvedValue({ status: true, backupCodes: [] }),
@@ -357,7 +357,7 @@ function securityPolicy(overrides: Partial<SecurityPolicy> = {}): SecurityPolicy
     passkeys: {
       enabled: true,
       rpId: 'auth.example.com',
-      rpName: 'FlareAuth',
+      rpName: 'Realmroot',
       origins: ['https://auth.example.com'],
       ...overrides.passkeys,
     },
@@ -398,7 +398,7 @@ function updatedSecurityPolicy(): SecurityPolicy {
     password: {
       minLength: 14,
       requiredCharacterTypes: 3,
-      customWords: ['flareauth'],
+      customWords: ['realmroot'],
       rejectUserInfo: true,
       rejectSequential: true,
       rejectCustomWords: true,

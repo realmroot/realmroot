@@ -229,7 +229,7 @@ export const zhFlatTranslations: Record<string, string> = {
   Showing: '显示',
   'Show password': '显示密码',
   'Sign in': '登录',
-  'Sign in to FlareAuth': '登录 FlareAuth',
+  'Sign in to Realmroot': '登录 Realmroot',
   'Sign in to continue.': '登录以继续。',
   'Sign out': '退出登录',
   'Sign up': '注册',

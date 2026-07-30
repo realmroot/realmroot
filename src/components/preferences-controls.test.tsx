@@ -24,14 +24,14 @@ describe('PreferencesControls', () => {
 
     await waitFor(() => expect(i18n.language).toBe('zh'))
     expect(document.documentElement.lang).toBe('zh-CN')
-    expect(window.localStorage.getItem('flareauth.language')).toBe('zh')
-    expect(document.cookie).toContain('flareauth_locale=zh')
+    expect(window.localStorage.getItem('realmroot.language')).toBe('zh')
+    expect(document.cookie).toContain('realmroot_locale=zh')
 
     fireEvent.change(screen.getByLabelText('主题'), { target: { value: 'dark' } })
 
     await waitFor(() => expect(document.documentElement.classList.contains('dark')).toBe(true))
     expect(document.documentElement.dataset.theme).toBe('dark')
-    expect(window.localStorage.getItem('flareauth.theme')).toBe('dark')
+    expect(window.localStorage.getItem('realmroot.theme')).toBe('dark')
   })
 
   it('normalizes unsupported preferences back to the default options', async () => {
@@ -49,13 +49,13 @@ describe('PreferencesControls', () => {
     fireEvent.change(screen.getByLabelText('语言'), { target: { value: 'fr' } })
 
     await waitFor(() => expect(i18n.language).toBe('en'))
-    expect(window.localStorage.getItem('flareauth.theme')).toBe('light')
+    expect(window.localStorage.getItem('realmroot.theme')).toBe('light')
   })
 })
 
 describe('theme preference fallback', () => {
   it('applies stored theme through ThemeProvider', async () => {
-    window.localStorage.setItem('flareauth.theme', 'dark')
+    window.localStorage.setItem('realmroot.theme', 'dark')
 
     render(
       <ThemeProvider>
@@ -95,7 +95,7 @@ describe('theme preference fallback', () => {
 
     await waitFor(() => expect(screen.getByText('dark')).toBeTruthy())
     expect(document.documentElement.classList.contains('dark')).toBe(true)
-    expect(window.localStorage.getItem('flareauth.theme')).toBe('dark')
+    expect(window.localStorage.getItem('realmroot.theme')).toBe('dark')
   })
 })
 

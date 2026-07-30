@@ -50,8 +50,8 @@ describe('configz routes', () => {
         supportEmail: null,
       },
       copy: {
-        productName: 'FlareAuth',
-        headline: 'Sign in to FlareAuth',
+        productName: 'Realmroot',
+        headline: 'Sign in to Realmroot',
         description: 'Use your account to continue securely.',
       },
       auth: {

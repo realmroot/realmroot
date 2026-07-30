@@ -24,7 +24,7 @@ export async function signInWithEthereum(enabledChains: number[], callback: stri
     chainId,
     domain: window.location.host,
     nonce,
-    statement: 'Sign in to FlareAuth.',
+    statement: 'Sign in to Realmroot.',
     uri: window.location.origin,
     version: '1',
   })

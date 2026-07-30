@@ -1,6 +1,0 @@
-interface:
-  display_name: "FlareAuth"
-  short_description: "Operate FlareAuth and Agent-authorized APIs"
-  default_prompt: "Use $flareauth to establish my Agent identity and call a registered API Resource with Restish."
-policy:
-  allow_implicit_invocation: true

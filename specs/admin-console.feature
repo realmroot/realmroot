@@ -1,7 +1,7 @@
 Feature: Admin Console
   As a tenant administrator
   I want Console pages to manage applications, users, connectors, security, and deployment settings
-  So that FlareAuth can be configured from the browser
+  So that Realmroot can be configured from the browser
 
   Background:
     Given a first admin exists
@@ -159,7 +159,7 @@ Feature: Admin Console
   @entrypoint:product-ui @journey:agent-discovery
   Scenario: AgentAuth discovery exposes a narrow delegated protocol surface
     When an agent client requests /.well-known/agent-configuration
-    Then FlareAuth advertises delegated mode and device authorization approval
+    Then Realmroot advertises delegated mode and device authorization approval
     And the advertised capabilities include read-only account data and coarse management permissions
     And the advertised endpoints, issuer, and proof algorithms are authoritative for the client
     And individual Management API operations are not generated as AgentAuth capabilities
@@ -168,7 +168,7 @@ Feature: Admin Console
   Scenario: Admins govern Agents without managing protocol internals
     Given delegated AgentAuth hosts, agents, grants, and approval requests exist
     When Console reads the tenant Agent inventory
-    Then FlareAuth presents stable Agents, access requests, access grants, account connections, and audit events
+    Then Realmroot presents stable Agents, access requests, access grants, account connections, and audit events
     And it does not expose hosts, registrations, bindings, or protocol approval records as management resources
     When an admin retires an Agent or revokes an access grant
     Then the Agent or grant is no longer active

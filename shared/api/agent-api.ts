@@ -185,7 +185,7 @@ export const accessTargetSchema = z.discriminatedUnion('type', [
     accountConnectionId: z.string().optional(),
   }),
   z.object({
-    type: z.literal('flareauth-management'),
+    type: z.literal('realmroot-management'),
   }),
 ])
 

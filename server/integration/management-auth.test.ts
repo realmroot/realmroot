@@ -10,7 +10,7 @@ afterEach(async () => {
 const admin = {
   email: 'admin@example.com',
   username: 'admin',
-  name: 'FlareAuth Admin',
+  name: 'Realmroot Admin',
   password: 'admin-password-2026',
 }
 

@@ -53,7 +53,7 @@ export async function enrollWallet(enabledChains: number[]) {
     chainId,
     domain: window.location.host,
     nonce,
-    statement: 'Link this wallet to FlareAuth.',
+    statement: 'Link this wallet to Realmroot.',
     uri: window.location.origin,
     version: '1',
   })

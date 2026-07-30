@@ -13,7 +13,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     method: 'post',
     path: '/agent/management-access-requests',
     operationId: 'requestAgentManagementAccess',
-    summary: 'Request FlareAuth management access',
+    summary: 'Request Realmroot management access',
     security: [{ agentAuth: [] }],
     request: { body: jsonBody(requestAgentCapabilitiesSchema) },
     response: requestAgentCapabilitiesResponseSchema,

@@ -38,7 +38,7 @@ describe('Agent identity enrollment over real D1', () => {
     ownerCookie = await signIn(harness, 'identity-owner@example.com', 'identity-owner-password-2026')
   })
 
-  it('commits controller approval decisions through the FlareAuth account boundary [spec: agent-identity/agent-identity-enrollment] [spec: agent-identity/agent-management-authority]', async () => {
+  it('commits controller approval decisions through the Realmroot account boundary [spec: agent-identity/agent-identity-enrollment] [spec: agent-identity/agent-management-authority]', async () => {
     const createdAt = new Date('2026-07-29T00:00:00.000Z')
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
     await harness.db.insert(agentHost).values({

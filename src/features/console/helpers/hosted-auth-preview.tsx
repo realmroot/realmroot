@@ -35,7 +35,7 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
     '--brand-background': preview.backgroundColor ?? '#f7f3ee',
     ...customCssProperties(preview.customCss ?? ''),
   } as CSSProperties
-  const productName = preview.productName || 'FlareAuth'
+  const productName = preview.productName || 'Realmroot'
   const primaryMode = hostedAuthMode(preview)
   const previewMode = flow === 'email' ? 'otp' : primaryMode
   const socialProviders = preview.socialProviders ?? []
@@ -51,7 +51,7 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
     preview.supportEmail ? ['Support', `mailto:${preview.supportEmail}`] : null,
   ].filter((link): link is [string, string] => link !== null)
   const previewTitle =
-    effectiveFlow === 'sign-up' ? tt('Create account') : localizedHostedCopy(preview.headline, 'Sign in to FlareAuth')
+    effectiveFlow === 'sign-up' ? tt('Create account') : localizedHostedCopy(preview.headline, 'Sign in to Realmroot')
   return (
     <div className="hostedPreviewShell">
       <div className="hostedPreviewHeader">

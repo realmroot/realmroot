@@ -1,6 +1,6 @@
-# FlareAuth Management API
+# Realmroot Management API
 
-Status: maintained contract for FlareAuth v1.0.
+Status: maintained contract for Realmroot v1.0.
 
 The Management API is mounted at:
 
@@ -23,44 +23,44 @@ Link: </api/management/openapi.json>; rel="service-desc"; type="application/open
 Restish v2 can load the contract directly:
 
 ```bash
-restish api connect flareauth https://auth.example.com/api/management --replace --yes
+restish api connect realmroot https://auth.example.com/api/management --replace --yes
 ```
 
 Restish discovers `/api/management/openapi.json` from the `service-desc` link relation. The OpenAPI document response itself intentionally does not include a self-referential discovery link.
 `--replace` ensures an existing profile is rebuilt from the Restish v2
-configuration published by FlareAuth.
+configuration published by Realmroot.
 
 Generated Restish commands are available after connecting, for example:
 
 ```bash
-restish flareauth list-applications
-restish flareauth get-application app_123
+restish realmroot list-applications
+restish realmroot get-application app_123
 ```
 
 For resource-path workflows, use Restish generic verbs:
 
 ```bash
-restish get flareauth/applications
-restish get flareauth/applications/app_123
-restish post flareauth/applications < app.json
-restish patch flareauth/applications/app_123 < patch.json
-restish delete flareauth/applications/app_123
+restish get realmroot/applications
+restish get realmroot/applications/app_123
+restish post realmroot/applications < app.json
+restish patch realmroot/applications/app_123 < patch.json
+restish delete realmroot/applications/app_123
 ```
 
 The Management API is exposed under `/api/management/*`.
 
 Product applications should not use this API for sign-in, session, or profile
-integration. Products consume FlareAuth through standard OIDC discovery and
+integration. Products consume Realmroot through standard OIDC discovery and
 authorization code with PKCE under `/api/auth/*`.
 
 ## Authentication And Authorization
 
-Every protected Management API route accepts either an authenticated administrator browser session or a Bearer token issued to the built-in FlareAuth CLI OAuth client. Requests without valid authentication return `401`; authenticated users without admin or equivalent management authorization return `403`. The OpenAPI discovery document is public so API clients can discover the service before authenticating.
+Every protected Management API route accepts either an authenticated administrator browser session or a Bearer token issued to the built-in Realmroot CLI OAuth client. Requests without valid authentication return `401`; authenticated users without admin or equivalent management authorization return `403`. The OpenAPI discovery document is public so API clients can discover the service before authenticating.
 
 The built-in CLI client is system-managed and stable:
 
-- `client_id`: `flareauth-cli`
-- Name: `FlareAuth CLI`
+- `client_id`: `realmroot-cli`
+- Name: `Realmroot CLI`
 - Client type: public native
 - Client secret: none
 - PKCE: required
@@ -117,7 +117,7 @@ Collection responses include:
 - Connectors: `GET /connectors`, `POST /connectors`, `GET /connectors/templates`, `GET /connectors/{id}`, `GET /connectors/{id}/readiness`, `PATCH /connectors/{id}`, `DELETE /connectors/{id}`.
 - Webhooks: `/webhooks/endpoints`, `/webhooks/endpoints/{id}`, `/webhooks/endpoints/{id}/secrets`, `/webhooks/requests`, `/webhooks/requests/{id}`, `/webhooks/requests/{id}/retries`.
 
-Application resources are OIDC clients. `POST /applications` returns the created application; confidential clients include `clientSecret` in that creation response only. `GET /applications/{id}` returns client metadata, redirect URIs, post sign-out redirect URIs, CORS origins, custom data, allowed grant types, allowed scopes, system-managed state, token endpoint auth method, and discovery endpoint URLs. `PATCH /applications/{id}` updates metadata, redirect/origin sets, custom data, and lifecycle fields including `disabled`; lifecycle transitions do not use action endpoints. `DELETE /applications/{id}` deletes the application and its provider client. System-managed applications such as `flareauth-cli` are not deletable through the Management API.
+Application resources are OIDC clients. `POST /applications` returns the created application; confidential clients include `clientSecret` in that creation response only. `GET /applications/{id}` returns client metadata, redirect URIs, post sign-out redirect URIs, CORS origins, custom data, allowed grant types, allowed scopes, system-managed state, token endpoint auth method, and discovery endpoint URLs. `PATCH /applications/{id}` updates metadata, redirect/origin sets, custom data, and lifecycle fields including `disabled`; lifecycle transitions do not use action endpoints. `DELETE /applications/{id}` deletes the application and its provider client. System-managed applications such as `realmroot-cli` are not deletable through the Management API.
 
 Redirect URIs are replaced as a set with `PUT /applications/{id}/redirect-uris`:
 

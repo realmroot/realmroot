@@ -1040,7 +1040,7 @@ async function registerClient(deps: Deps, endpoint: string, callbackOrigin: stri
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
       body: JSON.stringify({
-        client_name: 'FlareAuth External API Resource',
+        client_name: 'Realmroot External API Resource',
         redirect_uris: [resourceConnectionCallbackUrl(callbackOrigin)],
         grant_types: ['authorization_code', 'refresh_token', jwtBearerGrantType, tokenExchangeGrantType],
         response_types: ['code'],

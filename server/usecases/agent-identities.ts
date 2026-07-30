@@ -281,7 +281,7 @@ export async function retireAgentIdentity(deps: Deps, identityId: string, actorU
 
 export async function requireActiveAgentIdentity(deps: Deps, protocolAgentId: string) {
   const identity = await deps.agentIdentities.findActiveByProtocolAgent(protocolAgentId)
-  if (!identity) throw forbidden('Agent protocol identity is not bound to an active FlareAuth Agent identity.')
+  if (!identity) throw forbidden('Agent protocol identity is not bound to an active Realmroot Agent identity.')
   return identity
 }
 

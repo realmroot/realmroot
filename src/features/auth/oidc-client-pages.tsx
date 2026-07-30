@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { tt } from '@/lib/i18n'
 
-const oidcStateStorageKey = 'flareauth.oidc.state'
-const oidcVerifierStorageKey = 'flareauth.oidc.verifier'
+const oidcStateStorageKey = 'realmroot.oidc.state'
+const oidcVerifierStorageKey = 'realmroot.oidc.verifier'
 
 export function OidcStartRoute({
   startAuthorization = () => startOidcAuthorization((url) => window.location.assign(url)),

@@ -134,8 +134,8 @@ describe('AuthLayout', () => {
   it('renders fallback branding when config copy is unavailable', () => {
     render(<BrandIdentity config={{ branding: { logoUrl: null } } as never} />)
 
-    expect(screen.getByText('FlareAuth')).toBeTruthy()
-    expect(screen.getByText('F')).toBeTruthy()
+    expect(screen.getByText('Realmroot')).toBeTruthy()
+    expect(screen.getByText('R')).toBeTruthy()
   })
 
   it('renders configured logo branding and optional eyebrow', () => {

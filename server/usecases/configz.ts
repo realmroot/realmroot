@@ -20,8 +20,8 @@ export interface ConfigzOptions {
 }
 
 const defaultCopy = {
-  productName: 'FlareAuth',
-  headline: 'Sign in to FlareAuth',
+  productName: 'Realmroot',
+  headline: 'Sign in to Realmroot',
   description: 'Use your account to continue securely.',
 }
 

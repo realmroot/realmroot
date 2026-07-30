@@ -7,7 +7,7 @@ export function securityPolicy(overrides: Partial<SecurityPolicy> = {}): Securit
     passkeys: {
       enabled: true,
       rpId: 'auth.example.com',
-      rpName: 'FlareAuth',
+      rpName: 'Realmroot',
       origins: ['https://auth.example.com'],
     },
     sessions: {
@@ -54,7 +54,7 @@ export function updatedSecurityPolicy(): SecurityPolicy {
     password: {
       minLength: 14,
       requiredCharacterTypes: 3,
-      customWords: ['flareauth'],
+      customWords: ['realmroot'],
       rejectUserInfo: true,
       rejectSequential: true,
       rejectCustomWords: true,
@@ -131,7 +131,7 @@ export function createConfigzServiceMock(
         supportEmail: 'support@example.com',
       },
       copy: {
-        productName: 'FlareAuth',
+        productName: 'Realmroot',
         headline: 'Sign in',
         description: 'Continue.',
       },

@@ -12,9 +12,9 @@ const pluginVersion = "0.3.0"
 
 func main() {
 	manifest := plugin.Manifest{
-		Name:              "flareauth",
+		Name:              "realmroot",
 		Version:           pluginVersion,
-		Description:       "Authenticate FlareAuth and DPoP-bound target API requests as a stable Agent identity",
+		Description:       "Authenticate Realmroot and DPoP-bound target API requests as a stable Agent identity",
 		RestishAPIVersion: 2,
 		Hooks:             []string{"auth", "response-middleware"},
 		HookTimeouts: map[string]time.Duration{

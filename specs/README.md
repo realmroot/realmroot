@@ -1,6 +1,6 @@
-# FlareAuth Specs
+# Realmroot Specs
 
-Specs are the product-facing source of truth for FlareAuth behavior. They
+Specs are the product-facing source of truth for Realmroot behavior. They
 describe the feature, scenario, and verification path. They are **Gherkin
 documentation, not an executable suite** — there is no Cucumber runner. Tests
 reference specs; the specs do not generate tests.

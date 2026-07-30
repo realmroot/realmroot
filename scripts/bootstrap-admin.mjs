@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-const baseUrl = requireEnv('FLAREAUTH_URL').replace(/\/+$/, '')
-const email = requireEnv('FLAREAUTH_ADMIN_EMAIL')
-const password = requireEnv('FLAREAUTH_ADMIN_PASSWORD')
-const name = process.env.FLAREAUTH_ADMIN_NAME || 'FlareAuth Admin'
-const username = process.env.FLAREAUTH_ADMIN_USERNAME
+const baseUrl = requireEnv('REALMROOT_URL').replace(/\/+$/, '')
+const email = requireEnv('REALMROOT_ADMIN_EMAIL')
+const password = requireEnv('REALMROOT_ADMIN_PASSWORD')
+const name = process.env.REALMROOT_ADMIN_NAME || 'Realmroot Admin'
+const username = process.env.REALMROOT_ADMIN_USERNAME
 
 const response = await fetch(`${baseUrl}/api/onboarding/admin-users`, {
   method: 'POST',

@@ -85,7 +85,7 @@ function foreignKeyReferences(table: Parameters<typeof getTableConfig>[0]) {
 }
 
 describe('schema.test 2', () => {
-  it('keeps FlareAuth product settings and OAuth token tables explicit', () => {
+  it('keeps Realmroot product settings and OAuth token tables explicit', () => {
     expect(columnNames(account)).toEqual(expect.arrayContaining(['account_id', 'provider_id', 'user_id']))
     expect(columnNames(verification)).toEqual(expect.arrayContaining(['identifier', 'value', 'expires_at']))
     expect(indexNames(oauthRefreshToken)).toEqual(

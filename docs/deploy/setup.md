@@ -25,10 +25,10 @@ curl https://auth.example.com/api/onboarding/status
 6. Create the first admin in the browser, or use the CLI helper:
 
 ```bash
-FLAREAUTH_URL=https://auth.example.com \
-FLAREAUTH_ADMIN_EMAIL=admin@example.com \
-FLAREAUTH_ADMIN_PASSWORD='replace-with-a-long-password' \
-FLAREAUTH_ADMIN_NAME='Admin User' \
+REALMROOT_URL=https://auth.example.com \
+REALMROOT_ADMIN_EMAIL=admin@example.com \
+REALMROOT_ADMIN_PASSWORD='replace-with-a-long-password' \
+REALMROOT_ADMIN_NAME='Admin User' \
 pnpm run bootstrap:admin
 ```
 

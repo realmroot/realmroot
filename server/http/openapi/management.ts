@@ -151,7 +151,7 @@ function createManagementOpenApiApp() {
     type: 'http',
     scheme: 'bearer',
     bearerFormat: 'agent+jwt',
-    description: 'AgentAuth possession proof supplied transparently by the FlareAuth Restish authentication adapter.',
+    description: 'AgentAuth possession proof supplied transparently by the Realmroot Restish authentication adapter.',
   })
   for (const routeConfig of managementRoutes) app.openAPIRegistry.registerPath(createManagementRoute(routeConfig))
   return app
@@ -162,7 +162,7 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
     {
       openapi: '3.1.0',
       info: {
-        title: 'FlareAuth API',
+        title: 'Realmroot API',
         version: '2026-05-24',
         description:
           'Unified API for Agent identity, self-service resources, and permission-gated tenant administration.',
@@ -185,11 +185,11 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
                   in: 'header',
                   name: 'Authorization',
                   value: 'AgentAuth',
-                  provider: 'flareauth-agent',
+                  provider: 'realmroot-agent',
                 },
               },
               params: {
-                provider: 'flareauth-agent',
+                provider: 'realmroot-agent',
               },
             },
           },

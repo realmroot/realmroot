@@ -16,7 +16,7 @@ export const jwtTokenType = 'urn:ietf:params:oauth:token-type:jwt'
 const defaultExpiresInSeconds = 60 * 60
 const defaultRefreshExpiresInSeconds = 30 * 24 * 60 * 60
 const refreshTokenPrefix = 'fatr_'
-const subjectClaimsMember = 'urn:flareauth:params:oauth:token-exchange:subject-claims'
+const subjectClaimsMember = 'urn:realmroot:params:oauth:token-exchange:subject-claims'
 
 export interface TokenExchangeRequest {
   grantType: string
@@ -313,7 +313,7 @@ async function authenticateClient(deps: Deps, clientId: string, clientSecret: st
 }
 
 function invalidClient(description: string) {
-  return oauthError('invalid_client', description, 401, {}, { 'WWW-Authenticate': 'Basic realm="FlareAuth OAuth"' })
+  return oauthError('invalid_client', description, 401, {}, { 'WWW-Authenticate': 'Basic realm="Realmroot OAuth"' })
 }
 
 export function parseBasicClientAuthorization(header: string | null) {

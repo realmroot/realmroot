@@ -239,7 +239,7 @@ function createDeviceAuth(options: { clients?: Record<string, ApplicationAggrega
   }
 
   return betterAuth({
-    appName: 'FlareAuth',
+    appName: 'Realmroot',
     secret: '01234567890123456789012345678901abcdef',
     baseURL: 'https://auth.example.com/api/auth',
     emailAndPassword: {
@@ -268,7 +268,7 @@ function createDeviceAuth(options: { clients?: Record<string, ApplicationAggrega
 
 function createDeviceOAuthAuth(options: { expiresIn?: '1s' | '30m' } = {}) {
   return betterAuth({
-    appName: 'FlareAuth',
+    appName: 'Realmroot',
     secret: '01234567890123456789012345678901abcdef',
     baseURL: 'https://auth.example.com/api/auth',
     trustedOrigins: ['https://auth.example.com'],

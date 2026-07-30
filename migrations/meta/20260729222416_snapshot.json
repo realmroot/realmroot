@@ -3239,7 +3239,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'flareauth'"
+          "default": "'realmroot'"
         },
         "description": {
           "name": "description",

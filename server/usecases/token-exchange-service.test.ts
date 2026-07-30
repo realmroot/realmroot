@@ -32,7 +32,7 @@ const applicationId = 'app_1'
 const applicationClientId = 'runner-client'
 const audienceResourceId = 'res_1'
 const defaultAudience = 'https://ama.example.com'
-const flareAuthIssuer = 'https://auth.example.com/api/auth'
+const realmrootIssuer = 'https://auth.example.com/api/auth'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -115,15 +115,15 @@ describe('token exchange service', () => {
     expect(exchanged.access_token).toMatch(/^fatx_/)
 
     await expect(
-      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
+      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, realmrootIssuer),
     ).resolves.toMatchObject({
       active: true,
-      iss: flareAuthIssuer,
+      iss: realmrootIssuer,
       sub: 'org_1:runner_1',
       aud: defaultAudience,
       client_id: applicationClientId,
       scope: 'runner:connect',
-      'urn:flareauth:params:oauth:token-exchange:subject-claims': {
+      'urn:realmroot:params:oauth:token-exchange:subject-claims': {
         ama_project_id: 'project_1',
         ama_environment_id: 'env_1',
         ama_runner_id: 'runner_1',
@@ -145,7 +145,7 @@ describe('token exchange service', () => {
         deps,
         exchanged.access_token,
         { clientId: 'other-client', clientSecret: 'other-client-secret' },
-        flareAuthIssuer,
+        realmrootIssuer,
       ),
     ).resolves.toEqual({ active: false })
     repository.client = {
@@ -156,14 +156,14 @@ describe('token exchange service', () => {
 
     repository.expireTokens()
     await expect(
-      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
+      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, realmrootIssuer),
     ).resolves.toEqual({
       active: false,
     })
     repository.unexpireTokens()
     repository.revokeTokens()
     await expect(
-      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
+      introspectToken(deps, exchanged.access_token, { clientId: applicationClientId, clientSecret }, realmrootIssuer),
     ).resolves.toEqual({
       active: false,
     })
@@ -218,15 +218,15 @@ describe('token exchange service', () => {
     })
     expect(refreshed.access_token).toMatch(/^fatx_/)
     await expect(
-      introspectToken(deps, refreshed.access_token, { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
+      introspectToken(deps, refreshed.access_token, { clientId: applicationClientId, clientSecret }, realmrootIssuer),
     ).resolves.toMatchObject({
       active: true,
-      iss: flareAuthIssuer,
+      iss: realmrootIssuer,
       sub: 'org_1:runner_1',
       aud: defaultAudience,
       client_id: applicationClientId,
       scope: 'runner:connect',
-      'urn:flareauth:params:oauth:token-exchange:subject-claims': {
+      'urn:realmroot:params:oauth:token-exchange:subject-claims': {
         ama_project_id: 'project_1',
         ama_environment_id: 'env_1',
       },
@@ -260,7 +260,7 @@ describe('token exchange service', () => {
     ).rejects.toMatchObject({ status: 400 })
 
     await expect(
-      introspectToken(deps, 'missing-token', { clientId: applicationClientId, clientSecret }, flareAuthIssuer),
+      introspectToken(deps, 'missing-token', { clientId: applicationClientId, clientSecret }, realmrootIssuer),
     ).resolves.toEqual({
       active: false,
     })
@@ -953,7 +953,7 @@ describe('token exchange service', () => {
         deps,
         'missing-token',
         { clientId: applicationClientId, clientSecret: 'wrong-secret' },
-        flareAuthIssuer,
+        realmrootIssuer,
       ),
     ).rejects.toMatchObject({
       status: 401,

@@ -126,7 +126,7 @@ function parseSecurityPolicy(env: Env, baseURL: string, trustedOrigins: string[]
     passkeys: {
       enabled: parseBoolean(env.PASSKEY_ENABLED, true, 'PASSKEY_ENABLED'),
       rpId,
-      rpName: env.WEBAUTHN_RP_NAME || 'FlareAuth',
+      rpName: env.WEBAUTHN_RP_NAME || 'Realmroot',
       origins: env.WEBAUTHN_ORIGINS ? parseTrustedOrigins(env.WEBAUTHN_ORIGINS, baseURL) : trustedOrigins,
     },
     sessions: {

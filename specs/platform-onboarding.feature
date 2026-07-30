@@ -1,6 +1,6 @@
 Feature: Platform bootstrap and route access
   As a tenant operator
-  I want a fresh FlareAuth deployment to guide setup and protect hosted routes
+  I want a fresh Realmroot deployment to guide setup and protect hosted routes
   So that the first admin and authenticated entry points are created safely
 
   Background:
@@ -11,7 +11,7 @@ Feature: Platform bootstrap and route access
   Scenario: API health reports platform status
     When I request GET /api/health
     Then the response is 200
-    And the body reports ok true and service "flareauth"
+    And the body reports ok true and service "realmroot"
 
   @e2e @entrypoint:product-ui @journey:first-admin-gate
   Scenario: Fresh deployment routes redirect to first-admin onboarding

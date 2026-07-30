@@ -44,7 +44,7 @@ export function createSecretCipher(masterSecret: string): SecretCipher {
 }
 
 async function deriveKey(masterSecret: string) {
-  const material = await crypto.subtle.digest('SHA-256', encode(`flareauth:credential-encryption:${masterSecret}`))
+  const material = await crypto.subtle.digest('SHA-256', encode(`realmroot:credential-encryption:${masterSecret}`))
   return crypto.subtle.importKey('raw', material, 'AES-GCM', false, ['encrypt', 'decrypt'])
 }
 

@@ -54,14 +54,14 @@ export interface RestishAgentPlugin {
 }
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
-const pluginRoot = join(repoRoot, 'plugins', 'restish-flareauth')
+const pluginRoot = join(repoRoot, 'plugins', 'restish-realmroot')
 
 export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
-  const root = mkdtempSync(join(tmpdir(), 'flareauth-restish-e2e-'))
+  const root = mkdtempSync(join(tmpdir(), 'realmroot-restish-e2e-'))
   const configDir = join(root, 'config')
   const stateDir = join(root, 'state')
-  const binary = join(root, 'restish-flareauth')
-  const apiName = 'flareauth-e2e-plugin'
+  const binary = join(root, 'restish-realmroot')
+  const apiName = 'realmroot-e2e-plugin'
   const approvalFile = join(root, 'approval-url')
   mkdirSync(configDir)
   mkdirSync(stateDir)
@@ -74,8 +74,8 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   const environment = {
     ...process.env,
     RSH_CONFIG_DIR: configDir,
-    FLAREAUTH_PLUGIN_STATE_DIR: stateDir,
-    FLAREAUTH_PLUGIN_APPROVAL_FILE: approvalFile,
+    REALMROOT_PLUGIN_STATE_DIR: stateDir,
+    REALMROOT_PLUGIN_APPROVAL_FILE: approvalFile,
   }
   execFileSync('restish', ['plugin', 'install', binary, '--yes'], {
     cwd: repoRoot,
@@ -171,7 +171,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
       child.on('close', (code) => {
         clearInterval(approvalTimer)
         if (code !== 0) {
-          const error = new Error(`FlareAuth ${operation} exited with ${code}: ${stderr}${stdout}`)
+          const error = new Error(`Realmroot ${operation} exited with ${code}: ${stderr}${stdout}`)
           if (!approvalResolved) rejectApprovalUrl(error)
           reject(error)
           return
@@ -188,7 +188,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
 
   return {
     firstWhoami: (name) =>
-      invokePending<PluginIdentityResult>('get-current-agent', undefined, { FLAREAUTH_AGENT_NAME: name }),
+      invokePending<PluginIdentityResult>('get-current-agent', undefined, { REALMROOT_AGENT_NAME: name }),
     whoami: () => invoke<PluginIdentityResult>('get-current-agent'),
     requestCapabilities: (capabilities, reason) =>
       invokePending<CapabilityRequestResult>('request-agent-management-access', { capabilities, reason }),

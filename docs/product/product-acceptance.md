@@ -1,12 +1,12 @@
 # Product Acceptance Spec
 
-This document is the executable product map for FlareAuth 1.0. It defines the
+This document is the executable product map for Realmroot 1.0. It defines the
 route inventory, domain model, settings surface, product acceptance matrix, and
 review evidence needed to ship a complete Cloudflare-native identity provider.
 
 ## Reference Baseline
 
-FlareAuth follows a full identity-provider product model instead of a demo-page model:
+Realmroot follows a full identity-provider product model instead of a demo-page model:
 
 - Hosted auth is a centralized OIDC interaction. Client apps redirect to the
   identity provider, users complete the hosted sign-in experience, and the
@@ -41,7 +41,7 @@ FlareAuth follows a full identity-provider product model instead of a demo-page 
 
 ### Explicitly Deferred
 
-Only these enterprise capabilities are excluded from FlareAuth 1.0:
+Only these enterprise capabilities are excluded from Realmroot 1.0:
 
 - Enterprise SSO connectors, including SAML and enterprise OIDC SSO.
 - Team self-service administration distinct from tenant Organizations.
@@ -54,7 +54,7 @@ acceptance.
 
 ## Production-Ready Definition
 
-FlareAuth 1.0 is production ready only when all of these are true:
+Realmroot 1.0 is production ready only when all of these are true:
 
 - No demo-only product pages are reachable from public, Account Center, or Admin
   Console navigation.
@@ -230,7 +230,7 @@ Admin setup readiness is protected and read from `/api/management/readiness`:
 | Hosted sign-up | Creates an account through enabled identifiers and redirects into the authenticated product journey. |
 | Recovery and verification | Request and completion steps are separate, user-visible, reload-safe, and backed by configured email flows. |
 | OAuth consent | Shows client name, redirect URI context, requested scopes, approve/deny actions, and records consent against the application. |
-| OIDC integration | Discovery, authorize, token, JWKS, userinfo, and end-session endpoints use production issuer metadata and validate redirect URI/client constraints. Product apps integrate with standard OIDC authorization code plus PKCE and do not call FlareAuth management or account APIs. |
+| OIDC integration | Discovery, authorize, token, JWKS, userinfo, and end-session endpoints use production issuer metadata and validate redirect URI/client constraints. Product apps integrate with standard OIDC authorization code plus PKCE and do not call Realmroot management or account APIs. |
 | Account Center profile | Loads from account APIs, saves display name/username/avatar, requests email changes, changes password, and keeps `/profile` reload-safe. |
 | Account Center security | Shows MFA policy, supports TOTP enrollment, passkey registration, and 2-step state where enabled. |
 | Account Center linked accounts | Lists social identities and unlinks a connected account without leaving the section route. |
@@ -306,7 +306,7 @@ must include the review-environment acceptance path:
    client, copy the standard OIDC integration details, and verify confidential
    client secret metadata/one-time rotation when using a confidential client.
    Verify a product app can complete authorization code with PKCE from discovery
-   metadata without FlareAuth account, management, or custom SDK calls.
+   metadata without Realmroot account, management, or custom SDK calls.
 9. Visit every Console route in the route map directly and by sidebar
    navigation; every persistent nav item should point to a real route-backed
    page.

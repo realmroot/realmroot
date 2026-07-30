@@ -1,7 +1,7 @@
-# FlareAuth Tenant Management
+# Realmroot Tenant Management
 
 Read this reference only when the user explicitly asks to administer a
-FlareAuth tenant or configure a product OIDC client. Do not load or execute this
+Realmroot tenant or configure a product OIDC client. Do not load or execute this
 workflow while an Agent is merely establishing identity, discovering registered
 API Resources, requesting resource scopes, or invoking a target API.
 
@@ -38,7 +38,7 @@ target API scopes and are never prerequisites for:
 ## Request Management Authority
 
 Use the origin resolved by `../SKILL.md`; do not independently replace it with
-the hosted default. Connect the unified FlareAuth API and establish the Agent
+the hosted default. Connect the unified Realmroot API and establish the Agent
 identity first:
 
 ```bash
@@ -52,7 +52,7 @@ Request the minimum required capability with the generated operation:
 restish "$API_NAME" request-agent-management-access --rsh-validate -o json <<'JSON'
 {
   "capabilities": ["management:read", "management:write"],
-  "reason": "Administer the FlareAuth tenant"
+  "reason": "Administer the Realmroot tenant"
 }
 JSON
 ```
@@ -94,7 +94,7 @@ Confirm exact targets before destructive operations.
 
 ## Configure OIDC Clients
 
-Use the FlareAuth issuer:
+Use the Realmroot issuer:
 
 ```text
 AUTH_ORIGIN/api/auth
@@ -122,7 +122,7 @@ Use PKCE for authorization-code clients where supported. Set
 `tokenEndpointAuthMethod: none` for public clients. Store a confidential
 client's returned `clientSecret` immediately; it is shown only once.
 
-Distinguish `AUTH_ORIGIN`, where FlareAuth runs, from `APP_ORIGIN`, where the
+Distinguish `AUTH_ORIGIN`, where Realmroot runs, from `APP_ORIGIN`, where the
 consuming product runs. Create a public SPA client:
 
 ```bash
@@ -230,7 +230,7 @@ Prefer the product's OIDC library device-flow support.
   origin explicitly supplied for the task, obtain confirmation before mutating
   the tenant.
 - Never let the Agent approve its own enrollment or management request.
-- Never modify or delete system-managed applications such as `flareauth-cli`.
+- Never modify or delete system-managed applications such as `realmroot-cli`.
 - Treat asset uploads as `multipart/form-data` with one `file` field.
 - Treat raw secrets as create/rotation-only output; never expect list/detail
   operations to reveal them.

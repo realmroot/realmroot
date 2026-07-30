@@ -64,7 +64,7 @@ type AuthHandler = Pick<Auth, 'handler'> & {
 
 // Liveness payload. Shared with the worker entry so it can answer `/api/health`
 // before constructing deps — a liveness probe must not depend on the database.
-export const healthStatus = { ok: true, service: 'flareauth' } as const
+export const healthStatus = { ok: true, service: 'realmroot' } as const
 
 export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {}) {
   // Registration order is load-bearing: middleware only guards routes registered
@@ -247,7 +247,7 @@ async function maybeHandleTokenExchange(c: Context, issuer: string) {
       'Client authentication is required.',
       401,
       {},
-      { 'WWW-Authenticate': 'Basic realm="FlareAuth token endpoint"' },
+      { 'WWW-Authenticate': 'Basic realm="Realmroot token endpoint"' },
     )
   }
 

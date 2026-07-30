@@ -123,7 +123,7 @@ export function createAuth(
   } as unknown as Deps
 
   return betterAuth({
-    appName: 'FlareAuth',
+    appName: 'Realmroot',
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     secret,
     baseURL,
@@ -214,7 +214,7 @@ export function createAuth(
         translations: betterAuthTranslations,
         defaultLocale: 'en',
         detection: ['cookie', 'header'],
-        localeCookie: 'flareauth_locale',
+        localeCookie: 'realmroot_locale',
       }),
       jwt({
         jwt: {
@@ -228,7 +228,7 @@ export function createAuth(
       }),
       admin(),
       twoFactor({
-        issuer: 'FlareAuth',
+        issuer: 'Realmroot',
         allowPasswordless: true,
         twoFactorCookieMaxAge: 60 * 10,
         trustDeviceMaxAge: 60 * 60 * 24 * 30,
@@ -261,8 +261,8 @@ export function createAuth(
         },
       }),
       agentAuth({
-        providerName: 'FlareAuth',
-        providerDescription: 'Delegated FlareAuth account access for approved agents.',
+        providerName: 'Realmroot',
+        providerDescription: 'Delegated Realmroot account access for approved agents.',
         modes: ['delegated'],
         approvalMethods: ['device_authorization'],
         deviceAuthorizationPage: '/agent/approve',

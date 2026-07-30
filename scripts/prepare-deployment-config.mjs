@@ -6,13 +6,13 @@ const sourcePath = process.argv[2] ?? 'wrangler.toml'
 const outputPath = process.argv[3] ?? 'wrangler.deployment.toml'
 
 const settings = {
-  workerName: requiredName('FLAREAUTH_WORKER_NAME'),
-  databaseName: requiredName('FLAREAUTH_D1_DATABASE'),
-  databaseId: requiredUuid('FLAREAUTH_D1_DATABASE_ID'),
-  bucketName: requiredName('FLAREAUTH_R2_BUCKET'),
-  queueName: requiredName('FLAREAUTH_EMAIL_QUEUE'),
-  emailFrom: requiredEmail('FLAREAUTH_EMAIL_FROM'),
-  emailFromName: requiredText('FLAREAUTH_EMAIL_FROM_NAME'),
+  workerName: requiredName('REALMROOT_WORKER_NAME'),
+  databaseName: requiredName('REALMROOT_D1_DATABASE'),
+  databaseId: requiredUuid('REALMROOT_D1_DATABASE_ID'),
+  bucketName: requiredName('REALMROOT_R2_BUCKET'),
+  queueName: requiredName('REALMROOT_EMAIL_QUEUE'),
+  emailFrom: requiredEmail('REALMROOT_EMAIL_FROM'),
+  emailFromName: requiredText('REALMROOT_EMAIL_FROM_NAME'),
 }
 
 let config = readFileSync(sourcePath, 'utf8')

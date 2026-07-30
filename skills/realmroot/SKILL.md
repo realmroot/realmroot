@@ -1,15 +1,15 @@
 ---
-name: flareauth
-description: Operate FlareAuth and its registered API Resources with Restish v2, establish a stable Agent identity, request controller-approved access, call native or external target APIs with automatic DPoP, and guide product OIDC client integration. Use when an Agent needs enrollment, governance access, linked target accounts, API Resource discovery, target API invocation, or OIDC client configuration.
+name: realmroot
+description: Operate Realmroot and its registered API Resources with Restish v2, establish a stable Agent identity, request controller-approved access, call native or external target APIs with automatic DPoP, and guide product OIDC client integration. Use when an Agent needs enrollment, governance access, linked target accounts, API Resource discovery, target API invocation, or OIDC client configuration.
 ---
 
-# FlareAuth
+# Realmroot
 
 Use this skill to establish a stable Agent identity and call registered API
 Resources. Read `references/restish-commands.md` for the exact generated Restish
 operations and request bodies.
 
-Only when the user explicitly asks to administer FlareAuth applications,
+Only when the user explicitly asks to administer Realmroot applications,
 Connectors, API Resources, users, settings, or product OIDC clients, read
 `references/management.md`. Do not request `management:read` or
 `management:write` while establishing identity or calling a registered API
@@ -17,13 +17,13 @@ Resource.
 
 ## Resolve The Deployment Origin
 
-Use `https://realmroot.dev` as the official hosted FlareAuth origin. It is a
+Use `https://realmroot.dev` as the official hosted Realmroot origin. It is a
 live production service, not a placeholder or development endpoint.
 
 Resolve the origin in this order:
 
 1. use an origin explicitly supplied by the user for this task;
-2. otherwise use an already-set `AUTH_ORIGIN`, then `FLAREAUTH_ORIGIN`;
+2. otherwise use an already-set `AUTH_ORIGIN`, then `REALMROOT_ORIGIN`;
 3. otherwise default to `https://realmroot.dev`.
 
 Normalize the result into `AUTH_ORIGIN` without a trailing slash. It must be an
@@ -37,12 +37,12 @@ another name, especially when keeping hosted, test, and self-hosted deployments
 connected at the same time:
 
 ```bash
-AUTH_ORIGIN="${AUTH_ORIGIN:-${FLAREAUTH_ORIGIN:-https://realmroot.dev}}"
+AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://realmroot.dev}}"
 API_NAME="${API_NAME:-realmroot}"
 ```
 
 Do not ask for an origin merely because none was supplied; use the official
-default. Do not search for or assume access to FlareAuth source code.
+default. Do not search for or assume access to Realmroot source code.
 
 ## Install The Restish Adapter
 
@@ -56,23 +56,23 @@ go version
 Install the trusted adapter:
 
 ```bash
-go install github.com/saltbo/flareauth/plugins/restish-flareauth@latest
-restish plugin install "$(go env GOPATH)/bin/restish-flareauth" --yes
+go install github.com/saltbo/realmroot/plugins/restish-realmroot@latest
+restish plugin install "$(go env GOPATH)/bin/restish-realmroot" --yes
 restish plugin list
 ```
 
-Require plugin `flareauth` version 0.3.0 or newer with the `auth` and
+Require plugin `realmroot` version 0.3.0 or newer with the `auth` and
 `response-middleware` hooks. It must not expose `login`, `whoami`, or other
 business commands. Reinstall and stop if the installed version is older.
 
 The adapter stores Agent and Host private keys in protected local state with
-mode `0600`. Set `FLAREAUTH_PLUGIN_STATE_DIR` only when an explicit protected
+mode `0600`. Set `REALMROOT_PLUGIN_STATE_DIR` only when an explicit protected
 location is required. Never log, upload, or paste these keys.
 
 Optionally set a human-readable name before the first protected operation:
 
 ```bash
-export FLAREAUTH_AGENT_NAME="Build Agent"
+export REALMROOT_AGENT_NAME="Build Agent"
 ```
 
 ## Establish The Stable Agent Identity
@@ -108,7 +108,7 @@ The Agent issuer is the same Better Auth OIDC issuer used by product clients:
 AUTH_ORIGIN/api/auth
 ```
 
-FlareAuth publishes no second Agent-only issuer, token endpoint, or JWKS.
+Realmroot publishes no second Agent-only issuer, token endpoint, or JWKS.
 
 ## Call Registered API Resources
 
@@ -133,7 +133,7 @@ Use only scopes to express target authority:
 
 - For `external`, select an exact connected account. The target platform issues
   the token.
-- For `native`, omit `accountConnectionId`. FlareAuth issues the token for the
+- For `native`, omit `accountConnectionId`. Realmroot issues the token for the
   controller identity.
 
 If an external resource has no connected account, tell the controller to
@@ -149,13 +149,13 @@ refresh token or target-platform credentials to the Agent.
 
 The adapter generates a separate P-256 DPoP key for each grant. For `external`,
 it discovers the target token endpoint through RFC 9728 and RFC 8414. For
-`native`, it binds the proof to the FlareAuth token operation. It sends RFC 9449
+`native`, it binds the proof to the Realmroot token operation. It sends RFC 9449
 proofs, stores the issued token, and creates a fresh proof with `ath` for each
 target request.
 
 The target token is short-lived, audience-restricted, and DPoP-bound. Its issuer
 depends only on `authorizationMode`: the target platform for `external`, or
-FlareAuth for `native`. Restish output contains safe token metadata but not the
+Realmroot for `native`. Restish output contains safe token metadata but not the
 raw access token.
 
 Connect the discovered `resourceUrl` directly. The target advertises its OpenAPI
@@ -168,7 +168,7 @@ DPoP: RESOURCE_REQUEST_PROOF
 ```
 
 Never construct DPoP proofs, discover token endpoints manually, expose the
-access token, or use stored user credentials. FlareAuth never proxies target
+access token, or use stored user credentials. Realmroot never proxies target
 API traffic.
 
 Treat `/.well-known/agent-configuration` as authoritative only for AgentAuth

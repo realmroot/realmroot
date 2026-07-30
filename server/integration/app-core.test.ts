@@ -13,7 +13,7 @@ describe('core routes over real D1', () => {
     const response = await request('/api/health')
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ ok: true, service: 'flareauth' })
+    await expect(response.json()).resolves.toEqual({ ok: true, service: 'realmroot' })
   })
 
   it('serves the public configz contract built from the security policy', async () => {
@@ -65,7 +65,7 @@ describe('onboarding bootstrap writes real D1 rows', () => {
       body: JSON.stringify({
         email: 'admin@example.com',
         username: 'admin',
-        name: 'FlareAuth Admin',
+        name: 'Realmroot Admin',
         password: 'admin-password-2026',
       }),
     })

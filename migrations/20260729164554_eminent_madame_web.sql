@@ -151,7 +151,7 @@ ALTER TABLE `agent_audit_event` DROP COLUMN `external_account_grant_id`;--> stat
 ALTER TABLE `agent_audit_event` DROP COLUMN `target_origin`;--> statement-breakpoint
 ALTER TABLE `agent_audit_event` DROP COLUMN `target_path`;--> statement-breakpoint
 ALTER TABLE `agent_audit_event` DROP COLUMN `method`;--> statement-breakpoint
-ALTER TABLE `api_resource` ADD `authorization_mode` text DEFAULT 'flareauth' NOT NULL;--> statement-breakpoint
+ALTER TABLE `api_resource` ADD `authorization_mode` text DEFAULT 'realmroot' NOT NULL;--> statement-breakpoint
 ALTER TABLE `identity_provider_connector` DROP COLUMN `api_base_url`;--> statement-breakpoint
 ALTER TABLE `identity_provider_connector` DROP COLUMN `credential_modes`;--> statement-breakpoint
 ALTER TABLE `identity_provider_connector` DROP COLUMN `credential_header_name`;--> statement-breakpoint

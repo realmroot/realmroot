@@ -7,13 +7,13 @@ export const admin = {
   email: 'admin@example.com',
   username: 'admin',
   password: 'admin2026',
-  name: 'FlareAuth Admin',
+  name: 'Realmroot Admin',
 }
 
 export const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.PLAYWRIGHT_PORT ?? '4189'}`
 const e2eWranglerConfig = process.env.E2E_WRANGLER_CONFIG ?? 'e2e/wrangler.toml'
 const e2ePersistStatePath = process.env.CF_PERSIST_STATE_PATH ?? 'e2e/.wrangler/state'
-const e2eD1Database = process.env.E2E_D1_DATABASE ?? 'flareauth-db-e2e'
+const e2eD1Database = process.env.E2E_D1_DATABASE ?? 'realmroot-db-e2e'
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
 export async function resetAndBootstrap() {
@@ -97,12 +97,12 @@ export function resetLocalData() {
     DELETE FROM api_resource;
     DELETE FROM application_consent;
     DELETE FROM application_client_secret;
-    DELETE FROM application_client_metadata WHERE application_id <> 'app_flareauth_cli';
-    DELETE FROM application WHERE id <> 'app_flareauth_cli';
+    DELETE FROM application_client_metadata WHERE application_id <> 'app_realmroot_cli';
+    DELETE FROM application WHERE id <> 'app_realmroot_cli';
     DELETE FROM oauth_access_token;
     DELETE FROM oauth_refresh_token;
     DELETE FROM oauth_consent;
-    DELETE FROM oauth_client WHERE client_id <> 'flareauth-cli';
+    DELETE FROM oauth_client WHERE client_id <> 'realmroot-cli';
     DELETE FROM passkey;
     DELETE FROM wallet_address;
     DELETE FROM two_factor;

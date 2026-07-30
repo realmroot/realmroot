@@ -94,7 +94,7 @@ describe('schema.test 1', () => {
     )
   })
 
-  it('anchors FlareAuth applications to Better Auth OAuth clients without changing provider tables', () => {
+  it('anchors Realmroot applications to Better Auth OAuth clients without changing provider tables', () => {
     expect(columnNames(oauthClient)).toEqual(
       expect.arrayContaining(['client_id', 'client_secret', 'disabled', 'skip_consent', 'redirect_uris']),
     )

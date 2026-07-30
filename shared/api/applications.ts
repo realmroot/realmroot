@@ -11,7 +11,7 @@ export const applicationGrantTypes = [
   deviceCodeGrantType,
   tokenExchangeGrantType,
 ] as const
-export const systemCliClientId = 'flareauth-cli'
+export const systemCliClientId = 'realmroot-cli'
 export const managementApplicationScopes = ['management:read', 'management:write'] as const
 export const userConfigurableApplicationScopes = ['openid', 'profile', 'email', 'offline_access'] as const
 export const applicationScopes = [...userConfigurableApplicationScopes, ...managementApplicationScopes] as const

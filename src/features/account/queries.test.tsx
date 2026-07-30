@@ -52,7 +52,7 @@ describe('account query hooks', () => {
     const profile = renderHook(() => useAccountProfile(), { wrapper: wrapper(client) })
     await waitFor(() => expect(config.result.current.isSuccess).toBe(true))
     await waitFor(() => expect(profile.result.current.isSuccess).toBe(true))
-    expect(config.result.current.data?.copy.productName).toBe('FlareAuth')
+    expect(config.result.current.data?.copy.productName).toBe('Realmroot')
     expect(profile.result.current.data?.user.email).toBe('jane@example.com')
   })
 

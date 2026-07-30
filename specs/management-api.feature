@@ -1,6 +1,6 @@
-Feature: Unified FlareAuth API Restish entry
+Feature: Unified Realmroot API Restish entry
   As an Agent operator
-  I want Restish to discover every operation from one FlareAuth API contract
+  I want Restish to discover every operation from one Realmroot API contract
   So that identity and permissions, rather than separate API surfaces, determine what an Agent can do
 
   Background:
@@ -17,7 +17,7 @@ Feature: Unified FlareAuth API Restish entry
 
   @entrypoint:restish @journey:management-restish-oauth-auth
   Scenario: Restish transparently authenticates as an Agent
-    Given Restish is connected to the unified FlareAuth API
+    Given Restish is connected to the unified Realmroot API
     When a new Agent invokes its first protected OpenAPI operation
     Then the Restish authentication adapter starts Agent enrollment without a login command
     And the adapter uses the endpoints and issuer published by AgentAuth discovery
@@ -30,7 +30,7 @@ Feature: Unified FlareAuth API Restish entry
   Scenario: Native clients request OAuth device authorization codes when explicitly configured
     Given a public native application is configured with the OAuth device-code grant
     When a native client requests a device authorization code for openid profile email offline_access scopes
-    Then FlareAuth returns a device code, user code, verification URI, expiry, and polling interval
+    Then Realmroot returns a device code, user code, verification URI, expiry, and polling interval
     And the native client can poll the OAuth token endpoint for OIDC-compatible tokens after browser approval
     And confidential, disabled, or non-native clients cannot use device authorization
 

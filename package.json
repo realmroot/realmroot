@@ -1,5 +1,5 @@
 {
-  "name": "flareauth",
+  "name": "realmroot",
   "version": "1.0.1",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "vite dev",
     "build": "[ \"$WORKERS_CI\" = \"1\" ] && [ \"$WORKERS_CI_BRANCH\" != \"main\" ] && export CF_WRANGLER_CONFIG=wrangler.preview.toml; vite build",
-    "plugin:build": "cd plugins/restish-flareauth && go build -o restish-flareauth .",
-    "plugin:test": "cd plugins/restish-flareauth && go test ./...",
+    "plugin:build": "cd plugins/restish-realmroot && go build -o restish-realmroot .",
+    "plugin:test": "cd plugins/restish-realmroot && go test ./...",
     "deploy": "pnpm run db:migrate:remote && pnpm run build && wrangler deploy",
     "deploy:check": "node scripts/check-cloudflare-config.mjs",
     "deploy:fork": "node scripts/deploy-cloudflare-fork.mjs",
@@ -17,7 +17,7 @@
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply DB --local",
-    "db:migrate:e2e": "wrangler d1 migrations apply flareauth-db-e2e --local --config e2e/wrangler.toml --persist-to e2e/.wrangler/state",
+    "db:migrate:e2e": "wrangler d1 migrations apply realmroot-db-e2e --local --config e2e/wrangler.toml --persist-to e2e/.wrangler/state",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "db:migrate:self": "wrangler d1 migrations apply DB --remote --config wrangler.production.toml",
     "db:migrate:staging": "wrangler d1 migrations apply DB --remote --config wrangler.preview.toml",
@@ -113,7 +113,7 @@
         "description": "Master secret for AES-GCM encryption of Connector and external API resource credentials"
       },
       "DB": {
-        "description": "D1 database for FlareAuth identity data"
+        "description": "D1 database for Realmroot identity data"
       },
       "ASSET_BUCKET": {
         "description": "R2 bucket for uploaded avatars, organization logos, and application logos"

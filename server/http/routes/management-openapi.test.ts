@@ -266,7 +266,7 @@ describe('management routes 4', () => {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        url: 'https://events.example.com/flareauth',
+        url: 'https://events.example.com/realmroot',
         events: ['user.created'],
         enabled: true,
       }),
@@ -319,7 +319,7 @@ describe('management routes 4', () => {
     })
     expect(webhooks.createEndpoint).toHaveBeenCalledWith(
       expect.anything(),
-      { url: 'https://events.example.com/flareauth', events: ['user.created'], enabled: true },
+      { url: 'https://events.example.com/realmroot', events: ['user.created'], enabled: true },
       'admin-1',
     )
     expect(webhooks.updateEndpoint).toHaveBeenCalledWith(expect.anything(), 'wh_1', { enabled: false })
@@ -339,7 +339,7 @@ describe('management routes 4', () => {
     const invalid = await app.request('/api/management/webhooks/endpoints', {
       method: 'POST',
       headers: adminHeaders(),
-      body: JSON.stringify({ url: 'http://events.example.com/flareauth', events: [] }),
+      body: JSON.stringify({ url: 'http://events.example.com/realmroot', events: [] }),
     })
 
     expect(unauthenticated.status).toBe(401)

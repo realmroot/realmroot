@@ -1,6 +1,6 @@
-# FlareAuth Restish Plugin
+# Realmroot Restish Plugin
 
-`restish-flareauth` is the Restish v2 authentication adapter for FlareAuth's
+`restish-realmroot` is the Restish v2 authentication adapter for Realmroot's
 unified OpenAPI contract. It contributes no commands. `get-current-agent` and every
 resource operation are generated from `/api/openapi.json`.
 
@@ -22,7 +22,7 @@ for approval.
 
 For each access grant, the plugin creates a separate P-256 DPoP key. It discovers
 the proof target from RFC 9728 and RFC 8414 for external resources, uses the
-FlareAuth token operation for native resources, adds the standard `DPoP` header,
+Realmroot token operation for native resources, adds the standard `DPoP` header,
 and stores the resulting short-lived token with the protected Agent state.
 
 The plugin stores issued target tokens in protected state and removes the raw
@@ -37,7 +37,7 @@ restish projects list-projects -o json
 Restish follows the resource's RFC 8631 `service-desc` link to its OpenAPI
 contract. The global auth hook recognizes the registered resource URL and adds
 `Authorization: DPoP ...` plus a fresh request proof. The token belongs to the
-target platform and target traffic never passes through FlareAuth.
+target platform and target traffic never passes through Realmroot.
 
 ## Development
 
@@ -46,14 +46,14 @@ From the repository root:
 ```bash
 pnpm run plugin:test
 pnpm run plugin:build
-restish plugin install ./plugins/restish-flareauth/restish-flareauth --yes
+restish plugin install ./plugins/restish-realmroot/restish-realmroot --yes
 restish plugin list
 ```
 
 Inspect the manifest:
 
 ```bash
-restish plugin debug restish-flareauth -- --rsh-plugin-manifest
+restish plugin debug restish-realmroot -- --rsh-plugin-manifest
 ```
 
 `plugin debug` resolves binaries from `PATH`; add Restish's plugin directory to
@@ -65,10 +65,10 @@ State is keyed by Restish API and profile.
 The default root is:
 
 ```text
-<user-config>/restish/plugins/flareauth/agents
+<user-config>/restish/plugins/realmroot/agents
 ```
 
-Set `FLAREAUTH_PLUGIN_STATE_DIR` to use an explicit protected directory. State
+Set `REALMROOT_PLUGIN_STATE_DIR` to use an explicit protected directory. State
 files contain Agent, Host, and grant-specific DPoP private keys plus short-lived
 target tokens. They are created with mode `0600` and must not be committed or
 copied into logs. The plugin rejects state files that are symlinks or accessible
@@ -81,10 +81,10 @@ the Restish command surface.
 ## Architecture
 
 - The `auth` hook discovers endpoints, enrolls the Agent when needed, signs
-  FlareAuth requests, and authenticates matching target API requests.
+  Realmroot requests, and authenticates matching target API requests.
 - The `response-middleware` hook opens and waits for controller approval when
   a generated capability or external resource access operation returns pending.
-- The FlareAuth OpenAPI credential marker activates AgentAuth; registered target
+- The Realmroot OpenAPI credential marker activates AgentAuth; registered target
   resource URLs activate DPoP authentication through the global hook.
 - Both hooks have a ten-minute deadline for their foreground approval flow.
 - The plugin never authenticates a CLI request as the approving user.

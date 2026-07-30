@@ -162,7 +162,7 @@ function configz() {
       { slug: 'github', providerType: 'social', providerId: 'github', displayName: 'GitHub', icon: 'github' },
     ],
     links: { termsUri: null, privacyUri: null, supportEmail: null },
-    copy: { productName: 'FlareAuth', headline: 'Sign in', description: 'Secure access' },
+    copy: { productName: 'Realmroot', headline: 'Sign in', description: 'Secure access' },
     auth: {
       basePath: '/api/auth',
       signInEmailPath: '/api/auth/sign-in/email',
@@ -220,7 +220,7 @@ function profile() {
 const security = {
   mfa: { enabled: false, factors: [] },
   passkeys: { enabled: true, count: 0 },
-  policy: { mfa: { mode: 'optional' }, passkeys: { enabled: true, rpName: 'FlareAuth' } },
+  policy: { mfa: { mode: 'optional' }, passkeys: { enabled: true, rpName: 'Realmroot' } },
 }
 
 const linkedAccounts = [

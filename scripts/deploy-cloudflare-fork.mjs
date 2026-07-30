@@ -8,17 +8,17 @@ required('CLOUDFLARE_API_TOKEN')
 required('CLOUDFLARE_ACCOUNT_ID')
 
 const repositoryName = required('GITHUB_REPOSITORY').split('/').at(-1)
-const workerName = process.env.FLAREAUTH_WORKER_NAME?.trim() || repositoryName
-const suffix = workerName.startsWith('flareauth-') ? workerName.slice('flareauth-'.length) : undefined
+const workerName = process.env.REALMROOT_WORKER_NAME?.trim() || repositoryName
+const suffix = workerName.startsWith('realmroot-') ? workerName.slice('realmroot-'.length) : undefined
 const settings = {
   workerName,
-  databaseName: process.env.FLAREAUTH_D1_DATABASE?.trim() || workerName,
+  databaseName: process.env.REALMROOT_D1_DATABASE?.trim() || workerName,
   bucketName:
-    process.env.FLAREAUTH_R2_BUCKET?.trim() || (suffix ? `flareauth-assets-${suffix}` : `${workerName}-assets`),
+    process.env.REALMROOT_R2_BUCKET?.trim() || (suffix ? `realmroot-assets-${suffix}` : `${workerName}-assets`),
   queueName:
-    process.env.FLAREAUTH_EMAIL_QUEUE?.trim() || (suffix ? `flareauth-email-${suffix}` : `${workerName}-email`),
-  emailFrom: required('FLAREAUTH_EMAIL_FROM'),
-  emailFromName: process.env.FLAREAUTH_EMAIL_FROM_NAME?.trim() || 'FlareAuth',
+    process.env.REALMROOT_EMAIL_QUEUE?.trim() || (suffix ? `realmroot-email-${suffix}` : `${workerName}-email`),
+  emailFrom: required('REALMROOT_EMAIL_FROM'),
+  emailFromName: process.env.REALMROOT_EMAIL_FROM_NAME?.trim() || 'Realmroot',
 }
 
 const databases = JSON.parse(capture('pnpm', ['exec', 'wrangler', 'd1', 'list', '--json']))
@@ -44,13 +44,13 @@ ensureResource(
 )
 
 run('node', ['scripts/prepare-deployment-config.mjs'], {
-  FLAREAUTH_WORKER_NAME: settings.workerName,
-  FLAREAUTH_D1_DATABASE: settings.databaseName,
-  FLAREAUTH_D1_DATABASE_ID: database.uuid,
-  FLAREAUTH_R2_BUCKET: settings.bucketName,
-  FLAREAUTH_EMAIL_QUEUE: settings.queueName,
-  FLAREAUTH_EMAIL_FROM: settings.emailFrom,
-  FLAREAUTH_EMAIL_FROM_NAME: settings.emailFromName,
+  REALMROOT_WORKER_NAME: settings.workerName,
+  REALMROOT_D1_DATABASE: settings.databaseName,
+  REALMROOT_D1_DATABASE_ID: database.uuid,
+  REALMROOT_R2_BUCKET: settings.bucketName,
+  REALMROOT_EMAIL_QUEUE: settings.queueName,
+  REALMROOT_EMAIL_FROM: settings.emailFrom,
+  REALMROOT_EMAIL_FROM_NAME: settings.emailFromName,
 })
 run('pnpm', ['run', 'deploy:check', '--', 'wrangler.deployment.toml'])
 
@@ -106,7 +106,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,
     [
-      '### FlareAuth deployment',
+      '### Realmroot deployment',
       '',
       `- Worker: \`${settings.workerName}\``,
       `- D1: \`${settings.databaseName}\``,

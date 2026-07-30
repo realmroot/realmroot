@@ -61,7 +61,7 @@ describe('configz fallback branches', () => {
     expect(config.builtInProviders.passkey.allowSignUp).toBe(false)
     expect(config.builtInProviders.oneTap).toMatchObject({ enabled: true, clientId: 'one-tap-client' })
     expect(config.copy).toMatchObject({
-      productName: 'FlareAuth',
+      productName: 'Realmroot',
       headline: 'Welcome',
     })
   })

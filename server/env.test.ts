@@ -68,7 +68,7 @@ describe('validateEnv', () => {
         passkeys: {
           enabled: true,
           rpId: 'tenant.example.com',
-          rpName: 'FlareAuth',
+          rpName: 'Realmroot',
           origins: ['https://tenant.example.com', 'https://admin.example.com'],
         },
         sessions: {

@@ -196,7 +196,7 @@ describe('Agent protocol routes', () => {
   it('uses the unified grant token operation for native APIs [spec: agent-identity/native-api-resource-token]', async () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
     const issue = vi.spyOn(externalResources, 'issueTargetAccessToken').mockResolvedValue({
-      accessToken: 'flareauth-access-token',
+      accessToken: 'realmroot-access-token',
       tokenType: 'DPoP',
       expiresIn: 300,
       expiresAt: '2026-01-01T00:05:00.000Z',
@@ -207,7 +207,7 @@ describe('Agent protocol routes', () => {
     const app = createRouteApp(
       {
         getAgentSession: vi.fn().mockResolvedValue(session()),
-        signJWT: vi.fn().mockResolvedValue({ token: 'flareauth-access-token' }),
+        signJWT: vi.fn().mockResolvedValue({ token: 'realmroot-access-token' }),
       },
       'https://auth.example.com/api/auth',
     )

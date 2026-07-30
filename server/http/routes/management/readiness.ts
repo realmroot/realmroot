@@ -35,7 +35,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
     const emailMethodsEnabled = config.signIn.emailOtpEnabled || config.signIn.signupEnabled
     const emailDeliveryReady = !emailMethodsEnabled || (Boolean(c.env?.EMAIL) && Boolean(c.env?.EMAIL_FROM))
     const brandingReady =
-      config.copy.productName !== 'FlareAuth' ||
+      config.copy.productName !== 'Realmroot' ||
       Boolean(config.branding.logoUrl || config.branding.faviconUrl || config.branding.primaryColor)
     const securityReady = Boolean(securityPolicy?.mfa.mode === 'required' || securityPolicy?.passkeys.enabled)
     const connectorReady = !config.signIn.socialLoginEnabled || hasSocialSignInMethod

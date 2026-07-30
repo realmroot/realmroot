@@ -1,44 +1,48 @@
 <p align="center">
-  <img src="assets/logo.png" alt="FlareAuth logo" width="132" height="132" />
+  <img src="assets/logo.png" alt="Realmroot logo" width="132" height="132" />
 </p>
 
-<h1 align="center">FlareAuth</h1>
+<h1 align="center">Realmroot</h1>
 
 <p align="center">
-  Deployable identity infrastructure for hosted sign-in, account management,
-  administration, and standard OIDC.
+  Identity and delegated access infrastructure for people, applications,
+  APIs, and Agents.
 </p>
 
 <p align="center">
-  <a href="https://github.com/saltbo/flareauth/actions/workflows/ci.yaml"><img src="https://github.com/saltbo/flareauth/actions/workflows/ci.yaml/badge.svg" alt="CI" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/saltbo/flareauth.svg" alt="License" /></a>
-  <a href="https://codecov.io/gh/saltbo/flareauth"><img src="https://codecov.io/gh/saltbo/flareauth/branch/main/graph/badge.svg" alt="Coverage" /></a>
+  <a href="https://github.com/saltbo/realmroot/actions/workflows/ci.yaml"><img src="https://github.com/saltbo/realmroot/actions/workflows/ci.yaml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/saltbo/realmroot.svg" alt="License" /></a>
+  <a href="https://codecov.io/gh/saltbo/realmroot"><img src="https://codecov.io/gh/saltbo/realmroot/branch/main/graph/badge.svg" alt="Coverage" /></a>
   <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D24-339933.svg" alt="Node >=24" /></a>
   <a href="package.json"><img src="https://img.shields.io/badge/TypeScript-6.x-3178c6.svg" alt="TypeScript 6.x" /></a>
 </p>
 
 ## What It Is
 
-FlareAuth gives a product team its own auth realm: one user pool, one issuer, one
-admin console, and one hosted account center. Multiple applications can share
-the same realm when they should share accounts and administrators.
+Realmroot gives a product team its own identity root: one user pool, one issuer,
+one admin console, and one hosted account center. Multiple applications can
+share the same realm when they should share accounts and administrators.
+
+The same realm gives Agents stable identities and controller-approved,
+scope-bound access to native and external API resources.
 
 For products that need separate users, administrators, issuer URLs, or sign-in
-policy, deploy another FlareAuth instance.
+policy, deploy another Realmroot instance.
 
-## Why FlareAuth
+## Why Realmroot
 
 Better Auth is a strong foundation, but wiring it into every product means
 repeating the same user tables, hosted pages, OAuth clients, admin controls,
 email flows, security policy, deployment settings, and operational checks.
 
-FlareAuth packages that work once as a deployable auth service. Product apps
-integrate through OIDC, while teams manage users, applications, connectors, and
-policy from one dedicated identity layer.
+Realmroot packages that work once as a deployable identity and delegated-access
+service. Product apps integrate through OIDC, while teams manage users,
+applications, Agents, API resources, connectors, grants, and policy from one
+dedicated control plane.
 
 ## Core Architecture
 
-FlareAuth runs Better Auth inside a Cloudflare Worker. The Worker serves hosted
+Realmroot runs Better Auth inside a Cloudflare Worker. The Worker serves hosted
 auth pages, account management, admin APIs, OIDC discovery, OAuth flows, and
 Management API endpoints from the same deployment.
 
@@ -55,14 +59,17 @@ admin experience.
   organizations, roles, API resources, webhooks, and deployment readiness.
 - Standard OIDC integration for product applications.
 - Public Management API with generated OpenAPI contract.
-- Agent-operable administration through an installable FlareAuth skill.
+- Stable Agent identities with controller-approved native and external API
+  resource access.
+- Agent-operable administration through an installable Realmroot skill and
+  Restish plugin.
 - Fork-and-deploy GitHub Actions setup for low-cost per-product deployments.
 
 ## Core Capabilities
 
 ### Hosted Auth
 
-Use FlareAuth as the identity provider for your product applications. Product
+Use Realmroot as the identity provider for your product applications. Product
 apps integrate through standard OIDC discovery, authorization code with PKCE,
 token exchange, and callback handling.
 
@@ -90,16 +97,16 @@ contract is served by each deployment at:
 
 Deploy each product auth realm from a GitHub fork:
 
-1. Fork `saltbo/flareauth`.
-2. Install [`deploy/flareauth-fork.yml`](deploy/flareauth-fork.yml) as
+1. Fork `saltbo/realmroot`.
+2. Install [`deploy/realmroot-fork.yml`](deploy/realmroot-fork.yml) as
    `.github/workflows/deploy.yml` in the fork and enable GitHub Actions.
 3. Add the Cloudflare deployment secrets and sender variable described in
    [Cloudflare deployment](docs/deploy/cloudflare.md).
-4. Run **Deploy FlareAuth Fork** once.
+4. Run **Deploy Realmroot Fork** once.
 
 Later upgrades only require **Sync fork**. The resulting push to the fork's
 `main` branch deploys that exact fork commit automatically. The canonical
-`saltbo/flareauth` repository has no GitHub deployment workflow: its Worker
+`saltbo/realmroot` repository has no GitHub deployment workflow: its Worker
 continues to deploy exclusively through Cloudflare Workers Builds.
 
 After deployment:
@@ -118,7 +125,7 @@ For upgrade and operational details, see:
 
 ## Use From An App
 
-Register an application in FlareAuth, configure its redirect URI, then use the
+Register an application in Realmroot, configure its redirect URI, then use the
 deployment's OIDC discovery endpoint:
 
 ```text
@@ -127,7 +134,7 @@ deployment's OIDC discovery endpoint:
 
 Public browser and native clients should use authorization code with PKCE.
 Server-side confidential clients should authenticate at the token endpoint using
-the client credentials shown in the FlareAuth application record.
+the client credentials shown in the Realmroot application record.
 
 Product applications do not need to call the Management API for normal user
 login. The Management API is for administration and automation.
@@ -137,16 +144,16 @@ login. The Management API is for administration and automation.
 Install the skill:
 
 ```bash
-npx skills install saltbo/flareauth
+npx skills install saltbo/realmroot
 ```
 
 Then tell your agent what to configure:
 
 ```text
-Use FlareAuth to add a complete user system to this project.
+Use Realmroot to add identity and delegated Agent access to this project.
 ```
 
-The agent will ask for the FlareAuth deployment and application details it needs.
+The agent will ask for the Realmroot deployment and application details it needs.
 
 ## Documentation
 

@@ -1,4 +1,4 @@
-name = "flareauth-e2e"
+name = "realmroot-e2e"
 main = "../server/worker.ts"
 compatibility_date = "2026-04-12"
 compatibility_flags = ["nodejs_compat"]
@@ -11,7 +11,7 @@ BETTER_AUTH_URL = "http://localhost:4189"
 CREDENTIAL_ENCRYPTION_KEY = "e2e-credential-encryption-key-with-enough-entropy-2026"
 TRUSTED_ORIGINS = "http://localhost:4189"
 EMAIL_FROM = "e2e@example.com"
-EMAIL_FROM_NAME = "FlareAuth E2E"
+EMAIL_FROM_NAME = "Realmroot E2E"
 E2E_OAUTH_CLIENT_SECRET = "e2e-secret"
 
 [assets]
@@ -26,17 +26,17 @@ allowed_sender_addresses = ["e2e@example.com"]
 
 [[r2_buckets]]
 binding = "ASSET_BUCKET"
-bucket_name = "flareauth-assets-e2e"
+bucket_name = "realmroot-assets-e2e"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "flareauth-db-e2e"
+database_name = "realmroot-db-e2e"
 database_id = "00000000-0000-0000-0000-0000000000e2"
 migrations_dir = "../migrations"
 
 [[queues.producers]]
 binding = "EMAIL_QUEUE"
-queue = "flareauth-email-e2e"
+queue = "realmroot-email-e2e"
 
 [observability]
 enabled = false

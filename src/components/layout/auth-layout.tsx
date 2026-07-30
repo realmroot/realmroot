@@ -47,7 +47,7 @@ export function AuthLayout({
         eyebrow={eyebrow}
         headingLevel={1}
         legalLinks={authLegalLinks(config)}
-        productName={config?.copy?.productName ?? 'FlareAuth'}
+        productName={config?.copy?.productName ?? 'Realmroot'}
         title={title}
         titleId="auth-title"
       >
@@ -106,7 +106,7 @@ export function AuthCardFrame({
   )
 }
 export function BrandIdentity({ config }: { config: ConfigzConfigResponse | null }) {
-  const productName = config?.copy?.productName ?? 'FlareAuth'
+  const productName = config?.copy?.productName ?? 'Realmroot'
   return (
     <a className="brand brandLink" href="/">
       {config?.branding.logoUrl ? (

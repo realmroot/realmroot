@@ -20,7 +20,7 @@ const links = {
 }
 
 const copy = {
-  productName: 'FlareAuth',
+  productName: 'Realmroot',
   headline: 'Sign in',
   description: 'Continue.',
 }
@@ -119,7 +119,7 @@ describe('management routes 3', () => {
         supportEmail: 'support@example.com',
       },
       copy: {
-        productName: 'FlareAuth',
+        productName: 'Realmroot',
         headline: 'Sign in',
         description: 'Continue.',
       },
@@ -213,7 +213,7 @@ describe('management routes 3', () => {
         customCss: null,
       },
       copy: {
-        productName: 'FlareAuth',
+        productName: 'Realmroot',
         headline: 'Sign in',
         description: 'Continue.',
       },
@@ -282,7 +282,7 @@ describe('management routes 3', () => {
     expect(brandingResponse.status).toBe(200)
     expect(accountCenterResponse.status).toBe(200)
     expect(accountCenterPatch.status).toBe(200)
-    await expect(signInResponse.json()).resolves.toMatchObject({ copy: { productName: 'FlareAuth' } })
+    await expect(signInResponse.json()).resolves.toMatchObject({ copy: { productName: 'Realmroot' } })
     await expect(brandingResponse.json()).resolves.toMatchObject({ branding: { primaryColor: null } })
     await expect(accountCenterResponse.json()).resolves.toMatchObject({ accountCenter: { sessionsViewEnabled: true } })
     await expect(accountCenterPatch.json()).resolves.toMatchObject({ accountCenter: { sessionsViewEnabled: true } })
@@ -351,7 +351,7 @@ describe('management routes 3', () => {
   it('does not count the system CLI client as the tenant OIDC application for readiness', async () => {
     vi.spyOn(applications, 'listApplications').mockResolvedValue({
       applications: [
-        { ...applicationFixture(), id: 'app_flareauth_cli', clientId: 'flareauth-cli', systemManaged: true },
+        { ...applicationFixture(), id: 'app_realmroot_cli', clientId: 'realmroot-cli', systemManaged: true },
       ],
       pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
     } as unknown as ListApplicationsResponse)

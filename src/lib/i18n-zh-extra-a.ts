@@ -183,7 +183,7 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
   'Filter status': '筛选状态',
   'Filter webhook status': '筛选 Webhook 状态',
   'First OIDC application': '第一个 OIDC 应用',
-  FlareAuth: 'FlareAuth',
+  Realmroot: 'Realmroot',
   'Forgot password?': '忘记密码？',
   'Fresh age': '新鲜度时长',
   'From name or number': '发送名称或号码',

@@ -181,7 +181,7 @@ export function ApiResourcesPage() {
                 </TableCell>
                 <TableCell>{resource.audience}</TableCell>
                 <TableCell>
-                  {resource.authorizationMode === 'external' ? tt('External issuer') : tt('Native (FlareAuth)')}
+                  {resource.authorizationMode === 'external' ? tt('External issuer') : tt('Native (Realmroot)')}
                 </TableCell>
                 <TableCell>
                   <StatusBadge active={resource.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />

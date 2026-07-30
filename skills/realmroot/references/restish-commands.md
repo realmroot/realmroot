@@ -1,6 +1,6 @@
 # Restish Command Reference
 
-FlareAuth publishes one OpenAPI 3.1 contract:
+Realmroot publishes one OpenAPI 3.1 contract:
 
 ```text
 API base: AUTH_ORIGIN/api
@@ -19,11 +19,11 @@ workflow. For explicit tenant-administration work, read `management.md`.
 
 ## Connect
 
-These instructions require Restish v2 and the FlareAuth authentication adapter
+These instructions require Restish v2 and the Realmroot authentication adapter
 installed as described in `../SKILL.md`.
 
 ```bash
-AUTH_ORIGIN="${AUTH_ORIGIN:-${FLAREAUTH_ORIGIN:-https://realmroot.dev}}"
+AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://realmroot.dev}}"
 API_NAME="${API_NAME:-realmroot}"
 restish --version
 restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --replace --yes

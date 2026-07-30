@@ -7,7 +7,7 @@ type ThemeContextValue = {
   theme: Theme
 }
 
-const themeStorageKey = 'flareauth.theme'
+const themeStorageKey = 'realmroot.theme'
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 

@@ -9,7 +9,7 @@ describe('createEmailSender', () => {
       { send },
       {
         from: 'noreply@example.com',
-        fromName: 'FlareAuth',
+        fromName: 'Realmroot',
       },
     )
 
@@ -27,7 +27,7 @@ describe('createEmailSender', () => {
       to: 'user@example.com',
       from: {
         email: 'noreply@example.com',
-        name: 'FlareAuth',
+        name: 'Realmroot',
       },
       subject: 'Verify your email address',
       text: 'Verify your email address\n\nhttps://auth.example.com/verify',
@@ -60,6 +60,6 @@ describe('renderEmailTemplate', () => {
       renderEmailTemplate({ type: 'otp', otp: '654321' }).text,
       renderEmailTemplate({ type: 'security-notification', title: 'New login', body: 'A new login was detected.' })
         .subject,
-    ]).toEqual(['Reset your password', 'You were invited to FlareAuth', 'Your one-time code is 654321.', 'New login'])
+    ]).toEqual(['Reset your password', 'You were invited to Realmroot', 'Your one-time code is 654321.', 'New login'])
   })
 })

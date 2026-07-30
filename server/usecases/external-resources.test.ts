@@ -49,7 +49,7 @@ describe('external API resource authorization', () => {
           ],
         })
         expect(body).not.toHaveProperty('resource')
-        return Response.json({ client_id: 'flareauth-client', client_secret: 'target-secret' }, { status: 201 })
+        return Response.json({ client_id: 'realmroot-client', client_secret: 'target-secret' }, { status: 201 })
       }
       return new Response(null, { status: 404 })
     })
@@ -66,7 +66,7 @@ describe('external API resource authorization', () => {
       resourceId: 'resource-1',
       issuer: 'https://projects.example.com',
       registrationMode: 'dynamic',
-      clientId: 'flareauth-client',
+      clientId: 'realmroot-client',
       clientSecretConfigured: true,
       status: 'active',
     })
@@ -409,7 +409,7 @@ function authorizationRecord(): ExternalResourceAuthorizationRecord {
     jwksUri: 'https://projects.example.com/jwks',
     userInfoEndpoint: 'https://projects.example.com/userinfo',
     registrationMode: 'dynamic',
-    clientId: 'flareauth-client',
+    clientId: 'realmroot-client',
     encryptedClientSecret: 'sealed:target-secret',
     encryptedRegistrationAccessToken: null,
     scopesSupported: ['openid', 'offline_access', 'projects:read'],

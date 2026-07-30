@@ -8,7 +8,7 @@ export function testSecurityPolicy(): SecurityPolicy {
     passkeys: {
       enabled: true,
       rpId: 'auth.example.com',
-      rpName: 'FlareAuth',
+      rpName: 'Realmroot',
       origins: ['https://auth.example.com'],
     },
     sessions: {

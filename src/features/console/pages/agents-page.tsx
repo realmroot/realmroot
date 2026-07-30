@@ -64,7 +64,7 @@ function AgentTable({ agents, pending, retire }: { agents: Agent[]; pending: boo
     <Card>
       <CardHeader>
         <CardTitle>{tt('Stable Agents')}</CardTitle>
-        <CardDescription>{tt('Protocol credentials and bindings remain internal to FlareAuth.')}</CardDescription>
+        <CardDescription>{tt('Protocol credentials and bindings remain internal to Realmroot.')}</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
@@ -155,7 +155,7 @@ function AgentAuditTable({ events }: { events: AgentAuditEvent[] }) {
                   </TableCell>
                   <TableCell>{event.agentIdentityId ?? tt('Unresolved')}</TableCell>
                   <TableCell>
-                    {event.resourceId ?? tt('FlareAuth')}
+                    {event.resourceId ?? tt('Realmroot')}
                     {event.scopes?.length ? ` · ${event.scopes.join(' ')}` : null}
                   </TableCell>
                   <TableCell>{new Date(event.occurredAt).toLocaleString()}</TableCell>

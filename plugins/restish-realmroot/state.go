@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const stateDirectoryEnv = "FLAREAUTH_PLUGIN_STATE_DIR"
+const stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
 
 type agentTarget struct {
 	API     string
@@ -97,7 +97,7 @@ func newFileStateStore() *fileStateStore {
 		if err != nil {
 			panic(fmt.Sprintf("resolve user config directory: %v", err))
 		}
-		root = filepath.Join(configDir, "restish", "plugins", "flareauth", "agents")
+		root = filepath.Join(configDir, "restish", "plugins", "realmroot", "agents")
 	}
 	return &fileStateStore{root: root}
 }
@@ -242,7 +242,7 @@ func (s *fileStateStore) StoreTargetToken(origin string, grantID string, token t
 	}
 	if token.TokenType != "DPoP" || token.AccessToken == "" || token.ResourceURL != matchedCredential.ResourceURL ||
 		!token.ExpiresAt.After(time.Now()) {
-		return errors.New("FlareAuth returned an invalid target API access token")
+		return errors.New("Realmroot returned an invalid target API access token")
 	}
 	matchedCredential.AccessToken = token.AccessToken
 	matchedCredential.ExpiresAt = &token.ExpiresAt

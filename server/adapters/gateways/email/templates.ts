@@ -34,20 +34,20 @@ export function renderEmailTemplate(template: EmailTemplate): RenderedEmail {
   }
 
   if (template.type === 'password-reset') {
-    return renderActionEmail('Reset your password', 'Reset your FlareAuth password', template.url)
+    return renderActionEmail('Reset your password', 'Reset your Realmroot password', template.url)
   }
 
   if (template.type === 'invitation') {
     return renderActionEmail(
-      'You were invited to FlareAuth',
-      `${template.inviterName} invited you to FlareAuth`,
+      'You were invited to Realmroot',
+      `${template.inviterName} invited you to Realmroot`,
       template.url,
     )
   }
 
   if (template.type === 'otp') {
     return {
-      subject: 'Your FlareAuth code',
+      subject: 'Your Realmroot code',
       text: `Your one-time code is ${template.otp}.`,
       html: `<p>Your one-time code is <strong>${escapeHtml(template.otp)}</strong>.</p>`,
     }

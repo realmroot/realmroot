@@ -201,7 +201,7 @@ describe('auth.test 3', () => {
       origin: ['https://auth.example.com', 'https://preview.example.workers.dev'],
     })
     expect(findPlugin<TwoFactorPluginOptions>(auth, 'two-factor').options).toMatchObject({
-      issuer: 'FlareAuth',
+      issuer: 'Realmroot',
       allowPasswordless: true,
       totpOptions: {
         disable: false,
@@ -285,7 +285,7 @@ function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {
     passkeys: {
       enabled: true,
       rpId: 'auth.example.com',
-      rpName: 'FlareAuth',
+      rpName: 'Realmroot',
       origins: ['https://auth.example.com'],
       ...overrides.passkeys,
     },

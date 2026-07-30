@@ -98,12 +98,12 @@ Feature: Hosted authentication
   Scenario: Hosted OIDC authorization preserves the requested resource audience
     Given an OIDC client starts authorization with a resource audience
     When the user completes hosted sign-in
-    Then FlareAuth exchanges the authorization code for an access token with that audience
+    Then Realmroot exchanges the authorization code for an access token with that audience
 
   @entrypoint:product-ui @journey:oidc-native-token-verification
   Scenario: Native OIDC clients can verify issued identity tokens
     Given a native OIDC client uses a standards-compliant JOSE verifier
-    When FlareAuth publishes discovery metadata and signs an identity token
+    When Realmroot publishes discovery metadata and signs an identity token
     Then discovery advertises RS256 identity token signing
     And the token can be verified with the published RSA public key
 
@@ -111,19 +111,19 @@ Feature: Hosted authentication
   Scenario: OAuth consent approves requested scopes
     Given a third-party OIDC application requests scopes
     When I approve consent
-    Then FlareAuth redirects to the client callback with an authorization result
+    Then Realmroot redirects to the client callback with an authorization result
 
   @entrypoint:product-ui @journey:oauth-consent-account-switch
   Scenario: OAuth consent can switch accounts without losing the request
     Given a third-party OIDC application requests scopes
     When I switch accounts from the consent page
-    Then FlareAuth returns to the same consent request after sign-in
+    Then Realmroot returns to the same consent request after sign-in
 
   @entrypoint:product-ui @journey:oauth-consent-deny
   Scenario: OAuth consent denial returns safely to the client callback
     Given a third-party OIDC application requests scopes
     When I deny consent
-    Then FlareAuth redirects to the client callback with a denial result
+    Then Realmroot redirects to the client callback with a denial result
 
   @entrypoint:product-ui @journey:better-auth-device-approval
   Scenario: Device approval requires a signed-in browser session

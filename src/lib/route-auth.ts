@@ -1,7 +1,7 @@
 import { redirect } from '@tanstack/react-router'
 import { apiClient } from '@/lib/api'
 
-const returnTargetPrefix = 'flareauth:return-target:'
+const returnTargetPrefix = 'realmroot:return-target:'
 
 export type RouteAccountProfile = {
   user?: {

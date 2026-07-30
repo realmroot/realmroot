@@ -1,10 +1,10 @@
 # Auth Provider Architecture
 
-Status: accepted for FlareAuth v1.0
+Status: accepted for Realmroot v1.0
 
 ## Decision
 
-FlareAuth v1.0 uses `@better-auth/oauth-provider` as the long-term OAuth 2.1 and OIDC provider basis. The previous `better-auth/plugins` `oidcProvider` plugin is not the v1.0 basis because the Better Auth v1.6 documentation marks it as soon to be deprecated in favor of the OAuth Provider plugin.
+Realmroot v1.0 uses `@better-auth/oauth-provider` as the long-term OAuth 2.1 and OIDC provider basis. The previous `better-auth/plugins` `oidcProvider` plugin is not the v1.0 basis because the Better Auth v1.6 documentation marks it as soon to be deprecated in favor of the OAuth Provider plugin.
 
 The selected provider is configured in `server/auth.ts` with:
 
@@ -24,10 +24,10 @@ The selected provider is configured in `server/auth.ts` with:
 - Native API Resource tokens use the same Better Auth JWT/JWKS
   lifecycle after an Agent access request is approved.
 
-FlareAuth v1.0 is intentionally a single user pool auth realm. Multiple OIDC
+Realmroot v1.0 is intentionally a single user pool auth realm. Multiple OIDC
 applications can share the same provider instance, but they share users,
 administrators, login methods, connector configuration, and security policy.
-Products that need separate user pools use separate FlareAuth deployments. See
+Products that need separate user pools use separate Realmroot deployments. See
 [Tenancy Model](tenancy.md).
 
 The issuer is the Better Auth mounted issuer, not the bare site origin:
@@ -61,9 +61,9 @@ OIDC discovery remains at:
 | Consent flow | Supported | Consent is redirected to `/oauth/consent`; grants are stored in `oauth_consent`. |
 | UserInfo | Supported | Available when `openid` is in the granted scope set. |
 | Scopes | Supported | OIDC scopes remain `openid profile email offline_access`; API resource scopes are managed under `/api/management/api-resources/{id}/scopes` and are passed into the authorization claim builder for matching audience/resource requests. |
-| Resource indicators | Supported | API resources define valid audiences. When a token request includes a matching resource/audience, FlareAuth emits audience/resource authorization metadata and RBAC claims for that API resource. |
+| Resource indicators | Supported | API resources define valid audiences. When a token request includes a matching resource/audience, Realmroot emits audience/resource authorization metadata and RBAC claims for that API resource. |
 | Client credentials | Supported | The selected plugin supports `client_credentials`; v1.0 treats these as machine tokens without a user subject. |
-| Agent API access | Supported | Both API Resource modes use Agent access requests and grants. Native resources receive FlareAuth-signed DPoP JWTs; external resources receive target-issued tokens through standard target OAuth protocols. |
+| Agent API access | Supported | Both API Resource modes use Agent access requests and grants. Native resources receive Realmroot-signed DPoP JWTs; external resources receive target-issued tokens through standard target OAuth protocols. |
 
 ## Token Shape
 
@@ -95,7 +95,7 @@ Workload token exchange accepts only RS256 or ES256 assertions whose issuer,
 subject pattern, audience, and verification key are registered on the calling
 application's federated credential. Exchanged opaque tokens are introspectable
 only by that confidential client. Assertion-private claims are returned under
-`urn:flareauth:params:oauth:token-exchange:subject-claims`; they can never
+`urn:realmroot:params:oauth:token-exchange:subject-claims`; they can never
 replace authorization-server-controlled introspection fields. `offline_access`
 uses hashed opaque refresh tokens with one-time rotation. Reuse revokes the
 whole token family, and every refresh rechecks client authentication, allowed
@@ -115,15 +115,15 @@ OAuth clients are first-class provider records in `oauth_client`.
 
 ## Product Application Integration
 
-Product applications integrate with FlareAuth as a standard OIDC provider. They
-should not call FlareAuth `/api/management/*` or `/api/account/*` routes and do
-not need a FlareAuth custom SDK.
+Product applications integrate with Realmroot as a standard OIDC provider. They
+should not call Realmroot `/api/management/*` or `/api/account/*` routes and do
+not need a Realmroot custom SDK.
 
 Use discovery to get the current protocol endpoints:
 
 ```bash
-FLAREAUTH_ORIGIN=https://auth.example.com
-curl "$FLAREAUTH_ORIGIN/api/auth/.well-known/openid-configuration"
+REALMROOT_ORIGIN=https://auth.example.com
+curl "$REALMROOT_ORIGIN/api/auth/.well-known/openid-configuration"
 ```
 
 The issuer is:
@@ -169,7 +169,7 @@ though Better Auth 1.6.10 currently omits `none` from discovery metadata while
 unauthenticated dynamic registration is disabled:
 
 ```bash
-curl -X POST "$FLAREAUTH_ORIGIN/api/auth/oauth2/token" \
+curl -X POST "$REALMROOT_ORIGIN/api/auth/oauth2/token" \
   -H 'content-type: application/x-www-form-urlencoded' \
   --data-urlencode 'grant_type=authorization_code' \
   --data-urlencode 'client_id=public-client-id' \
@@ -182,7 +182,7 @@ Confidential server-side clients use the same authorization request and include
 client authentication at the token endpoint:
 
 ```bash
-curl -X POST "$FLAREAUTH_ORIGIN/api/auth/oauth2/token" \
+curl -X POST "$REALMROOT_ORIGIN/api/auth/oauth2/token" \
   -u 'confidential-client-id:one-time-client-secret' \
   -H 'content-type: application/x-www-form-urlencoded' \
   --data-urlencode 'grant_type=authorization_code' \
@@ -195,7 +195,7 @@ advertised `userinfo_endpoint` with a bearer access token when the product needs
 normalized OpenID profile claims. Request `offline_access` only when the product
 needs refresh tokens.
 
-Better Auth applications can use FlareAuth as an OIDC-compatible upstream through
+Better Auth applications can use Realmroot as an OIDC-compatible upstream through
 the generic OAuth plugin:
 
 ```ts
@@ -207,12 +207,12 @@ export const auth = betterAuth({
     genericOAuth({
       config: [
         {
-          providerId: 'flareauth',
+          providerId: 'realmroot',
           discoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
           issuer: 'https://auth.example.com/api/auth',
-          clientId: process.env.FLAREAUTH_CLIENT_ID!,
-          clientSecret: process.env.FLAREAUTH_CLIENT_SECRET,
-          redirectURI: 'https://app.example.com/api/auth/callback/flareauth',
+          clientId: process.env.REALMROOT_CLIENT_ID!,
+          clientSecret: process.env.REALMROOT_CLIENT_SECRET,
+          redirectURI: 'https://app.example.com/api/auth/callback/realmroot',
           scopes: ['openid', 'profile', 'email'],
           pkce: true,
         },
@@ -244,7 +244,7 @@ The migration intentionally drops the old spike provider tables instead of tryin
 
 ## Better Auth Device Approval
 
-FlareAuth installs Better Auth's Device Authorization plugin for guarded public native client approval. This is Better Auth device approval plumbing for a signed-in browser session; it is not currently a standards-compliant FlareAuth OAuth/OIDC device-code token flow.
+Realmroot installs Better Auth's Device Authorization plugin for guarded public native client approval. This is Better Auth device approval plumbing for a signed-in browser session; it is not currently a standards-compliant Realmroot OAuth/OIDC device-code token flow.
 
 The hosted verification URI is:
 
@@ -255,16 +255,16 @@ https://auth.example.com/device
 Native clients request a device authorization code at:
 
 ```bash
-curl -X POST "$FLAREAUTH_ORIGIN/api/auth/device/code" \
+curl -X POST "$REALMROOT_ORIGIN/api/auth/device/code" \
   -H 'content-type: application/json' \
   -d '{"client_id":"native-client-id","scope":"openid profile email offline_access"}'
 ```
 
-The response includes `device_code`, `user_code`, `verification_uri`, `verification_uri_complete`, `expires_in`, and `interval`. The browser verification page requires a signed-in FlareAuth session before approval or denial, and hosted sign-in preserves the verification return path.
+The response includes `device_code`, `user_code`, `verification_uri`, `verification_uri_complete`, `expires_in`, and `interval`. The browser verification page requires a signed-in Realmroot session before approval or denial, and hosted sign-in preserves the verification return path.
 
 Only public native clients explicitly configured with Better Auth device approval can start the flow. Public SPA clients, confidential web clients, disabled clients, and clients requesting disallowed scopes are rejected before code issuance.
 
-FlareAuth patches Better Auth v1.6.25 so `@better-auth/oauth-provider` accepts `urn:ietf:params:oauth:grant-type:device_code` at `/api/auth/oauth2/token` after Better Auth device approval. Successful polling returns OAuth Provider token material: a JWKS-compatible access token when a resource audience is requested, an ID token when `openid` is granted, and a refresh token when `offline_access` is granted. OIDC discovery advertises `device_authorization_endpoint` and the device-code grant.
+Realmroot patches Better Auth v1.6.25 so `@better-auth/oauth-provider` accepts `urn:ietf:params:oauth:grant-type:device_code` at `/api/auth/oauth2/token` after Better Auth device approval. Successful polling returns OAuth Provider token material: a JWKS-compatible access token when a resource audience is requested, an ID token when `openid` is granted, and a refresh token when `offline_access` is granted. OIDC discovery advertises `device_authorization_endpoint` and the device-code grant.
 
 ## v1.0 Better Auth Plugin Matrix
 
@@ -278,11 +278,11 @@ FlareAuth patches Better Auth v1.6.25 so `@better-auth/oauth-provider` accepts `
 | Email OTP | Include | Requires Cloudflare-native email delivery before enabling. |
 | Username | Include | Add username fields and policy before enabling. |
 | Generic OAuth/social | Include | Use `genericOAuth()` for configured social/custom upstream providers. |
-| Device Authorization | Include | Use Better Auth `deviceAuthorization()` for native-client browser approval and a FlareAuth-maintained Better Auth patch to exchange approved device codes through the OAuth Provider token endpoint. |
+| Device Authorization | Include | Use Better Auth `deviceAuthorization()` for native-client browser approval and a Realmroot-maintained Better Auth patch to exchange approved device codes through the OAuth Provider token endpoint. |
 | OpenAPI | Include if stable enough | Better Auth v1.6 exposes `openAPI()`; keep it behind review before public exposure. |
 
 ## Explicit Exclusions
 
-FlareAuth v1.0 excludes enterprise SSO, SAML, LDAP, SCIM, audit logs, teams, payments, crypto/wallet auth, anonymous auth, and phone/SMS auth.
+Realmroot v1.0 excludes enterprise SSO, SAML, LDAP, SCIM, audit logs, teams, payments, crypto/wallet auth, anonymous auth, and phone/SMS auth.
 
 Phone/SMS auth can be reconsidered only if there is a Cloudflare-native SMS path that meets the same deployment and secret-handling boundaries as email.

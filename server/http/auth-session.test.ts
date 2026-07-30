@@ -155,7 +155,7 @@ describe('auth.test 1', () => {
       template: {
         type: 'security-notification',
         title: 'Your password was changed',
-        body: 'Your FlareAuth password was changed. If this was not you, reset your password immediately.',
+        body: 'Your Realmroot password was changed. If this was not you, reset your password immediately.',
       },
     })
     expect(emailSender.send).toHaveBeenCalledWith({
@@ -220,7 +220,7 @@ describe('auth.test 1', () => {
     const agentAuthPlugin = findPlugin<AgentAuthPluginOptions>(auth, 'agent-auth')
 
     expect(agentAuthPlugin.options).toMatchObject({
-      providerName: 'FlareAuth',
+      providerName: 'Realmroot',
       modes: ['delegated'],
       approvalMethods: ['device_authorization'],
       deviceAuthorizationPage: '/agent/approve',
@@ -271,7 +271,7 @@ function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {
     passkeys: {
       enabled: true,
       rpId: 'auth.example.com',
-      rpName: 'FlareAuth',
+      rpName: 'Realmroot',
       origins: ['https://auth.example.com'],
       ...overrides.passkeys,
     },

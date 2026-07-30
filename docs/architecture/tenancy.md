@@ -1,12 +1,12 @@
 # Tenancy Model
 
-Status: accepted for FlareAuth v1.0
+Status: accepted for Realmroot v1.0
 
 ## Decision
 
-FlareAuth v1.0 is a single user pool auth realm.
+Realmroot v1.0 is a single user pool auth realm.
 
-One FlareAuth deployment has:
+One Realmroot deployment has:
 
 - one Better Auth user pool
 - one issuer
@@ -18,7 +18,7 @@ Multiple product applications can share a deployment by registering separate
 OIDC applications. This is the expected path when products share the same user
 accounts and operator model.
 
-Products that need separate user pools must use separate FlareAuth deployments.
+Products that need separate user pools must use separate Realmroot deployments.
 That means a separate Worker, D1 database, R2 bucket, queue, domain, and
 `BETTER_AUTH_SECRET` for each product auth realm.
 
@@ -58,7 +58,7 @@ boundaries:
 - hard data isolation between product user pools
 - independent incident response, backup, or deletion lifecycle
 
-These are multi-realm requirements. Deploy another FlareAuth instance instead
+These are multi-realm requirements. Deploy another Realmroot instance instead
 of adding application-level exceptions to one shared database.
 
 ## Why
@@ -72,7 +72,7 @@ configuration, and separate administrative realms.
 Cloudflare D1 also does not provide row-level security. Implementing multiple
 auth realms in one D1 database would make every query and every Better Auth
 integration point tenant-sensitive. A missed predicate would become an identity
-data leak. FlareAuth v1.0 avoids that risk by making the deployment the realm
+data leak. Realmroot v1.0 avoids that risk by making the deployment the realm
 boundary.
 
 ## Deployment Pattern

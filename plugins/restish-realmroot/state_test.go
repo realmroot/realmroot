@@ -11,7 +11,7 @@ import (
 func TestFileStateStoreProtectsAndValidatesAgentKeys(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
-		API:     "flareauth-local",
+		API:     "realmroot-local",
 		Profile: "default",
 		Name:    "build-agent",
 		Origin:  "https://auth.example.com",

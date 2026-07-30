@@ -82,7 +82,7 @@ describe('auth.test 4', () => {
             smsProvider: 'vonage',
             vonageApiKey: 'vonage-key',
             vonageApiSecret: 'vonage-secret',
-            vonageFrom: 'FlareAuth',
+            vonageFrom: 'Realmroot',
           }),
         },
       ),
@@ -104,7 +104,7 @@ describe('auth.test 4', () => {
           builtInProviders: createBuiltInProviders({
             smsProvider: 'messagebird',
             messageBirdAccessKey: 'messagebird-key',
-            messageBirdOriginator: 'FlareAuth',
+            messageBirdOriginator: 'Realmroot',
           }),
         },
       ),
@@ -162,7 +162,7 @@ describe('auth.test 4', () => {
         passkeys: {
           enabled: false,
           rpId: 'auth.example.com',
-          rpName: 'FlareAuth',
+          rpName: 'Realmroot',
           origins: ['https://auth.example.com'],
         },
       }),
@@ -200,7 +200,7 @@ function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {
     passkeys: {
       enabled: true,
       rpId: 'auth.example.com',
-      rpName: 'FlareAuth',
+      rpName: 'Realmroot',
       origins: ['https://auth.example.com'],
       ...overrides.passkeys,
     },

@@ -239,7 +239,7 @@ function ConsoleBrand() {
         {' '}
         {tt('F')}{' '}
       </span>
-      <span className="consoleBrandName truncate text-sm font-semibold leading-none">{tt('FlareAuth')}</span>
+      <span className="consoleBrandName truncate text-sm font-semibold leading-none">{tt('Realmroot')}</span>
       <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />
       <span className="consoleBrandContext truncate text-sm font-medium text-muted-foreground">
         {tt('common.adminConsole')}

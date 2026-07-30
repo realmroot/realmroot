@@ -1,13 +1,13 @@
 # Cloudflare Deployment
 
-FlareAuth runs as a Cloudflare Worker with Assets, D1, R2, Email Routing,
+Realmroot runs as a Cloudflare Worker with Assets, D1, R2, Email Routing,
 Queue, and Cron bindings.
 
 ## Repository Model
 
 Keep two clear repository roles:
 
-- `saltbo/flareauth` is the canonical upstream source. Its own Worker deploys
+- `saltbo/realmroot` is the canonical upstream source. Its own Worker deploys
   exclusively through Cloudflare Workers Builds and has no GitHub deployment
   workflow.
 - A GitHub fork is one product deployment. Its only operational responsibility
@@ -21,8 +21,8 @@ the explicit deployment version boundary.
 
 ## Create A Deployment
 
-1. Fork `saltbo/flareauth`.
-2. Copy [`deploy/flareauth-fork.yml`](../../deploy/flareauth-fork.yml) to
+1. Fork `saltbo/realmroot`.
+2. Copy [`deploy/realmroot-fork.yml`](../../deploy/realmroot-fork.yml) to
    `.github/workflows/deploy.yml` in the fork, then enable it from the fork's
    **Actions** tab. This small trigger belongs only to the deployment fork.
 3. Add these repository secrets under **Settings > Secrets and variables >
@@ -35,21 +35,21 @@ the explicit deployment version boundary.
 
 4. Add the required repository variable:
 
-   - `FLAREAUTH_EMAIL_FROM`, for example `noreply@example.com`
+   - `REALMROOT_EMAIL_FROM`, for example `noreply@example.com`
 
 5. Optionally add:
 
-   - `FLAREAUTH_EMAIL_FROM_NAME`, default `FlareAuth`
-   - `FLAREAUTH_WORKER_NAME`
-   - `FLAREAUTH_D1_DATABASE`
-   - `FLAREAUTH_R2_BUCKET`
-   - `FLAREAUTH_EMAIL_QUEUE`
+   - `REALMROOT_EMAIL_FROM_NAME`, default `Realmroot`
+   - `REALMROOT_WORKER_NAME`
+   - `REALMROOT_D1_DATABASE`
+   - `REALMROOT_R2_BUCKET`
+   - `REALMROOT_EMAIL_QUEUE`
 
-6. Open **Actions > Deploy FlareAuth Fork > Run workflow**.
+6. Open **Actions > Deploy Realmroot Fork > Run workflow**.
 
 The default resource names derive from the fork repository. A fork named
-`flareauth-example` deploys Worker and D1 names as `flareauth-example`, R2 as
-`flareauth-assets-example`, and Queue as `flareauth-email-example`.
+`realmroot-example` deploys Worker and D1 names as `realmroot-example`, R2 as
+`realmroot-assets-example`, and Queue as `realmroot-email-example`.
 
 The fork workflow checks out its own triggering commit and runs
 `pnpm run deploy:fork`. The upstream-maintained script is idempotent: it reuses
@@ -63,13 +63,13 @@ commit the token or put it in a repository variable.
 
 ## Auth Realm Boundary
 
-One FlareAuth deployment is one auth realm with one user pool and one issuer.
+One Realmroot deployment is one auth realm with one user pool and one issuer.
 Register multiple OIDC applications in the same deployment only when those
 products intentionally share accounts, administrators, login methods, security
 policy, connectors, and email settings.
 
 Products that need separate user pools or administrators should use separate
-FlareAuth deployments. Keep the deployment boundary as the isolation boundary
+Realmroot deployments. Keep the deployment boundary as the isolation boundary
 instead of adding product-level tenant predicates inside one D1 database. See
 [Tenancy Model](../architecture/tenancy.md).
 
@@ -85,7 +85,7 @@ These settings remain deployment-specific:
 
 - `BETTER_AUTH_URL`: optional canonical deployment origin. The shared user and
   Agent issuer is always `BETTER_AUTH_URL/api/auth`.
-- `TRUSTED_ORIGINS`: optional extra first-party FlareAuth origins.
+- `TRUSTED_ORIGINS`: optional extra first-party Realmroot origins.
 - OAuth provider credentials configured in the admin console or Management API.
 - `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, and `WEBAUTHN_ORIGINS` when passkeys
   span custom domains.
@@ -101,7 +101,7 @@ Cloudflare Email Routing must be active for the sending domain:
 1. Add the domain to Cloudflare.
 2. Enable Email Routing for the zone.
 3. Complete the required MX and TXT/SPF records.
-4. Verify the address used by `FLAREAUTH_EMAIL_FROM`.
+4. Verify the address used by `REALMROOT_EMAIL_FROM`.
 
 The workflow uses the same address for the `EMAIL_FROM` variable and the
 `EMAIL` binding allowlist, avoiding mismatched sender configuration.

@@ -1,4 +1,4 @@
-name = "flareauth"
+name = "realmroot"
 main = "./server/worker.ts"
 compatibility_date = "2026-04-12"
 compatibility_flags = ["nodejs_compat"]
@@ -7,7 +7,7 @@ preview_urls = true
 
 [vars]
 EMAIL_FROM = "noreply@example.com"
-EMAIL_FROM_NAME = "FlareAuth"
+EMAIL_FROM_NAME = "Realmroot"
 
 [assets]
 binding = "ASSETS"
@@ -21,17 +21,17 @@ allowed_sender_addresses = ["noreply@example.com"]
 
 [[r2_buckets]]
 binding = "ASSET_BUCKET"
-bucket_name = "flareauth-assets"
+bucket_name = "realmroot-assets"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "flareauth"
+database_name = "realmroot"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "./migrations"
 
 [[queues.producers]]
 binding = "EMAIL_QUEUE"
-queue = "flareauth-email"
+queue = "realmroot-email"
 
 [triggers]
 crons = ["*/15 * * * *"]

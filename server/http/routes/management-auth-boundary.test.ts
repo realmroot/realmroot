@@ -61,11 +61,11 @@ describe('management routes 1', () => {
                   in: 'header',
                   name: 'Authorization',
                   value: 'AgentAuth',
-                  provider: 'flareauth-agent',
+                  provider: 'realmroot-agent',
                 },
               },
               params: {
-                provider: 'flareauth-agent',
+                provider: 'realmroot-agent',
               },
             },
           },
@@ -190,7 +190,7 @@ describe('management routes 1', () => {
       sub: 'admin-1',
       email: 'admin-1@example.com',
       role: 'admin',
-      client_id: 'flareauth-cli',
+      client_id: 'realmroot-cli',
       scope: 'openid management:read management:write',
     })
 
@@ -357,7 +357,7 @@ describe('management routes 1', () => {
         sub: 'admin-1',
         email: 'admin-1@example.com',
         role: 'admin',
-        client_id: 'flareauth-cli',
+        client_id: 'realmroot-cli',
         scope: 'openid management:read management:write',
       }),
     )
@@ -382,7 +382,7 @@ describe('management routes 1', () => {
       sub: 'user-1',
       email: 'user-1@example.com',
       role: 'user',
-      client_id: 'flareauth-cli',
+      client_id: 'realmroot-cli',
       scope: 'openid management:read management:write',
     })
 
@@ -497,7 +497,7 @@ describe('management routes 1', () => {
       sub: 'admin-1',
       email: 'admin-1@example.com',
       role: 'admin',
-      client_id: 'flareauth-cli',
+      client_id: 'realmroot-cli',
       scope: 'openid management:read',
     })
 
@@ -530,7 +530,7 @@ describe('management routes 1', () => {
       sub: 'admin-1',
       email: 'admin-1@example.com',
       role: 'admin',
-      client_id: 'flareauth-cli',
+      client_id: 'realmroot-cli',
       scope: 'openid management:read management:write',
     })
     const users = createUserRepositoryMock()
@@ -583,7 +583,7 @@ describe('management routes 1', () => {
     auth.api.oauth2UserInfo.mockResolvedValue({
       sub: 'admin-1',
       email: 'admin-1@example.com',
-      client_id: 'flareauth-cli',
+      client_id: 'realmroot-cli',
       scope: 'openid management:read',
       authorization: {
         roles: ['admin'],

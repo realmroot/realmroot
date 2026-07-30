@@ -43,7 +43,7 @@ Feature: Account Center
   @entrypoint:product-ui @journey:email-update
   Scenario: Email change requests verification
     When I request a new email address
-    Then FlareAuth records an email change verification
+    Then Realmroot records an email change verification
 
   @entrypoint:product-ui @journey:password-update
   Scenario: Password change rotates credentials
@@ -67,7 +67,7 @@ Feature: Account Center
   Scenario: MFA policy controls enrollment and API access
     Given tenant MFA policy disables or requires TOTP
     When I attempt enrollment or protected API access
-    Then FlareAuth enforces the current policy
+    Then Realmroot enforces the current policy
 
   @entrypoint:product-ui @journey:passkey-flow
   Scenario: Passkey enrollment completes with WebAuthn
@@ -84,7 +84,7 @@ Feature: Account Center
   Scenario: Web3 wallet sign-in follows the SIWE boundary
     Given my account has a wallet address binding
     When I start hosted wallet sign-in
-    Then FlareAuth requires the external wallet signature boundary
+    Then Realmroot requires the external wallet signature boundary
     And the bound account can sign in
 
   @entrypoint:product-ui @journey:linked-account-unlink
