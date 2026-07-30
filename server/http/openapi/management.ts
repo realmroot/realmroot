@@ -67,6 +67,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/agent',
     operationId: 'getCurrentAgent',
     summary: 'Read the current Agent',
+    cli: { group: 'auth', name: 'whoami' },
     security: [{ agentAuth: [] }],
     response: agentResponseSchema,
   },
@@ -93,6 +94,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/agent/access-requests',
     operationId: 'createAgentAccessRequest',
     summary: 'Request exact API resource access',
+    cli: { group: 'access', name: 'request' },
     security: [{ agentAuth: [] }],
     request: { body: jsonBody(createAccessRequestSchema) },
     response: accessRequestSchema,
@@ -129,6 +131,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/agent/access-grants/{grantId}/tokens',
     operationId: 'issueTargetAccessToken',
     summary: 'Issue an API resource DPoP token',
+    cli: { group: 'access', name: 'token' },
     security: [{ agentAuth: [] }],
     request: { params: z.object({ grantId: z.string() }) },
     response: targetTokenSchema,
@@ -209,6 +212,9 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
     path: routeConfig.path,
     operationId: routeConfig.operationId,
     summary: routeConfig.summary,
+    ...(routeConfig.cli
+      ? { tags: [routeConfig.cli.group], 'x-cli-name': routeConfig.cli.name }
+      : { 'x-cli-hidden': true }),
     security:
       routeConfig.security ??
       (requiredAgentCapability

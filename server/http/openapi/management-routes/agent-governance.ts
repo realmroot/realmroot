@@ -14,6 +14,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     path: '/agent/capability-requests',
     operationId: 'requestAgentCapabilities',
     summary: 'Request Realmroot resource capabilities',
+    cli: { group: 'capability', name: 'request' },
     security: [{ agentAuth: [] }],
     request: { body: jsonBody(requestAgentCapabilitiesSchema) },
     response: requestAgentCapabilitiesResponseSchema,

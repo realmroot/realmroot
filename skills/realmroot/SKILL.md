@@ -36,7 +36,7 @@ ordinary public resources.
 Read [references/setup.md](references/setup.md) and complete its setup and
 identity procedure.
 
-This step is complete only when `get-current-agent` succeeds and returns both
+This step is complete only when `auth whoami` succeeds and returns both
 `agent.issuer` and `agent.subject`. If the user asked only for enrollment or
 identity, return those non-secret identifiers and stop.
 

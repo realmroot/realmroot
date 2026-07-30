@@ -88,8 +88,13 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     env: environment,
     encoding: 'utf8',
   })
+  execFileSync('restish', ['api', 'set', apiName, 'command_layout: tags'], {
+    cwd: repoRoot,
+    env: environment,
+    encoding: 'utf8',
+  })
 
-  const invoke = <T>(operation: string, input?: unknown): T => {
+  const invoke = <T>(command: string[], input?: unknown): T => {
     const options: ExecFileSyncOptionsWithStringEncoding = {
       cwd: repoRoot,
       env: environment,
@@ -97,20 +102,20 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
       ...(input === undefined ? {} : { input: JSON.stringify(input) }),
     }
     try {
-      return JSON.parse(execFileSync('restish', [apiName, operation, '--rsh-output-format', 'json'], options)) as T
+      return JSON.parse(execFileSync('restish', [apiName, ...command, '--rsh-output-format', 'json'], options)) as T
     } catch (error) {
       const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
       throw new Error(
-        `Restish ${operation} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
+        `Restish ${command.join(' ')} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
         { cause: error },
       )
     }
   }
 
-  const invokeWithArguments = <T>(operation: string, args: string[]): T => {
+  const invokeWithArguments = <T>(command: string[], args: string[]): T => {
     try {
       return JSON.parse(
-        execFileSync('restish', [apiName, operation, ...args, '--rsh-output-format', 'json'], {
+        execFileSync('restish', [apiName, ...command, ...args, '--rsh-output-format', 'json'], {
           cwd: repoRoot,
           env: environment,
           encoding: 'utf8',
@@ -119,15 +124,15 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     } catch (error) {
       const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
       throw new Error(
-        `Restish ${operation} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
+        `Restish ${command.join(' ')} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
         { cause: error },
       )
     }
   }
 
-  const invokePending = <T>(operation: string, input?: unknown, env?: Record<string, string>) => {
+  const invokePending = <T>(command: string[], input?: unknown, env?: Record<string, string>) => {
     rmSync(approvalFile, { force: true })
-    const child = spawn('restish', [apiName, operation, '--rsh-output-format', 'json'], {
+    const child = spawn('restish', [apiName, ...command, '--rsh-output-format', 'json'], {
       cwd: repoRoot,
       env: { ...environment, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -172,7 +177,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
       child.on('close', (code) => {
         clearInterval(approvalTimer)
         if (code !== 0) {
-          const error = new Error(`Realmroot ${operation} exited with ${code}: ${stderr}${stdout}`)
+          const error = new Error(`Realmroot ${command.join(' ')} exited with ${code}: ${stderr}${stdout}`)
           if (!approvalResolved) rejectApprovalUrl(error)
           reject(error)
           return
@@ -189,18 +194,18 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
 
   return {
     firstWhoami: (name) =>
-      invokePending<PluginIdentityResult>('get-current-agent', undefined, { REALMROOT_AGENT_NAME: name }),
-    whoami: () => invoke<PluginIdentityResult>('get-current-agent'),
+      invokePending<PluginIdentityResult>(['auth', 'whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
+    whoami: () => invoke<PluginIdentityResult>(['auth', 'whoami']),
     requestCapabilities: (capabilities, reason) =>
-      invokePending<CapabilityRequestResult>('request-agent-capabilities', { capabilities, reason }),
-    listAgentApiResources: <T>() => invoke<T>('list-agent-api-resources'),
-    requestResourceAccess: <T>(input: unknown) => invokePending<T>('create-agent-access-request', input),
+      invokePending<CapabilityRequestResult>(['capability', 'request'], { capabilities, reason }),
+    listAgentApiResources: <T>() => invoke<T>(['list-agent-api-resources']),
+    requestResourceAccess: <T>(input: unknown) => invokePending<T>(['access', 'request'], input),
     issueTargetAccessToken: (grantId) =>
       invokeWithArguments<{
         tokenType: 'DPoP'
         scopes: string[]
         resourceUrl: string
-      }>('issue-target-access-token', [grantId]),
+      }>(['access', 'token'], [grantId]),
     connectTarget: (targetAPIName, resourceUrl) => {
       execFileSync('restish', ['api', 'connect', targetAPIName, resourceUrl, '--no-discover', '--replace', '--yes'], {
         cwd: repoRoot,
@@ -228,7 +233,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
         )
       }
     },
-    listApplications: () => invoke<{ applications: unknown[] }>('list-applications'),
+    listApplications: () => invoke<{ applications: unknown[] }>(['list-applications']),
     dispose: () => rmSync(root, { recursive: true, force: true }),
   }
 }

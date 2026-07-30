@@ -23,15 +23,15 @@ Feature: Agent identity and external API authorization
     @e2e @entrypoint:agent-protocol @journey:agent-identity-enrollment
     Scenario: A new Agent establishes a stable identity on its first protected API operation
       Given a new Agent connects Restish to the Realmroot OpenAPI contract
-      When the Agent invokes get-current-agent without a local Realmroot identity
+      When the Agent invokes auth whoami without a local Realmroot identity
       Then the transparent Restish authentication adapter registers locally generated host and Agent keys
-      And get-current-agent waits while an authorized controller approves the Agent once from the hosted verification page
+      And auth whoami waits while an authorized controller approves the Agent once from the hosted verification page
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
       And the Agent belongs to exactly one home space
       And users govern the Agent through roles in that space
       And the host registration is bound to that Agent identity
-      And the original get-current-agent operation resumes and returns the stable issuer and subject
+      And the original auth whoami operation resumes and returns the stable issuer and subject
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
       And later OpenAPI operations reuse the Agent identity without another login command
       And enrollment alone grants no management or external API resource access

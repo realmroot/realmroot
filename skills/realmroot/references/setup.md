@@ -69,6 +69,7 @@ contract:
 
 ```bash
 restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --replace --yes
+restish api set "$API_NAME" 'command_layout: tags'
 ```
 
 For an existing connection that still targets the resolved origin, refresh its
@@ -76,6 +77,7 @@ contract:
 
 ```bash
 restish api sync "$API_NAME"
+restish api set "$API_NAME" 'command_layout: tags'
 ```
 
 Inspect before proceeding when the target is uncertain:
@@ -99,7 +101,7 @@ PROFILE_ORIGIN="${PROFILE_ORIGIN%/}"
 restish api set "$API_NAME" \
   "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
 restish api inspect "$API_NAME"
-restish -p "$PROFILE_NAME" "$API_NAME" get-current-agent -o json
+restish -p "$PROFILE_NAME" "$API_NAME" auth whoami -o json
 AUTH_ORIGIN="$PROFILE_ORIGIN"
 export RSH_PROFILE="$PROFILE_NAME"
 ```
@@ -110,7 +112,7 @@ Profiles resolving to the same issuer may reuse the stable identity; a
 different issuer uses a separate identity.
 
 Profile setup is complete when inspection shows the exact profile base URL and
-its explicit `get-current-agent` call succeeds. Keep the selected
+its explicit `auth whoami` call succeeds. Keep the selected
 `RSH_PROFILE` and matching `AUTH_ORIGIN` for every later branch command.
 
 ## Establish Identity
@@ -118,7 +120,7 @@ its explicit `get-current-agent` call succeeds. Keep the selected
 Invoke the generated identity operation in the selected profile:
 
 ```bash
-restish "$API_NAME" get-current-agent -o json
+restish "$API_NAME" auth whoami -o json
 ```
 
 On first use, the adapter registers a stable Agent, opens the controller's
@@ -126,6 +128,6 @@ approval page, waits, and resumes the same operation after approval. The
 controller signs in and decides; the Agent remains the Restish request
 identity.
 
-Repeat `get-current-agent` after interruption to resume enrollment. Use
+Repeat `auth whoami` after interruption to resume enrollment. Use
 `AUTH_ORIGIN/api/auth` as the returned OIDC issuer and consume its discovery
 metadata for OIDC endpoints.

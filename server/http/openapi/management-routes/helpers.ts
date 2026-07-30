@@ -102,6 +102,10 @@ export interface ManagementRouteConfig {
   path: string
   operationId: string
   summary: string
+  cli?: {
+    group: 'access' | 'auth' | 'capability'
+    name: string
+  }
   request?: {
     params?: ZodType
     query?: ZodType

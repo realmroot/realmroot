@@ -26,6 +26,36 @@ The generated contract is authoritative for resource paths, operation IDs,
 request and response schemas, and security requirements. Prose documentation
 describes only conventions that apply across operations.
 
+## Restish Command Surface
+
+Restish uses generic API-relative HTTP commands for routine single-request
+operations:
+
+```bash
+restish get realmroot/applications
+restish post realmroot/applications < application.json
+restish patch realmroot/applications/app_123 'name: Updated'
+restish delete realmroot/applications/app_123
+```
+
+Discover the complete generic operation surface, including HTTP methods,
+resource paths, and operation IDs, with:
+
+```bash
+restish doctor api realmroot
+```
+
+Generated commands are reserved for Agent identity, controller approval, and
+target credential workflows that span more than an ordinary resource request.
+With Restish tag layout enabled, the complete generated surface is:
+
+```text
+auth whoami
+capability request
+access request
+access token <grant-id>
+```
+
 ## Authentication And Authorization
 
 Protected operations accept either:

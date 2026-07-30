@@ -138,6 +138,23 @@ describe('management routes 1', () => {
     expect(protectedResponse.headers.get('link')).toContain('</api/openapi.json>; rel="service-desc"')
   })
 
+  it('limits generated Restish commands to approval and credential workflows [spec: management-api/management-restish-command-surface]', () => {
+    const generatedCommands = openApiOperationObjects()
+      .filter((operation) => operation.cliHidden !== true)
+      .map((operation) => ({
+        group: operation.tags?.[0],
+        name: operation.cliName,
+        operationId: operation.operationId,
+      }))
+
+    expect(generatedCommands).toEqual([
+      { group: 'auth', name: 'whoami', operationId: 'getCurrentAgent' },
+      { group: 'access', name: 'request', operationId: 'createAgentAccessRequest' },
+      { group: 'access', name: 'token', operationId: 'issueTargetAccessToken' },
+      { group: 'capability', name: 'request', operationId: 'requestAgentCapabilities' },
+    ])
+  })
+
   it('documents application setup fields and role scope replacement request bodies', () => {
     const createApplication = openApiOperationObjects().find((operation) => operation.key === 'POST /applications')
     const createApplicationSchema = openApiSchemaObject(requestBodyContent(createApplication?.requestBody).schema)

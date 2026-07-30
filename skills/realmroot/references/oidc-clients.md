@@ -53,7 +53,7 @@ slash:
 
 ```bash
 APP_ORIGIN="${APP_ORIGIN%/}"
-restish "$API_NAME" create-application --rsh-validate -o json <<JSON
+restish post "$API_NAME/applications" -o json <<JSON
 {
   "name": "Customer Portal",
   "slug": "customer-portal",
@@ -75,7 +75,7 @@ requirements.
 For authorization code:
 
 ```bash
-restish "$API_NAME" create-application --rsh-validate -o json <<'JSON'
+restish post "$API_NAME/applications" -o json <<'JSON'
 {
   "name": "Desktop App",
   "slug": "desktop-app",
@@ -90,7 +90,7 @@ JSON
 For device authorization:
 
 ```bash
-restish "$API_NAME" create-application --rsh-validate -o json <<'JSON'
+restish post "$API_NAME/applications" -o json <<'JSON'
 {
   "name": "Runner CLI",
   "slug": "runner-cli",
@@ -114,7 +114,7 @@ CLIENT_OUTPUT_FILE=/protected/path/client.json
 (
   umask 077
   set -o noclobber
-  restish "$API_NAME" create-application --rsh-validate -o json > "$CLIENT_OUTPUT_FILE" <<JSON
+  restish post "$API_NAME/applications" -o json > "$CLIENT_OUTPUT_FILE" <<JSON
 {
   "name": "Admin Backend",
   "slug": "admin-backend",

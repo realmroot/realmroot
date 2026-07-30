@@ -1,7 +1,9 @@
-# Registered API Resource Commands
+# Registered API Resource Requests
 
-Use this reference after Step 1 in `SKILL.md`. Realmroot publishes its generated
-operations from `AUTH_ORIGIN/api/openapi.json`.
+Use this reference after Step 1 in `SKILL.md`. Realmroot publishes its complete
+operation metadata from `AUTH_ORIGIN/api/openapi.json`. Routine single-request
+operations use Restish's generic HTTP commands; approval and credential
+workflows retain generated commands.
 
 ## Contents
 
@@ -22,10 +24,8 @@ Inspect pagination, then list every page of Agent-visible resources and
 existing grants:
 
 ```bash
-restish "$API_NAME" list-agent-api-resources --help
-restish "$API_NAME" list-agent-api-resources -o json
-restish "$API_NAME" list-agent-access-grants --help
-restish "$API_NAME" list-agent-access-grants -o json
+restish get "$API_NAME/agent/api-resources?limit=100&offset=0" -o json
+restish get "$API_NAME/agent/access-grants?limit=100&offset=0" -o json
 ```
 
 Search the discovered identifiers, names, catalog descriptions, scope values,
@@ -81,7 +81,7 @@ When no exact active grant exists, request access. For an `external` resource
 with the required account already connected, include it:
 
 ```bash
-restish "$API_NAME" create-agent-access-request --rsh-validate -o json <<'JSON'
+restish "$API_NAME" access request --rsh-validate -o json <<'JSON'
 {
   "target": {
     "type": "api-resource",
@@ -98,7 +98,7 @@ For a `native` resource, or an `external` resource whose account must be chosen
 or connected during approval, use a request without an account:
 
 ```bash
-restish "$API_NAME" create-agent-access-request --rsh-validate -o json <<'JSON'
+restish "$API_NAME" access request --rsh-validate -o json <<'JSON'
 {
   "target": {
     "type": "api-resource",
@@ -118,7 +118,7 @@ If interrupted after request creation, resume inspection with the returned
 request ID:
 
 ```bash
-restish "$API_NAME" get-agent-access-request request_123 -o json
+restish get "$API_NAME/agent/access-requests/request_123" -o json
 ```
 
 Access approval is complete only when the response contains an active
@@ -130,7 +130,7 @@ access request.
 Issue credentials for the exact approved grant:
 
 ```bash
-restish "$API_NAME" issue-target-access-token grant_123 -o json
+restish "$API_NAME" access token grant_123 -o json
 ```
 
 Use only the safe metadata returned by Restish.
@@ -155,10 +155,11 @@ every page unless the user requested a bounded result.
 
 ## Diagnostics
 
-Use generated operation names from:
+Inspect the focused workflow command surface:
 
 ```bash
 restish "$API_NAME" --help
+restish doctor api "$API_NAME"
 ```
 
 Diagnose discovery and authentication with redacted output:

@@ -127,6 +127,9 @@ export function openApiOperationObjects() {
           pathParameters: pathParameterNames(path),
           declaredPathParameters: declaredPathParameterNames(resolvedPathItem, resolvedOperation),
           operationId: resolvedOperation.operationId,
+          cliHidden: resolvedOperation['x-cli-hidden'],
+          cliName: resolvedOperation['x-cli-name'],
+          tags: resolvedOperation.tags,
           requestBody: resolvedOperation.requestBody,
           responses: resolvedOperation.responses,
           security: resolvedOperation.security,
@@ -357,6 +360,9 @@ export interface OpenApiOperation {
   requestBody?: unknown
   responses: Record<string, unknown>
   security?: unknown
+  tags?: string[]
+  'x-cli-hidden'?: boolean
+  'x-cli-name'?: string
 }
 
 export interface OpenApiParameter {

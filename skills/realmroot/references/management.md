@@ -17,7 +17,7 @@ mutations, limited to the resources in the user's task.
 For application administration:
 
 ```bash
-restish "$API_NAME" request-agent-capabilities --rsh-validate -o json <<'JSON'
+restish "$API_NAME" capability request --rsh-validate -o json <<'JSON'
 {
   "capabilities": ["applications:read", "applications:write"],
   "reason": "Administer Realmroot applications"
@@ -34,27 +34,26 @@ does not replay mutations.
 
 ## Operate Resources
 
-Discover generated operations from OpenAPI:
+Use generic HTTP commands for routine resource operations:
 
 ```bash
-restish "$API_NAME" --help
-restish "$API_NAME" list-applications -o json
-restish "$API_NAME" get-application app_123 -o json
+restish doctor api "$API_NAME"
+restish get "$API_NAME/applications" -o json
+restish get "$API_NAME/applications/app_123" -o json
 ```
 
 Read the current resource before mutation, select the exact ID from that
 response, and apply the smallest requested change:
 
 ```bash
-restish "$API_NAME" create-application --rsh-validate -o json < application.json
+restish post "$API_NAME/applications" -o json < application.json
 ```
 
-After mutation, invoke the generated get operation again for readback.
-
-Use generic verbs only for diagnostics:
+After mutation, read the exact resource again for verification. Approval and
+credential workflows remain visible under the API command:
 
 ```bash
-restish get "$API_NAME/applications"
+restish "$API_NAME" --help
 restish doctor api "$API_NAME"
 restish api auth inspect "$API_NAME" --redact
 ```

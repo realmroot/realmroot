@@ -1,8 +1,11 @@
 # Realmroot Restish Plugin
 
 `restish-realmroot` is the Restish v2 authentication adapter for Realmroot's
-unified OpenAPI contract. It contributes no commands. `get-current-agent` and every
-resource operation are generated from `/api/openapi.json`.
+unified OpenAPI contract. It contributes no commands. The contract retains
+generated commands only for identity, approval, and credential workflows;
+routine resource operations use Restish's generic HTTP commands. Run
+`restish doctor api realmroot` to enumerate their methods, paths, and operation
+IDs.
 
 Registration and later Agent requests require Ed25519 possession proofs. The
 plugin discovers the issuer and Agent endpoints from
@@ -14,11 +17,10 @@ prints one controller approval URL to the terminal, waits while the controller
 reviews it, creates the stable identity, signs the original request, and lets
 that same operation continue.
 
-The unified contract also generates `list-agent-api-resources`,
-`create-agent-access-request`, `get-agent-access-request`, and
-`issue-target-access-token`. When an exact resource request is
-pending, the response hook opens the hosted controller decision page and waits
-for approval.
+The unified contract generates `auth whoami`, `capability request`,
+`access request`, and `access token`. Resource and grant reads use generic
+API-relative requests. When an exact resource request is pending, the response
+hook opens the hosted controller decision page and waits for approval.
 
 For each access grant, the plugin creates a separate P-256 DPoP key. It discovers
 the proof target from RFC 9728 and RFC 8414 for external resources, uses the
