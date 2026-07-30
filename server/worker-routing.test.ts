@@ -1,24 +1,59 @@
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import previewConfig from '../wrangler.preview.toml?raw'
-import productionConfig from '../wrangler.toml?raw'
-
-const wranglerConfigs = [
-  ['wrangler.toml', productionConfig],
-  ['wrangler.preview.toml', previewConfig],
-] as const
+import wranglerConfig from '../wrangler.toml?raw'
 
 describe('Workers Assets routing', () => {
-  it.each(wranglerConfigs)('routes OAuth metadata well-known paths to the Worker in %s', (_path, config) => {
-    const runWorkerFirst = config.match(/run_worker_first\s*=\s*\[([^\]]+)\]/)
+  it('routes OAuth metadata well-known paths to the Worker', () => {
+    const runWorkerFirst = wranglerConfig.match(/run_worker_first\s*=\s*\[([^\]]+)\]/)
 
     expect(runWorkerFirst?.[1]).toContain('"/api/*"')
     expect(runWorkerFirst?.[1]).toContain('"/.well-known/*"')
   })
 
-  it.each(wranglerConfigs)('routes removed admin paths to the Worker 404 in %s', (_path, config) => {
-    const runWorkerFirst = config.match(/run_worker_first\s*=\s*\[([^\]]+)\]/)
+  it('routes removed admin paths to the Worker 404', () => {
+    const runWorkerFirst = wranglerConfig.match(/run_worker_first\s*=\s*\[([^\]]+)\]/)
 
     expect(runWorkerFirst?.[1]).not.toContain('"/admin"')
     expect(runWorkerFirst?.[1]).not.toContain('"/admin/*"')
+  })
+})
+
+describe('Cloudflare deployment configuration', () => {
+  it('isolates fork resources and canonical origins [spec: platform-onboarding/cloudflare-deployment-isolation]', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'realmroot-deployment-'))
+    try {
+      const sourcePath = path.join(directory, 'source.toml')
+      const outputPath = path.join(directory, 'deployment.toml')
+      writeFileSync(sourcePath, wranglerConfig)
+
+      const result = spawnSync('node', ['scripts/prepare-deployment-config.mjs', sourcePath, outputPath], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          REALMROOT_WORKER_NAME: 'realmroot-example',
+          REALMROOT_D1_DATABASE: 'realmroot-example',
+          REALMROOT_D1_DATABASE_ID: '00000000-0000-4000-8000-000000000001',
+          REALMROOT_R2_BUCKET: 'realmroot-assets-example',
+          REALMROOT_EMAIL_QUEUE: 'realmroot-email-example',
+          REALMROOT_EMAIL_FROM: 'noreply@example.com',
+          REALMROOT_EMAIL_FROM_NAME: 'Example Realmroot',
+        },
+      })
+
+      expect(result.status, result.stderr).toBe(0)
+      const deploymentConfig = readFileSync(outputPath, 'utf8')
+      expect(deploymentConfig).toContain('name = "realmroot-example"')
+      expect(deploymentConfig).toContain('database_name = "realmroot-example"')
+      expect(deploymentConfig).toContain('bucket_name = "realmroot-assets-example"')
+      expect(deploymentConfig).toContain('queue = "realmroot-email-example"')
+      expect(deploymentConfig).toContain('keep_vars = true')
+      expect(deploymentConfig).not.toContain('id.realmroot.dev')
+    } finally {
+      rmSync(directory, { recursive: true })
+    }
   })
 })

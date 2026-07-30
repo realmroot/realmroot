@@ -6,7 +6,11 @@ workers_dev = true
 preview_urls = true
 
 [vars]
-EMAIL_FROM = "noreply@example.com"
+BETTER_AUTH_URL = "https://id.realmroot.dev"
+TRUSTED_ORIGINS = "https://id.realmroot.dev"
+WEBAUTHN_RP_ID = "id.realmroot.dev"
+WEBAUTHN_ORIGINS = "https://id.realmroot.dev"
+EMAIL_FROM = "noreply@realmroot.dev"
 EMAIL_FROM_NAME = "Realmroot"
 
 [assets]
@@ -17,7 +21,7 @@ run_worker_first = ["/api/*", "/.well-known/*"]
 
 [[send_email]]
 name = "EMAIL"
-allowed_sender_addresses = ["noreply@example.com"]
+allowed_sender_addresses = ["noreply@realmroot.dev"]
 
 [[r2_buckets]]
 binding = "ASSET_BUCKET"
@@ -25,8 +29,8 @@ bucket_name = "realmroot-assets"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "realmroot"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "realmroot-db"
+database_id = "b038d1d4-9f08-4011-b0dc-70f125747b62"
 migrations_dir = "./migrations"
 
 [[queues.producers]]

@@ -8,11 +8,16 @@ Queue, and Cron bindings.
 Keep two clear repository roles:
 
 - `saltbo/realmroot` is the canonical upstream source. Its own Worker deploys
-  exclusively through Cloudflare Workers Builds and has no GitHub deployment
-  workflow.
+  through Cloudflare Workers Builds or the equivalent local `pnpm run deploy`
+  command and has no GitHub deployment workflow.
 - A GitHub fork is one product deployment. Its only operational responsibility
   is holding GitHub Actions credentials and deploying its current `main`
   commit with the upstream-maintained deployment script.
+
+The canonical deployment uses the committed `wrangler.toml`. A fork uses that
+file only as a template and generates an ignored `wrangler.deployment.toml`
+whose Worker, D1, R2, Queue, sender, and secrets belong to that fork. The build
+and deploy steps use the same selected configuration in both repository roles.
 
 Do not develop product code in the deployment fork during normal operation.
 Use GitHub's **Sync fork** action to bring upstream changes into the fork. The
@@ -90,9 +95,18 @@ These settings remain deployment-specific:
 - `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, and `WEBAUTHN_ORIGINS` when passkeys
   span custom domains.
 
+The fork generator removes the canonical repository's origin and WebAuthn
+values from its generated configuration. A fork that adds a custom domain
+should configure its own values in the Worker dashboard before the next
+deployment. A fork using only its Workers preview URL can leave them unset.
+
 The generated deployment config enables Wrangler `keep_vars`, so settings
 managed on the existing Worker but absent from the upstream template are not
 removed during deployment. Secrets are preserved by Wrangler independently.
+
+The canonical `wrangler.toml` remains the source of truth for its runtime
+variables. Do not enable `keep_vars` there; removing a committed variable must
+also remove it from the canonical Worker on the next deployment.
 
 ## Email Routing
 

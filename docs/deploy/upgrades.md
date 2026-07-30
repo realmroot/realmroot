@@ -51,7 +51,9 @@ Resource override variables are primarily for adopting an existing deployment
 whose names do not match the fork-name convention.
 
 The canonical `saltbo/realmroot` repository never runs the fork deployment job.
-It continues to deploy its own Worker through Cloudflare Workers Builds.
+It continues to deploy its own Worker through Cloudflare Workers Builds, or
+manually with the equivalent `pnpm run deploy` command. Both paths use the
+committed `wrangler.toml`.
 
 ## Migrations And Rollback
 
