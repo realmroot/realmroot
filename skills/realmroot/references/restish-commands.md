@@ -40,6 +40,20 @@ Refresh an existing connection after a server upgrade:
 restish api sync "$API_NAME"
 ```
 
+Add another isolated Restish profile without creating another API name:
+
+```bash
+restish api set "$API_NAME" \
+  'profiles.local.base_url: https://local.realmroot.dev/api'
+restish api inspect "$API_NAME"
+restish -p local "$API_NAME" get-current-agent -o json
+```
+
+The new profile has its own credential configuration. Do not copy or inherit it
+from `default`; invoke the profile's first protected operation explicitly. The
+adapter establishes or reuses stable Agent state according to runtime and
+issuer, never according to profile name.
+
 ## Generated Operations
 
 Use commands generated from OpenAPI `operationId` values:

@@ -44,6 +44,44 @@ API_NAME="${API_NAME:-realmroot}"
 Do not ask for an origin merely because none was supplied; use the official
 default. Do not search for or assume access to Realmroot source code.
 
+## Manage Restish Profiles
+
+Use one Restish API name and add named profiles for other environments or
+credential contexts. The discovered `default` profile targets the hosted
+production deployment.
+
+Add a profile by setting its own base URL:
+
+```bash
+restish api set realmroot \
+  'profiles.local.base_url: https://local.realmroot.dev/api'
+restish api inspect realmroot
+```
+
+Select it explicitly for one command:
+
+```bash
+restish -p local realmroot get-current-agent -o json
+```
+
+Or select it for the current process environment:
+
+```bash
+export RSH_PROFILE=local
+restish realmroot get-current-agent -o json
+```
+
+Treat every profile's credential configuration as isolated. Never copy,
+inherit, move, or silently fall back to credentials from `default` or another
+profile. Configure the new profile independently and invoke its first protected
+operation explicitly.
+
+Profile names are local request contexts, not Agent identity boundaries. The
+Realmroot adapter keys durable Agent state by runtime and issuer: profiles that
+resolve to the same issuer reuse that runtime's stable Agent identity, while a
+different issuer creates a separate environment identity. Do not create
+additional API names such as `realmroot-local` merely to select an environment.
+
 ## Install The Restish Adapter
 
 Use Restish v2.3 or newer and Go 1.25.3 or newer:
