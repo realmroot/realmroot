@@ -106,7 +106,7 @@ func TestAuthHookSignsTargetAPIRequestWithCachedDPoPToken(t *testing.T) {
 	states := &memoryStateStore{
 		exists: true,
 		state: agentState{
-			Version:         1,
+			Version:         agentStateVersion,
 			Origin:          "https://auth.example.com",
 			AgentID:         "agent-123",
 			HostID:          "host-123",
@@ -115,8 +115,9 @@ func TestAuthHookSignsTargetAPIRequestWithCachedDPoPToken(t *testing.T) {
 			AgentPrivateKey: encodePrivateKey(agentPrivateKey),
 			HostPrivateKey:  encodePrivateKey(hostPrivateKey),
 			DPoPCredentials: map[string]dpopCredential{
-				"grant-1": {
+				"resource-1": {
 					GrantID:           "grant-1",
+					GrantMode:         "persistent",
 					ResourceID:        "resource-1",
 					ResourceURL:       "https://api.example.com/v1",
 					AuthorizationMode: "native",
@@ -147,6 +148,207 @@ func TestAuthHookSignsTargetAPIRequestWithCachedDPoPToken(t *testing.T) {
 	claims := decodeJWTPayload(t, proof)
 	if claims["htm"] != http.MethodGet || claims["htu"] != input.Request.URI || claims["ath"] == "" {
 		t.Fatalf("unexpected DPoP claims: %#v", claims)
+	}
+}
+
+func TestEnsureDPoPCredentialReplacesGrantForSameResource(t *testing.T) {
+	t.Run("[spec: agent-identity/restish-resource-credential-lifecycle]", testEnsureDPoPCredentialReplacesGrantForSameResource)
+}
+
+func testEnsureDPoPCredentialReplacesGrantForSameResource(t *testing.T) {
+	state := authenticatedTestState(t)
+	oldPrivateKey, err := newDPoPPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.DPoPCredentials = map[string]dpopCredential{
+		"resource-1": {
+			GrantID:           "grant-old",
+			GrantMode:         "once",
+			ResourceID:        "resource-1",
+			ResourceURL:       "https://api.example.com/v1",
+			AuthorizationMode: "native",
+			PrivateKey:        oldPrivateKey,
+		},
+	}
+	states := &memoryStateStore{state: state, exists: true}
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != "https://auth.example.com/api/agent/api-resources?limit=100&offset=0" {
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
+		}
+		return jsonResponse(200, map[string]any{
+			"items": []map[string]any{{
+				"id":                "resource-1",
+				"resourceUrl":       "https://api.example.com/v1",
+				"authorizationMode": "native",
+				"accessGrants": []map[string]any{{
+					"id": "grant-new", "mode": "persistent", "status": "active",
+				}},
+			}},
+		}), nil
+	})
+
+	credential, updated, err := ensureDPoPCredential(
+		t.Context(),
+		states,
+		client,
+		agentTarget{Origin: state.Origin},
+		state,
+		agentConfiguration{Issuer: "https://auth.example.com/api/auth"},
+		"grant-new",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credential.GrantID != "grant-new" || credential.GrantMode != "persistent" {
+		t.Fatalf("credential = %#v", credential)
+	}
+	if len(updated.DPoPCredentials) != 1 || updated.DPoPCredentials["resource-1"].GrantID != "grant-new" {
+		t.Fatalf("resource credential was not replaced: %#v", updated.DPoPCredentials)
+	}
+	if credential.PrivateKey == oldPrivateKey {
+		t.Fatal("replacement grant reused the obsolete DPoP key")
+	}
+}
+
+func TestAuthHookRemovesExpiredOneTimeCredential(t *testing.T) {
+	state := authenticatedTestState(t)
+	expiredAt := time.Now().Add(-time.Minute)
+	state.DPoPCredentials = map[string]dpopCredential{
+		"resource-1": targetCredential(t, "grant-1", "once", "expired-token", &expiredAt),
+	}
+	states := &memoryStateStore{state: state, exists: true}
+
+	_, err := authenticateRequest(targetHookInput(), states, roundTripFunc(nil), &promptRecorder{})
+
+	if err == nil || !strings.Contains(err.Error(), "request and approve a new access grant") {
+		t.Fatalf("error = %v", err)
+	}
+	if len(states.state.DPoPCredentials) != 0 {
+		t.Fatalf("expired credential was retained: %#v", states.state.DPoPCredentials)
+	}
+}
+
+func TestAuthHookRefreshesExpiredPersistentCredential(t *testing.T) {
+	state := authenticatedTestState(t)
+	expiredAt := time.Now().Add(-time.Minute)
+	state.DPoPCredentials = map[string]dpopCredential{
+		"resource-1": targetCredential(t, "grant-1", "persistent", "expired-token", &expiredAt),
+	}
+	states := &memoryStateStore{state: state, exists: true}
+	requests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		switch requests {
+		case 1:
+			return jsonResponse(200, testAgentConfiguration()), nil
+		case 2:
+			if request.URL.Path != "/api/agent/access-grants/grant-1/tokens" {
+				t.Fatalf("token URL = %s", request.URL)
+			}
+			return jsonResponse(200, map[string]any{
+				"accessToken": "fresh-token",
+				"tokenType":   "DPoP",
+				"expiresAt":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+				"resourceUrl": "https://api.example.com/v1",
+			}), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
+			return nil, nil
+		}
+	})
+
+	output, err := authenticateRequest(targetHookInput(), states, client, &promptRecorder{})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Request.Headers["Authorization"] != "DPoP fresh-token" {
+		t.Fatalf("authorization = %#v", output.Request.Headers["Authorization"])
+	}
+	if states.state.DPoPCredentials["resource-1"].AccessToken != "fresh-token" {
+		t.Fatalf("refreshed token was not stored: %#v", states.state.DPoPCredentials)
+	}
+}
+
+func TestAuthHookRemovesCredentialRejectedAsInactive(t *testing.T) {
+	state := authenticatedTestState(t)
+	state.DPoPCredentials = map[string]dpopCredential{
+		"resource-1": targetCredential(t, "grant-1", "persistent", "", nil),
+	}
+	states := &memoryStateStore{state: state, exists: true}
+	requests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return jsonResponse(200, testAgentConfiguration()), nil
+		}
+		return jsonResponse(http.StatusForbidden, map[string]any{
+			"message": "Active Agent access grant is required.",
+		}), nil
+	})
+
+	_, err := authenticateRequest(targetHookInput(), states, client, &promptRecorder{})
+
+	if err == nil || !strings.Contains(err.Error(), "no longer active") {
+		t.Fatalf("error = %v", err)
+	}
+	if len(states.state.DPoPCredentials) != 0 {
+		t.Fatalf("inactive credential was retained: %#v", states.state.DPoPCredentials)
+	}
+}
+
+func authenticatedTestState(t *testing.T) agentState {
+	t.Helper()
+	_, agentPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, hostPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return agentState{
+		Version:         agentStateVersion,
+		Origin:          "https://auth.example.com",
+		AgentID:         "agent-123",
+		HostID:          "host-123",
+		AgentKeyID:      "agent-key",
+		HostKeyID:       "host-key",
+		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
+		HostPrivateKey:  encodePrivateKey(hostPrivateKey),
+	}
+}
+
+func targetCredential(
+	t *testing.T,
+	grantID string,
+	grantMode string,
+	accessToken string,
+	expiresAt *time.Time,
+) dpopCredential {
+	t.Helper()
+	privateKey, err := newDPoPPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dpopCredential{
+		GrantID:           grantID,
+		GrantMode:         grantMode,
+		ResourceID:        "resource-1",
+		ResourceURL:       "https://api.example.com/v1",
+		AuthorizationMode: "native",
+		PrivateKey:        privateKey,
+		AccessToken:       accessToken,
+		ExpiresAt:         expiresAt,
+	}
+}
+
+func targetHookInput() plugin.AuthHookInput {
+	return plugin.AuthHookInput{
+		API:     "projects",
+		Profile: "default",
+		Request: plugin.HookRequest{Method: http.MethodGet, URI: "https://api.example.com/v1/projects"},
 	}
 }
 
@@ -223,15 +425,24 @@ func (s *memoryStateStore) FindByResourceURL(resourceURL string) (resourceCreden
 }
 
 func (s *memoryStateStore) UpdateCredential(_ resourceCredentialReference, credential dpopCredential) error {
-	s.state.DPoPCredentials[credential.GrantID] = credential
+	s.state.DPoPCredentials[credential.ResourceID] = credential
+	return nil
+}
+
+func (s *memoryStateStore) DeleteCredential(reference resourceCredentialReference) error {
+	delete(s.state.DPoPCredentials, reference.credential.ResourceID)
 	return nil
 }
 
 func (s *memoryStateStore) StoreTargetToken(_ string, grantID string, token targetTokenResponse) error {
-	credential := s.state.DPoPCredentials[grantID]
-	credential.AccessToken = token.AccessToken
-	credential.ExpiresAt = &token.ExpiresAt
-	s.state.DPoPCredentials[grantID] = credential
+	for resourceID, credential := range s.state.DPoPCredentials {
+		if credential.GrantID != grantID {
+			continue
+		}
+		credential.AccessToken = token.AccessToken
+		credential.ExpiresAt = &token.ExpiresAt
+		s.state.DPoPCredentials[resourceID] = credential
+	}
 	return nil
 }
 

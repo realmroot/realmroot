@@ -49,6 +49,7 @@ type agentAPIResourcesResponse struct {
 		AuthorizationMode string `json:"authorizationMode"`
 		AccessGrants      []struct {
 			ID     string `json:"id"`
+			Mode   string `json:"mode"`
 			Status string `json:"status"`
 		} `json:"accessGrants"`
 	} `json:"items"`
@@ -167,9 +168,26 @@ func authenticateTargetRequest(
 		return plugin.AuthHookOutput{}, err
 	}
 	credential := reference.credential
+	if credential.GrantMode == "once" &&
+		credential.ExpiresAt != nil &&
+		!time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
+		if err := states.DeleteCredential(reference); err != nil {
+			return plugin.AuthHookOutput{}, fmt.Errorf("remove expired one-time target credential: %w", err)
+		}
+		return plugin.AuthHookOutput{}, errors.New("one-time target API access expired; request and approve a new access grant")
+	}
 	if credential.AccessToken == "" || credential.ExpiresAt == nil || !time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
 		credential, err = refreshTargetToken(context.Background(), client, reference.state, credential)
 		if err != nil {
+			var responseError *httpResponseError
+			if errors.As(err, &responseError) && responseError.StatusCode == http.StatusForbidden {
+				if deleteErr := states.DeleteCredential(reference); deleteErr != nil {
+					return plugin.AuthHookOutput{}, fmt.Errorf("remove inactive target credential: %w", deleteErr)
+				}
+				return plugin.AuthHookOutput{}, errors.New(
+					"target API access grant is no longer active; request and approve a new access grant",
+				)
+			}
 			return plugin.AuthHookOutput{}, err
 		}
 		if err := states.UpdateCredential(reference, credential); err != nil {
@@ -201,8 +219,10 @@ func ensureDPoPCredential(
 	configuration agentConfiguration,
 	grantID string,
 ) (dpopCredential, agentState, error) {
-	if credential, ok := state.DPoPCredentials[grantID]; ok {
-		return credential, state, nil
+	for _, credential := range state.DPoPCredentials {
+		if credential.GrantID == grantID {
+			return credential, state, nil
+		}
 	}
 	var resources agentAPIResourcesResponse
 	if err := requestJSON(
@@ -227,6 +247,7 @@ func ensureDPoPCredential(
 			}
 			credential := dpopCredential{
 				GrantID:           grantID,
+				GrantMode:         grant.Mode,
 				ResourceID:        resource.ID,
 				ResourceURL:       resource.ResourceURL,
 				AuthorizationMode: resource.AuthorizationMode,
@@ -235,7 +256,7 @@ func ensureDPoPCredential(
 			if state.DPoPCredentials == nil {
 				state.DPoPCredentials = make(map[string]dpopCredential)
 			}
-			state.DPoPCredentials[grantID] = credential
+			state.DPoPCredentials[resource.ID] = credential
 			if err := states.Update(target, state); err != nil {
 				return dpopCredential{}, state, err
 			}
@@ -535,7 +556,7 @@ func registerAgent(
 		expiresAt = time.Now().Add(time.Duration(registration.Approval.ExpiresIn) * time.Second)
 	}
 	state := agentState{
-		Version:         1,
+		Version:         agentStateVersion,
 		Origin:          target.Origin,
 		Name:            name,
 		AgentID:         registration.AgentID,
@@ -655,7 +676,7 @@ func requestJSONHeaders(
 		return fmt.Errorf("read Realmroot response: %w", err)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("Realmroot returned HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(encoded)))
+		return &httpResponseError{StatusCode: response.StatusCode, Body: strings.TrimSpace(string(encoded))}
 	}
 	if output == nil || len(encoded) == 0 {
 		return nil
@@ -664,6 +685,15 @@ func requestJSONHeaders(
 		return fmt.Errorf("decode Realmroot response: %w", err)
 	}
 	return nil
+}
+
+type httpResponseError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *httpResponseError) Error() string {
+	return fmt.Sprintf("Realmroot returned HTTP %d: %s", e.StatusCode, e.Body)
 }
 
 func realmrootOrigin(requestURI string) (string, error) {

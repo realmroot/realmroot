@@ -13,9 +13,9 @@ import { fileURLToPath } from 'node:url'
 //      hermetic Playwright crown; it does not change the tracing requirement.
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const specsDir = join(repoRoot, 'specs')
-// Tests are co-located beside source (server/, src/, shared/) and the Playwright
-// crown lives in e2e/; breadcrumbs can appear in any of them.
-const breadcrumbDirs = ['e2e', 'server', 'src', 'shared'].map((dir) => join(repoRoot, dir))
+// Tests are co-located beside source (server/, src/, shared/, plugins/) and the
+// Playwright crown lives in e2e/; breadcrumbs can appear in any of them.
+const breadcrumbDirs = ['e2e', 'plugins', 'server', 'src', 'shared'].map((dir) => join(repoRoot, dir))
 
 const supportedEntrypoints = new Set(['agent-protocol', 'product-ui', 'restish'])
 const scenarios = readScenarios(specsDir)
@@ -92,7 +92,7 @@ function readBreadcrumbs(directories) {
   const pattern = /\[spec:\s*([a-z0-9-]+\/[a-z0-9-]+)\]/g
   for (const directory of directories) {
     for (const file of readdirSync(directory, { recursive: true })) {
-      if (typeof file !== 'string' || !/\.(test|spec)\.[jt]sx?$/.test(file)) continue
+      if (typeof file !== 'string' || !(/\.(test|spec)\.[jt]sx?$/.test(file) || /_test\.go$/.test(file))) continue
       const source = readFileSync(join(directory, file), 'utf8')
       for (const match of source.matchAll(pattern)) {
         ids.add(match[1])

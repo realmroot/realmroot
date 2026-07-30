@@ -184,6 +184,16 @@ Feature: Agent identity and external API authorization
       Then the token issuer is selected only from the API resource authorization mode
       And one-time, limited, persistent, revocation, and audit behavior is consistent across both modes
 
+    @entrypoint:restish @journey:restish-resource-credential-lifecycle
+    Scenario: Restish replaces obsolete local resource credentials
+      Given Restish stores a DPoP credential for an Agent API resource
+      When the controller approves a new access grant for the same resource
+      Then the plugin replaces the old local grant binding with the new grant
+      And target requests use only the new DPoP credential
+      When a one-time token expires or Realmroot rejects an inactive grant
+      Then the plugin removes that local resource credential
+      And the Agent must request a new access grant
+
   Rule: Workload token exchange preserves authorization boundaries
 
     @entrypoint:agent-protocol @journey:workload-token-exchange-claims

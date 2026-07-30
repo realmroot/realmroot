@@ -11,7 +11,10 @@ import (
 	"time"
 )
 
-const stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
+const (
+	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
+	agentStateVersion = 2
+)
 
 type agentTarget struct {
 	API     string
@@ -34,6 +37,7 @@ type pendingApproval struct {
 
 type dpopCredential struct {
 	GrantID           string     `json:"grant_id"`
+	GrantMode         string     `json:"grant_mode"`
 	ResourceID        string     `json:"resource_id"`
 	ResourceURL       string     `json:"resource_url"`
 	AuthorizationMode string     `json:"authorization_mode"`
@@ -80,6 +84,7 @@ type resourceCredentialReference struct {
 type resourceCredentialStore interface {
 	FindByResourceURL(resourceURL string) (resourceCredentialReference, error)
 	UpdateCredential(reference resourceCredentialReference, credential dpopCredential) error
+	DeleteCredential(reference resourceCredentialReference) error
 }
 
 type targetTokenStore interface {
@@ -144,6 +149,13 @@ func (s *fileStateStore) Load(target agentTarget) (agentState, error) {
 	var state agentState
 	if err := json.Unmarshal(data, &state); err != nil {
 		return agentState{}, fmt.Errorf("decode Agent state: %w", err)
+	}
+	if state.Version == 1 {
+		state.Version = agentStateVersion
+		state.DPoPCredentials = nil
+		if err := s.updatePath(path, state); err != nil {
+			return agentState{}, fmt.Errorf("upgrade Agent state: %w", err)
+		}
 	}
 	if err := validateAgentState(state, target); err != nil {
 		return agentState{}, err
@@ -213,7 +225,12 @@ func (s *fileStateStore) UpdateCredential(reference resourceCredentialReference,
 	if reference.state.DPoPCredentials == nil {
 		reference.state.DPoPCredentials = make(map[string]dpopCredential)
 	}
-	reference.state.DPoPCredentials[credential.GrantID] = credential
+	reference.state.DPoPCredentials[credential.ResourceID] = credential
+	return s.updatePath(reference.path, reference.state)
+}
+
+func (s *fileStateStore) DeleteCredential(reference resourceCredentialReference) error {
+	delete(reference.state.DPoPCredentials, reference.credential.ResourceID)
 	return s.updatePath(reference.path, reference.state)
 }
 
@@ -222,16 +239,20 @@ func (s *fileStateStore) StoreTargetToken(origin string, grantID string, token t
 	var matchedState agentState
 	var matchedCredential dpopCredential
 	err := s.walkStates(func(path string, state agentState) error {
-		credential, ok := state.DPoPCredentials[grantID]
-		if !ok || state.Origin != origin {
+		if state.Origin != origin {
 			return nil
 		}
-		if matchedPath != "" {
-			return errors.New("multiple local DPoP credentials match the issued target token")
+		for _, credential := range state.DPoPCredentials {
+			if credential.GrantID != grantID {
+				continue
+			}
+			if matchedPath != "" {
+				return errors.New("multiple local DPoP credentials match the issued target token")
+			}
+			matchedPath = path
+			matchedState = state
+			matchedCredential = credential
 		}
-		matchedPath = path
-		matchedState = state
-		matchedCredential = credential
 		return nil
 	})
 	if err != nil {
@@ -246,7 +267,7 @@ func (s *fileStateStore) StoreTargetToken(origin string, grantID string, token t
 	}
 	matchedCredential.AccessToken = token.AccessToken
 	matchedCredential.ExpiresAt = &token.ExpiresAt
-	matchedState.DPoPCredentials[grantID] = matchedCredential
+	matchedState.DPoPCredentials[matchedCredential.ResourceID] = matchedCredential
 	return s.updatePath(matchedPath, matchedState)
 }
 
@@ -309,6 +330,16 @@ func (s *fileStateStore) walkStates(visit func(path string, state agentState) er
 		if err := json.Unmarshal(data, &state); err != nil {
 			return nil
 		}
+		if state.Version == 1 {
+			state.Version = agentStateVersion
+			state.DPoPCredentials = nil
+			if err := s.updatePath(path, state); err != nil {
+				return fmt.Errorf("upgrade Agent state: %w", err)
+			}
+		}
+		if state.Version != agentStateVersion {
+			return fmt.Errorf("unsupported Agent state version %d", state.Version)
+		}
 		if err := validateAgentStateCredentials(state); err != nil {
 			return err
 		}
@@ -324,7 +355,7 @@ func (s *fileStateStore) path(target agentTarget) string {
 }
 
 func validateAgentState(state agentState, target agentTarget) error {
-	if state.Version != 1 {
+	if state.Version != agentStateVersion {
 		return fmt.Errorf("unsupported Agent state version %d", state.Version)
 	}
 	if state.Origin != target.Origin {
@@ -346,8 +377,9 @@ func validateAgentStateCredentials(state agentState) error {
 			return fmt.Errorf("%s is invalid", label)
 		}
 	}
-	for grantID, credential := range state.DPoPCredentials {
-		if grantID == "" || credential.GrantID != grantID || credential.ResourceID == "" ||
+	for resourceID, credential := range state.DPoPCredentials {
+		if resourceID == "" || credential.ResourceID != resourceID || credential.GrantID == "" ||
+			(credential.GrantMode != "once" && credential.GrantMode != "until" && credential.GrantMode != "persistent") ||
 			(credential.AuthorizationMode != "native" && credential.AuthorizationMode != "external") {
 			return errors.New("Agent state contains invalid DPoP credential metadata")
 		}

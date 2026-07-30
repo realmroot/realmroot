@@ -25,7 +25,7 @@ func TestFileStateStoreProtectsAndValidatesAgentKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := agentState{
-		Version:         1,
+		Version:         agentStateVersion,
 		Origin:          target.Origin,
 		Name:            "Build Agent",
 		AgentID:         "agent-123",
@@ -60,6 +60,56 @@ func TestFileStateStoreProtectsAndValidatesAgentKeys(t *testing.T) {
 	}
 	if _, err := store.Load(target); err == nil {
 		t.Fatal("expected permissive state file to be rejected")
+	}
+}
+
+func TestFileStateStoreUpgradeDropsLegacyGrantCredentialCache(t *testing.T) {
+	store := &fileStateStore{root: t.TempDir()}
+	target := agentTarget{
+		API:     "realmroot-local",
+		Profile: "default",
+		Name:    "build-agent",
+		Origin:  "https://auth.example.com",
+	}
+	_, agentPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, hostPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := agentState{
+		Version:         1,
+		Origin:          target.Origin,
+		Name:            "Build Agent",
+		AgentID:         "agent-123",
+		HostID:          "host-123",
+		AgentKeyID:      "agent-key",
+		HostKeyID:       "host-key",
+		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
+		HostPrivateKey:  encodePrivateKey(hostPrivateKey),
+		DPoPCredentials: map[string]dpopCredential{
+			"grant-old": {GrantID: "grant-old", ResourceID: "resource-1"},
+		},
+	}
+	if _, err := store.Create(target, legacy); err != nil {
+		t.Fatal(err)
+	}
+
+	upgraded, err := store.Load(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upgraded.Version != agentStateVersion || len(upgraded.DPoPCredentials) != 0 {
+		t.Fatalf("legacy credential cache was retained: %#v", upgraded)
+	}
+	reloaded, err := store.Load(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Version != agentStateVersion || len(reloaded.DPoPCredentials) != 0 {
+		t.Fatalf("upgraded state was not persisted: %#v", reloaded)
 	}
 }
 
