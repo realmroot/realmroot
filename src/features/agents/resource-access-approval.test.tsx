@@ -126,6 +126,20 @@ describe('Agent resource access approval', () => {
     )
   })
 
+  it('reports account connection failures from Error and unknown values', async () => {
+    api.createAccountConnection
+      .mockRejectedValueOnce(new Error('Account authorization expired'))
+      .mockRejectedValueOnce('offline')
+    render(<ResourceAccessApproval />)
+    await screen.findByText('agent-1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect a new ZPan account' }))
+    expect(await screen.findByText('Account authorization expired')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect a new ZPan account' }))
+    expect(await screen.findByText('Unable to start account authorization.')).toBeTruthy()
+  })
+
   it('approves access until the selected expiry and can deny', async () => {
     const { unmount } = render(<ResourceAccessApproval />)
     await screen.findByText('agent-1')
