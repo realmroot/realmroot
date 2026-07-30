@@ -63,6 +63,8 @@ admin experience.
   resource access.
 - Agent-operable administration through an installable Realmroot skill and
   Restish plugin.
+- Resource-oriented API design through an installable skill that keeps routine
+  operations on generic HTTP and Restish commands.
 - Fork-and-deploy GitHub Actions setup for low-cost per-product deployments.
 
 ## Core Capabilities
@@ -167,6 +169,20 @@ Use Realmroot to add identity and delegated Agent access to this project.
 ```
 
 The agent will ask for the Realmroot deployment and application details it needs.
+
+To design or review a resource API whose routine operations stay on generic
+HTTP and Restish commands, install the API design skill:
+
+```bash
+npx skills add realmroot/realmroot -g --skill design-resource-api
+```
+
+Then invoke it with the API requirements or existing OpenAPI contract:
+
+```text
+Use $design-resource-api to model this API as resources, produce its OpenAPI
+contract, and justify any exceptional generated commands.
+```
 
 ### Update The Agent Skill
 

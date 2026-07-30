@@ -50,6 +50,8 @@ inventory into prose documentation.
 - `specs/*.feature` owns user-visible behaviour and journeys.
 - `skills/realmroot/` owns Agent operating procedures and generated Restish
   command workflows.
+- `skills/design-resource-api/` owns the Agent process for designing
+  resource-oriented APIs and reviewing exceptional command surfaces.
 - `/api/openapi.json` owns the live Resource API contract.
 - `docs/` owns durable technical explanation and architectural decisions.
 
