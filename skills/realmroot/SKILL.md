@@ -53,21 +53,23 @@ production deployment.
 Add a profile by setting its own base URL:
 
 ```bash
+PROFILE_NAME=staging
+PROFILE_ORIGIN=https://auth.example.com
 restish api set realmroot \
-  'profiles.local.base_url: https://local.realmroot.dev/api'
+  "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
 restish api inspect realmroot
 ```
 
 Select it explicitly for one command:
 
 ```bash
-restish -p local realmroot get-current-agent -o json
+restish -p "$PROFILE_NAME" realmroot get-current-agent -o json
 ```
 
 Or select it for the current process environment:
 
 ```bash
-export RSH_PROFILE=local
+export RSH_PROFILE="$PROFILE_NAME"
 restish realmroot get-current-agent -o json
 ```
 
@@ -80,7 +82,7 @@ Profile names are local request contexts, not Agent identity boundaries. The
 Realmroot adapter keys durable Agent state by runtime and issuer: profiles that
 resolve to the same issuer reuse that runtime's stable Agent identity, while a
 different issuer creates a separate environment identity. Do not create
-additional API names such as `realmroot-local` merely to select an environment.
+additional API names merely to select an environment.
 
 ## Install The Restish Adapter
 

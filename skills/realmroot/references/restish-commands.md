@@ -43,10 +43,12 @@ restish api sync "$API_NAME"
 Add another isolated Restish profile without creating another API name:
 
 ```bash
+PROFILE_NAME=staging
+PROFILE_ORIGIN=https://auth.example.com
 restish api set "$API_NAME" \
-  'profiles.local.base_url: https://local.realmroot.dev/api'
+  "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
 restish api inspect "$API_NAME"
-restish -p local "$API_NAME" get-current-agent -o json
+restish -p "$PROFILE_NAME" "$API_NAME" get-current-agent -o json
 ```
 
 The new profile has its own credential configuration. Do not copy or inherit it
