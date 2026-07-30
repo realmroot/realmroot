@@ -1,6 +1,7 @@
 import { createApp } from '@server/http/app'
 import { unifiedOpenApi } from '@server/http/openapi/management'
-import { managementCollectionRoutes } from '@shared/api/management'
+import { protectedResourceCollectionRoutes } from '@shared/api/management'
+import { protectedResourceCapabilityNames, requiredProtectedCapability } from '@shared/authz'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createTestDeps } from '../test-deps'
@@ -43,7 +44,7 @@ describe('management routes 1', () => {
     const operationIds = openApiOperationObjects().map((operation) => operation.operationId)
     expect(operationIds).not.toContain(undefined)
     expect(new Set(operationIds).size).toBe(operationIds.length)
-    expect(unifiedOpenApi.security).toEqual([{ agentAuth: [] }, { adminSession: [] }])
+    expect(unifiedOpenApi.security).toEqual([{ agentAuth: [] }, { adminSession: ['admin'] }])
     expect(unifiedOpenApi.components.securitySchemes.agentAuth).toMatchObject({
       type: 'http',
       scheme: 'bearer',
@@ -66,6 +67,7 @@ describe('management routes 1', () => {
               params: {
                 provider: 'realmroot-agent',
               },
+              satisfies: protectedResourceCapabilityNames,
             },
           },
         },
@@ -81,6 +83,16 @@ describe('management routes 1', () => {
       expect(operation.responses, operation.key).toHaveProperty('401')
       expect(operation.responses, operation.key).toHaveProperty('403')
       expect(operation.declaredPathParameters, operation.key).toEqual(operation.pathParameters)
+      const requiredCapability = requiredProtectedCapability(
+        operation.method,
+        operation.key.slice(operation.method.length + 1),
+      )
+      if (requiredCapability) {
+        expect(operation.security, operation.key).toEqual([
+          { agentAuth: [requiredCapability] },
+          { adminSession: ['admin'] },
+        ])
+      }
 
       if (methodsWithJsonRequestBody.has(operation.method) && !operationsWithoutRequestBody.has(operation.key)) {
         expect(requestBodyContent(operation.requestBody), operation.key).toEqual(
@@ -115,7 +127,7 @@ describe('management routes 1', () => {
     )
 
     const contract = await app.request('/api/openapi.json')
-    const protectedResponse = await app.request('/api/management/users')
+    const protectedResponse = await app.request('/api/users')
 
     expect(contract.status).toBe(200)
     expect(contract.headers.get('content-type')).toContain('application/json')
@@ -126,10 +138,8 @@ describe('management routes 1', () => {
     expect(protectedResponse.headers.get('link')).toContain('</api/openapi.json>; rel="service-desc"')
   })
 
-  it('documents application setup fields and role permission replacement request bodies', () => {
-    const createApplication = openApiOperationObjects().find(
-      (operation) => operation.key === 'POST /management/applications',
-    )
+  it('documents application setup fields and role scope replacement request bodies', () => {
+    const createApplication = openApiOperationObjects().find((operation) => operation.key === 'POST /applications')
     const createApplicationSchema = openApiSchemaObject(requestBodyContent(createApplication?.requestBody).schema)
     const createApplicationProperties = openApiRecord(createApplicationSchema.properties)
 
@@ -138,25 +148,22 @@ describe('management routes 1', () => {
     expect(createApplicationProperties).not.toHaveProperty('clientId')
     expect(createApplicationProperties).not.toHaveProperty('clientSecret')
 
-    const replaceRolePermissions = openApiOperationObjects().find(
-      (operation) => operation.key === 'PUT /management/roles/{param}/permissions',
+    const replaceRoleScopes = openApiOperationObjects().find(
+      (operation) => operation.key === 'PUT /roles/{param}/scopes',
     )
-    const replaceRolePermissionsSchema = openApiSchemaObject(
-      requestBodyContent(replaceRolePermissions?.requestBody).schema,
-    )
-    const replaceRolePermissionsProperties = openApiRecord(replaceRolePermissionsSchema.properties)
+    const replaceRoleScopesSchema = openApiSchemaObject(requestBodyContent(replaceRoleScopes?.requestBody).schema)
+    const replaceRoleScopesProperties = openApiRecord(replaceRoleScopesSchema.properties)
 
-    expect(replaceRolePermissionsProperties).toHaveProperty('permissionIds')
-    expect(replaceRolePermissionsProperties).not.toHaveProperty('permissions')
-    expect(replaceRolePermissions?.responses).toHaveProperty('204')
-    expect(replaceRolePermissions?.responses).not.toHaveProperty('200')
+    expect(replaceRoleScopesProperties).toHaveProperty('scopes')
+    expect(replaceRoleScopes?.responses).toHaveProperty('204')
+    expect(replaceRoleScopes?.responses).not.toHaveProperty('200')
   })
 
   it('mounts the documented management collections behind the admin boundary', async () => {
     const app = createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() }))
 
-    for (const route of managementCollectionRoutes) {
-      const response = await app.request(`/api/management${route}`)
+    for (const route of protectedResourceCollectionRoutes) {
+      const response = await app.request(`/api${route}`)
       expect(response.status, route).toBe(401)
       await expect(response.json()).resolves.toMatchObject({
         error: {
@@ -168,7 +175,7 @@ describe('management routes 1', () => {
 
   it('rejects non-admin sessions from management APIs', async () => {
     const response = await createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock() })).request(
-      '/api/management/users',
+      '/api/users',
       {
         headers: userHeaders(),
       },
@@ -237,10 +244,10 @@ describe('management routes 1', () => {
       agent: { issuer: 'http://localhost', subject: 'agt_1' },
     })
 
-    const denied = await app.request('/api/management/users', { headers })
+    const denied = await app.request('/api/users', { headers })
     expect(denied.status, await denied.clone().text()).toBe(403)
     await expect(denied.json()).resolves.toMatchObject({
-      error: { message: 'Agent authority "management:read" is required.' },
+      error: { message: 'Agent capability "users:read" is required.' },
     })
 
     auth.api.getAgentSession.mockResolvedValue({
@@ -249,11 +256,11 @@ describe('management routes 1', () => {
         id: 'protocol-agent-1',
         hostId: 'host-1',
         mode: 'delegated',
-        capabilityGrants: [{ capability: 'management:read', status: 'active' }],
+        capabilityGrants: [{ capability: 'users:read', status: 'active' }],
       },
       host: { id: 'host-1', userId: 'controller-1', status: 'active' },
     })
-    const allowed = await app.request('/api/management/users', { headers })
+    const allowed = await app.request('/api/users', { headers })
     expect(allowed.status).toBe(200)
 
     auth.api.getAgentSession.mockResolvedValue({
@@ -263,13 +270,13 @@ describe('management routes 1', () => {
         hostId: 'host-1',
         mode: 'delegated',
         capabilityGrants: [
-          { capability: 'management:read', status: 'active' },
-          { capability: 'management:write', status: 'active' },
+          { capability: 'users:read', status: 'active' },
+          { capability: 'users:write', status: 'active' },
         ],
       },
       host: { id: 'host-1', userId: 'controller-1', status: 'active' },
     })
-    const created = await app.request('/api/management/users', {
+    const created = await app.request('/api/users', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -279,12 +286,12 @@ describe('management routes 1', () => {
         role: 'user',
       }),
     })
-    const updated = await app.request('/api/management/users/user-1', {
+    const updated = await app.request('/api/users/user-1', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ displayName: 'Updated User' }),
     })
-    const removed = await app.request('/api/management/users/user-1', {
+    const removed = await app.request('/api/users/user-1', {
       method: 'DELETE',
       headers,
     })
@@ -303,17 +310,17 @@ describe('management routes 1', () => {
     auth.handler.mockImplementationOnce(async (request) => {
       expect(new URL(request.url).pathname).toBe('/api/auth/agent/request-capability')
       await expect(request.json()).resolves.toEqual({
-        capabilities: ['management:read', 'management:write'],
+        capabilities: ['applications:read', 'applications:write'],
         reason: 'Administer this tenant',
         preferred_method: 'device_authorization',
-        binding_message: 'Agent requesting management:read, management:write',
+        binding_message: 'Agent requesting applications:read, applications:write',
       })
       return Response.json({
         agent_id: 'protocol-agent-1',
         status: 'pending',
         agent_capability_grants: [
-          { capability: 'management:read', status: 'pending' },
-          { capability: 'management:write', status: 'pending' },
+          { capability: 'applications:read', status: 'pending' },
+          { capability: 'applications:write', status: 'pending' },
         ],
         approval: {
           method: 'device_authorization',
@@ -335,14 +342,14 @@ describe('management routes 1', () => {
       }),
     )
 
-    const response = await app.request('https://auth.example.com/api/agent/management-access-requests', {
+    const response = await app.request('https://auth.example.com/api/agent/capability-requests', {
       method: 'POST',
       headers: {
         authorization: 'Bearer agent-proof',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        capabilities: ['management:read', 'management:write'],
+        capabilities: ['applications:read', 'applications:write'],
         reason: 'Administer this tenant',
       }),
     })
@@ -354,7 +361,7 @@ describe('management routes 1', () => {
     }
     const approvalUrl = new URL(body.approval.verification_uri_complete)
     expect(approvalUrl.pathname).toBe('/agent/approve')
-    expect(approvalUrl.searchParams.getAll('capability')).toEqual(['management:read', 'management:write'])
+    expect(approvalUrl.searchParams.getAll('capability')).toEqual(['applications:read', 'applications:write'])
   })
 })
 

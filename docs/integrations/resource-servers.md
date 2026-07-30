@@ -1,0 +1,394 @@
+# Resource Server Integration
+
+This guide is for teams exposing a protected API through Realmroot. It covers
+what the resource server must publish and validate in both authorization modes:
+
+- `native`: Realmroot issues the API access token.
+- `external`: the target platform owns its authorization server and issues the
+  API access token.
+
+Realmroot never proxies business API requests. After authorization, the client
+calls the registered resource URL directly with a DPoP-bound access token.
+
+## Shared Resource Contract
+
+Both modes register two distinct values:
+
+| Value | Meaning |
+| --- | --- |
+| `audience` | Stable identifier placed in the access token's `aud` claim. |
+| `resourceUrl` | HTTPS base URL called by the client and used to discover the API contract. |
+
+They may be the same URL, but they do not have to be. Production URLs must use
+HTTPS and contain no username or password. Plain HTTP is accepted only for
+loopback development URLs.
+
+### Advertise OpenAPI
+
+An unauthenticated `GET` to the exact `resourceUrl` must return a successful
+response with an RFC 8631 `service-desc` link:
+
+```http
+HTTP/1.1 200 OK
+Link: <https://api.example.com/openapi.json>; rel="service-desc"; type="application/openapi+json"
+Content-Type: application/json
+```
+
+Relative link targets are allowed. The linked document must be OpenAPI 3.x in
+JSON or YAML.
+
+Realmroot derives requestable scopes from protected OpenAPI operations. Declare
+an OAuth 2.0 or OpenID Connect security scheme and put the required scopes in
+each operation's standard `security` requirement:
+
+```yaml
+openapi: 3.1.0
+info:
+  title: Projects API
+  version: 1.0.0
+servers:
+  - url: https://api.example.com
+components:
+  securitySchemes:
+    resourceOidc:
+      type: openIdConnect
+      openIdConnectUrl: https://auth.example.com/api/auth/.well-known/openid-configuration
+paths:
+  /projects:
+    get:
+      operationId: listProjects
+      security:
+        - resourceOidc: [projects:read]
+      responses:
+        "200":
+          description: Projects visible to the caller
+```
+
+Document-level `security` is also supported. A scope mentioned only in
+`scopes_supported`, descriptive text, or a custom extension is not requestable.
+The resource URL and OpenAPI document must remain reachable because Realmroot
+revalidates scopes at request, approval, and token-issuance boundaries.
+
+## Native Authorization
+
+Use native mode when the product already uses Realmroot as its authorization
+server and the protected API can trust the Realmroot issuer.
+
+### Register The Resource
+
+Create an API Resource with:
+
+| Field | Value |
+| --- | --- |
+| `authorizationMode` | `native` |
+| `audience` | The exact audience the API will accept. |
+| `resourceUrl` | The protected API base URL that advertises OpenAPI. |
+| `enabled` | Enable after discovery and token validation are configured. |
+
+No target OAuth client, target authorization-server metadata, or external
+account connection is used.
+
+A representative Resource API body is:
+
+```json
+{
+  "identifier": "projects-api",
+  "name": "Projects API",
+  "audience": "https://api.example.com",
+  "resourceUrl": "https://api.example.com",
+  "authorizationMode": "native",
+  "enabled": true
+}
+```
+
+The live `/api/openapi.json` contract is authoritative for the current request
+schema if the resource is created through automation.
+
+### Validate Realmroot Tokens
+
+Discover the issuer metadata rather than hard-coding protocol endpoints:
+
+```text
+Issuer:         REALMROOT_ORIGIN/api/auth
+OIDC discovery: REALMROOT_ORIGIN/api/auth/.well-known/openid-configuration
+JWKS:           REALMROOT_ORIGIN/api/auth/jwks
+```
+
+For every protected request, require both headers:
+
+```http
+Authorization: DPoP ACCESS_TOKEN
+DPoP: DPOP_PROOF_JWT
+```
+
+Validate the access token before using any claims:
+
+1. Require a signed JWT with protected-header `typ` equal to `at+jwt`.
+2. Accept only an explicitly configured signing algorithm published by the
+   Realmroot JWKS.
+3. Require `iss` to equal the Realmroot issuer exactly.
+4. Require `aud` to contain the registered resource audience exactly.
+5. Validate `exp`, `iat`, and the JWT signature.
+6. Require the scopes needed by the selected OpenAPI operation.
+7. Require `cnf.jkt`; it binds the token to the DPoP public key.
+
+Native Agent tokens may also contain:
+
+- `sub`: the controlling user or organization;
+- `client_id`: the presenting AgentAuth registration;
+- `act`: the host and stable Agent actor chain;
+- `roles`: effective roles for this API Resource;
+- `groups`: the Agent's organization home space.
+
+Treat `scope` as the granted API authority. `roles`, `groups`, `sub`, and `act`
+provide policy and audit context; they do not expand the token's scopes.
+
+### Validate The DPoP Proof
+
+Validate the proof independently on every request:
+
+1. Require protected-header `typ: dpop+jwt`, a public `jwk`, and an allowed
+   asymmetric `alg`.
+2. Verify the proof signature with that embedded public key.
+3. Require `htm` to equal the actual HTTP method.
+4. Require `htu` to equal the effective target URI according to RFC 9449.
+5. Require a recent `iat` and a unique `jti`; retain enough replay state to
+   reject reuse during the accepted time window.
+6. Calculate the RFC 7638 thumbprint of the proof JWK and compare it with the
+   access token's `cnf.jkt`.
+7. Calculate the base64url SHA-256 hash of the serialized access token and
+   compare it with the proof's `ath`.
+
+Reject a missing or invalid token/proof with `401` and a DPoP
+`WWW-Authenticate` challenge. Do not fall back to Bearer authentication.
+
+### Native Request Flow
+
+```text
+Agent -> Realmroot: request token for approved grant + token-endpoint DPoP proof
+Realmroot -> Agent: short-lived Realmroot-signed DPoP access token
+Agent -> Resource API: Authorization: DPoP ... + request DPoP proof
+Resource API: validate JWT, scopes, cnf.jkt, proof target, ath, and replay state
+```
+
+## External Authorization
+
+Use external mode when the target platform owns its users, OAuth client
+registry, authorization server, signing keys, and access-token lifecycle.
+Realmroot acts as a standards-based OAuth client; the final access token is
+issued and validated entirely by the target platform.
+
+Register the API Resource with the target audience and resource URL. Select
+dynamic registration when the target publishes `registration_endpoint`:
+
+```json
+{
+  "identifier": "external-projects-api",
+  "name": "External Projects API",
+  "audience": "https://api.example.com/v1",
+  "resourceUrl": "https://api.example.com/v1",
+  "authorizationMode": "external",
+  "authorization": {
+    "registrationMode": "dynamic"
+  }
+}
+```
+
+For a pre-registered client, use `registrationMode: manual` and provide its
+`clientId` and `clientSecret` in the authorization object.
+
+### Publish Protected Resource Metadata
+
+For resource URL `https://api.example.com/v1`, Realmroot fetches:
+
+```text
+https://api.example.com/.well-known/oauth-protected-resource/v1
+```
+
+Publish RFC 9728 metadata containing the exact resource URL and exactly one
+authorization server:
+
+```json
+{
+  "resource": "https://api.example.com/v1",
+  "authorization_servers": ["https://accounts.example.com"]
+}
+```
+
+The `resource` value must exactly match the configured `resourceUrl`.
+
+### Publish Authorization Server Metadata
+
+Realmroot fetches RFC 8414 metadata using issuer-path insertion. For issuer
+`https://accounts.example.com/oauth`, the URL is:
+
+```text
+https://accounts.example.com/.well-known/oauth-authorization-server/oauth
+```
+
+The metadata must contain:
+
+```json
+{
+  "issuer": "https://accounts.example.com",
+  "authorization_endpoint": "https://accounts.example.com/authorize",
+  "token_endpoint": "https://accounts.example.com/token",
+  "registration_endpoint": "https://accounts.example.com/register",
+  "revocation_endpoint": "https://accounts.example.com/revoke",
+  "jwks_uri": "https://accounts.example.com/jwks",
+  "userinfo_endpoint": "https://accounts.example.com/userinfo",
+  "grant_types_supported": [
+    "authorization_code",
+    "refresh_token",
+    "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    "urn:ietf:params:oauth:grant-type:token-exchange"
+  ],
+  "code_challenge_methods_supported": ["S256"],
+  "dpop_signing_alg_values_supported": ["ES256"]
+}
+```
+
+`issuer` must exactly match the issuer advertised by the protected resource.
+All listed endpoint URLs are required except `registration_endpoint`, which may
+be omitted when Realmroot is configured with a manually registered client.
+
+### Register The Realmroot OAuth Client
+
+Dynamic registration uses RFC 7591. Realmroot submits a confidential client
+whose relevant metadata is:
+
+```json
+{
+  "client_name": "Realmroot External API Resource",
+  "redirect_uris": [
+    "https://realmroot.example.com/api/account-connections/oauth/callback"
+  ],
+  "grant_types": [
+    "authorization_code",
+    "refresh_token",
+    "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    "urn:ietf:params:oauth:grant-type:token-exchange"
+  ],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "client_secret_basic",
+  "scope": "openid offline_access",
+  "jwks_uri": "https://realmroot.example.com/api/auth/jwks"
+}
+```
+
+Return `client_id` and `client_secret`. A
+`registration_access_token` is optional.
+
+For manual registration, create the same client at the target platform and
+configure its `client_id` and `client_secret` in Realmroot. The redirect URI and
+`jwks_uri` must use Realmroot's stable canonical production origin.
+
+### Support Target Account Connection
+
+Realmroot starts authorization code with S256 PKCE using:
+
+- `resource`: the registered audience;
+- `scope`: the requested business scopes plus `openid offline_access`;
+- the canonical Realmroot redirect URI;
+- `state`, `code_challenge`, and `code_challenge_method=S256`.
+
+The token endpoint must authenticate the client with
+`client_secret_basic`, validate the code and verifier, and return
+`access_token`, `refresh_token`, `expires_in`, and the granted `scope`.
+Refresh-token requests must return a current subject access token.
+
+Realmroot calls `userinfo_endpoint` with the subject access token. The response
+must contain `sub`; `name` or `preferred_username` may provide a display label.
+The refresh credential is encrypted by Realmroot and is never given to the
+Agent.
+
+### Support Agent And Token Exchange Grants
+
+Realmroot first requests the Agent actor token using RFC 7523:
+
+```text
+grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer
+assertion=SIGNED_AGENT_ASSERTION
+```
+
+Validate the assertion against the OAuth client's registered `jwks_uri`.
+Require its signature, expiry, unique `jti`, and:
+
+- `aud`: the target token endpoint;
+- `iss`: the stable Realmroot issuer;
+- `sub`: the stable Agent subject.
+
+Issue a short-lived actor access token bound to that OAuth client and Agent.
+
+Realmroot then sends RFC 8693 token exchange with client authentication and a
+token-endpoint DPoP proof:
+
+```text
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+subject_token=CONNECTED_USER_ACCESS_TOKEN
+subject_token_type=urn:ietf:params:oauth:token-type:access_token
+actor_token=AGENT_ACTOR_ACCESS_TOKEN
+actor_token_type=urn:ietf:params:oauth:token-type:access_token
+requested_token_type=urn:ietf:params:oauth:token-type:access_token
+resource=REGISTERED_AUDIENCE
+scope=EXACT_APPROVED_SCOPE_SET
+```
+
+The target authorization server must:
+
+1. validate the subject and actor tokens;
+2. verify that the actor token belongs to the authenticated OAuth client;
+3. restrict the result to the intersection of the connected user's scopes and
+   the requested Agent scopes;
+4. validate the RFC 9449 proof for the token endpoint;
+5. issue a short-lived token with `token_type: DPoP`;
+6. bind the token to the proof key with `cnf.jkt`;
+7. identify the connected user as `sub` and the stable Agent in `act.sub`;
+8. return exactly the requested scope set.
+
+Realmroot rejects a response with a different scope set or a non-DPoP token
+type. It limits its recorded token lease to at most one hour even if the target
+returns a longer `expires_in`.
+
+### Validate External API Requests
+
+The external resource server validates the final target-issued token and DPoP
+proof using the same DPoP checks described for native mode. The token issuer and
+JWKS are the target platform's, not Realmroot's. Require:
+
+- the target authorization-server issuer;
+- the registered resource audience;
+- the required operation scopes;
+- the target token's signature and expiry;
+- `cnf.jkt`, proof `htu`/`htm`/`jti`, and `ath`.
+
+Realmroot never appears in the business API request path.
+
+### Support Revocation
+
+The revocation endpoint must accept RFC 7009 requests authenticated with the
+Realmroot OAuth client. Realmroot sends the active target access token with
+`token_type_hint=access_token` when a grant, connection, credential, Agent, or
+host revocation invalidates a token lease.
+
+## Integration Checklist
+
+Before enabling a resource:
+
+- The exact resource URL returns a `service-desc` OpenAPI link.
+- OpenAPI is 3.x and protected operations declare OAuth/OIDC security scopes.
+- Realmroot can fetch the resource URL and linked contract without a user
+  session.
+- The configured audience matches the resource server's token validation.
+- The resource rejects Bearer fallback and validates DPoP replay and `ath`.
+- Native mode trusts only the configured Realmroot issuer and JWKS.
+- External mode publishes matching RFC 9728 and RFC 8414 metadata.
+- External authorization supports PKCE, refresh, JWT bearer, token exchange,
+  DPoP, UserInfo, and revocation.
+- External client redirect and JWKS URLs use Realmroot's stable canonical
+  origin.
+
+Run the repository's
+[native resource server](../../examples/native-resource-server/README.md) or
+[external resource server](../../examples/external-resource-server/README.md)
+to inspect one mode end to end.

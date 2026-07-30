@@ -44,7 +44,7 @@ dedicated control plane.
 
 Realmroot runs Better Auth inside a Cloudflare Worker. The Worker serves hosted
 auth pages, account management, admin APIs, OIDC discovery, OAuth flows, and
-Management API endpoints from the same deployment.
+Resource API endpoints from the same deployment.
 
 Cloudflare D1 stores auth and configuration data, Drizzle owns the schema, Hono
 exposes the HTTP surface, and the React console provides the hosted user and
@@ -58,7 +58,7 @@ admin experience.
 - Admin console for applications, users, connectors, security policy, branding,
   organizations, roles, API resources, webhooks, and deployment readiness.
 - Standard OIDC integration for product applications.
-- Public Management API with generated OpenAPI contract.
+- Public Resource API with generated OpenAPI contract.
 - Stable Agent identities with controller-approved native and external API
   resource access.
 - Agent-operable administration through an installable Realmroot skill and
@@ -84,13 +84,13 @@ Administrators can configure product applications, login methods, external
 identity connectors, branding, security requirements, organizations, roles,
 API resources, webhooks, and deployment health.
 
-### Management API
+### Resource API
 
-Every admin capability is available through the Management API. The OpenAPI
-contract is served by each deployment at:
+Every administrative capability is available through the unified Resource API.
+Its OpenAPI contract is served by each deployment at:
 
 ```text
-/api/management/openapi.json
+/api/openapi.json
 ```
 
 ## Deploy
@@ -136,8 +136,8 @@ Public browser and native clients should use authorization code with PKCE.
 Server-side confidential clients should authenticate at the token endpoint using
 the client credentials shown in the Realmroot application record.
 
-Product applications do not need to call the Management API for normal user
-login. The Management API is for administration and automation.
+Product applications do not call the Resource API for normal user login. It is
+for administration and automation.
 
 ## Use From Agents
 
@@ -157,7 +157,9 @@ The agent will ask for the Realmroot deployment and application details it needs
 
 ## Documentation
 
-- [Management API](docs/api/management.md)
-- [Product acceptance map](docs/product/product-acceptance.md)
-- [Review environment acceptance](docs/deploy/acceptance.md)
+- [Technical documentation index](docs/README.md)
+- [Resource API](docs/api/resource-api.md)
+- [Resource server integration](docs/integrations/resource-servers.md)
 - [Auth provider architecture](docs/architecture/auth-provider.md)
+- [Agent identity architecture](docs/architecture/agent-identity.md)
+- [Cloudflare deployment](docs/deploy/cloudflare.md)

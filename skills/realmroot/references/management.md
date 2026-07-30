@@ -16,17 +16,12 @@ API Resources, requesting resource scopes, or invoking a target API.
 
 ## Management Boundary
 
-Every management CLI request remains the Agent's stable `(issuer, subject)`
-principal. Tenant management is a separate, controller-approved authority:
-
-```text
-management:read
-management:write
-```
-
-Use `management:read` for reads and `management:write` for mutations. Request
-only what the explicit administration task requires. These capabilities are not
-target API scopes and are never prerequisites for:
+Every Realmroot resource CLI request remains the Agent's stable `(issuer, subject)`
+principal. Authority is controller-approved per resource. Use
+`{resource}:read` for reads and `{resource}:write` for mutations; read-only
+resources expose only `:read`. Request only what the explicit administration
+task requires. These capabilities are not target API scopes and are never
+prerequisites for:
 
 - `list-agent-api-resources`;
 - `create-agent-access-request`;
@@ -49,9 +44,9 @@ restish "$API_NAME" get-current-agent -o json
 Request the minimum required capability with the generated operation:
 
 ```bash
-restish "$API_NAME" request-agent-management-access --rsh-validate -o json <<'JSON'
+restish "$API_NAME" request-agent-capabilities --rsh-validate -o json <<'JSON'
 {
-  "capabilities": ["management:read", "management:write"],
+  "capabilities": ["applications:read", "applications:write"],
   "reason": "Administer the Realmroot tenant"
 }
 JSON
@@ -81,7 +76,7 @@ restish "$API_NAME" create-application --rsh-validate -o json < application.json
 Use generic verbs only for diagnostics:
 
 ```bash
-restish get "$API_NAME/management/applications"
+restish get "$API_NAME/applications"
 ```
 
 Use `restish doctor api "$API_NAME"` for discovery failures and

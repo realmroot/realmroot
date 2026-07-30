@@ -24,30 +24,22 @@ export {
 export { uploadedAssetResponseSchema } from '@shared/api/assets'
 export {
   addMemberRequestSchema,
-  apiPermissionResponseSchema,
   apiResourceResponseSchema,
-  apiScopeResponseSchema,
   assignRoleRequestSchema,
-  createApiPermissionRequestSchema,
   createApiResourceRequestSchema,
-  createApiScopeRequestSchema,
   createInvitationRequestSchema,
   createOrganizationRequestSchema,
   createRoleRequestSchema,
-  listApiPermissionsResponseSchema,
   listApiResourcesResponseSchema,
-  listApiScopesResponseSchema,
   listInvitationsResponseSchema,
   listMembersResponseSchema,
   listOrganizationsResponseSchema,
   listRolesResponseSchema,
   organizationResponseSchema,
-  replaceRolePermissionsRequestSchema,
-  rolePermissionsResponseSchema,
+  replaceRoleScopesRequestSchema,
   roleResponseSchema,
-  updateApiPermissionRequestSchema,
+  roleScopesResponseSchema,
   updateApiResourceRequestSchema,
-  updateApiScopeRequestSchema,
   updateMemberRequestSchema,
   updateOrganizationRequestSchema,
   updateRoleRequestSchema,
@@ -123,8 +115,7 @@ export interface ManagementRouteConfig {
 }
 export const jsonContentType = 'application/json'
 export const multipartContentType = 'multipart/form-data'
-export const managementSecurity: Array<Record<string, string[]>> = [{ agentAuth: [] }, { adminSession: [] }]
-export const managementScopes = 'openid profile email offline_access management:read management:write'
+export const managementSecurity: Array<Record<string, string[]>> = [{ agentAuth: [] }, { adminSession: ['admin'] }]
 export function errorResponse(description: string) {
   return { description, content: { [jsonContentType]: { schema: managementErrorResponseSchema } } }
 }
@@ -153,19 +144,15 @@ export const organizationIdParam = params('organizationId')
 export const userIdParam = params('id')
 export const userSessionParam = params('id', 'sessionId')
 export const userPasskeyParam = params('id', 'passkeyId')
-export const apiPermissionParam = params('id', 'permissionId')
-export const apiScopeParam = params('id', 'scopeId')
 export const memberParam = params('id', 'memberId')
 export const invitationParam = params('id', 'invitationId')
 export const agentIdentityParam = params('identityId')
 export function assignmentRoutes(): ManagementRouteConfig[] {
   const assignments = [
-    ['user-role-assignments', 'assignUserRole'],
-    ['member-role-assignments', 'assignMemberRole'],
-    ['application-role-assignments', 'assignApplicationRole'],
-    ['roles/assignments/users', 'assignUserRoleCompatibility'],
-    ['roles/assignments/members', 'assignMemberRoleCompatibility'],
-    ['roles/assignments/applications', 'assignApplicationRoleCompatibility'],
+    ['roles/assignments/users', 'assignUserRole'],
+    ['roles/assignments/members', 'assignMemberRole'],
+    ['roles/assignments/applications', 'assignApplicationRole'],
+    ['roles/assignments/agents', 'assignAgentRole'],
   ] as const
   return assignments.map(([path, operationId]) => ({
     method: 'post',

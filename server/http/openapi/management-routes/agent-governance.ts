@@ -11,16 +11,16 @@ import {
 export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   {
     method: 'post',
-    path: '/agent/management-access-requests',
-    operationId: 'requestAgentManagementAccess',
-    summary: 'Request Realmroot management access',
+    path: '/agent/capability-requests',
+    operationId: 'requestAgentCapabilities',
+    summary: 'Request Realmroot resource capabilities',
     security: [{ agentAuth: [] }],
     request: { body: jsonBody(requestAgentCapabilitiesSchema) },
     response: requestAgentCapabilitiesResponseSchema,
   },
   {
     method: 'get',
-    path: '/management/agents',
+    path: '/agents',
     operationId: 'listAgents',
     summary: 'List stable Agents',
     request: { query: paginationQuerySchema },
@@ -28,7 +28,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/management/agents/{agentId}',
+    path: '/agents/{agentId}',
     operationId: 'getAgent',
     summary: 'Get a stable Agent',
     request: { params: z.object({ agentId: z.string() }) },
@@ -36,7 +36,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'delete',
-    path: '/management/agents/{agentId}',
+    path: '/agents/{agentId}',
     operationId: 'retireAgent',
     summary: 'Permanently retire an Agent',
     request: { params: z.object({ agentId: z.string() }) },
@@ -44,7 +44,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/management/audit-events',
+    path: '/audit-events',
     operationId: 'listAgentAuditEvents',
     summary: 'List Agent audit events',
     request: { query: paginationQuerySchema },

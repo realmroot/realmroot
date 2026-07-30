@@ -1,7 +1,7 @@
-Feature: Unified Realmroot API Restish entry
+Feature: Unified Realmroot resource API
   As an Agent operator
   I want Restish to discover every operation from one Realmroot API contract
-  So that identity and permissions, rather than separate API surfaces, determine what an Agent can do
+  So that every resource has one canonical URI and explicit authorization scopes
 
   Background:
     Given a first admin exists
@@ -13,6 +13,8 @@ Feature: Unified Realmroot API Restish entry
     Then /api/openapi.json returns the OpenAPI 3.1 contract
     And API responses advertise that contract with Restish-compatible Link headers
     And Restish v2 exposes the current Agent and resource operations from the same contract
+    And resources are not grouped under a management path
+    And every protected operation declares its required Agent scope through the standard OpenAPI security requirement
 
 
   @entrypoint:restish @journey:management-restish-agent-auth
@@ -38,48 +40,51 @@ Feature: Unified Realmroot API Restish entry
 
   @entrypoint:restish @journey:management-restish-oauth-crud
   Scenario: An authorized Agent manages applications through the unified API
-    Given the Agent has approved tenant management authority
+    Given the Agent has approved applications:read and applications:write scopes
     When I create, update, list, and delete an application with Restish
     Then the unified API applies each application change
 
 
   @entrypoint:restish @journey:management-restish-user-crud
   Scenario: An authorized Agent manages users through the unified API
-    Given the Agent has approved tenant management authority
+    Given the Agent has approved users:read and users:write scopes
     When I create, update, list, and delete a user with Restish
     Then the unified API applies each user change
 
 
   @entrypoint:restish @journey:management-restish-organization-crud
   Scenario: An authorized Agent manages organizations through the unified API
-    Given the Agent has approved tenant management authority
+    Given the Agent has approved organizations:read and organizations:write scopes
     When I create, update, list, and delete an organization with Restish
     Then the unified API applies each organization change
 
 
   @entrypoint:restish @journey:management-restish-role-crud
-  Scenario: An authorized Agent manages roles through the unified API
-    Given the Agent has approved tenant management authority
-    When I create, update, list, and delete a role with Restish
+  Scenario: An authorized Agent manages roles and their scope eligibility through the unified API
+    Given the Agent has approved roles:read and roles:write scopes
+    When I create, update, list, and delete a role and replace its OpenAPI scope references with Restish
     Then the unified API applies each role change
+    And each role scope must exist in its business resource server OpenAPI contract
 
 
   @entrypoint:restish @journey:management-restish-api-resource-crud
-  Scenario: An authorized Agent manages API resources, scopes, and permissions
-    Given the Agent has approved tenant management authority
-    When I create, update, list, and delete an API resource, scope, and permission with Restish
+  Scenario: An authorized Agent manages API resources without duplicating business authorization definitions
+    Given the Agent has approved api-resources:read and api-resources:write scopes
+    When I create, update, list, and delete an API resource with Restish
     Then the unified API applies each API authorization change
+    And no permission catalog, scope catalog, or scope mutation operation exists
+    And requestable scopes come only from each business resource server's OpenAPI security requirements
 
 
   @entrypoint:restish @journey:management-restish-webhook-crud
   Scenario: An authorized Agent manages webhook endpoints
-    Given the Agent has approved tenant management authority
+    Given the Agent has approved webhooks:read and webhooks:write scopes
     When I create, update, rotate, list, and delete a webhook endpoint with Restish
     Then the unified API applies each webhook change
 
 
   @entrypoint:restish @journey:management-restish-settings-update
   Scenario: An authorized Agent manages tenant settings
-    Given the Agent has approved tenant management authority
+    Given the Agent has approved settings:read, settings:write, security:read, and security:write scopes
     When I update branding, Account Center, sign-in, and security settings with Restish
     Then the unified API persists each tenant setting change

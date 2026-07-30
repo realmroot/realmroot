@@ -86,7 +86,7 @@ These settings remain deployment-specific:
 - `BETTER_AUTH_URL`: optional canonical deployment origin. The shared user and
   Agent issuer is always `BETTER_AUTH_URL/api/auth`.
 - `TRUSTED_ORIGINS`: optional extra first-party Realmroot origins.
-- OAuth provider credentials configured in the admin console or Management API.
+- OAuth provider credentials configured in the admin console or Resource API.
 - `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, and `WEBAUTHN_ORIGINS` when passkeys
   span custom domains.
 

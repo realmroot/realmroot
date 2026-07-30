@@ -195,8 +195,8 @@ export function readClaimSelection(value: unknown): ApplicationOidcClaims['acces
   return {
     ...(input.authorization === true ? { authorization: true } : {}),
     ...(input.scopes === true ? { scopes: true } : {}),
+    ...(input.groups === true ? { groups: true } : {}),
     ...(input.roles === true ? { roles: true } : {}),
-    ...(input.permissions === true ? { permissions: true } : {}),
     ...(input.organizationId === true ? { organizationId: true } : {}),
     ...(input.organizationName === true ? { organizationName: true } : {}),
   }

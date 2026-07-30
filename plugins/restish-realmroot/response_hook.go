@@ -63,7 +63,7 @@ func handleCapabilityApprovalResponse(
 		}
 		return handleResourceAccessApproval(input, opener, finder, client, requestURL)
 	}
-	if input.Request.Method != http.MethodPost || requestURL.Path != "/api/agent/management-access-requests" {
+	if input.Request.Method != http.MethodPost || requestURL.Path != "/api/agent/capability-requests" {
 		return plugin.ResponseMiddlewareOutput{}, nil
 	}
 	body, ok := input.Response.Body.(map[string]any)

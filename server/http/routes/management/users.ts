@@ -12,8 +12,7 @@ import {
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { requireAdmin } from '../../middleware/admin'
-import { getAuthContext, isAutomationPrincipal } from '../../middleware/auth-context'
+import { getPrincipal, isAutomationPrincipal } from '../../middleware/authn'
 import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
@@ -25,8 +24,6 @@ interface ManagementUserRoutesOptions {
 
 export function managementUserRoutes(authApi: ManagementAuthApi, options: ManagementUserRoutesOptions = {}) {
   const app = new Hono()
-
-  app.use('*', requireAdmin())
 
   app.get('/', async (c) => {
     const users = getDeps(c).users
@@ -124,7 +121,6 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     }
   }
 
-  app.post('/password-reset', requestPasswordReset)
   app.post('/password-reset-requests', requestPasswordReset)
 
   app.get('/:id', async (c) => c.json({ user: await getDeps(c).users.getUser(c.req.param('id')) }))
@@ -225,7 +221,6 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     }
   }
 
-  app.post('/:id/ban', banUser)
   app.put('/:id/ban', banUser)
 
   const unbanUser = async (c: Context) => {
@@ -236,13 +231,12 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     }
   }
 
-  app.post('/:id/unban', unbanUser)
   app.delete('/:id/ban', unbanUser)
 
   app.delete('/:id', async (c) => {
     const userId = c.req.param('id')
     if (isAutomationPrincipal(c)) {
-      const actor = getAuthContext(c).user
+      const actor = getPrincipal(c).user
       if (actor?.id === userId) {
         throw badRequest('You cannot remove yourself.')
       }

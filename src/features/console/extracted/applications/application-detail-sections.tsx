@@ -42,8 +42,8 @@ const oidcClaimControls: Array<{ key: OidcClaimKey; label: string }> = [
   { key: 'organizationId', label: 'organization ID' },
   { key: 'organizationName', label: 'organization name' },
   { key: 'authorization', label: 'authorization claim' },
+  { key: 'groups', label: 'groups' },
   { key: 'roles', label: 'roles' },
-  { key: 'permissions', label: 'permissions' },
   { key: 'scopes', label: 'OAuth scopes' },
 ]
 

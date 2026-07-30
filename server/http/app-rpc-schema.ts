@@ -29,22 +29,14 @@ import type {
 } from '@shared/api/applications'
 import type { UploadedAssetResponse } from '@shared/api/assets'
 import type {
-  ApiPermissionResponse,
-  ApiScopeResponse,
   AssignRoleRequest,
-  CreateApiPermissionRequest,
-  CreateApiScopeRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
-  ListApiPermissionsResponse,
-  ListApiScopesResponse,
   ListOrganizationsResponse,
   ListRolesResponse,
   OrganizationResponse,
-  RolePermissionsResponse,
   RoleResponse,
-  UpdateApiPermissionRequest,
-  UpdateApiScopeRequest,
+  RoleScopesResponse,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '@shared/api/authorization'
@@ -213,33 +205,33 @@ export type RpcSchema = {
   '/api/account/security/sessions/:sessionId': {
     $delete: RpcEndpoint<{ param: { sessionId: string } }, EmptyResponse>
   }
-  '/api/management/applications': {
+  '/api/applications': {
     $get: RpcEndpoint<RpcNoInput, ListApplicationsResponse>
     $post: RpcEndpoint<{ json: CreateApplicationRequest }, CreateApplicationResponse, 201>
   }
-  '/api/management/applications/:id': {
+  '/api/applications/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, ApplicationResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateApplicationRequest }, ApplicationResponse>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
   }
-  '/api/management/applications/:id/redirect-uris': {
+  '/api/applications/:id/redirect-uris': {
     $get: RpcEndpoint<
       { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
       ListRedirectUrisResponse
     >
     $put: RpcEndpoint<{ param: { id: string }; json: ReplaceRedirectUrisRequest }, { redirectUris: string[] }>
   }
-  '/api/management/applications/:id/client-secrets': {
+  '/api/applications/:id/client-secrets': {
     $get: RpcEndpoint<
       { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
       ListClientSecretsResponse
     >
     $post: RpcEndpoint<{ param: { id: string } }, RotateClientSecretResponse, 201>
   }
-  '/api/management/applications/:applicationId/logo': {
+  '/api/applications/:applicationId/logo': {
     $post: RpcEndpoint<{ param: { applicationId: string } } & RpcFileUploadInput, UploadedAssetResponse, 201>
   }
-  '/api/management/applications/:applicationId/federated-credentials': {
+  '/api/applications/:applicationId/federated-credentials': {
     $get: RpcEndpoint<{ param: { applicationId: string } }, ListManagementFederatedCredentialsResponse>
     $post: RpcEndpoint<
       { param: { applicationId: string }; json: CreateManagementFederatedCredentialRequest },
@@ -247,211 +239,189 @@ export type RpcSchema = {
       201
     >
   }
-  '/api/management/applications/:applicationId/federated-credentials/:credentialId': {
+  '/api/applications/:applicationId/federated-credentials/:credentialId': {
     $patch: RpcEndpoint<
       { param: { applicationId: string; credentialId: string }; json: UpdateManagementFederatedCredentialRequest },
       CreateManagementFederatedCredentialResponse
     >
     $delete: RpcEndpoint<{ param: { applicationId: string; credentialId: string } }, EmptyResponse>
   }
-  '/api/management/users': {
+  '/api/users': {
     $get: RpcEndpoint<{ query: Partial<Record<keyof ManagementUserListQuery, string>> }, ListManagementUsersResponse>
     $post: RpcEndpoint<{ json: ManagementCreateUserRequest }, EmptyResponse, 201>
   }
-  '/api/management/users/:id': {
+  '/api/users/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, ManagementUserDetailResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: ManagementUpdateUserRequest }, { user: ManagementUserResponse }>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
   }
-  '/api/management/users/password-reset-requests': {
+  '/api/users/password-reset-requests': {
     $post: RpcEndpoint<{ json: { email: string } }, EmptyResponse>
   }
-  '/api/management/users/:id/password-reset-requests': {
+  '/api/users/:id/password-reset-requests': {
     $post: RpcEndpoint<{ param: { id: string }; json: { redirectTo?: string } }, EmptyResponse>
   }
-  '/api/management/users/:id/ban': {
+  '/api/users/:id/ban': {
     $put: RpcEndpoint<{ param: { id: string }; json: ManagementBanUserRequest }, EmptyResponse>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
   }
-  '/api/management/users/:id/sessions': {
+  '/api/users/:id/sessions': {
     $get: RpcEndpoint<
       { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
       ListManagementUserSessionsResponse
     >
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
   }
-  '/api/management/users/:id/sessions/:sessionId': {
+  '/api/users/:id/sessions/:sessionId': {
     $delete: RpcEndpoint<{ param: { id: string; sessionId: string } }, EmptyResponse>
   }
-  '/api/management/users/:id/linked-accounts': {
+  '/api/users/:id/linked-accounts': {
     $get: RpcEndpoint<
       { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
       ListManagementUserLinkedAccountsResponse
     >
   }
-  '/api/management/users/:id/applications': {
+  '/api/users/:id/applications': {
     $get: RpcEndpoint<
       { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
       ListManagementUserApplicationsResponse
     >
   }
-  '/api/management/users/:id/security': {
+  '/api/users/:id/security': {
     $get: RpcEndpoint<{ param: { id: string } }, ManagementUserSecurityResponse>
   }
-  '/api/management/users/:id/passkeys': {
+  '/api/users/:id/passkeys': {
     $get: RpcEndpoint<
       { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
       ListManagementUserPasskeysResponse
     >
   }
-  '/api/management/users/:id/passkeys/:passkeyId': {
+  '/api/users/:id/passkeys/:passkeyId': {
     $delete: RpcEndpoint<{ param: { id: string; passkeyId: string } }, EmptyResponse>
   }
-  '/api/management/connectors': {
+  '/api/connectors': {
     $get: RpcEndpoint<RpcNoInput, ListManagementConnectorsResponse>
     $post: RpcEndpoint<{ json: CreateManagementConnectorRequest }, ManagementConnectorResponse, 201>
   }
-  '/api/management/connectors/templates': {
+  '/api/connectors/templates': {
     $get: RpcEndpoint<RpcNoInput, ListConnectorTemplatesResponse>
   }
-  '/api/management/connectors/:id': {
+  '/api/connectors/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, ManagementConnectorResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateManagementConnectorRequest }, ManagementConnectorResponse>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse>
   }
-  '/api/management/connectors/:id/readiness': {
+  '/api/connectors/:id/readiness': {
     $get: RpcEndpoint<{ param: { id: string } }, ConnectorReadinessResponse>
   }
-  '/api/management/sign-in-settings': {
+  '/api/sign-in-settings': {
     $get: RpcEndpoint<RpcNoInput, ManagementSignInSettingsResponse>
     $patch: RpcEndpoint<{ json: UpdateManagementSignInSettingsRequest }, ManagementSignInSettingsResponse>
   }
-  '/api/management/branding-settings': {
+  '/api/branding-settings': {
     $get: RpcEndpoint<RpcNoInput, ManagementBrandingSettingsResponse>
     $patch: RpcEndpoint<{ json: UpdateManagementBrandingSettingsRequest }, ManagementBrandingSettingsResponse>
   }
-  '/api/management/branding/logo': {
+  '/api/branding/logo': {
     $post: RpcEndpoint<RpcFileUploadInput, UploadedAssetResponse, 201>
   }
-  '/api/management/branding/favicon': {
+  '/api/branding/favicon': {
     $post: RpcEndpoint<RpcFileUploadInput, UploadedAssetResponse, 201>
   }
-  '/api/management/webhooks/endpoints': {
+  '/api/webhooks/endpoints': {
     $get: RpcEndpoint<
       { query?: Partial<Record<keyof ListWebhookEndpointsQuery, string>> },
       ListWebhookEndpointsResponse
     >
     $post: RpcEndpoint<{ json: CreateWebhookEndpointRequest }, WebhookEndpointSecretResponse, 201>
   }
-  '/api/management/webhooks/endpoints/:id': {
+  '/api/webhooks/endpoints/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, WebhookEndpoint>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateWebhookEndpointRequest }, WebhookEndpoint>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
   }
-  '/api/management/webhooks/endpoints/:id/secrets': {
+  '/api/webhooks/endpoints/:id/secrets': {
     $post: RpcEndpoint<{ param: { id: string } }, WebhookEndpointSecretResponse, 201>
   }
-  '/api/management/webhooks/requests': {
+  '/api/webhooks/requests': {
     $get: RpcEndpoint<{ query?: Partial<Record<keyof ListWebhookRequestsQuery, string>> }, ListWebhookRequestsResponse>
   }
-  '/api/management/webhooks/requests/:id': {
+  '/api/webhooks/requests/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, WebhookRequest>
   }
-  '/api/management/webhooks/requests/:id/retries': {
+  '/api/webhooks/requests/:id/retries': {
     $post: RpcEndpoint<{ param: { id: string } }, WebhookRequest, 202>
   }
-  '/api/management/account-center-settings': {
+  '/api/account-center-settings': {
     $get: RpcEndpoint<RpcNoInput, ManagementAccountCenterSettingsResponse>
     $patch: RpcEndpoint<{ json: UpdateManagementAccountCenterSettingsRequest }, ManagementAccountCenterSettingsResponse>
   }
-  '/api/management/readiness': {
+  '/api/readiness': {
     $get: RpcEndpoint<RpcNoInput, ManagementReadinessResponse>
   }
-  '/api/management/agents': {
+  '/api/agents': {
     $get: RpcEndpoint<
       { query?: Partial<Record<keyof PaginationQuery, string>> },
       { items: Agent[]; pagination: PaginationMetadata }
     >
   }
-  '/api/management/agents/:agentId': {
+  '/api/agents/:agentId': {
     $get: RpcEndpoint<{ param: { agentId: string } }, { agent: Agent }>
     $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
   }
-  '/api/management/audit-events': {
+  '/api/audit-events': {
     $get: RpcEndpoint<
       { query?: Partial<Record<keyof PaginationQuery, string>> },
       { items: AgentAuditEvent[]; pagination: PaginationMetadata }
     >
   }
-  '/api/management/security/policy': {
+  '/api/security/policy': {
     $get: RpcEndpoint<RpcNoInput, { policy: SecurityPolicy }>
     $patch: RpcEndpoint<{ json: UpdateSecurityPolicyInput }, { policy: SecurityPolicy }>
   }
-  '/api/management/organizations': {
+  '/api/organizations': {
     $get: RpcEndpoint<RpcNoInput, ListOrganizationsResponse>
     $post: RpcEndpoint<{ json: CreateOrganizationRequest }, OrganizationResponse, 201>
   }
-  '/api/management/organizations/:id': {
+  '/api/organizations/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, OrganizationResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateOrganizationRequest }, OrganizationResponse>
   }
-  '/api/management/organizations/:organizationId/logo': {
+  '/api/organizations/:organizationId/logo': {
     $post: RpcEndpoint<{ param: { organizationId: string } } & RpcFileUploadInput, UploadedAssetResponse, 201>
   }
-  '/api/management/roles': {
+  '/api/roles': {
     $get: RpcEndpoint<RpcNoInput, ListRolesResponse>
     $post: RpcEndpoint<{ json: CreateRoleRequest }, RoleResponse, 201>
   }
-  '/api/management/roles/:id': {
+  '/api/roles/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, RoleResponse>
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateRoleRequest }, RoleResponse>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
   }
-  '/api/management/roles/:id/permissions': {
-    $get: RpcEndpoint<{ param: { id: string } }, RolePermissionsResponse>
-    $put: RpcEndpoint<{ param: { id: string }; json: { permissionIds: string[] } }, EmptyResponse, 204>
+  '/api/roles/:id/scopes': {
+    $get: RpcEndpoint<{ param: { id: string } }, RoleScopesResponse>
+    $put: RpcEndpoint<{ param: { id: string }; json: { scopes: string[] } }, EmptyResponse, 204>
   }
-  '/api/management/user-role-assignments': {
+  '/api/roles/assignments/users': {
     $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
   }
-  '/api/management/application-role-assignments': {
+  '/api/roles/assignments/applications': {
     $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
   }
-  '/api/management/member-role-assignments': {
+  '/api/roles/assignments/members': {
     $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
   }
-  '/api/management/api-resources': {
+  '/api/roles/assignments/agents': {
+    $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
+  }
+  '/api/api-resources': {
     $get: RpcEndpoint<RpcNoInput, { items: ApiResource[]; pagination: PaginationMetadata }>
     $post: RpcEndpoint<{ json: z.input<typeof createApiResourceSchema> }, ApiResource, 201>
   }
-  '/api/management/api-resources/:id': {
+  '/api/api-resources/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, ApiResource>
     $patch: RpcEndpoint<{ param: { id: string }; json: z.infer<typeof updateApiResourceSchema> }, ApiResource>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
-  }
-  '/api/management/api-resources/:id/scopes': {
-    $get: RpcEndpoint<
-      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
-      ListApiScopesResponse
-    >
-    $post: RpcEndpoint<{ param: { id: string }; json: CreateApiScopeRequest }, ApiScopeResponse, 201>
-  }
-  '/api/management/api-resources/:id/scopes/:scopeId': {
-    $patch: RpcEndpoint<{ param: { id: string; scopeId: string }; json: UpdateApiScopeRequest }, ApiScopeResponse>
-    $delete: RpcEndpoint<{ param: { id: string; scopeId: string } }, EmptyResponse, 204>
-  }
-  '/api/management/api-resources/:id/permissions': {
-    $get: RpcEndpoint<
-      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
-      ListApiPermissionsResponse
-    >
-    $post: RpcEndpoint<{ param: { id: string }; json: CreateApiPermissionRequest }, ApiPermissionResponse, 201>
-  }
-  '/api/management/api-resources/:id/permissions/:permissionId': {
-    $patch: RpcEndpoint<
-      { param: { id: string; permissionId: string }; json: UpdateApiPermissionRequest },
-      ApiPermissionResponse
-    >
-    $delete: RpcEndpoint<{ param: { id: string; permissionId: string } }, EmptyResponse, 204>
   }
 }

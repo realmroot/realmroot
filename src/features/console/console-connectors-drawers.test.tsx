@@ -48,15 +48,13 @@ function mountConnectors(options?: {
       if (custom) return Promise.resolve(custom)
       return Promise.resolve(jsonResponse({ ...connector }, method === 'POST' ? 201 : 200))
     }
-    if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-    if (url === '/api/management/sign-in-settings')
-      return Promise.resolve(jsonResponse(options?.signIn ?? signInSettings))
-    if (url === '/api/management/security/policy')
-      return Promise.resolve(jsonResponse(options?.security ?? securityPolicy))
-    if (url === '/api/management/connectors') {
+    if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+    if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(options?.signIn ?? signInSettings))
+    if (url === '/api/security/policy') return Promise.resolve(jsonResponse(options?.security ?? securityPolicy))
+    if (url === '/api/connectors') {
       return Promise.resolve(jsonResponse({ connectors: options?.connectors ?? [], pagination }))
     }
-    if (url.startsWith('/api/management/connectors/')) {
+    if (url.startsWith('/api/connectors/')) {
       const found = (options?.connectors ?? []).find((c) => (c as { id: string }).id === url.split('/').pop())
       return Promise.resolve(jsonResponse(found ?? connector))
     }
@@ -91,7 +89,7 @@ describe('console connectors built-in drawers', () => {
 
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/sign-in-settings',
+        url: '/api/sign-in-settings',
         method: 'PATCH',
         body: { builtInProviders: { email: { enabled: true, otpLength: 8, expiresInSeconds: 600 } } },
       })
@@ -111,13 +109,11 @@ describe('console connectors built-in drawers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
-      expect(requests.some((r) => r.url === '/api/management/security/policy' && r.method === 'PATCH')).toBe(true)
+      expect(requests.some((r) => r.url === '/api/security/policy' && r.method === 'PATCH')).toBe(true)
       expect(
         requests.some(
           (r) =>
-            r.url === '/api/management/sign-in-settings' &&
-            r.method === 'PATCH' &&
-            JSON.stringify(r.body).includes('passkey'),
+            r.url === '/api/sign-in-settings' && r.method === 'PATCH' && JSON.stringify(r.body).includes('passkey'),
         ),
       ).toBe(true)
     })
@@ -168,7 +164,7 @@ describe('console connectors built-in drawers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
-      expect(requests.some((r) => r.url === '/api/management/sign-in-settings' && r.method === 'PATCH')).toBe(true)
+      expect(requests.some((r) => r.url === '/api/sign-in-settings' && r.method === 'PATCH')).toBe(true)
     })
   })
 
@@ -188,7 +184,7 @@ describe('console connectors built-in drawers', () => {
 
     await waitFor(() => {
       const web3 = requests.find(
-        (r) => r.url === '/api/management/sign-in-settings' && JSON.stringify(r.body).includes('web3Wallet'),
+        (r) => r.url === '/api/sign-in-settings' && JSON.stringify(r.body).includes('web3Wallet'),
       )
       expect(web3).toBeTruthy()
     })
@@ -211,7 +207,7 @@ describe('console connectors built-in drawers', () => {
 
     await waitFor(() => {
       const oneTap = requests.find(
-        (r) => r.url === '/api/management/sign-in-settings' && JSON.stringify(r.body).includes('oneTap'),
+        (r) => r.url === '/api/sign-in-settings' && JSON.stringify(r.body).includes('oneTap'),
       )
       expect(oneTap).toBeTruthy()
     })
@@ -261,7 +257,7 @@ describe('console connectors built-in drawers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
-      const created = requests.find((r) => r.url === '/api/management/connectors' && r.method === 'POST')
+      const created = requests.find((r) => r.url === '/api/connectors' && r.method === 'POST')
       expect(created).toBeTruthy()
       expect((created!.body as { providerId: string }).providerId).toBe('cognito')
     })
@@ -288,13 +284,13 @@ describe('console connectors built-in drawers', () => {
       const request = input instanceof Request ? input : null
       const url = request?.url ? new URL(request.url).pathname : String(input)
       requests.push({ url, method: 'GET', body: null })
-      if (url === '/api/management/connectors/templates') {
+      if (url === '/api/connectors/templates') {
         if (failTemplates) return Promise.resolve(jsonResponse({ message: 'boom' }, 500))
         return Promise.resolve(jsonResponse(connectorTemplates))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-      if (url === '/api/management/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
       return consoleSharedFetch(input, init)
     })
     renderWithQuery(<ConnectorsPage />)
@@ -390,7 +386,7 @@ describe('console connectors built-in drawers', () => {
     fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'new-client' } })
     fireEvent.click(save)
     await waitFor(() => {
-      expect(requests.some((r) => r.method === 'PATCH' && r.url.startsWith('/api/management/connectors'))).toBe(true)
+      expect(requests.some((r) => r.method === 'PATCH' && r.url.startsWith('/api/connectors'))).toBe(true)
     })
   })
 })

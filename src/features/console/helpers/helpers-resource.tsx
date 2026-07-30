@@ -174,8 +174,8 @@ export function roleDetailTabs(): DetailTab[] {
       label: 'Settings',
     },
     {
-      value: 'permissions',
-      label: 'Permissions',
+      value: 'scopes',
+      label: 'Scopes',
     },
     {
       value: 'assignments',
@@ -184,20 +184,7 @@ export function roleDetailTabs(): DetailTab[] {
   ]
 }
 export function apiResourceDetailTabs(): DetailTab[] {
-  return [
-    {
-      value: 'settings',
-      label: 'Settings',
-    },
-    {
-      value: 'scopes',
-      label: 'Scopes',
-    },
-    {
-      value: 'permissions',
-      label: 'Permissions',
-    },
-  ]
+  return [{ value: 'settings', label: 'Settings' }]
 }
 export function SetupChecklist({ items, title }: { items: ManagementReadinessItem[]; title: string }) {
   return (

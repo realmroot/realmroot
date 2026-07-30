@@ -1,31 +1,25 @@
 import { badRequest, notFound } from '@server/domain/errors'
 import {
   type AuthorizationTokenClaimInput,
-  assertRoleTokenClaimName,
-  assertTokenClaims,
   createId,
-  filterScopes,
   toAssignmentInput,
   toTokenClaims,
 } from '@server/usecases/authorization-utils'
 import type { Deps } from '@server/usecases/deps'
 import type { RoleAssignmentScope } from '@server/usecases/ports'
+import { validateRequestedScopes } from '@server/usecases/resource-openapi'
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
 
 import type {
   AddMemberRequest,
   AssignRoleRequest,
-  CreateApiPermissionRequest,
   CreateApiResourceRequest,
-  CreateApiScopeRequest,
   CreateInvitationRequest,
   CreateOrganizationRequest,
   CreateRoleRequest,
   PaginationQuery,
-  UpdateApiPermissionRequest,
   UpdateApiResourceRequest,
-  UpdateApiScopeRequest,
   UpdateMemberRequest,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
@@ -137,7 +131,6 @@ export function createResource(deps: Deps, input: CreateApiResourceRequest) {
     authorizationMode: input.authorizationMode ?? 'native',
     description: input.description ?? null,
     enabled: (input.authorizationMode ?? 'native') === 'external' ? false : (input.enabled ?? true),
-    tokenClaimsNamespace: input.tokenClaimsNamespace ?? null,
   })
 }
 
@@ -170,70 +163,7 @@ export async function deleteResource(deps: Deps, id: string) {
   await deps.authorization.deleteResource(id)
 }
 
-export async function createScope(deps: Deps, resourceId: string, input: CreateApiScopeRequest) {
-  await getResource(deps, resourceId)
-  return deps.authorization.createScope(resourceId, {
-    id: createId('scope'),
-    resourceId,
-    value: input.value,
-    description: input.description ?? null,
-    required: input.required ?? false,
-    tokenClaimName: input.tokenClaimName ?? null,
-    includeInAccessToken: input.includeInAccessToken ?? true,
-    includeInIdToken: input.includeInIdToken ?? false,
-  })
-}
-
-export async function listScopes(deps: Deps, resourceId: string, pagination: PaginationQuery) {
-  await getResource(deps, resourceId)
-  const page = await deps.authorization.listScopes(resourceId, pagination)
-  return { scopes: page.items, pagination: page.pagination }
-}
-
-export async function updateScope(deps: Deps, resourceId: string, id: string, input: UpdateApiScopeRequest) {
-  await requireScopeForResource(deps, id, resourceId)
-  await deps.authorization.updateScope(id, input)
-  return requireScope(deps, id)
-}
-
-export async function deleteScope(deps: Deps, resourceId: string, id: string) {
-  await requireScopeForResource(deps, id, resourceId)
-  await deps.authorization.deleteScope(id)
-}
-
-export async function createPermission(deps: Deps, resourceId: string, input: CreateApiPermissionRequest) {
-  await getResource(deps, resourceId)
-  if (input.scopeId) await requireScopeBelongsToResource(deps, input.scopeId, resourceId)
-  return deps.authorization.createPermission(resourceId, {
-    id: createId('perm'),
-    resourceId,
-    scopeId: input.scopeId ?? null,
-    key: input.key,
-    description: input.description ?? null,
-    tokenClaimValue: input.tokenClaimValue ?? null,
-  })
-}
-
-export async function listPermissions(deps: Deps, resourceId: string, pagination: PaginationQuery) {
-  await getResource(deps, resourceId)
-  const page = await deps.authorization.listPermissions(resourceId, pagination)
-  return { permissions: page.items, pagination: page.pagination }
-}
-
-export async function updatePermission(deps: Deps, resourceId: string, id: string, input: UpdateApiPermissionRequest) {
-  await requirePermissionForResource(deps, id, resourceId)
-  if (input.scopeId) await requireScopeBelongsToResource(deps, input.scopeId, resourceId)
-  await deps.authorization.updatePermission(id, input)
-  return requirePermission(deps, id)
-}
-
-export async function deletePermission(deps: Deps, resourceId: string, id: string) {
-  await requirePermissionForResource(deps, id, resourceId)
-  await deps.authorization.deletePermission(id)
-}
-
 export async function createRole(deps: Deps, input: CreateRoleRequest) {
-  assertRoleTokenClaimName(input.tokenClaimName)
   return deps.authorization.createRole({
     id: createId('role'),
     key: input.key,
@@ -243,8 +173,6 @@ export async function createRole(deps: Deps, input: CreateRoleRequest) {
     organizationId: input.organizationId ?? null,
     applicationId: input.applicationId ?? null,
     system: input.system ?? false,
-    tokenClaimName: input.tokenClaimName ?? null,
-    tokenClaimValue: input.tokenClaimValue ?? null,
   })
 }
 
@@ -260,7 +188,6 @@ export async function getRole(deps: Deps, id: string) {
 
 export async function updateRole(deps: Deps, id: string, input: UpdateRoleRequest) {
   const role = await getRole(deps, id)
-  assertRoleTokenClaimName(input.tokenClaimName)
   if (
     (input.resourceId !== undefined && input.resourceId !== role.resourceId) ||
     (input.organizationId !== undefined && input.organizationId !== role.organizationId) ||
@@ -278,20 +205,17 @@ export async function deleteRole(deps: Deps, id: string) {
   await deps.authorization.deleteRole(id)
 }
 
-export async function listRolePermissions(deps: Deps, roleId: string) {
+export async function listRoleScopes(deps: Deps, roleId: string) {
   await getRole(deps, roleId)
-  return { permissions: await deps.authorization.listRolePermissions(roleId) }
+  return { scopes: await deps.authorization.listRoleScopes(roleId) }
 }
 
-export async function replaceRolePermissions(deps: Deps, roleId: string, permissionIds: string[]) {
+export async function replaceRoleScopes(deps: Deps, roleId: string, scopes: string[]) {
   const role = await getRole(deps, roleId)
-  for (const permissionId of permissionIds) {
-    const permission = await requirePermission(deps, permissionId)
-    if (!role.resourceId || permission.resourceId !== role.resourceId) {
-      throw badRequest('Role permissions must belong to the same API resource as the role.')
-    }
-  }
-  await deps.authorization.replaceRolePermissions(roleId, permissionIds)
+  if (!role.resourceId) throw badRequest('A role must belong to an API resource before scopes can be assigned.')
+  const resource = await getResource(deps, role.resourceId)
+  await validateRequestedScopes(deps, resource.resourceUrl, scopes)
+  await deps.authorization.replaceRoleScopes(roleId, scopes)
 }
 
 export async function assignUserRole(deps: Deps, input: AssignRoleRequest, actorUserId: string | null) {
@@ -299,7 +223,6 @@ export async function assignUserRole(deps: Deps, input: AssignRoleRequest, actor
   if (role.organizationId || role.applicationId) {
     throw badRequest('User role assignments must use global roles.')
   }
-  assertTokenClaims(input.tokenClaims)
   await deps.authorization.assignUserRole(toAssignmentInput(input, actorUserId))
 }
 
@@ -308,7 +231,6 @@ export async function assignApplicationRole(deps: Deps, input: AssignRoleRequest
   if (role.organizationId || (role.applicationId && role.applicationId !== input.subjectId)) {
     throw badRequest('Application role assignments must use global roles or roles scoped to the same application.')
   }
-  assertTokenClaims(input.tokenClaims)
   await deps.authorization.assignApplicationRole(toAssignmentInput(input, actorUserId))
 }
 
@@ -318,8 +240,36 @@ export async function assignMemberRole(deps: Deps, input: AssignRoleRequest, act
   if (role.applicationId || (role.organizationId && role.organizationId !== member.organizationId)) {
     throw badRequest('Member role assignments must use global roles or roles scoped to the same organization.')
   }
-  assertTokenClaims(input.tokenClaims)
   await deps.authorization.assignMemberRole(toAssignmentInput(input, actorUserId))
+}
+
+export async function assignAgentRole(deps: Deps, input: AssignRoleRequest, actorUserId: string | null) {
+  const role = await getRole(deps, input.roleId)
+  if (!role.resourceId || role.applicationId) {
+    throw badRequest('Agent role assignments require an API resource role.')
+  }
+  const identity = await deps.agentIdentities.findIdentity(input.subjectId)
+  if (!identity || identity.identity.status !== 'active') throw notFound('Active Agent identity was not found.')
+  if (role.organizationId && role.organizationId !== identity.identity.ownerOrganizationId) {
+    throw badRequest('Agent role must belong to the Agent home organization.')
+  }
+  await deps.authorization.assignAgentRole(toAssignmentInput(input, actorUserId))
+}
+
+export async function getAgentRoleAuthorization(
+  deps: Deps,
+  agentIdentityId: string,
+  resourceId: string,
+  organizationId?: string,
+) {
+  const assignments = await deps.authorization.listAgentRoleAssignments(agentIdentityId, {
+    resourceId,
+    organizationId,
+  })
+  return {
+    roles: [...new Set(assignments.map((assignment) => assignment.role.key))].sort(),
+    scopes: [...new Set(assignments.flatMap((assignment) => assignment.scopes))].sort(),
+  }
 }
 
 export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClaimInput) {
@@ -327,8 +277,6 @@ export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClai
   if (input.resource && !resource) {
     return toTokenClaims(input, [], null)
   }
-  const scopes = input.destination ? await deps.authorization.listScopesByValues(resource?.id, input.scopes) : []
-  const tokenScopes = input.destination ? filterScopes(input.scopes, input.destination, scopes) : input.scopes
   const organization =
     input.organizationId && input.claimSelection?.organizationName
       ? await deps.authorization.findOrganization(input.organizationId)
@@ -349,7 +297,7 @@ export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClai
       : []
 
   const assignments = [...userAssignments, ...applicationAssignments, ...memberAssignments]
-  return toTokenClaims({ ...input, scopes: tokenScopes }, assignments, resource, organization)
+  return toTokenClaims(input, assignments, resource, organization)
 }
 
 async function memberAssignmentsFor(deps: Deps, userId: string, organizationId: string, scope: RoleAssignmentScope) {
@@ -369,40 +317,4 @@ async function requireMemberForOrganization(deps: Deps, id: string, organization
     throw notFound('Organization member was not found.')
   }
   return member
-}
-
-async function requireScope(deps: Deps, id: string) {
-  const scope = await deps.authorization.findScope(id)
-  if (!scope) throw notFound('API scope was not found.')
-  return scope
-}
-
-async function requireScopeForResource(deps: Deps, id: string, resourceId: string) {
-  const scope = await requireScope(deps, id)
-  if (scope.resourceId !== resourceId) {
-    throw notFound('API scope was not found.')
-  }
-  return scope
-}
-
-async function requireScopeBelongsToResource(deps: Deps, id: string, resourceId: string) {
-  const scope = await requireScope(deps, id)
-  if (scope.resourceId !== resourceId) {
-    throw badRequest('API scope must belong to the same API resource as the permission.')
-  }
-  return scope
-}
-
-async function requirePermission(deps: Deps, id: string) {
-  const permission = await deps.authorization.findPermission(id)
-  if (!permission) throw notFound('API permission was not found.')
-  return permission
-}
-
-async function requirePermissionForResource(deps: Deps, id: string, resourceId: string) {
-  const permission = await requirePermission(deps, id)
-  if (permission.resourceId !== resourceId) {
-    throw notFound('API permission was not found.')
-  }
-  return permission
 }

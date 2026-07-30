@@ -39,20 +39,20 @@ describe('admin console applications-detail-b', () => {
       const url = String(input)
       requests.push(url)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/applications/app-1') {
+      if (url === '/api/applications/app-1') {
         detailAttempts += 1
         if (detailAttempts === 1) {
           return Promise.resolve(jsonResponse({ error: { message: 'Application unavailable.' } }, 503))
         }
         return Promise.resolve(jsonResponse(application))
       }
-      if (url === '/api/management/applications/app-1/client-secrets') {
+      if (url === '/api/applications/app-1/client-secrets') {
         return Promise.resolve(jsonResponse({ secrets: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
@@ -63,20 +63,20 @@ describe('admin console applications-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
-    expect(requests.filter((url) => url === '/api/management/applications/app-1')).toHaveLength(2)
+    expect(requests.filter((url) => url === '/api/applications/app-1')).toHaveLength(2)
   })
 
   it('keeps application detail rendering stable when optional list fields are absent from the API response', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/applications/app-1') {
+      if (url === '/api/applications/app-1') {
         const {
           corsOrigins: _corsOrigins,
           postLogoutRedirectUris: _postLogoutRedirectUris,
@@ -101,16 +101,16 @@ describe('admin console applications-detail-b', () => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/applications/app-1' && init?.method === 'PATCH') {
+      if (url === '/api/applications/app-1' && init?.method === 'PATCH') {
         return Promise.resolve(jsonResponse({ error: { message: 'Redirect URI is not allowed.' } }, 400))
       }
-      if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
+      if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
       return consoleSharedFetch(input, init)
     })
     window.history.pushState(null, '', '/console/applications/app-1')
@@ -129,10 +129,10 @@ describe('admin console applications-detail-b', () => {
   it('renders users and displays management API errors from create flow', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/users' && init?.method === 'POST') {
+      if (url === '/api/users' && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ error: { message: 'Email already exists.' } }, 400))
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [user], pagination }))
       }
       return consoleSharedFetch(input, init)

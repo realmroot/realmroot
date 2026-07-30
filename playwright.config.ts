@@ -11,6 +11,8 @@ const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 4189)
 const baseURL = `http://localhost:${PORT}`
 const externalPort = Number(process.env.E2E_EXTERNAL_PORT ?? 4399)
 const externalOrigin = `http://127.0.0.1:${externalPort}`
+const nativePort = Number(process.env.E2E_NATIVE_PORT ?? 4400)
+const nativeOrigin = `http://127.0.0.1:${nativePort}`
 const persistStatePath = process.env.CF_PERSIST_STATE_PATH ?? 'e2e/.wrangler/state'
 
 export default defineConfig({
@@ -29,13 +31,23 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
-      command: 'pnpm run example:resource-platform',
+      command: 'pnpm run example:resource-external',
       url: `${externalOrigin}/.well-known/oauth-protected-resource/api`,
       timeout: 30_000,
       reuseExistingServer: !process.env.CI,
       env: {
         PORT: String(externalPort),
         ORIGIN: externalOrigin,
+      },
+    },
+    {
+      command: 'pnpm run example:resource-native',
+      url: `${nativeOrigin}/api`,
+      timeout: 30_000,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        PORT: String(nativePort),
+        ORIGIN: nativeOrigin,
         REALMROOT_ORIGIN: baseURL,
       },
     },

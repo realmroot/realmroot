@@ -3,15 +3,13 @@ import type { AgentProtocolInventoryResponse } from './agents'
 import { applicationResponseSchema, listApplicationsResponseSchema, paginationMetadataSchema } from './applications'
 import {
   apiResourceResponseSchema,
-  apiScopeResponseSchema,
   listApiResourcesResponseSchema,
-  listApiScopesResponseSchema,
   listOrganizationsResponseSchema,
   listRolesResponseSchema,
   organizationResponseSchema,
   paginationQuerySchema,
-  rolePermissionsResponseSchema,
   roleResponseSchema,
+  roleScopesResponseSchema,
 } from './authorization'
 import {
   configzAccountCenterSchema,
@@ -32,8 +30,6 @@ import {
   adminUpdateUserSchema,
   adminUserListQuerySchema,
 } from './users'
-
-export const managementApiBasePath = '/api/management' as const
 
 export const managementErrorResponseSchema = z.object({
   error: z.object({
@@ -388,8 +384,7 @@ export const managementResourceSchemas = {
   applications: applicationResponseSchema,
   organizations: organizationResponseSchema,
   apiResources: apiResourceResponseSchema,
-  apiScopes: apiScopeResponseSchema,
-  rolePermissions: rolePermissionsResponseSchema,
+  roleScopes: roleScopesResponseSchema,
   roles: roleResponseSchema,
   signInSettings: managementSignInSettingsResponseSchema,
   brandingSettings: managementBrandingSettingsResponseSchema,
@@ -402,7 +397,6 @@ export const managementCollectionSchemas = {
   applications: listApplicationsResponseSchema,
   organizations: listOrganizationsResponseSchema,
   apiResources: listApiResourcesResponseSchema,
-  apiScopes: listApiScopesResponseSchema,
   roles: listRolesResponseSchema,
   connectors: listManagementConnectorsResponseSchema,
 } as const
@@ -413,7 +407,7 @@ export const managementUpdateUserRequestSchema = adminUpdateUserSchema
 export const managementBanUserRequestSchema = adminBanUserSchema
 export const managementPasswordResetRequestSchema = adminPasswordResetSchema
 
-export const managementCollectionRoutes = [
+export const protectedResourceCollectionRoutes = [
   '/applications',
   '/users',
   '/organizations',

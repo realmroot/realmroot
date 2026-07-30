@@ -14,17 +14,13 @@ import type {
 } from '@shared/api/applications'
 import type { AssetPurpose } from '@shared/api/assets'
 import type {
-  ApiPermissionResponse,
   ApiResourceResponse,
-  ApiScopeResponse,
   AssignRoleRequest,
   InvitationResponse,
   MemberResponse,
   OrganizationResponse,
   RoleResponse,
-  UpdateApiPermissionRequest,
   UpdateApiResourceRequest,
-  UpdateApiScopeRequest,
   UpdateMemberRequest,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
@@ -369,7 +365,6 @@ export interface ExternalResourceAuthorizationRecord {
   clientId: string
   encryptedClientSecret: string
   encryptedRegistrationAccessToken: string | null
-  scopesSupported: string[]
   metadata: Record<string, unknown>
   status: string
   createdAt: Date
@@ -825,16 +820,13 @@ export interface AuthorizationPaginatedResult<T> {
 
 export interface RoleAssignmentRecord {
   role: RoleResponse
-  permissions: ApiPermissionResponse[]
-  tokenClaims: Record<string, unknown> | null
+  scopes: string[]
 }
 
 export type OrganizationRecordInput = Omit<OrganizationResponse, 'createdAt' | 'updatedAt'>
 export type MemberRecordInput = Omit<MemberResponse, 'createdAt' | 'updatedAt'>
 export type InvitationRecordInput = Omit<InvitationResponse, 'createdAt' | 'acceptedAt' | 'revokedAt'>
 export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'createdAt' | 'updatedAt'>
-export type ApiScopeRecordInput = ApiScopeResponse
-export type ApiPermissionRecordInput = ApiPermissionResponse
 export type RoleRecordInput = Omit<RoleResponse, 'createdAt' | 'updatedAt'>
 export type RoleAssignmentInput = AssignRoleRequest & { id: string; assignedByUserId: string | null }
 
@@ -872,33 +864,21 @@ export interface AuthorizationRepository {
   findResourceByAudience(audience: string): Promise<ApiResourceResponse | null>
   updateResource(id: string, patch: UpdateApiResourceRequest): Promise<void>
   deleteResource(id: string): Promise<void>
-  createScope(resourceId: string, input: ApiScopeRecordInput): Promise<ApiScopeResponse>
-  listScopes(resourceId: string, pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<ApiScopeResponse>>
-  listScopesByValues(resourceId: string | undefined, values: string[]): Promise<ApiScopeResponse[]>
-  findScope(id: string): Promise<ApiScopeResponse | null>
-  updateScope(id: string, patch: UpdateApiScopeRequest): Promise<void>
-  deleteScope(id: string): Promise<void>
-  createPermission(resourceId: string, input: ApiPermissionRecordInput): Promise<ApiPermissionResponse>
-  listPermissions(
-    resourceId: string,
-    pagination: PaginationQuery,
-  ): Promise<AuthorizationPaginatedResult<ApiPermissionResponse>>
-  findPermission(id: string): Promise<ApiPermissionResponse | null>
-  updatePermission(id: string, patch: UpdateApiPermissionRequest): Promise<void>
-  deletePermission(id: string): Promise<void>
   createRole(input: RoleRecordInput): Promise<RoleResponse>
   listRoles(pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<RoleResponse>>
   findRole(id: string): Promise<RoleResponse | null>
   updateRole(id: string, patch: UpdateRoleRequest): Promise<void>
   deleteRole(id: string): Promise<void>
-  listRolePermissions(roleId: string): Promise<ApiPermissionResponse[]>
-  replaceRolePermissions(roleId: string, permissionIds: string[]): Promise<void>
+  listRoleScopes(roleId: string): Promise<string[]>
+  replaceRoleScopes(roleId: string, scopes: string[]): Promise<void>
   assignUserRole(input: RoleAssignmentInput): Promise<void>
   assignApplicationRole(input: RoleAssignmentInput): Promise<void>
   assignMemberRole(input: RoleAssignmentInput): Promise<void>
+  assignAgentRole(input: RoleAssignmentInput): Promise<void>
   listUserRoleAssignments(userId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
   listApplicationRoleAssignments(applicationId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
   listMemberRoleAssignments(memberId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
+  listAgentRoleAssignments(agentIdentityId: string, scope: RoleAssignmentScope): Promise<RoleAssignmentRecord[]>
 }
 
 // --- token-exchange ---------------------------------------------------------

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isProtectedResourceCapability } from '../authz'
 import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 export const applicationClientTypes = ['public_spa', 'public_native', 'confidential_web'] as const
@@ -19,8 +20,8 @@ export const customApplicationScopeSchema = z
   .min(1)
   .max(120)
   .regex(/^[A-Za-z0-9._-]+:[A-Za-z0-9:._-]+$/)
-  .refine((value) => value !== 'management:read' && value !== 'management:write', {
-    message: 'Management scopes are reserved.',
+  .refine((value) => !isProtectedResourceCapability(value), {
+    message: 'Realmroot resource capabilities are reserved.',
   })
 
 export const applicationClientTypeSchema = z.enum(applicationClientTypes)
@@ -63,8 +64,8 @@ const oidcClaimSelectionSchema = z
   .object({
     authorization: z.boolean().optional(),
     scopes: z.boolean().optional(),
+    groups: z.boolean().optional(),
     roles: z.boolean().optional(),
-    permissions: z.boolean().optional(),
     organizationId: z.boolean().optional(),
     organizationName: z.boolean().optional(),
   })
@@ -81,11 +82,17 @@ export const applicationOidcClaimsSchema = z
 export const defaultApplicationOidcClaims = {
   accessToken: {
     authorization: true,
+    groups: true,
     roles: true,
-    permissions: true,
   },
-  idToken: {},
-  userInfo: {},
+  idToken: {
+    groups: true,
+    roles: true,
+  },
+  userInfo: {
+    groups: true,
+    roles: true,
+  },
 }
 
 export const applicationResponseSchema = z

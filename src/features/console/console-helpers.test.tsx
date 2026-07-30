@@ -22,7 +22,6 @@ import {
   parseCustomData,
   parseLineList,
   parseMetadata,
-  parseTokenClaims,
   removeBlankValues,
   shallowEqual,
   userDisplayName,
@@ -76,8 +75,8 @@ describe('admin console helpers', () => {
     expect(navigate).toHaveBeenCalledTimes(1)
     expect(userDetailTabs().map((tab) => tab.value)).toContain('linked-accounts')
     expect(organizationDetailTabs().map((tab) => tab.value)).toEqual(['settings', 'authorization'])
-    expect(roleDetailTabs().map((tab) => tab.value)).toContain('permissions')
-    expect(apiResourceDetailTabs().map((tab) => tab.value)).toContain('scopes')
+    expect(roleDetailTabs().map((tab) => tab.value)).toContain('scopes')
+    expect(apiResourceDetailTabs().map((tab) => tab.value)).toEqual(['settings'])
     expect(formatDashboardDate(new Date('2026-05-01T12:00:00.000Z'))).toBe('2026-05-01')
     expect(dashboardChartLabels(new Date('2026-05-29T00:00:00.000Z'))).toHaveLength(8)
     expect(listItems(['a', 'b'])).toEqual(['a', 'b'])
@@ -93,8 +92,6 @@ describe('admin console helpers', () => {
     expect(shallowEqual({ a: 1 }, { a: 2 })).toBe(false)
     expect(nullableString(' value ')).toBe('value')
     expect(nullableString('   ')).toBeNull()
-    expect(parseTokenClaims('')).toBeUndefined()
-    expect(parseTokenClaims('{"role":"admin"}')).toEqual({ role: 'admin' })
     expect(parseLineList(' a\n\n b ')).toEqual(['a', 'b'])
     expect(parseCustomData('')).toEqual({})
     expect(parseCustomData('{"tier":"pro"}')).toEqual({ tier: 'pro' })

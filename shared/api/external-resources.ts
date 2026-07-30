@@ -38,7 +38,6 @@ export const externalResourceAuthorizationSchema = z.object({
   registrationMode: externalClientRegistrationModeSchema,
   clientId: z.string(),
   clientSecretConfigured: z.literal(true),
-  scopesSupported: z.array(z.string()),
   status: externalAuthorizationStatusSchema,
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -51,7 +50,7 @@ export const resourceConnectionOwnerSchema = z.discriminatedUnion('type', [
 
 export const createResourceConnectionIntentRequestSchema = z.object({
   owner: resourceConnectionOwnerSchema.default({ type: 'user' }),
-  scopes: scopeListSchema.optional(),
+  scopes: scopeListSchema,
 })
 
 export const resourceConnectionIntentResponseSchema = z.object({
@@ -92,7 +91,6 @@ export const connectableExternalResourcesResponseSchema = z.object({
       name: z.string(),
       audience: z.string(),
       resourceUrl: z.url(),
-      scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
     }),
   ),
 })

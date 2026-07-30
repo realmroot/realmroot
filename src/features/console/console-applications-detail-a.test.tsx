@@ -34,7 +34,7 @@ describe('admin console applications-detail-a', () => {
     const thirdPartyApplication = { ...application, id: 'app-2', firstParty: false, name: 'Partner app' }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application, thirdPartyApplication], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -67,28 +67,28 @@ describe('admin console applications-detail-a', () => {
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/applications/app-1' && method === 'PATCH') {
+      if (url === '/api/applications/app-1' && method === 'PATCH') {
         const body = JSON.parse(String(init?.body))
         requests.push({ url, method, body })
         currentApplication = { ...currentApplication, ...body }
         return Promise.resolve(jsonResponse(currentApplication))
       }
-      if (url === '/api/management/applications/app-1/logo' && method === 'POST') {
+      if (url === '/api/applications/app-1/logo' && method === 'POST') {
         requests.push({ url, method, body: init?.body instanceof FormData ? '[form-data]' : init?.body })
         return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
       }
-      if (url === '/api/management/applications/app-1' && method === 'DELETE') {
+      if (url === '/api/applications/app-1' && method === 'DELETE') {
         requests.push({ url, method, body: null })
         return Promise.resolve(new Response(null, { status: 204 }))
       }
-      if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(currentApplication))
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(currentApplication))
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -126,7 +126,7 @@ describe('admin console applications-detail-a', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/applications/app-1',
+        url: '/api/applications/app-1',
         method: 'PATCH',
         body: { name: 'Customer portal updated', description: null },
       })
@@ -156,7 +156,7 @@ describe('admin console applications-detail-a', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save redirects and origins' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/applications/app-1',
+        url: '/api/applications/app-1',
         method: 'PATCH',
         body: {
           redirectUris: ['https://new.example.com/callback'],
@@ -180,7 +180,7 @@ describe('admin console applications-detail-a', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/applications/app-1',
+        url: '/api/applications/app-1',
         method: 'PATCH',
         body: { customData: {} },
       })
@@ -192,7 +192,7 @@ describe('admin console applications-detail-a', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/applications/app-1',
+        url: '/api/applications/app-1',
         method: 'PATCH',
         body: { customData: { plan: 'growth', beta: true } },
       })
@@ -210,7 +210,7 @@ describe('admin console applications-detail-a', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/applications/app-1',
+        url: '/api/applications/app-1',
         method: 'PATCH',
         body: { customData: {} },
       })
@@ -218,24 +218,24 @@ describe('admin console applications-detail-a', () => {
 
     fireEvent.click(screen.getByRole('switch', { name: 'Access token organization ID' }))
     fireEvent.click(screen.getByRole('switch', { name: 'ID token roles' }))
-    fireEvent.click(screen.getByRole('switch', { name: 'ID token permissions' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'ID token groups' }))
     fireEvent.click(screen.getByRole('switch', { name: 'UserInfo organization name' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save OIDC claims' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/applications/app-1',
+        url: '/api/applications/app-1',
         method: 'PATCH',
         body: {
           oidcClaims: {
             accessToken: {
               authorization: true,
               roles: true,
-              permissions: true,
+              groups: true,
               organizationId: true,
             },
             idToken: {
               roles: true,
-              permissions: true,
+              groups: true,
             },
             userInfo: {
               organizationName: true,
@@ -272,12 +272,12 @@ describe('admin console applications-detail-a', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         {
-          url: '/api/management/applications/app-1',
+          url: '/api/applications/app-1',
           method: 'PATCH',
           body: { name: 'Customer portal updated', description: null },
         },
         {
-          url: '/api/management/applications/app-1',
+          url: '/api/applications/app-1',
           method: 'PATCH',
           body: {
             redirectUris: ['https://new.example.com/callback'],
@@ -286,34 +286,34 @@ describe('admin console applications-detail-a', () => {
           },
         },
         {
-          url: '/api/management/applications/app-1',
+          url: '/api/applications/app-1',
           method: 'PATCH',
           body: { customData: {} },
         },
         {
-          url: '/api/management/applications/app-1',
+          url: '/api/applications/app-1',
           method: 'PATCH',
           body: { customData: { plan: 'growth', beta: true } },
         },
         {
-          url: '/api/management/applications/app-1',
+          url: '/api/applications/app-1',
           method: 'PATCH',
           body: { customData: {} },
         },
         {
-          url: '/api/management/applications/app-1',
+          url: '/api/applications/app-1',
           method: 'PATCH',
           body: {
             oidcClaims: {
               accessToken: {
                 authorization: true,
                 roles: true,
-                permissions: true,
+                groups: true,
                 organizationId: true,
               },
               idToken: {
                 roles: true,
-                permissions: true,
+                groups: true,
               },
               userInfo: {
                 organizationName: true,
@@ -322,21 +322,21 @@ describe('admin console applications-detail-a', () => {
           },
         },
         {
-          url: '/api/management/applications/app-1/logo',
+          url: '/api/applications/app-1/logo',
           method: 'POST',
           body: '[form-data]',
         },
         {
-          url: '/api/management/applications/app-1',
+          url: '/api/applications/app-1',
           method: 'PATCH',
           body: { disabled: true, disabledReason: 'Disabled from Console' },
         },
         {
-          url: '/api/management/applications/app-1',
+          url: '/api/applications/app-1',
           method: 'PATCH',
           body: { disabled: false, disabledReason: null },
         },
-        { url: '/api/management/applications/app-1', method: 'DELETE', body: null },
+        { url: '/api/applications/app-1', method: 'DELETE', body: null },
       ])
     })
     await waitFor(() => expect(window.location.pathname).toBe('/console/applications'))
@@ -365,13 +365,13 @@ describe('admin console applications-detail-a', () => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url.startsWith('/api/management/applications/app-1/client-secrets') && init?.method === 'POST') {
+      if (url.startsWith('/api/applications/app-1/client-secrets') && init?.method === 'POST') {
         return Promise.resolve(
           jsonResponse({
             clientSecret: 'fas_rotated_secret',
@@ -387,10 +387,10 @@ describe('admin console applications-detail-a', () => {
           }),
         )
       }
-      if (url.startsWith('/api/management/applications/app-1/client-secrets')) {
+      if (url.startsWith('/api/applications/app-1/client-secrets')) {
         return Promise.resolve(jsonResponse({ secrets: confidentialApplication.secretMetadata, pagination }))
       }
-      if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(confidentialApplication))
+      if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(confidentialApplication))
       return consoleSharedFetch(input, init)
     })
     window.history.pushState(null, '', '/console/applications/app-1')

@@ -72,9 +72,9 @@ describe('application API pagination contracts', () => {
         endSessionEndpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
       },
       oidcClaims: {
-        accessToken: { authorization: true, roles: true, permissions: true },
+        accessToken: { authorization: true, roles: true, groups: true },
         idToken: { organizationId: true },
-        userInfo: { roles: true, permissions: true },
+        userInfo: { roles: true, groups: true },
       },
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
@@ -98,18 +98,18 @@ describe('application API pagination contracts', () => {
     ).toEqual([deviceCodeGrantType])
   })
 
-  it('keeps management scopes out of user-configurable application requests', () => {
+  it('keeps Realmroot resource capabilities out of user-configurable application requests', () => {
     expect(() =>
       createApplicationRequestSchema.parse({
         name: 'Customer app',
         clientType: 'public_spa',
         redirectUris: ['http://localhost:5173/callback'],
-        allowedScopes: ['openid', 'management:read'],
+        allowedScopes: ['openid', 'applications:read'],
       }),
     ).toThrow()
     expect(() =>
       updateApplicationRequestSchema.parse({
-        allowedScopes: ['openid', 'management:write'],
+        allowedScopes: ['openid', 'applications:write'],
       }),
     ).toThrow()
   })
@@ -143,13 +143,13 @@ describe('application API pagination contracts', () => {
         oidcClaims: {
           accessToken: { authorization: true, scopes: true },
           idToken: { organizationId: true, organizationName: true },
-          userInfo: { roles: true, permissions: true },
+          userInfo: { roles: true, groups: true },
         },
       }).oidcClaims,
     ).toEqual({
       accessToken: { authorization: true, scopes: true },
       idToken: { organizationId: true, organizationName: true },
-      userInfo: { roles: true, permissions: true },
+      userInfo: { roles: true, groups: true },
     })
     expect(() =>
       updateApplicationRequestSchema.parse({

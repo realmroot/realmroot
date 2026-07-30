@@ -104,7 +104,7 @@ describe('account self-service over real D1', () => {
     const adminCookie = await signInAdmin(harness)
     // Enable the web3 wallet provider so the account-center linking path is allowed.
     const chainId = 1
-    const enable = await harness.request('/api/management/sign-in-settings', {
+    const enable = await harness.request('/api/sign-in-settings', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({ builtInProviders: { web3Wallet: { enabled: true, chains: [chainId] } } }),

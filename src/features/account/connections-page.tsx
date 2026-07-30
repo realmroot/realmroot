@@ -2,7 +2,6 @@ import { AppWindow, Bot, KeyRound, Link2, Wallet } from 'lucide-react'
 import { ProviderIcon } from '@/components/provider-icon'
 import { Button } from '@/components/ui/button'
 import {
-  createAccountConnection,
   linkAccount,
   retireAgent,
   revokeAccountConnection,
@@ -107,13 +106,6 @@ function ResourceConnectionsPanel({
   confirm: ConfirmDestructiveHandler
   mutate: MutationHandler
 }) {
-  async function connect(resourceId: string) {
-    const intent = await mutate('Redirecting to the external platform.', () =>
-      createAccountConnection({ apiResourceId: resourceId, owner: { type: 'user' } }),
-    )
-    if (intent?.authorizationUrl) window.location.assign(intent.authorizationUrl)
-  }
-
   return (
     <section className="accountPanelGroup" aria-label={tt('API resource accounts')}>
       <div className="accountPanelHeader">
@@ -126,53 +118,43 @@ function ResourceConnectionsPanel({
       <section className="settingsPanel">
         <SubsectionTitle
           title={tt('Connected resource accounts')}
-          description={tt('Connecting an account grants no Agent access until you approve an exact request.')}
+          description={tt(
+            'Restish starts a connection with the exact scopes required by the target OpenAPI operation.',
+          )}
         />
         <ItemList
-          empty={tt('No external API resources are available.')}
-          emptyDescription={tt('An administrator must configure an external API Resource first.')}
-          items={resources.flatMap((resource) => {
-            const matches = connections.filter(
-              (connection) => connection.apiResourceId === resource.id && connection.status === 'active',
-            )
-            if (matches.length === 0) {
-              return [
-                {
-                  id: resource.id,
-                  icon: <KeyRound size={16} />,
-                  title: resource.name,
-                  meta: `${resource.resourceUrl} · ${resource.scopes.map((scope) => scope.value).join(', ')}`,
-                  status: tt('Not connected'),
-                  action: <Button onClick={() => void connect(resource.id)}>{tt('Connect')}</Button>,
-                },
-              ]
-            }
-            return matches.map((connection) => ({
-              id: connection.id,
-              icon: <KeyRound size={16} />,
-              title: `${resource.name} · ${connection.displayName}`,
-              meta: connection.scopes.join(', '),
-              status: tt('Connected'),
-              action: (
-                <Button
-                  onClick={() =>
-                    confirm({
-                      title: tt('Disconnect resource account'),
-                      description: tt('Active Agent grants and token leases for this account will be revoked.'),
-                      actionLabel: tt('Disconnect'),
-                      onConfirm: () =>
-                        mutate('Resource account disconnected.', () => revokeAccountConnection(connection.id), {
-                          invalidate: [accountQueryKeys.accountConnections],
-                        }),
-                    })
-                  }
-                  variant="ghost"
-                >
-                  {tt('Disconnect')}
-                </Button>
-              ),
-            }))
-          })}
+          empty={tt('No connected resource accounts.')}
+          emptyDescription={tt('Invoke a protected target operation with Restish to start a scoped connection.')}
+          items={connections
+            .filter((connection) => connection.status === 'active')
+            .map((connection) => {
+              const resource = resources.find((candidate) => candidate.id === connection.apiResourceId)
+              return {
+                id: connection.id,
+                icon: <KeyRound size={16} />,
+                title: `${resource?.name ?? tt('API resource')} · ${connection.displayName}`,
+                meta: connection.scopes.join(', '),
+                status: tt('Connected'),
+                action: (
+                  <Button
+                    onClick={() =>
+                      confirm({
+                        title: tt('Disconnect resource account'),
+                        description: tt('Active Agent grants and token leases for this account will be revoked.'),
+                        actionLabel: tt('Disconnect'),
+                        onConfirm: () =>
+                          mutate('Resource account disconnected.', () => revokeAccountConnection(connection.id), {
+                            invalidate: [accountQueryKeys.accountConnections],
+                          }),
+                      })
+                    }
+                    variant="ghost"
+                  >
+                    {tt('Disconnect')}
+                  </Button>
+                ),
+              }
+            })}
         />
       </section>
     </section>

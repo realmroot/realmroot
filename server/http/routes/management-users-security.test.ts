@@ -20,7 +20,7 @@ describe('management routes 2', () => {
   it('preserves existing admin-session auth behavior on management routes', async () => {
     const auth = createAuthMock()
     const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
-      '/api/management/users?limit=10&offset=20&banned=false',
+      '/api/users?limit=10&offset=20&banned=false',
       { headers: adminHeaders() },
     )
 
@@ -75,12 +75,12 @@ describe('management routes 2', () => {
       { securityPolicy: policy },
     )
 
-    const weakPassword = await app.request('/api/management/users', {
+    const weakPassword = await app.request('/api/users', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({ email: 'ada@example.com', displayName: 'Ada', password: 'Password1' }),
     })
-    const blockedEmail = await app.request('/api/management/users', {
+    const blockedEmail = await app.request('/api/users', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({ email: 'ada@blocked.example', displayName: 'Ada', password: 'Valid-pass-Zed!' }),
@@ -100,7 +100,7 @@ describe('management routes 2', () => {
     auth.api.listUsers.mockResolvedValueOnce({ users: [{ id: 'user-1' }], total: 1, limit: 50 })
     const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
 
-    const managementResponse = await app.request('/api/management/users', { headers: adminHeaders() })
+    const managementResponse = await app.request('/api/users', { headers: adminHeaders() })
 
     await expect(managementResponse.json()).resolves.toEqual({
       users: [{ id: 'user-1' }],
@@ -115,7 +115,7 @@ describe('management routes 2', () => {
   })
 
   it('returns the Management error envelope for malformed application JSON', async () => {
-    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/management/applications', {
+    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/applications', {
       method: 'POST',
       headers: adminHeaders(),
       body: '{',
@@ -135,17 +135,17 @@ describe('management routes 2', () => {
     const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
     const headers = adminHeaders()
 
-    await app.request('/api/management/users/password-reset-requests', {
+    await app.request('/api/users/password-reset-requests', {
       method: 'POST',
       headers,
       body: JSON.stringify({ email: 'ada@example.com', redirectTo: 'https://app.example.com/reset' }),
     })
-    await app.request('/api/management/users/user-1/ban', {
+    await app.request('/api/users/user-1/ban', {
       method: 'PUT',
       headers,
       body: JSON.stringify({ reason: 'abuse', expiresInSeconds: 3600 }),
     })
-    await app.request('/api/management/users/user-1/ban', { method: 'DELETE', headers })
+    await app.request('/api/users/user-1/ban', { method: 'DELETE', headers })
 
     expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
       body: {
@@ -175,11 +175,11 @@ describe('management routes 2', () => {
     const app = createApp(auth, createTestDeps({ users }))
     const headers = adminHeaders()
 
-    const detail = await app.request('/api/management/users/user-1', { headers })
-    const accounts = await app.request('/api/management/users/user-1/linked-accounts?limit=2&offset=4', { headers })
-    const applications = await app.request('/api/management/users/user-1/applications?limit=3&offset=6', { headers })
-    const sessions = await app.request('/api/management/users/user-1/sessions?limit=4&offset=8', { headers })
-    const reset = await app.request('/api/management/users/user-1/password-reset-requests', {
+    const detail = await app.request('/api/users/user-1', { headers })
+    const accounts = await app.request('/api/users/user-1/linked-accounts?limit=2&offset=4', { headers })
+    const applications = await app.request('/api/users/user-1/applications?limit=3&offset=6', { headers })
+    const sessions = await app.request('/api/users/user-1/sessions?limit=4&offset=8', { headers })
+    const reset = await app.request('/api/users/user-1/password-reset-requests', {
       method: 'POST',
       headers,
       body: JSON.stringify({ redirectTo: 'https://app.example.com/reset' }),
@@ -244,9 +244,9 @@ describe('management routes 2', () => {
     )
     const headers = adminHeaders()
 
-    const securityState = await app.request('/api/management/users/user-1/security', { headers })
-    const passkeys = await app.request('/api/management/users/user-1/passkeys?limit=2&offset=4', { headers })
-    const deleted = await app.request('/api/management/users/user-1/passkeys/passkey-1', {
+    const securityState = await app.request('/api/users/user-1/security', { headers })
+    const passkeys = await app.request('/api/users/user-1/passkeys?limit=2&offset=4', { headers })
+    const deleted = await app.request('/api/users/user-1/passkeys/passkey-1', {
       method: 'DELETE',
       headers,
     })
@@ -322,8 +322,8 @@ describe('management routes 2', () => {
       },
     }
 
-    const current = await app.request('/api/management/security/policy', { headers })
-    const updated = await app.request('/api/management/security/policy', {
+    const current = await app.request('/api/security/policy', { headers })
+    const updated = await app.request('/api/security/policy', {
       method: 'PATCH',
       headers,
       body: JSON.stringify(body),
@@ -343,7 +343,7 @@ describe('management routes 2', () => {
     const app = createApp(auth, createTestDeps({ users }))
     const headers = adminHeaders()
 
-    const updated = await app.request('/api/management/users/user-1', {
+    const updated = await app.request('/api/users/user-1', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -354,11 +354,11 @@ describe('management routes 2', () => {
         emailVerified: false,
       }),
     })
-    const revokedOne = await app.request('/api/management/users/user-1/sessions/session-1', {
+    const revokedOne = await app.request('/api/users/user-1/sessions/session-1', {
       method: 'DELETE',
       headers,
     })
-    const revokedAll = await app.request('/api/management/users/user-1/sessions', {
+    const revokedAll = await app.request('/api/users/user-1/sessions', {
       method: 'DELETE',
       headers,
     })

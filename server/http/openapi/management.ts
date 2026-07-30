@@ -9,6 +9,7 @@ import {
   createAgentEnrollmentSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
+import { protectedResourceCapabilityNames, requiredProtectedCapability } from '@shared/authz'
 import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
@@ -47,6 +48,7 @@ interface RestishCliConfig {
             params: Record<string, string>
           }
           params: Record<string, string>
+          satisfies: string[]
         }
       }
     }
@@ -132,9 +134,9 @@ const managementRoutes: ManagementRouteConfig[] = [
     response: targetTokenSchema,
   },
   ...agentGovernanceRoutes,
-  ...applicationAuthorizationRoutes.map(toManagementRoute),
-  ...userSecurityRoutes.map(toManagementRoute),
-  ...platformWebhookRoutes.map(toManagementRoute),
+  ...applicationAuthorizationRoutes,
+  ...userSecurityRoutes,
+  ...platformWebhookRoutes,
 ]
 const openApiApp = createManagementOpenApiApp()
 export const unifiedOpenApi = buildUnifiedOpenApi()
@@ -191,6 +193,7 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
               params: {
                 provider: 'realmroot-agent',
               },
+              satisfies: protectedResourceCapabilityNames,
             },
           },
         },
@@ -200,19 +203,20 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
 }
 
 function createManagementRoute(routeConfig: ManagementRouteConfig) {
+  const requiredAgentCapability = requiredProtectedCapability(routeConfig.method.toUpperCase(), routeConfig.path)
   return createRoute({
     method: routeConfig.method,
     path: routeConfig.path,
     operationId: routeConfig.operationId,
     summary: routeConfig.summary,
-    security: routeConfig.security ?? managementSecurity,
+    security:
+      routeConfig.security ??
+      (requiredAgentCapability
+        ? [{ agentAuth: [requiredAgentCapability] }, { adminSession: ['admin'] }]
+        : managementSecurity),
     request: routeConfig.request as never,
     responses: routeResponses(routeConfig) as never,
   })
-}
-
-function toManagementRoute(route: ManagementRouteConfig): ManagementRouteConfig {
-  return { ...route, path: `/management${route.path}` }
 }
 
 function routeResponses(routeConfig: ManagementRouteConfig) {

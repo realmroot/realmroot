@@ -1,7 +1,12 @@
 import { ApiError, notFound } from '@server/domain/errors'
+import { protectResourceRoutes } from '@server/http/app'
 import { handleApiError } from '@server/http/errors'
-import { authContext } from '@server/http/middleware/auth-context'
-import { createAccountAssetRoutes, createAssetRoutes, createManagementAssetRoutes } from '@server/http/routes/assets'
+import { authn } from '@server/http/middleware/authn'
+import {
+  createAccountAssetRoutes,
+  createAssetRoutes,
+  createProtectedResourceAssetRoutes,
+} from '@server/http/routes/assets'
 import * as assetsUsecase from '@server/usecases/assets'
 import * as configzUsecase from '@server/usecases/configz'
 import { Hono } from 'hono'
@@ -71,7 +76,7 @@ describe('asset routes', () => {
     const assets = createAssetServiceMock()
     const deps = setupAssetMocks(assets)
     const app = new Hono()
-      .use('/api/*', authContext(createAuthMock()))
+      .use('/api/*', authn(createAuthMock()))
       .use('/api/*', setDeps(deps))
       .onError((error, c) => {
         if (error instanceof ApiError) return handleApiError(error, c)
@@ -140,7 +145,7 @@ describe('asset routes', () => {
     const deps = setupAssetMocks(assets)
     const getConfig = configzUsecase.getConfig as unknown as ReturnType<typeof vi.fn>
     const app = new Hono()
-      .use('/api/*', authContext(createAuthMock()))
+      .use('/api/*', authn(createAuthMock()))
       .use('/api/*', setDeps(deps))
       .onError((error, c) => {
         if (error instanceof ApiError) return handleApiError(error, c)
@@ -167,7 +172,7 @@ describe('asset routes', () => {
     const app = createRouteTestApp(assets)
     const response = await requestWithFile(
       app,
-      '/api/management/applications/app-1/logo',
+      '/api/applications/app-1/logo',
       userHeaders(),
       'logo.png',
       'image/png',
@@ -183,10 +188,10 @@ describe('asset routes', () => {
     const app = createRouteTestApp(assets)
     const headers = adminHeaders()
 
-    await requestWithFile(app, '/api/management/applications/app-1/logo', headers, 'logo.png', 'image/png', 'logo')
-    await requestWithFile(app, '/api/management/organizations/org-1/logo', headers, 'logo.png', 'image/png', 'logo')
-    await requestWithFile(app, '/api/management/branding/logo', headers, 'logo.png', 'image/png', 'logo')
-    await requestWithFile(app, '/api/management/branding/favicon', headers, 'favicon.png', 'image/png', 'icon')
+    await requestWithFile(app, '/api/applications/app-1/logo', headers, 'logo.png', 'image/png', 'logo')
+    await requestWithFile(app, '/api/organizations/org-1/logo', headers, 'logo.png', 'image/png', 'logo')
+    await requestWithFile(app, '/api/branding/logo', headers, 'logo.png', 'image/png', 'logo')
+    await requestWithFile(app, '/api/branding/favicon', headers, 'favicon.png', 'image/png', 'icon')
 
     expect(assets.updateApplicationLogo).toHaveBeenCalledWith('app-1', assetFixture())
     expect(assets.updateOrganizationLogo).toHaveBeenCalledWith('org-1', assetFixture())
@@ -289,17 +294,19 @@ function setDeps(deps: ReturnType<typeof createTestDeps>) {
 
 function createRouteTestApp(assets: ReturnType<typeof createAssetServiceMock>, accountCenter = {}) {
   const deps = setupAssetMocks(assets, accountCenter)
-  return new Hono()
-    .use('/api/*', authContext(createAuthMock()))
+  const app = new Hono()
+    .use('/api/*', authn(createAuthMock()))
     .use('/api/*', setDeps(deps))
     .onError((error, c) => {
       if (error instanceof ApiError) return handleApiError(error, c)
       throw error
     })
     .notFound((c) => handleApiError(notFound(), c))
+  protectResourceRoutes(app, createAuthMock())
+  return app
     .route('/api/assets', createAssetRoutes())
     .route('/api/account', createAccountAssetRoutes())
-    .route('/api/management', createManagementAssetRoutes())
+    .route('/api', createProtectedResourceAssetRoutes())
 }
 
 function requestWithFile(

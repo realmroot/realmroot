@@ -67,7 +67,7 @@ describe('OAuth token exchange over real D1', () => {
     const audience = 'https://api.example.com'
 
     // Confidential client allowed to use the token-exchange grant (findClient path).
-    const createApp = await harness.request('/api/management/applications', {
+    const createApp = await harness.request('/api/applications', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
@@ -82,7 +82,7 @@ describe('OAuth token exchange over real D1', () => {
     const application = (await createApp.json()) as { id: string; clientId: string; clientSecret: string }
 
     // The API resource that defines the minted token's audience.
-    const createResource = await harness.request('/api/management/api-resources', {
+    const createResource = await harness.request('/api/api-resources', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ identifier: audience, name: 'Example API', audience, resourceUrl: audience }),
@@ -93,20 +93,17 @@ describe('OAuth token exchange over real D1', () => {
     // Federated credential under the application (asymmetric, inline public JWK).
     const issuerUrl = 'https://issuer.partner.example.com'
     const { privateKey, publicJwk } = await es256KeyAndPublicJwk()
-    const createCredential = await harness.request(
-      `/api/management/applications/${application.id}/federated-credentials`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({
-          name: 'Partner',
-          issuer: issuerUrl,
-          subject: 'partner-user-1',
-          audienceResourceId: resource.id,
-          publicKeys: [publicJwk],
-        }),
-      },
-    )
+    const createCredential = await harness.request(`/api/applications/${application.id}/federated-credentials`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        name: 'Partner',
+        issuer: issuerUrl,
+        subject: 'partner-user-1',
+        audienceResourceId: resource.id,
+        publicKeys: [publicJwk],
+      }),
+    })
     expect(createCredential.status, await createCredential.clone().text()).toBe(201)
 
     const now = Math.floor(Date.now() / 1000)
@@ -160,7 +157,7 @@ describe('OAuth token exchange over real D1', () => {
     const cookie = await signInAdmin(harness)
     const audience = 'https://api.example.com'
 
-    const createApp = await harness.request('/api/management/applications', {
+    const createApp = await harness.request('/api/applications', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({

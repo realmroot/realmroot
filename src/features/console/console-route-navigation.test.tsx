@@ -17,9 +17,7 @@ afterEach(() => {
 })
 
 import {
-  apiPermission,
   apiResource,
-  apiScope,
   application,
   brandingSettings,
   configz,
@@ -47,16 +45,16 @@ describe('console route navigation', () => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({
             admin: { setupRequired: true, setupHref: '/console/onboarding', missing: ['oidc_application'] },
           }),
         )
       }
-      if (url === '/api/management/applications') return Promise.resolve(jsonResponse({ applications: [], pagination }))
+      if (url === '/api/applications') return Promise.resolve(jsonResponse({ applications: [], pagination }))
       return consoleSharedFetch(input, init)
     })
     window.history.pushState(null, '', '/console/applications')
@@ -159,53 +157,47 @@ describe('console route navigation', () => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
-      if (url === '/api/management/applications/app-1/client-secrets') {
+      if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
+      if (url === '/api/applications/app-1/client-secrets') {
         return Promise.resolve(jsonResponse({ secrets: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/users/user-1') {
+      if (url === '/api/users/user-1') {
         return Promise.resolve(jsonResponse({ user: { ...profile, role: 'admin', banned: false } }))
       }
-      if (url.startsWith('/api/management/users/user-1/sessions')) {
+      if (url.startsWith('/api/users/user-1/sessions')) {
         return Promise.resolve(jsonResponse({ sessions: [consoleSession], pagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+      if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [linkedAccount], pagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/applications')) {
+      if (url.startsWith('/api/users/user-1/applications')) {
         return Promise.resolve(jsonResponse({ applications: [userApplication], pagination }))
       }
-      if (url === '/api/management/users/user-1/security') {
+      if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
       }
-      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+      if (url.startsWith('/api/users/user-1/passkeys')) {
         return Promise.resolve(jsonResponse({ passkeys: [consolePasskey], pagination }))
       }
-      if (url === '/api/management/roles/role-1') {
+      if (url === '/api/roles/role-1') {
         return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
       }
-      if (url === '/api/management/roles/role-1/permissions') {
-        return Promise.resolve(jsonResponse({ permissions: [apiPermission] }))
+      if (url === '/api/roles/role-1/scopes') {
+        return Promise.resolve(jsonResponse({ scopes: ['orders.read'] }))
       }
-      if (url.startsWith('/api/management/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/management/api-resources') {
+      if (url.startsWith('/api/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/api-resources') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
-      if (url === '/api/management/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
-      if (url === '/api/management/api-resources/resource-1/scopes') {
-        return Promise.resolve(jsonResponse({ scopes: [apiScope], pagination }))
-      }
-      if (url === '/api/management/api-resources/resource-1/permissions') {
-        return Promise.resolve(jsonResponse({ permissions: [apiPermission], pagination }))
-      }
-      if (url === '/api/management/organizations/org-1') return Promise.resolve(jsonResponse(organization))
+      if (url === '/api/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
       return consoleSharedFetch(input, init)
     })
 
@@ -269,10 +261,10 @@ describe('console route navigation', () => {
         nextText: 'General',
       },
       {
-        path: '/console/roles/role-1/permissions',
+        path: '/console/roles/role-1/scopes',
         heading: 'Admin',
-        tab: 'Permissions',
-        text: 'Permission assignment',
+        tab: 'Scopes',
+        text: 'Scope eligibility',
         nextTab: 'Assignments',
         nextPath: '/console/roles/role-1/assignments',
         nextText: 'Assign role',
@@ -285,33 +277,6 @@ describe('console route navigation', () => {
         nextTab: 'Settings',
         nextPath: '/console/roles/role-1/settings',
         nextText: 'Role settings',
-      },
-      {
-        path: '/console/api-resources/resource-1/scopes',
-        heading: 'Management API',
-        tab: 'Scopes',
-        text: 'Create scope',
-        nextTab: 'Permissions',
-        nextPath: '/console/api-resources/resource-1/permissions',
-        nextText: 'Create permission',
-      },
-      {
-        path: '/console/api-resources/resource-1/permissions',
-        heading: 'Management API',
-        tab: 'Permissions',
-        text: 'Create permission',
-        nextTab: 'Settings',
-        nextPath: '/console/api-resources/resource-1/settings',
-        nextText: 'Resource settings',
-      },
-      {
-        path: '/console/organization-template/organization-permissions',
-        heading: 'Organization template',
-        tab: 'Organization permissions',
-        text: 'Permission templates use API resources',
-        nextTab: 'Organization roles',
-        nextPath: '/console/organization-template/organization-roles',
-        nextText: 'Admin',
       },
       {
         path: '/console/webhooks/requests',

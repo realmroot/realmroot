@@ -3,18 +3,18 @@ import { createConsent, loadConsentRequest } from '@server/usecases/applications
 import { consentRequestQuerySchema, hostedConsentApprovalRequestSchema } from '@shared/api/applications'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { requireAuth } from '../../middleware/admin'
-import { getAuthContext } from '../../middleware/auth-context'
+import { getPrincipal } from '../../middleware/authn'
+import { authenticatedUser } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import { readJson } from '../validation'
 
 export function createOAuthConsentRoute() {
   const app = new Hono()
 
-  app.use('*', requireAuth())
+  app.use('*', authenticatedUser())
 
   app.get('/', zValidator('query', consentRequestQuerySchema), async (c) => {
-    const { user } = getAuthContext(c)
+    const { user } = getPrincipal(c)
     const query = c.req.valid('query')
     const consent = await loadConsentRequest(
       getDeps(c),
@@ -32,7 +32,7 @@ export function createOAuthConsentRoute() {
   })
 
   app.post('/', async (c) => {
-    const { user } = getAuthContext(c)
+    const { user } = getPrincipal(c)
     const body = await readJson(c, hostedConsentApprovalRequestSchema)
     const consent = await createConsent(getDeps(c), body, user!.id)
     return c.json({ consent }, 201)

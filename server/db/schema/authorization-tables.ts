@@ -193,7 +193,6 @@ export const apiResource = sqliteTable(
     authorizationMode: text('authorization_mode').notNull().default('native'),
     description: text('description'),
     enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
-    tokenClaimsNamespace: text('token_claims_namespace'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
@@ -203,44 +202,6 @@ export const apiResource = sqliteTable(
       .notNull(),
   },
   (table) => [index('apiResource_enabled_idx').on(table.enabled)],
-)
-
-export const apiScope = sqliteTable(
-  'api_scope',
-  {
-    id: text('id').primaryKey(),
-    resourceId: text('resource_id')
-      .notNull()
-      .references(() => apiResource.id, { onDelete: 'cascade' }),
-    value: text('value').notNull(),
-    description: text('description'),
-    required: integer('required', { mode: 'boolean' }).default(false).notNull(),
-    tokenClaimName: text('token_claim_name'),
-    includeInAccessToken: integer('include_in_access_token', { mode: 'boolean' }).default(true).notNull(),
-    includeInIdToken: integer('include_in_id_token', { mode: 'boolean' }).default(false).notNull(),
-  },
-  (table) => [
-    uniqueIndex('apiScope_resourceId_value_unique').on(table.resourceId, table.value),
-    index('apiScope_resourceId_idx').on(table.resourceId),
-  ],
-)
-
-export const apiPermission = sqliteTable(
-  'api_permission',
-  {
-    id: text('id').primaryKey(),
-    resourceId: text('resource_id')
-      .notNull()
-      .references(() => apiResource.id, { onDelete: 'cascade' }),
-    scopeId: text('scope_id').references(() => apiScope.id, { onDelete: 'set null' }),
-    key: text('key').notNull(),
-    description: text('description'),
-    tokenClaimValue: text('token_claim_value'),
-  },
-  (table) => [
-    uniqueIndex('apiPermission_resourceId_key_unique').on(table.resourceId, table.key),
-    index('apiPermission_scopeId_idx').on(table.scopeId),
-  ],
 )
 
 export const role = sqliteTable(
@@ -254,8 +215,6 @@ export const role = sqliteTable(
     organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
     applicationId: text('application_id').references(() => application.id, { onDelete: 'cascade' }),
     system: integer('system', { mode: 'boolean' }).default(false).notNull(),
-    tokenClaimName: text('token_claim_name'),
-    tokenClaimValue: text('token_claim_value'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
@@ -272,20 +231,18 @@ export const role = sqliteTable(
   ],
 )
 
-export const rolePermission = sqliteTable(
-  'role_permission',
+export const roleScope = sqliteTable(
+  'role_scope',
   {
     roleId: text('role_id')
       .notNull()
       .references(() => role.id, { onDelete: 'cascade' }),
-    permissionId: text('permission_id')
-      .notNull()
-      .references(() => apiPermission.id, { onDelete: 'cascade' }),
+    scope: text('scope').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
   },
-  (table) => [uniqueIndex('rolePermission_roleId_permissionId_unique').on(table.roleId, table.permissionId)],
+  (table) => [uniqueIndex('roleScope_roleId_scope_unique').on(table.roleId, table.scope)],
 )
 
 export const userRoleAssignment = sqliteTable(
@@ -299,7 +256,6 @@ export const userRoleAssignment = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     assignedByUserId: text('assigned_by_user_id').references(() => user.id, { onDelete: 'set null' }),
-    tokenClaims: text('token_claims', { mode: 'json' }).$type<Record<string, unknown>>(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
@@ -323,7 +279,6 @@ export const applicationRoleAssignment = sqliteTable(
       .notNull()
       .references(() => application.id, { onDelete: 'cascade' }),
     assignedByUserId: text('assigned_by_user_id').references(() => user.id, { onDelete: 'set null' }),
-    tokenClaims: text('token_claims', { mode: 'json' }).$type<Record<string, unknown>>(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
@@ -347,7 +302,6 @@ export const memberRoleAssignment = sqliteTable(
       .notNull()
       .references(() => member.id, { onDelete: 'cascade' }),
     assignedByUserId: text('assigned_by_user_id').references(() => user.id, { onDelete: 'set null' }),
-    tokenClaims: text('token_claims', { mode: 'json' }).$type<Record<string, unknown>>(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),

@@ -1,4 +1,5 @@
 import {
+  assignAgentRole,
   assignApplicationRole,
   assignMemberRole,
   assignUserRole,
@@ -6,11 +7,10 @@ import {
   createRole,
   deleteRole,
   getRole,
-  listApiPermissions,
   listApiResources,
-  listRolePermissions,
+  listRoleScopes,
   listRoles,
-  replaceRolePermissions,
+  replaceRoleScopes,
   updateRole,
 } from '@/lib/api/management'
 import {
@@ -33,7 +33,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TextArea,
   TextInput,
   Trash2,
   tt,
@@ -58,7 +57,7 @@ import {
   ResourcePage,
   roleDetailTabs,
 } from '../helpers/helpers-resource'
-import { parseForm, parseTokenClaims, useAdminMutation } from '../helpers/helpers-utils'
+import { parseForm, useAdminMutation } from '../helpers/helpers-utils'
 import { RoleSummaryCard } from './role-summary-card'
 
 export function RolesPage() {
@@ -193,39 +192,21 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
   const [assignment, setAssignment] = useState({
     type: 'user',
     subjectId: '',
-    tokenClaims: '',
   })
-  const [assignmentValidationError, setAssignmentValidationError] = useState<string | null>(null)
-  const [selectedResourceId, setSelectedResourceId] = useState('')
-  const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([])
+  const [scopes, setScopes] = useState('')
   const roleQuery = useQuery({
     queryKey: [...consoleQueryKeys.roles, roleId],
     queryFn: () => getRole(roleId),
   })
-  const resourcesQuery = useQuery({
-    queryKey: consoleQueryKeys.apiResources,
-    queryFn: listApiResources,
-    enabled: selectedTab === 'permissions',
-  })
-  const rolePermissionsQuery = useQuery({
-    queryKey: [...consoleQueryKeys.roles, roleId, 'permissions'],
-    queryFn: () => listRolePermissions(roleId),
-    enabled: selectedTab === 'permissions',
-  })
-  const permissionsQuery = useQuery({
-    queryKey: [...consoleQueryKeys.apiResources, selectedResourceId, 'permissions'],
-    queryFn: () => listApiPermissions(selectedResourceId),
-    enabled: selectedTab === 'permissions' && selectedResourceId.length > 0,
+  const roleScopesQuery = useQuery({
+    queryKey: [...consoleQueryKeys.roles, roleId, 'scopes'],
+    queryFn: () => listRoleScopes(roleId),
+    enabled: selectedTab === 'scopes',
   })
   const role = roleQuery.data
   useEffect(() => {
-    if (role?.resourceId && selectedResourceId !== role.resourceId) setSelectedResourceId(role.resourceId)
-  }, [role?.resourceId, selectedResourceId])
-  useEffect(() => {
-    if (rolePermissionsQuery.data) {
-      setSelectedPermissionIds(rolePermissionsQuery.data.permissions.map((permission) => permission.id))
-    }
-  }, [rolePermissionsQuery.data])
+    if (roleScopesQuery.data) setScopes(roleScopesQuery.data.scopes.join('\n'))
+  }, [roleScopesQuery.data])
   useEffect(() => setSelectedTab(section), [section])
   const updateMutation = useMutation({
     mutationFn: (input: z.infer<typeof updateRoleRequestSchema>) => updateRole(roleId, input),
@@ -245,9 +226,9 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
       await navigate({ href: '/console/roles' })
     },
   })
-  const permissionMutation = useMutation({
-    mutationFn: (permissionIds: string[]) => replaceRolePermissions(roleId, permissionIds),
-    onSuccess: () => rolePermissionsQuery.refetch(),
+  const scopesMutation = useMutation({
+    mutationFn: (values: string[]) => replaceRoleScopes(roleId, values),
+    onSuccess: () => roleScopesQuery.refetch(),
   })
   const assignmentMutation = useMutation({
     mutationFn: (
@@ -255,23 +236,17 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
         type: string
       },
     ) => {
-      const payload = {
-        roleId,
-        subjectId: input.subjectId,
-        tokenClaims: input.tokenClaims,
-      }
+      const payload = { roleId, subjectId: input.subjectId }
       if (input.type === 'application') return assignApplicationRole(payload)
       if (input.type === 'member') return assignMemberRole(payload)
+      if (input.type === 'agent') return assignAgentRole(payload)
       return assignUserRole(payload)
     },
   })
-  const selectedPermissionIdSet = new Set(selectedPermissionIds)
   return (
     <ResourcePage
       title={role?.name ?? tt('Role')}
-      description={tt(
-        'Manage role metadata, API permissions, and user, application, or organization member assignments.',
-      )}
+      description={tt('Manage role metadata, OpenAPI scope references, and subject assignments.')}
       framed={false}
       error={roleQuery.error}
       loading={roleQuery.isLoading}
@@ -310,16 +285,12 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
                       key: role.key,
                       name: role.name,
                       description: role.description ?? '',
-                      tokenClaimName: role.tokenClaimName ?? '',
-                      tokenClaimValue: role.tokenClaimValue ?? '',
                     }}
                     error={updateMutation.error}
                     fields={[
                       ['key', 'Key'],
                       ['name', 'Name'],
                       ['description', 'Description'],
-                      ['tokenClaimName', 'Token claim name'],
-                      ['tokenClaimValue', 'Token claim value'],
                     ]}
                     onSubmit={(form) => updateMutation.mutate(parseForm(updateRoleRequestSchema, form))}
                     pending={updateMutation.isPending}
@@ -340,63 +311,44 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
               </Card>
             ) : null}
 
-            {selectedTab === 'permissions' ? (
+            {selectedTab === 'scopes' ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>{tt('Permission assignment')}</CardTitle>
+                  <CardTitle>{tt('Scope eligibility')}</CardTitle>
                   <CardDescription>
-                    {' '}
-                    {tt('Select permissions from one API resource and replace the role permission set.')}{' '}
+                    {tt('Enter scope names published by this role’s business resource OpenAPI document.')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-3">
-                  <Field label={tt('API resource')}>
-                    <SelectInput
-                      onChange={(event) => setSelectedResourceId(event.target.value)}
-                      value={selectedResourceId}
-                    >
-                      <option value="">{tt('Select resource')}</option>
-                      {resourcesQuery.data?.items.map((resource) => (
-                        <option key={resource.id} value={resource.id}>
-                          {resource.name}
-                        </option>
-                      ))}
-                    </SelectInput>
+                  <Field label={tt('Scopes')}>
+                    <textarea
+                      className="min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      disabled={scopesMutation.isPending || !role.resourceId}
+                      onChange={(event) => setScopes(event.target.value)}
+                      placeholder="documents.read&#10;documents.write"
+                      value={scopes}
+                    />
                   </Field>
-                  <div className="grid gap-2">
-                    {permissionsQuery.data?.permissions.map((permission) => (
-                      <label
-                        className="flex items-start gap-2 rounded-md border border-border p-3 text-sm"
-                        key={permission.id}
-                      >
-                        <input
-                          checked={selectedPermissionIdSet.has(permission.id)}
-                          disabled={permissionMutation.isPending}
-                          onChange={(event) => {
-                            const next = new Set(selectedPermissionIds)
-                            if (event.target.checked) next.add(permission.id)
-                            else next.delete(permission.id)
-                            setSelectedPermissionIds([...next])
-                          }}
-                          type="checkbox"
-                        />
-                        <span>
-                          <span className="font-medium">{permission.key}</span>
-                          <span className="block text-muted-foreground">
-                            {permission.description ?? 'No description'}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                  {!role.resourceId ? (
+                    <p className="text-sm text-muted-foreground">
+                      {tt('Only resource roles can reference business API scopes.')}
+                    </p>
+                  ) : null}
                   <Button
-                    disabled={permissionMutation.isPending || selectedResourceId.length === 0}
-                    onClick={() => permissionMutation.mutate(selectedPermissionIds)}
+                    disabled={scopesMutation.isPending || !role.resourceId}
+                    onClick={() =>
+                      scopesMutation.mutate(
+                        scopes
+                          .split(/\s+/)
+                          .map((scope) => scope.trim())
+                          .filter(Boolean),
+                      )
+                    }
                     type="button"
                   >
-                    <Save data-icon="inline-start" /> {tt('Save permissions')}{' '}
+                    <Save data-icon="inline-start" /> {tt('Save scopes')}{' '}
                   </Button>
-                  <MutationError error={permissionMutation.error} />
+                  <MutationError error={scopesMutation.error} />
                 </CardContent>
               </Card>
             ) : null}
@@ -407,7 +359,7 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
                   <CardTitle>{tt('Assignments')}</CardTitle>
                   <CardDescription>
                     {' '}
-                    {tt('Assign this role to a user, an application, or an organization member record.')}{' '}
+                    {tt('Assign this role to a user, Agent, application, or organization member record.')}{' '}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -416,17 +368,11 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
                     onSubmit={(event) => {
                       event.preventDefault()
                       const submittedForm = new FormData(event.currentTarget)
-                      try {
-                        setAssignmentValidationError(null)
-                        assignmentMutation.mutate({
-                          type: submittedForm.get('type') as string,
-                          roleId,
-                          subjectId: submittedForm.get('subjectId') as string,
-                          tokenClaims: parseTokenClaims(submittedForm.get('tokenClaims') as string),
-                        })
-                      } catch (submitError) {
-                        setAssignmentValidationError((submitError as Error).message)
-                      }
+                      assignmentMutation.mutate({
+                        type: submittedForm.get('type') as string,
+                        roleId,
+                        subjectId: submittedForm.get('subjectId') as string,
+                      })
                     }}
                   >
                     <Field label={tt('Subject type')}>
@@ -441,6 +387,7 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
                         value={assignment.type}
                       >
                         <option value="user">{tt('User')}</option>
+                        <option value="agent">{tt('Agent')}</option>
                         <option value="application">{tt('Application')}</option>
                         <option value="member">{tt('Organization member')}</option>
                       </SelectInput>
@@ -448,30 +395,18 @@ export function RoleDetailPage({ roleId, section = 'settings' }: { roleId: strin
                     <Field label={tt('Subject ID')}>
                       <TextInput defaultValue={assignment.subjectId} name="subjectId" required />
                     </Field>
-                    <Field label={tt('Token claims JSON')}>
-                      <TextArea
-                        defaultValue={assignment.tokenClaims}
-                        name="tokenClaims"
-                        placeholder={tt('{"tier":"gold"}')}
-                      />
-                    </Field>
                     <Button disabled={assignmentMutation.isPending} type="submit">
                       <Save data-icon="inline-start" /> {tt('Assign role')}{' '}
                     </Button>
                     {assignmentMutation.isSuccess ? (
                       <p className="text-sm text-muted-foreground">{tt('Assignment saved.')}</p>
                     ) : null}
-                    {assignmentValidationError ? (
-                      <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                        {assignmentValidationError}
-                      </div>
-                    ) : null}
                     <MutationError error={assignmentMutation.error} />
                   </form>
                 </CardContent>
               </Card>
             ) : null}
-            <RoleSummaryCard permissionCount={rolePermissionsQuery.data?.permissions.length ?? 0} role={role} />
+            <RoleSummaryCard role={role} scopeCount={roleScopesQuery.data?.scopes.length ?? 0} />
           </div>
         </div>
       ) : null}

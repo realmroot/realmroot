@@ -32,12 +32,12 @@ describe('admin console security-signin-b', () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
         requests.push(url)
         return Promise.resolve(jsonResponse(signInSettings))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -52,11 +52,11 @@ describe('admin console security-signin-b', () => {
   it('renders sign-in save errors from the management boundary', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
         return Promise.resolve(jsonResponse({ error: { message: 'Sign-in save failed.' } }, 500))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -71,7 +71,7 @@ describe('admin console security-signin-b', () => {
   it('hides excluded sign-in method rows from runtime config', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') {
+      if (url === '/api/sign-in-settings') {
         return Promise.resolve(
           jsonResponse({
             ...signInSettings,
@@ -84,7 +84,7 @@ describe('admin console security-signin-b', () => {
           }),
         )
       }
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -99,11 +99,11 @@ describe('admin console security-signin-b', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings' && init?.method === 'PATCH') {
+      if (url === '/api/branding-settings' && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(brandingSettings))
       }
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -132,7 +132,7 @@ describe('admin console security-signin-b', () => {
     await waitFor(() =>
       expect(requests).toEqual([
         {
-          url: '/api/management/branding-settings',
+          url: '/api/branding-settings',
           body: {
             branding: {
               logoUrl: 'https://cdn.example.com/northstar-logo.svg',
@@ -156,11 +156,11 @@ describe('admin console security-signin-b', () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings' && init?.method === 'PATCH') {
+      if (url === '/api/branding-settings' && init?.method === 'PATCH') {
         requests.push(url)
         return Promise.resolve(jsonResponse(brandingSettings))
       }
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -179,7 +179,7 @@ describe('admin console security-signin-b', () => {
   it('renders polished branding upload controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -196,7 +196,7 @@ describe('admin console security-signin-b', () => {
   it('switches the hosted sign-in preview between desktop and mobile viewports', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 

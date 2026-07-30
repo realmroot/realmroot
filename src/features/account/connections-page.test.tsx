@@ -50,6 +50,84 @@ describe('AccountConnectionsPage', () => {
     expect(screen.getByText('Web3 wallet')).toBeTruthy()
   })
 
+  it('does not start an unscoped external API connection from the account page', async () => {
+    server.use(
+      http.get(`${base}/api/account/api-resources`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'resource-1',
+              identifier: 'projects',
+              name: 'Projects API',
+              audience: 'https://projects.example.com',
+              resourceUrl: 'https://projects.example.com/api',
+              scopes: [{ value: 'projects:read', description: 'Read projects' }],
+            },
+          ],
+          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
+      ),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    expect(await screen.findByText('No connected resource accounts.')).toBeTruthy()
+    expect(screen.queryByText('Projects API')).toBeNull()
+    expect(
+      screen.getByText('Invoke a protected target operation with Restish to start a scoped connection.'),
+    ).toBeTruthy()
+  })
+
+  it('disconnects an active external API resource account', async () => {
+    server.use(
+      http.get(`${base}/api/account/api-resources`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'resource-1',
+              identifier: 'projects',
+              name: 'Projects API',
+              audience: 'https://projects.example.com',
+              resourceUrl: 'https://projects.example.com/api',
+              scopes: [{ value: 'projects:read', description: null }],
+            },
+          ],
+          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
+      ),
+      http.get(`${base}/api/account/account-connections`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'connection-1',
+              apiResourceId: 'resource-1',
+              owner: { type: 'user', userId: 'user-1' },
+              displayName: 'Project Owner',
+              subjectHint: '••••er-1',
+              scopes: ['projects:read'],
+              status: 'active',
+              credentialExpiresAt: null,
+              authorizationUrl: null,
+              expiresAt: null,
+              createdAt: '2026-08-01T00:00:00.000Z',
+              updatedAt: '2026-08-01T00:00:00.000Z',
+            },
+          ],
+          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        }),
+      ),
+      http.delete(
+        `${base}/api/account/account-connections/:connectionId`,
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    )
+
+    renderWithClient(<AccountConnectionsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }))
+    const disconnectButtons = await screen.findAllByRole('button', { name: 'Disconnect' })
+    fireEvent.click(disconnectButtons.at(-1)!)
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Resource account disconnected.'))
+  })
+
   it('presents personal stable Agent identities in Account Center', async () => {
     const withIdentity = createAccountStore()
     withIdentity.agentIdentities = [

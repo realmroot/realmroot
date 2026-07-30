@@ -75,7 +75,7 @@ describe('AgentApproveRoute', () => {
   })
 
   it('denies a pending request and replaces the approval controls [spec: agent-identity/agent-capability-denial]', async () => {
-    window.history.pushState(null, '', '/agent/approve?agent_id=agent-1&code=ABCD-1234&capability=management:read')
+    window.history.pushState(null, '', '/agent/approve?agent_id=agent-1&code=ABCD-1234&capability=applications:read')
 
     render(<AgentApproval />)
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
@@ -85,7 +85,7 @@ describe('AgentApproveRoute', () => {
         agentId: 'agent-1',
         userCode: 'ABCD-1234',
         action: 'deny',
-        capabilities: ['management:read'],
+        capabilities: ['applications:read'],
       }),
     )
     expect(await screen.findByRole('heading', { name: 'Authorization denied' })).toBeTruthy()

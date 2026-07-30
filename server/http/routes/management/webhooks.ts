@@ -21,15 +21,12 @@ import {
   webhookRequestSchema,
 } from '@shared/api/webhooks'
 import { Hono } from 'hono'
-import { requireAdmin } from '../../middleware/admin'
-import { getActorUserId } from '../../middleware/auth-context'
+import { getActorUserId } from '../../middleware/authn'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
 export function createManagementWebhookRoutes() {
   const app = new Hono()
-
-  app.use('*', requireAdmin())
 
   app.get('/endpoints', async (c) =>
     c.json(

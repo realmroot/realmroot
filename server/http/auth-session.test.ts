@@ -7,6 +7,7 @@ import type {
 import type { Database } from '@server/db/client'
 import { createApp } from '@server/http/app'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
+import { protectedResourceCapabilityNames } from '@shared/authz'
 import { describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
 
@@ -232,10 +233,10 @@ describe('auth.test 1', () => {
       'account.profile.read',
       'account.sessions.list',
       'account.authorized_apps.list',
-      'management:read',
-      'management:write',
+      ...protectedResourceCapabilityNames,
     ])
-    expect(agentAuthPlugin.options.validateCapabilities(['account.profile.read', 'management:read'])).toBe(true)
+    expect(agentAuthPlugin.options.validateCapabilities(['account.profile.read', 'applications:read'])).toBe(true)
+    expect(agentAuthPlugin.options.validateCapabilities(['tenant:read'])).toBe(false)
     expect(agentAuthPlugin.options.validateCapabilities(['management.users.delete'])).toBe(false)
     expect(agentAuthPlugin.options.resolveAutonomousUser).toBeUndefined()
   })

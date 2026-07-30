@@ -11,9 +11,8 @@ import {
   agentHost,
   agentIdentity,
   agentIdentityBinding,
-  apiPermission,
+  agentRoleAssignment,
   apiResource,
-  apiScope,
   application,
   applicationClientMetadata,
   applicationClientSecret,
@@ -41,7 +40,7 @@ import {
   resourceAccountConnection,
   resourceConnectionIntent,
   role,
-  rolePermission,
+  roleScope,
   session,
   signInExperience,
   twoFactor,
@@ -119,9 +118,10 @@ describe('schema.test 1', () => {
   })
 
   it('models resource authorization and subject-specific role assignments explicitly', () => {
-    expect(indexNames(apiScope)).toEqual(expect.arrayContaining(['apiScope_resourceId_value_unique']))
-    expect(indexNames(apiPermission)).toEqual(expect.arrayContaining(['apiPermission_resourceId_key_unique']))
-    expect(indexNames(rolePermission)).toEqual(expect.arrayContaining(['rolePermission_roleId_permissionId_unique']))
+    expect(indexNames(roleScope)).toEqual(expect.arrayContaining(['roleScope_roleId_scope_unique']))
+    expect(indexNames(agentRoleAssignment)).toEqual(
+      expect.arrayContaining(['agentRoleAssignment_roleId_agentIdentityId_unique']),
+    )
 
     expect(indexNames(userRoleAssignment)).toEqual(expect.arrayContaining(['userRoleAssignment_roleId_userId_unique']))
     expect(indexNames(applicationRoleAssignment)).toEqual(
@@ -491,10 +491,9 @@ const _schemaTables = [
   member,
   invitation,
   apiResource,
-  apiScope,
-  apiPermission,
+  roleScope,
+  agentRoleAssignment,
   role,
-  rolePermission,
   userRoleAssignment,
   applicationRoleAssignment,
   memberRoleAssignment,

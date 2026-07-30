@@ -12,6 +12,7 @@ import {
   tokenExchangeGrantType,
 } from '@server/usecases/token-exchange'
 import { requestAgentCapabilitiesResponseSchema, requestAgentCapabilitiesSchema } from '@shared/api/agents'
+import { resourceByRoutePrefix } from '@shared/authz'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import {
@@ -25,7 +26,8 @@ import { configzOptions } from './app-config'
 import type { RpcSchema } from './app-rpc-schema'
 import type { AgentConfiguration, AppConfig } from './app-types'
 import { accessLog } from './middleware/access-log'
-import { agentPrincipalAuth, authContext, type SessionReader } from './middleware/auth-context'
+import { authn, type SessionReader } from './middleware/authn'
+import { authz } from './middleware/authz'
 import { trustedOriginCors } from './middleware/cors'
 import { depsMiddleware } from './middleware/deps'
 import { requestContext } from './middleware/request-context'
@@ -33,10 +35,10 @@ import { requireSecurityPolicy } from './middleware/security-policy'
 import { unifiedOpenApi, unifiedOpenApiLinkHeader, unifiedOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
 import { createAgentProtocolRoutes } from './routes/agent-protocol'
-import { createAccountAssetRoutes, createAssetRoutes, createManagementAssetRoutes } from './routes/assets'
+import { createAccountAssetRoutes, createAssetRoutes, createProtectedResourceAssetRoutes } from './routes/assets'
 import type { ManagementAuthApi } from './routes/auth-api'
 import { createConfigzRoutes } from './routes/configz'
-import { createManagementRoutes } from './routes/management'
+import { createProtectedResourceRoutes } from './routes/management'
 import { oauthConsentRoute } from './routes/oauth/consent'
 import { onboardingRoutes } from './routes/onboarding'
 import { createResourceConnectionRoutes } from './routes/resource-connections'
@@ -84,7 +86,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
       resolveAllowedOrigins: oauthClientCorsOrigins(),
     }),
   )
-  app.use('/api/*', authContext(auth))
+  app.use('/api/*', authn(auth))
   app.use('/api/*', requireSecurityPolicy(deps.security))
 
   app.onError((error, c) => handleApiError(error, c))
@@ -150,12 +152,12 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .route('/api/configz', createConfigzRoutes(config.securityPolicy))
     .route('/api/assets', createAssetRoutes())
     .use('/api/*', unifiedOpenApiDiscoveryHeader())
-    .use('/api/management', agentPrincipalAuth(auth))
-    .use('/api/management/*', agentPrincipalAuth(auth))
-    .route('/api/management', createManagementAssetRoutes())
+  protectResourceRoutes(api, auth)
+  return api
+    .route('/api', createProtectedResourceAssetRoutes())
     .route(
-      '/api/management',
-      createManagementRoutes({
+      '/api',
+      createProtectedResourceRoutes({
         authApi: managementApi,
         canonicalOrigin: config.baseURL,
         securityPolicy: config.securityPolicy,
@@ -166,15 +168,22 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .route('/api/account', createAccountAssetRoutes(config.securityPolicy))
     .route('/api/account-connections', createResourceConnectionRoutes(canonicalOrigin || undefined))
     .route('/api/agent', createAgentProtocolRoutes(auth.api, issuer || undefined))
+}
 
-  return api
+export function protectResourceRoutes(app: Hono, auth: SessionReader) {
+  for (const [prefix, resource] of Object.entries(resourceByRoutePrefix)) {
+    app.use(`/api/${prefix}`, authn(auth, { allowAgent: true, required: true }))
+    app.use(`/api/${prefix}/*`, authn(auth, { allowAgent: true, required: true }))
+    app.use(`/api/${prefix}`, authz(resource))
+    app.use(`/api/${prefix}/*`, authz(resource))
+  }
 }
 
 function createUnifiedApiRoutes(auth: AuthHandler, _config: AppConfig) {
   const app = new Hono()
 
   app.get('/openapi.json', (c) => c.json(unifiedOpenApi))
-  app.post('/agent/management-access-requests', async (c) => {
+  app.post('/agent/capability-requests', async (c) => {
     const body = await readJson(c, requestAgentCapabilitiesSchema)
     const headers = new Headers(c.req.raw.headers)
     headers.set('content-type', 'application/json')

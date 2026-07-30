@@ -192,13 +192,13 @@ describe('account security policy routes', () => {
       securityPolicy: securityPolicy({ mfa: { mode: 'required' } }),
     })
 
-    const policy = await app.request('/api/management/security/policy', { headers: adminHeaders() })
-    const state = await app.request('/api/management/security/users/user-2', { headers: adminHeaders() })
-    await app.request('/api/management/security/users/user-2/passkeys/passkey-1', {
+    const policy = await app.request('/api/security/policy', { headers: adminHeaders() })
+    const state = await app.request('/api/users/user-2/security', { headers: adminHeaders() })
+    await app.request('/api/users/user-2/passkeys/passkey-1', {
       method: 'DELETE',
       headers: adminHeaders(),
     })
-    await app.request('/api/management/security/users/user-2/sessions/session-1', {
+    await app.request('/api/users/user-2/sessions/session-1', {
       method: 'DELETE',
       headers: adminHeaders(),
     })
@@ -216,7 +216,7 @@ describe('account security policy routes', () => {
       },
     })
     expect(security.deletePasskey).toHaveBeenCalledWith('user-2', 'passkey-1')
-    expect(security.getSessionToken).toHaveBeenCalledWith('user-2', 'session-1')
+    expect(users.getSessionToken).toHaveBeenCalledWith('user-2', 'session-1')
     expect(auth.api.revokeUserSession).toHaveBeenCalledWith({
       body: { sessionToken: 'session-token-1' },
       headers: expect.any(Headers),

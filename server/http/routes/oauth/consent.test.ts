@@ -105,7 +105,7 @@ function createTestApp(service: ReturnType<typeof createConsentServiceMock>) {
   app.onError((error, c) => handleApiError(error, c))
   app.use('/api/*', async (c, next) => {
     const userId = c.req.header('x-user-id')
-    c.set('authContext', {
+    c.set('principal', {
       session: userId ? { session: { id: 'session-1' }, user: { id: userId } } : null,
       user: userId
         ? { id: userId, email: 'jane@example.com', name: 'Jane Stone', image: 'https://auth.example.com/avatar.png' }

@@ -186,13 +186,13 @@ describe('service.test 2', () => {
           name: 'Reserved Management Scope',
           clientType: 'public_spa',
           redirectUris: ['http://localhost:5173/callback'],
-          allowedScopes: ['openid', 'management:read' as 'openid'],
+          allowedScopes: ['openid', 'applications:read' as 'openid'],
         },
         'admin-1',
       ),
     ).rejects.toMatchObject({
       status: 400,
-      message: 'Unsupported scope: management:read',
+      message: 'Unsupported scope: applications:read',
     })
     await expect(
       createApplication(

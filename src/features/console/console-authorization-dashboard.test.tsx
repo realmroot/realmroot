@@ -63,26 +63,26 @@ describe('console authorization dashboard', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [disabledApplication], pagination }))
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [idOnlyUser], pagination }))
       }
-      if (url === '/api/management/connectors') {
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [defaultConnector], pagination }))
       }
-      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/management/organizations') {
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [{ ...organization, displayName: null }], pagination }))
       }
-      if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/management/api-resources') {
+      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/api-resources') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(unsetSignInSettings))
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(passkeysDisabled))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(unsetSignInSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(passkeysDisabled))
       return consoleSharedFetch(input, init)
     })
 
@@ -128,21 +128,20 @@ describe('console authorization dashboard', () => {
   it('renders explicit empty states for admin collection pages', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/connectors') {
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/organizations') {
+      if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/roles')
-        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
-      if (url === '/api/management/api-resources') {
+      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
+      if (url === '/api/api-resources') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
@@ -203,7 +202,7 @@ describe('console authorization dashboard', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications' && init?.method === 'POST') {
+      if (url === '/api/applications' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(
           jsonResponse(
@@ -219,7 +218,7 @@ describe('console authorization dashboard', () => {
           ),
         )
       }
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
@@ -240,7 +239,7 @@ describe('console authorization dashboard', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         {
-          url: '/api/management/applications',
+          url: '/api/applications',
           body: {
             name: 'Runner CLI',
             slug: 'runner-cli',

@@ -27,7 +27,7 @@ describe('auth.test 3', () => {
         oidcClaims: {
           accessToken: {},
           idToken: {},
-          userInfo: { roles: true, permissions: true, organizationName: true },
+          userInfo: { roles: true, groups: true, organizationName: true },
         },
       }),
     }
@@ -55,7 +55,7 @@ describe('auth.test 3', () => {
       resource: 'https://api.example.com/contacts',
       scopes: ['openid', 'contacts:read'],
       destination: 'userinfo',
-      claimSelection: { roles: true, permissions: true, organizationName: true },
+      claimSelection: { roles: true, groups: true, organizationName: true },
     })
     buildTokenClaims.mockRestore()
   })
@@ -148,11 +148,11 @@ describe('auth.test 3', () => {
     await expect(options.validateClient('disabled')).resolves.toBe(false)
     await expect(options.validateClient('missing-grant')).resolves.toBe(false)
     await expect(options.onDeviceAuthRequest('native-client', 'openid email')).resolves.toBeUndefined()
-    await expect(options.onDeviceAuthRequest('native-client', 'openid management:read')).rejects.toMatchObject({
+    await expect(options.onDeviceAuthRequest('native-client', 'openid applications:read')).rejects.toMatchObject({
       status: 'BAD_REQUEST',
       body: {
         error: 'invalid_request',
-        error_description: 'Scope is not allowed for this client: management:read',
+        error_description: 'Scope is not allowed for this client: applications:read',
       },
     })
     await expect(options.onDeviceAuthRequest('disabled', 'openid')).rejects.toMatchObject({

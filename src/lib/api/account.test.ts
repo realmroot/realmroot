@@ -2,11 +2,17 @@ import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
+  createAccountConnection,
   createPasskeyRegistrationOptions,
+  decideAgentResourceApproval,
   getAccountProfile,
+  getAgentResourceApproval,
   linkAccount,
   listAccountAgents,
+  listAccountConnections,
+  listExternalApiResources,
   retireAgent,
+  revokeAccountConnection,
   verifyPasskeyRegistration,
 } from '@/lib/api/account'
 
@@ -173,6 +179,87 @@ describe('account API client over the real network boundary', () => {
 
     expect(await verifyPasskeyRegistration({ response: { id: 'cred' } })).toEqual({ verified: true })
     expect(captured.body).toEqual({ response: { id: 'cred' } })
+  })
+
+  it('manages external resource connections and Agent approvals', async () => {
+    const requests: Array<{ url: URL; method: string; body: unknown }> = []
+    realClientServer.use(
+      http.get(`${base}/api/account/api-resources`, () =>
+        HttpResponse.json({
+          items: [],
+          pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        }),
+      ),
+      http.get(`${base}/api/account/account-connections`, () =>
+        HttpResponse.json({
+          items: [],
+          pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        }),
+      ),
+      http.post(`${base}/api/account/account-connections`, async ({ request }) => {
+        requests.push({ url: new URL(request.url), method: request.method, body: await request.json() })
+        return HttpResponse.json({ id: 'connection-1' })
+      }),
+      http.delete(`${base}/api/account/account-connections/:connectionId`, ({ request }) => {
+        requests.push({ url: new URL(request.url), method: request.method, body: null })
+        return new HttpResponse(null, { status: 204 })
+      }),
+      http.get(`${base}/api/account/access-requests`, ({ request }) => {
+        requests.push({ url: new URL(request.url), method: request.method, body: null })
+        return HttpResponse.json({
+          items: [{ id: 'request-1' }],
+          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+        })
+      }),
+      http.put(`${base}/api/account/access-requests/:requestId/decision`, async ({ request }) => {
+        requests.push({ url: new URL(request.url), method: request.method, body: await request.json() })
+        return HttpResponse.json({ id: 'request-1', status: 'approved' })
+      }),
+    )
+
+    await expect(listExternalApiResources()).resolves.toMatchObject({ items: [] })
+    await expect(listAccountConnections()).resolves.toMatchObject({ items: [] })
+    await expect(
+      createAccountConnection({
+        apiResourceId: 'resource-1',
+        owner: { type: 'user' },
+        scopes: ['projects:read'],
+      }),
+    ).resolves.toMatchObject({ id: 'connection-1' })
+    await expect(revokeAccountConnection('connection/1')).resolves.toBeUndefined()
+    await expect(getAgentResourceApproval('approval token')).resolves.toMatchObject({ id: 'request-1' })
+    await expect(
+      decideAgentResourceApproval('request/1', 'approval token', { decision: 'approve', mode: 'once' }),
+    ).resolves.toMatchObject({ status: 'approved' })
+
+    expect(requests).toEqual([
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.objectContaining({ apiResourceId: 'resource-1' }),
+      }),
+      expect.objectContaining({
+        method: 'DELETE',
+        url: expect.objectContaining({ pathname: expect.stringContaining('connection%2F1') }),
+      }),
+      expect.objectContaining({
+        method: 'GET',
+        url: expect.objectContaining({ search: '?approvalToken=approval%20token' }),
+      }),
+      expect.objectContaining({
+        method: 'PUT',
+        url: expect.objectContaining({ pathname: expect.stringContaining('request%2F1') }),
+        body: { approvalToken: 'approval token', decision: 'approve', mode: 'once' },
+      }),
+    ])
+  })
+
+  it('delegates failed connection revocation responses to the JSON error reader', async () => {
+    realClientServer.use(
+      http.delete(`${base}/api/account/account-connections/:connectionId`, () =>
+        HttpResponse.json({ error: 'already revoked' }, { status: 409 }),
+      ),
+    )
+    await expect(revokeAccountConnection('connection-1')).rejects.toThrow('already revoked')
   })
 
   it('omits the register-options query string when no options are provided', async () => {

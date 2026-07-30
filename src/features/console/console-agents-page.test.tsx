@@ -20,9 +20,9 @@ describe('console Agents page', () => {
       const url = request?.url ? new URL(request.url).pathname : String(input)
       const method = request?.method ?? init?.method ?? 'GET'
       requests.push({ url, method })
-      if (url === '/api/management/agents') return Promise.resolve(jsonResponse(agentInventory))
-      if (url === '/api/management/audit-events') return Promise.resolve(jsonResponse(agentAudit))
-      if (url === '/api/management/agents/agent-1' && method === 'DELETE') {
+      if (url === '/api/agents') return Promise.resolve(jsonResponse(agentInventory))
+      if (url === '/api/audit-events') return Promise.resolve(jsonResponse(agentAudit))
+      if (url === '/api/agents/agent-1' && method === 'DELETE') {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
       throw new Error(`Unexpected request: ${method} ${url}`)
@@ -38,18 +38,41 @@ describe('console Agents page', () => {
     expect(screen.getByText('api_resource.token_issued')).toBeTruthy()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Retire' })[0]!)
-    await waitFor(() => expect(requests).toContainEqual({ url: '/api/management/agents/agent-1', method: 'DELETE' }))
+    await waitFor(() => expect(requests).toContainEqual({ url: '/api/agents/agent-1', method: 'DELETE' }))
+    await waitFor(() => expect(requests.filter(({ url }) => url === '/api/agents')).toHaveLength(2))
     expect(requests.some(({ url }) => url.includes('host') || url.includes('binding'))).toBe(false)
+  })
+
+  it('surfaces query failures and retries both Agent datasets', async () => {
+    let failed = true
+    const requests: string[] = []
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const request = input instanceof Request ? input : null
+      const url = request?.url ? new URL(request.url).pathname : String(input)
+      requests.push(url)
+      if (failed) return Promise.resolve(jsonResponse({ error: 'offline' }, 500))
+      if (url === '/api/agents') return Promise.resolve(jsonResponse(agentInventory))
+      if (url === '/api/audit-events') return Promise.resolve(jsonResponse(agentAudit))
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(<AgentsPage />)
+    expect(await screen.findByText('offline')).toBeTruthy()
+    failed = false
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('Stable Build Agent')).toBeTruthy()
+    expect(requests.filter((url) => url === '/api/agents').length).toBeGreaterThan(1)
+    expect(requests.filter((url) => url === '/api/audit-events').length).toBeGreaterThan(1)
   })
 
   it('renders empty Agent and audit tables', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const request = input instanceof Request ? input : null
       const url = request?.url ? new URL(request.url).pathname : String(input)
-      if (url === '/api/management/agents') {
+      if (url === '/api/agents') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/audit-events') {
+      if (url === '/api/audit-events') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       throw new Error(`Unexpected request: ${url}`)

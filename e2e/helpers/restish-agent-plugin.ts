@@ -191,7 +191,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
       invokePending<PluginIdentityResult>('get-current-agent', undefined, { REALMROOT_AGENT_NAME: name }),
     whoami: () => invoke<PluginIdentityResult>('get-current-agent'),
     requestCapabilities: (capabilities, reason) =>
-      invokePending<CapabilityRequestResult>('request-agent-management-access', { capabilities, reason }),
+      invokePending<CapabilityRequestResult>('request-agent-capabilities', { capabilities, reason }),
     listAgentApiResources: <T>() => invoke<T>('list-agent-api-resources'),
     requestResourceAccess: <T>(input: unknown) => invokePending<T>('create-agent-access-request', input),
     issueTargetAccessToken: (grantId) =>

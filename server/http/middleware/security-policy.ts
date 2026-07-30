@@ -3,7 +3,7 @@ import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/secu
 import type { SecurityRepository } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
 import type { MiddlewareHandler } from 'hono'
-import { getAuthContext } from './auth-context'
+import { getPrincipal } from './authn'
 
 const mfaEnrollmentPaths = new Set([
   '/api/account/security',
@@ -18,7 +18,7 @@ export function requireSecurityPolicy(security: SecurityRepository): MiddlewareH
     const policy = await security.getPolicy()
 
     if (policy.mfa.mode === 'required') {
-      const { user } = getAuthContext(c)
+      const { user } = getPrincipal(c)
       if (user && !isMfaExemptPath(c.req.path)) {
         const state = await security.getSecurityState(user.id)
         if (!state.mfa.enabled) {

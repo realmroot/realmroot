@@ -11,7 +11,7 @@ describe('management users and account routes', () => {
   it('rejects normal users from admin user APIs', async () => {
     const auth = createAuthMock()
     const response = await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
-      '/api/management/users',
+      '/api/users',
       {
         headers: {
           'x-user-id': 'user-1',
@@ -28,7 +28,7 @@ describe('management users and account routes', () => {
     const auth = createAuthMock()
     const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
 
-    const adminResponse = await app.request('/api/management/users')
+    const adminResponse = await app.request('/api/users')
     const accountResponse = await app.request('/api/account/profile')
 
     expect(adminResponse.status).toBe(401)
@@ -41,8 +41,8 @@ describe('management users and account routes', () => {
     const app = createApp(auth, createTestDeps({ users }))
     const headers = adminHeaders()
 
-    await app.request('/api/management/users?search=ada&searchField=email&limit=10&role=user', { headers })
-    await app.request('/api/management/users', {
+    await app.request('/api/users?search=ada&searchField=email&limit=10&role=user', { headers })
+    await app.request('/api/users', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -54,7 +54,7 @@ describe('management users and account routes', () => {
         role: 'user',
       }),
     })
-    await app.request('/api/management/users/user-1', {
+    await app.request('/api/users/user-1', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -62,17 +62,17 @@ describe('management users and account routes', () => {
         emailVerified: true,
       }),
     })
-    await app.request('/api/management/users/user-1/ban', {
-      method: 'POST',
+    await app.request('/api/users/user-1/ban', {
+      method: 'PUT',
       headers,
       body: JSON.stringify({
         reason: 'abuse',
         expiresInSeconds: 3600,
       }),
     })
-    await app.request('/api/management/users/user-1/unban', { method: 'POST', headers })
-    await app.request('/api/management/users/user-1', { method: 'DELETE', headers })
-    await app.request('/api/management/users/password-reset', {
+    await app.request('/api/users/user-1/ban', { method: 'DELETE', headers })
+    await app.request('/api/users/user-1', { method: 'DELETE', headers })
+    await app.request('/api/users/password-reset-requests', {
       method: 'POST',
       headers,
       body: JSON.stringify({ email: 'ada@example.com' }),
@@ -132,12 +132,9 @@ describe('management users and account routes', () => {
   it('parses banned=false as a false admin list filter', async () => {
     const auth = createAuthMock()
 
-    await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request(
-      '/api/management/users?banned=false',
-      {
-        headers: adminHeaders(),
-      },
-    )
+    await createApp(auth, createTestDeps({ users: createUserRepositoryMock() })).request('/api/users?banned=false', {
+      headers: adminHeaders(),
+    })
 
     expect(auth.api.listUsers).toHaveBeenCalledWith({
       query: expect.objectContaining({
@@ -151,7 +148,7 @@ describe('management users and account routes', () => {
   it('aggregates admin user detail resources', async () => {
     const auth = createAuthMock()
     const users = createUserRepositoryMock()
-    const response = await createApp(auth, createTestDeps({ users })).request('/api/management/users/user-1', {
+    const response = await createApp(auth, createTestDeps({ users })).request('/api/users/user-1', {
       headers: adminHeaders(),
     })
 
@@ -171,9 +168,9 @@ describe('management users and account routes', () => {
     const app = createApp(createAuthMock(), createTestDeps({ users }))
     const headers = adminHeaders()
 
-    const accounts = await app.request('/api/management/users/user-1/linked-accounts?limit=2&offset=4', { headers })
-    const applications = await app.request('/api/management/users/user-1/applications?limit=3&offset=6', { headers })
-    const sessions = await app.request('/api/management/users/user-1/sessions?limit=4&offset=8', { headers })
+    const accounts = await app.request('/api/users/user-1/linked-accounts?limit=2&offset=4', { headers })
+    const applications = await app.request('/api/users/user-1/applications?limit=3&offset=6', { headers })
+    const sessions = await app.request('/api/users/user-1/sessions?limit=4&offset=8', { headers })
 
     await expect(accounts.json()).resolves.toEqual({
       accounts: [],
@@ -215,9 +212,9 @@ describe('management users and account routes', () => {
     const users = createUserRepositoryMock()
     const app = createApp(auth, createTestDeps({ users }))
 
-    await app.request('/api/management/users/user-1/sessions', { headers: adminHeaders() })
-    await app.request('/api/management/users/user-1/sessions', { method: 'DELETE', headers: adminHeaders() })
-    await app.request('/api/management/users/user-1/sessions/session-1', { method: 'DELETE', headers: adminHeaders() })
+    await app.request('/api/users/user-1/sessions', { headers: adminHeaders() })
+    await app.request('/api/users/user-1/sessions', { method: 'DELETE', headers: adminHeaders() })
+    await app.request('/api/users/user-1/sessions/session-1', { method: 'DELETE', headers: adminHeaders() })
 
     expect(auth.api.listUserSessions).not.toHaveBeenCalled()
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 50, offset: 0 })

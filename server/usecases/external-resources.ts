@@ -22,6 +22,8 @@ import type {
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
+import { getAgentRoleAuthorization } from './authorization'
+import { validateRequestedScopes } from './resource-openapi'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
@@ -80,7 +82,6 @@ export async function configureExternalResourceAuthorization(
     typeof metadata.registration_endpoint === 'string'
       ? requireNetworkUrl(metadata.registration_endpoint, 'registration endpoint')
       : null
-  const scopesSupported = stringArray(metadata.scopes_supported)
   const grants = stringArray(metadata.grant_types_supported)
   if (
     !grants.includes('authorization_code') ||
@@ -124,7 +125,6 @@ export async function configureExternalResourceAuthorization(
     encryptedRegistrationAccessToken: registrationAccessToken
       ? await deps.secrets.seal(registrationAccessToken, registrationTokenContext(resourceId))
       : null,
-    scopesSupported,
     metadata,
     status: 'active',
     createdAt: now,
@@ -170,10 +170,8 @@ export async function createResourceConnectionIntent(
   const resource = await requireExternalResource(deps, resourceId)
   const authorization = await requireActiveExternalAuthorization(deps, resourceId)
   await requireConnectionOwnerControl(deps, input.owner, actorUserId)
-  const configuredScopes = (await deps.authorization.listScopes(resourceId, page)).items.map((scope) => scope.value)
-  const scopes = input.scopes ?? configuredScopes
-  assertScopeSubset(scopes, configuredScopes, 'API resource')
-  assertScopeSubset(scopes, authorization.scopesSupported, 'authorization server')
+  const scopes = input.scopes
+  await validateRequestedScopes(deps, resource.resourceUrl, scopes)
   const requestedScopes = [...new Set([...scopes, 'openid', 'offline_access'])].sort()
   const id = createId('resconnint')
   const state = randomToken()
@@ -337,14 +335,12 @@ export async function listConnectableExternalResources(deps: Deps) {
   for (const resource of resources) {
     const authorization = await deps.externalResources.findAuthorization(resource.id)
     if (authorization?.status !== 'active') continue
-    const scopes = (await deps.authorization.listScopes(resource.id, page)).items
     connectable.push({
       id: resource.id,
       identifier: resource.identifier,
       name: resource.name,
       audience: resource.audience,
       resourceUrl: authorization.resourceUrl,
-      scopes: scopes.map(({ value, description }) => ({ value, description })),
     })
   }
   return { resources: connectable }
@@ -380,8 +376,6 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
     if (!resource?.enabled || (resource.authorizationMode === 'external' && authorization?.status !== 'active')) {
       continue
     }
-    const scopes = (await deps.authorization.listScopes(resourceId, page)).items
-    const requestableScopes = new Set(scopes.map((scope) => scope.value))
     resources.push({
       id: resource.id,
       identifier: resource.identifier,
@@ -389,7 +383,6 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       audience: resource.audience,
       resourceUrl: resource.resourceUrl,
       authorizationMode: resource.authorizationMode,
-      scopes: scopes.map(({ value, description }) => ({ value, description })),
       connections:
         resource.authorizationMode === 'external'
           ? activeConnections
@@ -398,7 +391,9 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
                 id: connection.id,
                 displayName: connection.displayName,
                 subjectHint: redactSubject(connection.externalSubject),
-                grantedScopes: connection.grantedScopes.filter((scope) => requestableScopes.has(scope)),
+                grantedScopes: connection.grantedScopes.filter(
+                  (scope) => scope !== 'openid' && scope !== 'offline_access',
+                ),
               }))
           : [],
       grants: grants
@@ -423,7 +418,6 @@ export async function listAgentApiResources(
     audience: resource.audience,
     resourceUrl: resource.resourceUrl,
     authorizationMode: resource.authorizationMode,
-    scopes: resource.scopes,
     accountConnections: resource.connections.map((connection) => ({
       id: connection.id,
       displayName: connection.displayName,
@@ -470,8 +464,14 @@ export async function createAgentAccessRequest(
   } else if (connection) {
     throw badRequest('Native API resources do not use account connections.')
   }
-  const configuredScopes = (await deps.authorization.listScopes(resource.id, page)).items.map((scope) => scope.value)
-  assertScopeSubset(input.scopes, configuredScopes, 'API resource')
+  await validateRequestedScopes(deps, resource.resourceUrl, input.scopes)
+  await requireAgentScopeEligibility(
+    deps,
+    principal.identityId,
+    resource.id,
+    identity.identity.ownerOrganizationId,
+    input.scopes,
+  )
   if (connection) assertScopeSubset(input.scopes, connection.grantedScopes, 'connected account')
   const scopes = [...new Set(input.scopes)].sort()
   const existingGrant = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).find(
@@ -671,6 +671,17 @@ export async function decideAgentAccessRequest(
     return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
   }
 
+  const resource = await requireEnabledResource(deps, request.resourceId)
+  await validateRequestedScopes(deps, resource.resourceUrl, request.scopes)
+  const requestIdentity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
+  if (!requestIdentity) throw notFound('Active Agent identity was not found.')
+  await requireAgentScopeEligibility(
+    deps,
+    request.agentIdentityId,
+    resource.id,
+    requestIdentity.identity.ownerOrganizationId,
+    request.scopes,
+  )
   const expiresAt = input.mode === 'until' ? new Date(input.expiresAt!) : null
   if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Grant expiry must be in the future.')
   const grant = await deps.externalResources.createGrant({
@@ -739,10 +750,18 @@ export async function issueTargetAccessToken(
   if (grant.status !== 'active' || (grant.expiresAt && grant.expiresAt.getTime() <= Date.now()) || !resource?.enabled) {
     throw forbidden('Active Agent access grant is required.')
   }
+  await validateRequestedScopes(deps, resource.resourceUrl, grant.scopes)
+  const roleAuthorization = await requireAgentScopeEligibility(
+    deps,
+    principal.identityId,
+    resource.id,
+    identity.identity.ownerOrganizationId,
+    grant.scopes,
+  )
   if (resource.authorizationMode === 'native') {
     return issueNativeAccessToken(
       deps,
-      { grant, request, resource, identity },
+      { grant, request, resource, identity, roleAuthorization },
       dpopProof,
       tokenRequestUrl,
       principal,
@@ -757,6 +776,7 @@ export async function issueTargetAccessToken(
   if (!connection || connection.status !== 'active' || authorization?.status !== 'active') {
     throw forbidden('Active external API resource grant is required.')
   }
+  assertScopeSubset(grant.scopes, connection.grantedScopes, 'connected account')
   const confirmationJkt = await dpopThumbprint(deps, dpopProof, authorization.tokenEndpoint)
   const subjectToken = await refreshConnectionToken(deps, connection, authorization)
   const nowSeconds = Math.floor(Date.now() / 1000)
@@ -857,13 +877,14 @@ async function issueNativeAccessToken(
     request: AgentAccessRequestRecord
     resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>
     identity: Awaited<ReturnType<typeof requireActiveIdentityAndBinding>>
+    roleAuthorization: Awaited<ReturnType<typeof getAgentRoleAuthorization>>
   },
   dpopProof: string,
   tokenRequestUrl: string,
   principal: AgentResourcePrincipal,
   signer: AgentAssertionSigner,
 ) {
-  const { grant, request, resource, identity } = context
+  const { grant, request, resource, identity, roleAuthorization } = context
   if (request.connectionId !== null || grant.connectionId !== null) {
     throw forbidden('Native API resource grants cannot use account connections.')
   }
@@ -886,6 +907,8 @@ async function issueNativeAccessToken(
       iat: Math.floor(now.getTime() / 1000),
       exp: Math.floor(expiresAt.getTime() / 1000),
       scope: request.scopes.join(' '),
+      groups: identity.identity.ownerOrganizationId ? [identity.identity.ownerOrganizationId] : [],
+      roles: roleAuthorization.roles,
       client_id: principal.protocolAgentId,
       cnf: { jkt: confirmationJkt },
       act: {
@@ -1400,6 +1423,20 @@ function assertScopeSubset(requested: string[], allowed: string[], boundary: str
   }
 }
 
+async function requireAgentScopeEligibility(
+  deps: Deps,
+  agentIdentityId: string,
+  resourceId: string,
+  organizationId: string | null,
+  scopes: string[],
+) {
+  const authorization = await getAgentRoleAuthorization(deps, agentIdentityId, resourceId, organizationId ?? undefined)
+  if (scopes.some((scope) => !authorization.scopes.includes(scope))) {
+    throw forbidden('Agent roles do not permit every requested scope.')
+  }
+  return authorization
+}
+
 function exactScopes(left: string[], right: string[]) {
   return left.length === right.length && [...left].sort().every((value, index) => value === [...right].sort()[index])
 }
@@ -1418,7 +1455,6 @@ function toExternalAuthorization(record: ExternalResourceAuthorizationRecord) {
     registrationMode: record.registrationMode as 'dynamic' | 'manual',
     clientId: record.clientId,
     clientSecretConfigured: true as const,
-    scopesSupported: record.scopesSupported,
     status: record.status as 'pending' | 'active' | 'invalid',
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),

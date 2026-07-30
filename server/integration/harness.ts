@@ -177,7 +177,7 @@ interface ManagedUser {
 
 /** Creates a managed user through the real admin endpoint and returns its id. */
 export async function createUser(harness: Harness, adminCookie: string, user: ManagedUser): Promise<string> {
-  const response = await harness.request('/api/management/users', {
+  const response = await harness.request('/api/users', {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie: adminCookie },
     body: JSON.stringify({ role: 'user', ...user }),

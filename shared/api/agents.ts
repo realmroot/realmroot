@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { protectedResourceCapabilityNames } from '../authz'
 import { type PaginationInput, paginationMetadataSchema } from './pagination'
 
 const dateValueSchema = z.union([z.string(), z.date()])
@@ -80,8 +81,10 @@ export const agentProtocolIdentityResponseSchema = z.object({
   identity: agentIdentitySchema,
 })
 
+export const protectedResourceCapabilitySchema = z.enum(protectedResourceCapabilityNames)
+
 export const requestAgentCapabilitiesSchema = z.object({
-  capabilities: z.array(z.enum(['management:read', 'management:write'])).min(1),
+  capabilities: z.array(protectedResourceCapabilitySchema).min(1),
   reason: z.string().trim().min(1).max(500).optional(),
 })
 

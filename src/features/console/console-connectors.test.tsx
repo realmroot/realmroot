@@ -40,13 +40,34 @@ import {
 } from './console.test-utils'
 
 describe('admin console connectors', () => {
+  it('shows connector form validation errors', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ConnectorsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Google.*Credentials required.*Not enabled/ }))
+    const enabled = screen.getByRole('switch', { name: 'Enabled' })
+    fireEvent.click(enabled)
+    await waitFor(() => expect(enabled.getAttribute('data-state')).toBe('checked'))
+    fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form')!)
+    expect(await screen.findByText('clientId is required.')).toBeTruthy()
+  })
+
   it('closes the connector drawer from the overlay', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-      if (url === '/api/management/connectors') {
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -68,16 +89,16 @@ describe('admin console connectors', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/connectors' && init?.method === 'POST') {
+      if (url === '/api/connectors' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(
           jsonResponse({ ...connector, providerId: 'cognito', displayName: 'Amazon Cognito' }, 201),
         )
       }
-      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-      if (url === '/api/management/connectors') {
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -102,7 +123,7 @@ describe('admin console connectors', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         {
-          url: '/api/management/connectors',
+          url: '/api/connectors',
           body: {
             slug: 'cognito',
             displayName: 'Amazon Cognito',
@@ -126,9 +147,9 @@ describe('admin console connectors', () => {
   it('renders sign-in settings and security policy surfaces', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -158,11 +179,11 @@ describe('admin console connectors', () => {
   it('renders independent MFA, security, connector, and OIDC settings surfaces [spec: admin-console/admin-connector-inventory] [spec: admin-console/admin-security-policy]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') return Promise.resolve(jsonResponse(readinessIncomplete))
-      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/management/connectors') {
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') return Promise.resolve(jsonResponse(readinessIncomplete))
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       }
       return consoleSharedFetch(input, init)

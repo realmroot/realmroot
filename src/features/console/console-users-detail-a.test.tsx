@@ -38,13 +38,13 @@ describe('admin console users-detail-a', () => {
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/users/user-1' && method === 'GET') {
+      if (url === '/api/users/user-1' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             user: {
@@ -57,30 +57,30 @@ describe('admin console users-detail-a', () => {
           }),
         )
       }
-      if (url === '/api/management/users/user-1/ban' && method === 'DELETE') {
+      if (url === '/api/users/user-1/ban' && method === 'DELETE') {
         requests.push({ method, url, body: null })
         return Promise.resolve(jsonResponse({ user: { ...profile, role: 'user', banned: false, banReason: null } }))
       }
-      if (url === '/api/management/users/user-1' && method === 'DELETE') {
+      if (url === '/api/users/user-1' && method === 'DELETE') {
         requests.push({ method, url, body: null })
         return Promise.resolve(jsonResponse({ success: true }))
       }
-      if (url.startsWith('/api/management/users/user-1/sessions')) {
+      if (url.startsWith('/api/users/user-1/sessions')) {
         return Promise.resolve(jsonResponse({ sessions: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+      if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/applications')) {
+      if (url.startsWith('/api/users/user-1/applications')) {
         return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/users/user-1/security') {
+      if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
       }
-      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+      if (url.startsWith('/api/users/user-1/passkeys')) {
         return Promise.resolve(jsonResponse({ passkeys: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
@@ -93,18 +93,14 @@ describe('admin console users-detail-a', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
     expect(screen.getByText('abuse')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Unban user' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({ method: 'DELETE', url: '/api/management/users/user-1/ban', body: null }),
-    )
+    await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', url: '/api/users/user-1/ban', body: null }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete user' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete user' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete user' }).at(-1)!)
 
-    await waitFor(() =>
-      expect(requests).toContainEqual({ method: 'DELETE', url: '/api/management/users/user-1', body: null }),
-    )
+    await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', url: '/api/users/user-1', body: null }))
   })
 
   it('retries user detail loading and cancels destructive dialogs', async () => {
@@ -117,30 +113,30 @@ describe('admin console users-detail-a', () => {
       requests.push({ method, url })
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/users/user-1' && method === 'GET') {
+      if (url === '/api/users/user-1' && method === 'GET') {
         detailAttempts += 1
         if (detailAttempts === 1) return Promise.resolve(jsonResponse({ error: { message: 'User unavailable.' } }, 503))
         return Promise.resolve(jsonResponse({ user: { ...profile, role: 'user', banned: false } }))
       }
-      if (url.startsWith('/api/management/users/user-1/sessions')) {
+      if (url.startsWith('/api/users/user-1/sessions')) {
         return Promise.resolve(jsonResponse({ sessions: [consoleSession], pagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+      if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/applications')) {
+      if (url.startsWith('/api/users/user-1/applications')) {
         return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/users/user-1/security') {
+      if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
       }
-      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+      if (url.startsWith('/api/users/user-1/passkeys')) {
         return Promise.resolve(jsonResponse({ passkeys: [consolePasskey], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -178,13 +174,13 @@ describe('admin console users-detail-a', () => {
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/users/user-1' && method === 'GET') {
+      if (url === '/api/users/user-1' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             user: {
@@ -199,22 +195,22 @@ describe('admin console users-detail-a', () => {
           }),
         )
       }
-      if (url === '/api/management/users/user-1/ban' && method === 'PUT') {
+      if (url === '/api/users/user-1/ban' && method === 'PUT') {
         requests.push({ method, url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'support'], banned: true } }))
       }
-      if (url.startsWith('/api/management/users/user-1/sessions')) {
+      if (url.startsWith('/api/users/user-1/sessions')) {
         return Promise.resolve(
           jsonResponse({ sessions: [{ ...consoleSession, ipAddress: null, userAgent: null }], pagination }),
         )
       }
-      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+      if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/applications')) {
+      if (url.startsWith('/api/users/user-1/applications')) {
         return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/users/user-1/security') {
+      if (url === '/api/users/user-1/security') {
         return Promise.resolve(
           jsonResponse({
             security: {
@@ -226,7 +222,7 @@ describe('admin console users-detail-a', () => {
           }),
         )
       }
-      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+      if (url.startsWith('/api/users/user-1/passkeys')) {
         return Promise.resolve(
           jsonResponse({
             passkeys: [{ ...consolePasskey, name: null, backedUp: false, createdAt: null }],
@@ -255,7 +251,7 @@ describe('admin console users-detail-a', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' }).at(-1)!)
     await waitFor(() => {
-      expect(requests).toEqual([{ method: 'PUT', url: '/api/management/users/user-1/ban', body: {} }])
+      expect(requests).toEqual([{ method: 'PUT', url: '/api/users/user-1/ban', body: {} }])
     })
   })
 
@@ -266,32 +262,32 @@ describe('admin console users-detail-a', () => {
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/users/user-1' && method === 'GET') {
+      if (url === '/api/users/user-1' && method === 'GET') {
         return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'viewer'], banned: false } }))
       }
-      if (url === '/api/management/users/user-1' && method === 'PATCH') {
+      if (url === '/api/users/user-1' && method === 'PATCH') {
         requests.push({ method, url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'viewer'], banned: false } }))
       }
-      if (url.startsWith('/api/management/users/user-1/sessions')) {
+      if (url.startsWith('/api/users/user-1/sessions')) {
         return Promise.resolve(jsonResponse({ sessions: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+      if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/applications')) {
+      if (url.startsWith('/api/users/user-1/applications')) {
         return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
       }
-      if (url === '/api/management/users/user-1/security') {
+      if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
       }
-      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+      if (url.startsWith('/api/users/user-1/passkeys')) {
         return Promise.resolve(jsonResponse({ passkeys: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
@@ -311,7 +307,7 @@ describe('admin console users-detail-a', () => {
       expect(requests).toEqual([
         {
           method: 'PATCH',
-          url: '/api/management/users/user-1',
+          url: '/api/users/user-1',
           body: {
             email: 'roles@example.com',
             displayName: 'Jane Roles',

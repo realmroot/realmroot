@@ -4,7 +4,8 @@ import { createRestishAgentPlugin } from './helpers/restish-agent-plugin'
 
 const externalOrigin = `http://127.0.0.1:${process.env.E2E_EXTERNAL_PORT ?? '4399'}`
 const externalResource = `${externalOrigin}/api`
-const realmrootResource = `${externalOrigin}/realmroot-api`
+const nativeOrigin = `http://127.0.0.1:${process.env.E2E_NATIVE_PORT ?? '4400'}`
+const realmrootResource = `${nativeOrigin}/api`
 
 test.describe('external API resource authorization', () => {
   test.beforeEach(resetAndBootstrap)
@@ -23,7 +24,7 @@ test.describe('external API resource authorization', () => {
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
       await whoami.result
 
-      const resourceResponse = await page.request.post('/api/management/api-resources', {
+      const resourceResponse = await page.request.post('/api/api-resources', {
         data: {
           identifier: 'e2e-projects',
           name: 'E2E Projects API',
@@ -35,17 +36,11 @@ test.describe('external API resource authorization', () => {
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
       const resource = (await resourceResponse.json()) as { id: string }
-      for (const scope of ['projects:read', 'projects:write']) {
-        const created = await page.request.post(`/api/management/api-resources/${resource.id}/scopes`, {
-          data: { value: scope, description: scope === 'projects:read' ? 'Read projects' : 'Write projects' },
-        })
-        expect(created.status(), await created.text()).toBe(201)
-      }
       const intentResponse = await page.request.post('/api/account/account-connections', {
         data: {
           apiResourceId: resource.id,
           owner: { type: 'user' },
-          scopes: ['projects:read', 'projects:write'],
+          scopes: ['projects:read'],
         },
       })
       expect(intentResponse.status(), await intentResponse.text()).toBe(201)
@@ -64,11 +59,8 @@ test.describe('external API resource authorization', () => {
       const available = discovered.items.find((candidate) => candidate.id === resource.id)
       expect(available).toMatchObject({
         resourceUrl: externalResource,
-        scopes: expect.arrayContaining([
-          expect.objectContaining({ value: 'projects:read' }),
-          expect.objectContaining({ value: 'projects:write' }),
-        ]),
-        accountConnections: [{ scopes: ['projects:read', 'projects:write'] }],
+        scopes: expect.arrayContaining([expect.objectContaining({ value: 'projects:read' })]),
+        accountConnections: [{ scopes: ['projects:read'] }],
       })
       const connectionId = available!.accountConnections[0]!.id
 
@@ -125,7 +117,7 @@ test.describe('external API resource authorization', () => {
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
       await whoami.result
 
-      const resourceResponse = await page.request.post('/api/management/api-resources', {
+      const resourceResponse = await page.request.post('/api/api-resources', {
         data: {
           identifier: 'e2e-realmroot-projects',
           name: 'E2E Realmroot Projects API',
@@ -136,10 +128,6 @@ test.describe('external API resource authorization', () => {
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
       const resource = (await resourceResponse.json()) as { id: string }
-      const scopeResponse = await page.request.post(`/api/management/api-resources/${resource.id}/scopes`, {
-        data: { value: 'projects:read', description: 'Read projects' },
-      })
-      expect(scopeResponse.status(), await scopeResponse.text()).toBe(201)
 
       const discovered = plugin.listAgentApiResources<{
         items: Array<{

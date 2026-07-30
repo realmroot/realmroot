@@ -9,7 +9,6 @@ import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { configzOptions } from '../../app-config'
-import { requireAdmin } from '../../middleware/admin'
 import { getDeps } from '../../middleware/deps'
 
 interface ReadinessBindings {
@@ -20,7 +19,6 @@ interface ReadinessBindings {
 export function createManagementReadinessRoute({ securityPolicy }: { securityPolicy?: SecurityPolicy }) {
   const app = new Hono<{ Bindings: ReadinessBindings }>()
 
-  app.use('/readiness', requireAdmin())
   app.get('/readiness', async (c) => {
     const deps = getDeps(c)
     const [applications, config] = await Promise.all([

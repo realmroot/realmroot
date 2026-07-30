@@ -34,7 +34,7 @@ describe('admin console branding-content-a', () => {
   it('updates the hosted sign-in preview from unsaved branding edits [spec: admin-console/admin-branding-settings]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -60,7 +60,7 @@ describe('admin console branding-content-a', () => {
   it('falls back to a brand mark when the hosted preview logo cannot load', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -92,8 +92,8 @@ describe('admin console branding-content-a', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(otpOnlySettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(otpOnlySettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -125,11 +125,10 @@ describe('admin console branding-content-a', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(previewSignInSettings))
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-      if (url === '/api/management/connectors')
-        return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(previewSignInSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       return consoleSharedFetch(input, init)
     })
 
@@ -205,10 +204,10 @@ describe('admin console branding-content-a', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(oneTapSettings))
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/management/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(oneTapSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -222,7 +221,7 @@ describe('admin console branding-content-a', () => {
   it('does not apply unsafe custom CSS to the branding preview', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -239,11 +238,11 @@ describe('admin console branding-content-a', () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings' && init?.method === 'PATCH') {
+      if (url === '/api/branding-settings' && init?.method === 'PATCH') {
         requests.push(url)
         return Promise.resolve(jsonResponse(brandingSettings))
       }
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -261,16 +260,16 @@ describe('admin console branding-content-a', () => {
   it('renders branding save and upload errors from the management boundary', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings' && init?.method === 'PATCH') {
+      if (url === '/api/branding-settings' && init?.method === 'PATCH') {
         return Promise.resolve(jsonResponse({ error: { message: 'Branding save failed.' } }, 500))
       }
-      if (url === '/api/management/branding/logo' && init?.method === 'POST') {
+      if (url === '/api/branding/logo' && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ error: { message: 'Logo upload failed.' } }, 500))
       }
-      if (url === '/api/management/branding/favicon' && init?.method === 'POST') {
+      if (url === '/api/branding/favicon' && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ error: { message: 'Favicon upload failed.' } }, 500))
       }
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 

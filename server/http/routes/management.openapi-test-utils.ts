@@ -162,11 +162,28 @@ export function toManagementOperationKey(route: HonoRoute) {
     route.path.startsWith('/api/agent/access-grants/:') ||
     route.path === '/api/agent/access-requests' ||
     route.path.startsWith('/api/agent/access-requests/:') ||
-    route.path === '/api/agent/management-access-requests'
+    route.path === '/api/agent/capability-requests'
   ) {
     return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
   }
-  if (!route.path.startsWith('/api/management')) {
+  const tenantPaths = [
+    '/api/applications',
+    '/api/api-resources',
+    '/api/agents',
+    '/api/audit-events',
+    '/api/organizations',
+    '/api/roles',
+    '/api/users',
+    '/api/security',
+    '/api/sign-in-settings',
+    '/api/branding-settings',
+    '/api/account-center-settings',
+    '/api/branding',
+    '/api/readiness',
+    '/api/connectors',
+    '/api/webhooks',
+  ]
+  if (!tenantPaths.some((path) => route.path === path || route.path.startsWith(`${path}/`))) {
     return null
   }
 
@@ -322,11 +339,10 @@ export type ManagementOpenApiMethod = (typeof managementOpenApiMethods)[number]
 export const managementOpenApiOperationKey = 'GET /openapi.json'
 export const methodsWithJsonRequestBody = new Set(['POST', 'PUT', 'PATCH'])
 export const operationsWithoutRequestBody = new Set([
-  'POST /management/applications/{param}/client-secrets',
-  'POST /management/users/{param}/password-reset-requests',
-  'POST /management/users/{param}/unban',
-  'POST /management/webhooks/endpoints/{param}/secrets',
-  'POST /management/webhooks/requests/{param}/retries',
+  'POST /applications/{param}/client-secrets',
+  'POST /users/{param}/password-reset-requests',
+  'POST /webhooks/endpoints/{param}/secrets',
+  'POST /webhooks/requests/{param}/retries',
   'POST /agent/access-grants/{param}/tokens',
 ])
 

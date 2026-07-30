@@ -20,7 +20,6 @@ export const externalResourceAuthorization = sqliteTable('external_resource_auth
   clientId: text('client_id').notNull(),
   encryptedClientSecret: text('encrypted_client_secret').notNull(),
   encryptedRegistrationAccessToken: text('encrypted_registration_access_token'),
-  scopesSupported: text('scopes_supported', { mode: 'json' }).$type<string[]>().notNull(),
   metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
   status: text('status').notNull().default('active'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })

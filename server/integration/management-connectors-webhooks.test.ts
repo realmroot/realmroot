@@ -17,17 +17,17 @@ describe('connector management over real D1', () => {
   })
 
   it('rejects anonymous reads with 401', async () => {
-    expect((await harness.request('/api/management/connectors')).status).toBe(401)
+    expect((await harness.request('/api/connectors')).status).toBe(401)
   })
 
   it('lists templates, then runs the connector lifecycle and readiness through real SQL', async () => {
     const cookie = await signInAdmin(harness)
 
-    const templates = await harness.request('/api/management/connectors/templates', { headers: { cookie } })
+    const templates = await harness.request('/api/connectors/templates', { headers: { cookie } })
     expect(templates.status).toBe(200)
     expect(((await templates.json()) as { templates: unknown[] }).templates.length).toBeGreaterThan(0)
 
-    const created = await harness.request('/api/management/connectors', {
+    const created = await harness.request('/api/connectors', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
@@ -50,25 +50,25 @@ describe('connector management over real D1', () => {
       clientSecret: 'google-secret',
     })
 
-    const list = await harness.request('/api/management/connectors', { headers: { cookie } })
+    const list = await harness.request('/api/connectors', { headers: { cookie } })
     expect(((await list.json()) as { connectors: unknown[] }).connectors.length).toBe(1)
 
-    const fetched = await harness.request(`/api/management/connectors/${connector.id}`, { headers: { cookie } })
+    const fetched = await harness.request(`/api/connectors/${connector.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
 
-    const readiness = await harness.request(`/api/management/connectors/${connector.id}/readiness`, {
+    const readiness = await harness.request(`/api/connectors/${connector.id}/readiness`, {
       headers: { cookie },
     })
     expect(readiness.status).toBe(200)
 
-    const patched = await harness.request(`/api/management/connectors/${connector.id}`, {
+    const patched = await harness.request(`/api/connectors/${connector.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ displayName: 'Google Workspace' }),
     })
     expect(((await patched.json()) as { displayName: string }).displayName).toBe('Google Workspace')
 
-    const removed = await harness.request(`/api/management/connectors/${connector.id}`, {
+    const removed = await harness.request(`/api/connectors/${connector.id}`, {
       method: 'DELETE',
       headers: { cookie },
     })
@@ -111,7 +111,7 @@ describe('connector management over real D1', () => {
 
   it('rejects an invalid connector payload with 400', async () => {
     const cookie = await signInAdmin(harness)
-    const response = await harness.request('/api/management/connectors', {
+    const response = await harness.request('/api/connectors', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       // enabled social connector is missing clientId/clientSecret.
@@ -129,12 +129,12 @@ describe('webhook management over real D1', () => {
   })
 
   it('rejects anonymous reads with 401', async () => {
-    expect((await harness.request('/api/management/webhooks/endpoints')).status).toBe(401)
+    expect((await harness.request('/api/webhooks/endpoints')).status).toBe(401)
   })
 
   it('rejects an invalid endpoint payload with 400', async () => {
     const cookie = await signInAdmin(harness)
-    const response = await harness.request('/api/management/webhooks/endpoints', {
+    const response = await harness.request('/api/webhooks/endpoints', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       // http URL is rejected (https required) and events is empty.
@@ -146,7 +146,7 @@ describe('webhook management over real D1', () => {
   it('runs the endpoint lifecycle and secret rotation through real SQL [spec: management-api/management-restish-webhook-crud]', async () => {
     const cookie = await signInAdmin(harness)
 
-    const created = await harness.request('/api/management/webhooks/endpoints', {
+    const created = await harness.request('/api/webhooks/endpoints', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ url: 'https://example.com/hook', events: ['user.created'] }),
@@ -154,27 +154,27 @@ describe('webhook management over real D1', () => {
     expect(created.status, await created.clone().text()).toBe(201)
     const endpoint = ((await created.json()) as { endpoint: { id: string; secretPrefix: string } }).endpoint
 
-    const list = await harness.request('/api/management/webhooks/endpoints', { headers: { cookie } })
+    const list = await harness.request('/api/webhooks/endpoints', { headers: { cookie } })
     expect(((await list.json()) as { endpoints: unknown[] }).endpoints.length).toBe(1)
 
-    const fetched = await harness.request(`/api/management/webhooks/endpoints/${endpoint.id}`, { headers: { cookie } })
+    const fetched = await harness.request(`/api/webhooks/endpoints/${endpoint.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
 
-    const patched = await harness.request(`/api/management/webhooks/endpoints/${endpoint.id}`, {
+    const patched = await harness.request(`/api/webhooks/endpoints/${endpoint.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ events: ['user.created', 'user.deleted'] }),
     })
     expect(patched.status).toBe(200)
 
-    const rotated = await harness.request(`/api/management/webhooks/endpoints/${endpoint.id}/secrets`, {
+    const rotated = await harness.request(`/api/webhooks/endpoints/${endpoint.id}/secrets`, {
       method: 'POST',
       headers: { cookie },
     })
     expect(rotated.status).toBe(201)
     expect(((await rotated.json()) as { signingSecret: string }).signingSecret).toBeTruthy()
 
-    const removed = await harness.request(`/api/management/webhooks/endpoints/${endpoint.id}`, {
+    const removed = await harness.request(`/api/webhooks/endpoints/${endpoint.id}`, {
       method: 'DELETE',
       headers: { cookie },
     })
@@ -184,7 +184,7 @@ describe('webhook management over real D1', () => {
   it('lists, reads, and retries a seeded webhook delivery request through real SQL', async () => {
     const cookie = await signInAdmin(harness)
 
-    const created = await harness.request('/api/management/webhooks/endpoints', {
+    const created = await harness.request('/api/webhooks/endpoints', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ url: 'https://example.com/hook', events: ['user.created'] }),
@@ -205,22 +205,21 @@ describe('webhook management over real D1', () => {
       updatedAt: now,
     })
 
-    const list = await harness.request('/api/management/webhooks/requests', { headers: { cookie } })
+    const list = await harness.request('/api/webhooks/requests', { headers: { cookie } })
     expect(list.status).toBe(200)
     expect(((await list.json()) as { requests: Array<{ id: string }> }).requests).toEqual([
       expect.objectContaining({ id: 'whreq-1', endpointUrl: 'https://example.com/hook' }),
     ])
 
-    const filtered = await harness.request(
-      `/api/management/webhooks/requests?endpointId=${endpoint.id}&status=failed`,
-      { headers: { cookie } },
-    )
+    const filtered = await harness.request(`/api/webhooks/requests?endpointId=${endpoint.id}&status=failed`, {
+      headers: { cookie },
+    })
     expect(((await filtered.json()) as { requests: unknown[] }).requests.length).toBe(1)
 
-    const fetched = await harness.request('/api/management/webhooks/requests/whreq-1', { headers: { cookie } })
+    const fetched = await harness.request('/api/webhooks/requests/whreq-1', { headers: { cookie } })
     expect(fetched.status).toBe(200)
 
-    const retried = await harness.request('/api/management/webhooks/requests/whreq-1/retries', {
+    const retried = await harness.request('/api/webhooks/requests/whreq-1/retries', {
       method: 'POST',
       headers: { cookie },
     })

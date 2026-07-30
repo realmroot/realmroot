@@ -1,4 +1,6 @@
 import { relations } from 'drizzle-orm'
+import { agentIdentity } from './agent-identity-tables'
+import { agentRoleAssignment } from './agent-role-tables'
 import { agent, agentCapabilityGrant, agentHost, approvalRequest, uploadedAsset } from './agent-tables'
 import {
   account,
@@ -12,9 +14,7 @@ import {
   user,
 } from './auth-tables'
 import {
-  apiPermission,
   apiResource,
-  apiScope,
   application,
   applicationClientSecret,
   applicationConsent,
@@ -24,7 +24,7 @@ import {
   memberRoleAssignment,
   organization,
   role,
-  rolePermission,
+  roleScope,
   userRoleAssignment,
 } from './authorization-tables'
 
@@ -175,29 +175,7 @@ export const applicationRelations = relations(application, ({ one, many }) => ({
 }))
 
 export const apiResourceRelations = relations(apiResource, ({ many }) => ({
-  scopes: many(apiScope),
-  permissions: many(apiPermission),
   roles: many(role),
-}))
-
-export const apiScopeRelations = relations(apiScope, ({ one, many }) => ({
-  resource: one(apiResource, {
-    fields: [apiScope.resourceId],
-    references: [apiResource.id],
-  }),
-  permissions: many(apiPermission),
-}))
-
-export const apiPermissionRelations = relations(apiPermission, ({ one, many }) => ({
-  resource: one(apiResource, {
-    fields: [apiPermission.resourceId],
-    references: [apiResource.id],
-  }),
-  scope: one(apiScope, {
-    fields: [apiPermission.scopeId],
-    references: [apiScope.id],
-  }),
-  rolePermissions: many(rolePermission),
 }))
 
 export const roleRelations = relations(role, ({ one, many }) => ({
@@ -213,20 +191,28 @@ export const roleRelations = relations(role, ({ one, many }) => ({
     fields: [role.applicationId],
     references: [application.id],
   }),
-  permissions: many(rolePermission),
+  scopes: many(roleScope),
   userAssignments: many(userRoleAssignment),
   applicationAssignments: many(applicationRoleAssignment),
   memberAssignments: many(memberRoleAssignment),
+  agentAssignments: many(agentRoleAssignment),
 }))
 
-export const rolePermissionRelations = relations(rolePermission, ({ one }) => ({
+export const roleScopeRelations = relations(roleScope, ({ one }) => ({
   role: one(role, {
-    fields: [rolePermission.roleId],
+    fields: [roleScope.roleId],
     references: [role.id],
   }),
-  permission: one(apiPermission, {
-    fields: [rolePermission.permissionId],
-    references: [apiPermission.id],
+}))
+
+export const agentRoleAssignmentRelations = relations(agentRoleAssignment, ({ one }) => ({
+  role: one(role, {
+    fields: [agentRoleAssignment.roleId],
+    references: [role.id],
+  }),
+  agentIdentity: one(agentIdentity, {
+    fields: [agentRoleAssignment.agentIdentityId],
+    references: [agentIdentity.id],
   }),
 }))
 

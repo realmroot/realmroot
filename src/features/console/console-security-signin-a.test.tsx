@@ -42,11 +42,11 @@ describe('admin console security-signin-a', () => {
   it('renders editable MFA and password policy compact controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-      if (url.startsWith('/api/management/webhooks/endpoints')) {
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url.startsWith('/api/webhooks/endpoints')) {
         return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
       }
-      if (url.startsWith('/api/management/webhooks/requests')) {
+      if (url.startsWith('/api/webhooks/requests')) {
         return Promise.resolve(jsonResponse({ requests: [webhookRequest], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -79,7 +79,7 @@ describe('admin console security-signin-a', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/management/security/policy' && method === 'PATCH') {
+      if (url === '/api/security/policy' && method === 'PATCH') {
         const body = JSON.parse(String(init?.body))
         requests.push({ url, method, body })
         return Promise.resolve(
@@ -91,7 +91,7 @@ describe('admin console security-signin-a', () => {
           }),
         )
       }
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -103,7 +103,7 @@ describe('admin console security-signin-a', () => {
     await waitFor(() =>
       expect(requests).toEqual([
         {
-          url: '/api/management/security/policy',
+          url: '/api/security/policy',
           method: 'PATCH',
           body: {
             policy: {
@@ -131,7 +131,7 @@ describe('admin console security-signin-a', () => {
 
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/management/security/policy',
+        url: '/api/security/policy',
         method: 'PATCH',
         body: {
           policy: {
@@ -159,7 +159,7 @@ describe('admin console security-signin-a', () => {
 
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/management/security/policy',
+        url: '/api/security/policy',
         method: 'PATCH',
         body: {
           policy: {
@@ -185,7 +185,7 @@ describe('admin console security-signin-a', () => {
 
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/management/security/policy',
+        url: '/api/security/policy',
         method: 'PATCH',
         body: {
           policy: {
@@ -227,7 +227,7 @@ describe('admin console security-signin-a', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(policy))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(policy))
       return consoleSharedFetch(input, init)
     })
 
@@ -290,13 +290,13 @@ describe('admin console security-signin-a', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       requests.push(url)
-      if (url === '/api/management/sign-in-settings') {
+      if (url === '/api/sign-in-settings') {
         return Promise.resolve(jsonResponse({ error: 'Sign-in settings unavailable.' }, 503))
       }
-      if (url === '/api/management/security/policy') {
+      if (url === '/api/security/policy') {
         return Promise.resolve(jsonResponse({ error: 'Security policy unavailable.' }, 503))
       }
-      if (url === '/api/management/readiness') return Promise.resolve(jsonResponse(readinessIncomplete))
+      if (url === '/api/readiness') return Promise.resolve(jsonResponse(readinessIncomplete))
       return consoleSharedFetch(input, init)
     })
 
@@ -304,66 +304,56 @@ describe('admin console security-signin-a', () => {
 
     expect(await screen.findByText('Sign-in settings unavailable.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    await waitFor(() => expect(requests.filter((url) => url === '/api/management/sign-in-settings').length).toBe(2))
+    await waitFor(() => expect(requests.filter((url) => url === '/api/sign-in-settings').length).toBe(2))
 
     unmount()
     renderWithQuery(<SecurityGeneralPage />)
 
     expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
-    const generalPolicyRequests = requests.filter((url) => url === '/api/management/security/policy').length
+    const generalPolicyRequests = requests.filter((url) => url === '/api/security/policy').length
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() =>
-      expect(requests.filter((url) => url === '/api/management/security/policy').length).toBeGreaterThan(
-        generalPolicyRequests,
-      ),
+      expect(requests.filter((url) => url === '/api/security/policy').length).toBeGreaterThan(generalPolicyRequests),
     )
 
     cleanup()
     renderWithQuery(<SecurityPasswordPolicyPage />)
 
     expect(await screen.findByText('Sign-in settings unavailable.')).toBeTruthy()
-    const passwordPolicyRequests = requests.filter((url) => url === '/api/management/sign-in-settings').length
+    const passwordPolicyRequests = requests.filter((url) => url === '/api/sign-in-settings').length
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() =>
-      expect(requests.filter((url) => url === '/api/management/sign-in-settings').length).toBeGreaterThan(
-        passwordPolicyRequests,
-      ),
+      expect(requests.filter((url) => url === '/api/sign-in-settings').length).toBeGreaterThan(passwordPolicyRequests),
     )
 
     cleanup()
     renderWithQuery(<SecurityCaptchaPage />)
 
     expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
-    const captchaPolicyRequests = requests.filter((url) => url === '/api/management/security/policy').length
+    const captchaPolicyRequests = requests.filter((url) => url === '/api/security/policy').length
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() =>
-      expect(requests.filter((url) => url === '/api/management/security/policy').length).toBeGreaterThan(
-        captchaPolicyRequests,
-      ),
+      expect(requests.filter((url) => url === '/api/security/policy').length).toBeGreaterThan(captchaPolicyRequests),
     )
 
     cleanup()
     renderWithQuery(<SecurityBlocklistPage />)
 
     expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
-    const blocklistPolicyRequests = requests.filter((url) => url === '/api/management/security/policy').length
+    const blocklistPolicyRequests = requests.filter((url) => url === '/api/security/policy').length
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() =>
-      expect(requests.filter((url) => url === '/api/management/security/policy').length).toBeGreaterThan(
-        blocklistPolicyRequests,
-      ),
+      expect(requests.filter((url) => url === '/api/security/policy').length).toBeGreaterThan(blocklistPolicyRequests),
     )
 
     cleanup()
     renderWithQuery(<DeploymentSettingsPage />)
 
     expect(await screen.findByText('Security policy unavailable.')).toBeTruthy()
-    const deploymentPolicyRequests = requests.filter((url) => url === '/api/management/security/policy').length
+    const deploymentPolicyRequests = requests.filter((url) => url === '/api/security/policy').length
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() =>
-      expect(requests.filter((url) => url === '/api/management/security/policy').length).toBeGreaterThan(
-        deploymentPolicyRequests,
-      ),
+      expect(requests.filter((url) => url === '/api/security/policy').length).toBeGreaterThan(deploymentPolicyRequests),
     )
   })
 
@@ -371,12 +361,12 @@ describe('admin console security-signin-a', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(signInSettings))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -389,7 +379,7 @@ describe('admin console security-signin-a', () => {
 
     await waitFor(() => expect(requests).toHaveLength(1))
     expect(requests[0]).toMatchObject({
-      url: '/api/management/sign-in-settings',
+      url: '/api/sign-in-settings',
       body: {
         signIn: {
           passwordEnabled: false,
@@ -408,12 +398,12 @@ describe('admin console security-signin-a', () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
         requests.push(url)
         return Promise.resolve(jsonResponse(signInSettings))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -431,11 +421,11 @@ describe('admin console security-signin-a', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/management/sign-in-settings' && method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && method === 'PATCH') {
         return Promise.resolve(jsonResponse({ error: { message: 'Sign-in save failed.' } }, 500))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -461,8 +451,8 @@ describe('admin console security-signin-a', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(settings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(settings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 

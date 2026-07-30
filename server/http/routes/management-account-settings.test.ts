@@ -280,7 +280,7 @@ describe('management account settings routes', () => {
 
   it('validates connector configuration before management route persistence', async () => {
     const deps = createTestDeps({ users: createUserRepositoryMock() })
-    const response = await createApp(createAuthMock(), deps).request('/api/management/connectors', {
+    const response = await createApp(createAuthMock(), deps).request('/api/connectors', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({

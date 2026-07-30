@@ -2,19 +2,11 @@ import { type ApiResource, createApiResourceSchema } from '@shared/api/agent-api
 import { configureExternalResourceAuthorizationRequestSchema } from '@shared/api/external-resources'
 import {
   consoleQueryKeys,
-  createApiPermission,
   createApiResource,
-  createApiScope,
-  deleteApiPermission,
   deleteApiResource,
-  deleteApiScope,
   getApiResource,
-  listApiPermissions,
   listApiResources,
-  listApiScopes,
-  updateApiPermission,
   updateApiResource,
-  updateApiScope,
 } from '@/lib/api/management'
 import {
   type ApiResourceDetailSection,
@@ -24,9 +16,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  createApiPermissionRequestSchema,
   createApiResourceRequestSchema,
-  createApiScopeRequestSchema,
   Field,
   Plus,
   SelectInput,
@@ -41,9 +31,7 @@ import {
   Trash2,
   tt,
   Undo2,
-  updateApiPermissionRequestSchema,
   updateApiResourceRequestSchema,
-  updateApiScopeRequestSchema,
   useEffect,
   useMutation,
   useNavigate,
@@ -54,7 +42,7 @@ import {
 } from '../console-shared'
 import { SimpleCreateDialog } from '../helpers/helpers-create'
 import { MutationError, StatusBadge } from '../helpers/helpers-dialogs'
-import { AuthorizationForm, AuthorizationRows } from '../helpers/helpers-forms'
+import { AuthorizationForm } from '../helpers/helpers-forms'
 import {
   apiResourceDetailTabs,
   DetailTabs,
@@ -63,7 +51,7 @@ import {
   ObjectHeader,
   ResourcePage,
 } from '../helpers/helpers-resource'
-import { nullableString, parseForm, useAdminMutation } from '../helpers/helpers-utils'
+import { parseForm, useAdminMutation } from '../helpers/helpers-utils'
 import { ApiResourceSummaryCard } from './api-resource-summary-card'
 
 export function ApiResourcesPage() {
@@ -93,7 +81,7 @@ export function ApiResourcesPage() {
   return (
     <ResourcePage
       title={tt('API resources')}
-      description={tt('Register protected APIs, audiences, scopes, and permission surfaces.')}
+      description={tt('Register protected APIs, audiences, OpenAPI contracts, and permission surfaces.')}
       action={
         <div className="flex gap-2">
           <Button
@@ -218,26 +206,7 @@ export function ApiResourceDetailPage({
     queryKey: [...consoleQueryKeys.apiResources, resourceId],
     queryFn: () => getApiResource(resourceId),
   })
-  const scopesQuery = useQuery({
-    queryKey: [...consoleQueryKeys.apiResources, resourceId, 'scopes'],
-    queryFn: () => listApiScopes(resourceId),
-    enabled: selectedTab === 'scopes',
-  })
-  const permissionsQuery = useQuery({
-    queryKey: [...consoleQueryKeys.apiResources, resourceId, 'permissions'],
-    queryFn: () => listApiPermissions(resourceId),
-    enabled: selectedTab === 'permissions',
-  })
   const resource = resourceQuery.data
-  const refreshChildren = () =>
-    Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: [...consoleQueryKeys.apiResources, resourceId, 'scopes'],
-      }),
-      queryClient.invalidateQueries({
-        queryKey: [...consoleQueryKeys.apiResources, resourceId, 'permissions'],
-      }),
-    ])
   const updateMutation = useMutation({
     mutationFn: (input: z.infer<typeof updateApiResourceRequestSchema>) => updateApiResource(resourceId, input),
     onSuccess: (updated) => {
@@ -256,46 +225,11 @@ export function ApiResourceDetailPage({
       await navigate({ href: '/console/api-resources' })
     },
   })
-  const createScopeMutation = useMutation({
-    mutationFn: (input: z.infer<typeof createApiScopeRequestSchema>) => createApiScope(resourceId, input),
-    onSuccess: refreshChildren,
-  })
-  const updateScopeMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: z.infer<typeof updateApiScopeRequestSchema> }) =>
-      updateApiScope(resourceId, id, input),
-    onSuccess: refreshChildren,
-  })
-  const deleteScopeMutation = useMutation({
-    mutationFn: (id: string) => deleteApiScope(resourceId, id),
-    onSuccess: refreshChildren,
-  })
-  const createPermissionMutation = useMutation({
-    mutationFn: (input: z.infer<typeof createApiPermissionRequestSchema>) => createApiPermission(resourceId, input),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: [...consoleQueryKeys.apiResources, resourceId, 'permissions'],
-      }),
-  })
-  const updatePermissionMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: z.infer<typeof updateApiPermissionRequestSchema> }) =>
-      updateApiPermission(resourceId, id, input),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: [...consoleQueryKeys.apiResources, resourceId, 'permissions'],
-      }),
-  })
-  const deletePermissionMutation = useMutation({
-    mutationFn: (id: string) => deleteApiPermission(resourceId, id),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: [...consoleQueryKeys.apiResources, resourceId, 'permissions'],
-      }),
-  })
   useEffect(() => setSelectedTab(section), [section])
   return (
     <ResourcePage
       title={resource?.name ?? tt('API resource')}
-      description={tt('Manage the protected API audience, OAuth scopes, and permission keys used by RBAC roles.')}
+      description={tt('Manage the protected API audience and authoritative business OpenAPI location.')}
       framed={false}
       error={resourceQuery.error}
       loading={resourceQuery.isLoading}
@@ -341,7 +275,6 @@ export function ApiResourceDetailPage({
                         audience: resource.audience,
                         resourceUrl: resource.resourceUrl,
                         description: resource.description ?? '',
-                        tokenClaimsNamespace: resource.tokenClaimsNamespace ?? '',
                       }}
                       error={updateMutation.error}
                       fields={[
@@ -352,13 +285,9 @@ export function ApiResourceDetailPage({
                           ? ([['resourceUrl', 'Resource URL']] as [string, string][])
                           : []),
                         ['description', 'Description'],
-                        ['tokenClaimsNamespace', 'Token claims namespace'],
                       ]}
                       onSubmit={(form) => {
-                        const input = parseForm(updateApiResourceRequestSchema, {
-                          ...form,
-                          tokenClaimsNamespace: nullableString(form.tokenClaimsNamespace ?? ''),
-                        })
+                        const input = parseForm(updateApiResourceRequestSchema, form)
                         if (resource.authorizationMode === 'native') {
                           updateMutation.mutate(input)
                           return
@@ -403,126 +332,7 @@ export function ApiResourceDetailPage({
               </>
             ) : null}
 
-            {selectedTab === 'scopes' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{tt('Scopes')}</CardTitle>
-                  <CardDescription>
-                    {' '}
-                    {tt('Scopes become OAuth scope strings and can also drive token claim inclusion.')}{' '}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  <AuthorizationForm
-                    buttonLabel="Create scope"
-                    defaults={{
-                      value: '',
-                      description: '',
-                      tokenClaimName: '',
-                    }}
-                    error={createScopeMutation.error}
-                    fields={[
-                      ['value', 'Value'],
-                      ['description', 'Description'],
-                      ['tokenClaimName', 'Token claim name'],
-                    ]}
-                    onSubmit={(form) => createScopeMutation.mutate(parseForm(createApiScopeRequestSchema, form))}
-                    pending={createScopeMutation.isPending}
-                  />
-                  <AuthorizationRows
-                    empty={tt('No scopes yet.')}
-                    rows={scopesQuery.data?.scopes.map((scope) => ({
-                      id: scope.id,
-                      title: scope.value,
-                      detail: scope.description ?? 'No description',
-                      defaults: {
-                        value: scope.value,
-                        description: scope.description ?? '',
-                        tokenClaimName: scope.tokenClaimName ?? '',
-                      },
-                      fields: [
-                        ['value', 'Value'],
-                        ['description', 'Description'],
-                        ['tokenClaimName', 'Token claim name'],
-                      ],
-                      onDelete: () => deleteScopeMutation.mutate(scope.id),
-                      onEdit: (form) =>
-                        updateScopeMutation.mutate({
-                          id: scope.id,
-                          input: parseForm(updateApiScopeRequestSchema, form),
-                        }),
-                    }))}
-                  />
-                  <MutationError error={updateScopeMutation.error ?? deleteScopeMutation.error} />
-                </CardContent>
-              </Card>
-            ) : null}
-
-            {selectedTab === 'permissions' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{tt('Permissions')}</CardTitle>
-                  <CardDescription>
-                    {' '}
-                    {tt('Permissions are assigned to roles and emitted through authorization claims.')}{' '}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  <AuthorizationForm
-                    buttonLabel="Create permission"
-                    defaults={{
-                      key: '',
-                      description: '',
-                      tokenClaimValue: '',
-                      scopeId: '',
-                    }}
-                    error={createPermissionMutation.error}
-                    fields={[
-                      ['key', 'Key'],
-                      ['description', 'Description'],
-                      ['scopeId', 'Scope ID'],
-                      ['tokenClaimValue', 'Token claim value'],
-                    ]}
-                    onSubmit={(form) =>
-                      createPermissionMutation.mutate(parseForm(createApiPermissionRequestSchema, form))
-                    }
-                    pending={createPermissionMutation.isPending}
-                  />
-                  <AuthorizationRows
-                    empty={tt('No permissions yet.')}
-                    rows={permissionsQuery.data?.permissions.map((permission) => ({
-                      id: permission.id,
-                      title: permission.key,
-                      detail: permission.description ?? permission.scopeId ?? 'No description',
-                      defaults: {
-                        key: permission.key,
-                        description: permission.description ?? '',
-                        scopeId: permission.scopeId ?? '',
-                        tokenClaimValue: permission.tokenClaimValue ?? '',
-                      },
-                      fields: [
-                        ['key', 'Key'],
-                        ['description', 'Description'],
-                        ['scopeId', 'Scope ID'],
-                        ['tokenClaimValue', 'Token claim value'],
-                      ],
-                      onDelete: () => deletePermissionMutation.mutate(permission.id),
-                      onEdit: (form) =>
-                        updatePermissionMutation.mutate({
-                          id: permission.id,
-                          input: parseForm(updateApiPermissionRequestSchema, form),
-                        }),
-                    }))}
-                  />
-                  <MutationError error={updatePermissionMutation.error ?? deletePermissionMutation.error} />
-                </CardContent>
-              </Card>
-            ) : null}
-            <ApiResourceSummaryCard
-              permissionsCount={permissionsQuery.data?.permissions.length ?? 0}
-              resource={resource}
-              scopesCount={scopesQuery.data?.scopes.length ?? 0}
-            />
+            <ApiResourceSummaryCard resource={resource} />
           </div>
         </div>
       ) : null}

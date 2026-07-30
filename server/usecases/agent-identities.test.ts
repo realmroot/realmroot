@@ -5,15 +5,21 @@ import {
   createAgentEnrollmentIntent,
   createAgentLoginIdentity,
   emergencyRetireAgentIdentity,
+  getAgent,
   getAgentEnrollmentIntent,
   getAgentIdentityByProtocolAgent,
+  getPersonalAgent,
+  getPublicAgentEnrollment,
   listAllAgentIdentities,
+  listAllAgents,
   listOrganizationAgentIdentities,
   listPersonalAgentIdentities,
+  listPersonalAgents,
   recoverAgentIdentity,
   requireActiveAgentIdentity,
   retireAgentIdentity,
   revokeAgentIdentityHost,
+  toAgentEnrollment,
 } from '@server/usecases/agent-identities'
 import type {
   AgentEnrollmentIntentRecord,
@@ -127,6 +133,55 @@ describe('Agent identity lifecycle', () => {
     await expect(listOrganizationAgentIdentities(deps, 'org-1', 'user-1')).rejects.toMatchObject({ status: 403 })
     vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(null)
     await expect(listOrganizationAgentIdentities(deps, 'org-1', 'user-1')).rejects.toMatchObject({ status: 403 })
+  })
+
+  it('maps paginated Agent resources and public enrollment views', async () => {
+    const deps = identityDeps()
+    const stored = aggregate()
+    vi.mocked(deps.agentIdentities.listPersonal).mockResolvedValue([stored])
+    vi.mocked(deps.agentIdentities.listAll).mockResolvedValue({
+      items: [stored],
+      total: 1,
+      limit: 10,
+      offset: 0,
+    })
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(stored)
+    vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(intent())
+
+    await expect(listPersonalAgents(deps, 'user-1', { limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [{ id: 'identity-1', subject: 'agt_stable' }],
+      pagination: { total: 1, hasMore: false },
+    })
+    await expect(listAllAgents(deps, { limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [{ id: 'identity-1' }],
+      pagination: { total: 1 },
+    })
+    await expect(getPersonalAgent(deps, 'identity-1', 'user-1')).resolves.toMatchObject({ id: 'identity-1' })
+    await expect(getAgent(deps, 'identity-1')).resolves.toMatchObject({ id: 'identity-1' })
+    await expect(getPublicAgentEnrollment(deps, 'intent-1', 'user-1')).resolves.toMatchObject({
+      id: 'intent-1',
+      agentId: null,
+      status: 'pending',
+      decidedAt: null,
+    })
+
+    const approved = toAgentEnrollment({
+      id: 'intent-2',
+      agentIdentityId: 'identity-1',
+      protocolAgentId: 'protocol-agent-1',
+      requestedName: null,
+      homeSpace: { type: 'personal', userId: 'user-1' },
+      status: 'approved',
+      expiresAt: '2026-08-01T01:00:00.000Z',
+      approvedAt: '2026-08-01T00:30:00.000Z',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:30:00.000Z',
+    })
+    expect(approved).toMatchObject({
+      agentId: 'identity-1',
+      status: 'approved',
+      decidedAt: '2026-08-01T00:30:00.000Z',
+    })
   })
 
   it('gets only active protocol-bound identities', async () => {

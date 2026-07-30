@@ -101,7 +101,7 @@ describe('management routes 3', () => {
     vi.spyOn(configz, 'getManagementSignInSettings').mockResolvedValue(signInSettings())
     const app = createApp(createAuthMock(), createTestDeps())
 
-    const settings = await app.request('/api/management/sign-in-settings', { headers: adminHeaders() })
+    const settings = await app.request('/api/sign-in-settings', { headers: adminHeaders() })
 
     expect(settings.status).toBe(200)
     await expect(settings.json()).resolves.toMatchObject({
@@ -141,7 +141,7 @@ describe('management routes 3', () => {
     const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
-    const signInResponse = await app.request('/api/management/sign-in-settings', {
+    const signInResponse = await app.request('/api/sign-in-settings', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -150,7 +150,7 @@ describe('management routes 3', () => {
         copy: { productName: 'Acme ID' },
       }),
     })
-    const brandingResponse = await app.request('/api/management/branding-settings', {
+    const brandingResponse = await app.request('/api/branding-settings', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -163,12 +163,12 @@ describe('management routes 3', () => {
         },
       }),
     })
-    const invalidCss = await app.request('/api/management/branding-settings', {
+    const invalidCss = await app.request('/api/branding-settings', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ branding: { customCss: '.authPanel { background: red; }' } }),
     })
-    const accountCenterResponse = await app.request('/api/management/account-center-settings', {
+    const accountCenterResponse = await app.request('/api/account-center-settings', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ accountCenter: { sessionsViewEnabled: false, emailChangeEnabled: false } }),
@@ -201,7 +201,7 @@ describe('management routes 3', () => {
     vi.spyOn(configz, 'getManagementBrandingSettings').mockResolvedValue(brandingSettings())
     const app = createApp(createAuthMock(), createTestDeps())
 
-    const settings = await app.request('/api/management/branding-settings', { headers: adminHeaders() })
+    const settings = await app.request('/api/branding-settings', { headers: adminHeaders() })
 
     expect(settings.status).toBe(200)
     await expect(settings.json()).resolves.toEqual({
@@ -246,8 +246,8 @@ describe('management routes 3', () => {
     } as BrandingSettings)
     const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
-    const signInResponse = await app.request('/api/management/sign-in-settings', { headers })
-    const brandingResponse = await app.request('/api/management/branding-settings', { headers })
+    const signInResponse = await app.request('/api/sign-in-settings', { headers })
+    const brandingResponse = await app.request('/api/branding-settings', { headers })
 
     await expect(signInResponse.json()).resolves.toMatchObject({ copy: { productName: 'Dedicated ID' } })
     await expect(brandingResponse.json()).resolves.toMatchObject({ branding: { primaryColor: '#2563eb' } })
@@ -261,18 +261,18 @@ describe('management routes 3', () => {
     const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
-    const signInResponse = await app.request('/api/management/sign-in-settings', {
+    const signInResponse = await app.request('/api/sign-in-settings', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ signIn: { identifierFirst: true } }),
     })
-    const brandingResponse = await app.request('/api/management/branding-settings', {
+    const brandingResponse = await app.request('/api/branding-settings', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ branding: { primaryColor: '#2563eb' } }),
     })
-    const accountCenterResponse = await app.request('/api/management/account-center-settings', { headers })
-    const accountCenterPatch = await app.request('/api/management/account-center-settings', {
+    const accountCenterResponse = await app.request('/api/account-center-settings', { headers })
+    const accountCenterPatch = await app.request('/api/account-center-settings', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ accountCenter: { sessionsViewEnabled: false } }),
@@ -296,7 +296,7 @@ describe('management routes 3', () => {
     vi.spyOn(configz, 'getConfig').mockResolvedValue(readinessConfig())
     const app = createApp(createAuthMock(), createTestDeps())
 
-    const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
+    const readiness = await app.request('/api/readiness', { headers: adminHeaders() })
 
     expect(readiness.status).toBe(200)
     const body = managementReadinessResponseSchema.parse(await readiness.json())
@@ -336,7 +336,7 @@ describe('management routes 3', () => {
     vi.spyOn(configz, 'getConfig').mockResolvedValue(readinessConfig())
     const app = createApp(createAuthMock(), createTestDeps())
 
-    const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
+    const readiness = await app.request('/api/readiness', { headers: adminHeaders() })
 
     expect(readiness.status).toBe(200)
     const body = managementReadinessResponseSchema.parse(await readiness.json())
@@ -361,7 +361,7 @@ describe('management routes 3', () => {
     )
     const app = createApp(createAuthMock(), createTestDeps())
 
-    const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
+    const readiness = await app.request('/api/readiness', { headers: adminHeaders() })
 
     expect(readiness.status).toBe(200)
     const body = managementReadinessResponseSchema.parse(await readiness.json())
@@ -387,7 +387,7 @@ describe('management routes 3', () => {
     )
     const app = createApp(createAuthMock(), createTestDeps())
 
-    const readiness = await app.request('/api/management/readiness', { headers: adminHeaders() })
+    const readiness = await app.request('/api/readiness', { headers: adminHeaders() })
 
     expect(readiness.status).toBe(200)
     const body = managementReadinessResponseSchema.parse(await readiness.json())

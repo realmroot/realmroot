@@ -65,7 +65,7 @@ describe('OIDC authorization over real D1', () => {
     const verifier = 'resource-flow-pkce-verifier-0123456789abcdefghijklmnop'
     const resource = `${baseURL}/api/auth`
 
-    const createApp = await harness.request('/api/management/applications', {
+    const createApp = await harness.request('/api/applications', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({

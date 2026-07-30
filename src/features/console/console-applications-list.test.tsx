@@ -31,11 +31,11 @@ describe('admin console applications-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications' && init?.method === 'POST') {
+      if (url === '/api/applications' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(application, 201))
       }
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -65,7 +65,7 @@ describe('admin console applications-list', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         {
-          url: '/api/management/applications',
+          url: '/api/applications',
           body: {
             name: 'Admin console',
             slug: 'admin-console',
@@ -87,11 +87,11 @@ describe('admin console applications-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications/app-1' && init?.method === 'PATCH') {
+      if (url === '/api/applications/app-1' && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse({ ...application, disabled: true }))
       }
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -109,7 +109,7 @@ describe('admin console applications-list', () => {
     fireEvent.click(await screen.findByText('Disable'))
 
     await waitFor(() => {
-      expect(requests).toEqual([{ url: '/api/management/applications/app-1', body: { disabled: true } }])
+      expect(requests).toEqual([{ url: '/api/applications/app-1', body: { disabled: true } }])
     })
   })
 
@@ -118,11 +118,11 @@ describe('admin console applications-list', () => {
     const thirdPartyApplication = { ...application, id: 'app-2', name: 'Partner app', firstParty: false }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications/app-2' && init?.method === 'PATCH') {
+      if (url === '/api/applications/app-2' && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse({ ...thirdPartyApplication, disabled: true }))
       }
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [thirdPartyApplication], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -136,7 +136,7 @@ describe('admin console applications-list', () => {
     fireEvent.click(await screen.findByText('Disable'))
 
     await waitFor(() => {
-      expect(requests).toEqual([{ url: '/api/management/applications/app-2', body: { disabled: true } }])
+      expect(requests).toEqual([{ url: '/api/applications/app-2', body: { disabled: true } }])
     })
   })
 
@@ -144,7 +144,7 @@ describe('admin console applications-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications' && init?.method === 'POST') {
+      if (url === '/api/applications' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(
           jsonResponse(
@@ -161,7 +161,7 @@ describe('admin console applications-list', () => {
           ),
         )
       }
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -191,7 +191,7 @@ describe('admin console applications-list', () => {
     expect(await screen.findByText('fas_created_secret')).toBeTruthy()
     expect(requests).toEqual([
       {
-        url: '/api/management/applications',
+        url: '/api/applications',
         body: {
           name: 'Server app',
           slug: 'server-app',
@@ -210,12 +210,12 @@ describe('admin console applications-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.includes('/api/management/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
-      if (url === '/api/management/applications' && init?.method === 'POST') {
+      if (url.includes('/api/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
+      if (url === '/api/applications' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(application, 201))
       }
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -240,12 +240,12 @@ describe('admin console applications-list', () => {
     let resolveCreate: (response: Response) => void = () => undefined
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications' && init?.method === 'POST') {
+      if (url === '/api/applications' && init?.method === 'POST') {
         return new Promise<Response>((resolve) => {
           resolveCreate = resolve
         })
       }
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
       return consoleSharedFetch(input, init)

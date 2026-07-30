@@ -15,13 +15,10 @@ const port = Number(process.env.PORT ?? 4100)
 const origin = process.env.ORIGIN ?? `http://127.0.0.1:${port}`
 const issuer = origin
 const resource = `${origin}/api`
-const realmrootOrigin = process.env.REALMROOT_ORIGIN ?? 'http://localhost:4189'
-const realmrootIssuer = `${realmrootOrigin}/api/auth`
-const realmrootResource = `${origin}/realmroot-api`
-const realmrootJwks = createRemoteJWKSet(new URL(`${realmrootIssuer}/jwks`))
 const db = new DatabaseSync(process.env.DATABASE_PATH ?? ':memory:')
 const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true })
 const publicJwk = { ...(await exportJWK(publicKey)), kid: 'target-signing-key', use: 'sig', alg: 'ES256' }
+const usedDpopProofs = new Map<string, number>()
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS oauth_client (
@@ -59,7 +56,7 @@ app.use(express.urlencoded({ extended: false }))
 app.use(express.json())
 
 app.get('/.well-known/oauth-protected-resource/api', (_request, response) => {
-  response.json({ resource, authorization_servers: [issuer], scopes_supported: ['projects:read', 'projects:write'] })
+  response.json({ resource, authorization_servers: [issuer], scopes_supported: ['projects:read'] })
 })
 
 app.get('/.well-known/oauth-authorization-server', (_request, response) => {
@@ -71,7 +68,7 @@ app.get('/.well-known/oauth-authorization-server', (_request, response) => {
     revocation_endpoint: `${origin}/revoke`,
     jwks_uri: `${origin}/jwks`,
     userinfo_endpoint: `${origin}/userinfo`,
-    scopes_supported: ['openid', 'offline_access', 'projects:read', 'projects:write'],
+    scopes_supported: ['openid', 'offline_access', 'projects:read'],
     response_types_supported: ['code'],
     response_modes_supported: ['query'],
     grant_types_supported: [
@@ -94,22 +91,14 @@ app.get('/jwks', (_request, response) => response.json({ keys: [publicJwk] }))
 
 app.get('/api', (_request, response) => {
   response
-    .set('Link', `<${origin}/openapi-external.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"`)
-    .json({ resource, serviceDescription: `${origin}/openapi-external.json` })
+    .set('Link', `<${origin}/openapi.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"`)
+    .json({ resource, serviceDescription: `${origin}/openapi.json` })
 })
 
-app.get('/realmroot-api', (_request, response) => {
+app.get('/openapi.json', (_request, response) => {
   response
-    .set('Link', `<${origin}/openapi-native.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"`)
-    .json({ resource: realmrootResource, serviceDescription: `${origin}/openapi-native.json` })
-})
-
-app.get('/openapi-external.json', (_request, response) => {
-  response.type('application/vnd.oai.openapi+json').json(projectsOpenAPI('External Projects API', resource))
-})
-
-app.get('/openapi-native.json', (_request, response) => {
-  response.type('application/vnd.oai.openapi+json').json(projectsOpenAPI('Realmroot-native Projects API', realmrootResource))
+    .type('application/vnd.oai.openapi+json')
+    .json(projectsOpenAPI('External Projects API', resource, `${origin}/.well-known/openid-configuration`))
 })
 
 app.post('/register', (request, response) => {
@@ -208,33 +197,36 @@ app.get('/api/projects', requireDpopAccess, (request, response) => {
   })
 })
 
-app.get('/realmroot-api/projects', requireRealmrootDpopAccess, (_request, response) => {
-  response.json({
-    projects: [{ id: 'project-1', name: 'Realmroot-native project' }],
-    authorization: response.locals.authorization,
-  })
-})
-
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   const normalized = error instanceof OAuthError ? error : oauthError('server_error', 'The target platform rejected the request.')
+  if (normalized.status === 401) response.set('WWW-Authenticate', 'DPoP')
   response.status(normalized.status).json({ error: normalized.code, error_description: normalized.message })
 })
 
 app.listen(port, '127.0.0.1', () => {
-  console.log(`OIDC resource platform listening at ${origin}`)
-  console.log(`Protected API resource: ${resource}`)
+  console.log(`External resource server listening at ${origin}`)
+  console.log(`Protected resource: ${resource}`)
 })
 
-function projectsOpenAPI(title: string, serverUrl: string) {
+function projectsOpenAPI(title: string, serverUrl: string, openIdConnectUrl: string) {
   return {
     openapi: '3.1.0',
     info: { title, version: '1.0.0' },
     servers: [{ url: serverUrl }],
+    components: {
+      securitySchemes: {
+        resourceOidc: {
+          type: 'openIdConnect',
+          openIdConnectUrl,
+        },
+      },
+    },
     paths: {
       '/projects': {
         get: {
           operationId: 'listProjects',
           summary: 'List projects available to the delegated Agent',
+          security: [{ resourceOidc: ['projects:read'] }],
           responses: {
             '200': {
               description: 'Projects visible through the granted account authority',
@@ -388,32 +380,6 @@ async function requireDpopAccess(request: Request, response: Response, next: Nex
   }
 }
 
-async function requireRealmrootDpopAccess(request: Request, response: Response, next: NextFunction) {
-  try {
-    const token = dpopBearer(request)
-    const verified = await jwtVerify(token, realmrootJwks, {
-      issuer: realmrootIssuer,
-      audience: realmrootResource,
-      typ: 'at+jwt',
-    })
-    const proof = await verifyDpop(request, `${origin}${request.originalUrl}`, 'GET')
-    if ((verified.payload.cnf as { jkt?: string } | undefined)?.jkt !== proof.jkt) {
-      throw oauthError('invalid_token', 'DPoP key does not match the access token.', 401)
-    }
-    if (proof.payload.ath !== sha256Base64Url(token)) {
-      throw oauthError('invalid_dpop_proof', 'DPoP ath is invalid.', 401)
-    }
-    response.locals.authorization = {
-      sub: verified.payload.sub,
-      act: verified.payload.act,
-      scope: verified.payload.scope,
-    }
-    next()
-  } catch (error) {
-    next(error)
-  }
-}
-
 async function verifyDpop(request: Request, htu: string, method = 'POST') {
   const compact = request.header('dpop')
   if (!compact) throw oauthError('invalid_dpop_proof', 'DPoP proof is required.', 401)
@@ -430,7 +396,19 @@ async function verifyDpop(request: Request, htu: string, method = 'POST') {
   if (typeof verified.payload.iat !== 'number' || Math.abs(Date.now() / 1000 - verified.payload.iat) > 300) {
     throw oauthError('invalid_dpop_proof', 'DPoP proof is stale.', 401)
   }
-  return { payload: verified.payload, jkt: await calculateJwkThumbprint(header.jwk) }
+  const jkt = await calculateJwkThumbprint(header.jwk)
+  consumeDpopJti(jkt, String(verified.payload.jti), verified.payload.iat)
+  return { payload: verified.payload, jkt }
+}
+
+function consumeDpopJti(jkt: string, jti: string, issuedAt: number) {
+  const now = Math.floor(Date.now() / 1000)
+  for (const [candidate, expiresAt] of usedDpopProofs) {
+    if (expiresAt <= now) usedDpopProofs.delete(candidate)
+  }
+  const replayKey = `${jkt}:${jti}`
+  if (usedDpopProofs.has(replayKey)) throw oauthError('invalid_dpop_proof', 'DPoP proof was already used.', 401)
+  usedDpopProofs.set(replayKey, issuedAt + 300)
 }
 
 async function issueSubjectToken(client: Client, subject: string, scope: string) {

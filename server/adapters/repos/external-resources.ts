@@ -31,7 +31,6 @@ export function createExternalResourceRepository(db: Database): ExternalResource
             clientId: input.clientId,
             encryptedClientSecret: input.encryptedClientSecret,
             encryptedRegistrationAccessToken: input.encryptedRegistrationAccessToken,
-            scopesSupported: input.scopesSupported,
             metadata: input.metadata,
             status: input.status,
             updatedAt: input.updatedAt,

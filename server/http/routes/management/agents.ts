@@ -3,15 +3,10 @@ import { agentResponseSchema, agentsResponseSchema } from '@shared/api/agent-api
 import { agentAuditEventSchema } from '@shared/api/agents'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
-import { requireAdmin } from '../../middleware/admin'
 import { getDeps } from '../../middleware/deps'
 import { readQuery } from '../validation'
 
 export const managementAgentsRoute = new Hono()
-
-managementAgentsRoute.use('/agents', requireAdmin())
-managementAgentsRoute.use('/agents/*', requireAdmin())
-managementAgentsRoute.use('/audit-events', requireAdmin())
 
 managementAgentsRoute.get('/agents', async (c) => {
   return c.json(agentsResponseSchema.parse(await listAllAgents(getDeps(c), readQuery(c, paginationQuerySchema))))

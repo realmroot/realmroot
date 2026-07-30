@@ -15,7 +15,7 @@ describe('management API client', () => {
     await management.updateApplication('app-1', {
       disabled: true,
       oidcClaims: {
-        accessToken: { authorization: true, roles: true, permissions: true, organizationId: true },
+        accessToken: { authorization: true, roles: true, groups: true, organizationId: true },
         idToken: { roles: true },
         userInfo: { organizationName: true },
       },
@@ -86,8 +86,8 @@ describe('management API client', () => {
     await management.createRole({ key: 'admin', name: 'Admin' })
     await management.updateRole('role-1', { description: 'Tenant admin' })
     await management.deleteRole('role-1')
-    await management.listRolePermissions('role-1')
-    await management.replaceRolePermissions('role-1', ['permission-1'])
+    await management.listRoleScopes('role-1')
+    await management.replaceRoleScopes('role-1', ['orders.read'])
     await management.assignUserRole({ roleId: 'role-1', subjectId: 'user-1' })
     await management.assignApplicationRole({ roleId: 'role-1', subjectId: 'app-1' })
     await management.assignMemberRole({ roleId: 'role-1', subjectId: 'member-1' })
@@ -96,19 +96,11 @@ describe('management API client', () => {
     await management.createApiResource({
       identifier: 'management-api',
       name: 'Management API',
-      audience: 'https://auth.example.com/api/management',
-      resourceUrl: 'https://auth.example.com/api/management',
+      audience: 'https://auth.example.com/api',
+      resourceUrl: 'https://auth.example.com/api',
     })
     await management.updateApiResource('resource-1', { enabled: false })
     await management.deleteApiResource('resource-1')
-    await management.listApiScopes('resource-1')
-    await management.createApiScope('resource-1', { value: 'orders:read' })
-    await management.updateApiScope('resource-1', 'scope-1', { description: 'Read orders' })
-    await management.deleteApiScope('resource-1', 'scope-1')
-    await management.listApiPermissions('resource-1')
-    await management.createApiPermission('resource-1', { key: 'orders.read' })
-    await management.updateApiPermission('resource-1', 'permission-1', { key: 'orders.view' })
-    await management.deleteApiPermission('resource-1', 'permission-1')
     await management.listWebhookEndpoints({ search: 'auth', status: 'enabled' })
     await management.createWebhookEndpoint({
       url: 'https://app.example.com/webhooks/auth',
@@ -133,7 +125,7 @@ describe('management API client', () => {
           json: {
             disabled: true,
             oidcClaims: {
-              accessToken: { authorization: true, roles: true, permissions: true, organizationId: true },
+              accessToken: { authorization: true, roles: true, groups: true, organizationId: true },
               idToken: { roles: true },
               userInfo: { organizationName: true },
             },
@@ -164,7 +156,7 @@ describe('management API client', () => {
       ['redirectUris.put', { param: { id: 'app-1' }, json: { redirectUris: ['https://app.example.com/callback'] } }],
       ['clientSecrets.get', { param: { id: 'app-1' }, query: { limit: '5' } }],
       ['clientSecrets.post', { param: { id: 'app-1' } }],
-      ['upload', '/api/management/applications/app-1/logo', expect.any(File)],
+      ['upload', '/api/applications/app-1/logo', expect.any(File)],
       ['users.get', { query: { search: 'jane', limit: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
       ['users.patch', { param: { id: 'user-1' }, json: { role: 'admin' } }],
@@ -212,16 +204,16 @@ describe('management API client', () => {
       ['organizations.get'],
       ['organizations.post', { json: { slug: 'acme', name: 'Acme' } }],
       ['organizations.patch', { param: { id: 'org-1' }, json: { disabled: true } }],
-      ['upload', '/api/management/organizations/org-1/logo', expect.any(File)],
-      ['upload', '/api/management/branding/logo', expect.any(File)],
-      ['upload', '/api/management/branding/favicon', expect.any(File)],
+      ['upload', '/api/organizations/org-1/logo', expect.any(File)],
+      ['upload', '/api/branding/logo', expect.any(File)],
+      ['upload', '/api/branding/favicon', expect.any(File)],
       ['roles.get'],
       ['role.get', { param: { id: 'role-1' } }],
       ['roles.post', { json: { key: 'admin', name: 'Admin' } }],
       ['roles.patch', { param: { id: 'role-1' }, json: { description: 'Tenant admin' } }],
       ['roles.delete', { param: { id: 'role-1' } }],
-      ['rolePermissions.get', { param: { id: 'role-1' } }],
-      ['rolePermissions.put', { param: { id: 'role-1' }, json: { permissionIds: ['permission-1'] } }],
+      ['roleScopes.get', { param: { id: 'role-1' } }],
+      ['roleScopes.put', { param: { id: 'role-1' }, json: { scopes: ['orders.read'] } }],
       ['userRoleAssignments.post', { json: { roleId: 'role-1', subjectId: 'user-1' } }],
       ['applicationRoleAssignments.post', { json: { roleId: 'role-1', subjectId: 'app-1' } }],
       ['memberRoleAssignments.post', { json: { roleId: 'role-1', subjectId: 'member-1' } }],
@@ -233,24 +225,13 @@ describe('management API client', () => {
           json: {
             identifier: 'management-api',
             name: 'Management API',
-            audience: 'https://auth.example.com/api/management',
-            resourceUrl: 'https://auth.example.com/api/management',
+            audience: 'https://auth.example.com/api',
+            resourceUrl: 'https://auth.example.com/api',
           },
         },
       ],
       ['apiResources.patch', { param: { id: 'resource-1' }, json: { enabled: false } }],
       ['apiResources.delete', { param: { id: 'resource-1' } }],
-      ['apiScopes.get', { param: { id: 'resource-1' } }],
-      ['apiScopes.post', { param: { id: 'resource-1' }, json: { value: 'orders:read' } }],
-      ['apiScopes.patch', { param: { id: 'resource-1', scopeId: 'scope-1' }, json: { description: 'Read orders' } }],
-      ['apiScopes.delete', { param: { id: 'resource-1', scopeId: 'scope-1' } }],
-      ['apiPermissions.get', { param: { id: 'resource-1' } }],
-      ['apiPermissions.post', { param: { id: 'resource-1' }, json: { key: 'orders.read' } }],
-      [
-        'apiPermissions.patch',
-        { param: { id: 'resource-1', permissionId: 'permission-1' }, json: { key: 'orders.view' } },
-      ],
-      ['apiPermissions.delete', { param: { id: 'resource-1', permissionId: 'permission-1' } }],
       ['webhookEndpoints.get', { query: { search: 'auth', status: 'enabled' } }],
       [
         'webhookEndpoints.post',
@@ -302,143 +283,127 @@ async function loadManagementApi() {
   vi.doMock('@/lib/api', () => ({
     apiClient: {
       api: {
-        management: {
-          applications: {
-            $get: endpoint('applications.get'),
-            $post: endpoint('applications.post'),
+        applications: {
+          $get: endpoint('applications.get'),
+          $post: endpoint('applications.post'),
+          ':id': {
+            $get: endpoint('application.get'),
+            $patch: endpoint('applications.patch'),
+            $delete: endpoint('applications.delete'),
+            'redirect-uris': {
+              $get: endpoint('redirectUris.get'),
+              $put: endpoint('redirectUris.put'),
+            },
+            'client-secrets': {
+              $get: endpoint('clientSecrets.get'),
+              $post: endpoint('clientSecrets.post'),
+            },
+          },
+          ':applicationId': {
+            'federated-credentials': {
+              $get: endpoint('federatedCredentials.get'),
+              $post: endpoint('federatedCredentials.post'),
+              ':credentialId': {
+                $patch: endpoint('federatedCredential.patch'),
+                $delete: endpoint('federatedCredential.delete'),
+              },
+            },
+          },
+        },
+        users: {
+          $get: endpoint('users.get'),
+          $post: endpoint('users.post'),
+          ':id': {
+            $get: endpoint('user.get'),
+            $patch: endpoint('users.patch'),
+            $delete: endpoint('users.delete'),
+            'password-reset-requests': { $post: endpoint('userPasswordReset.post') },
+            ban: {
+              $put: endpoint('userBan.put'),
+              $delete: endpoint('userBan.delete'),
+            },
+            sessions: {
+              $get: endpoint('userSessions.get'),
+              $delete: endpoint('userSessions.delete'),
+              ':sessionId': { $delete: endpoint('userSession.delete') },
+            },
+            'linked-accounts': { $get: endpoint('userLinkedAccounts.get') },
+            applications: { $get: endpoint('userApplications.get') },
+            security: { $get: endpoint('userSecurity.get') },
+            passkeys: {
+              $get: endpoint('userPasskeys.get'),
+              ':passkeyId': { $delete: endpoint('userPasskey.delete') },
+            },
+          },
+          'password-reset-requests': { $post: endpoint('passwordReset.post') },
+        },
+        connectors: {
+          $get: endpoint('connectors.get'),
+          $post: endpoint('connectors.post'),
+          templates: { $get: endpoint('connectorTemplates.get') },
+          ':id': {
+            $get: endpoint('connector.get'),
+            $patch: endpoint('connectors.patch'),
+            $delete: endpoint('connectors.delete'),
+            readiness: { $get: endpoint('connectorReadiness.get') },
+          },
+        },
+        'sign-in-settings': { $get: endpoint('signIn.get'), $patch: endpoint('signIn.patch') },
+        'branding-settings': { $get: endpoint('branding.get'), $patch: endpoint('branding.patch') },
+        readiness: { $get: endpoint('readiness.get') },
+        agents: {
+          $get: endpoint('agentInventory.get'),
+          ':agentId': { $delete: endpoint('agent.delete') },
+        },
+        'audit-events': { $get: endpoint('agentAudit.get') },
+        security: { policy: { $get: endpoint('security.get'), $patch: endpoint('security.patch') } },
+        organizations: {
+          $get: endpoint('organizations.get'),
+          $post: endpoint('organizations.post'),
+          ':id': { $patch: endpoint('organizations.patch') },
+        },
+        roles: {
+          $get: endpoint('roles.get'),
+          $post: endpoint('roles.post'),
+          ':id': {
+            $get: endpoint('role.get'),
+            $patch: endpoint('roles.patch'),
+            $delete: endpoint('roles.delete'),
+            scopes: {
+              $get: endpoint('roleScopes.get'),
+              $put: endpoint('roleScopes.put'),
+            },
+          },
+          assignments: {
+            users: { $post: endpoint('userRoleAssignments.post') },
+            applications: { $post: endpoint('applicationRoleAssignments.post') },
+            members: { $post: endpoint('memberRoleAssignments.post') },
+          },
+        },
+        'api-resources': {
+          $get: endpoint('apiResources.get'),
+          $post: endpoint('apiResources.post'),
+          ':id': {
+            $get: endpoint('apiResource.get'),
+            $patch: endpoint('apiResources.patch'),
+            $delete: endpoint('apiResources.delete'),
+          },
+        },
+        webhooks: {
+          endpoints: {
+            $get: endpoint('webhookEndpoints.get'),
+            $post: endpoint('webhookEndpoints.post'),
             ':id': {
-              $get: endpoint('application.get'),
-              $patch: endpoint('applications.patch'),
-              $delete: endpoint('applications.delete'),
-              'redirect-uris': {
-                $get: endpoint('redirectUris.get'),
-                $put: endpoint('redirectUris.put'),
-              },
-              'client-secrets': {
-                $get: endpoint('clientSecrets.get'),
-                $post: endpoint('clientSecrets.post'),
-              },
-            },
-            ':applicationId': {
-              'federated-credentials': {
-                $get: endpoint('federatedCredentials.get'),
-                $post: endpoint('federatedCredentials.post'),
-                ':credentialId': {
-                  $patch: endpoint('federatedCredential.patch'),
-                  $delete: endpoint('federatedCredential.delete'),
-                },
-              },
+              $patch: endpoint('webhookEndpoint.patch'),
+              $delete: endpoint('webhookEndpoint.delete'),
+              secrets: { $post: endpoint('webhookEndpointSecret.post') },
             },
           },
-          users: {
-            $get: endpoint('users.get'),
-            $post: endpoint('users.post'),
+          requests: {
+            $get: endpoint('webhookRequests.get'),
             ':id': {
-              $get: endpoint('user.get'),
-              $patch: endpoint('users.patch'),
-              $delete: endpoint('users.delete'),
-              'password-reset-requests': { $post: endpoint('userPasswordReset.post') },
-              ban: {
-                $put: endpoint('userBan.put'),
-                $delete: endpoint('userBan.delete'),
-              },
-              sessions: {
-                $get: endpoint('userSessions.get'),
-                $delete: endpoint('userSessions.delete'),
-                ':sessionId': { $delete: endpoint('userSession.delete') },
-              },
-              'linked-accounts': { $get: endpoint('userLinkedAccounts.get') },
-              applications: { $get: endpoint('userApplications.get') },
-              security: { $get: endpoint('userSecurity.get') },
-              passkeys: {
-                $get: endpoint('userPasskeys.get'),
-                ':passkeyId': { $delete: endpoint('userPasskey.delete') },
-              },
-            },
-            'password-reset-requests': { $post: endpoint('passwordReset.post') },
-          },
-          connectors: {
-            $get: endpoint('connectors.get'),
-            $post: endpoint('connectors.post'),
-            templates: { $get: endpoint('connectorTemplates.get') },
-            ':id': {
-              $get: endpoint('connector.get'),
-              $patch: endpoint('connectors.patch'),
-              $delete: endpoint('connectors.delete'),
-              readiness: { $get: endpoint('connectorReadiness.get') },
-            },
-          },
-          'sign-in-settings': { $get: endpoint('signIn.get'), $patch: endpoint('signIn.patch') },
-          'branding-settings': { $get: endpoint('branding.get'), $patch: endpoint('branding.patch') },
-          readiness: { $get: endpoint('readiness.get') },
-          agents: {
-            $get: endpoint('agentInventory.get'),
-            ':agentId': { $delete: endpoint('agent.delete') },
-          },
-          'audit-events': { $get: endpoint('agentAudit.get') },
-          security: { policy: { $get: endpoint('security.get'), $patch: endpoint('security.patch') } },
-          organizations: {
-            $get: endpoint('organizations.get'),
-            $post: endpoint('organizations.post'),
-            ':id': { $patch: endpoint('organizations.patch') },
-          },
-          roles: {
-            $get: endpoint('roles.get'),
-            $post: endpoint('roles.post'),
-            ':id': {
-              $get: endpoint('role.get'),
-              $patch: endpoint('roles.patch'),
-              $delete: endpoint('roles.delete'),
-              permissions: {
-                $get: endpoint('rolePermissions.get'),
-                $put: endpoint('rolePermissions.put'),
-              },
-            },
-          },
-          'user-role-assignments': { $post: endpoint('userRoleAssignments.post') },
-          'application-role-assignments': { $post: endpoint('applicationRoleAssignments.post') },
-          'member-role-assignments': { $post: endpoint('memberRoleAssignments.post') },
-          'api-resources': {
-            $get: endpoint('apiResources.get'),
-            $post: endpoint('apiResources.post'),
-            ':id': {
-              $get: endpoint('apiResource.get'),
-              $patch: endpoint('apiResources.patch'),
-              $delete: endpoint('apiResources.delete'),
-              scopes: {
-                $get: endpoint('apiScopes.get'),
-                $post: endpoint('apiScopes.post'),
-                ':scopeId': {
-                  $patch: endpoint('apiScopes.patch'),
-                  $delete: endpoint('apiScopes.delete'),
-                },
-              },
-              permissions: {
-                $get: endpoint('apiPermissions.get'),
-                $post: endpoint('apiPermissions.post'),
-                ':permissionId': {
-                  $patch: endpoint('apiPermissions.patch'),
-                  $delete: endpoint('apiPermissions.delete'),
-                },
-              },
-            },
-          },
-          webhooks: {
-            endpoints: {
-              $get: endpoint('webhookEndpoints.get'),
-              $post: endpoint('webhookEndpoints.post'),
-              ':id': {
-                $patch: endpoint('webhookEndpoint.patch'),
-                $delete: endpoint('webhookEndpoint.delete'),
-                secrets: { $post: endpoint('webhookEndpointSecret.post') },
-              },
-            },
-            requests: {
-              $get: endpoint('webhookRequests.get'),
-              ':id': {
-                $get: endpoint('webhookRequest.get'),
-                retries: { $post: endpoint('webhookRequestRetry.post') },
-              },
+              $get: endpoint('webhookRequest.get'),
+              retries: { $post: endpoint('webhookRequestRetry.post') },
             },
           },
         },

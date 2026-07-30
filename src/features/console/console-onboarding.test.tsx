@@ -44,7 +44,7 @@ describe('console onboarding', () => {
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/onboarding/status') return Promise.resolve(jsonResponse({ required: false }))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
@@ -57,12 +57,12 @@ describe('console onboarding', () => {
         })
         return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
       }
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
-      if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/management/organizations') {
+      if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -75,7 +75,7 @@ describe('console onboarding', () => {
 
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/applications/app-1/logo',
+        url: '/api/applications/app-1/logo',
         method: 'POST',
         body: '[form-data]',
       })
@@ -99,9 +99,9 @@ describe('console onboarding', () => {
     await waitFor(() => {
       expect(requests).toEqual(
         expect.arrayContaining([
-          { url: '/api/management/organizations/org-1/logo', method: 'POST', body: '[form-data]' },
-          { url: '/api/management/branding/logo', method: 'POST', body: '[form-data]' },
-          { url: '/api/management/branding/favicon', method: 'POST', body: '[form-data]' },
+          { url: '/api/organizations/org-1/logo', method: 'POST', body: '[form-data]' },
+          { url: '/api/branding/logo', method: 'POST', body: '[form-data]' },
+          { url: '/api/branding/favicon', method: 'POST', body: '[form-data]' },
         ]),
       )
     })
@@ -116,8 +116,8 @@ describe('console onboarding', () => {
     })
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.includes('/api/management/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
-      if (url === '/api/management/applications' && init?.method === 'POST') {
+      if (url.includes('/api/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
+      if (url === '/api/applications' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(application, 201))
       }
@@ -148,7 +148,7 @@ describe('console onboarding', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         {
-          url: '/api/management/applications',
+          url: '/api/applications',
           body: {
             name: 'Review app',
             slug: 'review-app',
@@ -177,7 +177,7 @@ describe('console onboarding', () => {
   it('resets device login when switching away from a native client type', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.includes('/api/management/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
+      if (url.includes('/api/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
       return consoleSharedFetch(input, init)
     })
 

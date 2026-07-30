@@ -39,7 +39,7 @@ async function signIn(harness: Harness): Promise<string> {
     .join('; ')
 }
 
-describe('management access over real D1 and real Better Auth sessions', () => {
+describe('resource access over real D1 and real Better Auth sessions', () => {
   let harness: Harness
 
   beforeEach(async () => {
@@ -48,13 +48,13 @@ describe('management access over real D1 and real Better Auth sessions', () => {
 
   it('rejects anonymous management reads with 401', async () => {
     await bootstrapAdmin(harness)
-    const response = await harness.request('/api/management/applications')
+    const response = await harness.request('/api/applications')
     expect(response.status).toBe(401)
   })
 
   it('rejects a malformed bearer token with 401', async () => {
     await bootstrapAdmin(harness)
-    const response = await harness.request('/api/management/applications', {
+    const response = await harness.request('/api/applications', {
       headers: { authorization: 'Bearer' },
     })
     expect(response.status).toBe(401)
@@ -64,7 +64,7 @@ describe('management access over real D1 and real Better Auth sessions', () => {
     await bootstrapAdmin(harness)
     const adminCookie = await signIn(harness)
 
-    const created = await harness.request('/api/management/users', {
+    const created = await harness.request('/api/users', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({
@@ -89,7 +89,7 @@ describe('management access over real D1 and real Better Auth sessions', () => {
       .filter((pair) => pair.includes('='))
       .join('; ')
 
-    const forbidden = await harness.request('/api/management/applications', {
+    const forbidden = await harness.request('/api/applications', {
       headers: { cookie: memberCookie },
     })
     expect(forbidden.status).toBe(403)
@@ -99,12 +99,12 @@ describe('management access over real D1 and real Better Auth sessions', () => {
     await bootstrapAdmin(harness)
     const cookie = await signIn(harness)
 
-    const before = await harness.request('/api/management/applications', { headers: { cookie } })
+    const before = await harness.request('/api/applications', { headers: { cookie } })
     expect(before.status, await before.clone().text()).toBe(200)
     const beforeBody = (await before.json()) as { items: unknown[]; pagination: { total: number } }
     const initialTotal = beforeBody.pagination.total
 
-    const create = await harness.request('/api/management/applications', {
+    const create = await harness.request('/api/applications', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
@@ -118,7 +118,7 @@ describe('management access over real D1 and real Better Auth sessions', () => {
     })
     expect(create.status, await create.clone().text()).toBe(201)
 
-    const after = await harness.request('/api/management/applications', { headers: { cookie } })
+    const after = await harness.request('/api/applications', { headers: { cookie } })
     const afterBody = (await after.json()) as { pagination: { total: number } }
     expect(afterBody.pagination.total).toBe(initialTotal + 1)
   })
@@ -127,7 +127,7 @@ describe('management access over real D1 and real Better Auth sessions', () => {
     await bootstrapAdmin(harness)
     const cookie = await signIn(harness)
 
-    const response = await harness.request('/api/management/applications', {
+    const response = await harness.request('/api/applications', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ slug: 'no-name' }),

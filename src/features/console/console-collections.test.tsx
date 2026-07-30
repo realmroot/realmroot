@@ -51,20 +51,20 @@ describe('console collections', () => {
   it('renders page-specific resource actions and list toolbars', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [user], pagination }))
       }
-      if (url === '/api/management/connectors') {
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       }
-      if (url === '/api/management/organizations') {
+      if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
-      if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/management/api-resources') {
+      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/api-resources') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -150,18 +150,18 @@ describe('console collections', () => {
 
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/connectors') {
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector, githubConnector], pagination }))
       }
-      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/organizations') {
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization, northwindOrganization], pagination }))
       }
-      if (url === '/api/management/roles') {
+      if (url === '/api/roles') {
         return Promise.resolve(jsonResponse({ roles: [role, billingManagerRole, ordersReaderRole], pagination }))
       }
-      if (url === '/api/management/api-resources') {
+      if (url === '/api/api-resources') {
         return Promise.resolve(
           jsonResponse({
             items: [
@@ -239,7 +239,7 @@ describe('console collections', () => {
   it('renders collection loading and query error states', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/applications') {
+      if (url === '/api/applications') {
         return new Promise(() => undefined)
       }
       return consoleSharedFetch(input, init)
@@ -253,7 +253,7 @@ describe('console collections', () => {
     vi.restoreAllMocks()
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ error: { message: 'Users unavailable.' } }, 503))
       }
       return consoleSharedFetch(input, init)
@@ -270,61 +270,61 @@ describe('console collections', () => {
     for (const scenario of [
       {
         component: <ApplicationsPage />,
-        matches: (url: string) => url === '/api/management/applications',
+        matches: (url: string) => url === '/api/applications',
         success: { applications: [application], pagination },
         text: 'Customer portal',
       },
       {
         component: <ConnectorsPage />,
-        matches: (url: string) => url === '/api/management/connectors',
+        matches: (url: string) => url === '/api/connectors',
         success: { connectors: [connector], pagination },
         text: 'Google',
       },
       {
         component: <ConsoleOnboardingPage />,
-        matches: (url: string) => url === '/api/management/readiness',
+        matches: (url: string) => url === '/api/readiness',
         success: readinessIncomplete,
         text: 'Setup checklist',
       },
       {
         component: <SignInSettingsPage />,
-        matches: (url: string) => url === '/api/management/sign-in-settings',
+        matches: (url: string) => url === '/api/sign-in-settings',
         success: signInSettings,
         text: 'Sign-up and sign-in',
       },
       {
         component: <ContentSettingsPage />,
-        matches: (url: string) => url === '/api/management/sign-in-settings',
+        matches: (url: string) => url === '/api/sign-in-settings',
         success: signInSettings,
         text: 'Hosted messages',
       },
       {
         component: <BrandingPage />,
-        matches: (url: string) => url === '/api/management/branding-settings',
+        matches: (url: string) => url === '/api/branding-settings',
         success: brandingSettings,
         text: 'Live preview',
       },
       {
         component: <MfaPage />,
-        matches: (url: string) => url === '/api/management/security/policy',
+        matches: (url: string) => url === '/api/security/policy',
         success: securityPolicy,
         text: 'Factors',
       },
       {
         component: <OrganizationsPage />,
-        matches: (url: string) => url === '/api/management/organizations',
+        matches: (url: string) => url === '/api/organizations',
         success: { organizations: [organization], pagination },
         text: 'Acme',
       },
       {
         component: <RolesPage />,
-        matches: (url: string) => url === '/api/management/roles',
+        matches: (url: string) => url === '/api/roles',
         success: { roles: [role], pagination },
         text: 'Admin',
       },
       {
         component: <ApiResourcesPage />,
-        matches: (url: string) => url === '/api/management/api-resources',
+        matches: (url: string) => url === '/api/api-resources',
         success: { items: [{ ...apiResource, authorization: null }], pagination },
         text: 'Management API',
       },
@@ -338,8 +338,8 @@ describe('console collections', () => {
             ? Promise.resolve(jsonResponse({ error: { message: 'Temporary unavailable.' } }, 503))
             : Promise.resolve(jsonResponse(scenario.success))
         }
-        if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-        if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+        if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+        if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
         return Promise.resolve(jsonResponse({}))
       })
 
@@ -357,8 +357,8 @@ describe('console collections', () => {
   it('renders editable branding and tenant settings pages [spec: admin-console/admin-deployment-settings]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
     const { unmount } = renderWithQuery(<BrandingPage />)
@@ -372,6 +372,6 @@ describe('console collections', () => {
 
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy()
     expect(await screen.findByText('Cloudflare Workers')).toBeTruthy()
-    expect(screen.getByText('/api/management')).toBeTruthy()
+    expect(screen.getByText('/api')).toBeTruthy()
   })
 })

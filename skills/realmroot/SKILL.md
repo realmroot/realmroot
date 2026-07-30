@@ -11,8 +11,8 @@ operations and request bodies.
 
 Only when the user explicitly asks to administer Realmroot applications,
 Connectors, API Resources, users, settings, or product OIDC clients, read
-`references/management.md`. Do not request `management:read` or
-`management:write` while establishing identity or calling a registered API
+`references/management.md`. Do not request `applications:read` or
+`applications:write` while establishing identity or calling a registered API
 Resource.
 
 ## Resolve The Deployment Origin
@@ -114,7 +114,7 @@ Realmroot publishes no second Agent-only issuer, token endpoint, or JWKS.
 
 Enrollment grants only the Agent's self-service identity. It grants neither
 tenant-management authority nor API Resource access. Do not request
-`management:read` or `management:write` for this workflow.
+`applications:read` or `applications:write` for this workflow.
 
 Use the generated operations in `references/restish-commands.md` to:
 

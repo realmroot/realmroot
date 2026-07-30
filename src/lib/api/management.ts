@@ -19,8 +19,8 @@ import type {
   CreateOrganizationRequest,
   CreateRoleRequest,
   OrganizationResponse,
-  RolePermissionsResponse,
   RoleResponse,
+  RoleScopesResponse,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '@shared/api/authorization'
@@ -118,23 +118,23 @@ export function getAdminDashboard(): Promise<AdminDashboard> {
 }
 
 export function listApplications() {
-  return readRpcResponse(apiClient.api.management.applications.$get())
+  return readRpcResponse(apiClient.api.applications.$get())
 }
 
 export function createApplication(input: CreateApplicationRequest): Promise<CreateApplicationResponse> {
-  return readRpcResponse(apiClient.api.management.applications.$post({ json: input }))
+  return readRpcResponse(apiClient.api.applications.$post({ json: input }))
 }
 
 export function getApplication(id: string): Promise<ApplicationResponse> {
-  return readRpcResponse(apiClient.api.management.applications[':id'].$get({ param: { id } }))
+  return readRpcResponse(apiClient.api.applications[':id'].$get({ param: { id } }))
 }
 
 export function updateApplication(id: string, input: UpdateApplicationRequest) {
-  return readRpcResponse(apiClient.api.management.applications[':id'].$patch({ param: { id }, json: input }))
+  return readRpcResponse(apiClient.api.applications[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function deleteApplication(id: string) {
-  return readRpcResponse(apiClient.api.management.applications[':id'].$delete({ param: { id } }))
+  return readRpcResponse(apiClient.api.applications[':id'].$delete({ param: { id } }))
 }
 
 export function listApplicationRedirectUris(
@@ -142,7 +142,7 @@ export function listApplicationRedirectUris(
   query: Partial<PaginationQuery> = {},
 ): Promise<ListRedirectUrisResponse> {
   return readRpcResponse(
-    apiClient.api.management.applications[':id']['redirect-uris'].$get({
+    apiClient.api.applications[':id']['redirect-uris'].$get({
       param: { id },
       query: stringifyQuery(query),
     }),
@@ -150,9 +150,7 @@ export function listApplicationRedirectUris(
 }
 
 export function replaceApplicationRedirectUris(id: string, input: ReplaceRedirectUrisRequest) {
-  return readRpcResponse(
-    apiClient.api.management.applications[':id']['redirect-uris'].$put({ param: { id }, json: input }),
-  )
+  return readRpcResponse(apiClient.api.applications[':id']['redirect-uris'].$put({ param: { id }, json: input }))
 }
 
 export function listApplicationClientSecrets(
@@ -160,7 +158,7 @@ export function listApplicationClientSecrets(
   query: Partial<PaginationQuery> = {},
 ): Promise<ListClientSecretsResponse> {
   return readRpcResponse(
-    apiClient.api.management.applications[':id']['client-secrets'].$get({
+    apiClient.api.applications[':id']['client-secrets'].$get({
       param: { id },
       query: stringifyQuery(query),
     }),
@@ -168,11 +166,11 @@ export function listApplicationClientSecrets(
 }
 
 export function rotateApplicationClientSecret(id: string): Promise<RotateClientSecretResponse> {
-  return readRpcResponse(apiClient.api.management.applications[':id']['client-secrets'].$post({ param: { id } }))
+  return readRpcResponse(apiClient.api.applications[':id']['client-secrets'].$post({ param: { id } }))
 }
 
 export function uploadApplicationLogo(id: string, file: File): Promise<UploadedAssetResponse> {
-  return uploadApiFile(`/api/management/applications/${id}/logo`, file)
+  return uploadApiFile(`/api/applications/${id}/logo`, file)
 }
 
 export function listUsers(query: Partial<ManagementUserListQuery> = {}) {
@@ -180,60 +178,54 @@ export function listUsers(query: Partial<ManagementUserListQuery> = {}) {
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) params.set(key, String(value))
   }
-  return readRpcResponse(apiClient.api.management.users.$get({ query: Object.fromEntries(params) }))
+  return readRpcResponse(apiClient.api.users.$get({ query: Object.fromEntries(params) }))
 }
 
 export function createUser(input: ManagementCreateUserRequest) {
-  return readRpcResponse(apiClient.api.management.users.$post({ json: input }))
+  return readRpcResponse(apiClient.api.users.$post({ json: input }))
 }
 
 export function updateUser(id: string, input: ManagementUpdateUserRequest) {
-  return readRpcResponse(apiClient.api.management.users[':id'].$patch({ param: { id }, json: input }))
+  return readRpcResponse(apiClient.api.users[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function getUser(id: string): Promise<ManagementUserDetailResponse> {
-  return readRpcResponse(apiClient.api.management.users[':id'].$get({ param: { id } }))
+  return readRpcResponse(apiClient.api.users[':id'].$get({ param: { id } }))
 }
 
 export function deleteUser(id: string) {
-  return readRpcResponse(apiClient.api.management.users[':id'].$delete({ param: { id } }))
+  return readRpcResponse(apiClient.api.users[':id'].$delete({ param: { id } }))
 }
 
 export function requestPasswordReset(email: string) {
-  return readRpcResponse(apiClient.api.management.users['password-reset-requests'].$post({ json: { email } }))
+  return readRpcResponse(apiClient.api.users['password-reset-requests'].$post({ json: { email } }))
 }
 
 export function requestUserPasswordReset(id: string) {
-  return readRpcResponse(
-    apiClient.api.management.users[':id']['password-reset-requests'].$post({ param: { id }, json: {} }),
-  )
+  return readRpcResponse(apiClient.api.users[':id']['password-reset-requests'].$post({ param: { id }, json: {} }))
 }
 
 export function banUser(id: string, input: ManagementBanUserRequest = {}) {
-  return readRpcResponse(apiClient.api.management.users[':id'].ban.$put({ param: { id }, json: input }))
+  return readRpcResponse(apiClient.api.users[':id'].ban.$put({ param: { id }, json: input }))
 }
 
 export function unbanUser(id: string) {
-  return readRpcResponse(apiClient.api.management.users[':id'].ban.$delete({ param: { id } }))
+  return readRpcResponse(apiClient.api.users[':id'].ban.$delete({ param: { id } }))
 }
 
 export function listUserSessions(
   id: string,
   query: Partial<PaginationQuery> = {},
 ): Promise<ListManagementUserSessionsResponse> {
-  return readRpcResponse(
-    apiClient.api.management.users[':id'].sessions.$get({ param: { id }, query: stringifyQuery(query) }),
-  )
+  return readRpcResponse(apiClient.api.users[':id'].sessions.$get({ param: { id }, query: stringifyQuery(query) }))
 }
 
 export function revokeUserSessions(id: string) {
-  return readRpcResponse(apiClient.api.management.users[':id'].sessions.$delete({ param: { id } }))
+  return readRpcResponse(apiClient.api.users[':id'].sessions.$delete({ param: { id } }))
 }
 
 export function revokeUserSession(id: string, sessionId: string) {
-  return readRpcResponse(
-    apiClient.api.management.users[':id'].sessions[':sessionId'].$delete({ param: { id, sessionId } }),
-  )
+  return readRpcResponse(apiClient.api.users[':id'].sessions[':sessionId'].$delete({ param: { id, sessionId } }))
 }
 
 export function listUserLinkedAccounts(
@@ -241,7 +233,7 @@ export function listUserLinkedAccounts(
   query: Partial<PaginationQuery> = {},
 ): Promise<ListManagementUserLinkedAccountsResponse> {
   return readRpcResponse(
-    apiClient.api.management.users[':id']['linked-accounts'].$get({ param: { id }, query: stringifyQuery(query) }),
+    apiClient.api.users[':id']['linked-accounts'].$get({ param: { id }, query: stringifyQuery(query) }),
   )
 }
 
@@ -249,232 +241,220 @@ export function listUserApplications(
   id: string,
   query: Partial<PaginationQuery> = {},
 ): Promise<ListManagementUserApplicationsResponse> {
-  return readRpcResponse(
-    apiClient.api.management.users[':id'].applications.$get({ param: { id }, query: stringifyQuery(query) }),
-  )
+  return readRpcResponse(apiClient.api.users[':id'].applications.$get({ param: { id }, query: stringifyQuery(query) }))
 }
 
 export function getUserSecurity(id: string): Promise<ManagementUserSecurityResponse> {
-  return readRpcResponse(apiClient.api.management.users[':id'].security.$get({ param: { id } }))
+  return readRpcResponse(apiClient.api.users[':id'].security.$get({ param: { id } }))
 }
 
 export function listUserPasskeys(
   id: string,
   query: Partial<PaginationQuery> = {},
 ): Promise<ListManagementUserPasskeysResponse> {
-  return readRpcResponse(
-    apiClient.api.management.users[':id'].passkeys.$get({ param: { id }, query: stringifyQuery(query) }),
-  )
+  return readRpcResponse(apiClient.api.users[':id'].passkeys.$get({ param: { id }, query: stringifyQuery(query) }))
 }
 
 export function deleteUserPasskey(id: string, passkeyId: string) {
-  return readRpcResponse(
-    apiClient.api.management.users[':id'].passkeys[':passkeyId'].$delete({ param: { id, passkeyId } }),
-  )
+  return readRpcResponse(apiClient.api.users[':id'].passkeys[':passkeyId'].$delete({ param: { id, passkeyId } }))
 }
 
 export function listConnectors() {
-  return readRpcResponse(apiClient.api.management.connectors.$get())
+  return readRpcResponse(apiClient.api.connectors.$get())
 }
 
 export function listConnectorTemplates(): Promise<ListConnectorTemplatesResponse> {
-  return readRpcResponse(apiClient.api.management.connectors.templates.$get())
+  return readRpcResponse(apiClient.api.connectors.templates.$get())
 }
 
 export function createConnector(input: CreateManagementConnectorRequest) {
-  return readRpcResponse(apiClient.api.management.connectors.$post({ json: input }))
+  return readRpcResponse(apiClient.api.connectors.$post({ json: input }))
 }
 
 export function getConnector(id: string): Promise<ConnectorResponse> {
-  return readRpcResponse(apiClient.api.management.connectors[':id'].$get({ param: { id } }))
+  return readRpcResponse(apiClient.api.connectors[':id'].$get({ param: { id } }))
 }
 
 export function updateConnector(id: string, input: UpdateManagementConnectorRequest) {
-  return readRpcResponse(apiClient.api.management.connectors[':id'].$patch({ param: { id }, json: input }))
+  return readRpcResponse(apiClient.api.connectors[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function deleteConnector(id: string) {
-  return readRpcResponse(apiClient.api.management.connectors[':id'].$delete({ param: { id } }))
+  return readRpcResponse(apiClient.api.connectors[':id'].$delete({ param: { id } }))
 }
 
 export function getConnectorReadiness(id: string): Promise<ConnectorReadinessResponse> {
-  return readRpcResponse(apiClient.api.management.connectors[':id'].readiness.$get({ param: { id } }))
+  return readRpcResponse(apiClient.api.connectors[':id'].readiness.$get({ param: { id } }))
 }
 
 export function getSignInSettings() {
-  return readRpcResponse(apiClient.api.management['sign-in-settings'].$get())
+  return readRpcResponse(apiClient.api['sign-in-settings'].$get())
 }
 
 export function updateSignInSettings(input: UpdateManagementSignInSettingsRequest) {
-  return readRpcResponse(apiClient.api.management['sign-in-settings'].$patch({ json: input }))
+  return readRpcResponse(apiClient.api['sign-in-settings'].$patch({ json: input }))
 }
 
 export function getBrandingSettings(): Promise<ManagementBrandingSettingsResponse> {
-  return readRpcResponse(apiClient.api.management['branding-settings'].$get())
+  return readRpcResponse(apiClient.api['branding-settings'].$get())
 }
 
 export function updateBrandingSettings(input: UpdateManagementBrandingSettingsRequest) {
-  return readRpcResponse(apiClient.api.management['branding-settings'].$patch({ json: input }))
+  return readRpcResponse(apiClient.api['branding-settings'].$patch({ json: input }))
 }
 
 export function getAccountCenterSettings(): Promise<ManagementAccountCenterSettingsResponse> {
-  return readRpcResponse(apiClient.api.management['account-center-settings'].$get())
+  return readRpcResponse(apiClient.api['account-center-settings'].$get())
 }
 
 export function updateAccountCenterSettings(input: UpdateManagementAccountCenterSettingsRequest) {
-  return readRpcResponse(apiClient.api.management['account-center-settings'].$patch({ json: input }))
+  return readRpcResponse(apiClient.api['account-center-settings'].$patch({ json: input }))
 }
 
 export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
-  return readRpcResponse(apiClient.api.management.readiness.$get())
+  return readRpcResponse(apiClient.api.readiness.$get())
 }
 
 export function getAgentInventory(): Promise<{
   items: import('@shared/api/agent-api').Agent[]
   pagination: PaginationMetadata
 }> {
-  return readRpcResponse(apiClient.api.management.agents.$get())
+  return readRpcResponse(apiClient.api.agents.$get())
 }
 
 export function getAgentAuditEvents(): Promise<{
   items: AgentAuditEvent[]
   pagination: PaginationMetadata
 }> {
-  return readRpcResponse(apiClient.api.management['audit-events'].$get())
+  return readRpcResponse(apiClient.api['audit-events'].$get())
 }
 
 export function emergencyRetireAgent(agentId: string) {
-  return readRpcResponse(apiClient.api.management.agents[':agentId'].$delete({ param: { agentId } }))
+  return readRpcResponse(apiClient.api.agents[':agentId'].$delete({ param: { agentId } }))
 }
 
 export function listWebhookEndpoints(
   query: Partial<ListWebhookEndpointsQuery> = {},
 ): Promise<ListWebhookEndpointsResponse> {
-  return readRpcResponse(apiClient.api.management.webhooks.endpoints.$get({ query: stringifyWebhookQuery(query) }))
+  return readRpcResponse(apiClient.api.webhooks.endpoints.$get({ query: stringifyWebhookQuery(query) }))
 }
 
 export function createWebhookEndpoint(input: CreateWebhookEndpointRequest): Promise<WebhookEndpointSecretResponse> {
-  return readRpcResponse(apiClient.api.management.webhooks.endpoints.$post({ json: input }))
+  return readRpcResponse(apiClient.api.webhooks.endpoints.$post({ json: input }))
 }
 
 export function updateWebhookEndpoint(id: string, input: UpdateWebhookEndpointRequest): Promise<WebhookEndpoint> {
-  return readRpcResponse(apiClient.api.management.webhooks.endpoints[':id'].$patch({ param: { id }, json: input }))
+  return readRpcResponse(apiClient.api.webhooks.endpoints[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function deleteWebhookEndpoint(id: string) {
-  return readRpcResponse(apiClient.api.management.webhooks.endpoints[':id'].$delete({ param: { id } }))
+  return readRpcResponse(apiClient.api.webhooks.endpoints[':id'].$delete({ param: { id } }))
 }
 
 export function rotateWebhookEndpointSecret(id: string): Promise<WebhookEndpointSecretResponse> {
-  return readRpcResponse(apiClient.api.management.webhooks.endpoints[':id'].secrets.$post({ param: { id } }))
+  return readRpcResponse(apiClient.api.webhooks.endpoints[':id'].secrets.$post({ param: { id } }))
 }
 
 export function listWebhookRequests(
   query: Partial<ListWebhookRequestsQuery> = {},
 ): Promise<ListWebhookRequestsResponse> {
-  return readRpcResponse(apiClient.api.management.webhooks.requests.$get({ query: stringifyWebhookQuery(query) }))
+  return readRpcResponse(apiClient.api.webhooks.requests.$get({ query: stringifyWebhookQuery(query) }))
 }
 
 export function getWebhookRequest(id: string): Promise<WebhookRequest> {
-  return readRpcResponse(apiClient.api.management.webhooks.requests[':id'].$get({ param: { id } }))
+  return readRpcResponse(apiClient.api.webhooks.requests[':id'].$get({ param: { id } }))
 }
 
 export function retryWebhookRequest(id: string): Promise<WebhookRequest> {
-  return readRpcResponse(apiClient.api.management.webhooks.requests[':id'].retries.$post({ param: { id } }))
+  return readRpcResponse(apiClient.api.webhooks.requests[':id'].retries.$post({ param: { id } }))
 }
 
 export function getSecurityPolicy() {
-  return readRpcResponse(apiClient.api.management.security.policy.$get())
+  return readRpcResponse(apiClient.api.security.policy.$get())
 }
 
 export function updateSecurityPolicy(input: UpdateSecurityPolicyInput) {
-  return readRpcResponse(apiClient.api.management.security.policy.$patch({ json: input }))
+  return readRpcResponse(apiClient.api.security.policy.$patch({ json: input }))
 }
 
 export function listOrganizations() {
-  return readRpcResponse(apiClient.api.management.organizations.$get())
+  return readRpcResponse(apiClient.api.organizations.$get())
 }
 
 export function getOrganization(id: string): Promise<OrganizationResponse> {
-  return readRpcResponse(apiClient.api.management.organizations[':id'].$get({ param: { id } }))
+  return readRpcResponse(apiClient.api.organizations[':id'].$get({ param: { id } }))
 }
 
 export function createOrganization(input: CreateOrganizationRequest) {
-  return readRpcResponse(apiClient.api.management.organizations.$post({ json: input }))
+  return readRpcResponse(apiClient.api.organizations.$post({ json: input }))
 }
 
 export function updateOrganization(id: string, input: UpdateOrganizationRequest) {
-  return readRpcResponse(apiClient.api.management.organizations[':id'].$patch({ param: { id }, json: input }))
+  return readRpcResponse(apiClient.api.organizations[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function uploadOrganizationLogo(id: string, file: File): Promise<UploadedAssetResponse> {
-  return uploadApiFile(`/api/management/organizations/${id}/logo`, file)
+  return uploadApiFile(`/api/organizations/${id}/logo`, file)
 }
 
 export function uploadBrandingLogo(file: File): Promise<UploadedAssetResponse> {
-  return uploadApiFile('/api/management/branding/logo', file)
+  return uploadApiFile('/api/branding/logo', file)
 }
 
 export function uploadBrandingFavicon(file: File): Promise<UploadedAssetResponse> {
-  return uploadApiFile('/api/management/branding/favicon', file)
+  return uploadApiFile('/api/branding/favicon', file)
 }
 
 export function listRoles() {
-  return readRpcResponse(apiClient.api.management.roles.$get())
+  return readRpcResponse(apiClient.api.roles.$get())
 }
 
 export function getRole(id: string): Promise<RoleResponse> {
-  return readRpcResponse(apiClient.api.management.roles[':id'].$get({ param: { id } }))
+  return readRpcResponse(apiClient.api.roles[':id'].$get({ param: { id } }))
 }
 
 export function createRole(input: CreateRoleRequest) {
-  return readRpcResponse(apiClient.api.management.roles.$post({ json: input }))
+  return readRpcResponse(apiClient.api.roles.$post({ json: input }))
 }
 
 export function updateRole(id: string, input: UpdateRoleRequest) {
-  return readRpcResponse(apiClient.api.management.roles[':id'].$patch({ param: { id }, json: input }))
+  return readRpcResponse(apiClient.api.roles[':id'].$patch({ param: { id }, json: input }))
 }
 
 export function deleteRole(id: string) {
-  return readRpcResponse(apiClient.api.management.roles[':id'].$delete({ param: { id } }))
+  return readRpcResponse(apiClient.api.roles[':id'].$delete({ param: { id } }))
 }
 
-export function listRolePermissions(id: string): Promise<RolePermissionsResponse> {
-  return readRpcResponse(apiClient.api.management.roles[':id'].permissions.$get({ param: { id } }))
+export function listRoleScopes(id: string): Promise<RoleScopesResponse> {
+  return readRpcResponse(apiClient.api.roles[':id'].scopes.$get({ param: { id } }))
 }
 
-export function replaceRolePermissions(id: string, permissionIds: string[]) {
-  return readRpcResponse(
-    apiClient.api.management.roles[':id'].permissions.$put({ param: { id }, json: { permissionIds } }),
-  )
+export function replaceRoleScopes(id: string, scopes: string[]) {
+  return readRpcResponse(apiClient.api.roles[':id'].scopes.$put({ param: { id }, json: { scopes } }))
 }
 
 export function assignUserRole(input: AssignRoleRequest) {
-  return readRpcResponse(apiClient.api.management['user-role-assignments'].$post({ json: input }))
+  return readRpcResponse(apiClient.api.roles.assignments.users.$post({ json: input }))
 }
 
 export function assignApplicationRole(input: AssignRoleRequest) {
-  return readRpcResponse(apiClient.api.management['application-role-assignments'].$post({ json: input }))
+  return readRpcResponse(apiClient.api.roles.assignments.applications.$post({ json: input }))
 }
 
 export function assignMemberRole(input: AssignRoleRequest) {
-  return readRpcResponse(apiClient.api.management['member-role-assignments'].$post({ json: input }))
+  return readRpcResponse(apiClient.api.roles.assignments.members.$post({ json: input }))
+}
+
+export function assignAgentRole(input: AssignRoleRequest) {
+  return readRpcResponse(apiClient.api.roles.assignments.agents.$post({ json: input }))
 }
 
 export {
-  createApiPermission,
   createApiResource,
-  createApiScope,
-  deleteApiPermission,
   deleteApiResource,
-  deleteApiScope,
   getApiResource,
-  listApiPermissions,
   listApiResources,
-  listApiScopes,
-  updateApiPermission,
   updateApiResource,
-  updateApiScope,
 } from './management-api-resources'
 
 export {

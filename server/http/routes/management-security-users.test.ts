@@ -22,13 +22,13 @@ describe('management security user routes', () => {
       { securityPolicy: securityPolicy() },
     )
 
-    const passkeys = await app.request('/api/management/security/users/user-2/passkeys?limit=2&offset=4', {
+    const passkeys = await app.request('/api/users/user-2/passkeys?limit=2&offset=4', {
       headers: adminHeaders(),
     })
-    const sessions = await app.request('/api/management/security/users/user-2/sessions?limit=3&offset=6', {
+    const sessions = await app.request('/api/users/user-2/sessions?limit=3&offset=6', {
       headers: adminHeaders(),
     })
-    await app.request('/api/management/security/users/user-2/sessions', {
+    await app.request('/api/users/user-2/sessions', {
       method: 'DELETE',
       headers: adminHeaders(),
     })
@@ -95,12 +95,12 @@ describe('management security user routes', () => {
       },
     }
 
-    const adminResponse = await app.request('/api/management/security/policy', {
+    const adminResponse = await app.request('/api/security/policy', {
       method: 'PATCH',
       headers: adminHeaders(),
       body: JSON.stringify(body),
     })
-    const managementResponse = await app.request('/api/management/security/policy', {
+    const managementResponse = await app.request('/api/security/policy', {
       method: 'PATCH',
       headers: adminHeaders(),
       body: JSON.stringify(body),

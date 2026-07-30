@@ -9,8 +9,6 @@ const slugSchema = z
   .min(3)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
 
-export const tokenClaimsSchema = z.record(z.string(), z.unknown())
-
 export const organizationResponseSchema = z.object({
   id: z.string(),
   slug: z.string(),
@@ -88,7 +86,6 @@ export const apiResourceResponseSchema = z.object({
   authorizationMode: z.enum(['native', 'external']),
   description: z.string().nullable(),
   enabled: z.boolean(),
-  tokenClaimsNamespace: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -101,7 +98,6 @@ export const createApiResourceRequestSchema = z.object({
   authorizationMode: z.enum(['native', 'external']).default('native'),
   description: optionalText,
   enabled: z.boolean().optional(),
-  tokenClaimsNamespace: z.url().nullable().optional(),
 })
 
 export const updateApiResourceRequestSchema = z.object({
@@ -111,48 +107,7 @@ export const updateApiResourceRequestSchema = z.object({
   resourceUrl: z.url().optional(),
   description: optionalText,
   enabled: z.boolean().optional(),
-  tokenClaimsNamespace: z.url().nullable().optional(),
 })
-
-export const apiScopeResponseSchema = z.object({
-  id: z.string(),
-  resourceId: z.string(),
-  value: z.string(),
-  description: z.string().nullable(),
-  required: z.boolean(),
-  tokenClaimName: z.string().nullable(),
-  includeInAccessToken: z.boolean(),
-  includeInIdToken: z.boolean(),
-})
-
-export const createApiScopeRequestSchema = z.object({
-  value: nonEmptyString,
-  description: optionalText,
-  required: z.boolean().optional(),
-  tokenClaimName: nonEmptyString.nullable().optional(),
-  includeInAccessToken: z.boolean().optional(),
-  includeInIdToken: z.boolean().optional(),
-})
-
-export const updateApiScopeRequestSchema = createApiScopeRequestSchema.partial()
-
-export const apiPermissionResponseSchema = z.object({
-  id: z.string(),
-  resourceId: z.string(),
-  scopeId: z.string().nullable(),
-  key: z.string(),
-  description: z.string().nullable(),
-  tokenClaimValue: z.string().nullable(),
-})
-
-export const createApiPermissionRequestSchema = z.object({
-  scopeId: z.string().nullable().optional(),
-  key: nonEmptyString,
-  description: optionalText,
-  tokenClaimValue: nonEmptyString.nullable().optional(),
-})
-
-export const updateApiPermissionRequestSchema = createApiPermissionRequestSchema.partial()
 
 export const roleResponseSchema = z.object({
   id: z.string(),
@@ -163,8 +118,6 @@ export const roleResponseSchema = z.object({
   organizationId: z.string().nullable(),
   applicationId: z.string().nullable(),
   system: z.boolean(),
-  tokenClaimName: z.string().nullable(),
-  tokenClaimValue: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -177,8 +130,6 @@ export const createRoleRequestSchema = z.object({
   organizationId: z.string().nullable().optional(),
   applicationId: z.string().nullable().optional(),
   system: z.boolean().optional(),
-  tokenClaimName: nonEmptyString.nullable().optional(),
-  tokenClaimValue: nonEmptyString.nullable().optional(),
 })
 
 export const updateRoleRequestSchema = createRoleRequestSchema.partial()
@@ -186,12 +137,11 @@ export const updateRoleRequestSchema = createRoleRequestSchema.partial()
 export const assignRoleRequestSchema = z.object({
   roleId: nonEmptyString,
   subjectId: nonEmptyString,
-  tokenClaims: tokenClaimsSchema.optional(),
   expiresAt: z.iso.datetime().nullable().optional(),
 })
 
-export const replaceRolePermissionsRequestSchema = z.object({
-  permissionIds: z.array(z.string()).default([]),
+export const replaceRoleScopesRequestSchema = z.object({
+  scopes: z.array(nonEmptyString).transform((values) => [...new Set(values)].sort()),
 })
 
 export const listOrganizationsResponseSchema = z.object({
@@ -214,23 +164,13 @@ export const listApiResourcesResponseSchema = z.object({
   pagination: paginationMetadataSchema,
 })
 
-export const listApiScopesResponseSchema = z.object({
-  scopes: z.array(apiScopeResponseSchema),
-  pagination: paginationMetadataSchema,
-})
-
-export const listApiPermissionsResponseSchema = z.object({
-  permissions: z.array(apiPermissionResponseSchema),
-  pagination: paginationMetadataSchema,
-})
-
 export const listRolesResponseSchema = z.object({
   roles: z.array(roleResponseSchema),
   pagination: paginationMetadataSchema,
 })
 
-export const rolePermissionsResponseSchema = z.object({
-  permissions: z.array(apiPermissionResponseSchema),
+export const roleScopesResponseSchema = z.object({
+  scopes: z.array(z.string()),
 })
 
 export { paginationQuerySchema }
@@ -248,19 +188,11 @@ export type ApiResourceResponse = z.infer<typeof apiResourceResponseSchema>
 export type ListApiResourcesResponse = z.infer<typeof listApiResourcesResponseSchema>
 export type ListOrganizationsResponse = z.infer<typeof listOrganizationsResponseSchema>
 export type ListRolesResponse = z.infer<typeof listRolesResponseSchema>
-export type RolePermissionsResponse = z.infer<typeof rolePermissionsResponseSchema>
+export type RoleScopesResponse = z.infer<typeof roleScopesResponseSchema>
 export type CreateApiResourceRequest = z.input<typeof createApiResourceRequestSchema>
 export type UpdateApiResourceRequest = z.infer<typeof updateApiResourceRequestSchema>
-export type ApiScopeResponse = z.infer<typeof apiScopeResponseSchema>
-export type ListApiScopesResponse = z.infer<typeof listApiScopesResponseSchema>
-export type CreateApiScopeRequest = z.infer<typeof createApiScopeRequestSchema>
-export type UpdateApiScopeRequest = z.infer<typeof updateApiScopeRequestSchema>
-export type ApiPermissionResponse = z.infer<typeof apiPermissionResponseSchema>
-export type ListApiPermissionsResponse = z.infer<typeof listApiPermissionsResponseSchema>
-export type CreateApiPermissionRequest = z.infer<typeof createApiPermissionRequestSchema>
-export type UpdateApiPermissionRequest = z.infer<typeof updateApiPermissionRequestSchema>
 export type RoleResponse = z.infer<typeof roleResponseSchema>
 export type CreateRoleRequest = z.infer<typeof createRoleRequestSchema>
 export type UpdateRoleRequest = z.infer<typeof updateRoleRequestSchema>
 export type AssignRoleRequest = z.infer<typeof assignRoleRequestSchema>
-export type ReplaceRolePermissionsRequest = z.infer<typeof replaceRolePermissionsRequestSchema>
+export type ReplaceRoleScopesRequest = z.infer<typeof replaceRoleScopesRequestSchema>

@@ -11,7 +11,7 @@ test.describe('new Agent stable identity enrollment', () => {
     await resetAndBootstrap()
   })
 
-  test('[spec: agent-identity/agent-identity-enrollment] [spec: agent-identity/agent-management-authority] [spec: agent-identity/agent-capability-approval-renewal] a new Agent establishes its identity and gains approved management access', async ({
+  test('[spec: agent-identity/agent-identity-enrollment] [spec: agent-identity/agent-management-authority] [spec: agent-identity/agent-capability-approval-renewal] a new Agent establishes its identity and gains approved resource access', async ({
     page,
   }) => {
     await signIn(page)
@@ -37,12 +37,12 @@ test.describe('new Agent stable identity enrollment', () => {
       })
 
       const firstPermissionRequest = plugin.requestCapabilities(
-        ['management:read', 'management:write'],
+        ['applications:read', 'applications:write'],
         'E2E tenant administration',
       )
       const firstApprovalUrl = await firstPermissionRequest.approvalUrl
       const repeatedPermissionRequest = plugin.requestCapabilities(
-        ['management:read', 'management:write'],
+        ['applications:read', 'applications:write'],
         'E2E tenant administration retry',
       )
       const repeatedApprovalUrl = await repeatedPermissionRequest.approvalUrl
@@ -50,7 +50,7 @@ test.describe('new Agent stable identity enrollment', () => {
 
       expirePendingAgentApprovals(result.local_agent)
       const renewedPermissionRequest = plugin.requestCapabilities(
-        ['management:read', 'management:write'],
+        ['applications:read', 'applications:write'],
         'E2E tenant administration after expiry',
       )
       const renewedApprovalUrl = await renewedPermissionRequest.approvalUrl
@@ -58,8 +58,8 @@ test.describe('new Agent stable identity enrollment', () => {
 
       await page.goto(renewedApprovalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent permissions' })).toBeVisible()
-      await expect(page.getByText('management:read', { exact: true })).toBeVisible()
-      await expect(page.getByText('management:write', { exact: true })).toBeVisible()
+      await expect(page.getByText('applications:read', { exact: true })).toBeVisible()
+      await expect(page.getByText('applications:write', { exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'Approve permissions' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
       await expect(page.getByText('You can safely close this page.')).toBeVisible()
@@ -73,8 +73,8 @@ test.describe('new Agent stable identity enrollment', () => {
         expect(permissionRequest.status).toBe('active')
         expect(permissionRequest.agent_capability_grants).toEqual(
           expect.arrayContaining([
-            expect.objectContaining({ capability: 'management:read', status: 'active' }),
-            expect.objectContaining({ capability: 'management:write', status: 'active' }),
+            expect.objectContaining({ capability: 'applications:read', status: 'active' }),
+            expect.objectContaining({ capability: 'applications:write', status: 'active' }),
           ]),
         )
         expect(permissionRequest.agent_capability_grants).toHaveLength(2)
@@ -119,7 +119,7 @@ test.describe('new Agent stable identity enrollment', () => {
       await whoami.result
 
       const capabilityRequest = deniedCapabilityPlugin.requestCapabilities(
-        ['management:read'],
+        ['applications:read'],
         'Verify explicit controller denial',
       )
       const capabilityResult = capabilityRequest.result.catch((error: unknown) => error)

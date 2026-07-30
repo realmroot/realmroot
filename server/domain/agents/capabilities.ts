@@ -3,13 +3,17 @@
  * built on top of them. Framework-free so it stays inside the domain layer;
  * the better-auth-typed capability descriptors live in server/auth-capabilities.
  */
-export const agentCapabilityNames = [
+import { protectedResourceCapabilityNames } from '@shared/authz'
+
+export { protectedResourceCapabilityNames } from '@shared/authz'
+
+export const accountAgentCapabilityNames = [
   'account.profile.read',
   'account.sessions.list',
   'account.authorized_apps.list',
-  'management:read',
-  'management:write',
 ] as const
+
+export const agentCapabilityNames = [...accountAgentCapabilityNames, ...protectedResourceCapabilityNames] as const
 
 const agentCapabilityNameSet = new Set<string>(agentCapabilityNames)
 

@@ -1,10 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, SettingRow, tt } from '../console-shared'
 
 export function RoleSummaryCard({
-  permissionCount,
+  scopeCount,
   role,
 }: {
-  permissionCount: number
+  scopeCount: number
   role: {
     id: string
     key: string
@@ -13,24 +13,20 @@ export function RoleSummaryCard({
     applicationId: string | null
     organizationId: string | null
     resourceId: string | null
-    tokenClaimName: string | null
-    tokenClaimValue: string | null
   }
 }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>{tt('Role summary')}</CardTitle>
-        <CardDescription>{tt('Read-only role scope and token claim context.')}</CardDescription>
+        <CardDescription>{tt('Read-only role scope and eligibility context.')}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         <SettingRow label={tt('Role ID')} value={role.id} />
         <SettingRow label={tt('Key')} value={role.key} />
         <SettingRow label={tt('Type')} value={role.system ? 'System role' : 'Custom role'} />
         <SettingRow label={tt('Scope')} value={roleScopeLabel(role)} />
-        <SettingRow label={tt('Permissions')} value={String(permissionCount)} />
-        <SettingRow label={tt('Token claim')} value={role.tokenClaimName ?? 'Not set'} />
-        <SettingRow label={tt('Token value')} value={role.tokenClaimValue ?? 'Not set'} />
+        <SettingRow label={tt('Referenced scopes')} value={String(scopeCount)} />
       </CardContent>
     </Card>
   )

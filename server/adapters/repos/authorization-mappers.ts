@@ -1,5 +1,4 @@
-import type { ApiPermissionRecordInput, ApiScopeRecordInput } from '@server/usecases/ports'
-import type { apiPermission, apiResource, apiScope, invitation, member, organization, role } from '../../db/schema'
+import type { apiResource, invitation, member, organization, role } from '../../db/schema'
 
 export function toOrganization(row: typeof organization.$inferSelect) {
   return {
@@ -52,33 +51,8 @@ export function toResource(row: typeof apiResource.$inferSelect) {
     authorizationMode: row.authorizationMode as 'native' | 'external',
     description: row.description,
     enabled: row.enabled,
-    tokenClaimsNamespace: row.tokenClaimsNamespace,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-  }
-}
-
-export function toScope(row: typeof apiScope.$inferSelect): ApiScopeRecordInput {
-  return {
-    id: row.id,
-    resourceId: row.resourceId,
-    value: row.value,
-    description: row.description,
-    required: row.required,
-    tokenClaimName: row.tokenClaimName,
-    includeInAccessToken: row.includeInAccessToken,
-    includeInIdToken: row.includeInIdToken,
-  }
-}
-
-export function toPermission(row: typeof apiPermission.$inferSelect): ApiPermissionRecordInput {
-  return {
-    id: row.id,
-    resourceId: row.resourceId,
-    scopeId: row.scopeId,
-    key: row.key,
-    description: row.description,
-    tokenClaimValue: row.tokenClaimValue,
   }
 }
 
@@ -92,8 +66,6 @@ export function toRole(row: typeof role.$inferSelect) {
     organizationId: row.organizationId,
     applicationId: row.applicationId,
     system: row.system,
-    tokenClaimName: row.tokenClaimName,
-    tokenClaimValue: row.tokenClaimValue,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }

@@ -16,7 +16,7 @@ describe('agent protocol management over real D1', () => {
   })
 
   it('rejects anonymous stable Agent reads with 401', async () => {
-    expect((await harness.request('/api/management/agents')).status).toBe(401)
+    expect((await harness.request('/api/agents')).status).toBe(401)
   })
 
   it('lists and retires stable Agents through real SQL', async () => {
@@ -35,14 +35,13 @@ describe('agent protocol management over real D1', () => {
       userId,
     )
 
-    const inventory = await harness.request('/api/management/agents', { headers: { cookie } })
+    const inventory = await harness.request('/api/agents', { headers: { cookie } })
     expect(inventory.status).toBe(200)
     const body = (await inventory.json()) as { items: Array<{ id: string }> }
     expect(body.items).toEqual([expect.objectContaining({ id: stableAgent.id })])
 
     expect(
-      (await harness.request(`/api/management/agents/${stableAgent.id}`, { method: 'DELETE', headers: { cookie } }))
-        .status,
+      (await harness.request(`/api/agents/${stableAgent.id}`, { method: 'DELETE', headers: { cookie } })).status,
     ).toBe(204)
   })
 
@@ -89,7 +88,7 @@ describe('user management over real D1', () => {
   })
 
   it('rejects anonymous reads with 401', async () => {
-    expect((await harness.request('/api/management/users')).status).toBe(401)
+    expect((await harness.request('/api/users')).status).toBe(401)
   })
 
   it('rejects a signed-in non-admin with 403', async () => {
@@ -101,13 +100,13 @@ describe('user management over real D1', () => {
       password: 'plain-password-2026',
     })
     const memberCookie = await signIn(harness, 'plain@example.com', 'plain-password-2026')
-    expect((await harness.request('/api/management/users', { headers: { cookie: memberCookie } })).status).toBe(403)
+    expect((await harness.request('/api/users', { headers: { cookie: memberCookie } })).status).toBe(403)
   })
 
   it('runs admin user CRUD through the user repository (real SQL)', async () => {
     const cookie = await signInAdmin(harness)
 
-    const created = await harness.request('/api/management/users', {
+    const created = await harness.request('/api/users', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
@@ -122,15 +121,15 @@ describe('user management over real D1', () => {
     const userId = ((await created.json()) as { user: { id: string } }).user.id
 
     // listManagedUsers (repository search/pagination).
-    const list = await harness.request('/api/management/users?search=managed', { headers: { cookie } })
+    const list = await harness.request('/api/users?search=managed', { headers: { cookie } })
     expect(list.status).toBe(200)
     expect(((await list.json()) as { users: Array<{ id: string }> }).users.some((u) => u.id === userId)).toBe(true)
 
-    const fetched = await harness.request(`/api/management/users/${userId}`, { headers: { cookie } })
+    const fetched = await harness.request(`/api/users/${userId}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
 
     // updateManagedUser.
-    const updated = await harness.request(`/api/management/users/${userId}`, {
+    const updated = await harness.request(`/api/users/${userId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ displayName: 'Renamed Managed' }),
@@ -138,7 +137,7 @@ describe('user management over real D1', () => {
     expect(updated.status, await updated.clone().text()).toBe(200)
 
     // deleteManagedUser.
-    const removed = await harness.request(`/api/management/users/${userId}`, {
+    const removed = await harness.request(`/api/users/${userId}`, {
       method: 'DELETE',
       headers: { cookie },
     })
@@ -147,7 +146,7 @@ describe('user management over real D1', () => {
 
   it('rejects an invalid admin create payload with 400', async () => {
     const cookie = await signInAdmin(harness)
-    const response = await harness.request('/api/management/users', {
+    const response = await harness.request('/api/users', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ username: 'no-email' }),
@@ -168,29 +167,29 @@ describe('user management over real D1', () => {
     const me = await harness.request('/api/account/profile', { headers: { cookie: userCookie } })
     const userId = ((await me.json()) as { user: { id: string } }).user.id
 
-    const sessions = await harness.request(`/api/management/users/${userId}/sessions`, {
+    const sessions = await harness.request(`/api/users/${userId}/sessions`, {
       headers: { cookie: adminCookie },
     })
     expect(sessions.status).toBe(200)
     expect(((await sessions.json()) as { sessions: unknown[] }).sessions.length).toBeGreaterThanOrEqual(1)
 
-    const linked = await harness.request(`/api/management/users/${userId}/linked-accounts`, {
+    const linked = await harness.request(`/api/users/${userId}/linked-accounts`, {
       headers: { cookie: adminCookie },
     })
     expect(linked.status).toBe(200)
     expect(((await linked.json()) as { accounts: unknown[] }).accounts.length).toBeGreaterThanOrEqual(1)
 
-    const passkeys = await harness.request(`/api/management/users/${userId}/passkeys`, {
+    const passkeys = await harness.request(`/api/users/${userId}/passkeys`, {
       headers: { cookie: adminCookie },
     })
     expect(passkeys.status).toBe(200)
 
-    const security = await harness.request(`/api/management/users/${userId}/security`, {
+    const security = await harness.request(`/api/users/${userId}/security`, {
       headers: { cookie: adminCookie },
     })
     expect(security.status).toBe(200)
 
-    const apps = await harness.request(`/api/management/users/${userId}/applications`, {
+    const apps = await harness.request(`/api/users/${userId}/applications`, {
       headers: { cookie: adminCookie },
     })
     expect(apps.status).toBe(200)
@@ -205,15 +204,15 @@ describe('user management over real D1', () => {
       password: 'bannable-password-2026',
     })
 
-    const banned = await harness.request(`/api/management/users/${userId}/ban`, {
-      method: 'POST',
+    const banned = await harness.request(`/api/users/${userId}/ban`, {
+      method: 'PUT',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ reason: 'policy violation' }),
     })
     expect(banned.status, await banned.clone().text()).toBe(200)
 
-    const unbanned = await harness.request(`/api/management/users/${userId}/unban`, {
-      method: 'POST',
+    const unbanned = await harness.request(`/api/users/${userId}/ban`, {
+      method: 'DELETE',
       headers: { cookie },
     })
     expect(unbanned.status).toBe(200)
@@ -228,7 +227,7 @@ describe('federated credential management over real D1', () => {
   })
 
   async function createAppAndResource(cookie: string) {
-    const createApp = await harness.request('/api/management/applications', {
+    const createApp = await harness.request('/api/applications', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
@@ -240,7 +239,7 @@ describe('federated credential management over real D1', () => {
       }),
     })
     const application = (await createApp.json()) as { id: string }
-    const createResource = await harness.request('/api/management/api-resources', {
+    const createResource = await harness.request('/api/api-resources', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
@@ -255,14 +254,14 @@ describe('federated credential management over real D1', () => {
   }
 
   it('rejects anonymous reads with 401', async () => {
-    expect((await harness.request('/api/management/applications/app_x/federated-credentials')).status).toBe(401)
+    expect((await harness.request('/api/applications/app_x/federated-credentials')).status).toBe(401)
   })
 
   it('creates and lists a federated credential through real SQL', async () => {
     const cookie = await signInAdmin(harness)
     const { applicationId, audienceResourceId } = await createAppAndResource(cookie)
 
-    const created = await harness.request(`/api/management/applications/${applicationId}/federated-credentials`, {
+    const created = await harness.request(`/api/applications/${applicationId}/federated-credentials`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
@@ -275,7 +274,7 @@ describe('federated credential management over real D1', () => {
     })
     expect(created.status, await created.clone().text()).toBe(201)
 
-    const list = await harness.request(`/api/management/applications/${applicationId}/federated-credentials`, {
+    const list = await harness.request(`/api/applications/${applicationId}/federated-credentials`, {
       headers: { cookie },
     })
     expect(list.status).toBe(200)
@@ -287,7 +286,7 @@ describe('federated credential management over real D1', () => {
     const { applicationId, audienceResourceId } = await createAppAndResource(cookie)
 
     // Neither jwksUrl nor publicKeys provided.
-    const response = await harness.request(`/api/management/applications/${applicationId}/federated-credentials`, {
+    const response = await harness.request(`/api/applications/${applicationId}/federated-credentials`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ name: 'No key', issuer: 'https://x.example.com', subject: 'm:*', audienceResourceId }),

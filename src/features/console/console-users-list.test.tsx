@@ -40,15 +40,15 @@ describe('admin console users-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/users' && init?.method === 'POST') {
+      if (url === '/api/users' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(user, 201))
       }
-      if (url === '/api/management/users/user-1' && init?.method === 'PATCH') {
+      if (url === '/api/users/user-1' && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse({ ...user, role: 'user' }))
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -69,7 +69,7 @@ describe('admin console users-list', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         {
-          url: '/api/management/users',
+          url: '/api/users',
           body: {
             email: 'sam@example.com',
             displayName: 'Sam Doe',
@@ -85,7 +85,7 @@ describe('admin console users-list', () => {
     fireEvent.click(await screen.findByText('Toggle admin role'))
 
     await waitFor(() => {
-      expect(requests.at(-1)).toEqual({ url: '/api/management/users/user-1', body: { role: 'user' } })
+      expect(requests.at(-1)).toEqual({ url: '/api/users/user-1', body: { role: 'user' } })
     })
   })
 
@@ -93,11 +93,11 @@ describe('admin console users-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/users/user-1' && init?.method === 'PATCH') {
+      if (url === '/api/users/user-1' && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse({ ...user, role: 'admin' }))
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [{ ...user, role: 'user' }], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -110,7 +110,7 @@ describe('admin console users-list', () => {
     fireEvent.click(await screen.findByText('Toggle admin role'))
 
     await waitFor(() => {
-      expect(requests.at(-1)).toEqual({ url: '/api/management/users/user-1', body: { role: 'admin' } })
+      expect(requests.at(-1)).toEqual({ url: '/api/users/user-1', body: { role: 'admin' } })
     })
   })
 
@@ -118,7 +118,7 @@ describe('admin console users-list', () => {
     const seen: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         seen.push(url)
         return Promise.resolve(
           jsonResponse({
@@ -149,11 +149,11 @@ describe('admin console users-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/users' && init?.method === 'POST') {
+      if (url === '/api/users' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(user, 201))
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -174,10 +174,10 @@ describe('admin console users-list', () => {
   it('renders fallback mutation errors for non-Error rejections', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/users' && init?.method === 'POST') {
+      if (url === '/api/users' && init?.method === 'POST') {
         return Promise.reject('network failed')
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -198,11 +198,11 @@ describe('admin console users-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/users/password-reset-requests') {
+      if (url === '/api/users/password-reset-requests') {
         requests.push({ url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ accepted: true }))
       }
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(jsonResponse({ users: [user], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -218,9 +218,7 @@ describe('admin console users-list', () => {
     fireEvent.click(await screen.findByText('Send password reset'))
 
     await waitFor(() => {
-      expect(requests).toEqual([
-        { url: '/api/management/users/password-reset-requests', body: { email: 'jane@example.com' } },
-      ])
+      expect(requests).toEqual([{ url: '/api/users/password-reset-requests', body: { email: 'jane@example.com' } }])
     })
   })
 
@@ -229,7 +227,7 @@ describe('admin console users-list', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       requests.push(url)
-      if (url.startsWith('/api/management/users')) {
+      if (url.startsWith('/api/users')) {
         return Promise.resolve(
           jsonResponse({
             users: [{ ...user, email: null, emailVerified: true, role: null }],
@@ -282,16 +280,16 @@ describe('admin console users-list', () => {
 
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/readiness') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
       }
-      if (url === '/api/management/users/user-1' && method === 'GET') {
+      if (url === '/api/users/user-1' && method === 'GET') {
         return Promise.resolve(jsonResponse({ user: { ...profile, role: 'admin', banned: false, banReason: null } }))
       }
-      if (url === '/api/management/users/user-1' && method === 'PATCH') {
+      if (url === '/api/users/user-1' && method === 'PATCH') {
         requests.push({ method, url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(
           jsonResponse({
@@ -306,44 +304,44 @@ describe('admin console users-list', () => {
           }),
         )
       }
-      if (url === '/api/management/users/user-1/password-reset-requests' && method === 'POST') {
+      if (url === '/api/users/user-1/password-reset-requests' && method === 'POST') {
         requests.push({ method, url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ accepted: true }))
       }
-      if (url.startsWith('/api/management/users/user-1/sessions') && method === 'GET') {
+      if (url.startsWith('/api/users/user-1/sessions') && method === 'GET') {
         return Promise.resolve(jsonResponse({ sessions: [consoleSession], pagination }))
       }
-      if (url === '/api/management/users/user-1/sessions/session-1' && method === 'DELETE') {
+      if (url === '/api/users/user-1/sessions/session-1' && method === 'DELETE') {
         requests.push({ method, url, body: null })
         return Promise.resolve(jsonResponse({ success: true }))
       }
-      if (url === '/api/management/users/user-1/sessions' && method === 'DELETE') {
+      if (url === '/api/users/user-1/sessions' && method === 'DELETE') {
         requests.push({ method, url, body: null })
         return Promise.resolve(jsonResponse({ success: true }))
       }
-      if (url.startsWith('/api/management/users/user-1/linked-accounts')) {
+      if (url.startsWith('/api/users/user-1/linked-accounts')) {
         return Promise.resolve(jsonResponse({ accounts: [linkedAccount], pagination }))
       }
-      if (url.startsWith('/api/management/users/user-1/applications')) {
+      if (url.startsWith('/api/users/user-1/applications')) {
         return Promise.resolve(jsonResponse({ applications: [userApplication], pagination }))
       }
-      if (url === '/api/management/users/user-1/security') {
+      if (url === '/api/users/user-1/security') {
         return Promise.resolve(jsonResponse({ security: consoleSecurity }))
       }
-      if (url === '/api/management/users/user-1/passkeys/passkey-1' && method === 'DELETE') {
+      if (url === '/api/users/user-1/passkeys/passkey-1' && method === 'DELETE') {
         requests.push({ method, url, body: null })
         return Promise.resolve(jsonResponse({}))
       }
-      if (url.startsWith('/api/management/users/user-1/passkeys')) {
+      if (url.startsWith('/api/users/user-1/passkeys')) {
         return Promise.resolve(jsonResponse({ passkeys: [consolePasskey], pagination }))
       }
-      if (url === '/api/management/users/user-1/ban' && method === 'PUT') {
+      if (url === '/api/users/user-1/ban' && method === 'PUT') {
         requests.push({ method, url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(
           jsonResponse({ user: { ...profile, role: 'user', banned: true, banReason: 'abuse', emailVerified: false } }),
         )
       }
-      if (url === '/api/management/users/user-1/ban' && method === 'DELETE') {
+      if (url === '/api/users/user-1/ban' && method === 'DELETE') {
         requests.push({ method, url, body: null })
         return Promise.resolve(
           jsonResponse({
@@ -372,15 +370,11 @@ describe('admin console users-list', () => {
     expect(await screen.findByRole('button', { name: 'Send password reset' })).toBeTruthy()
     const fetchedUrls = fetches.map((entry) => entry.url)
     expect(fetchedUrls).toEqual(
-      expect.arrayContaining([
-        '/api/management/users/user-1',
-        '/api/management/users/user-1/security',
-        '/api/management/users/user-1/passkeys?',
-      ]),
+      expect.arrayContaining(['/api/users/user-1', '/api/users/user-1/security', '/api/users/user-1/passkeys?']),
     )
-    expect(fetchedUrls).not.toContain('/api/management/users/user-1/sessions?')
-    expect(fetchedUrls).not.toContain('/api/management/users/user-1/linked-accounts?')
-    expect(fetchedUrls).not.toContain('/api/management/users/user-1/applications?')
+    expect(fetchedUrls).not.toContain('/api/users/user-1/sessions?')
+    expect(fetchedUrls).not.toContain('/api/users/user-1/linked-accounts?')
+    expect(fetchedUrls).not.toContain('/api/users/user-1/applications?')
     await waitFor(() => {
       const summary = summaryCard('Identity summary')
       expect(summary.getByText('Sessions')).toBeTruthy()
@@ -419,7 +413,7 @@ describe('admin console users-list', () => {
       expect(requests).toEqual([
         {
           method: 'PATCH',
-          url: '/api/management/users/user-1',
+          url: '/api/users/user-1',
           body: {
             email: 'jane@example.com',
             displayName: 'Jane Q. Stone',
@@ -430,27 +424,27 @@ describe('admin console users-list', () => {
         },
         {
           method: 'POST',
-          url: '/api/management/users/user-1/password-reset-requests',
+          url: '/api/users/user-1/password-reset-requests',
           body: {},
         },
         {
           method: 'DELETE',
-          url: '/api/management/users/user-1/sessions/session-1',
+          url: '/api/users/user-1/sessions/session-1',
           body: null,
         },
         {
           method: 'DELETE',
-          url: '/api/management/users/user-1/sessions',
+          url: '/api/users/user-1/sessions',
           body: null,
         },
         {
           method: 'DELETE',
-          url: '/api/management/users/user-1/passkeys/passkey-1',
+          url: '/api/users/user-1/passkeys/passkey-1',
           body: null,
         },
         {
           method: 'PUT',
-          url: '/api/management/users/user-1/ban',
+          url: '/api/users/user-1/ban',
           body: { reason: 'abuse' },
         },
       ])

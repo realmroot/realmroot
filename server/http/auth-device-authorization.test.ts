@@ -45,11 +45,11 @@ describe('auth device authorization endpoints', () => {
       await expect(response.json()).resolves.toMatchObject({ error: 'invalid_client' })
     }
 
-    const disallowedScope = await requestJson(auth, '/device/code', { client_id: 'native', scope: 'management:read' })
+    const disallowedScope = await requestJson(auth, '/device/code', { client_id: 'native', scope: 'applications:read' })
     expect(disallowedScope.status).toBe(400)
     await expect(disallowedScope.json()).resolves.toMatchObject({
       error: 'invalid_request',
-      error_description: 'Scope is not allowed for this client: management:read',
+      error_description: 'Scope is not allowed for this client: applications:read',
     })
   })
 

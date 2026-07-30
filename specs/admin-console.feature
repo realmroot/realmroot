@@ -121,11 +121,14 @@ Feature: Admin Console
   Scenario: Roles page creates a role
     When I create a role
     Then it appears in authorization inventory
+    And the role can reference scopes declared by its API resource OpenAPI contract
 
   @entrypoint:product-ui @journey:admin-create-api-resource
   Scenario: API resources page creates an API resource
     When I create an API resource
     Then it appears in authorization inventory
+    And the business resource server OpenAPI contract remains the scope authority
+    And the Console does not provide scope creation or editing
 
   @entrypoint:product-ui @journey:admin-authorization-inventory
   Scenario: Authorization inventory lists organizations, roles, and API resources
@@ -152,15 +155,17 @@ Feature: Admin Console
 
   @entrypoint:product-ui @journey:oidc-claim-emission
   Scenario: Applications apply configured OIDC claim emission per token destination
-    Given an application has organization membership, roles, permissions, and API scopes
+    Given an application has organization membership, resource roles, and approved resource scopes
     When OIDC claims are configured for access tokens, ID tokens, and userinfo
-    Then issued access tokens, ID tokens, and userinfo include only the configured claims
+    Then issued tokens identify relevant organizations in groups
+    And identify effective resource roles in roles
+    And carry only approved scopes
 
   @entrypoint:product-ui @journey:agent-discovery
   Scenario: AgentAuth discovery exposes a narrow delegated protocol surface
     When an agent client requests /.well-known/agent-configuration
     Then Realmroot advertises delegated mode and device authorization approval
-    And the advertised capabilities include read-only account data and coarse management permissions
+    And the advertised capabilities include read-only account data and explicit resource scopes
     And the advertised endpoints, issuer, and proof algorithms are authoritative for the client
     And individual Management API operations are not generated as AgentAuth capabilities
 

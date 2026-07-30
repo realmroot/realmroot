@@ -72,7 +72,7 @@ export const application = {
     accessToken: {
       authorization: true,
       roles: true,
-      permissions: true,
+      groups: true,
     },
     idToken: {},
     userInfo: {},
@@ -233,8 +233,6 @@ export const role = {
   applicationId: null,
   organizationId: null,
   resourceId: null,
-  tokenClaimName: null,
-  tokenClaimValue: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 }
@@ -244,31 +242,10 @@ export const apiResource = {
   identifier: 'management-api',
   name: 'Management API',
   description: 'Management surface',
-  audience: 'https://auth.example.com/api/management',
-  resourceUrl: 'https://auth.example.com/api/management',
+  audience: 'https://auth.example.com/api',
+  resourceUrl: 'https://auth.example.com/api',
   authorizationMode: 'native' as const,
   enabled: true,
-  tokenClaimsNamespace: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
-}
-
-export const apiScope = {
-  id: 'scope-1',
-  resourceId: 'resource-1',
-  value: 'orders:read',
-  description: 'Read orders',
-  required: false,
-  tokenClaimName: null,
-  includeInAccessToken: true,
-  includeInIdToken: false,
-}
-
-export const apiPermission = {
-  id: 'permission-1',
-  resourceId: 'resource-1',
-  scopeId: 'scope-1',
-  key: 'orders.read',
-  description: 'Read orders',
-  tokenClaimValue: 'read',
 }

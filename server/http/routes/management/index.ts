@@ -1,12 +1,6 @@
-import { assignApplicationRole, assignMemberRole, assignUserRole } from '@server/usecases/authorization'
-import { assignRoleRequestSchema } from '@shared/api/authorization'
 import type { SecurityPolicy } from '@shared/api/security'
 import { Hono } from 'hono'
-import { requireAdmin } from '../../middleware/admin'
-import { getActorUserId } from '../../middleware/auth-context'
-import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
-import { readJson } from '../validation'
 import { managementAgentsRoute } from './agents'
 import { createManagementApiResourcesRoute } from './api-resources'
 import { managementApplicationsRoute } from './applications'
@@ -19,13 +13,13 @@ import { createManagementSettingsRoutes } from './settings'
 import { managementUserRoutes } from './users'
 import { createManagementWebhookRoutes } from './webhooks'
 
-interface ManagementRoutesOptions {
+interface ProtectedResourceRoutesOptions {
   authApi: ManagementAuthApi
   canonicalOrigin?: string
   securityPolicy?: SecurityPolicy
 }
 
-export function createManagementRoutes(options: ManagementRoutesOptions) {
+export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOptions) {
   const app = new Hono()
 
   app.route('/applications', managementApplicationsRoute)
@@ -33,21 +27,8 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)
-  app.post('/user-role-assignments', requireAdmin(), async (c) => {
-    await assignUserRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
-    return c.body(null, 204)
-  })
-  app.post('/application-role-assignments', requireAdmin(), async (c) => {
-    await assignApplicationRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
-    return c.body(null, 204)
-  })
-  app.post('/member-role-assignments', requireAdmin(), async (c) => {
-    await assignMemberRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
-    return c.body(null, 204)
-  })
-
   app.route('/users', managementUserRoutes(options.authApi, { normalizeListResponse: true }))
-  app.route('/security', managementSecurityRoutes(options.authApi))
+  app.route('/security', managementSecurityRoutes())
 
   app.route('/', createManagementSettingsRoutes(options.securityPolicy))
   app.route('/', createManagementReadinessRoute({ securityPolicy: options.securityPolicy }))
@@ -57,4 +38,4 @@ export function createManagementRoutes(options: ManagementRoutesOptions) {
   return app
 }
 
-export type ManagementRoutes = ReturnType<typeof createManagementRoutes>
+export type ProtectedResourceRoutes = ReturnType<typeof createProtectedResourceRoutes>

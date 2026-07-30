@@ -1,18 +1,17 @@
 import type { AuthorizationRepository, RoleAssignmentScope } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, inArray, isNull, or } from 'drizzle-orm'
+import { and, count, desc, eq, gt, isNull, or } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
-  apiPermission,
+  agentRoleAssignment,
   apiResource,
-  apiScope,
   applicationRoleAssignment,
   invitation,
   member,
   memberRoleAssignment,
   organization,
   role,
-  rolePermission,
+  roleScope,
   userRoleAssignment,
 } from '../../db/schema'
 import {
@@ -20,10 +19,8 @@ import {
   toMember,
   toOrganization,
   toPagination,
-  toPermission,
   toResource,
   toRole,
-  toScope,
   withoutUndefined,
 } from './authorization-mappers'
 
@@ -181,77 +178,6 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       await db.delete(apiResource).where(eq(apiResource.id, id))
     },
 
-    async createScope(resourceId, input) {
-      await db.insert(apiScope).values({ ...input, resourceId })
-      return { ...input, resourceId }
-    },
-
-    async listScopes(resourceId, pagination) {
-      const rows = await db
-        .select()
-        .from(apiScope)
-        .where(eq(apiScope.resourceId, resourceId))
-        .limit(pagination.limit)
-        .offset(pagination.offset)
-      const total = await totalRows(db, apiScope, eq(apiScope.resourceId, resourceId))
-      return { items: rows.map(toScope), pagination: toPagination(pagination, total) }
-    },
-
-    async listScopesByValues(resourceId, values) {
-      if (values.length === 0) return []
-      const rows = await db
-        .select()
-        .from(apiScope)
-        .where(
-          resourceId
-            ? and(eq(apiScope.resourceId, resourceId), inArray(apiScope.value, values))
-            : inArray(apiScope.value, values),
-        )
-      return rows.map(toScope)
-    },
-
-    async findScope(id) {
-      const rows = await db.select().from(apiScope).where(eq(apiScope.id, id)).limit(1)
-      return rows[0] ? toScope(rows[0]) : null
-    },
-
-    async updateScope(id, patch) {
-      await db.update(apiScope).set(withoutUndefined(patch)).where(eq(apiScope.id, id))
-    },
-
-    async deleteScope(id) {
-      await db.delete(apiScope).where(eq(apiScope.id, id))
-    },
-
-    async createPermission(resourceId, input) {
-      await db.insert(apiPermission).values({ ...input, resourceId })
-      return { ...input, resourceId }
-    },
-
-    async listPermissions(resourceId, pagination) {
-      const rows = await db
-        .select()
-        .from(apiPermission)
-        .where(eq(apiPermission.resourceId, resourceId))
-        .limit(pagination.limit)
-        .offset(pagination.offset)
-      const total = await totalRows(db, apiPermission, eq(apiPermission.resourceId, resourceId))
-      return { items: rows.map(toPermission), pagination: toPagination(pagination, total) }
-    },
-
-    async findPermission(id) {
-      const rows = await db.select().from(apiPermission).where(eq(apiPermission.id, id)).limit(1)
-      return rows[0] ? toPermission(rows[0]) : null
-    },
-
-    async updatePermission(id, patch) {
-      await db.update(apiPermission).set(withoutUndefined(patch)).where(eq(apiPermission.id, id))
-    },
-
-    async deletePermission(id) {
-      await db.delete(apiPermission).where(eq(apiPermission.id, id))
-    },
-
     async createRole(input) {
       const now = new Date()
       await db.insert(role).values({ ...input, createdAt: now, updatedAt: now })
@@ -285,23 +211,17 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       await db.delete(role).where(eq(role.id, id))
     },
 
-    async listRolePermissions(roleId) {
-      const rows = await db
-        .select({ permission: apiPermission })
-        .from(rolePermission)
-        .innerJoin(apiPermission, eq(rolePermission.permissionId, apiPermission.id))
-        .where(eq(rolePermission.roleId, roleId))
-      return rows.map((row) => toPermission(row.permission))
+    async listRoleScopes(roleId) {
+      const rows = await db.select({ scope: roleScope.scope }).from(roleScope).where(eq(roleScope.roleId, roleId))
+      return rows.map((row) => row.scope).sort()
     },
 
-    async replaceRolePermissions(roleId, permissionIds) {
+    async replaceRoleScopes(roleId, scopes) {
       const statements: [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]] = [
-        db.delete(rolePermission).where(eq(rolePermission.roleId, roleId)),
+        db.delete(roleScope).where(eq(roleScope.roleId, roleId)),
       ]
-      if (permissionIds.length > 0) {
-        statements.push(
-          db.insert(rolePermission).values(permissionIds.map((permissionId) => ({ roleId, permissionId }))),
-        )
+      if (scopes.length > 0) {
+        statements.push(db.insert(roleScope).values(scopes.map((scope) => ({ roleId, scope }))))
       }
       await db.batch(statements)
     },
@@ -314,7 +234,6 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           roleId: input.roleId,
           userId: input.subjectId,
           assignedByUserId: input.assignedByUserId,
-          tokenClaims: input.tokenClaims,
           expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
         })
         .onConflictDoNothing()
@@ -328,7 +247,6 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           roleId: input.roleId,
           applicationId: input.subjectId,
           assignedByUserId: input.assignedByUserId,
-          tokenClaims: input.tokenClaims,
           expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
         })
         .onConflictDoNothing()
@@ -342,7 +260,19 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
           roleId: input.roleId,
           memberId: input.subjectId,
           assignedByUserId: input.assignedByUserId,
-          tokenClaims: input.tokenClaims,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+        })
+        .onConflictDoNothing()
+    },
+
+    async assignAgentRole(input) {
+      await db
+        .insert(agentRoleAssignment)
+        .values({
+          id: input.id,
+          roleId: input.roleId,
+          agentIdentityId: input.subjectId,
+          assignedByUserId: input.assignedByUserId,
           expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
         })
         .onConflictDoNothing()
@@ -367,27 +297,34 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
     listMemberRoleAssignments(memberId, scope) {
       return listAssignments(db, memberRoleAssignment, eq(memberRoleAssignment.memberId, memberId), scope)
     },
+
+    listAgentRoleAssignments(agentIdentityId, scope) {
+      return listAssignments(db, agentRoleAssignment, eq(agentRoleAssignment.agentIdentityId, agentIdentityId), scope)
+    },
   }
 }
 
 async function listAssignments(
   db: Database,
-  assignmentTable: typeof userRoleAssignment | typeof applicationRoleAssignment | typeof memberRoleAssignment,
+  assignmentTable:
+    | typeof userRoleAssignment
+    | typeof applicationRoleAssignment
+    | typeof memberRoleAssignment
+    | typeof agentRoleAssignment,
   subjectFilter: ReturnType<typeof eq>,
   scope: RoleAssignmentScope,
 ) {
   const now = new Date()
   const rows = await db
-    .select({ assignment: assignmentTable, role, permission: apiPermission })
+    .select({ assignment: assignmentTable, role, scope: roleScope.scope })
     .from(assignmentTable)
     .innerJoin(role, eq(assignmentTable.roleId, role.id))
-    .leftJoin(rolePermission, eq(role.id, rolePermission.roleId))
-    .leftJoin(apiPermission, eq(rolePermission.permissionId, apiPermission.id))
+    .leftJoin(roleScope, eq(role.id, roleScope.roleId))
     .where(
       and(
         subjectFilter,
         or(isNull(assignmentTable.expiresAt), gt(assignmentTable.expiresAt, now)),
-        scope.resourceId ? or(eq(role.resourceId, scope.resourceId), isNull(role.resourceId)) : isNull(role.resourceId),
+        scope.resourceId ? eq(role.resourceId, scope.resourceId) : isNull(role.resourceId),
         scope.organizationId
           ? or(eq(role.organizationId, scope.organizationId), isNull(role.organizationId))
           : isNull(role.organizationId),
@@ -401,17 +338,15 @@ async function listAssignments(
     string,
     {
       role: ReturnType<typeof toRole>
-      permissions: ReturnType<typeof toPermission>[]
-      tokenClaims: Record<string, unknown> | null
+      scopes: string[]
     }
   >()
   for (const row of rows) {
     const current = assignments.get(row.role.id) ?? {
       role: toRole(row.role),
-      permissions: [],
-      tokenClaims: row.assignment.tokenClaims,
+      scopes: [],
     }
-    if (row.permission) current.permissions.push(toPermission(row.permission))
+    if (row.scope) current.scopes.push(row.scope)
     assignments.set(row.role.id, current)
   }
   return [...assignments.values()]

@@ -5,6 +5,7 @@ import { createApp } from '@server/http/app'
 import * as authorizationUsecase from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
+import { protectedResourceCapabilityNames } from '@shared/authz'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestDeps } from './test-deps'
 
@@ -13,7 +14,7 @@ describe('auth.test 2', () => {
     vi.restoreAllMocks()
   })
 
-  it('serves account and coarse management capabilities without generating one capability per API operation [spec: admin-console/agent-discovery]', async () => {
+  it('serves account and resource-scoped management capabilities [spec: admin-console/agent-discovery]', async () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
@@ -49,8 +50,7 @@ describe('auth.test 2', () => {
       'account.profile.read',
       'account.sessions.list',
       'account.authorized_apps.list',
-      'management:read',
-      'management:write',
+      ...protectedResourceCapabilityNames,
     ])
     expect(capabilities.capabilities.map((capability) => capability.name)).not.toContain('management.users.delete')
   })
@@ -77,7 +77,7 @@ describe('auth.test 2', () => {
     })
   })
 
-  it('keeps management capabilities out of OAuth client scopes and userinfo', async () => {
+  it('keeps Realmroot resource capabilities out of OAuth client scopes and userinfo', async () => {
     const auth = createAuth(
       {} as Database,
       '01234567890123456789012345678901',
@@ -91,7 +91,7 @@ describe('auth.test 2', () => {
     await expect(
       oauth.customUserInfoClaims({
         user: createUser(),
-        scopes: ['openid', 'management:read'],
+        scopes: ['openid', 'applications:read'],
         jwt: {},
       }),
     ).resolves.toEqual({})
@@ -132,7 +132,7 @@ describe('auth.test 2', () => {
       claimSelection: {
         authorization: true,
         roles: true,
-        permissions: true,
+        groups: true,
       },
     })
   })

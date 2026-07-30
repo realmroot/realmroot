@@ -77,7 +77,7 @@ describe('asset upload + read over real D1 and an in-memory bucket', () => {
     const cookie = await signInAdmin(harness)
 
     const application = (await (
-      await harness.request('/api/management/applications', {
+      await harness.request('/api/applications', {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie },
         body: JSON.stringify({
@@ -89,35 +89,35 @@ describe('asset upload + read over real D1 and an in-memory bucket', () => {
       })
     ).json()) as { id: string }
     const organization = (await (
-      await harness.request('/api/management/organizations', {
+      await harness.request('/api/organizations', {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie },
         body: JSON.stringify({ slug: 'logo-org', name: 'Logo Org' }),
       })
     ).json()) as { id: string }
 
-    const appLogo = await harness.request(`/api/management/applications/${application.id}/logo`, {
+    const appLogo = await harness.request(`/api/applications/${application.id}/logo`, {
       method: 'POST',
       headers: { cookie, origin: 'http://localhost' },
       body: pngForm(),
     })
     expect(appLogo.status, await appLogo.clone().text()).toBe(201)
 
-    const orgLogo = await harness.request(`/api/management/organizations/${organization.id}/logo`, {
+    const orgLogo = await harness.request(`/api/organizations/${organization.id}/logo`, {
       method: 'POST',
       headers: { cookie, origin: 'http://localhost' },
       body: pngForm(),
     })
     expect(orgLogo.status, await orgLogo.clone().text()).toBe(201)
 
-    const brandingLogo = await harness.request('/api/management/branding/logo', {
+    const brandingLogo = await harness.request('/api/branding/logo', {
       method: 'POST',
       headers: { cookie, origin: 'http://localhost' },
       body: pngForm(),
     })
     expect(brandingLogo.status, await brandingLogo.clone().text()).toBe(201)
 
-    const favicon = await harness.request('/api/management/branding/favicon', {
+    const favicon = await harness.request('/api/branding/favicon', {
       method: 'POST',
       headers: { cookie, origin: 'http://localhost' },
       body: pngForm(),

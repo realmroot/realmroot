@@ -112,7 +112,6 @@ export const agentApiResourcesResponseSchema = z.object({
       audience: z.string(),
       resourceUrl: z.url(),
       authorizationMode: z.enum(['native', 'external']),
-      scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       accountConnections: z.array(
         z.object({
           id: z.string(),
@@ -135,7 +134,6 @@ export const connectableApiResourcesResponseSchema = z.object({
       name: z.string(),
       audience: z.string(),
       resourceUrl: z.url(),
-      scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
     }),
   ),
   pagination: paginationMetadataSchema,
@@ -169,7 +167,7 @@ export const createAccountConnectionSchema = z
         z.object({ type: z.literal('organization'), organizationId: nonEmptyString }),
       ])
       .default({ type: 'user' }),
-    scopes: scopeListSchema.optional(),
+    scopes: scopeListSchema,
   })
   .strict()
 

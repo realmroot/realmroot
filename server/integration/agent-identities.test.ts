@@ -8,7 +8,7 @@ import {
   approvalRequest,
 } from '@server/db/schema'
 import { createAdditionalAgentEnrollmentIntent, createAgentEnrollmentIntent } from '@server/usecases/agent-identities'
-import { createResource, createScope } from '@server/usecases/authorization'
+import { assignAgentRole, createResource, createRole, replaceRoleScopes } from '@server/usecases/authorization'
 import { createAccessRequest, issueTargetAccessToken, listAgentApiResources } from '@server/usecases/external-resources'
 import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
@@ -95,7 +95,7 @@ describe('Agent identity enrollment over real D1', () => {
     await harness.db.insert(agentCapabilityGrant).values({
       id: 'approval-management-grant',
       agentId: 'approval-agent',
-      capability: 'management:read',
+      capability: 'applications:read',
       status: 'pending',
       createdAt,
       updatedAt: createdAt,
@@ -105,7 +105,7 @@ describe('Agent identity enrollment over real D1', () => {
       method: 'device_authorization',
       agentId: 'approval-agent',
       hostId: 'approval-host',
-      capabilities: 'management:read',
+      capabilities: 'applications:read',
       status: 'pending',
       userCodeHash: await hashApprovalCode('WXYZ-5678'),
       interval: 5,
@@ -121,7 +121,7 @@ describe('Agent identity enrollment over real D1', () => {
         kind: 'protocol',
         userCode: 'WXYZ-5678',
         decision: 'approve',
-        permissions: ['management:read'],
+        permissions: ['applications:read'],
       }),
     })
     expect(capabilityApproval.status, await capabilityApproval.clone().text()).toBe(200)
@@ -230,7 +230,14 @@ describe('Agent identity enrollment over real D1', () => {
       resourceUrl: 'https://api.example.com',
       authorizationMode: 'native',
     })
-    await createScope(harness.deps, resource.id, { value: 'repo:read' })
+    harness.deps.externalHttp.fetch = resourceOpenApiFetch(resource.resourceUrl, 'repo:read')
+    const resourceRole = await createRole(harness.deps, {
+      key: 'native-api-reader',
+      name: 'Native API reader',
+      resourceId: resource.id,
+    })
+    await replaceRoleScopes(harness.deps, resourceRole.id, ['repo:read'])
+    await assignAgentRole(harness.deps, { roleId: resourceRole.id, subjectId: approved.agent.id }, userId)
     const principal = {
       issuer: approved.agent.issuer,
       subject: approved.agent.subject,
@@ -318,6 +325,38 @@ describe('Agent identity enrollment over real D1', () => {
     ).rejects.toMatchObject({ status: 400 })
   })
 })
+
+function resourceOpenApiFetch(resourceUrl: string, scope: string) {
+  return async (request: Request) => {
+    if (request.url === new URL(resourceUrl).toString()) {
+      return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+    }
+    if (request.url === new URL('/openapi.json', resourceUrl).toString()) {
+      return Response.json({
+        openapi: '3.1.0',
+        components: {
+          securitySchemes: {
+            oauth: {
+              type: 'oauth2',
+              flows: {
+                clientCredentials: {
+                  tokenUrl: 'https://api.example.com/token',
+                  scopes: { [scope]: scope },
+                },
+              },
+            },
+          },
+        },
+        paths: {
+          '/resource': {
+            get: { security: [{ oauth: [scope] }], responses: {} },
+          },
+        },
+      })
+    }
+    return new Response(null, { status: 404 })
+  }
+}
 
 async function createIntent(
   harness: Harness,

@@ -5,7 +5,6 @@ import {
   type FormState,
   hostedCustomCssSchema,
   type ManagementUserResponse,
-  tokenClaimsObjectSchema,
   tt,
   useMutation,
   useState,
@@ -98,12 +97,6 @@ export function shallowEqual(left: Record<string, unknown>, right: Record<string
 export function nullableString(value: string) {
   const trimmed = value.trim()
   return trimmed ? trimmed : null
-}
-export function parseTokenClaims(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return undefined
-  const parsed = JSON.parse(trimmed) as unknown
-  return tokenClaimsObjectSchema.parse(parsed)
 }
 export function parseLineList(value: string) {
   return value

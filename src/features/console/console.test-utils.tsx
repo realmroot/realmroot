@@ -43,22 +43,21 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
 
   if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
   if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
-  if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-  if (url === '/api/management/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
-  if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-  if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-  if (url === '/api/management/connectors')
-    return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
-  if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-  if (url === '/api/management/readiness') {
+  if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+  if (url === '/api/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
+  if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+  if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+  if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
+  if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+  if (url === '/api/readiness') {
     return Promise.resolve(
       jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
     )
   }
-  if (url === '/api/management/agents') {
+  if (url === '/api/agents') {
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
-  if (url === '/api/management/audit-events') {
+  if (url === '/api/audit-events') {
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
 
@@ -87,40 +86,40 @@ export function consoleRouteFetch(input: RequestInfo | URL) {
   const url = request?.url ? new URL(request.url).pathname : String(input)
   if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
   if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
-  if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-  if (url === '/api/management/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
-  if (url === '/api/management/readiness') {
+  if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+  if (url === '/api/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
+  if (url === '/api/readiness') {
     return Promise.resolve(
       jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
     )
   }
-  if (url === '/api/management/applications') {
+  if (url === '/api/applications') {
     return Promise.resolve(jsonResponse({ applications: [application], pagination }))
   }
-  if (url === '/api/management/applications/app-1') return Promise.resolve(jsonResponse(application))
-  if (url.startsWith('/api/management/users')) return Promise.resolve(jsonResponse({ users: [user], pagination }))
-  if (url === '/api/management/connectors') {
+  if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
+  if (url.startsWith('/api/users')) return Promise.resolve(jsonResponse({ users: [user], pagination }))
+  if (url === '/api/connectors') {
     return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
   }
-  if (url === '/api/management/connectors/templates') {
+  if (url === '/api/connectors/templates') {
     return Promise.resolve(jsonResponse(connectorTemplates))
   }
-  if (url === '/api/management/organizations') {
+  if (url === '/api/organizations') {
     return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
   }
-  if (url === '/api/management/organizations/org-1') return Promise.resolve(jsonResponse(organization))
-  if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-  if (url === '/api/management/api-resources') {
+  if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
+  if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+  if (url === '/api/api-resources') {
     return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
   }
-  if (url.startsWith('/api/management/webhooks/endpoints')) {
+  if (url.startsWith('/api/webhooks/endpoints')) {
     return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
   }
-  if (url.startsWith('/api/management/webhooks/requests')) {
+  if (url.startsWith('/api/webhooks/requests')) {
     return Promise.resolve(jsonResponse({ requests: [webhookRequest], pagination }))
   }
-  if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-  if (url === '/api/management/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+  if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+  if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
   return consoleSharedFetch(input)
 }
 

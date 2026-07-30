@@ -44,7 +44,7 @@ describe('admin console branding-content-b', () => {
   it('uses default branding form values when optional branding settings are absent', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/branding-settings') {
+      if (url === '/api/branding-settings') {
         return Promise.resolve(
           jsonResponse({
             branding: {
@@ -88,8 +88,8 @@ describe('admin console branding-content-b', () => {
   it('renders sign-in and account configuration tabs without v1 dead-end controls [spec: admin-console/admin-account-center-settings]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/account-center-settings') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/account-center-settings') {
         return Promise.resolve(jsonResponse(accountCenterSettings))
       }
       return consoleSharedFetch(input, init)
@@ -115,7 +115,7 @@ describe('admin console branding-content-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save account center' }))
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
-        '/api/management/account-center-settings',
+        '/api/account-center-settings',
         expect.objectContaining({
           method: 'PATCH',
           body: expect.stringContaining('"sessionsViewEnabled":false'),
@@ -126,7 +126,7 @@ describe('admin console branding-content-b', () => {
     cleanup()
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') {
+      if (url === '/api/sign-in-settings') {
         return Promise.resolve(
           jsonResponse({
             ...signInSettings,
@@ -155,15 +155,15 @@ describe('admin console branding-content-b', () => {
   it('renders routed connector, account, tenant, and webhook settings tabs with active states', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/account-center-settings') {
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/account-center-settings') {
         return Promise.resolve(jsonResponse(accountCenterSettings))
       }
-      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/management/connectors') {
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       }
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -203,13 +203,13 @@ describe('admin console branding-content-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/management/account-center-settings' && method === 'PATCH') {
+      if (url === '/api/account-center-settings' && method === 'PATCH') {
         return Promise.resolve(jsonResponse({ error: { message: 'Account center save failed.' } }, 500))
       }
-      if (url === '/api/management/account-center-settings') {
+      if (url === '/api/account-center-settings') {
         return Promise.resolve(jsonResponse(accountCenterSettings))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -244,7 +244,7 @@ describe('admin console branding-content-b', () => {
     let accountCenterRequests = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/account-center-settings') {
+      if (url === '/api/account-center-settings') {
         accountCenterRequests += 1
         if (accountCenterRequests === 1) {
           return Promise.resolve(jsonResponse({ error: { message: 'Account center unavailable.' } }, 503))
@@ -273,25 +273,25 @@ describe('admin console branding-content-b', () => {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null
       requests.push({ url, method, body })
 
-      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'GET') {
+      if (url.startsWith('/api/webhooks/endpoints') && method === 'GET') {
         return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
       }
-      if (url === '/api/management/webhooks/endpoints' && method === 'POST') {
+      if (url === '/api/webhooks/endpoints' && method === 'POST') {
         return Promise.resolve(jsonResponse({ endpoint: webhookEndpoint, signingSecret: 'whsec_created_secret' }, 201))
       }
-      if (url === '/api/management/webhooks/endpoints/wh_1' && method === 'PATCH') {
+      if (url === '/api/webhooks/endpoints/wh_1' && method === 'PATCH') {
         return Promise.resolve(jsonResponse({ ...webhookEndpoint, enabled: false }))
       }
-      if (url === '/api/management/webhooks/endpoints/wh_1/secrets' && method === 'POST') {
+      if (url === '/api/webhooks/endpoints/wh_1/secrets' && method === 'POST') {
         return Promise.resolve(jsonResponse({ endpoint: webhookEndpoint, signingSecret: 'whsec_rotated_secret' }, 201))
       }
-      if (url === '/api/management/webhooks/endpoints/wh_1' && method === 'DELETE') {
+      if (url === '/api/webhooks/endpoints/wh_1' && method === 'DELETE') {
         return Promise.resolve(new Response(null, { status: 204 }))
       }
-      if (url.startsWith('/api/management/webhooks/requests') && method === 'GET') {
+      if (url.startsWith('/api/webhooks/requests') && method === 'GET') {
         return Promise.resolve(jsonResponse({ requests: [webhookRequest], pagination }))
       }
-      if (url === '/api/management/webhooks/requests/whr_1/retries' && method === 'POST') {
+      if (url === '/api/webhooks/requests/whr_1/retries' && method === 'POST') {
         return Promise.resolve(jsonResponse({ ...webhookRequest, status: 'pending' }, 202))
       }
       return consoleSharedFetch(input, init)
@@ -311,7 +311,7 @@ describe('admin console branding-content-b', () => {
     expect(writeText).toHaveBeenCalledWith('whsec_created_secret')
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(requests).toContainEqual({
-      url: '/api/management/webhooks/endpoints',
+      url: '/api/webhooks/endpoints',
       method: 'POST',
       body: {
         url: 'https://events.example.com/auth',
@@ -331,7 +331,7 @@ describe('admin console branding-content-b', () => {
     fireEvent.click(await screen.findByRole('switch', { name: 'Enabled' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/management/webhooks/endpoints/wh_1',
+        url: '/api/webhooks/endpoints/wh_1',
         method: 'PATCH',
         body: { enabled: false },
       }),
@@ -343,9 +343,7 @@ describe('admin console branding-content-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     await waitFor(() =>
       expect(
-        requests.some(
-          (request) => request.url === '/api/management/webhooks/endpoints/wh_1' && request.method === 'DELETE',
-        ),
+        requests.some((request) => request.url === '/api/webhooks/endpoints/wh_1' && request.method === 'DELETE'),
       ).toBe(true),
     )
 
@@ -364,7 +362,7 @@ describe('admin console branding-content-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/management/webhooks/requests/whr_1/retries',
+        url: '/api/webhooks/requests/whr_1/retries',
         method: 'POST',
         body: null,
       }),
@@ -375,10 +373,10 @@ describe('admin console branding-content-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'POST') {
+      if (url.startsWith('/api/webhooks/endpoints') && method === 'POST') {
         return Promise.resolve(jsonResponse({ error: { message: 'Endpoint create failed.' } }, 500))
       }
-      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'GET') {
+      if (url.startsWith('/api/webhooks/endpoints') && method === 'GET') {
         return Promise.resolve(jsonResponse({ endpoints: [], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -404,11 +402,11 @@ describe('admin console branding-content-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'POST') {
+      if (url.startsWith('/api/webhooks/endpoints') && method === 'POST') {
         posts.push(url)
         return Promise.resolve(jsonResponse({ endpoint: webhookEndpoint, signingSecret: 'x' }, 201))
       }
-      if (url.startsWith('/api/management/webhooks/endpoints') && method === 'GET') {
+      if (url.startsWith('/api/webhooks/endpoints') && method === 'GET') {
         return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -426,7 +424,7 @@ describe('admin console branding-content-b', () => {
   it('renders pending webhook request badges and an empty request state on filter', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.startsWith('/api/management/webhooks/requests')) {
+      if (url.startsWith('/api/webhooks/requests')) {
         // a filtered (non-failed) status returns no rows; the default load shows a pending row
         const empty = url.includes('status=') && !url.includes('status=failed')
         return Promise.resolve(
@@ -468,11 +466,11 @@ describe('admin console branding-content-b', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(signInSettings))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -491,7 +489,7 @@ describe('admin console branding-content-b', () => {
     await waitFor(() =>
       expect(requests).toEqual([
         {
-          url: '/api/management/sign-in-settings',
+          url: '/api/sign-in-settings',
           body: {
             links: {
               termsUri: 'https://northstar.example.com/terms',
@@ -513,11 +511,11 @@ describe('admin console branding-content-b', () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
         requests.push(url)
         return Promise.resolve(jsonResponse(signInSettings))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       return consoleSharedFetch(input, init)
     })
 

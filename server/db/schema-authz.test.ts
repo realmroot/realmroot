@@ -8,12 +8,10 @@ import {
   agentHost,
   agentHostRelations,
   agentRelations,
-  apiPermission,
-  apiPermissionRelations,
+  agentRoleAssignment,
+  agentRoleAssignmentRelations,
   apiResource,
   apiResourceRelations,
-  apiScope,
-  apiScopeRelations,
   application,
   applicationClientMetadata,
   applicationClientSecret,
@@ -43,9 +41,9 @@ import {
   passkey,
   passkeyRelations,
   role,
-  rolePermission,
-  rolePermissionRelations,
   roleRelations,
+  roleScope,
+  roleScopeRelations,
   session,
   sessionRelations,
   signInExperience,
@@ -212,23 +210,21 @@ describe('schema.test 2', () => {
         'roleAssignments',
       ]),
     )
-    expect(relationKeys(apiResourceRelations)).toEqual(expect.arrayContaining(['scopes', 'permissions', 'roles']))
-    expect(relationKeys(apiScopeRelations)).toEqual(expect.arrayContaining(['resource', 'permissions']))
-    expect(relationKeys(apiPermissionRelations)).toEqual(
-      expect.arrayContaining(['resource', 'scope', 'rolePermissions']),
-    )
+    expect(relationKeys(apiResourceRelations)).toEqual(['roles'])
     expect(relationKeys(roleRelations)).toEqual(
       expect.arrayContaining([
         'resource',
         'organization',
         'application',
-        'permissions',
+        'scopes',
         'userAssignments',
         'applicationAssignments',
         'memberAssignments',
+        'agentAssignments',
       ]),
     )
-    expect(relationKeys(rolePermissionRelations)).toEqual(expect.arrayContaining(['role', 'permission']))
+    expect(relationKeys(roleScopeRelations)).toEqual(['role'])
+    expect(relationKeys(agentRoleAssignmentRelations)).toEqual(expect.arrayContaining(['role', 'agentIdentity']))
     expect(relationKeys(userRoleAssignmentRelations)).toEqual(expect.arrayContaining(['role', 'user']))
     expect(relationKeys(applicationRoleAssignmentRelations)).toEqual(expect.arrayContaining(['role', 'application']))
     expect(relationKeys(memberRoleAssignmentRelations)).toEqual(expect.arrayContaining(['role', 'member']))
@@ -268,10 +264,9 @@ const schemaTables = [
   member,
   invitation,
   apiResource,
-  apiScope,
-  apiPermission,
+  roleScope,
+  agentRoleAssignment,
   role,
-  rolePermission,
   userRoleAssignment,
   applicationRoleAssignment,
   memberRoleAssignment,

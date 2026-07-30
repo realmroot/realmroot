@@ -26,7 +26,7 @@ describe('authorization management over real D1', () => {
   })
 
   it('rejects anonymous reads with 401', async () => {
-    const response = await harness.request('/api/management/api-resources')
+    const response = await harness.request('/api/api-resources')
     expect(response.status).toBe(401)
   })
 
@@ -40,13 +40,13 @@ describe('authorization management over real D1', () => {
     })
     const memberCookie = await signIn(harness, 'member@example.com', 'member-password-2026')
 
-    const response = await harness.request('/api/management/roles', { headers: { cookie: memberCookie } })
+    const response = await harness.request('/api/roles', { headers: { cookie: memberCookie } })
     expect(response.status).toBe(403)
   })
 
   it('rejects an invalid api-resource payload with 400', async () => {
     const cookie = await signInAdmin(harness)
-    const response = await harness.request('/api/management/api-resources', {
+    const response = await harness.request('/api/api-resources', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ name: 'missing identifier' }),
@@ -64,7 +64,7 @@ describe('authorization management over real D1', () => {
       authorizationMode: 'external',
     })
 
-    const response = await harness.request(`/api/management/api-resources/${resource.id}`, {
+    const response = await harness.request(`/api/api-resources/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ resourceUrl: 'https://new-projects.example.com/api' }),
@@ -76,11 +76,11 @@ describe('authorization management over real D1', () => {
     })
   })
 
-  it('runs the full api-resource / scope / permission lifecycle through real SQL [spec: management-api/management-restish-api-resource-crud]', async () => {
+  it('runs the API resource lifecycle through real SQL [spec: management-api/management-restish-api-resource-crud]', async () => {
     const cookie = await signInAdmin(harness)
 
     const resource = (await (
-      await postJson(harness, cookie, '/api/management/api-resources', {
+      await postJson(harness, cookie, '/api/api-resources', {
         identifier: 'https://api.example.com',
         name: 'Example API',
         audience: 'https://api.example.com',
@@ -88,76 +88,22 @@ describe('authorization management over real D1', () => {
       })
     ).json()) as { id: string }
 
-    const list = await harness.request('/api/management/api-resources', { headers: { cookie } })
+    const list = await harness.request('/api/api-resources', { headers: { cookie } })
     expect(((await list.json()) as { items: unknown[] }).items.length).toBe(1)
 
-    const fetched = await harness.request(`/api/management/api-resources/${resource.id}`, { headers: { cookie } })
+    const fetched = await harness.request(`/api/api-resources/${resource.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
 
-    const patched = await harness.request(`/api/management/api-resources/${resource.id}`, {
+    const patched = await harness.request(`/api/api-resources/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ name: 'Renamed API' }),
     })
     expect(((await patched.json()) as { name: string }).name).toBe('Renamed API')
 
-    const scope = (await (
-      await postJson(harness, cookie, `/api/management/api-resources/${resource.id}/scopes`, {
-        value: 'documents:read',
-      })
-    ).json()) as { id: string }
-    const scopes = await harness.request(`/api/management/api-resources/${resource.id}/scopes`, {
-      headers: { cookie },
-    })
-    expect(((await scopes.json()) as { scopes: unknown[] }).scopes.length).toBe(1)
-
-    const patchedScope = await harness.request(`/api/management/api-resources/${resource.id}/scopes/${scope.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ description: 'Read documents' }),
-    })
-    expect(patchedScope.status).toBe(200)
-
-    const permission = (await (
-      await postJson(harness, cookie, `/api/management/api-resources/${resource.id}/permissions`, {
-        scopeId: scope.id,
-        key: 'documents.read',
-      })
-    ).json()) as { id: string }
-    const permissions = await harness.request(`/api/management/api-resources/${resource.id}/permissions`, {
-      headers: { cookie },
-    })
-    expect(((await permissions.json()) as { permissions: unknown[] }).permissions.length).toBe(1)
-
-    const patchedPermission = await harness.request(
-      `/api/management/api-resources/${resource.id}/permissions/${permission.id}`,
-      {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({ description: 'Read docs' }),
-      },
-    )
-    expect(patchedPermission.status).toBe(200)
-
     expect(
       (
-        await harness.request(`/api/management/api-resources/${resource.id}/permissions/${permission.id}`, {
-          method: 'DELETE',
-          headers: { cookie },
-        })
-      ).status,
-    ).toBe(204)
-    expect(
-      (
-        await harness.request(`/api/management/api-resources/${resource.id}/scopes/${scope.id}`, {
-          method: 'DELETE',
-          headers: { cookie },
-        })
-      ).status,
-    ).toBe(204)
-    expect(
-      (
-        await harness.request(`/api/management/api-resources/${resource.id}`, {
+        await harness.request(`/api/api-resources/${resource.id}`, {
           method: 'DELETE',
           headers: { cookie },
         })
@@ -165,7 +111,7 @@ describe('authorization management over real D1', () => {
     ).toBe(204)
   })
 
-  it('manages roles, role permissions, and a user role assignment through real SQL [spec: management-api/management-restish-role-crud]', async () => {
+  it('manages role scope references and a user role assignment through real SQL [spec: management-api/management-restish-role-crud]', async () => {
     const cookie = await signInAdmin(harness)
     const userId = await createUser(harness, cookie, {
       email: 'assignee@example.com',
@@ -175,73 +121,51 @@ describe('authorization management over real D1', () => {
     })
 
     const resource = (await (
-      await postJson(harness, cookie, '/api/management/api-resources', {
+      await postJson(harness, cookie, '/api/api-resources', {
         identifier: 'https://roles.example.com',
         name: 'Roles API',
         audience: 'https://roles.example.com',
         resourceUrl: 'https://roles.example.com',
       })
     ).json()) as { id: string }
-    const permission = (await (
-      await postJson(harness, cookie, `/api/management/api-resources/${resource.id}/permissions`, {
-        key: 'roles.manage',
-      })
-    ).json()) as { id: string }
-
     const role = (await (
-      await postJson(harness, cookie, '/api/management/roles', {
+      await postJson(harness, cookie, '/api/roles', {
         key: 'editor',
         name: 'Editor',
         resourceId: resource.id,
       })
     ).json()) as { id: string }
 
-    const roles = await harness.request('/api/management/roles', { headers: { cookie } })
+    const roles = await harness.request('/api/roles', { headers: { cookie } })
     expect(((await roles.json()) as { roles: unknown[] }).roles.length).toBeGreaterThanOrEqual(1)
 
-    expect((await harness.request(`/api/management/roles/${role.id}`, { headers: { cookie } })).status).toBe(200)
+    expect((await harness.request(`/api/roles/${role.id}`, { headers: { cookie } })).status).toBe(200)
 
-    const patched = await harness.request(`/api/management/roles/${role.id}`, {
+    const patched = await harness.request(`/api/roles/${role.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ name: 'Lead Editor' }),
     })
     expect(((await patched.json()) as { name: string }).name).toBe('Lead Editor')
 
-    const replacePermissions = await harness.request(`/api/management/roles/${role.id}/permissions`, {
+    const replaceScopes = await harness.request(`/api/roles/${role.id}/scopes`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ permissionIds: [permission.id] }),
+      body: JSON.stringify({ scopes: [] }),
     })
-    expect(replacePermissions.status).toBe(204)
+    expect(replaceScopes.status).toBe(204)
 
-    const rolePermissions = await harness.request(`/api/management/roles/${role.id}/permissions`, {
+    const roleScopes = await harness.request(`/api/roles/${role.id}/scopes`, {
       headers: { cookie },
     })
-    expect(((await rolePermissions.json()) as { permissions: Array<{ id: string }> }).permissions).toEqual([
-      expect.objectContaining({ id: permission.id }),
-    ])
+    expect(((await roleScopes.json()) as { scopes: string[] }).scopes).toEqual([])
 
     // assignUserRole (top-level mount) writes a userRoleAssignment row.
-    await postJson(
-      harness,
-      cookie,
-      '/api/management/user-role-assignments',
-      { roleId: role.id, subjectId: userId },
-      204,
-    )
+    await postJson(harness, cookie, '/api/roles/assignments/users', { roleId: role.id, subjectId: userId }, 204)
     // assignUserRole (roles-scoped mount) is idempotent on conflict.
-    await postJson(
-      harness,
-      cookie,
-      '/api/management/roles/assignments/users',
-      { roleId: role.id, subjectId: userId },
-      204,
-    )
+    await postJson(harness, cookie, '/api/roles/assignments/users', { roleId: role.id, subjectId: userId }, 204)
 
-    expect(
-      (await harness.request(`/api/management/roles/${role.id}`, { method: 'DELETE', headers: { cookie } })).status,
-    ).toBe(204)
+    expect((await harness.request(`/api/roles/${role.id}`, { method: 'DELETE', headers: { cookie } })).status).toBe(204)
   })
 
   it('runs the organization / member / invitation lifecycle through real SQL [spec: management-api/management-restish-organization-crud]', async () => {
@@ -254,17 +178,15 @@ describe('authorization management over real D1', () => {
     })
 
     const organization = (await (
-      await postJson(harness, cookie, '/api/management/organizations', { slug: 'acme', name: 'Acme' })
+      await postJson(harness, cookie, '/api/organizations', { slug: 'acme', name: 'Acme' })
     ).json()) as { id: string }
 
-    const list = await harness.request('/api/management/organizations', { headers: { cookie } })
+    const list = await harness.request('/api/organizations', { headers: { cookie } })
     expect(((await list.json()) as { organizations: unknown[] }).organizations.length).toBe(1)
 
-    expect(
-      (await harness.request(`/api/management/organizations/${organization.id}`, { headers: { cookie } })).status,
-    ).toBe(200)
+    expect((await harness.request(`/api/organizations/${organization.id}`, { headers: { cookie } })).status).toBe(200)
 
-    const patched = await harness.request(`/api/management/organizations/${organization.id}`, {
+    const patched = await harness.request(`/api/organizations/${organization.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ name: 'Acme Inc' }),
@@ -272,52 +194,43 @@ describe('authorization management over real D1', () => {
     expect(((await patched.json()) as { name: string }).name).toBe('Acme Inc')
 
     const member = (await (
-      await postJson(harness, cookie, `/api/management/organizations/${organization.id}/members`, {
+      await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
         userId: memberUserId,
         role: 'member',
       })
     ).json()) as { id: string }
-    const members = await harness.request(`/api/management/organizations/${organization.id}/members`, {
+    const members = await harness.request(`/api/organizations/${organization.id}/members`, {
       headers: { cookie },
     })
     expect(((await members.json()) as { members: unknown[] }).members.length).toBe(1)
 
-    const patchedMember = await harness.request(
-      `/api/management/organizations/${organization.id}/members/${member.id}`,
-      {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({ role: 'admin' }),
-      },
-    )
+    const patchedMember = await harness.request(`/api/organizations/${organization.id}/members/${member.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ role: 'admin' }),
+    })
     expect(((await patchedMember.json()) as { role: string }).role).toBe('admin')
 
     // assignMemberRole writes a memberRoleAssignment row.
     const role = (await (
-      await postJson(harness, cookie, '/api/management/roles', { key: 'org-lead', name: 'Org Lead' })
+      await postJson(harness, cookie, '/api/roles', { key: 'org-lead', name: 'Org Lead' })
     ).json()) as { id: string }
-    await postJson(
-      harness,
-      cookie,
-      '/api/management/member-role-assignments',
-      { roleId: role.id, subjectId: member.id },
-      204,
-    )
+    await postJson(harness, cookie, '/api/roles/assignments/members', { roleId: role.id, subjectId: member.id }, 204)
 
     const invitation = (await (
-      await postJson(harness, cookie, `/api/management/organizations/${organization.id}/invitations`, {
+      await postJson(harness, cookie, `/api/organizations/${organization.id}/invitations`, {
         email: 'invitee@example.com',
         role: 'member',
       })
     ).json()) as { id: string }
-    const invitations = await harness.request(`/api/management/organizations/${organization.id}/invitations`, {
+    const invitations = await harness.request(`/api/organizations/${organization.id}/invitations`, {
       headers: { cookie },
     })
     expect(((await invitations.json()) as { invitations: unknown[] }).invitations.length).toBe(1)
 
     expect(
       (
-        await harness.request(`/api/management/organizations/${organization.id}/invitations/${invitation.id}`, {
+        await harness.request(`/api/organizations/${organization.id}/invitations/${invitation.id}`, {
           method: 'DELETE',
           headers: { cookie },
         })
@@ -325,7 +238,7 @@ describe('authorization management over real D1', () => {
     ).toBe(204)
     expect(
       (
-        await harness.request(`/api/management/organizations/${organization.id}/members/${member.id}`, {
+        await harness.request(`/api/organizations/${organization.id}/members/${member.id}`, {
           method: 'DELETE',
           headers: { cookie },
         })
@@ -333,7 +246,7 @@ describe('authorization management over real D1', () => {
     ).toBe(204)
     expect(
       (
-        await harness.request(`/api/management/organizations/${organization.id}`, {
+        await harness.request(`/api/organizations/${organization.id}`, {
           method: 'DELETE',
           headers: { cookie },
         })
@@ -345,21 +258,21 @@ describe('authorization management over real D1', () => {
     const cookie = await signInAdmin(harness)
 
     const application = (await (
-      await postJson(harness, cookie, '/api/management/applications', {
+      await postJson(harness, cookie, '/api/applications', {
         name: 'Role Client',
         slug: 'role-client',
         clientType: 'confidential_web',
         redirectUris: ['http://localhost/callback'],
       })
     ).json()) as { id: string }
-    const role = (await (
-      await postJson(harness, cookie, '/api/management/roles', { key: 'svc', name: 'Service' })
-    ).json()) as { id: string }
+    const role = (await (await postJson(harness, cookie, '/api/roles', { key: 'svc', name: 'Service' })).json()) as {
+      id: string
+    }
 
     await postJson(
       harness,
       cookie,
-      '/api/management/application-role-assignments',
+      '/api/roles/assignments/applications',
       { roleId: role.id, subjectId: application.id },
       204,
     )

@@ -58,7 +58,7 @@ function withAdminContext() {
   const app = new Hono()
   app.use('*', async (c, next) => {
     const user = { id: 'admin-1', role: 'admin' }
-    c.set('authContext', {
+    c.set('principal', {
       session: { session: { id: 'session-1' }, user },
       user,
     })

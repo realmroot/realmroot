@@ -56,8 +56,8 @@ import { getAddress, verifyMessage } from 'viem'
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe'
 import { z } from 'zod'
 import { configzOptions } from '../../app-config'
-import { requireAuth } from '../../middleware/admin'
-import { getAuthContext } from '../../middleware/auth-context'
+import { getPrincipal } from '../../middleware/authn'
+import { authenticatedUser } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
@@ -67,14 +67,14 @@ import { accountSecurityRoutes } from './security'
 export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: SecurityPolicy, canonicalOrigin?: string) {
   const app = new Hono()
 
-  app.use('*', requireAuth())
+  app.use('*', authenticatedUser())
 
-  app.get('/profile', async (c) => c.json({ user: await getDeps(c).users.getUser(getAuthContext(c).user!.id) }))
+  app.get('/profile', async (c) => c.json({ user: await getDeps(c).users.getUser(getPrincipal(c).user!.id) }))
 
   app.patch('/profile', async (c) => {
     const body = await readJson(c, accountProfileUpdateSchema)
     await assertProfileUpdateAllowed(c, body, securityPolicy)
-    return c.json({ user: await getDeps(c).users.updateProfile(getAuthContext(c).user!.id, body) })
+    return c.json({ user: await getDeps(c).users.updateProfile(getPrincipal(c).user!.id, body) })
   })
 
   app.post('/email/change', async (c) => {
@@ -127,7 +127,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   })
 
   app.post('/email/verification', async (c) => {
-    const email = getAuthContext(c).user!.email
+    const email = getPrincipal(c).user!.email
 
     if (!email) {
       throw badRequest('Current user email is required.')
@@ -154,7 +154,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     )
     const body = await readJson(c, accountPasswordChangeSchema)
     const policy = await getDeps(c).security.getPolicy()
-    const user = getAuthContext(c).user!
+    const user = getPrincipal(c).user!
     validatePasswordPolicy(body.newPassword, policy.password, {
       email: user.email,
       name: user.name,
@@ -216,7 +216,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     if (!verified) throw forbidden('Invalid wallet signature.')
 
     await wallets.deleteSiweNonce(walletAddress, body.chainId)
-    await wallets.linkWalletAddress(getAuthContext(c).user!.id, {
+    await wallets.linkWalletAddress(getPrincipal(c).user!.id, {
       address: walletAddress,
       chainId: body.chainId,
     })
@@ -230,7 +230,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       'Connected account access is disabled for this account center.',
       securityPolicy,
     )
-    await getDeps(c).wallets.unlinkWalletAddress(getAuthContext(c).user!.id, c.req.param('accountId'))
+    await getDeps(c).wallets.unlinkWalletAddress(getPrincipal(c).user!.id, c.req.param('accountId'))
     return c.body(null, 204)
   })
 
@@ -242,7 +242,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       securityPolicy,
     )
     const page = await getDeps(c).users.listLinkedAccounts(
-      getAuthContext(c).user!.id,
+      getPrincipal(c).user!.id,
       readQuery(c, paginationQuerySchema),
     )
     return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
@@ -320,7 +320,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       securityPolicy,
     )
     const page = await getDeps(c).users.listConsentedApplications(
-      getAuthContext(c).user!.id,
+      getPrincipal(c).user!.id,
       readQuery(c, paginationQuerySchema),
     )
     return c.json({ applications: page.items, pagination: paginationMetadata(page) })
@@ -333,7 +333,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       'Authorized application access is disabled for this account center.',
       securityPolicy,
     )
-    await revokeConsent(getDeps(c), c.req.param('consentId'), getAuthContext(c).user!.id)
+    await revokeConsent(getDeps(c), c.req.param('consentId'), getPrincipal(c).user!.id)
     return c.body(null, 204)
   })
 
@@ -344,7 +344,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       'Session management is disabled for this account center.',
       securityPolicy,
     )
-    const authContext = getAuthContext(c)
+    const authContext = getPrincipal(c)
     const page = await getDeps(c).users.listSessions(authContext.user!.id, readQuery(c, paginationQuerySchema))
     const currentSessionId = authContext.session?.session.id
     return c.json({
@@ -356,7 +356,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.get('/agents', async (c) => {
     return c.json(
       agentsResponseSchema.parse(
-        await listPersonalAgents(getDeps(c), getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema)),
+        await listPersonalAgents(getDeps(c), getPrincipal(c).user!.id, readQuery(c, paginationQuerySchema)),
       ),
     )
   })
@@ -364,18 +364,18 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.get('/agents/:agentId', async (c) => {
     return c.json(
       agentResponseSchema.parse({
-        agent: await getPersonalAgent(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id),
+        agent: await getPersonalAgent(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id),
       }),
     )
   })
 
   app.delete('/agents/:agentId', async (c) => {
-    await retireAgentIdentity(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id)
+    await retireAgentIdentity(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id)
     return c.body(null, 204)
   })
 
   app.post('/agents/:agentId/recovery', async (c) => {
-    await recoverAgentIdentity(getDeps(c), c.req.param('agentId'), getAuthContext(c).user!.id)
+    await recoverAgentIdentity(getDeps(c), c.req.param('agentId'), getPrincipal(c).user!.id)
     return c.body(null, 202)
   })
 
@@ -383,7 +383,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     const result = await listOrganizationAgentIdentities(
       getDeps(c),
       c.req.param('organizationId'),
-      getAuthContext(c).user!.id,
+      getPrincipal(c).user!.id,
     )
     return c.json({ items: result.identities.map(toAgent) })
   })
@@ -391,7 +391,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.get('/agent-enrollments/:enrollmentId', async (c) => {
     return c.json(
       agentEnrollmentSchema.parse(
-        await getPublicAgentEnrollment(getDeps(c), c.req.param('enrollmentId'), getAuthContext(c).user!.id),
+        await getPublicAgentEnrollment(getDeps(c), c.req.param('enrollmentId'), getPrincipal(c).user!.id),
       ),
     )
   })
@@ -407,7 +407,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
           action: input.decision,
           capabilities: input.permissions,
         },
-        getAuthContext(c).user!.id,
+        getPrincipal(c).user!.id,
       )
       return c.json(decideAgentApprovalResponseSchema.parse(result))
     }
@@ -415,7 +415,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       getDeps(c),
       c.req.param('enrollmentId'),
       `${(canonicalOrigin ?? new URL(c.req.url).origin).replace(/\/$/, '')}/api/auth`,
-      getAuthContext(c).user!.id,
+      getPrincipal(c).user!.id,
     )
     return c.json(agentResponseSchema.parse({ agent: toAgent(result.identity) }))
   })
@@ -423,7 +423,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.get('/account-connections', async (c) => {
     return c.json(
       accountConnectionsResponseSchema.parse(
-        await listAccountConnections(getDeps(c), getAuthContext(c).user!.id, readQuery(c, paginationQuerySchema)),
+        await listAccountConnections(getDeps(c), getPrincipal(c).user!.id, readQuery(c, paginationQuerySchema)),
       ),
     )
   })
@@ -432,10 +432,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     const resources = (await listConnectableExternalResources(getDeps(c))).resources
     return c.json(
       connectableApiResourcesResponseSchema.parse({
-        items: resources.map((resource) => ({
-          ...resource,
-          scopes: resource.scopes,
-        })),
+        items: resources,
         pagination: {
           limit: resources.length || 1,
           offset: 0,
@@ -451,7 +448,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     const result = await createAccountConnection(
       getDeps(c),
       await readJson(c, createAccountConnectionSchema),
-      getAuthContext(c).user!.id,
+      getPrincipal(c).user!.id,
       canonicalOrigin ?? new URL(c.req.url).origin,
     )
     c.header('Location', `/api/account/account-connections/${encodeURIComponent(result.id)}`)
@@ -461,20 +458,20 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.get('/account-connections/:connectionId', async (c) => {
     return c.json(
       accountConnectionSchema.parse(
-        await getAccountConnection(getDeps(c), c.req.param('connectionId'), getAuthContext(c).user!.id),
+        await getAccountConnection(getDeps(c), c.req.param('connectionId'), getPrincipal(c).user!.id),
       ),
     )
   })
 
   app.delete('/account-connections/:connectionId', async (c) => {
-    await revokeResourceConnection(getDeps(c), c.req.param('connectionId'), getAuthContext(c).user!.id)
+    await revokeResourceConnection(getDeps(c), c.req.param('connectionId'), getPrincipal(c).user!.id)
     return c.body(null, 204)
   })
 
   app.get('/access-requests', async (c) => {
     const query = readQuery(c, paginationQuerySchema.extend({ approvalToken: z.string().trim().min(1).optional() }))
     if (query.approvalToken) {
-      const request = await getAccountAccessRequestByToken(getDeps(c), query.approvalToken, getAuthContext(c).user!.id)
+      const request = await getAccountAccessRequestByToken(getDeps(c), query.approvalToken, getPrincipal(c).user!.id)
       return c.json(
         accessRequestsResponseSchema.parse({
           items: [request],
@@ -484,7 +481,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     }
     return c.json(
       accessRequestsResponseSchema.parse(
-        await listAccountAccessRequests(getDeps(c), getAuthContext(c).user!.id, {
+        await listAccountAccessRequests(getDeps(c), getPrincipal(c).user!.id, {
           limit: query.limit,
           offset: query.offset,
         }),
@@ -498,7 +495,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
         await getAccountAccessRequest(
           getDeps(c),
           c.req.param('requestId'),
-          getAuthContext(c).user!.id,
+          getPrincipal(c).user!.id,
           c.req.query('approvalToken'),
         ),
       ),
@@ -510,13 +507,13 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       getDeps(c),
       c.req.param('requestId'),
       await readJson(c, decideAccessRequestSchema),
-      getAuthContext(c).user!.id,
+      getPrincipal(c).user!.id,
     )
     return c.json(accessRequestSchema.parse(result))
   })
 
   app.delete('/access-grants/:grantId', async (c) => {
-    await revokeAgentAccessGrant(getDeps(c), c.req.param('grantId'), getAuthContext(c).user!.id)
+    await revokeAgentAccessGrant(getDeps(c), c.req.param('grantId'), getPrincipal(c).user!.id)
     return c.body(null, 204)
   })
 

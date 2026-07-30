@@ -10,8 +10,8 @@ import {
 } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { requireAuth } from '../../../middleware/admin'
-import { getAuthContext } from '../../../middleware/auth-context'
+import { getPrincipal } from '../../../middleware/authn'
+import { authenticatedUser } from '../../../middleware/authz'
 import { getDeps } from '../../../middleware/deps'
 import type { ManagementAuthApi } from '../../auth-api'
 import { toBoundaryError } from '../../auth-api'
@@ -22,7 +22,7 @@ type AccountCenterSettingsReader = (c: Context) => Promise<ConfigzAccountCenter>
 export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterSettings?: AccountCenterSettingsReader) {
   const app = new Hono()
 
-  app.use('*', requireAuth())
+  app.use('*', authenticatedUser())
 
   app.get('/', async (c) => c.json({ security: await getDeps(c).security.getSecurityState(currentUserId(c)) }))
 
@@ -111,7 +111,7 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterS
 
   app.get('/sessions', async (c) => {
     await assertSessionsEnabled(c, accountCenterSettings)
-    const authContext = getAuthContext(c)
+    const authContext = getPrincipal(c)
     const page = await getDeps(c).users.listSessions(authContext.user!.id, readQuery(c, paginationQuerySchema))
     const currentSessionId = authContext.session?.session.id
     return c.json({
@@ -144,7 +144,7 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterS
 }
 
 function currentUserId(c: Context): string {
-  return getAuthContext(c).user!.id
+  return getPrincipal(c).user!.id
 }
 
 async function assertPasskeysEnabled(c: Context) {

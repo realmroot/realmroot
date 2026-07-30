@@ -12,15 +12,10 @@ import {
 } from '@shared/api/applications'
 import {
   type assignRoleRequestSchema,
-  createApiPermissionRequestSchema,
   createApiResourceRequestSchema,
-  createApiScopeRequestSchema,
   createOrganizationRequestSchema,
   createRoleRequestSchema,
-  tokenClaimsSchema,
-  updateApiPermissionRequestSchema,
   updateApiResourceRequestSchema,
-  updateApiScopeRequestSchema,
   updateOrganizationRequestSchema,
   updateRoleRequestSchema,
 } from '@shared/api/authorization'
@@ -131,15 +126,7 @@ const emptyConnectorsResponse: ListManagementConnectorsResponse = {
     nextOffset: null,
   },
 }
-const tokenClaimsObjectSchema = tokenClaimsSchema.optional()
-const optionalAuthorizationFieldNames = new Set([
-  'description',
-  'disabledReason',
-  'displayName',
-  'tokenClaimName',
-  'tokenClaimValue',
-  'tokenClaimsNamespace',
-])
+const optionalAuthorizationFieldNames = new Set(['description', 'disabledReason', 'displayName'])
 type DetailTab = {
   value: string
   label: string
@@ -147,9 +134,9 @@ type DetailTab = {
 type ApplicationDetailSection = 'settings' | 'branding' | 'federated-credentials'
 type UserDetailSection = 'profile' | 'security' | 'sessions' | 'linked-accounts' | 'applications' | 'operations'
 type OrganizationDetailSection = 'settings' | 'authorization'
-type RoleDetailSection = 'settings' | 'permissions' | 'assignments'
-type ApiResourceDetailSection = 'settings' | 'scopes' | 'permissions'
-type OrganizationTemplateSection = 'organization-roles' | 'organization-permissions'
+type RoleDetailSection = 'settings' | 'scopes' | 'assignments'
+type ApiResourceDetailSection = 'settings'
+type OrganizationTemplateSection = 'organization-roles'
 type WebhooksSection = 'endpoints' | 'requests'
 type SignInPreviewSurface = 'desktop' | 'mobile'
 type SignInMode = 'password' | 'otp'
@@ -280,9 +267,7 @@ export {
   ConsoleToolbar,
   Copy,
   cn,
-  createApiPermissionRequestSchema,
   createApiResourceRequestSchema,
-  createApiScopeRequestSchema,
   createApplicationRequestSchema,
   createElement,
   createManagementConnectorRequestSchema,
@@ -353,13 +338,9 @@ export {
   TextArea,
   TextInput,
   Trash2,
-  tokenClaimsObjectSchema,
-  tokenClaimsSchema,
   tt,
   Undo2,
-  updateApiPermissionRequestSchema,
   updateApiResourceRequestSchema,
-  updateApiScopeRequestSchema,
   updateApplicationRequestSchema,
   updateManagementBrandingSettingsRequestSchema,
   updateManagementConnectorRequestSchema,

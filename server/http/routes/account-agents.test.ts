@@ -83,7 +83,7 @@ function withAccountContext() {
   const deps = createTestDeps()
   app.use('*', async (c, next) => {
     const user = { id: 'user-1', role: 'user', email: 'user@example.com' }
-    c.set('authContext', {
+    c.set('principal', {
       session: { session: { id: 'session-1' }, user },
       user,
     })

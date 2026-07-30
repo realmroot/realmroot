@@ -46,9 +46,9 @@ Feature: Agent identity and external API authorization
       And the controller's browser session is used only to approve enrollment or authority
 
     @e2e @entrypoint:restish @journey:agent-management-authority
-    Scenario: An Agent gains management access without changing identity
+    Scenario: An Agent gains resource access without changing identity
       Given an Agent identity has only its default self-service authority
-      When the Agent invokes an operation that requires tenant management authority
+      When the Agent invokes an operation that requires a Realmroot resource scope
       Then Realmroot rejects the operation and identifies the missing authority
       When the Agent requests the missing management authority
       Then Realmroot records the request through the existing AgentAuth capability approval flow
@@ -59,7 +59,8 @@ Feature: Agent identity and external API authorization
       Then the existing approval request activates the management capability grant
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
       And the capability request command completes with the active grants
-      And the same Agent identity can invoke the operation
+      And the same Agent identity can invoke only operations covered by the approved resource scopes
+      And the Agent can request only scopes referenced by its roles for that resource
       And Restish does not automatically replay the previously denied operation
       And the Agent does not log in again or adopt the controller's identity
 
@@ -124,18 +125,22 @@ Feature: Agent identity and external API authorization
     Scenario: An administrator registers a native API that trusts Realmroot
       Given a product uses Realmroot as its OIDC provider and OAuth authorization server
       When an administrator creates an API resource with native authorization mode
-      Then the administrator configures its audience, protected resource URL, and requestable scopes
+      Then the administrator configures only its audience and protected resource URL
       And no external authorization server, OAuth client, or account connection is configured
       And the product API validates Realmroot access tokens with the published issuer and JWKS
       And the protected resource advertises its OpenAPI contract with a standard service-desc link
+      And Realmroot derives every requestable scope from the OpenAPI security requirements
+      And Realmroot does not store or administer a separate scope catalog
 
     @entrypoint:agent-protocol @journey:native-api-resource-access-request
     Scenario: An Agent requests access to a native API
       Given an enabled native API resource belongs to the Agent's home space
       When the Agent lists available resources
-      Then Realmroot returns that resource, its protected resource URL, and its requestable scopes without requiring an account connection
-      When the Agent requests an exact scope set
-      Then Realmroot creates the same pending access-request resource used for external APIs
+      Then Realmroot returns that resource and its protected resource URL without requiring an account connection
+      When Restish reads the target OpenAPI operation and the Agent requests its exact scope set
+      Then Realmroot validates that scope set against the current target OpenAPI contract
+      And Realmroot validates that the Agent's resource roles make every requested scope eligible
+      And Realmroot creates the same pending access-request resource used for external APIs
       And it does not require a user-created authority grant or grant identifier
       When an authorized controller approves the request
       Then Realmroot creates the same access-grant resource used for external APIs
@@ -150,6 +155,8 @@ Feature: Agent identity and external API authorization
       And the token uses the Better Auth issuer and signing keys
       And the token identifies the controller as subject and the Agent and host in the RFC 8693 actor chain
       And the token carries only the approved scopes
+      And groups identifies the Agent's organization home space
+      And roles identifies the Agent's effective roles for that API resource
       And the token is bound to the Agent's DPoP key
       And Restish stores but does not print the raw access token
       When the Agent connects Restish to the discovered protected resource URL
@@ -193,8 +200,10 @@ Feature: Agent identity and external API authorization
     Scenario: An administrator registers an external API resource by protocol
       Given a target resource publishes protected-resource and authorization-server metadata
       When an administrator creates an external API resource from its resource URL
-      Then Realmroot discovers its issuer, OAuth endpoints, supported scopes, token exchange, DPoP, and revocation
+      Then Realmroot discovers its issuer, OAuth endpoints, token exchange, DPoP, and revocation
       And the resource URL advertises its OpenAPI contract with a standard service-desc link
+      And Realmroot derives every requestable scope only from that OpenAPI contract
+      And authorization-server scopes_supported is not a scope catalog
       And Realmroot registers or uses an explicitly configured OAuth client
       And the resource cannot be enabled for Agents when a required capability is absent
       And no identity Connector or HTTP proxy configuration is created
@@ -226,8 +235,10 @@ Feature: Agent identity and external API authorization
     Scenario: An Agent discovers accounts and requests exact resource authority
       Given connected resource accounts exist in the Agent's home space
       When the Agent lists available resources
-      Then Realmroot returns enabled resources, protected resource URLs, requestable scopes, redacted accounts, and active grants
-      When the Agent requests an account and exact scope set without an applicable grant
+      Then Realmroot returns enabled resources, protected resource URLs, redacted accounts, and active grants
+      When Restish reads a target OpenAPI operation and the Agent requests an account and its exact scope set without an applicable grant
+      Then Realmroot validates that scope set against the current target OpenAPI contract
+      And Realmroot validates that the Agent's resource roles and connected account both permit every requested scope
       Then Realmroot creates one pending access request and returns a hosted approval URL
       And it does not require a pre-existing Agent resource grant
 

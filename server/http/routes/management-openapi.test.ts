@@ -91,9 +91,9 @@ describe('management routes 4', () => {
     const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
-    const list = await app.request('/api/management/connectors?limit=1&offset=0', { headers })
-    const templates = await app.request('/api/management/connectors/templates', { headers })
-    const created = await app.request('/api/management/connectors', {
+    const list = await app.request('/api/connectors?limit=1&offset=0', { headers })
+    const templates = await app.request('/api/connectors/templates', { headers })
+    const created = await app.request('/api/connectors', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -113,14 +113,14 @@ describe('management routes 4', () => {
         providerMetadata: { prompt: 'select_account' },
       }),
     })
-    const detail = await app.request('/api/management/connectors/connector-1', { headers })
-    const readiness = await app.request('/api/management/connectors/connector-1/readiness', { headers })
-    const updated = await app.request('/api/management/connectors/connector-1', {
+    const detail = await app.request('/api/connectors/connector-1', { headers })
+    const readiness = await app.request('/api/connectors/connector-1/readiness', { headers })
+    const updated = await app.request('/api/connectors/connector-1', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ enabled: false, displayName: 'Google Workspace' }),
     })
-    const deleted = await app.request('/api/management/connectors/connector-1', { method: 'DELETE', headers })
+    const deleted = await app.request('/api/connectors/connector-1', { method: 'DELETE', headers })
 
     expect(list.status).toBe(200)
     await expect(list.json()).resolves.toEqual(
@@ -176,7 +176,7 @@ describe('management routes 4', () => {
     const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
-    const created = await app.request('/api/management/connectors', {
+    const created = await app.request('/api/connectors', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -188,7 +188,7 @@ describe('management routes 4', () => {
         clientSecret: 'REVIEW_CLIENT_SECRET',
       }),
     })
-    const updated = await app.request('/api/management/connectors/connector-1', {
+    const updated = await app.request('/api/connectors/connector-1', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -196,8 +196,8 @@ describe('management routes 4', () => {
         clientSecret: 'REVIEW_CLIENT_SECRET',
       }),
     })
-    const list = await app.request('/api/management/connectors?limit=1&offset=0', { headers })
-    const templates = await app.request('/api/management/connectors/templates', { headers })
+    const list = await app.request('/api/connectors?limit=1&offset=0', { headers })
+    const templates = await app.request('/api/connectors/templates', { headers })
 
     expect(created.status).toBe(201)
     await expect(created.json()).resolves.toMatchObject({ clientSecretConfigured: true })
@@ -218,7 +218,7 @@ describe('management routes 4', () => {
 
   it('rejects unsupported connector provider types at the request boundary', async () => {
     const connectors = spyConnectors()
-    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/management/connectors', {
+    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/connectors', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({
@@ -237,7 +237,7 @@ describe('management routes 4', () => {
 
   it('reuses connector contracts for generic OAuth request validation', async () => {
     const connectors = spyConnectors()
-    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/management/connectors', {
+    const response = await createApp(createAuthMock(), createTestDeps()).request('/api/connectors', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({
@@ -259,10 +259,10 @@ describe('management routes 4', () => {
     const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
-    const list = await app.request('/api/management/webhooks/endpoints?limit=10&offset=5&search=auth&status=enabled', {
+    const list = await app.request('/api/webhooks/endpoints?limit=10&offset=5&search=auth&status=enabled', {
       headers,
     })
-    const created = await app.request('/api/management/webhooks/endpoints', {
+    const created = await app.request('/api/webhooks/endpoints', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -271,19 +271,19 @@ describe('management routes 4', () => {
         enabled: true,
       }),
     })
-    const detail = await app.request('/api/management/webhooks/endpoints/wh_1', { headers })
-    const updated = await app.request('/api/management/webhooks/endpoints/wh_1', {
+    const detail = await app.request('/api/webhooks/endpoints/wh_1', { headers })
+    const updated = await app.request('/api/webhooks/endpoints/wh_1', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ enabled: false }),
     })
-    const rotated = await app.request('/api/management/webhooks/endpoints/wh_1/secrets', { method: 'POST', headers })
-    const requests = await app.request('/api/management/webhooks/requests?limit=2&offset=4&status=failed', {
+    const rotated = await app.request('/api/webhooks/endpoints/wh_1/secrets', { method: 'POST', headers })
+    const requests = await app.request('/api/webhooks/requests?limit=2&offset=4&status=failed', {
       headers,
     })
-    const requestDetail = await app.request('/api/management/webhooks/requests/whr_1', { headers })
-    const retried = await app.request('/api/management/webhooks/requests/whr_1/retries', { method: 'POST', headers })
-    const deleted = await app.request('/api/management/webhooks/endpoints/wh_1', { method: 'DELETE', headers })
+    const requestDetail = await app.request('/api/webhooks/requests/whr_1', { headers })
+    const retried = await app.request('/api/webhooks/requests/whr_1/retries', { method: 'POST', headers })
+    const deleted = await app.request('/api/webhooks/endpoints/wh_1', { method: 'DELETE', headers })
 
     expect(list.status).toBe(200)
     await expect(list.json()).resolves.toEqual({
@@ -334,9 +334,9 @@ describe('management routes 4', () => {
     const webhooks = spyWebhooks()
     const app = createApp(createAuthMock(), createTestDeps())
 
-    const unauthenticated = await app.request('/api/management/webhooks/endpoints')
-    const nonAdmin = await app.request('/api/management/webhooks/endpoints', { headers: userHeaders() })
-    const invalid = await app.request('/api/management/webhooks/endpoints', {
+    const unauthenticated = await app.request('/api/webhooks/endpoints')
+    const nonAdmin = await app.request('/api/webhooks/endpoints', { headers: userHeaders() })
+    const invalid = await app.request('/api/webhooks/endpoints', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({ url: 'http://events.example.com/realmroot', events: [] }),

@@ -13,8 +13,8 @@ import type { SecurityPolicy } from '@shared/api/security'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { configzOptions } from '../app-config'
-import { requireAdmin, requireAuth } from '../middleware/admin'
-import { getAuthContext } from '../middleware/auth-context'
+import { getPrincipal } from '../middleware/authn'
+import { authenticatedUser } from '../middleware/authz'
 import { getDeps } from '../middleware/deps'
 
 export function createAssetRoutes() {
@@ -39,7 +39,7 @@ export function createAssetRoutes() {
 export function createAccountAssetRoutes(securityPolicy?: SecurityPolicy) {
   const app = new Hono()
 
-  app.use('*', requireAuth())
+  app.use('*', authenticatedUser())
 
   app.post('/avatar', async (c) => {
     const accountCenter = await accountCenterSettings(c, securityPolicy)
@@ -51,9 +51,9 @@ export function createAccountAssetRoutes(securityPolicy?: SecurityPolicy) {
     const asset = await uploadAsset(deps, origin, {
       purpose: 'avatar',
       file: await readUploadFile(c.req.raw),
-      actorUserId: getAuthContext(c).user!.id,
+      actorUserId: getPrincipal(c).user!.id,
     })
-    await updateUserAvatar(deps, getAuthContext(c).user!.id, asset.asset)
+    await updateUserAvatar(deps, getPrincipal(c).user!.id, asset.asset)
     return c.json(asset, 201)
   })
 
@@ -66,17 +66,15 @@ async function accountCenterSettings(c: Context, securityPolicy?: SecurityPolicy
   return (await getConfig(deps, configzOptions(c, securityPolicy))).accountCenter
 }
 
-export function createManagementAssetRoutes() {
+export function createProtectedResourceAssetRoutes() {
   const app = new Hono()
-
-  app.use('*', requireAdmin())
 
   app.post('/applications/:applicationId/logo', async (c) => {
     const deps = getDeps(c)
     const asset = await uploadAsset(deps, requestOrigin(c), {
       purpose: 'application_logo',
       file: await readUploadFile(c.req.raw),
-      actorUserId: getAuthContext(c).user?.id ?? null,
+      actorUserId: getPrincipal(c).user?.id ?? null,
     })
     await updateApplicationLogo(deps, c.req.param('applicationId'), asset.asset)
     return c.json(asset, 201)
@@ -87,7 +85,7 @@ export function createManagementAssetRoutes() {
     const asset = await uploadAsset(deps, requestOrigin(c), {
       purpose: 'organization_logo',
       file: await readUploadFile(c.req.raw),
-      actorUserId: getAuthContext(c).user?.id ?? null,
+      actorUserId: getPrincipal(c).user?.id ?? null,
     })
     await updateOrganizationLogo(deps, c.req.param('organizationId'), asset.asset)
     return c.json(asset, 201)
@@ -98,7 +96,7 @@ export function createManagementAssetRoutes() {
     const asset = await uploadAsset(deps, requestOrigin(c), {
       purpose: 'branding_logo',
       file: await readUploadFile(c.req.raw),
-      actorUserId: getAuthContext(c).user?.id ?? null,
+      actorUserId: getPrincipal(c).user?.id ?? null,
     })
     await updateBrandingAsset(deps, 'logo', asset.asset)
     return c.json(asset, 201)
@@ -109,7 +107,7 @@ export function createManagementAssetRoutes() {
     const asset = await uploadAsset(deps, requestOrigin(c), {
       purpose: 'favicon',
       file: await readUploadFile(c.req.raw),
-      actorUserId: getAuthContext(c).user?.id ?? null,
+      actorUserId: getPrincipal(c).user?.id ?? null,
     })
     await updateBrandingAsset(deps, 'favicon', asset.asset)
     return c.json(asset, 201)

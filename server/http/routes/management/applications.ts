@@ -29,14 +29,11 @@ import {
 } from '@shared/api/management'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { requireAdmin } from '../../middleware/admin'
-import { getActorUserId } from '../../middleware/auth-context'
+import { getActorUserId } from '../../middleware/authn'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
 export const managementApplicationsRoute = new Hono()
-
-managementApplicationsRoute.use('*', requireAdmin())
 
 managementApplicationsRoute.get('/', async (c) => {
   const query = readQuery(c, paginationQuerySchema)

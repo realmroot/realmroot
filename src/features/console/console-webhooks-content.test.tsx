@@ -38,11 +38,11 @@ describe('admin console webhooks-content', () => {
     const requests: string[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
         requests.push(url)
         return Promise.resolve(jsonResponse(signInSettings))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -58,10 +58,10 @@ describe('admin console webhooks-content', () => {
   it('renders content save errors from the management boundary', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings' && init?.method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
         return Promise.resolve(jsonResponse({ error: { message: 'Content save failed.' } }, 500))
       }
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       return consoleSharedFetch(input, init)
     })
 
@@ -76,7 +76,7 @@ describe('admin console webhooks-content', () => {
   it('uses empty content link defaults when optional links are absent', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/sign-in-settings') {
+      if (url === '/api/sign-in-settings') {
         return Promise.resolve(
           jsonResponse({
             ...signInSettings,
@@ -108,23 +108,23 @@ describe('admin console webhooks-content', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/organizations' && init?.method === 'POST') {
+      if (url === '/api/organizations' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(organization, 201))
       }
-      if (url === '/api/management/roles' && init?.method === 'POST') {
+      if (url === '/api/roles' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(role, 201))
       }
-      if (url === '/api/management/api-resources' && init?.method === 'POST') {
+      if (url === '/api/api-resources' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(apiResource, 201))
       }
-      if (url === '/api/management/organizations') {
+      if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
-      if (url === '/api/management/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/management/api-resources') {
+      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/api-resources') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -175,15 +175,15 @@ describe('admin console webhooks-content', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         {
-          url: '/api/management/organizations',
+          url: '/api/organizations',
           body: { slug: 'northwind', name: 'Northwind', displayName: 'Northwind Traders' },
         },
         {
-          url: '/api/management/roles',
+          url: '/api/roles',
           body: { key: 'auditor', name: 'Auditor', description: 'Reads audit events', resourceId: 'resource-1' },
         },
         {
-          url: '/api/management/api-resources',
+          url: '/api/api-resources',
           body: {
             identifier: 'billing-api',
             name: 'Billing API',
@@ -201,12 +201,12 @@ describe('admin console webhooks-content', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/organizations/org-1' && init?.method === 'PATCH') {
+      if (url === '/api/organizations/org-1' && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse({ ...organization, ...JSON.parse(String(init.body)) }))
       }
-      if (url === '/api/management/organizations/org-1') return Promise.resolve(jsonResponse(organization))
-      if (url === '/api/management/organizations') {
+      if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
+      if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -226,7 +226,7 @@ describe('admin console webhooks-content', () => {
 
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/organizations/org-1',
+        url: '/api/organizations/org-1',
         body: {
           slug: 'acme',
           name: 'Acme',
@@ -241,10 +241,10 @@ describe('admin console webhooks-content', () => {
     expect(summaryCard('Organization summary').getByText('Not set')).toBeTruthy()
   })
 
-  it('searches organization template roles and opens permission guidance', async () => {
+  it('searches organization template roles', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/roles') {
+      if (url === '/api/roles') {
         return Promise.resolve(
           jsonResponse({
             roles: [
@@ -255,7 +255,6 @@ describe('admin console webhooks-content', () => {
                 name: 'Billing manager',
                 description: 'Controls invoices',
                 organizationId: 'org-1',
-                tokenClaimName: 'billing_roles',
               },
               {
                 ...role,
@@ -281,9 +280,6 @@ describe('admin console webhooks-content', () => {
     expect(screen.getByText('Billing manager')).toBeTruthy()
     expect(screen.queryByText('Member')).toBeNull()
     expect(screen.getByText('Organization')).toBeTruthy()
-    expect(screen.getByText('billing_roles')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('link', { name: 'Organization permissions' }))
-    expect(screen.getByText('Permission templates use API resources')).toBeTruthy()
+    expect(screen.getByText('roles')).toBeTruthy()
   })
 })

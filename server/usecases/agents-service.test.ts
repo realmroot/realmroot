@@ -16,6 +16,7 @@ import {
   revokeAgentHost,
 } from '@server/usecases/agents'
 import type { Deps } from '@server/usecases/deps'
+import { protectedResourceCapabilityNames } from '@shared/authz'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('AgentService', () => {
@@ -221,7 +222,7 @@ describe('AgentService', () => {
           agentId: 'agent-1',
           userCode: 'abcd1234',
           action: 'approve',
-          capabilities: ['management:read'],
+          capabilities: ['applications:read'],
         },
         'user-1',
       ),
@@ -231,7 +232,7 @@ describe('AgentService', () => {
       agentId: 'agent-1',
       userCodeHash: await sha256Base64url('ABCD-1234'),
       action: 'approve',
-      capabilities: ['management:read'],
+      capabilities: ['applications:read'],
       userId: 'user-1',
       now: expect.any(Date),
     })
@@ -264,15 +265,15 @@ describe('AgentService', () => {
     })
   })
 
-  it('declares account data capabilities and coarse unified API management permissions', () => {
+  it('declares account data capabilities and resource-scoped management permissions', () => {
     expect(agentCapabilities.map((capability) => capability.name)).toEqual([
       'account.profile.read',
       'account.sessions.list',
       'account.authorized_apps.list',
-      'management:read',
-      'management:write',
+      ...protectedResourceCapabilityNames,
     ])
-    expect(areKnownAgentCapabilities(['account.profile.read', 'management:read'])).toBe(true)
+    expect(areKnownAgentCapabilities(['account.profile.read', 'applications:read'])).toBe(true)
+    expect(areKnownAgentCapabilities(['tenant:read'])).toBe(false)
     expect(areKnownAgentCapabilities(['management.openapi.generate'])).toBe(false)
   })
 })

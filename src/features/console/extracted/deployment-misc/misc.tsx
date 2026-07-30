@@ -1,6 +1,5 @@
 import { consoleQueryKeys, listRoles } from '@/lib/api/management'
 import {
-  EmptyState,
   type OrganizationTemplateSection,
   Plus,
   SettingRow,
@@ -77,14 +76,7 @@ export function OrganizationTemplatePage({
           active={tab}
           ariaLabel="Organization template sections"
           onSelect={(value) => setTab(value)}
-          tabs={[
-            ['organization-roles', 'Organization roles', '/console/organization-template/organization-roles'],
-            [
-              'organization-permissions',
-              'Organization permissions',
-              '/console/organization-template/organization-permissions',
-            ],
-          ]}
+          tabs={[['organization-roles', 'Organization roles', '/console/organization-template/organization-roles']]}
         />
         <SettingsSections>
           {tab === 'organization-roles' ? (
@@ -109,7 +101,7 @@ export function OrganizationTemplatePage({
                     <TableRow>
                       <TableHead>{tt('Role')}</TableHead>
                       <TableHead>{tt('Scope')}</TableHead>
-                      <TableHead>{tt('Token claim')}</TableHead>
+                      <TableHead>{tt('Emitted claim')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -122,32 +114,12 @@ export function OrganizationTemplatePage({
                           <div className="text-xs text-muted-foreground">{role.key}</div>
                         </TableCell>
                         <TableCell>{role.organizationId ? 'Organization' : 'Global template'}</TableCell>
-                        <TableCell>{role.tokenClaimName ?? 'Default authorization claims'}</TableCell>
+                        <TableCell>roles</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
-            </SettingsSection>
-          ) : null}
-          {tab === 'organization-permissions' ? (
-            <SettingsSection
-              title={tt('Organization permissions')}
-              description={tt('Permissions are managed on API resources and attached to organization roles.')}
-            >
-              <EmptyState
-                action={
-                  <a className="uiButton uiButton-secondary" href="/console/api-resources">
-                    {' '}
-                    {tt('API resources')}{' '}
-                  </a>
-                }
-                description={tt(
-                  'Create resource permissions, then attach them to organization-scoped roles from the role detail page.',
-                )}
-                framed={false}
-                title={tt('Permission templates use API resources')}
-              />
             </SettingsSection>
           ) : null}
         </SettingsSections>
@@ -167,15 +139,16 @@ export function CustomizeJwtPage() {
           title={tt('Access token')}
           rows={[
             ['Audience', 'API resource audience is emitted for matching protected APIs.'],
-            ['Roles and permissions', 'Configured through role assignments and API resource permissions.'],
-            ['Custom claims', 'Use role assignment token claims and API resource claim namespaces.'],
+            ['Roles', 'Role keys are emitted in the roles claim.'],
+            ['Groups', 'Relevant organization IDs are emitted in the groups claim.'],
+            ['Scopes', 'Approved scopes are emitted in the scope claim.'],
           ]}
         />
         <TokenCustomizationCard
           title={tt('Machine-to-machine token')}
           rows={[
             ['Application roles', 'Application role assignments are supported.'],
-            ['Custom claims', 'Use assignment token claims for trusted application subjects.'],
+            ['Claims', 'Uses the fixed roles, groups, and scope authorization claims.'],
           ]}
         />
         <TokenCustomizationCard

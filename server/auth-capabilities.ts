@@ -1,4 +1,5 @@
 import type { Capability } from '@better-auth/agent-auth'
+import { resourceAccess } from '@shared/authz'
 
 export const agentCapabilities = [
   {
@@ -41,16 +42,22 @@ export const agentCapabilities = [
       },
     },
   },
-  {
-    name: 'management:read',
-    description: 'Read tenant management resources through the unified Realmroot API.',
-    approvalStrength: 'session',
-  },
-  {
-    name: 'management:write',
-    description: 'Change tenant management resources through the unified Realmroot API.',
-    approvalStrength: 'session',
-  },
+  ...Object.entries(resourceAccess).flatMap(([resource, { capabilities }]) => [
+    {
+      name: capabilities.read,
+      description: `Read Realmroot ${resource} resources.`,
+      approvalStrength: 'session' as const,
+    },
+    ...('write' in capabilities
+      ? [
+          {
+            name: capabilities.write,
+            description: `Change Realmroot ${resource} resources.`,
+            approvalStrength: 'session' as const,
+          },
+        ]
+      : []),
+  ]),
 ] as const satisfies Capability[]
 
 function paginationInputSchema() {

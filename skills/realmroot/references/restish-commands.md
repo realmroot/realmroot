@@ -55,7 +55,7 @@ Use `restish doctor api "$API_NAME"` for discovery problems and
 ## API Resource Access
 
 The Agent's own identity is sufficient for this workflow. Do not request
-`management:read` or `management:write`.
+`applications:read` or `applications:write`.
 
 Discover the exact API resource, authorization mode, protected resource URL,
 requestable scopes, linked accounts where applicable, and any grants:

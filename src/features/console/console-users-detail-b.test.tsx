@@ -35,14 +35,14 @@ describe('admin console users-detail-b', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard })
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/management/connectors' && init?.method === 'POST') {
+      if (url === '/api/connectors' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(connector, 201))
       }
-      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-      if (url === '/api/management/connectors') {
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -91,7 +91,7 @@ describe('admin console users-detail-b', () => {
     await waitFor(() => {
       expect(requests).toEqual([
         {
-          url: '/api/management/connectors',
+          url: '/api/connectors',
           body: {
             slug: 'google',
             displayName: 'Google',
@@ -112,9 +112,9 @@ describe('admin console users-detail-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/management/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
-      if (url === '/api/management/sign-in-settings' && method === 'GET') {
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
+      if (url === '/api/sign-in-settings' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             ...signInSettings,
@@ -126,20 +126,20 @@ describe('admin console users-detail-b', () => {
           }),
         )
       }
-      if (url === '/api/management/sign-in-settings' && method === 'PATCH') {
+      if (url === '/api/sign-in-settings' && method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(
           jsonResponse({ ...signInSettings, signIn: { ...signInSettings.signIn, emailOtpEnabled: true } }),
         )
       }
-      if (url === '/api/management/security/policy' && method === 'GET') {
+      if (url === '/api/security/policy' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             policy: { ...securityPolicy.policy, passkeys: { ...securityPolicy.policy.passkeys, enabled: false } },
           }),
         )
       }
-      if (url === '/api/management/security/policy' && method === 'PATCH') {
+      if (url === '/api/security/policy' && method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse(securityPolicy))
       }
@@ -155,7 +155,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/sign-in-settings',
+        url: '/api/sign-in-settings',
         body: { builtInProviders: { email: { enabled: true, otpLength: 8, expiresInSeconds: 600 } } },
       })
     })
@@ -166,7 +166,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/security/policy',
+        url: '/api/security/policy',
         body: { policy: { passkeys: { enabled: true } } },
       })
     })
@@ -190,7 +190,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/sign-in-settings',
+        url: '/api/sign-in-settings',
         body: {
           builtInProviders: {
             phone: expect.objectContaining({
@@ -218,7 +218,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/sign-in-settings',
+        url: '/api/sign-in-settings',
         body: {
           builtInProviders: {
             web3Wallet: expect.objectContaining({
@@ -239,7 +239,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/sign-in-settings',
+        url: '/api/sign-in-settings',
         body: {
           builtInProviders: {
             oneTap: expect.objectContaining({
@@ -257,21 +257,21 @@ describe('admin console users-detail-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/management/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/management/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/management/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-      if (url === '/api/management/connectors/connector-1' && method === 'GET') {
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/connectors/connector-1' && method === 'GET') {
         return Promise.resolve(jsonResponse(connector))
       }
-      if (url === '/api/management/connectors/connector-1' && method === 'PATCH') {
+      if (url === '/api/connectors/connector-1' && method === 'PATCH') {
         requests.push({ url, method, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ ...connector, enabled: false }))
       }
-      if (url === '/api/management/connectors/connector-1' && method === 'DELETE') {
+      if (url === '/api/connectors/connector-1' && method === 'DELETE') {
         requests.push({ url, method, body: null })
         return Promise.resolve(new Response(null, { status: 204 }))
       }
-      if (url === '/api/management/connectors') {
+      if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -289,7 +289,7 @@ describe('admin console users-detail-b', () => {
 
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/management/connectors/connector-1',
+        url: '/api/connectors/connector-1',
         method: 'PATCH',
         body: expect.objectContaining({ clientId: 'workspace-client', enabled: false }),
       })
@@ -302,7 +302,7 @@ describe('admin console users-detail-b', () => {
     expect(await screen.findByRole('heading', { name: 'Delete connector' })).toBeTruthy()
     fireEvent.click(within(screen.getAllByRole('dialog').at(-1)!).getByRole('button', { name: 'Delete' }))
     await waitFor(() => {
-      expect(requests).toContainEqual({ url: '/api/management/connectors/connector-1', method: 'DELETE', body: null })
+      expect(requests).toContainEqual({ url: '/api/connectors/connector-1', method: 'DELETE', body: null })
     })
   })
 })

@@ -66,12 +66,11 @@ After deployment, verify:
 ```bash
 curl https://AUTH_ORIGIN/api/configz
 curl https://AUTH_ORIGIN/api/auth/.well-known/openid-configuration
-curl https://AUTH_ORIGIN/api/management/openapi.json
+curl https://AUTH_ORIGIN/api/openapi.json
 ```
 
-Confirm the issuer matches the deployment origin, then use the Realmroot Restish
-skill to run `get-readiness` and at least one generated read-only Management API
-operation.
+Confirm that the issuer matches the deployment origin and that the OpenAPI
+document describes the expected deployment version.
 
 Source:
 

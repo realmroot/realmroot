@@ -113,7 +113,7 @@ func TestCapabilityApprovalResponseOpensAndWaitsForHostedApproval(t *testing.T) 
 		return jsonResponse(200, map[string]any{
 			"status": "active",
 			"agent_capability_grants": []map[string]any{
-				{"capability": "management:read", "status": "active"},
+				{"capability": "applications:read", "status": "active"},
 			},
 		}), nil
 	})
@@ -239,7 +239,7 @@ func TestCapabilityApprovalWaitStopsOnDenial(t *testing.T) {
 		return jsonResponse(200, map[string]any{
 			"status": "active",
 			"agent_capability_grants": []map[string]any{
-				{"capability": "management:read", "status": "denied"},
+				{"capability": "applications:read", "status": "denied"},
 			},
 		}), nil
 	})
@@ -254,7 +254,7 @@ func TestCapabilityApprovalWaitStopsOnDenial(t *testing.T) {
 				"status": "https://auth.example.com/api/auth/agent/status",
 			},
 		},
-		[]string{"management:read"},
+		[]string{"applications:read"},
 		time.Now().Add(time.Minute),
 		time.Millisecond,
 	)
@@ -267,7 +267,7 @@ func capabilityHookInput(approvalURL string) plugin.ResponseMiddlewareInput {
 	return plugin.ResponseMiddlewareInput{
 		Request: plugin.HookRequest{
 			Method: "POST",
-			URI:    "https://auth.example.com/api/agent/management-access-requests",
+			URI:    "https://auth.example.com/api/agent/capability-requests",
 		},
 		Response: plugin.HookResponse{
 			Status: 200,
@@ -275,7 +275,7 @@ func capabilityHookInput(approvalURL string) plugin.ResponseMiddlewareInput {
 				"agent_id": "agent-123",
 				"status":   "pending",
 				"agent_capability_grants": []any{
-					map[string]any{"capability": "management:read", "status": "pending"},
+					map[string]any{"capability": "applications:read", "status": "pending"},
 				},
 				"approval": map[string]any{
 					"verification_uri_complete": approvalURL,

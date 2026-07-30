@@ -41,25 +41,15 @@ describe('OAuth token claim building over real D1', () => {
 
     const audience = 'https://api.example.com/contacts'
     const resource = (await (
-      await postJson(harness, cookie, '/api/management/api-resources', {
+      await postJson(harness, cookie, '/api/api-resources', {
         identifier: 'contacts-api',
         name: 'Contacts API',
         audience,
         resourceUrl: audience,
       })
     ).json()) as { id: string }
-    const scope = (await (
-      await postJson(harness, cookie, `/api/management/api-resources/${resource.id}/scopes`, {
-        value: 'contacts:read',
-      })
-    ).json()) as { id: string }
-    await postJson(harness, cookie, `/api/management/api-resources/${resource.id}/permissions`, {
-      scopeId: scope.id,
-      key: 'contacts.read',
-    })
-
     const application = (await (
-      await postJson(harness, cookie, '/api/management/applications', {
+      await postJson(harness, cookie, '/api/applications', {
         name: 'Claims App',
         clientType: 'public_spa',
         redirectUris: ['https://app.example.com/callback'],
@@ -67,10 +57,10 @@ describe('OAuth token claim building over real D1', () => {
     ).json()) as { id: string }
 
     const organization = (await (
-      await postJson(harness, cookie, '/api/management/organizations', { slug: 'claims-org', name: 'Claims Org' })
+      await postJson(harness, cookie, '/api/organizations', { slug: 'claims-org', name: 'Claims Org' })
     ).json()) as { id: string }
     const member = (await (
-      await postJson(harness, cookie, `/api/management/organizations/${organization.id}/members`, {
+      await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
         userId,
         role: 'member',
       })
@@ -79,35 +69,23 @@ describe('OAuth token claim building over real D1', () => {
     // Distinct roles per subject so each assignment read is independently proven.
     const roleId = async (key: string, name: string) =>
       (
-        (await (
-          await postJson(harness, cookie, '/api/management/roles', { key, name, resourceId: resource.id })
-        ).json()) as { id: string }
+        (await (await postJson(harness, cookie, '/api/roles', { key, name, resourceId: resource.id })).json()) as {
+          id: string
+        }
       ).id
     const userRole = await roleId('contacts-user-role', 'Contacts User')
     const appRole = await roleId('contacts-app-role', 'Contacts App')
     const memberRole = await roleId('contacts-member-role', 'Contacts Member')
 
+    await postJson(harness, cookie, '/api/roles/assignments/users', { roleId: userRole, subjectId: userId }, 204)
     await postJson(
       harness,
       cookie,
-      '/api/management/user-role-assignments',
-      { roleId: userRole, subjectId: userId },
-      204,
-    )
-    await postJson(
-      harness,
-      cookie,
-      '/api/management/application-role-assignments',
+      '/api/roles/assignments/applications',
       { roleId: appRole, subjectId: application.id },
       204,
     )
-    await postJson(
-      harness,
-      cookie,
-      '/api/management/member-role-assignments',
-      { roleId: memberRole, subjectId: member.id },
-      204,
-    )
+    await postJson(harness, cookie, '/api/roles/assignments/members', { roleId: memberRole, subjectId: member.id }, 204)
 
     const claims = (await buildTokenClaims(harness.deps, {
       userId,

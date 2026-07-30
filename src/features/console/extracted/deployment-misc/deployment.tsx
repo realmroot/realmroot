@@ -51,7 +51,7 @@ export function DeploymentSettingsPage() {
               <SettingRow label={tt('Auth issuer')} value="/api/auth" />
               <SettingRow label={tt('Discovery')} value="/api/auth/.well-known/openid-configuration" />
               <SettingRow label={tt('JWKS URI')} value="/api/auth/jwks" />
-              <SettingRow label={tt('Management API')} value="/api/management" />
+              <SettingRow label={tt('Management API')} value="/api" />
             </div>
           </SettingsSection>
           <SettingsSection

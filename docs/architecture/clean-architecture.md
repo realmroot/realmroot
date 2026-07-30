@@ -71,7 +71,7 @@ in `tsconfig.json` `paths` and `vite.config.ts` / `vitest.config.ts` `resolve.al
 the optional deployment config vars are declared by hand; `validateEnv` derives the
 `RuntimeConfig`.
 
-## Testing (vitest projects)
+## Test Runtimes
 
 The layers collapse into runtimes via vitest `projects` (`vitest.config.ts`):
 
@@ -83,12 +83,10 @@ The layers collapse into runtimes via vitest `projects` (`vitest.config.ts`):
   Auth sessions over real D1, faking nothing but the outward email/R2 gateways. Per
   resource: happy path + 401 + 403 + one validation failure (not the usecase branch matrix).
 
-`pnpm test` runs all three. The cross-stack crown is **Playwright** (`pnpm run e2e`),
-scoped to a handful of hermetic journeys — real SPA + Worker + isolated local D1 +
-auth, no external dependency (onboarding, auth/session/cookies, routing, admin config
-CRUD that only writes D1). The specs in `specs/*.feature` are behaviour-first Gherkin
-docs (no runner); `pnpm run spec:check` is a governance lint that ties every `@e2e`
-scenario to a `[spec: <feature>/<journey>]` breadcrumb in `tests/`.
+Cross-stack Playwright tests run the real SPA, Worker, authentication stack, and
+isolated local D1. Behaviour selection and test-governance rules are maintained
+in `AGENTS.md`, `specs/README.md`, and the feature files rather than duplicated
+here.
 
 ## Migrations
 
@@ -98,11 +96,3 @@ migrations; the drizzle snapshot in `migrations/meta/` is baselined to the schem
 `NNNN_*.sql` files remain the applied production history; generated migrations use a
 timestamp prefix so they sort after them. CI runs `db:generate` and fails on a dirty
 `migrations/` tree (schema changed without a committed migration).
-
-## Conformance
-
-The layout, dependency rule, ports, composition root, DI via `c.get('deps')`,
-cf-typegen `Env`, the vitest projects split with the real-D1 integration crown, the
-Playwright e2e layer, and generated migrations all follow the skill. `specs/*.feature`
-stay as behaviour-first Gherkin documentation (the skill's runner-less convention),
-traced from tests via `[spec:]` breadcrumbs.

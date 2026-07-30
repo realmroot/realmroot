@@ -59,7 +59,7 @@ describe('service.test 1', () => {
         accessToken: {
           authorization: true,
           roles: true,
-          permissions: true,
+          groups: true,
         },
         idToken: {},
         userInfo: {},
@@ -262,7 +262,7 @@ describe('service.test 1', () => {
         oidcClaims: {
           accessToken: { authorization: true, roles: true, scopes: true },
           idToken: { organizationId: true, organizationName: true },
-          userInfo: { roles: true, permissions: true },
+          userInfo: { roles: true, groups: true },
         },
       },
       'admin-1',
@@ -271,20 +271,20 @@ describe('service.test 1', () => {
     expect(created.oidcClaims).toEqual({
       accessToken: { authorization: true, roles: true, scopes: true },
       idToken: { organizationId: true, organizationName: true },
-      userInfo: { roles: true, permissions: true },
+      userInfo: { roles: true, groups: true },
     })
 
     await expect(
       updateApplication(deps, issuer, created.id, {
         oidcClaims: {
-          accessToken: { permissions: true },
+          accessToken: { groups: true },
           idToken: { roles: true },
           userInfo: { authorization: true, organizationName: true },
         },
       }),
     ).resolves.toMatchObject({
       oidcClaims: {
-        accessToken: { permissions: true },
+        accessToken: { groups: true },
         idToken: { roles: true },
         userInfo: { authorization: true, organizationName: true },
       },

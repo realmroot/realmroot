@@ -21,14 +21,11 @@ import {
   updateOrganizationRequestSchema,
 } from '@shared/api/authorization'
 import { Hono } from 'hono'
-import { requireAdmin } from '../../middleware/admin'
-import { getActorUserId } from '../../middleware/auth-context'
+import { getActorUserId } from '../../middleware/authn'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
 export const managementOrganizationsRoute = new Hono()
-
-managementOrganizationsRoute.use('*', requireAdmin())
 
 managementOrganizationsRoute.get('/', async (c) =>
   c.json(await listOrganizations(getDeps(c), readQuery(c, paginationQuerySchema))),

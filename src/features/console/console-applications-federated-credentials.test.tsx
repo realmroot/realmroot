@@ -100,7 +100,7 @@ describe('admin console application federated credentials', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/management/api-resources') {
+      if (url === '/api/api-resources') {
         return jsonResponse({
           items: [
             {
@@ -112,7 +112,6 @@ describe('admin console application federated credentials', () => {
               authorizationMode: 'native',
               description: null,
               enabled: true,
-              tokenClaimsNamespace: null,
               authorization: null,
               createdAt: '2026-01-01T00:00:00.000Z',
               updatedAt: '2026-01-01T00:00:00.000Z',
@@ -121,10 +120,10 @@ describe('admin console application federated credentials', () => {
           pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
         })
       }
-      if (url === '/api/management/applications/app-1/federated-credentials' && method === 'GET') {
+      if (url === '/api/applications/app-1/federated-credentials' && method === 'GET') {
         return jsonResponse({ credentials })
       }
-      if (url === '/api/management/applications/app-1/federated-credentials' && method === 'POST') {
+      if (url === '/api/applications/app-1/federated-credentials' && method === 'POST') {
         const body = JSON.parse(String(init?.body))
         requests.push({ method, url, body })
         const created = {
@@ -140,7 +139,7 @@ describe('admin console application federated credentials', () => {
         credentials = [...credentials, created]
         return jsonResponse({ credential: created }, 201)
       }
-      if (url === '/api/management/applications/app-1/federated-credentials/cred-1' && method === 'PATCH') {
+      if (url === '/api/applications/app-1/federated-credentials/cred-1' && method === 'PATCH') {
         const body = JSON.parse(String(init?.body))
         requests.push({ method, url, body })
         credentials = credentials.map((credential) =>
@@ -148,7 +147,7 @@ describe('admin console application federated credentials', () => {
         )
         return jsonResponse({ credential: credentials[0] })
       }
-      if (url === '/api/management/applications/app-1/federated-credentials/cred-1' && method === 'DELETE') {
+      if (url === '/api/applications/app-1/federated-credentials/cred-1' && method === 'DELETE') {
         requests.push({ method, url, body: null })
         credentials = credentials.filter((credential) => credential.id !== 'cred-1')
         return new Response(null, { status: 204 })
@@ -177,7 +176,7 @@ describe('admin console application federated credentials', () => {
     await waitFor(() => {
       expect(requests).toContainEqual({
         method: 'POST',
-        url: '/api/management/applications/app-1/federated-credentials',
+        url: '/api/applications/app-1/federated-credentials',
         body: {
           name: 'JWKS credential',
           issuer: 'https://issuer.example.com',
@@ -193,7 +192,7 @@ describe('admin console application federated credentials', () => {
     await waitFor(() => {
       expect(requests).toContainEqual({
         method: 'PATCH',
-        url: '/api/management/applications/app-1/federated-credentials/cred-1',
+        url: '/api/applications/app-1/federated-credentials/cred-1',
         body: { enabled: false },
       })
     })
@@ -202,7 +201,7 @@ describe('admin console application federated credentials', () => {
     await waitFor(() => {
       expect(requests).toContainEqual({
         method: 'DELETE',
-        url: '/api/management/applications/app-1/federated-credentials/cred-1',
+        url: '/api/applications/app-1/federated-credentials/cred-1',
         body: null,
       })
     })
@@ -212,13 +211,13 @@ describe('admin console application federated credentials', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/management/api-resources') {
+      if (url === '/api/api-resources') {
         return jsonResponse({
           items: [],
           pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
         })
       }
-      if (url === '/api/management/applications/app-1/federated-credentials' && method === 'GET') {
+      if (url === '/api/applications/app-1/federated-credentials' && method === 'GET') {
         return jsonResponse({
           credentials: [
             {

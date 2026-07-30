@@ -16,14 +16,11 @@ import {
   updateManagementConnectorRequestSchema,
 } from '@shared/api/management'
 import { Hono } from 'hono'
-import { requireAdmin } from '../../middleware/admin'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
 export function createManagementConnectorRoutes() {
   const app = new Hono()
-
-  app.use('*', requireAdmin())
 
   app.get('/templates', async (c) => c.json(listConnectorTemplatesResponseSchema.parse(listConnectorTemplates())))
 
