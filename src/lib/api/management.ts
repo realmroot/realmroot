@@ -450,10 +450,12 @@ export function assignAgentRole(input: AssignRoleRequest) {
 }
 
 export {
+  archiveApiResource,
   createApiResource,
   deleteApiResource,
   getApiResource,
   listApiResources,
+  restoreApiResource,
   updateApiResource,
 } from './management-api-resources'
 

@@ -1,6 +1,20 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { apiResource, resourceAccountConnection, user } from '@server/db/schema'
+import {
+  agent,
+  agentAccessGrant,
+  agentAccessRequest,
+  agentAuditEvent,
+  agentHost,
+  agentIdentity,
+  agentIdentityBinding,
+  apiResource,
+  externalTokenLease,
+  resourceAccountConnection,
+  resourceConnectionIntent,
+  user,
+} from '@server/db/schema'
 import { createResource } from '@server/usecases/authorization'
+import { discoverAgentResources } from '@server/usecases/external-resources'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, createUser, type Harness, resourceOpenApiFetch, signIn, signInAdmin } from './harness'
@@ -192,6 +206,290 @@ describe('authorization management over real D1', () => {
         .from(resourceAccountConnection)
         .where(eq(resourceAccountConnection.id, 'connection-history')),
     ).resolves.toEqual([{ id: 'connection-history' }])
+  })
+
+  it('configures external authorization atomically only while the resource is unarchived [spec: management-api/management-api-resource-archival]', async () => {
+    const cookie = await signInAdmin(harness)
+    const resource = await createResource(harness.deps, {
+      identifier: 'conditional-external',
+      name: 'Conditional external API',
+      resourceUrl: 'https://conditional.example.com/api',
+      authorizationMode: 'external',
+      enabled: false,
+    })
+    const now = new Date()
+    const authorization = {
+      resourceId: resource.id,
+      resourceUrl: resource.resourceUrl,
+      issuer: 'https://conditional.example.com',
+      authorizationEndpoint: 'https://conditional.example.com/authorize',
+      tokenEndpoint: 'https://conditional.example.com/token',
+      registrationEndpoint: null,
+      revocationEndpoint: 'https://conditional.example.com/revoke',
+      jwksUri: 'https://conditional.example.com/jwks',
+      userInfoEndpoint: 'https://conditional.example.com/userinfo',
+      registrationMode: 'manual',
+      clientId: 'conditional-client',
+      encryptedClientSecret: 'conditional-secret',
+      encryptedRegistrationAccessToken: null,
+      metadata: {},
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    await expect(harness.deps.externalResources.configureAuthorization(authorization)).resolves.toMatchObject({
+      resourceId: resource.id,
+    })
+    await expect(harness.deps.authorization.findResource(resource.id)).resolves.toMatchObject({ enabled: true })
+
+    const archived = await harness.request(`/api/api-resources/${resource.id}/archival`, {
+      method: 'PUT',
+      headers: { cookie },
+    })
+    expect(archived.status).toBe(200)
+    await expect(
+      harness.deps.externalResources.configureAuthorization({
+        ...authorization,
+        clientId: 'late-client',
+        updatedAt: new Date(now.getTime() + 1),
+      }),
+    ).resolves.toBeNull()
+    await expect(harness.deps.externalResources.findAuthorization(resource.id)).resolves.toMatchObject({
+      clientId: 'conditional-client',
+    })
+  })
+
+  it('[spec: management-api/management-api-resource-archival] archives and restores without reviving authorization', async () => {
+    const cookie = await signInAdmin(harness)
+    const resource = (await (
+      await postJson(harness, cookie, '/api/api-resources', {
+        identifier: 'archived-api',
+        name: 'Archived API',
+        resourceUrl: 'https://archived.example.com/api',
+      })
+    ).json()) as { id: string }
+    const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.email, 'admin@example.com'))
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + 60_000)
+    await harness.db.insert(agentHost).values({
+      id: 'archive-host',
+      name: 'Archive host',
+      userId: admin.id,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agent).values({
+      id: 'archive-agent',
+      name: 'Archive Agent',
+      userId: admin.id,
+      hostId: 'archive-host',
+      status: 'active',
+      publicKey: '{}',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentIdentity).values({
+      id: 'archive-identity',
+      issuer: 'http://localhost/api/auth',
+      subject: 'archive-subject',
+      name: 'Archive identity',
+      ownerUserId: admin.id,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentIdentityBinding).values({
+      id: 'archive-binding',
+      agentIdentityId: 'archive-identity',
+      protocolAgentId: 'archive-agent',
+      status: 'active',
+      boundAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(resourceAccountConnection).values({
+      id: 'archive-connection',
+      resourceId: resource.id,
+      ownerUserId: admin.id,
+      externalSubject: 'admin@example.com',
+      displayName: 'Archive connection',
+      encryptedTokens: 'encrypted-tokens',
+      grantedScopes: ['files:read'],
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(resourceConnectionIntent).values({
+      id: 'archive-intent',
+      stateHash: 'archive-state',
+      resourceId: resource.id,
+      ownerUserId: admin.id,
+      scopes: ['files:read'],
+      encryptedPkceVerifier: 'encrypted-verifier',
+      status: 'pending',
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentAccessRequest).values({
+      id: 'archive-request',
+      resourceId: resource.id,
+      connectionId: 'archive-connection',
+      agentIdentityId: 'archive-identity',
+      bindingId: 'archive-binding',
+      scopes: ['files:read'],
+      status: 'pending',
+      approvalTokenHash: 'archive-approval-hash',
+      encryptedApprovalToken: 'encrypted-approval',
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentAccessGrant).values({
+      id: 'archive-grant',
+      resourceId: resource.id,
+      connectionId: 'archive-connection',
+      agentIdentityId: 'archive-identity',
+      scopes: ['files:read'],
+      mode: 'ongoing',
+      status: 'active',
+      grantedByUserId: admin.id,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(externalTokenLease).values({
+      id: 'archive-lease',
+      grantId: 'archive-grant',
+      requestId: 'archive-request',
+      bindingId: 'archive-binding',
+      encryptedAccessToken: 'encrypted-access-token',
+      tokenHash: 'archive-token-hash',
+      confirmationJkt: 'archive-jkt',
+      scopes: ['files:read'],
+      expiresAt,
+      createdAt: now,
+    })
+
+    const archived = await harness.request(`/api/api-resources/${resource.id}/archival`, {
+      method: 'PUT',
+      headers: { cookie },
+    })
+
+    expect(archived.status).toBe(200)
+    await expect(archived.json()).resolves.toMatchObject({
+      id: resource.id,
+      enabled: false,
+      archivedAt: expect.any(String),
+    })
+    await expect(
+      discoverAgentResources(harness.deps, {
+        issuer: 'http://localhost/api/auth',
+        subject: 'archive-subject',
+        identityId: 'archive-identity',
+        protocolAgentId: 'archive-agent',
+        hostId: 'archive-host',
+      }),
+    ).resolves.toEqual({ resources: [] })
+
+    const [[connection], [intent], [request], [grant], [lease]] = await Promise.all([
+      harness.db.select().from(resourceAccountConnection).where(eq(resourceAccountConnection.id, 'archive-connection')),
+      harness.db.select().from(resourceConnectionIntent).where(eq(resourceConnectionIntent.id, 'archive-intent')),
+      harness.db.select().from(agentAccessRequest).where(eq(agentAccessRequest.id, 'archive-request')),
+      harness.db.select().from(agentAccessGrant).where(eq(agentAccessGrant.id, 'archive-grant')),
+      harness.db.select().from(externalTokenLease).where(eq(externalTokenLease.id, 'archive-lease')),
+    ])
+    expect(connection).toMatchObject({ status: 'revoked', revokedAt: expect.any(Date) })
+    expect(intent).toMatchObject({ status: 'cancelled', completedAt: expect.any(Date) })
+    expect(request).toMatchObject({ status: 'denied', decidedAt: expect.any(Date) })
+    expect(grant).toMatchObject({ status: 'revoked', revokedAt: expect.any(Date) })
+    expect(lease).toMatchObject({ revokedAt: expect.any(Date) })
+    const [archiveAudit] = await harness.db
+      .select()
+      .from(agentAuditEvent)
+      .where(eq(agentAuditEvent.resourceId, resource.id))
+    expect(archiveAudit).toMatchObject({
+      action: 'api_resource.archived',
+      controllerUserId: admin.id,
+      metadata: { authorizationRecordsRevoked: true },
+    })
+    await expect(harness.deps.authorization.updateResource(resource.id, { enabled: true })).resolves.toBe(false)
+    await expect(
+      harness.deps.externalResources.createConnectionIntent({
+        id: 'late-intent',
+        stateHash: 'late-state',
+        resourceId: resource.id,
+        ownerUserId: admin.id,
+        ownerOrganizationId: null,
+        scopes: ['files:read'],
+        encryptedPkceVerifier: 'late-verifier',
+        returnTo: 'account-center',
+        status: 'pending',
+        expiresAt,
+        completedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ).resolves.toBeNull()
+    await expect(
+      harness.deps.externalResources.createAccessRequest({
+        id: 'late-request',
+        resourceId: resource.id,
+        connectionId: null,
+        agentIdentityId: 'archive-identity',
+        bindingId: 'archive-binding',
+        scopes: ['files:read'],
+        reason: null,
+        status: 'pending',
+        approvalTokenHash: 'late-approval-hash',
+        encryptedApprovalToken: 'late-approval',
+        grantId: null,
+        expiresAt,
+        decidedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ).resolves.toBeNull()
+    await expect(
+      harness.deps.externalResources.createTokenLease({
+        id: 'late-lease',
+        grantId: 'archive-grant',
+        requestId: 'archive-request',
+        bindingId: 'archive-binding',
+        encryptedAccessToken: 'late-access-token',
+        tokenHash: 'late-token-hash',
+        confirmationJkt: 'late-jkt',
+        scopes: ['files:read'],
+        expiresAt,
+        revokedAt: null,
+        createdAt: now,
+      }),
+    ).resolves.toBeNull()
+
+    const restored = await harness.request(`/api/api-resources/${resource.id}/archival`, {
+      method: 'DELETE',
+      headers: { cookie },
+    })
+
+    expect(restored.status).toBe(200)
+    await expect(restored.json()).resolves.toMatchObject({
+      id: resource.id,
+      enabled: false,
+      archivedAt: null,
+    })
+    const [restoredConnection] = await harness.db
+      .select()
+      .from(resourceAccountConnection)
+      .where(eq(resourceAccountConnection.id, 'archive-connection'))
+    const [restoredGrant] = await harness.db
+      .select()
+      .from(agentAccessGrant)
+      .where(eq(agentAccessGrant.id, 'archive-grant'))
+    expect(restoredConnection.status).toBe('revoked')
+    expect(restoredGrant.status).toBe('revoked')
+    const audits = await harness.db.select().from(agentAuditEvent).where(eq(agentAuditEvent.resourceId, resource.id))
+    expect(audits.map((event) => event.action)).toEqual(['api_resource.archived', 'api_resource.restored'])
   })
 
   it('manages role scope references and a user role assignment through real SQL [spec: management-api/management-restish-role-crud]', async () => {

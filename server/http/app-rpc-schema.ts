@@ -424,4 +424,8 @@ export type RpcSchema = {
     $patch: RpcEndpoint<{ param: { id: string }; json: z.infer<typeof updateApiResourceSchema> }, ApiResource>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
   }
+  '/api/api-resources/:id/archival': {
+    $put: RpcEndpoint<{ param: { id: string } }, ApiResource>
+    $delete: RpcEndpoint<{ param: { id: string } }, ApiResource>
+  }
 }

@@ -21,3 +21,11 @@ export function updateApiResource(id: string, input: z.infer<typeof updateApiRes
 export function deleteApiResource(id: string) {
   return readRpcResponse(apiClient.api['api-resources'][':id'].$delete({ param: { id } }))
 }
+
+export function archiveApiResource(id: string): Promise<ApiResource> {
+  return readRpcResponse(apiClient.api['api-resources'][':id'].archival.$put({ param: { id } }))
+}
+
+export function restoreApiResource(id: string): Promise<ApiResource> {
+  return readRpcResponse(apiClient.api['api-resources'][':id'].archival.$delete({ param: { id } }))
+}

@@ -342,6 +342,7 @@ export type ManagementOpenApiMethod = (typeof managementOpenApiMethods)[number]
 export const managementOpenApiOperationKey = 'GET /openapi.json'
 export const methodsWithJsonRequestBody = new Set(['POST', 'PUT', 'PATCH'])
 export const operationsWithoutRequestBody = new Set([
+  'PUT /api-resources/{param}/archival',
   'POST /applications/{param}/client-secrets',
   'POST /users/{param}/password-reset-requests',
   'POST /webhooks/endpoints/{param}/secrets',

@@ -70,8 +70,16 @@ export const zhFlatTranslationsExtraB: Record<string, string> = {
   'Required items unlock Console routes. Recommended items prepare production.':
     '必需项用于解锁控制台路由。推荐项用于准备生产环境。',
   'Resource ID': '资源 ID',
+  'Archive resource': '归档资源',
+  'Archive API resource': '归档 API 资源',
+  'Archiving this resource permanently revokes its active connections, access grants, pending requests, and token leases. Restoring the resource will not restore that authorization.':
+    '归档此资源会永久撤销其有效连接、访问授权、待处理请求和令牌租约。恢复资源不会恢复这些授权。',
+  Archived: '已归档',
+  'Archived resources remain available for authorization history but cannot be enabled or edited.':
+    '已归档资源会保留授权历史，但无法启用或编辑。',
   'Resource settings': '资源设置',
   'Resource summary': '资源摘要',
+  'Restore resource': '恢复资源',
   'Response body': '响应正文',
   'Review CAPTCHA provider setup for hosted sign-up, sign-in, and password recovery flows.':
     '查看托管注册、登录和密码恢复流程的 CAPTCHA 提供商设置。',

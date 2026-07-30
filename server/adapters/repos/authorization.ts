@@ -1,13 +1,15 @@
 import type { AuthorizationRepository, RoleAssignmentScope } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, isNull, notExists, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, notExists, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
   agentAccessRequest,
+  agentAuditEvent,
   agentRoleAssignment,
   apiResource,
   applicationRoleAssignment,
+  externalTokenLease,
   federatedCredential,
   invitation,
   member,
@@ -144,7 +146,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
     async createResource(input) {
       const now = new Date()
       await db.insert(apiResource).values({ ...input, createdAt: now, updatedAt: now })
-      return { ...input, createdAt: now.toISOString(), updatedAt: now.toISOString() }
+      return { ...input, archivedAt: null, createdAt: now.toISOString(), updatedAt: now.toISOString() }
     },
 
     async listResources(pagination) {
@@ -156,6 +158,15 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .offset(pagination.offset)
       const total = await totalRows(db, apiResource)
       return { items: rows.map(toResource), pagination: toPagination(pagination, total) }
+    },
+
+    async listEnabledResources() {
+      const rows = await db
+        .select()
+        .from(apiResource)
+        .where(and(eq(apiResource.enabled, true), isNull(apiResource.archivedAt)))
+        .orderBy(desc(apiResource.createdAt))
+      return rows.map(toResource)
     },
 
     async findResource(id) {
@@ -173,10 +184,109 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
     },
 
     async updateResource(id, patch) {
-      await db
+      const [row] = await db
         .update(apiResource)
         .set({ ...withoutUndefined(patch), updatedAt: new Date() })
-        .where(eq(apiResource.id, id))
+        .where(and(eq(apiResource.id, id), isNull(apiResource.archivedAt)))
+        .returning({ id: apiResource.id })
+      return Boolean(row)
+    },
+
+    async archiveResource(id, now, audit) {
+      await db.batch([
+        db.insert(agentAuditEvent).select(
+          db
+            .select({
+              id: sql<string>`${audit.id}`.as('id'),
+              action: sql<string>`${audit.action}`.as('action'),
+              result: sql<string>`${audit.result}`.as('result'),
+              controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
+              subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
+              subject: sql<string | null>`${audit.subject}`.as('subject'),
+              agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
+              hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
+              resourceId: apiResource.id,
+              resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
+              accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+              scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
+              reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
+              metadata: sql<Record<string, unknown> | null>`${
+                audit.metadata === null ? null : JSON.stringify(audit.metadata)
+              }`.as('metadata'),
+              occurredAt: sql<Date>`${audit.occurredAt.getTime()}`.as('occurred_at'),
+            })
+            .from(apiResource)
+            .where(and(eq(apiResource.id, id), isNull(apiResource.archivedAt))),
+        ),
+        db
+          .update(apiResource)
+          .set({ enabled: false, archivedAt: now, updatedAt: now })
+          .where(and(eq(apiResource.id, id), isNull(apiResource.archivedAt))),
+        db
+          .update(resourceAccountConnection)
+          .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+          .where(and(eq(resourceAccountConnection.resourceId, id), eq(resourceAccountConnection.status, 'active'))),
+        db
+          .update(resourceConnectionIntent)
+          .set({ status: 'cancelled', completedAt: now, updatedAt: now })
+          .where(and(eq(resourceConnectionIntent.resourceId, id), eq(resourceConnectionIntent.status, 'pending'))),
+        db
+          .update(agentAccessRequest)
+          .set({ status: 'denied', decidedAt: now, updatedAt: now })
+          .where(and(eq(agentAccessRequest.resourceId, id), eq(agentAccessRequest.status, 'pending'))),
+        db
+          .update(agentAccessGrant)
+          .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+          .where(and(eq(agentAccessGrant.resourceId, id), eq(agentAccessGrant.status, 'active'))),
+        db
+          .update(externalTokenLease)
+          .set({ revokedAt: now })
+          .where(
+            and(
+              isNull(externalTokenLease.revokedAt),
+              inArray(
+                externalTokenLease.grantId,
+                db
+                  .select({ id: agentAccessGrant.id })
+                  .from(agentAccessGrant)
+                  .where(eq(agentAccessGrant.resourceId, id)),
+              ),
+            ),
+          ),
+      ])
+    },
+
+    async restoreResource(id, now, audit) {
+      await db.batch([
+        db.insert(agentAuditEvent).select(
+          db
+            .select({
+              id: sql<string>`${audit.id}`.as('id'),
+              action: sql<string>`${audit.action}`.as('action'),
+              result: sql<string>`${audit.result}`.as('result'),
+              controllerUserId: sql<string | null>`${audit.controllerUserId}`.as('controller_user_id'),
+              subjectIssuer: sql<string | null>`${audit.subjectIssuer}`.as('subject_issuer'),
+              subject: sql<string | null>`${audit.subject}`.as('subject'),
+              agentIdentityId: sql<string | null>`${audit.agentIdentityId}`.as('agent_identity_id'),
+              hostId: sql<string | null>`${audit.hostId}`.as('host_id'),
+              resourceId: apiResource.id,
+              resourceConnectionId: sql<string | null>`${audit.resourceConnectionId}`.as('resource_connection_id'),
+              accessGrantId: sql<string | null>`${audit.accessGrantId}`.as('access_grant_id'),
+              scopes: sql<string[] | null>`${audit.scopes === null ? null : JSON.stringify(audit.scopes)}`.as('scopes'),
+              reasonCode: sql<string | null>`${audit.reasonCode}`.as('reason_code'),
+              metadata: sql<Record<string, unknown> | null>`${
+                audit.metadata === null ? null : JSON.stringify(audit.metadata)
+              }`.as('metadata'),
+              occurredAt: sql<Date>`${audit.occurredAt.getTime()}`.as('occurred_at'),
+            })
+            .from(apiResource)
+            .where(and(eq(apiResource.id, id), isNotNull(apiResource.archivedAt))),
+        ),
+        db
+          .update(apiResource)
+          .set({ enabled: false, archivedAt: null, updatedAt: now })
+          .where(and(eq(apiResource.id, id), isNotNull(apiResource.archivedAt))),
+      ])
     },
 
     async deleteResource(id) {

@@ -180,6 +180,15 @@ describe('management routes 1', () => {
     )
     expect(deleteApiResource?.responses).toHaveProperty('204')
     expect(deleteApiResource?.responses).toHaveProperty('409')
+
+    const archiveApiResource = openApiOperationObjects().find(
+      (operation) => operation.key === 'PUT /api-resources/{param}/archival',
+    )
+    const restoreApiResource = openApiOperationObjects().find(
+      (operation) => operation.key === 'DELETE /api-resources/{param}/archival',
+    )
+    expect(archiveApiResource?.responses).toHaveProperty('200')
+    expect(restoreApiResource?.responses).toHaveProperty('200')
   })
 
   it('mounts the documented management collections behind the admin boundary', async () => {

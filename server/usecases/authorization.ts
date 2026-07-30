@@ -15,6 +15,16 @@ import {
 
 export type { AuthorizationTokenClaimInput } from '@server/usecases/authorization-utils'
 
+export interface ResourceMutationActor {
+  controllerUserId: string | null
+  agent: {
+    issuer: string
+    subject: string
+    identityId: string
+    hostId: string
+  } | null
+}
+
 import type {
   AddMemberRequest,
   AssignRoleRequest,
@@ -155,6 +165,7 @@ export async function getResource(deps: Deps, id: string) {
 
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
   const resource = await getResource(deps, id)
+  if (resource.archivedAt) throw badRequest('Archived API resources must be restored before updating.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
   if (resource.authorizationMode === 'external' && input.enabled === true) {
     const authorization = await deps.externalResources.findAuthorization(id)
@@ -166,8 +177,53 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
   if (enabled && (input.enabled === true || input.resourceUrl !== undefined)) {
     await validateResourceContract(deps, input.resourceUrl ?? resource.resourceUrl)
   }
-  await deps.authorization.updateResource(id, input)
+  if (!(await deps.authorization.updateResource(id, input))) {
+    throw badRequest('Archived API resources must be restored before updating.')
+  }
   return getResource(deps, id)
+}
+
+export async function archiveResource(deps: Deps, id: string, actor: ResourceMutationActor) {
+  const resource = await getResource(deps, id)
+  if (!resource.archivedAt) {
+    const now = new Date()
+    await deps.authorization.archiveResource(id, now, resourceMutationAudit('api_resource.archived', id, now, actor))
+  }
+  return getResource(deps, id)
+}
+
+export async function restoreResource(deps: Deps, id: string, actor: ResourceMutationActor) {
+  const resource = await getResource(deps, id)
+  if (resource.archivedAt) {
+    const now = new Date()
+    await deps.authorization.restoreResource(id, now, resourceMutationAudit('api_resource.restored', id, now, actor))
+  }
+  return getResource(deps, id)
+}
+
+function resourceMutationAudit(
+  action: 'api_resource.archived' | 'api_resource.restored',
+  resourceId: string,
+  occurredAt: Date,
+  actor: ResourceMutationActor,
+) {
+  return {
+    id: createId('agaudit'),
+    action,
+    result: 'allowed',
+    controllerUserId: actor.controllerUserId,
+    subjectIssuer: actor.agent?.issuer ?? null,
+    subject: actor.agent?.subject ?? null,
+    agentIdentityId: actor.agent?.identityId ?? null,
+    hostId: actor.agent?.hostId ?? null,
+    resourceId,
+    resourceConnectionId: null,
+    accessGrantId: null,
+    scopes: null,
+    reasonCode: null,
+    metadata: action === 'api_resource.archived' ? { authorizationRecordsRevoked: true } : null,
+    occurredAt,
+  }
 }
 
 export async function deleteResource(deps: Deps, id: string) {
