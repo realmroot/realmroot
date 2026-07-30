@@ -23,7 +23,7 @@ These instructions require Restish v2 and the Realmroot authentication adapter
 installed as described in `../SKILL.md`.
 
 ```bash
-AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://realmroot.dev}}"
+AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://id.realmroot.dev}}"
 API_NAME="${API_NAME:-realmroot}"
 restish --version
 restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --replace --yes
@@ -39,6 +39,22 @@ Refresh an existing connection after a server upgrade:
 ```bash
 restish api sync "$API_NAME"
 ```
+
+Add another isolated Restish profile without creating another API name:
+
+```bash
+PROFILE_NAME=staging
+PROFILE_ORIGIN=https://auth.example.com
+restish api set "$API_NAME" \
+  "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
+restish api inspect "$API_NAME"
+restish -p "$PROFILE_NAME" "$API_NAME" get-current-agent -o json
+```
+
+The new profile has its own credential configuration. Do not copy or inherit it
+from `default`; invoke the profile's first protected operation explicitly. The
+adapter establishes or reuses stable Agent state according to runtime and
+issuer, never according to profile name.
 
 ## Generated Operations
 

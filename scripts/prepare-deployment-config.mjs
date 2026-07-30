@@ -17,6 +17,10 @@ const settings = {
 
 let config = readFileSync(sourcePath, 'utf8')
 config = replaceOnce(config, /^name = .+$/m, `name = ${tomlString(settings.workerName)}`)
+config = removeOptionalLine(config, /^BETTER_AUTH_URL = .+$/m)
+config = removeOptionalLine(config, /^TRUSTED_ORIGINS = .+$/m)
+config = removeOptionalLine(config, /^WEBAUTHN_RP_ID = .+$/m)
+config = removeOptionalLine(config, /^WEBAUTHN_ORIGINS = .+$/m)
 config = replaceOnce(config, /^EMAIL_FROM = .+$/m, `EMAIL_FROM = ${tomlString(settings.emailFrom)}`)
 config = replaceOnce(config, /^EMAIL_FROM_NAME = .+$/m, `EMAIL_FROM_NAME = ${tomlString(settings.emailFromName)}`)
 config = replaceOnce(
@@ -81,6 +85,10 @@ function replaceOnce(content, pattern, replacement) {
     throw new Error(`Deployment config template is missing ${pattern}`)
   }
   return content.replace(pattern, replacement)
+}
+
+function removeOptionalLine(content, pattern) {
+  return content.replace(pattern, '')
 }
 
 function tomlString(value) {

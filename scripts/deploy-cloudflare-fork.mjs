@@ -95,7 +95,7 @@ if (configuredCredentialEncryptionKey) {
 }
 
 run('pnpm', ['exec', 'wrangler', 'd1', 'migrations', 'apply', 'DB', '--remote', '--config', 'wrangler.deployment.toml'])
-run('pnpm', ['run', 'build'])
+run('pnpm', ['run', 'build'], { CF_WRANGLER_CONFIG: 'wrangler.deployment.toml' })
 const deployArguments = ['exec', 'wrangler', 'deploy', '--config', 'wrangler.deployment.toml']
 if (process.env.GITHUB_SHA) {
   deployArguments.push('--message', `Deploy ${required('GITHUB_REPOSITORY')}@${process.env.GITHUB_SHA}`)

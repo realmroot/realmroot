@@ -13,6 +13,15 @@ Feature: Platform bootstrap and route access
     Then the response is 200
     And the body reports ok true and service "realmroot"
 
+  @entrypoint:product-ui @journey:cloudflare-deployment-isolation
+  Scenario: Canonical and fork deployments use isolated Cloudflare resources
+    Given the canonical repository deploys through Cloudflare Workers Builds or a local Wrangler command
+    And a deployment fork installs the supplied GitHub Actions workflow
+    When either repository deploys Realmroot
+    Then the canonical deployment uses the committed Wrangler configuration
+    And the fork generates an ignored Wrangler configuration with its own Worker, D1, R2, Queue, and secrets
+    And each build uses the same Wrangler configuration that its deployment uses
+
   @e2e @entrypoint:product-ui @journey:first-admin-gate
   Scenario: Fresh deployment routes redirect to first-admin onboarding
     Given no users exist

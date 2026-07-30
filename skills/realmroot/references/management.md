@@ -221,7 +221,7 @@ Prefer the product's OIDC library device-flow support.
 - Never request management capabilities unless the user explicitly asks for a
   tenant-management operation.
 - Before a management mutation, state the resolved `AUTH_ORIGIN`. If it resolved
-  to the default production origin `https://realmroot.dev` rather than an
+  to the default production origin `https://id.realmroot.dev` rather than an
   origin explicitly supplied for the task, obtain confirmation before mutating
   the tenant.
 - Never let the Agent approve its own enrollment or management request.
