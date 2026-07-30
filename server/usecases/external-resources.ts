@@ -1433,7 +1433,7 @@ async function requireAgentScopeEligibility(
   scopes: string[],
 ) {
   const authorization = await getAgentRoleAuthorization(deps, agentIdentityId, resourceId, organizationId ?? undefined)
-  if (scopes.some((scope) => !authorization.scopes.includes(scope))) {
+  if (authorization.roles.length > 0 && scopes.some((scope) => !authorization.scopes.includes(scope))) {
     throw forbidden('Agent roles do not permit every requested scope.')
   }
   return authorization

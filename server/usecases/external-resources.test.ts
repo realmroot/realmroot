@@ -41,7 +41,7 @@ import type {
   ResourceConnectionIntentRecord,
 } from '@server/usecases/ports'
 import type { ApiResourceResponse } from '@shared/api/authorization'
-import { exportJWK, generateKeyPair, SignJWT } from 'jose'
+import { exportJWK, generateKeyPair, type JWTHeaderParameters, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
 
 const now = new Date('2026-07-29T12:00:00.000Z')
@@ -73,7 +73,14 @@ describe('external API resource authorization', () => {
           ],
         })
         expect(body).not.toHaveProperty('resource')
-        return Response.json({ client_id: 'realmroot-client', client_secret: 'target-secret' }, { status: 201 })
+        return Response.json(
+          {
+            client_id: 'realmroot-client',
+            client_secret: 'target-secret',
+            registration_access_token: 'registration-token',
+          },
+          { status: 201 },
+        )
       }
       return new Response(null, { status: 404 })
     })
@@ -154,6 +161,37 @@ describe('external API resource authorization', () => {
     })
     const stored = vi.mocked(deps.externalResources.createConnection).mock.calls[0]![0]
     expect(stored.encryptedTokens).not.toContain('subject-refresh')
+
+    intent = {
+      ...intent!,
+      id: 'organization-connection',
+      ownerOrganizationId: 'org-1',
+    }
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      if (request.url.endsWith('/token')) {
+        return Response.json({
+          access_token: 'organization-access',
+          refresh_token: 'organization-refresh',
+          token_type: 'Bearer',
+        })
+      }
+      if (request.url.endsWith('/userinfo')) {
+        return Response.json({ sub: 'org-subject', preferred_username: 'Organization Owner' })
+      }
+      return new Response(null, { status: 404 })
+    })
+    await expect(
+      completeResourceConnectionIntent(
+        deps,
+        { state: 'organization-state', code: 'organization-code' },
+        'https://auth.example.com/',
+      ),
+    ).resolves.toMatchObject({
+      owner: { type: 'organization', organizationId: 'org-1' },
+      displayName: 'Organization Owner',
+      grantedScopes: intent.scopes,
+      credentialExpiresAt: null,
+    })
   })
 
   it('discovers accounts and deduplicates an exact JIT request [spec: agent-identity/agent-resource-discovery]', async () => {
@@ -239,7 +277,10 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
     vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue(request)
     vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grant)
-    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connectionRecord(),
+      credentialExpiresAt: new Date(Date.now() - 1),
+    })
     vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
     vi.mocked(deps.externalResources.createTokenLease).mockImplementation(async (record) => record)
     vi.mocked(deps.externalResources.consumeAccessRequest).mockResolvedValue(true)
@@ -255,6 +296,12 @@ describe('external API resource authorization', () => {
       .setProtectedHeader({ typ: 'dpop+jwt', alg: 'ES256', jwk: publicJwk })
       .sign(privateKey)
     const tokenRequests: URLSearchParams[] = []
+    let exchangeResponse: Record<string, unknown> = {
+      access_token: 'target-dpop-access',
+      token_type: 'DPoP',
+      expires_in: 5_000,
+    }
+    let exchangeStatus = 200
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (outbound) => {
       if (outbound.url === resource().resourceUrl || outbound.url === 'https://projects.example.com/openapi.json') {
         return openApiFetch(outbound)
@@ -262,6 +309,13 @@ describe('external API resource authorization', () => {
       expect(outbound.url).toBe('https://projects.example.com/token')
       const form = new URLSearchParams(await outbound.text())
       tokenRequests.push(form)
+      if (form.get('grant_type') === 'refresh_token') {
+        return Response.json({
+          access_token: 'refreshed-subject',
+          token_type: 'Bearer',
+          expires_in: 0,
+        })
+      }
       if (form.get('grant_type') === 'urn:ietf:params:oauth:grant-type:jwt-bearer') {
         expect(outbound.headers.get('dpop')).toBeNull()
         expect(form.get('assertion')).toBe('signed-agent-assertion')
@@ -272,16 +326,11 @@ describe('external API resource authorization', () => {
         })
       }
       expect(outbound.headers.get('dpop')).toBe(proof)
-      expect(form.get('subject_token')).toBe('subject')
+      expect(form.get('subject_token')).toBe('refreshed-subject')
       expect(form.get('actor_token')).toBe('target-agent-access')
       expect(form.get('actor_token_type')).toBe('urn:ietf:params:oauth:token-type:access_token')
       expect(form.get('scope')).toBe('projects:read')
-      return Response.json({
-        access_token: 'target-dpop-access',
-        token_type: 'DPoP',
-        expires_in: 300,
-        scope: 'projects:read',
-      })
+      return Response.json(exchangeResponse, { status: exchangeStatus })
     })
 
     const sign = vi.fn().mockResolvedValue('signed-agent-assertion')
@@ -303,13 +352,14 @@ describe('external API resource authorization', () => {
     )
     expect(sign.mock.calls[0]![0]).not.toHaveProperty('act')
     expect(tokenRequests.map((form) => form.get('grant_type'))).toEqual([
+      'refresh_token',
       'urn:ietf:params:oauth:grant-type:jwt-bearer',
       'urn:ietf:params:oauth:grant-type:token-exchange',
     ])
     expect(lease).toEqual({
       accessToken: 'target-dpop-access',
       tokenType: 'DPoP',
-      expiresIn: 300,
+      expiresIn: 3_600,
       expiresAt: expect.any(String),
       scopes: ['projects:read'],
       apiResource: 'https://projects.example.com/api',
@@ -325,6 +375,56 @@ describe('external API resource authorization', () => {
         scopes: ['projects:read'],
       }),
     )
+
+    exchangeResponse = { access_token: 'wrong-type', token_type: 'Bearer', expires_in: 60 }
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('did not issue a DPoP-bound access token')
+    exchangeResponse = {
+      access_token: 'wrong-scope',
+      token_type: 'DPoP',
+      expires_in: 60,
+      scope: 'projects:write',
+    }
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('issued a different scope set')
+    exchangeResponse = { access_token: 'invalid-expiry', token_type: 'DPoP', expires_in: 0 }
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('invalid expires_in')
+    exchangeStatus = 400
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        grant.id,
+        proof,
+        'https://auth.example.com/api/agent/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('rejected the token request')
   })
 
   it('revokes active target token leases [spec: agent-identity/agent-resource-revocation]', async () => {
@@ -504,6 +604,17 @@ describe('external API resource authorization', () => {
       approval: { url: expect.stringContaining('/agent/resource-access/approve#token=') },
       grantId: null,
     })
+    await expect(
+      createAccessRequest(
+        deps,
+        {
+          target: { type: 'api-resource', apiResourceId: 'resource-1' },
+          scopes: ['projects:read'],
+        },
+        principal(),
+        'https://auth.example.com/',
+      ),
+    ).resolves.toMatchObject({ reason: null })
     const stored = vi.mocked(deps.externalResources.createAccessRequest).mock.calls[0]![0]
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(stored)
     await expect(getAgentAccessRequest(deps, stored.id, principal())).resolves.toMatchObject({ id: stored.id })
@@ -606,21 +717,26 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.revokeTokenLease).toHaveBeenCalledWith('lease-1', expect.any(Date))
   })
 
-  it('issues Realmroot-native DPoP access tokens', async () => {
+  it('issues Realmroot-native DPoP access tokens without a role [spec: agent-identity/agent-resource-access-without-role]', async () => {
     const deps = createTestDeps()
     const native = nativeResource()
     Object.assign(deps.authorization, {
       findResource: vi.fn().mockResolvedValue(native),
-      listAgentRoleAssignments: vi
-        .fn()
-        .mockResolvedValue([{ role: { id: 'role-1', key: 'projects-reader' }, scopes: ['projects:read'] }]),
+      listAgentRoleAssignments: vi.fn().mockResolvedValue([]),
     })
     mockResourceOpenApi(deps, native.resourceUrl)
-    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue({
+      ...identityAggregate(),
+      identity: {
+        ...identityAggregate().identity,
+        ownerUserId: null,
+        ownerOrganizationId: 'org-1',
+      },
+    })
     vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
       ...grantRecord(),
       connectionId: null,
-      mode: 'persistent',
+      mode: 'once',
       expiresAt: new Date(Date.now() + 120_000),
     })
     vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({
@@ -658,13 +774,798 @@ describe('external API resource authorization', () => {
     })
     expect(sign).toHaveBeenCalledWith(
       expect.objectContaining({
-        sub: 'user-1',
+        sub: 'org-1',
+        groups: ['org-1'],
+        roles: [],
         act: expect.objectContaining({
           sub: 'host-1',
           act: expect.objectContaining({ sub: 'agt_stable' }),
         }),
       }),
       'at+jwt',
+    )
+  })
+
+  it('rejects invalid external authorization discovery and client configuration', async () => {
+    const configure = async ({
+      protectedBody = {
+        resource: resource().resourceUrl,
+        authorization_servers: ['https://projects.example.com'],
+      },
+      serverBody = metadata(),
+      protectedResponse,
+      serverResponse,
+      registrationResponse,
+      input = { registrationMode: 'manual' as const, clientId: 'client', clientSecret: 'secret' },
+      configuredResource = resource(),
+    }: {
+      protectedBody?: unknown
+      serverBody?: unknown
+      protectedResponse?: Response
+      serverResponse?: Response
+      registrationResponse?: Response
+      input?: Parameters<typeof configureExternalResourceAuthorization>[2]
+      configuredResource?: ApiResourceResponse | null
+    }) => {
+      const deps = createTestDeps()
+      authorizationDeps(deps)
+      vi.mocked(deps.authorization.findResource).mockResolvedValue(configuredResource)
+      vi.mocked(deps.externalResources.upsertAuthorization).mockImplementation(async (record) => record)
+      vi.mocked(deps.externalHttp.fetch)
+        .mockResolvedValueOnce(protectedResponse ?? Response.json(protectedBody))
+        .mockResolvedValueOnce(serverResponse ?? Response.json(serverBody))
+      if (registrationResponse) vi.mocked(deps.externalHttp.fetch).mockResolvedValueOnce(registrationResponse)
+      return configureExternalResourceAuthorization(deps, 'resource-1', input, 'https://auth.example.com/')
+    }
+
+    await expect(configure({ configuredResource: null })).rejects.toThrow('External API resource was not found.')
+    await expect(configure({ configuredResource: { ...resource(), authorizationMode: 'native' } })).rejects.toThrow(
+      'External API resource was not found.',
+    )
+    await expect(
+      configure({ configuredResource: { ...resource(), resourceUrl: 'http://projects.example.com/api' } }),
+    ).rejects.toThrow('resource URL must use HTTPS')
+    await expect(configure({ protectedResponse: new Response(null, { status: 503 }) })).rejects.toThrow(
+      'Protected resource metadata discovery failed.',
+    )
+    await expect(configure({ protectedBody: [] })).rejects.toThrow('Protected resource metadata discovery failed.')
+    await expect(
+      configure({
+        protectedBody: {
+          resource: 'https://other.example.com/api',
+          authorization_servers: ['https://projects.example.com'],
+        },
+      }),
+    ).rejects.toThrow('does not match the configured resource URL')
+    await expect(
+      configure({ protectedBody: { resource: resource().resourceUrl, authorization_servers: [] } }),
+    ).rejects.toThrow('exactly one authorization server')
+    await expect(
+      configure({ protectedBody: { resource: resource().resourceUrl, authorization_servers: [42] } }),
+    ).rejects.toThrow('exactly one authorization server')
+    await expect(
+      configure({
+        protectedBody: {
+          resource: resource().resourceUrl,
+          authorization_servers: ['https://one.example.com', 'https://two.example.com'],
+        },
+      }),
+    ).rejects.toThrow('exactly one authorization server')
+    await expect(
+      configure({
+        protectedBody: {
+          resource: resource().resourceUrl,
+          authorization_servers: ['http://projects.example.com'],
+        },
+      }),
+    ).rejects.toThrow('authorization server issuer must use HTTPS')
+    await expect(configure({ serverResponse: new Response(null, { status: 503 }) })).rejects.toThrow(
+      'Authorization server metadata discovery failed.',
+    )
+    await expect(configure({ serverBody: { ...metadata(), issuer: 'https://wrong.example.com' } })).rejects.toThrow(
+      'issuer does not match',
+    )
+    await expect(configure({ serverBody: { ...metadata(), token_endpoint: undefined } })).rejects.toThrow(
+      'missing token_endpoint',
+    )
+    await expect(
+      configure({ serverBody: { ...metadata(), authorization_endpoint: 'https://user:secret@example.com' } }),
+    ).rejects.toThrow('authorization_endpoint must use HTTPS')
+    await expect(configure({ serverBody: { ...metadata(), grant_types_supported: [] } })).rejects.toThrow(
+      'Authorization server must support',
+    )
+    await expect(configure({ serverBody: { ...metadata(), dpop_signing_alg_values_supported: [] } })).rejects.toThrow(
+      'must advertise RFC 9449 DPoP support',
+    )
+    await expect(
+      configure({
+        serverBody: { ...metadata(), registration_endpoint: undefined },
+        input: { registrationMode: 'dynamic' },
+      }),
+    ).rejects.toThrow('does not support dynamic client registration')
+    await expect(
+      configure({
+        input: { registrationMode: 'dynamic' },
+        registrationResponse: new Response(null, { status: 400 }),
+      }),
+    ).rejects.toThrow('Dynamic client registration failed.')
+    await expect(
+      configure({
+        input: { registrationMode: 'dynamic' },
+        registrationResponse: new Response('not-json', { status: 201 }),
+      }),
+    ).rejects.toThrow('Dynamic client registration response is invalid.')
+    await expect(
+      configure({
+        input: { registrationMode: 'dynamic' },
+        registrationResponse: Response.json({ client_id: 'client' }, { status: 201 }),
+      }),
+    ).rejects.toThrow('missing client_secret')
+    await expect(
+      configure({ input: { registrationMode: 'manual', clientId: 'client', clientSecret: '' } }),
+    ).rejects.toThrow('OAuth client is incomplete')
+    await expect(configure({})).resolves.toMatchObject({
+      registrationMode: 'manual',
+      clientId: 'client',
+      status: 'active',
+    })
+    await expect(
+      configure({
+        configuredResource: {
+          ...resource(),
+          resourceUrl: 'https://projects.example.com/',
+        },
+        protectedBody: {
+          resource: 'https://projects.example.com/',
+          authorization_servers: ['https://projects.example.com/tenant'],
+        },
+        serverBody: {
+          ...metadata(),
+          issuer: 'https://projects.example.com/tenant',
+        },
+      }),
+    ).resolves.toMatchObject({ issuer: 'https://projects.example.com/tenant' })
+  })
+
+  it('enforces identity, resource, connection, and role scope boundaries on requests', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('active Agent identity')
+
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce(null)
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Enabled API resource')
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(null)
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Active resource account connection')
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connectionRecord(),
+      ownerUserId: 'another-user',
+    })
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('outside the Agent home space')
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.authorization.listAgentRoleAssignments).mockResolvedValue([
+      {
+        role: {
+          id: 'role-1',
+          key: 'writer',
+          name: 'Writer',
+          description: null,
+          resourceId: 'resource-1',
+          organizationId: null,
+          applicationId: null,
+          system: false,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        },
+        scopes: ['projects:write'],
+      },
+    ])
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Agent roles do not permit')
+
+    vi.mocked(deps.authorization.listAgentRoleAssignments).mockResolvedValue([
+      {
+        role: {
+          id: 'role-1',
+          key: 'reader',
+          name: 'Reader',
+          description: null,
+          resourceId: 'resource-1',
+          organizationId: null,
+          applicationId: null,
+          system: false,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        },
+        scopes: ['projects:read'],
+      },
+    ])
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connectionRecord(),
+      grantedScopes: ['openid'],
+    })
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('connected account boundary')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(nativeResource())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Native API resources do not use account connections')
+  })
+
+  it('[spec: agent-identity/agent-resource-access-without-role] allows an Agent without roles to request OpenAPI scopes', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.authorization.listAgentRoleAssignments).mockResolvedValue([])
+    vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
+    vi.mocked(deps.externalResources.listPendingAccessRequestsByAgent).mockResolvedValue([])
+    vi.mocked(deps.externalResources.createAccessRequest).mockImplementation(async (record) => record)
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      scopes: ['projects:read'],
+    })
+  })
+
+  it('enforces controller ownership and request state boundaries', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(null)
+    await expect(getAccountConnection(deps, 'missing', 'user-1')).rejects.toThrow(
+      'Resource account connection was not found.',
+    )
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connectionRecord(),
+      ownerUserId: 'another-user',
+    })
+    await expect(getAccountConnection(deps, 'connection-1', 'user-1')).rejects.toThrow(
+      'Resource account controller access is required.',
+    )
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(null)
+    await expect(getAccountAccessRequest(deps, 'missing', 'user-1')).rejects.toThrow(
+      'Agent access request was not found.',
+    )
+    await expect(getAgentAccessRequest(deps, 'missing', principal())).rejects.toThrow(
+      'Agent access request was not found.',
+    )
+
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...requestRecord(),
+      agentIdentityId: 'another-agent',
+    })
+    await expect(getAgentAccessRequest(deps, 'request-1', principal())).rejects.toThrow(
+      'Agent access request was not found.',
+    )
+    await expect(
+      createAccessRequest(
+        deps,
+        { target: { type: 'realmroot-management' }, scopes: [] },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Unsupported access request target.')
+
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...requestRecord(),
+      status: 'approved',
+    })
+    await expect(decideAgentAccessRequest(deps, 'request-1', { decision: 'deny' }, 'user-1')).rejects.toThrow(
+      'Pending Agent access request was not found.',
+    )
+
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(null)
+    await expect(decideAgentAccessRequestByToken(deps, 'bad-token', { decision: 'deny' }, 'user-1')).rejects.toThrow(
+      'Pending Agent access request was not found.',
+    )
+  })
+
+  it('covers missing resource records and inactive discovery entries', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+
+    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValueOnce(null)
+    await expect(getExternalResourceAuthorization(deps, 'resource-1')).rejects.toThrow(
+      'External API resource authorization was not found.',
+    )
+    vi.mocked(deps.authorization.findResource).mockResolvedValueOnce(null)
+    await expect(getApiResource(deps, 'missing')).rejects.toThrow('API resource was not found.')
+    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValueOnce(null)
+    await expect(getApiResource(deps, 'resource-1')).resolves.toMatchObject({ authorization: null })
+    vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue(null)
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'invalid', code: 'code' }, 'https://auth.example.com'),
+    ).rejects.toThrow('Resource connection state is invalid')
+
+    vi.mocked(deps.authorization.listResources).mockResolvedValue({
+      items: [resource(), { ...resource(), id: 'disabled', enabled: false }, { ...nativeResource(), id: 'native' }],
+      pagination: { total: 3, limit: 100, offset: 0, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(null)
+    await expect(listConnectableExternalResources(deps)).resolves.toEqual({ resources: [] })
+  })
+
+  it('discovers organization resources while filtering invalid resources and expired grants', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const organizationIdentity = {
+      ...identityAggregate(),
+      identity: {
+        ...identityAggregate().identity,
+        ownerUserId: null,
+        ownerOrganizationId: 'org-1',
+      },
+    }
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(organizationIdentity)
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
+      {
+        ...connectionRecord(),
+        ownerUserId: null,
+        ownerOrganizationId: 'org-1',
+        externalSubject: 'abc',
+      },
+      { ...connectionRecord(), id: 'revoked', status: 'revoked' },
+    ])
+    vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([
+      { ...grantRecord(), expiresAt: new Date(Date.now() - 1) },
+      {
+        ...grantRecord(),
+        id: 'grant-live',
+        expiresAt: new Date(Date.now() + 30_000),
+        revokedAt: now,
+      },
+    ])
+    vi.mocked(deps.authorization.listResources).mockResolvedValue({
+      items: [resource(), { ...nativeResource(), id: 'missing' }],
+      pagination: { total: 2, limit: 100, offset: 0, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(deps.authorization.findResource).mockImplementation(async (id) =>
+      id === 'resource-1' ? resource() : null,
+    )
+    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+
+    await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
+      resources: [
+        {
+          connections: [{ subjectHint: '••••' }],
+          grants: [{ id: 'grant-live' }],
+        },
+      ],
+    })
+    await expect(listAgentApiResources(deps, principal(), { limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [
+        {
+          accessGrants: [
+            {
+              id: 'grant-live',
+              expiresAt: expect.any(String),
+              revokedAt: expect.any(String),
+            },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('returns an approved request immediately for an exact active grant', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([
+      { ...grantRecord(), connectionId: 'other-connection' },
+      { ...grantRecord(), resourceId: 'other-resource' },
+      { ...grantRecord(), scopes: ['projects:write'] },
+      { ...grantRecord(), expiresAt: new Date(Date.now() - 1) },
+      grantRecord(),
+    ])
+    vi.mocked(deps.externalResources.listPendingAccessRequestsByAgent).mockResolvedValue([])
+    vi.mocked(deps.externalResources.createAccessRequest).mockImplementation(async (record) => record)
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+          reason: 'Scheduled synchronization',
+        },
+        principal(),
+        'https://auth.example.com/',
+      ),
+    ).resolves.toMatchObject({
+      status: 'approved',
+      grantId: 'grant-1',
+      reason: 'Scheduled synchronization',
+      approvalUrl: null,
+    })
+  })
+
+  it('rejects races, missing identities, invalid expiry, and mismatched approval tokens during decisions', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(requestRecord())
+    vi.mocked(deps.externalResources.decideAccessRequest).mockResolvedValueOnce(null)
+    await expect(decideAgentAccessRequest(deps, 'request-1', { decision: 'deny' }, 'user-1')).rejects.toThrow(
+      'already decided',
+    )
+
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce(null)
+    await expect(
+      decideAgentAccessRequest(deps, 'request-1', { decision: 'approve', mode: 'persistent' }, 'user-1'),
+    ).rejects.toThrow('Active Agent identity was not found.')
+
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        'request-1',
+        { decision: 'approve', mode: 'until', expiresAt: new Date(Date.now() - 1).toISOString() },
+        'user-1',
+      ),
+    ).rejects.toThrow('Grant expiry must be in the future.')
+
+    vi.mocked(deps.externalResources.createGrant).mockImplementation(async (record) => record)
+    vi.mocked(deps.externalResources.decideAccessRequest).mockResolvedValue(null)
+    await expect(
+      decideAgentAccessRequest(deps, 'request-1', { decision: 'approve', mode: 'persistent' }, 'user-1'),
+    ).rejects.toThrow('already decided')
+
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(requestRecord())
+    await expect(
+      decideAccessRequest(deps, 'different-request', { decision: 'deny', approvalToken: 'approval-token' }, 'user-1'),
+    ).rejects.toThrow('Agent access request was not found.')
+    await expect(getAccountAccessRequest(deps, 'different-request', 'user-1', 'approval-token')).rejects.toThrow(
+      'Agent access request was not found.',
+    )
+  })
+
+  it('rejects invalid grants before issuing a target token', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    const signer = { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('token') }
+
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue(null)
+    await expect(
+      issueTargetAccessToken(deps, 'missing', 'proof', 'https://auth.example.com/token', principal(), signer),
+    ).rejects.toThrow('Active Agent access grant is required.')
+
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
+      ...grantRecord(),
+      agentIdentityId: 'another-agent',
+    })
+    await expect(
+      issueTargetAccessToken(deps, 'grant-1', 'proof', 'https://auth.example.com/token', principal(), signer),
+    ).rejects.toThrow('Active Agent access grant is required.')
+
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grantRecord())
+    vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue(null)
+    await expect(
+      issueTargetAccessToken(deps, 'grant-1', 'proof', 'https://auth.example.com/token', principal(), signer),
+    ).rejects.toThrow('Approved Agent access request is required.')
+
+    vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({
+      ...requestRecord(),
+      status: 'approved',
+    })
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
+      ...grantRecord(),
+      expiresAt: new Date(Date.now() - 1),
+    })
+    await expect(
+      issueTargetAccessToken(deps, 'grant-1', 'proof', 'https://auth.example.com/token', principal(), signer),
+    ).rejects.toThrow('Active Agent access grant is required.')
+
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grantRecord())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(null)
+    await expect(
+      issueTargetAccessToken(deps, 'grant-1', 'proof', 'https://auth.example.com/token', principal(), signer),
+    ).rejects.toThrow('Active external API resource grant is required.')
+  })
+
+  it('rejects malformed, misbound, stale, and replayed native DPoP proofs', async () => {
+    const deps = createTestDeps()
+    const native = nativeResource()
+    authorizationDeps(deps)
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(native)
+    mockResourceOpenApi(deps, native.resourceUrl)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
+      ...grantRecord(),
+      connectionId: null,
+      mode: 'persistent',
+    })
+    vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({
+      ...requestRecord(),
+      connectionId: null,
+      status: 'approved',
+    })
+    const signer = { issuer: principal().issuer, sign: vi.fn().mockResolvedValue('native-token') }
+    const tokenUrl = 'https://auth.example.com/api/access-grants/grant-1/tokens'
+
+    vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValueOnce({
+      ...requestRecord(),
+      connectionId: 'connection-1',
+      status: 'approved',
+    })
+    await expect(issueTargetAccessToken(deps, 'grant-1', 'proof', tokenUrl, principal(), signer)).rejects.toThrow(
+      'Native API resource grants cannot use account connections.',
+    )
+    await expect(
+      issueTargetAccessToken(deps, 'grant-1', 'proof', tokenUrl, principal(), {
+        ...signer,
+        issuer: 'https://other.example.com',
+      }),
+    ).rejects.toThrow('does not belong to the active OAuth issuer')
+    await expect(issueTargetAccessToken(deps, 'grant-1', 'not-a-jwt', tokenUrl, principal(), signer)).rejects.toThrow()
+
+    const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    const proof = async (
+      payload: Record<string, unknown>,
+      header: JWTHeaderParameters = { typ: 'dpop+jwt', alg: 'ES256', jwk: publicJwk },
+    ) => new SignJWT(payload).setProtectedHeader(header).sign(privateKey)
+
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        'grant-1',
+        await proof({ htm: 'POST', htu: tokenUrl, jti: 'no-iat' }, { alg: 'ES256', jwk: publicJwk }),
+        tokenUrl,
+        principal(),
+        signer,
+      ),
+    ).rejects.toThrow('public-key DPoP proof')
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        'grant-1',
+        await proof({ htm: 'GET', htu: tokenUrl, jti: 'wrong-method', iat: Math.floor(Date.now() / 1000) }),
+        tokenUrl,
+        principal(),
+        signer,
+      ),
+    ).rejects.toThrow('not bound to the target token endpoint')
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        'grant-1',
+        await proof({ htm: 'POST', htu: tokenUrl, jti: 'stale', iat: 1 }),
+        tokenUrl,
+        principal(),
+        signer,
+      ),
+    ).rejects.toThrow('outside the accepted time window')
+    const signed = await proof({
+      htm: 'POST',
+      htu: tokenUrl,
+      jti: 'tampered',
+      iat: Math.floor(Date.now() / 1000),
+    })
+    const signedParts = signed.split('.')
+    signedParts[2] = `${signedParts[2]!.startsWith('a') ? 'b' : 'a'}${signedParts[2]!.slice(1)}`
+    await expect(
+      issueTargetAccessToken(deps, 'grant-1', signedParts.join('.'), tokenUrl, principal(), signer),
+    ).rejects.toThrow('DPoP proof signature is invalid.')
+
+    vi.mocked(deps.agentTokens.consumeDpopJti).mockResolvedValue(false)
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        'grant-1',
+        await proof({
+          htm: 'POST',
+          htu: tokenUrl,
+          jti: 'replayed',
+          iat: Math.floor(Date.now() / 1000),
+        }),
+        tokenUrl,
+        principal(),
+        signer,
+      ),
+    ).rejects.toThrow('already used')
+
+    vi.mocked(deps.agentTokens.consumeDpopJti).mockResolvedValue(true)
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        'grant-1',
+        await proof({
+          htm: 'POST',
+          htu: tokenUrl,
+          jti: 'valid-user-proof',
+          iat: Math.floor(Date.now() / 1000),
+        }),
+        tokenUrl,
+        principal(),
+        signer,
+      ),
+    ).resolves.toMatchObject({ accessToken: 'native-token' })
+  })
+
+  it('enforces organization controllers and handles revocation error paths', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    Object.assign(deps.authorization, {
+      findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
+    })
+    await expect(
+      createResourceConnectionIntent(
+        deps,
+        'resource-1',
+        { owner: { type: 'organization', organizationId: 'org-1' }, scopes: [] },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Organization credential manager access is required.')
+
+    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue({
+      ...authorizationRecord(),
+      status: 'invalid',
+    })
+    await expect(
+      createResourceConnectionIntent(
+        deps,
+        'resource-1',
+        { owner: { type: 'user' }, scopes: [] },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Active external API resource authorization was not found.')
+
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(null)
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...requestRecord(),
+      connectionId: null,
+    })
+    await expect(getAccountAccessRequest(deps, 'request-1', 'user-1')).rejects.toThrow(
+      'Agent controller access is required.',
+    )
+
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue(null)
+    await expect(revokeAgentAccessGrant(deps, 'missing', 'user-1')).rejects.toThrow('Agent access grant was not found.')
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grantRecord())
+    vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue(null)
+    await expect(revokeAgentAccessGrant(deps, 'grant-1', 'user-1')).rejects.toThrow(
+      'Approved Agent access request was not found.',
+    )
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(nativeResource())
+    vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([
+      { ...grantRecord(), connectionId: null },
+    ])
+    vi.mocked(deps.externalResources.listActiveTokenLeasesByGrant).mockResolvedValue([
+      {
+        id: 'lease-native',
+        grantId: 'grant-1',
+        requestId: 'request-1',
+        bindingId: 'binding-1',
+        encryptedAccessToken: 'sealed:native',
+        tokenHash: 'hash',
+        confirmationJkt: 'jkt',
+        scopes: ['projects:read'],
+        expiresAt: new Date(Date.now() + 30_000),
+        revokedAt: null,
+        createdAt: now,
+      },
+    ])
+    await revokeAgentResourceAccess(deps, 'identity-1')
+    expect(deps.externalResources.revokeTokenLease).toHaveBeenCalledWith('lease-native', expect.any(Date))
+  })
+
+  it('rejects unknown grants and missing host bindings in account views', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
+      ...grantRecord(),
+      agentIdentityId: 'another-agent',
+    })
+    await expect(getAgentAccessGrant(deps, 'grant-1', principal())).rejects.toThrow('Agent access grant was not found.')
+
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(requestRecord())
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue({
+      ...identityAggregate(),
+      bindings: [],
+    })
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).rejects.toThrow(
+      'Agent host binding was not found.',
     )
   })
 })

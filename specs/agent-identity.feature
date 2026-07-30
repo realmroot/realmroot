@@ -60,7 +60,7 @@ Feature: Agent identity and external API authorization
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
       And the capability request command completes with the active grants
       And the same Agent identity can invoke only operations covered by the approved resource scopes
-      And the Agent can request only scopes referenced by its roles for that resource
+      And assigned resource roles optionally restrict which OpenAPI scopes the Agent can request
       And Restish does not automatically replay the previously denied operation
       And the Agent does not log in again or adopt the controller's identity
 
@@ -139,11 +139,20 @@ Feature: Agent identity and external API authorization
       Then Realmroot returns that resource and its protected resource URL without requiring an account connection
       When Restish reads the target OpenAPI operation and the Agent requests its exact scope set
       Then Realmroot validates that scope set against the current target OpenAPI contract
-      And Realmroot validates that the Agent's resource roles make every requested scope eligible
+      And assigned resource roles make every requested scope eligible when the Agent has such roles
+      And the absence of a resource role does not block the request
       And Realmroot creates the same pending access-request resource used for external APIs
       And it does not require a user-created authority grant or grant identifier
       When an authorized controller approves the request
       Then Realmroot creates the same access-grant resource used for external APIs
+
+    @entrypoint:agent-protocol @journey:agent-resource-access-without-role
+    Scenario: An Agent requests resource access without a role
+      Given an enabled API resource publishes the requested scope in its OpenAPI contract
+      And the Agent has no assigned role for that resource
+      When the Agent requests that exact scope
+      Then Realmroot allows the access request to proceed to controller approval
+      And an approved native token carries an empty roles claim
 
     @e2e @entrypoint:agent-protocol @journey:native-api-resource-token
     Scenario: An Agent calls a native API directly
@@ -238,7 +247,8 @@ Feature: Agent identity and external API authorization
       Then Realmroot returns enabled resources, protected resource URLs, redacted accounts, and active grants
       When Restish reads a target OpenAPI operation and the Agent requests an account and its exact scope set without an applicable grant
       Then Realmroot validates that scope set against the current target OpenAPI contract
-      And Realmroot validates that the Agent's resource roles and connected account both permit every requested scope
+      And assigned resource roles restrict the request when present
+      And the connected account permits every requested scope
       Then Realmroot creates one pending access request and returns a hosted approval URL
       And it does not require a pre-existing Agent resource grant
 

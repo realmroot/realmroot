@@ -111,8 +111,36 @@ describe('AccountConnectionsPage', () => {
               createdAt: '2026-08-01T00:00:00.000Z',
               updatedAt: '2026-08-01T00:00:00.000Z',
             },
+            {
+              id: 'connection-unknown',
+              apiResourceId: 'missing-resource',
+              owner: { type: 'user', userId: 'user-1' },
+              displayName: 'Unknown owner',
+              subjectHint: '••••nown',
+              scopes: [],
+              status: 'active',
+              credentialExpiresAt: '2026-08-01T01:00:00.000Z',
+              authorizationUrl: null,
+              expiresAt: null,
+              createdAt: '2026-08-01T00:00:00.000Z',
+              updatedAt: '2026-08-01T00:00:00.000Z',
+            },
+            {
+              id: 'connection-revoked',
+              apiResourceId: 'resource-1',
+              owner: { type: 'user', userId: 'user-1' },
+              displayName: 'Revoked owner',
+              subjectHint: '••••oked',
+              scopes: ['projects:read'],
+              status: 'revoked',
+              credentialExpiresAt: null,
+              authorizationUrl: null,
+              expiresAt: null,
+              createdAt: '2026-08-01T00:00:00.000Z',
+              updatedAt: '2026-08-01T00:00:00.000Z',
+            },
           ],
-          pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+          pagination: { limit: 50, offset: 0, total: 3, hasMore: false, nextOffset: null },
         }),
       ),
       http.delete(
@@ -122,7 +150,9 @@ describe('AccountConnectionsPage', () => {
     )
 
     renderWithClient(<AccountConnectionsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }))
+    expect(await screen.findByText('API resource · Unknown owner')).toBeTruthy()
+    expect(screen.queryByText('Revoked owner')).toBeNull()
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Disconnect' }))[0]!)
     const disconnectButtons = await screen.findAllByRole('button', { name: 'Disconnect' })
     fireEvent.click(disconnectButtons.at(-1)!)
     await waitFor(() => expect(success).toHaveBeenCalledWith('Resource account disconnected.'))
@@ -143,6 +173,18 @@ describe('AccountConnectionsPage', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
         bindings: [],
       },
+      {
+        id: 'identity-retired',
+        issuer: 'https://auth.example.com',
+        subject: 'agt_retired',
+        name: 'Retired Agent',
+        homeSpace: { type: 'personal', userId: 'user-1' },
+        status: 'retired',
+        retiredAt: '2026-02-01T00:00:00.000Z',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-02-01T00:00:00.000Z',
+        bindings: [],
+      },
     ]
     Object.assign(store, withIdentity)
     server.use(http.delete(`${base}/api/account/agents/:agentId`, () => new HttpResponse(null, { status: 204 })))
@@ -150,6 +192,7 @@ describe('AccountConnectionsPage', () => {
     renderWithClient(<AccountConnectionsPage />)
 
     expect(await screen.findByText('Personal Build Agent')).toBeTruthy()
+    expect(screen.getByText('Retired Agent')).toBeTruthy()
     expect(screen.getByText(/https:\/\/auth\.example\.com · agt_stable/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retire' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Retire identity' }))
@@ -265,6 +308,14 @@ describe('AccountConnectionsPage', () => {
       }),
     )
     server.use(
+      http.get(`${base}/api/configz`, () => {
+        const walletConfig = configz()
+        walletConfig.builtInProviders.web3Wallet = {
+          ...walletConfig.builtInProviders.web3Wallet,
+          chains: undefined as unknown as number[],
+        }
+        return HttpResponse.json(walletConfig)
+      }),
       http.post(`${base}/api/auth/siwe/nonce`, () => HttpResponse.json({ nonce: 'nonce12345' })),
       http.post(`${base}/api/account/wallet-addresses`, () => HttpResponse.json({ id: 'wallet-1' })),
     )
@@ -272,6 +323,12 @@ describe('AccountConnectionsPage', () => {
     const walletRow = (await screen.findByText('Web3 wallet')).closest('article') as HTMLElement
     fireEvent.click(walletRow.querySelector('button') as HTMLElement)
     await waitFor(() => expect(success).toHaveBeenCalledWith('Wallet linked.'))
+  })
+
+  it('shows an account-center error when the profile is absent', async () => {
+    server.use(http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: null })))
+    renderWithClient(<AccountConnectionsPage />)
+    expect(await screen.findByText('Unable to load account center.')).toBeTruthy()
   })
 
   it('still renders the panels when connected accounts queries are disabled', async () => {
