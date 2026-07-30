@@ -26,7 +26,6 @@ const resource: ApiResourceResponse = {
   id: 'resource-documents',
   identifier: 'documents',
   name: 'Documents API',
-  audience: 'https://api.example.com',
   resourceUrl: 'https://api.example.com',
   authorizationMode: 'native',
   description: null,
@@ -116,7 +115,7 @@ describe('authorization policy', () => {
   it('[spec: agent-identity/native-token-authorization-claims] emits fixed groups and roles claims', async () => {
     const deps = {
       authorization: {
-        findResourceByAudience: vi.fn().mockResolvedValue(resource),
+        findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
         listUserRoleAssignments: vi.fn().mockResolvedValue([{ role, scopes: ['documents.read'] }]),
         listApplicationRoleAssignments: vi.fn().mockResolvedValue([]),
         findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
@@ -127,12 +126,12 @@ describe('authorization policy', () => {
       buildTokenClaims(deps, {
         userId: 'user-1',
         organizationId: 'org-home',
-        resource: resource.audience,
+        resource: resource.resourceUrl,
         scopes: ['documents.read'],
       }),
     ).resolves.toEqual({
       authorization: {
-        audience: resource.audience,
+        audience: resource.resourceUrl,
         resource: resource.identifier,
         organization_id: 'org-home',
         groups: ['org-home'],

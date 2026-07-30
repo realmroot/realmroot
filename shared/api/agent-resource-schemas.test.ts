@@ -12,7 +12,6 @@ describe('Agent resource schemas', () => {
     const input = {
       identifier: 'projects',
       name: 'Projects',
-      audience: 'https://projects.example.com',
       resourceUrl: 'https://projects.example.com',
       authorizationMode: 'external',
     }

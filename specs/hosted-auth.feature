@@ -95,10 +95,10 @@ Feature: Hosted authentication
     Then the application context is visible
 
   @entrypoint:product-ui @journey:oidc-resource-authorization
-  Scenario: Hosted OIDC authorization preserves the requested resource audience
-    Given an OIDC client starts authorization with a resource audience
+  Scenario: Hosted OIDC authorization preserves the requested resource identifier
+    Given an OIDC client starts authorization with a protected resource URL
     When the user completes hosted sign-in
-    Then Realmroot exchanges the authorization code for an access token with that audience
+    Then Realmroot exchanges the authorization code for an access token whose audience is that URL
 
   @entrypoint:product-ui @journey:oidc-native-token-verification
   Scenario: Native OIDC clients can verify issued identity tokens

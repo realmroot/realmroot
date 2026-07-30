@@ -27,7 +27,7 @@ describe('OAuth token claim building over real D1', () => {
   })
 
   // Exercises the authorization repo read paths that only fire during token-claim
-  // assembly — findResourceByAudience, listUserRoleAssignments,
+  // assembly — findResourceByResourceUrl, listUserRoleAssignments,
   // listApplicationRoleAssignments, and findMemberByOrganizationUser +
   // listMemberRoleAssignments — through real SQL (the usecase tests cover the
   // branching logic with fake ports; this proves the real queries).
@@ -45,7 +45,6 @@ describe('OAuth token claim building over real D1', () => {
       await postJson(harness, cookie, '/api/api-resources', {
         identifier: 'contacts-api',
         name: 'Contacts API',
-        audience,
         resourceUrl: audience,
       })
     ).json()) as { id: string }
@@ -97,7 +96,7 @@ describe('OAuth token claim building over real D1', () => {
       destination: 'access_token',
     })) as { authorization: { audience: string; resource: string; organization_id: string; roles: string[] } }
 
-    // findResourceByAudience returned the registered resource.
+    // findResourceByResourceUrl returned the registered resource.
     expect(claims.authorization.audience).toBe(audience)
     expect(claims.authorization.resource).toBe('contacts-api')
     expect(claims.authorization.organization_id).toBe(organization.id)
@@ -115,7 +114,7 @@ describe('OAuth token claim building over real D1', () => {
       scopes: ['openid'],
       destination: 'access_token',
     })) as { authorization?: { audience?: string } }
-    // findResourceByAudience ran (real SQL) and found nothing → no audience claim.
+    // findResourceByResourceUrl ran (real SQL) and found nothing → no audience claim.
     expect(claims.authorization?.audience).toBeUndefined()
   })
 })

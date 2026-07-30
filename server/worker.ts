@@ -85,9 +85,9 @@ async function getAuth(env: Env, config: RuntimeConfig): Promise<Auth> {
 
 async function loadValidAudiences(db: D1Database, baseURL: string) {
   const result = await db
-    .prepare('SELECT audience FROM api_resource WHERE enabled = 1 ORDER BY audience')
-    .all<{ audience: string }>()
-  return [baseURL, ...result.results.map((row) => row.audience)]
+    .prepare('SELECT resource_url FROM api_resource WHERE enabled = 1 ORDER BY resource_url')
+    .all<{ resource_url: string }>()
+  return [baseURL, ...result.results.map((row) => row.resource_url)]
 }
 
 function mergeBuiltInProviders(

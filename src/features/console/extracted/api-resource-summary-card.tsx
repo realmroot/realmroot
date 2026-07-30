@@ -7,7 +7,7 @@ export function ApiResourceSummaryCard({
   resource: {
     id: string
     identifier: string
-    audience: string
+    resourceUrl: string
     enabled: boolean
     createdAt: string | Date
     updatedAt: string | Date
@@ -22,7 +22,7 @@ export function ApiResourceSummaryCard({
       <CardContent className="grid gap-3">
         <SettingRow label={tt('Resource ID')} value={resource.id} />
         <SettingRow label={tt('Identifier')} value={resource.identifier} />
-        <SettingRow label={tt('Audience')} value={resource.audience} />
+        <SettingRow label={tt('Resource URL')} value={resource.resourceUrl} />
         <SettingRow label={tt('Status')} value={resource.enabled ? 'Enabled' : 'Disabled'} />
         <SettingRow label={tt('Scope authority')} value="Business OpenAPI" />
         <SettingRow label={tt('Updated')} value={formatDate(resource.updatedAt)} />

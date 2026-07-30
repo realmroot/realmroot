@@ -61,7 +61,6 @@ describe('authorization management over real D1', () => {
     const input = {
       identifier: 'projects-api',
       name: 'Projects API',
-      audience: 'https://projects.example.com/api',
       resourceUrl: 'https://projects.example.com/api',
     }
 
@@ -89,7 +88,6 @@ describe('authorization management over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'projects-api',
       name: 'Projects API',
-      audience: 'https://projects.example.com/api',
       resourceUrl: 'https://projects.example.com/api',
       authorizationMode: 'external',
     })
@@ -113,7 +111,6 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/api-resources', {
         identifier: 'https://api.example.com',
         name: 'Example API',
-        audience: 'https://api.example.com',
         resourceUrl: 'https://api.example.com',
       })
     ).json()) as { id: string }
@@ -154,7 +151,6 @@ describe('authorization management over real D1', () => {
       await postJson(harness, cookie, '/api/api-resources', {
         identifier: 'https://roles.example.com',
         name: 'Roles API',
-        audience: 'https://roles.example.com',
         resourceUrl: 'https://roles.example.com',
       })
     ).json()) as { id: string }

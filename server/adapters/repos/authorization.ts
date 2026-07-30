@@ -158,11 +158,11 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       return rows[0] ? toResource(rows[0]) : null
     },
 
-    async findResourceByAudience(audience) {
+    async findResourceByResourceUrl(resourceUrl) {
       const rows = await db
         .select()
         .from(apiResource)
-        .where(and(eq(apiResource.audience, audience), eq(apiResource.enabled, true)))
+        .where(and(eq(apiResource.resourceUrl, resourceUrl), eq(apiResource.enabled, true)))
         .limit(1)
       return rows[0] ? toResource(rows[0]) : null
     },

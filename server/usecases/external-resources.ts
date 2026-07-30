@@ -199,7 +199,7 @@ export async function createResourceConnectionIntent(
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('client_id', authorization.clientId)
   url.searchParams.set('redirect_uri', redirectUri)
-  url.searchParams.set('resource', resource.audience)
+  url.searchParams.set('resource', resource.resourceUrl)
   url.searchParams.set('scope', requestedScopes.join(' '))
   url.searchParams.set('state', state)
   url.searchParams.set('code_challenge', await sha256(verifier))
@@ -385,7 +385,6 @@ export async function listConnectableExternalResources(deps: Deps) {
       id: resource.id,
       identifier: resource.identifier,
       name: resource.name,
-      audience: resource.audience,
       resourceUrl: authorization.resourceUrl,
     })
   }
@@ -428,7 +427,6 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       identifier: resource.identifier,
       name: resource.name,
       description: resource.description,
-      audience: resource.audience,
       resourceUrl: resource.resourceUrl,
       authorizationMode: resource.authorizationMode,
       status: scopes ? 'available' : 'unavailable',
@@ -474,7 +472,6 @@ export async function listAgentApiResources(
     identifier: resource.identifier,
     name: resource.name,
     description: resource.description,
-    audience: resource.audience,
     resourceUrl: resource.resourceUrl,
     authorizationMode: resource.authorizationMode,
     status: resource.status,
@@ -897,7 +894,7 @@ export async function issueTargetAccessToken(
       actor_token: actorToken,
       actor_token_type: accessTokenType,
       requested_token_type: accessTokenType,
-      resource: resource.audience,
+      resource: resource.resourceUrl,
       scope: request.scopes.join(' '),
     },
     authorization.clientId,
@@ -949,7 +946,6 @@ export async function issueTargetAccessToken(
     expiresIn,
     expiresAt: new Date(now.getTime() + expiresIn * 1000).toISOString(),
     scopes: request.scopes,
-    apiResource: resource.audience,
     resourceUrl: resource.resourceUrl,
   }
 }
@@ -986,7 +982,7 @@ async function issueNativeAccessToken(
     {
       iss: signer.issuer,
       sub: subject,
-      aud: resource.audience,
+      aud: resource.resourceUrl,
       jti: createId('resat'),
       iat: Math.floor(now.getTime() / 1000),
       exp: Math.floor(expiresAt.getTime() / 1000),
@@ -1043,7 +1039,6 @@ async function issueNativeAccessToken(
     expiresIn: Math.max(1, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
     expiresAt: expiresAt.toISOString(),
     scopes: request.scopes,
-    apiResource: resource.audience,
     resourceUrl: resource.resourceUrl,
   }
 }

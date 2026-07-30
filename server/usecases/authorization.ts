@@ -134,7 +134,6 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     id: createId('res'),
     identifier: input.identifier,
     name: input.name,
-    audience: input.audience,
     resourceUrl: input.resourceUrl,
     authorizationMode,
     description: input.description ?? null,
@@ -286,7 +285,7 @@ export async function getAgentRoleAuthorization(
 }
 
 export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClaimInput) {
-  const resource = input.resource ? await deps.authorization.findResourceByAudience(input.resource) : null
+  const resource = input.resource ? await deps.authorization.findResourceByResourceUrl(input.resource) : null
   if (input.resource && !resource) {
     return toTokenClaims(input, [], null)
   }

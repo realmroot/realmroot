@@ -34,7 +34,7 @@ export function toTokenClaims(
     roles,
     ...(input.organizationId ? { organization_id: input.organizationId } : {}),
     ...(organization ? { organization_name: organization.displayName ?? organization.name } : {}),
-    ...(resource ? { resource: resource.identifier, audience: resource.audience } : {}),
+    ...(resource ? { resource: resource.identifier, audience: resource.resourceUrl } : {}),
   }
   const claims = {
     authorization,

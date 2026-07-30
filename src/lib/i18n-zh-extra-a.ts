@@ -47,8 +47,6 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
   'Assignment saved.': '分配已保存。',
   Assignments: '分配',
   Attempts: '尝试次数',
-  'Audience is emitted into authorization claims for matching OAuth resource requests.':
-    'Audience 会写入匹配 OAuth 资源请求的授权声明。',
   'Auth method': '认证方式',
   'Authenticator setup': '认证器设置',
   'Authorization endpoint': '授权端点',

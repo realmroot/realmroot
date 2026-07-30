@@ -145,7 +145,7 @@ describe('console collections', () => {
       id: 'resource-2',
       identifier: 'billing-api',
       name: 'Billing API',
-      audience: 'https://billing.example.com',
+      resourceUrl: 'https://billing.example.com',
     }
 
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {

@@ -127,6 +127,7 @@ Feature: Admin Console
   Scenario: API resources page creates an API resource
     When I create an API resource
     Then it appears in authorization inventory
+    And its protected resource URL is the OAuth resource identifier and access-token audience
     And the business resource server OpenAPI contract remains the scope authority
     And the Console does not provide scope creation or editing
 

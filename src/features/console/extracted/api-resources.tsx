@@ -74,14 +74,14 @@ export function ApiResourcesPage() {
   })
   const resources = query.data?.items ?? []
   const visibleResources = resources.filter((resource) =>
-    [resource.name, resource.identifier, resource.audience, resource.description ?? ''].some((value) =>
+    [resource.name, resource.identifier, resource.resourceUrl, resource.description ?? ''].some((value) =>
       value.toLowerCase().includes(search.trim().toLowerCase()),
     ),
   )
   return (
     <ResourcePage
       title={tt('API resources')}
-      description={tt('Register protected APIs, audiences, OpenAPI contracts, and permission surfaces.')}
+      description={tt('Register protected APIs, OpenAPI contracts, and permission surfaces.')}
       action={
         <div className="flex gap-2">
           <Button
@@ -109,7 +109,6 @@ export function ApiResourcesPage() {
           fields={[
             ['identifier', 'Identifier'],
             ['name', 'Name'],
-            ['audience', 'Audience'],
             ['resourceUrl', 'Resource URL'],
             ['description', 'Description'],
           ]}
@@ -152,7 +151,7 @@ export function ApiResourcesPage() {
         <TableHeader>
           <TableRow>
             <TableHead>{tt('Resource')}</TableHead>
-            <TableHead>{tt('Audience')}</TableHead>
+            <TableHead>{tt('Resource URL')}</TableHead>
             <TableHead>{tt('Authorization')}</TableHead>
             <TableHead>{tt('Status')}</TableHead>
           </TableRow>
@@ -167,7 +166,7 @@ export function ApiResourcesPage() {
                   </a>
                   <div className="text-xs text-muted-foreground">{resource.identifier}</div>
                 </TableCell>
-                <TableCell>{resource.audience}</TableCell>
+                <TableCell>{resource.resourceUrl}</TableCell>
                 <TableCell>
                   {resource.authorizationMode === 'external' ? tt('External issuer') : tt('Native (Realmroot)')}
                 </TableCell>
@@ -229,7 +228,7 @@ export function ApiResourceDetailPage({
   return (
     <ResourcePage
       title={resource?.name ?? tt('API resource')}
-      description={tt('Manage the protected API audience and authoritative business OpenAPI location.')}
+      description={tt('Manage the protected API URL and authoritative business OpenAPI location.')}
       framed={false}
       error={resourceQuery.error}
       loading={resourceQuery.isLoading}
@@ -262,8 +261,7 @@ export function ApiResourceDetailPage({
                   <CardHeader>
                     <CardTitle>{tt('Resource settings')}</CardTitle>
                     <CardDescription>
-                      {' '}
-                      {tt('Audience is emitted into authorization claims for matching OAuth resource requests.')}{' '}
+                      {tt('The resource URL is used for OAuth resource requests and access-token audiences.')}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -272,7 +270,6 @@ export function ApiResourceDetailPage({
                       defaults={{
                         identifier: resource.identifier,
                         name: resource.name,
-                        audience: resource.audience,
                         resourceUrl: resource.resourceUrl,
                         description: resource.description ?? '',
                       }}
@@ -280,7 +277,6 @@ export function ApiResourceDetailPage({
                       fields={[
                         ['identifier', 'Identifier'],
                         ['name', 'Name'],
-                        ['audience', 'Audience'],
                         ...(resource.authorizationMode === 'native'
                           ? ([['resourceUrl', 'Resource URL']] as [string, string][])
                           : []),

@@ -82,7 +82,6 @@ describe('management resource routes', () => {
       {
         identifier: 'contacts',
         name: 'Contacts',
-        audience: 'https://api.example.com',
         resourceUrl: 'https://api.example.com',
       },
       201,
@@ -121,7 +120,6 @@ describe('management resource routes', () => {
       body: JSON.stringify({
         identifier: 'projects',
         name: 'Projects',
-        audience: 'https://projects.example.com/api',
         resourceUrl: 'https://projects.example.com/api',
         authorizationMode: 'external',
         authorization: {
@@ -210,7 +208,6 @@ async function loadAuthorizationRoutes() {
     id: 'resource-1',
     identifier: 'contacts',
     name: 'Contacts',
-    audience: 'https://api.example.com',
     resourceUrl: 'https://api.example.com',
     description: null,
     authorizationMode: 'native' as const,

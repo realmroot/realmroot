@@ -12,16 +12,14 @@ calls the registered resource URL directly with a DPoP-bound access token.
 
 ## Shared Resource Contract
 
-Both modes register two distinct values:
+Both modes register one protected resource URL:
 
 | Value | Meaning |
 | --- | --- |
-| `audience` | Stable identifier placed in the access token's `aud` claim. |
-| `resourceUrl` | HTTPS base URL called by the client and used to discover the API contract. |
+| `resourceUrl` | HTTPS resource identifier placed in the access token's `aud` claim, called by the client, and used to discover the API contract. |
 
-They may be the same URL, but they do not have to be. Production URLs must use
-HTTPS and contain no username or password. Plain HTTP is accepted only for
-loopback development URLs.
+Production URLs must use HTTPS and contain no username or password. Plain HTTP
+is accepted only for loopback development URLs.
 
 ### Advertise OpenAPI
 
@@ -81,8 +79,7 @@ Create an API Resource with:
 | Field | Value |
 | --- | --- |
 | `authorizationMode` | `native` |
-| `audience` | The exact audience the API will accept. |
-| `resourceUrl` | The protected API base URL that advertises OpenAPI. |
+| `resourceUrl` | The protected API identifier and base URL that the API accepts as its audience and that advertises OpenAPI. |
 | `enabled` | Enable after discovery and token validation are configured. |
 
 No target OAuth client, target authorization-server metadata, or external
@@ -94,7 +91,6 @@ A representative Resource API body is:
 {
   "identifier": "projects-api",
   "name": "Projects API",
-  "audience": "https://api.example.com",
   "resourceUrl": "https://api.example.com",
   "authorizationMode": "native",
   "enabled": true
@@ -178,14 +174,13 @@ registry, authorization server, signing keys, and access-token lifecycle.
 Realmroot acts as a standards-based OAuth client; the final access token is
 issued and validated entirely by the target platform.
 
-Register the API Resource with the target audience and resource URL. Select
+Register the API Resource with the target resource URL. Select
 dynamic registration when the target publishes `registration_endpoint`:
 
 ```json
 {
   "identifier": "external-projects-api",
   "name": "External Projects API",
-  "audience": "https://api.example.com/v1",
   "resourceUrl": "https://api.example.com/v1",
   "authorizationMode": "external",
   "authorization": {
@@ -287,7 +282,7 @@ configure its `client_id` and `client_secret` in Realmroot. The redirect URI and
 
 Realmroot starts authorization code with S256 PKCE using:
 
-- `resource`: the registered audience;
+- `resource`: the registered resource URL;
 - `scope`: the requested business scopes plus `openid offline_access`;
 - the canonical Realmroot redirect URI;
 - `state`, `code_challenge`, and `code_challenge_method=S256`.
@@ -357,7 +352,7 @@ proof using the same DPoP checks described for native mode. The token issuer and
 JWKS are the target platform's, not Realmroot's. Require:
 
 - the target authorization-server issuer;
-- the registered resource audience;
+- the registered resource URL as audience;
 - the required operation scopes;
 - the target token's signature and expiry;
 - `cnf.jkt`, proof `htu`/`htm`/`jti`, and `ath`.
@@ -379,7 +374,7 @@ Before enabling a resource:
 - OpenAPI is 3.x and protected operations declare OAuth/OIDC security scopes.
 - Realmroot can fetch the resource URL and linked contract without a user
   session.
-- The configured audience matches the resource server's token validation.
+- The configured resource URL matches the resource server's audience validation.
 - The resource rejects Bearer fallback and validates DPoP replay and `ath`.
 - Native mode trusts only the configured Realmroot issuer and JWKS.
 - External mode publishes matching RFC 9728 and RFC 8414 metadata.

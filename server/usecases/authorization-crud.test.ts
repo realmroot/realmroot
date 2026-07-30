@@ -78,7 +78,6 @@ const resource: ApiResourceResponse = {
   id: 'resource-1',
   identifier: 'projects',
   name: 'Projects',
-  audience: 'https://api.example.com',
   resourceUrl: 'https://api.example.com',
   authorizationMode: 'native',
   description: null,
@@ -202,7 +201,6 @@ describe('authorization CRUD and assignment policy', () => {
     await createResource(deps, {
       identifier: 'native',
       name: 'Native',
-      audience: resource.audience,
       resourceUrl: resource.resourceUrl,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
@@ -215,7 +213,6 @@ describe('authorization CRUD and assignment policy', () => {
     await createResource(deps, {
       identifier: 'external',
       name: 'External',
-      audience: resource.audience,
       resourceUrl: resource.resourceUrl,
       authorizationMode: 'external',
       enabled: true,
@@ -258,7 +255,6 @@ describe('authorization CRUD and assignment policy', () => {
     const input = {
       identifier: 'projects',
       name: 'Projects',
-      audience: resource.audience,
       resourceUrl: resource.resourceUrl,
     }
 
@@ -405,7 +401,7 @@ describe('authorization CRUD and assignment policy', () => {
   it('builds claims from global, application, and organization-member assignments', async () => {
     const authorization = repository()
     const assignment = { role, scopes: ['projects:read'] }
-    authorization.findResourceByAudience.mockResolvedValue(resource)
+    authorization.findResourceByResourceUrl.mockResolvedValue(resource)
     authorization.findOrganization.mockResolvedValue(organization)
     authorization.listUserRoleAssignments.mockResolvedValue([assignment])
     authorization.listApplicationRoleAssignments.mockResolvedValue([assignment])
@@ -418,7 +414,7 @@ describe('authorization CRUD and assignment policy', () => {
         userId: 'user-1',
         applicationId: 'app-1',
         organizationId: organization.id,
-        resource: resource.audience,
+        resource: resource.resourceUrl,
         scopes: ['projects:read'],
         claimSelection: {
           authorization: true,
@@ -431,7 +427,7 @@ describe('authorization CRUD and assignment policy', () => {
       }),
     ).resolves.toEqual({
       authorization: {
-        audience: resource.audience,
+        audience: resource.resourceUrl,
         resource: resource.identifier,
         organization_id: organization.id,
         organization_name: organization.displayName,
@@ -446,12 +442,12 @@ describe('authorization CRUD and assignment policy', () => {
       organization_name: organization.displayName,
     })
 
-    authorization.findResourceByAudience.mockResolvedValue(null)
+    authorization.findResourceByResourceUrl.mockResolvedValue(null)
     await expect(buildTokenClaims(deps, { resource: 'missing', scopes: ['projects:read'] })).resolves.toMatchObject({
       roles: [],
       groups: [],
     })
-    authorization.findResourceByAudience.mockResolvedValue(resource)
+    authorization.findResourceByResourceUrl.mockResolvedValue(resource)
     authorization.findMemberByOrganizationUser.mockResolvedValue(null)
     await buildTokenClaims(deps, { userId: 'user-1', organizationId: organization.id, scopes: [] })
     await buildTokenClaims(deps, { applicationId: 'app-1', scopes: [] })
@@ -479,7 +475,7 @@ function repository() {
     createResource: vi.fn(),
     listResources: vi.fn(),
     findResource: vi.fn().mockResolvedValue(null),
-    findResourceByAudience: vi.fn().mockResolvedValue(null),
+    findResourceByResourceUrl: vi.fn().mockResolvedValue(null),
     updateResource: vi.fn(),
     deleteResource: vi.fn(),
     createRole: vi.fn(),

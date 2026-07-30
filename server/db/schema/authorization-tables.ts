@@ -188,7 +188,6 @@ export const apiResource = sqliteTable(
     id: text('id').primaryKey(),
     identifier: text('identifier').notNull().unique(),
     name: text('name').notNull(),
-    audience: text('audience').notNull(),
     resourceUrl: text('resource_url').notNull(),
     authorizationMode: text('authorization_mode').notNull().default('native'),
     description: text('description'),
@@ -201,7 +200,10 @@ export const apiResource = sqliteTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index('apiResource_enabled_idx').on(table.enabled)],
+  (table) => [
+    uniqueIndex('apiResource_resourceUrl_unique').on(table.resourceUrl),
+    index('apiResource_enabled_idx').on(table.enabled),
+  ],
 )
 
 export const role = sqliteTable(

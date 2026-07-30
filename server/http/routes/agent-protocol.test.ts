@@ -201,7 +201,6 @@ describe('Agent protocol routes', () => {
       expiresIn: 300,
       expiresAt: '2026-01-01T00:05:00.000Z',
       scopes: ['projects:read'],
-      apiResource: 'https://projects.example.com/api',
       resourceUrl: 'https://projects.example.com/api',
     })
     const app = createRouteApp(

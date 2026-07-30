@@ -39,7 +39,6 @@ Create an external API Resource in Realmroot with:
 {
   "identifier": "external-projects",
   "name": "External Projects API",
-  "audience": "http://127.0.0.1:4100/api",
   "resourceUrl": "http://127.0.0.1:4100/api",
   "authorizationMode": "external",
   "authorization": {

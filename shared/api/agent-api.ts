@@ -110,7 +110,6 @@ export const agentApiResourcesResponseSchema = z.object({
       identifier: z.string(),
       name: z.string(),
       description: z.string().nullable(),
-      audience: z.string(),
       resourceUrl: z.url(),
       authorizationMode: z.enum(['native', 'external']),
       status: z.enum(['available', 'unavailable']),
@@ -135,7 +134,6 @@ export const connectableApiResourcesResponseSchema = z.object({
       id: z.string(),
       identifier: z.string(),
       name: z.string(),
-      audience: z.string(),
       resourceUrl: z.url(),
     }),
   ),
@@ -278,7 +276,6 @@ export const targetTokenSchema = z.object({
   expiresIn: z.number().int().positive().max(3600),
   expiresAt: z.iso.datetime(),
   scopes: z.array(z.string()),
-  apiResource: z.string(),
   resourceUrl: z.url(),
 })
 

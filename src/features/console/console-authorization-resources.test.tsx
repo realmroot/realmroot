@@ -135,7 +135,6 @@ describe('console API resources and roles', () => {
       id: 'resource-external',
       identifier: 'projects',
       name: 'Projects API',
-      audience: 'https://projects.example.com',
       resourceUrl: 'https://projects.example.com/api',
       authorizationMode: 'external' as const,
       enabled: false,
@@ -193,7 +192,6 @@ describe('console API resources and roles', () => {
     for (const [label, value] of [
       ['Identifier', 'projects'],
       ['Name', 'Projects API'],
-      ['Audience', 'https://projects.example.com'],
       ['Resource URL', 'https://projects.example.com/api'],
       ['Description', 'Projects'],
     ]) {
@@ -217,7 +215,6 @@ describe('console API resources and roles', () => {
     for (const [label, value] of [
       ['Identifier', 'local'],
       ['Name', 'Local API'],
-      ['Audience', 'https://auth.example.com/local'],
       ['Resource URL', 'https://auth.example.com/local'],
     ]) {
       fireEvent.change(screen.getByLabelText(label), { target: { value } })

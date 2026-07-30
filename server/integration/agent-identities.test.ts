@@ -227,7 +227,6 @@ describe('Agent identity enrollment over real D1', () => {
     const resource = await createResource(harness.deps, {
       identifier: 'native-api',
       name: 'Native API',
-      audience: 'https://api.example.com',
       resourceUrl: 'https://api.example.com',
       authorizationMode: 'native',
       description: 'Read private code repositories',
@@ -291,7 +290,7 @@ describe('Agent identity enrollment over real D1', () => {
     expect(issued).toMatchObject({
       tokenType: 'DPoP',
       scopes: ['repo:read'],
-      apiResource: 'https://api.example.com',
+      resourceUrl: 'https://api.example.com',
     })
     const jwksResponse = await harness.request('/api/auth/jwks')
     expect(jwksResponse.status).toBe(200)

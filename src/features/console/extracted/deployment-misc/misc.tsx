@@ -138,7 +138,7 @@ export function CustomizeJwtPage() {
         <TokenCustomizationCard
           title={tt('Access token')}
           rows={[
-            ['Audience', 'API resource audience is emitted for matching protected APIs.'],
+            ['Audience', 'API resource URLs are emitted as audiences for matching protected APIs.'],
             ['Roles', 'Role keys are emitted in the roles claim.'],
             ['Groups', 'Relevant organization IDs are emitted in the groups claim.'],
             ['Scopes', 'Approved scopes are emitted in the scope claim.'],

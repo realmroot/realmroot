@@ -379,7 +379,6 @@ describe('external API resource authorization', () => {
       expiresIn: 3_600,
       expiresAt: expect.any(String),
       scopes: ['projects:read'],
-      apiResource: 'https://projects.example.com/api',
       resourceUrl: 'https://projects.example.com/api',
     })
     expect(deps.agentAudit.append).toHaveBeenCalledWith(
@@ -993,7 +992,7 @@ describe('external API resource authorization', () => {
     ).resolves.toMatchObject({
       accessToken: 'native-access-token',
       tokenType: 'DPoP',
-      apiResource: native.audience,
+      resourceUrl: native.resourceUrl,
     })
     expect(sign).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1836,7 +1835,6 @@ function resource(): ApiResourceResponse {
     id: 'resource-1',
     identifier: 'projects',
     name: 'Projects API',
-    audience: 'https://projects.example.com/api',
     resourceUrl: 'https://projects.example.com/api',
     authorizationMode: 'external',
     description: 'Manage private projects',

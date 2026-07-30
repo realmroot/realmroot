@@ -242,7 +242,6 @@ export const apiResource = {
   identifier: 'management-api',
   name: 'Management API',
   description: 'Management surface',
-  audience: 'https://auth.example.com/api',
   resourceUrl: 'https://auth.example.com/api',
   authorizationMode: 'native' as const,
   enabled: true,

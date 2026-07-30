@@ -28,7 +28,6 @@ test.describe('external API resource authorization', () => {
         data: {
           identifier: 'e2e-projects',
           name: 'E2E Projects API',
-          audience: externalResource,
           resourceUrl: externalResource,
           authorizationMode: 'external',
           authorization: { registrationMode: 'dynamic' },
@@ -116,7 +115,6 @@ test.describe('external API resource authorization', () => {
         data: {
           identifier: 'e2e-realmroot-projects',
           name: 'E2E Realmroot Projects API',
-          audience: realmrootResource,
           resourceUrl: realmrootResource,
           authorizationMode: 'native',
         },

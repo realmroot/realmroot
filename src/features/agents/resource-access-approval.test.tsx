@@ -63,7 +63,6 @@ describe('Agent resource access approval', () => {
           id: 'resource-1',
           name: 'ZPan',
           identifier: 'zpan',
-          audience: 'https://zpan.test',
           resourceUrl: 'https://zpan.test/api',
         },
       ],

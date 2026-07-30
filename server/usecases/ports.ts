@@ -868,7 +868,7 @@ export interface AuthorizationRepository {
   createResource(input: ApiResourceRecordInput): Promise<ApiResourceResponse>
   listResources(pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<ApiResourceResponse>>
   findResource(id: string): Promise<ApiResourceResponse | null>
-  findResourceByAudience(audience: string): Promise<ApiResourceResponse | null>
+  findResourceByResourceUrl(resourceUrl: string): Promise<ApiResourceResponse | null>
   updateResource(id: string, patch: UpdateApiResourceRequest): Promise<void>
   deleteResource(id: string): Promise<void>
   createRole(input: RoleRecordInput): Promise<RoleResponse>

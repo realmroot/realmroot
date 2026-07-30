@@ -136,7 +136,8 @@ Feature: Agent identity and external API authorization
     Scenario: An administrator registers a native API that trusts Realmroot
       Given a product uses Realmroot as its OIDC provider and OAuth authorization server
       When an administrator creates an API resource with native authorization mode
-      Then the administrator configures only its audience and protected resource URL
+      Then the administrator configures one protected resource URL
+      And Realmroot uses that URL as the OAuth resource identifier and access-token audience
       And no external authorization server, OAuth client, or account connection is configured
       And the product API validates Realmroot access tokens with the published issuer and JWKS
       And the protected resource advertises its OpenAPI contract with a standard service-desc link

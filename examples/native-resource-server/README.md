@@ -31,7 +31,6 @@ Create a native API Resource in Realmroot with:
 {
   "identifier": "native-projects",
   "name": "Native Projects API",
-  "audience": "http://127.0.0.1:4101/api",
   "resourceUrl": "http://127.0.0.1:4101/api",
   "authorizationMode": "native",
   "enabled": true
