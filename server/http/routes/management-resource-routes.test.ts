@@ -109,9 +109,33 @@ describe('management resource routes', () => {
   })
 
   it('uses the configured origin for dynamic external client registration [spec: agent-identity/external-api-resource-canonical-callback]', async () => {
-    const configure = vi
-      .spyOn(externalResourcesUsecase, 'configureExternalResourceAuthorization')
-      .mockResolvedValue({} as never)
+    const createExternal = vi.spyOn(externalResourcesUsecase, 'createExternalApiResource').mockResolvedValue({
+      id: 'resource-1',
+      identifier: 'projects',
+      name: 'Projects',
+      resourceUrl: 'https://projects.example.com/api',
+      description: null,
+      authorizationMode: 'external',
+      enabled: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      authorization: {
+        resourceUrl: 'https://projects.example.com/api',
+        issuer: 'https://projects.example.com',
+        authorizationEndpoint: 'https://projects.example.com/authorize',
+        tokenEndpoint: 'https://projects.example.com/token',
+        registrationEndpoint: 'https://projects.example.com/register',
+        revocationEndpoint: 'https://projects.example.com/revoke',
+        jwksUri: 'https://projects.example.com/jwks',
+        userInfoEndpoint: 'https://projects.example.com/userinfo',
+        registrationMode: 'dynamic',
+        clientId: 'client',
+        clientSecretConfigured: true,
+        status: 'active',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
     const { app } = await loadAuthorizationRoutes()
 
     const response = await app.request('https://preview.example.net/api-resources', {
@@ -129,9 +153,14 @@ describe('management resource routes', () => {
     })
 
     expect(response.status).toBe(201)
-    expect(configure).toHaveBeenCalledWith(
+    expect(createExternal).toHaveBeenCalledWith(
       expect.anything(),
-      'resource-1',
+      {
+        identifier: 'projects',
+        name: 'Projects',
+        resourceUrl: 'https://projects.example.com/api',
+        authorizationMode: 'external',
+      },
       {
         registrationMode: 'dynamic',
       },

@@ -253,6 +253,7 @@ Feature: Agent identity and external API authorization
       And Realmroot derives every requestable scope only from that OpenAPI contract
       And authorization-server scopes_supported is not a scope catalog
       And Realmroot registers or uses an explicitly configured OAuth client
+      And Realmroot persists the resource and authorization atomically only after registration succeeds
       And the resource cannot be enabled for Agents when a required capability is absent
       And no identity Connector or HTTP proxy configuration is created
 

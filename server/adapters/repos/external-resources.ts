@@ -4,6 +4,7 @@ import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
   agentAccessRequest,
+  apiResource,
   externalResourceAuthorization,
   externalTokenLease,
   resourceAccountConnection,
@@ -12,6 +13,14 @@ import {
 
 export function createExternalResourceRepository(db: Database): ExternalResourceRepository {
   return {
+    async createResourceWithAuthorization(resource, authorization) {
+      const now = new Date()
+      await db.batch([
+        db.insert(apiResource).values({ ...resource, createdAt: now, updatedAt: now }),
+        db.insert(externalResourceAuthorization).values(authorization),
+      ])
+    },
+
     async upsertAuthorization(input) {
       const [row] = await db
         .insert(externalResourceAuthorization)

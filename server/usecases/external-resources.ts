@@ -14,6 +14,7 @@ import type {
   CreateAccessRequest,
   CreateAccountConnection,
 } from '@shared/api/agent-api'
+import type { CreateApiResourceRequest } from '@shared/api/authorization'
 import type {
   ConfigureExternalResourceAuthorizationRequest,
   CreateAgentAccessRequest,
@@ -50,7 +51,56 @@ export async function configureExternalResourceAuthorization(
   callbackOrigin: string,
 ) {
   const resource = await requireExternalResource(deps, resourceId)
-  const resourceUrl = requireNetworkUrl(resource.resourceUrl, 'resource URL')
+  const record = await prepareExternalResourceAuthorization(
+    deps,
+    resourceId,
+    resource.resourceUrl,
+    input,
+    callbackOrigin,
+  )
+  const configured = await deps.externalResources.upsertAuthorization(record)
+  await deps.authorization.updateResource(resourceId, { enabled: true })
+  return toExternalAuthorization(configured)
+}
+
+export async function createExternalApiResource(
+  deps: Deps,
+  input: CreateApiResourceRequest,
+  authorization: ConfigureExternalResourceAuthorizationRequest,
+  callbackOrigin: string,
+): Promise<ApiResource> {
+  const resourceId = createId('res')
+  const resourceUrl = requireNetworkUrl(input.resourceUrl, 'resource URL')
+  const record = await prepareExternalResourceAuthorization(
+    deps,
+    resourceId,
+    resourceUrl,
+    authorization,
+    callbackOrigin,
+  )
+  await deps.externalResources.createResourceWithAuthorization(
+    {
+      id: resourceId,
+      identifier: input.identifier,
+      name: input.name,
+      resourceUrl,
+      authorizationMode: 'external',
+      description: input.description ?? null,
+      enabled: true,
+    },
+    record,
+  )
+  return getApiResource(deps, resourceId)
+}
+
+async function prepareExternalResourceAuthorization(
+  deps: Deps,
+  resourceId: string,
+  configuredResourceUrl: string,
+  input: ConfigureExternalResourceAuthorizationRequest,
+  callbackOrigin: string,
+) {
+  const resourceUrl = requireNetworkUrl(configuredResourceUrl, 'resource URL')
   await validateResourceContract(deps, resourceUrl)
   const protectedMetadata = await fetchObject(
     deps,
@@ -131,9 +181,7 @@ export async function configureExternalResourceAuthorization(
     createdAt: now,
     updatedAt: now,
   }
-  const configured = await deps.externalResources.upsertAuthorization(record)
-  await deps.authorization.updateResource(resourceId, { enabled: true })
-  return toExternalAuthorization(configured)
+  return record
 }
 
 export async function getExternalResourceAuthorization(deps: Deps, resourceId: string) {

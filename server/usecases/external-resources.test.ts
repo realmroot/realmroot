@@ -5,6 +5,7 @@ import {
   createAccessRequest,
   createAccountConnection,
   createAgentAccessRequest,
+  createExternalApiResource,
   createResourceConnectionIntent,
   decideAccessRequest,
   decideAgentAccessRequest,
@@ -91,24 +92,86 @@ describe('external API resource authorization', () => {
       }
       return new Response(null, { status: 404 })
     })
-    vi.mocked(deps.externalResources.upsertAuthorization).mockImplementation(async (record) => record)
 
     await expect(
-      configureExternalResourceAuthorization(
+      createExternalApiResource(
         deps,
-        'resource-1',
+        {
+          identifier: 'projects',
+          name: 'Projects API',
+          resourceUrl: 'https://projects.example.com/api',
+          authorizationMode: 'external',
+        },
         { registrationMode: 'dynamic' },
         'https://auth.example.com',
       ),
     ).resolves.toMatchObject({
-      resourceId: 'resource-1',
-      issuer: 'https://projects.example.com',
-      registrationMode: 'dynamic',
-      clientId: 'realmroot-client',
-      clientSecretConfigured: true,
-      status: 'active',
+      id: 'resource-1',
+      authorization: {
+        issuer: 'https://projects.example.com',
+        registrationMode: 'dynamic',
+        clientId: 'realmroot-client',
+        clientSecretConfigured: true,
+        status: 'active',
+      },
     })
+    expect(deps.externalResources.createResourceWithAuthorization).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/^res_/),
+        identifier: 'projects',
+        resourceUrl: 'https://projects.example.com/api',
+        authorizationMode: 'external',
+        enabled: true,
+      }),
+      expect.objectContaining({
+        resourceId: expect.stringMatching(/^res_/),
+        registrationMode: 'dynamic',
+        clientId: 'realmroot-client',
+      }),
+    )
+    expect(deps.externalResources.upsertAuthorization).not.toHaveBeenCalled()
+    expect(deps.authorization.updateResource).not.toHaveBeenCalled()
     expect(deps.connectors.create).not.toHaveBeenCalled()
+  })
+
+  it('does not persist an external resource when dynamic registration fails', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      if (request.url === 'https://projects.example.com/api') {
+        return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+      }
+      if (request.url === 'https://projects.example.com/openapi.json') {
+        return Response.json({ openapi: '3.1.0', paths: {} })
+      }
+      if (request.url.endsWith('/.well-known/oauth-protected-resource/api')) {
+        return Response.json({
+          resource: 'https://projects.example.com/api',
+          authorization_servers: ['https://projects.example.com'],
+        })
+      }
+      if (request.url.endsWith('/.well-known/oauth-authorization-server')) {
+        return Response.json(metadata())
+      }
+      if (request.url.endsWith('/register')) {
+        return Response.json({ error: 'invalid_client_metadata' }, { status: 400 })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    await expect(
+      createExternalApiResource(
+        deps,
+        {
+          identifier: 'projects',
+          name: 'Projects API',
+          resourceUrl: 'https://projects.example.com/api',
+          authorizationMode: 'external',
+        },
+        { registrationMode: 'dynamic' },
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Dynamic client registration failed.')
+    expect(deps.externalResources.createResourceWithAuthorization).not.toHaveBeenCalled()
   })
 
   it('connects the user account with authorization code and PKCE [spec: agent-identity/resource-account-connection]', async () => {

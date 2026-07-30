@@ -451,6 +451,10 @@ export interface ExternalTokenLeaseRecord {
 }
 
 export interface ExternalResourceRepository {
+  createResourceWithAuthorization(
+    resource: ApiResourceRecordInput,
+    authorization: ExternalResourceAuthorizationRecord,
+  ): Promise<void>
   upsertAuthorization(input: ExternalResourceAuthorizationRecord): Promise<ExternalResourceAuthorizationRecord>
   findAuthorization(resourceId: string): Promise<ExternalResourceAuthorizationRecord | null>
   createConnection(input: ResourceAccountConnectionRecord): Promise<ResourceAccountConnectionRecord>

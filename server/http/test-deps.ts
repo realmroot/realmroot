@@ -128,6 +128,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       delete: vi.fn(),
     },
     externalResources: {
+      createResourceWithAuthorization: vi.fn(),
       upsertAuthorization: vi.fn(),
       findAuthorization: vi.fn().mockResolvedValue(null),
       createConnection: vi.fn(),

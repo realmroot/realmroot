@@ -2,6 +2,7 @@ import { badRequest } from '@server/domain/errors'
 import { createResource, deleteResource, updateResource } from '@server/usecases/authorization'
 import {
   configureExternalResourceAuthorization,
+  createExternalApiResource,
   getApiResource,
   listApiResources,
 } from '@server/usecases/external-resources'
@@ -26,12 +27,14 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
     const { authorization, ...resourceInput } = input
-    const resource = await createResource(getDeps(c), resourceInput)
-    if (authorization) {
-      await configureExternalResourceAuthorization(getDeps(c), resource.id, authorization, requireCanonicalOrigin())
-    }
+    const resource = authorization
+      ? await createExternalApiResource(getDeps(c), resourceInput, authorization, requireCanonicalOrigin())
+      : await createResource(getDeps(c), resourceInput)
     c.header('Location', `/api/api-resources/${encodeURIComponent(resource.id)}`)
-    return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
+    return c.json(
+      apiResourceSchema.parse(authorization ? resource : await getApiResource(getDeps(c), resource.id)),
+      201,
+    )
   })
 
   app.get('/:resourceId', async (c) =>
