@@ -196,6 +196,16 @@ describe('external API resource authorization', () => {
     const authorizationUrl = new URL(started.authorizationUrl)
     expect(authorizationUrl.searchParams.get('code_challenge_method')).toBe('S256')
     expect(authorizationUrl.searchParams.get('resource')).toBe('https://projects.example.com/api')
+    vi.mocked(deps.externalResources.createConnectionIntent).mockResolvedValueOnce(null)
+    await expect(
+      createResourceConnectionIntent(
+        deps,
+        'resource-1',
+        { owner: { type: 'user' }, scopes: ['projects:read'] },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Enabled external API resource was not found.')
     vi.mocked(deps.secrets.seal).mockResolvedValueOnce('v1.encrypted-resource-credential')
 
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
@@ -262,6 +272,14 @@ describe('external API resource authorization', () => {
       grantedScopes: intent.scopes,
       credentialExpiresAt: null,
     })
+    vi.mocked(deps.externalResources.createConnection).mockResolvedValueOnce(null)
+    await expect(
+      completeResourceConnectionIntent(
+        deps,
+        { state: 'archived-state', code: 'archived-code' },
+        'https://auth.example.com/',
+      ),
+    ).rejects.toThrow('archived while completing the connection')
   })
 
   it('reauthorizes the same external account without replacing its connection identity [spec: agent-identity/resource-account-reauthorization]', async () => {
@@ -392,6 +410,16 @@ describe('external API resource authorization', () => {
     expect(first.approvalUrl).toContain('/agent/resource-access/approve#token=')
     expect(repeated.id).toBe(first.id)
     expect(deps.externalResources.createAccessRequest).toHaveBeenCalledOnce()
+    pending = []
+    vi.mocked(deps.externalResources.createAccessRequest).mockResolvedValueOnce(null)
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        { resourceId: 'resource-1', connectionId: null, scopes: ['projects:read'] },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Enabled API resource is required.')
   })
 
   it('lets the account controller approve an exact request once [spec: agent-identity/agent-resource-approval]', async () => {
@@ -428,6 +456,15 @@ describe('external API resource authorization', () => {
       'request-1',
       expect.objectContaining({ connectionId: 'connection-1' }),
     )
+    vi.mocked(deps.externalResources.createGrant).mockResolvedValueOnce(null)
+    await expect(
+      decideAgentAccessRequestByToken(
+        deps,
+        'approval-token',
+        { decision: 'approve', mode: 'once', accountConnectionId: 'connection-1' },
+        'user-1',
+      ),
+    ).rejects.toThrow('archived before access could be approved')
   })
 
   it(`exchanges user and Agent authority for a target-issued DPoP token
@@ -1183,6 +1220,17 @@ describe('external API resource authorization', () => {
       }),
       'at+jwt',
     )
+    vi.mocked(deps.externalResources.createTokenLease).mockResolvedValueOnce(null)
+    await expect(
+      issueTargetAccessToken(
+        deps,
+        'grant-1',
+        proof,
+        'https://auth.example.com/api/access-grants/grant-1/tokens',
+        principal(),
+        { issuer: principal().issuer, sign },
+      ),
+    ).rejects.toThrow('Active Agent access grant is required.')
   })
 
   it('rejects invalid external authorization discovery and client configuration', async () => {
@@ -1197,6 +1245,7 @@ describe('external API resource authorization', () => {
       registrationResponse,
       input = { registrationMode: 'manual' as const, clientId: 'client', clientSecret: 'secret' },
       configuredResource = resource(),
+      configuredResult = true,
     }: {
       protectedBody?: unknown
       serverBody?: unknown
@@ -1205,11 +1254,14 @@ describe('external API resource authorization', () => {
       registrationResponse?: Response
       input?: Parameters<typeof configureExternalResourceAuthorization>[2]
       configuredResource?: ApiResourceResponse | null
+      configuredResult?: boolean
     }) => {
       const deps = createTestDeps()
       authorizationDeps(deps)
       vi.mocked(deps.authorization.findResource).mockResolvedValue(configuredResource)
-      vi.mocked(deps.externalResources.configureAuthorization).mockImplementation(async (record) => record)
+      vi.mocked(deps.externalResources.configureAuthorization).mockImplementation(async (record) =>
+        configuredResult ? record : null,
+      )
       const protocolResponses = [
         protectedResponse ?? Response.json(protectedBody),
         serverResponse ?? Response.json(serverBody),
@@ -1233,6 +1285,9 @@ describe('external API resource authorization', () => {
       'External API resource was not found.',
     )
     await expect(configure({ configuredResource: { ...resource(), archivedAt: now.toISOString() } })).rejects.toThrow(
+      'Archived API resources must be restored before reconfiguration.',
+    )
+    await expect(configure({ configuredResult: false })).rejects.toThrow(
       'Archived API resources must be restored before reconfiguration.',
     )
     await expect(
