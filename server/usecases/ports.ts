@@ -841,6 +841,14 @@ export type ApiResourceRecordInput = Omit<ApiResourceResponse, 'createdAt' | 'up
 export type RoleRecordInput = Omit<RoleResponse, 'createdAt' | 'updatedAt'>
 export type RoleAssignmentInput = AssignRoleRequest & { id: string; assignedByUserId: string | null }
 
+export interface ApiResourceReferenceCounts {
+  federatedCredentials: number
+  accountConnections: number
+  connectionIntents: number
+  agentAccessRequests: number
+  agentAccessGrants: number
+}
+
 export interface RoleAssignmentScope {
   resourceId?: string
   organizationId?: string
@@ -874,7 +882,7 @@ export interface AuthorizationRepository {
   findResource(id: string): Promise<ApiResourceResponse | null>
   findResourceByResourceUrl(resourceUrl: string): Promise<ApiResourceResponse | null>
   updateResource(id: string, patch: UpdateApiResourceRequest): Promise<void>
-  deleteResource(id: string): Promise<void>
+  deleteResource(id: string): Promise<ApiResourceReferenceCounts | null>
   createRole(input: RoleRecordInput): Promise<RoleResponse>
   listRoles(pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<RoleResponse>>
   findRole(id: string): Promise<RoleResponse | null>

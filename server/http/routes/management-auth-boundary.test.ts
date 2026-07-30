@@ -174,6 +174,12 @@ describe('management routes 1', () => {
     expect(replaceRoleScopesProperties).toHaveProperty('scopes')
     expect(replaceRoleScopes?.responses).toHaveProperty('204')
     expect(replaceRoleScopes?.responses).not.toHaveProperty('200')
+
+    const deleteApiResource = openApiOperationObjects().find(
+      (operation) => operation.key === 'DELETE /api-resources/{param}',
+    )
+    expect(deleteApiResource?.responses).toHaveProperty('204')
+    expect(deleteApiResource?.responses).toHaveProperty('409')
   })
 
   it('mounts the documented management collections behind the admin boundary', async () => {

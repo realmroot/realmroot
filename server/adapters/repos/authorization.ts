@@ -1,15 +1,20 @@
 import type { AuthorizationRepository, RoleAssignmentScope } from '@server/usecases/ports'
-import { and, count, desc, eq, gt, isNull, or } from 'drizzle-orm'
+import { and, count, desc, eq, gt, isNull, notExists, or, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
+  agentAccessGrant,
+  agentAccessRequest,
   agentRoleAssignment,
   apiResource,
   applicationRoleAssignment,
+  federatedCredential,
   invitation,
   member,
   memberRoleAssignment,
   organization,
+  resourceAccountConnection,
+  resourceConnectionIntent,
   role,
   roleScope,
   userRoleAssignment,
@@ -175,7 +180,72 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
     },
 
     async deleteResource(id) {
-      await db.delete(apiResource).where(eq(apiResource.id, id))
+      const deleted = await db
+        .delete(apiResource)
+        .where(
+          and(
+            eq(apiResource.id, id),
+            notExists(
+              db
+                .select({ id: federatedCredential.id })
+                .from(federatedCredential)
+                .where(eq(federatedCredential.audienceResourceId, id)),
+            ),
+            notExists(
+              db
+                .select({ id: resourceAccountConnection.id })
+                .from(resourceAccountConnection)
+                .where(eq(resourceAccountConnection.resourceId, id)),
+            ),
+            notExists(
+              db
+                .select({ id: resourceConnectionIntent.id })
+                .from(resourceConnectionIntent)
+                .where(eq(resourceConnectionIntent.resourceId, id)),
+            ),
+            notExists(
+              db
+                .select({ id: agentAccessRequest.id })
+                .from(agentAccessRequest)
+                .where(eq(agentAccessRequest.resourceId, id)),
+            ),
+            notExists(
+              db.select({ id: agentAccessGrant.id }).from(agentAccessGrant).where(eq(agentAccessGrant.resourceId, id)),
+            ),
+          ),
+        )
+        .returning({ id: apiResource.id })
+
+      if (deleted.length > 0) return null
+
+      const [references] = await db
+        .select({
+          federatedCredentials: sql<number>`(
+            SELECT COUNT(*) FROM ${federatedCredential}
+            WHERE ${federatedCredential.audienceResourceId} = ${id}
+          )`,
+          accountConnections: sql<number>`(
+            SELECT COUNT(*) FROM ${resourceAccountConnection}
+            WHERE ${resourceAccountConnection.resourceId} = ${id}
+          )`,
+          connectionIntents: sql<number>`(
+            SELECT COUNT(*) FROM ${resourceConnectionIntent}
+            WHERE ${resourceConnectionIntent.resourceId} = ${id}
+          )`,
+          agentAccessRequests: sql<number>`(
+            SELECT COUNT(*) FROM ${agentAccessRequest}
+            WHERE ${agentAccessRequest.resourceId} = ${id}
+          )`,
+          agentAccessGrants: sql<number>`(
+            SELECT COUNT(*) FROM ${agentAccessGrant}
+            WHERE ${agentAccessGrant.resourceId} = ${id}
+          )`,
+        })
+        .from(apiResource)
+        .where(eq(apiResource.id, id))
+
+      if (!references) throw new Error(`API resource ${id} disappeared during deletion.`)
+      return references
     },
 
     async createRole(input) {

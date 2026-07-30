@@ -206,6 +206,9 @@ export const applicationAuthorizationRoutes: ManagementRouteConfig[] = [
     summary: 'Delete API resource',
     request: { params: idParam },
     noBody: true,
+    errors: {
+      409: 'The API resource has authorization history and cannot be permanently deleted.',
+    },
   },
 
   {

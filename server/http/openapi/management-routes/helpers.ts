@@ -115,6 +115,7 @@ export interface ManagementRouteConfig {
   status?: number
   response?: ZodType
   noBody?: boolean
+  errors?: Partial<Record<400 | 404 | 409, string>>
   security?: Array<Record<string, string[]>>
 }
 export const jsonContentType = 'application/json'

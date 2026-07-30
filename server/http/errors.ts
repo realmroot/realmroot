@@ -16,7 +16,7 @@ export function handleApiError(error: Error, c: Context) {
     )
   }
   if (error instanceof ApiError) {
-    return errorResponse(c, error.status, error.code, error.message)
+    return errorResponse(c, error.status, error.code, error.message, error.details)
   }
 
   if (error instanceof HTTPException) {
@@ -26,13 +26,20 @@ export function handleApiError(error: Error, c: Context) {
   return errorResponse(c, 500, 'internal_error', 'Internal server error.')
 }
 
-function errorResponse(c: Context, status: number, code: ErrorCode, message: string) {
+function errorResponse(
+  c: Context,
+  status: number,
+  code: ErrorCode,
+  message: string,
+  details?: Record<string, unknown>,
+) {
   return c.json(
     {
       error: {
         code,
         message,
         requestId: c.get('requestContext')?.id,
+        ...(details ? { details } : {}),
       },
     },
     status as ContentfulStatusCode,
@@ -44,5 +51,6 @@ function statusCode(status: number): ErrorCode {
   if (status === 401) return 'unauthorized'
   if (status === 403) return 'forbidden'
   if (status === 404) return 'not_found'
+  if (status === 409) return 'conflict'
   return 'internal_error'
 }

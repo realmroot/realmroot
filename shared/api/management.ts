@@ -33,9 +33,18 @@ import {
 
 export const managementErrorResponseSchema = z.object({
   error: z.object({
-    code: z.enum(['bad_request', 'unauthorized', 'forbidden', 'not_found', 'internal_error']),
+    code: z.enum([
+      'bad_request',
+      'unauthorized',
+      'forbidden',
+      'not_found',
+      'conflict',
+      'resource_in_use',
+      'internal_error',
+    ]),
     message: z.string(),
     requestId: z.string().optional(),
+    details: z.record(z.string(), z.unknown()).optional(),
   }),
 })
 

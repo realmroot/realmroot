@@ -1,10 +1,18 @@
-export type ErrorCode = 'bad_request' | 'unauthorized' | 'forbidden' | 'not_found' | 'internal_error'
+export type ErrorCode =
+  | 'bad_request'
+  | 'unauthorized'
+  | 'forbidden'
+  | 'not_found'
+  | 'conflict'
+  | 'resource_in_use'
+  | 'internal_error'
 
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: ErrorCode,
     message: string,
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -28,6 +36,8 @@ export const badRequest = (message: string) => new ApiError(400, 'bad_request', 
 export const unauthorized = (message = 'Authentication is required.') => new ApiError(401, 'unauthorized', message)
 export const forbidden = (message = 'Admin access is required.') => new ApiError(403, 'forbidden', message)
 export const notFound = (message = 'Resource not found.') => new ApiError(404, 'not_found', message)
+export const resourceInUse = (message: string, details: Record<string, unknown>) =>
+  new ApiError(409, 'resource_in_use', message, details)
 export const oauthError = (
   error: string,
   description: string,

@@ -236,6 +236,9 @@ function routeResponses(routeConfig: ManagementRouteConfig) {
   if (routeConfig.security !== undefined && routeConfig.security.length === 0) return responses
   return {
     ...responses,
+    ...Object.fromEntries(
+      Object.entries(routeConfig.errors ?? {}).map(([status, description]) => [status, errorResponse(description)]),
+    ),
     401: errorResponse('Authentication is required.'),
     403: errorResponse('Administrator access is required.'),
   }

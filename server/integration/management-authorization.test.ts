@@ -1,5 +1,7 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
+import { apiResource, resourceAccountConnection, user } from '@server/db/schema'
 import { createResource } from '@server/usecases/authorization'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, createUser, type Harness, resourceOpenApiFetch, signIn, signInAdmin } from './harness'
 
@@ -136,6 +138,60 @@ describe('authorization management over real D1', () => {
         })
       ).status,
     ).toBe(204)
+  })
+
+  it('[spec: management-api/management-api-resource-delete-conflict] preserves resources with authorization history', async () => {
+    const cookie = await signInAdmin(harness)
+    const resource = (await (
+      await postJson(harness, cookie, '/api/api-resources', {
+        identifier: 'history-api',
+        name: 'History API',
+        resourceUrl: 'https://history.example.com/api',
+      })
+    ).json()) as { id: string }
+    const [admin] = await harness.db.select({ id: user.id }).from(user).where(eq(user.email, 'admin@example.com'))
+    const now = new Date()
+    await harness.db.insert(resourceAccountConnection).values({
+      id: 'connection-history',
+      resourceId: resource.id,
+      ownerUserId: admin.id,
+      externalSubject: 'admin@example.com',
+      displayName: 'Admin connection',
+      encryptedTokens: 'encrypted-tokens',
+      grantedScopes: ['files:read'],
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const response = await harness.request(`/api/api-resources/${resource.id}`, {
+      method: 'DELETE',
+      headers: { cookie },
+    })
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'resource_in_use',
+        message: 'API resource has authorization history and cannot be permanently deleted.',
+        requestId: expect.any(String),
+        details: {
+          federatedCredentials: 0,
+          accountConnections: 1,
+          connectionIntents: 0,
+          agentAccessRequests: 0,
+          agentAccessGrants: 0,
+        },
+      },
+    })
+    await expect(
+      harness.db.select({ id: apiResource.id }).from(apiResource).where(eq(apiResource.id, resource.id)),
+    ).resolves.toEqual([{ id: resource.id }])
+    await expect(
+      harness.db
+        .select({ id: resourceAccountConnection.id })
+        .from(resourceAccountConnection)
+        .where(eq(resourceAccountConnection.id, 'connection-history')),
+    ).resolves.toEqual([{ id: 'connection-history' }])
   })
 
   it('manages role scope references and a user role assignment through real SQL [spec: management-api/management-restish-role-crud]', async () => {

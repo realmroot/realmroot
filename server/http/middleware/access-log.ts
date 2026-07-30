@@ -11,17 +11,24 @@ export const accessLog = (): MiddlewareHandler => async (c, next) => {
   } finally {
     const context = c.get('requestContext')
     const status = caught ? 500 : c.res.status
-    const error = caught instanceof Error ? caught : null
+    const error = c.error ?? (caught instanceof Error ? caught : null)
 
-    console.info(
-      JSON.stringify({
-        requestId: context.id,
-        method: c.req.method,
-        path: new URL(c.req.url).pathname,
-        status,
-        durationMs: Date.now() - context.startedAt,
-        ...(error ? { errorName: error.name, errorMessage: error.message } : {}),
-      }),
-    )
+    const entry = JSON.stringify({
+      requestId: context.id,
+      method: c.req.method,
+      path: new URL(c.req.url).pathname,
+      status,
+      durationMs: Date.now() - context.startedAt,
+      ...(error
+        ? {
+            errorName: error.name,
+            errorMessage: error.message,
+            ...(status >= 500 ? { errorStack: error.stack } : {}),
+          }
+        : {}),
+    })
+
+    if (status >= 500) console.error(entry)
+    else console.info(entry)
   }
 }

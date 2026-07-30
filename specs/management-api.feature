@@ -86,6 +86,14 @@ Feature: Unified Realmroot resource API
     And no permission catalog, scope catalog, or scope mutation operation exists
     And requestable scopes come only from each business resource server's OpenAPI security requirements
 
+  @entrypoint:restish @journey:management-api-resource-delete-conflict
+  Scenario: API resources with authorization history cannot be permanently deleted
+    Given the Agent has approved api-resources:write scope
+    And an API resource has authorization history
+    When I delete the API resource with Restish
+    Then the unified API returns a conflict with the blocking reference counts
+    And the API resource and its authorization history remain
+
 
   @entrypoint:restish @journey:management-restish-webhook-crud
   Scenario: An authorized Agent manages webhook endpoints

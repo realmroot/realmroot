@@ -226,7 +226,27 @@ describe('authorization CRUD and assignment policy', () => {
     })
     await expect(getResource(deps, resource.id)).resolves.toBe(resource)
     await expect(updateResource(deps, resource.id, { name: 'Projects 2' })).resolves.toBe(resource)
+    authorization.deleteResource.mockResolvedValue(null)
     await expect(deleteResource(deps, resource.id)).resolves.toBeUndefined()
+
+    authorization.deleteResource.mockResolvedValue({
+      federatedCredentials: 0,
+      accountConnections: 1,
+      connectionIntents: 1,
+      agentAccessRequests: 1,
+      agentAccessGrants: 1,
+    })
+    await expect(deleteResource(deps, resource.id)).rejects.toMatchObject({
+      status: 409,
+      code: 'resource_in_use',
+      details: {
+        federatedCredentials: 0,
+        accountConnections: 1,
+        connectionIntents: 1,
+        agentAccessRequests: 1,
+        agentAccessGrants: 1,
+      },
+    })
 
     authorization.findResource.mockResolvedValue({ ...resource, authorizationMode: 'external' })
     externalResources.findAuthorization.mockResolvedValue(null)

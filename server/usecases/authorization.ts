@@ -1,4 +1,4 @@
-import { badRequest, notFound } from '@server/domain/errors'
+import { badRequest, notFound, resourceInUse } from '@server/domain/errors'
 import {
   type AuthorizationTokenClaimInput,
   createId,
@@ -172,7 +172,10 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
 
 export async function deleteResource(deps: Deps, id: string) {
   await getResource(deps, id)
-  await deps.authorization.deleteResource(id)
+  const references = await deps.authorization.deleteResource(id)
+  if (references) {
+    throw resourceInUse('API resource has authorization history and cannot be permanently deleted.', { ...references })
+  }
 }
 
 export async function createRole(deps: Deps, input: CreateRoleRequest) {

@@ -1,4 +1,12 @@
-import { ApiError, badRequest, forbidden, notFound, oauthError, unauthorized } from '@server/domain/errors'
+import {
+  ApiError,
+  badRequest,
+  forbidden,
+  notFound,
+  oauthError,
+  resourceInUse,
+  unauthorized,
+} from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
 import { HTTPException } from 'hono/http-exception'
 import { describe, expect, it, vi } from 'vitest'
@@ -9,6 +17,12 @@ describe('API error boundary helpers', () => {
     expect(unauthorized()).toMatchObject({ status: 401, code: 'unauthorized', message: 'Authentication is required.' })
     expect(forbidden()).toMatchObject({ status: 403, code: 'forbidden', message: 'Admin access is required.' })
     expect(notFound()).toMatchObject({ status: 404, code: 'not_found', message: 'Resource not found.' })
+    expect(resourceInUse('In use.', { agentAccessGrants: 1 })).toMatchObject({
+      status: 409,
+      code: 'resource_in_use',
+      message: 'In use.',
+      details: { agentAccessGrants: 1 },
+    })
 
     const response = handleApiError(new ApiError(400, 'bad_request', 'Invalid request.'), context())
 
@@ -23,8 +37,37 @@ describe('API error boundary helpers', () => {
     await expectError(new HTTPException(401, { message: 'No session.' }), 401, 'unauthorized')
     await expectError(new HTTPException(403, { message: 'No access.' }), 403, 'forbidden')
     await expectError(new HTTPException(404, { message: 'Missing.' }), 404, 'not_found')
-    await expectError(new HTTPException(409, { message: 'Conflict.' }), 409, 'internal_error')
+    await expectError(new HTTPException(409, { message: 'Conflict.' }), 409, 'conflict')
     await expectError(new Error('Unexpected.'), 500, 'internal_error', 'Internal server error.')
+  })
+
+  it('serializes structured conflict details', async () => {
+    const response = handleApiError(
+      resourceInUse('API resource is in use.', {
+        federatedCredentials: 0,
+        accountConnections: 1,
+        connectionIntents: 0,
+        agentAccessRequests: 1,
+        agentAccessGrants: 1,
+      }),
+      context(),
+    )
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'resource_in_use',
+        message: 'API resource is in use.',
+        requestId: 'request-1',
+        details: {
+          federatedCredentials: 0,
+          accountConnections: 1,
+          connectionIntents: 0,
+          agentAccessRequests: 1,
+          agentAccessGrants: 1,
+        },
+      },
+    })
   })
 
   it('serializes OAuth and DPoP errors without the REST error envelope', async () => {
