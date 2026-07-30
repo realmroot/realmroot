@@ -56,7 +56,7 @@ app.use(express.urlencoded({ extended: false }))
 app.use(express.json())
 
 app.get('/.well-known/oauth-protected-resource/api', (_request, response) => {
-  response.json({ resource, authorization_servers: [issuer], scopes_supported: ['projects:read'] })
+  response.json({ resource, authorization_servers: [issuer], scopes_supported: ['projects:read', 'projects:write'] })
 })
 
 app.get('/.well-known/oauth-authorization-server', (_request, response) => {
@@ -68,7 +68,7 @@ app.get('/.well-known/oauth-authorization-server', (_request, response) => {
     revocation_endpoint: `${origin}/revoke`,
     jwks_uri: `${origin}/jwks`,
     userinfo_endpoint: `${origin}/userinfo`,
-    scopes_supported: ['openid', 'offline_access', 'projects:read'],
+    scopes_supported: ['openid', 'offline_access', 'projects:read', 'projects:write'],
     response_types_supported: ['code'],
     response_modes_supported: ['query'],
     grant_types_supported: [
@@ -249,6 +249,16 @@ function projectsOpenAPI(title: string, serverUrl: string, openIdConnectUrl: str
                   },
                 },
               },
+            },
+          },
+        },
+        post: {
+          operationId: 'createProject',
+          summary: 'Create a project through delegated Agent authority',
+          security: [{ resourceOidc: ['projects:write'] }],
+          responses: {
+            '201': {
+              description: 'Project created',
             },
           },
         },

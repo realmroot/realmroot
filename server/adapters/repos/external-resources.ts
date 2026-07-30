@@ -123,20 +123,14 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row ?? null
     },
 
-    async findConnectionByOwnerSubject(input) {
+    async findConnectionByOwnerResource(input) {
       const ownerCondition = input.ownerOrganizationId
         ? eq(resourceAccountConnection.ownerOrganizationId, input.ownerOrganizationId)
         : eq(resourceAccountConnection.ownerUserId, input.ownerUserId!)
       const [row] = await db
         .select()
         .from(resourceAccountConnection)
-        .where(
-          and(
-            eq(resourceAccountConnection.resourceId, input.resourceId),
-            eq(resourceAccountConnection.externalSubject, input.externalSubject),
-            ownerCondition,
-          ),
-        )
+        .where(and(eq(resourceAccountConnection.resourceId, input.resourceId), ownerCondition))
         .limit(1)
       return row ?? null
     },

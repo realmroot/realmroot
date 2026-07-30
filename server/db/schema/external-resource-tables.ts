@@ -58,11 +58,11 @@ export const resourceAccountConnection = sqliteTable(
       'resourceAccountConnection_exactly_one_owner_check',
       sql`((${table.ownerUserId} IS NOT NULL) + (${table.ownerOrganizationId} IS NOT NULL)) = 1`,
     ),
-    uniqueIndex('resourceAccountConnection_resource_subject_user_unique')
-      .on(table.resourceId, table.externalSubject, table.ownerUserId)
+    uniqueIndex('resourceAccountConnection_resource_user_unique')
+      .on(table.resourceId, table.ownerUserId)
       .where(sql`${table.ownerUserId} IS NOT NULL`),
-    uniqueIndex('resourceAccountConnection_resource_subject_org_unique')
-      .on(table.resourceId, table.externalSubject, table.ownerOrganizationId)
+    uniqueIndex('resourceAccountConnection_resource_org_unique')
+      .on(table.resourceId, table.ownerOrganizationId)
       .where(sql`${table.ownerOrganizationId} IS NOT NULL`),
     index('resourceAccountConnection_resourceId_idx').on(table.resourceId),
     index('resourceAccountConnection_ownerUserId_idx').on(table.ownerUserId),

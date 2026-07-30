@@ -280,6 +280,8 @@ describe('schema.test 1', () => {
     expect(indexNames(resourceAccountConnection)).toEqual(
       expect.arrayContaining([
         'resourceAccountConnection_resourceId_idx',
+        'resourceAccountConnection_resource_user_unique',
+        'resourceAccountConnection_resource_org_unique',
         'resourceAccountConnection_ownerUserId_idx',
         'resourceAccountConnection_ownerOrganizationId_idx',
         'resourceAccountConnection_status_idx',

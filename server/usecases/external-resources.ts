@@ -308,15 +308,18 @@ export async function completeResourceConnectionIntent(
     optionalString(profile, 'name') ?? optionalString(profile, 'preferred_username') ?? externalSubject
   const expiresAt = tokenExpiry(token, now)
   const ownerUserId = intent.ownerOrganizationId ? null : intent.ownerUserId
-  const existing = await deps.externalResources.findConnectionByOwnerSubject({
+  const existing = await deps.externalResources.findConnectionByOwnerResource({
     resourceId: intent.resourceId,
-    externalSubject,
     ownerUserId,
     ownerOrganizationId: intent.ownerOrganizationId,
   })
+  if (existing?.status === 'active' && existing.externalSubject !== externalSubject) {
+    throw badRequest('Disconnect the current resource account before connecting another account.')
+  }
   const connectionId = existing?.id ?? intent.id
   const grantedScopes = scopeString(token.scope) ?? intent.scopes
   const authorizationInput = {
+    externalSubject,
     displayName,
     encryptedTokens: await deps.secrets.seal(
       JSON.stringify({ accessToken, refreshToken, scope: grantedScopes.join(' ') }),
@@ -335,7 +338,6 @@ export async function completeResourceConnectionIntent(
         resourceId: intent.resourceId,
         ownerUserId,
         ownerOrganizationId: intent.ownerOrganizationId,
-        externalSubject,
         ...authorizationInput,
         createdAt: now,
       })
@@ -370,14 +372,15 @@ export async function createAccountConnection(
     const owner = identity.identity.ownerOrganizationId
       ? { type: 'organization' as const, organizationId: identity.identity.ownerOrganizationId }
       : { type: 'user' as const }
+    const connectionScopes = (await readDeclaredScopes(deps, resource.resourceUrl)).map((scope) => scope.value)
     const pending = await createResourceConnectionIntent(
       deps,
       request.resourceId,
-      { owner, scopes: request.scopes, returnTo: 'access-approval' },
+      { owner, scopes: connectionScopes, returnTo: 'access-approval' },
       actorUserId,
       callbackOrigin,
     )
-    return toPendingAccountConnection(pending, request.scopes)
+    return toPendingAccountConnection(pending, connectionScopes)
   }
   const pending = await createResourceConnectionIntent(
     deps,
@@ -411,17 +414,16 @@ export async function listAccessRequestConnections(
   }
   const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   if (!identity) throw notFound('Active Agent identity was not found.')
-  const connections = (
+  const resourceConnections = (
     identity.identity.ownerOrganizationId
       ? await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId])
       : await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId!)
-  )
-    .filter(
-      (connection) =>
-        connection.resourceId === request.resourceId &&
-        connection.status === 'active' &&
-        request.scopes.every((scope) => connection.grantedScopes.includes(scope)),
-    )
+  ).filter((connection) => connection.resourceId === request.resourceId && connection.status === 'active')
+  if (resourceConnections.length > 1) {
+    throw new Error('A resource home space cannot have more than one active account connection.')
+  }
+  const connections = resourceConnections
+    .filter((connection) => request.scopes.every((scope) => connection.grantedScopes.includes(scope)))
     .map(toAccountConnection)
   return {
     items: connections.slice(pagination.offset, pagination.offset + pagination.limit),
@@ -1677,7 +1679,7 @@ function toAccountConnection(record: ResourceAccountConnectionRecord): AccountCo
       : { type: 'organization', organizationId: record.ownerOrganizationId! },
     displayName: record.displayName,
     subjectHint: redactSubject(record.externalSubject),
-    scopes: record.grantedScopes,
+    scopes: record.grantedScopes.filter((scope) => scope !== 'openid' && scope !== 'offline_access'),
     status: record.status as 'active' | 'revoked',
     credentialExpiresAt: record.credentialExpiresAt?.toISOString() ?? null,
     authorizationUrl: null,

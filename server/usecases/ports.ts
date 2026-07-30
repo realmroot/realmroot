@@ -460,9 +460,8 @@ export interface ExternalResourceRepository {
   ): Promise<ExternalResourceAuthorizationRecord | null>
   findAuthorization(resourceId: string): Promise<ExternalResourceAuthorizationRecord | null>
   createConnection(input: ResourceAccountConnectionRecord): Promise<ResourceAccountConnectionRecord | null>
-  findConnectionByOwnerSubject(input: {
+  findConnectionByOwnerResource(input: {
     resourceId: string
-    externalSubject: string
     ownerUserId: string | null
     ownerOrganizationId: string | null
   }): Promise<ResourceAccountConnectionRecord | null>
@@ -470,6 +469,7 @@ export interface ExternalResourceRepository {
     id: string,
     resourceId: string,
     input: {
+      externalSubject: string
       displayName: string
       encryptedTokens: string
       grantedScopes: string[]

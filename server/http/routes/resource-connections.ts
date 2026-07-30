@@ -15,9 +15,7 @@ export function createResourceConnectionRoutes(canonicalOrigin?: string) {
     )
     const origin = canonicalOrigin ?? new URL(c.req.url).origin
     if (connection.returnTo === 'access-approval') {
-      return c.redirect(
-        `${origin}/agent/resource-access/approve?accountConnectionId=${encodeURIComponent(connection.id)}`,
-      )
+      return c.redirect(`${origin}/agent/resource-access/approve`)
     }
     return c.redirect(`${origin}/connections?resource_connection=connected`)
   })

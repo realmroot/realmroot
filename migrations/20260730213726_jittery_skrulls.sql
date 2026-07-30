@@ -1,0 +1,4 @@
+DROP INDEX `resourceAccountConnection_resource_subject_user_unique`;--> statement-breakpoint
+DROP INDEX `resourceAccountConnection_resource_subject_org_unique`;--> statement-breakpoint
+CREATE UNIQUE INDEX `resourceAccountConnection_resource_user_unique` ON `resource_account_connection` (`resource_id`,`owner_user_id`) WHERE "resource_account_connection"."owner_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX `resourceAccountConnection_resource_org_unique` ON `resource_account_connection` (`resource_id`,`owner_organization_id`) WHERE "resource_account_connection"."owner_organization_id" IS NOT NULL;

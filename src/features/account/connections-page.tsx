@@ -119,7 +119,7 @@ function ResourceConnectionsPanel({
         <SubsectionTitle
           title={tt('Connected resource accounts')}
           description={tt(
-            'Restish starts a connection with the exact scopes required by the target OpenAPI operation.',
+            'A connection authorizes the resource’s current Agent-delegable scope catalog. Each Agent grant remains limited to its separately approved exact scopes and lifetime.',
           )}
         />
         <ItemList

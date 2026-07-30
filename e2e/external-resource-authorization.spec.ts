@@ -59,17 +59,30 @@ test.describe('external API resource authorization', () => {
       })
       await page.goto(await accessRequest.approvalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent resource access' })).toBeVisible()
-      await expect(page.getByText('No connected account covers these exact scopes.')).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Approve exact access' })).toBeDisabled()
-      await page.getByRole('button', { name: 'Connect a new E2E Projects API account' }).click()
-      await page.waitForURL('**/agent/resource-access/approve?accountConnectionId=*')
-      await expect(page.getByRole('heading', { name: 'Approve Agent resource access' })).toBeVisible()
-      await expect(page.getByRole('radio', { name: /Demo Project Owner/ })).toBeChecked()
-      await page.getByRole('button', { name: 'Approve exact access' }).click()
+      await expect(
+        page.getByText('Connect your E2E Projects API account before deciding this Agent request.'),
+      ).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Approve exact access', exact: true })).toBeDisabled()
+      await page.getByRole('button', { name: 'Connect E2E Projects API account' }).click()
+      await page.waitForURL('**/agent/resource-access/approve')
+      await expect(page.getByText('Demo Project Owner')).toBeVisible()
+      await expect(page.getByRole('radio', { name: /Demo Project Owner/ })).toHaveCount(0)
+      await page.getByRole('button', { name: 'Approve exact access', exact: true }).click()
       await expect(page.getByRole('heading', { name: 'Resource access approved' })).toBeVisible()
 
       const approved = await accessRequest.result
       expect(approved.status).toBe('approved')
+      const connectionsResponse = await page.request.get('/api/account/account-connections')
+      expect(connectionsResponse.status(), await connectionsResponse.text()).toBe(200)
+      const connections = (await connectionsResponse.json()) as {
+        items: Array<{ apiResourceId: string; scopes: string[] }>
+      }
+      expect(connections.items).toContainEqual(
+        expect.objectContaining({
+          apiResourceId: resource.id,
+          scopes: expect.arrayContaining(['projects:read', 'projects:write']),
+        }),
+      )
 
       const lease = plugin.issueTargetAccessToken(approved.grantId)
       expect(lease).toMatchObject({ tokenType: 'DPoP', scopes: ['projects:read'] })

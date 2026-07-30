@@ -306,7 +306,7 @@ describe('external API resource authorization', () => {
       revokedAt: now,
     }
     vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue(intent)
-    vi.mocked(deps.externalResources.findConnectionByOwnerSubject).mockResolvedValue(existing)
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(existing)
     vi.mocked(deps.externalResources.replaceConnectionAuthorization).mockImplementation(
       async (id, _resourceId, input) => ({
         ...existing,
@@ -343,9 +343,8 @@ describe('external API resource authorization', () => {
       status: 'active',
       returnTo: 'access-approval',
     })
-    expect(deps.externalResources.findConnectionByOwnerSubject).toHaveBeenCalledWith({
+    expect(deps.externalResources.findConnectionByOwnerResource).toHaveBeenCalledWith({
       resourceId: 'resource-1',
-      externalSubject: 'target-user-1',
       ownerUserId: 'user-1',
       ownerOrganizationId: null,
     })
@@ -353,6 +352,7 @@ describe('external API resource authorization', () => {
       'connection-1',
       'resource-1',
       expect.objectContaining({
+        externalSubject: 'target-user-1',
         displayName: 'Renamed Project Owner',
         encryptedTokens: expect.stringContaining('replacement-refresh'),
         grantedScopes: ['offline_access', 'openid', 'projects:read', 'projects:write'],
@@ -364,6 +364,51 @@ describe('external API resource authorization', () => {
       expect.stringContaining('replacement-refresh'),
       'resource-connection:connection-1:tokens',
     )
+    expect(deps.externalResources.createConnection).not.toHaveBeenCalled()
+  })
+
+  it('rejects connecting a different external account while the resource already has an active account', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue({
+      id: 'replacement-intent',
+      stateHash: 'state-hash',
+      resourceId: 'resource-1',
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+      scopes: ['offline_access', 'openid', 'projects:read'],
+      encryptedPkceVerifier: 'sealed:pkce-verifier',
+      returnTo: 'access-approval',
+      status: 'completed',
+      expiresAt: new Date(Date.now() + 300_000),
+      completedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
+    })
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connectionRecord())
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      if (request.url.endsWith('/token')) {
+        return Response.json({
+          access_token: 'another-access',
+          refresh_token: 'another-refresh',
+          token_type: 'Bearer',
+          scope: 'openid offline_access projects:read',
+        })
+      }
+      if (request.url.endsWith('/userinfo')) {
+        return Response.json({ sub: 'another-target-user', name: 'Another Project Owner' })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    await expect(
+      completeResourceConnectionIntent(
+        deps,
+        { state: 'replacement-state', code: 'replacement-code' },
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Disconnect the current resource account before connecting another account.')
+    expect(deps.externalResources.replaceConnectionAuthorization).not.toHaveBeenCalled()
     expect(deps.externalResources.createConnection).not.toHaveBeenCalled()
   })
 
@@ -705,6 +750,7 @@ describe('external API resource authorization', () => {
     await expect(getAccountConnection(deps, 'connection-1', 'user-1')).resolves.toMatchObject({
       apiResourceId: 'resource-1',
       subjectHint: '••••er-1',
+      scopes: ['projects:read'],
     })
     await expect(listConnectableExternalResources(deps)).resolves.toMatchObject({
       resources: [{ id: 'resource-1' }],
@@ -756,9 +802,10 @@ describe('external API resource authorization', () => {
     )
   })
 
-  it('[spec: agent-identity/external-resource-first-access] derives approval connection scopes and owner from the pending request', async () => {
+  it('[spec: agent-identity/external-resource-first-access] connects the account with the current catalog and keeps the request exact', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
+    mockResourceOpenApi(deps, resource().resourceUrl, ['projects:read', 'projects:write'])
     const request = { ...requestRecord(), connectionId: null }
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
@@ -779,28 +826,33 @@ describe('external API resource authorization', () => {
     ).resolves.toMatchObject({
       apiResourceId: 'resource-1',
       owner: { type: 'user', userId: 'user-1' },
-      scopes: ['projects:read'],
+      scopes: ['projects:read', 'projects:write'],
       status: 'pending_authorization',
     })
     expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
       expect.objectContaining({
         resourceId: 'resource-1',
         ownerUserId: 'user-1',
-        scopes: ['offline_access', 'openid', 'projects:read'],
+        scopes: ['offline_access', 'openid', 'projects:read', 'projects:write'],
         returnTo: 'access-approval',
       }),
     )
 
-    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
-      connectionRecord(),
-      { ...connectionRecord(), id: 'wrong-scopes', grantedScopes: ['projects:write'] },
-    ])
+    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([connectionRecord()])
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).resolves.toMatchObject({
       items: [{ id: 'connection-1' }],
       pagination: { total: 1 },
     })
+
+    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
+      connectionRecord(),
+      { ...connectionRecord(), id: 'duplicate-connection' },
+    ])
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).rejects.toThrow('A resource home space cannot have more than one active account connection.')
   })
 
   it('enforces first-access connection context boundaries', async () => {
@@ -870,7 +922,6 @@ describe('external API resource authorization', () => {
       { ...connectionRecord(), ownerUserId: null, ownerOrganizationId: 'org-1' },
       { ...connectionRecord(), id: 'wrong-resource', resourceId: 'resource-2' },
       { ...connectionRecord(), id: 'revoked', status: 'revoked' },
-      { ...connectionRecord(), id: 'wrong-scope', grantedScopes: ['projects:write'] },
     ])
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
@@ -2131,7 +2182,7 @@ function authorizationRecord(): ExternalResourceAuthorizationRecord {
   }
 }
 
-function mockResourceOpenApi(deps: ReturnType<typeof createTestDeps>, resourceUrl: string) {
+function mockResourceOpenApi(deps: ReturnType<typeof createTestDeps>, resourceUrl: string, scopes = ['projects:read']) {
   vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
     if (request.url === resourceUrl) {
       return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
@@ -2147,7 +2198,9 @@ function mockResourceOpenApi(deps: ReturnType<typeof createTestDeps>, resourceUr
                 authorizationCode: {
                   authorizationUrl: 'https://projects.example.com/authorize',
                   tokenUrl: 'https://projects.example.com/token',
-                  scopes: { 'projects:read': 'Read projects' },
+                  scopes: Object.fromEntries(
+                    scopes.map((scope) => [scope, scope === 'projects:read' ? 'Read projects' : `Allows ${scope}`]),
+                  ),
                 },
               },
             },
@@ -2155,7 +2208,7 @@ function mockResourceOpenApi(deps: ReturnType<typeof createTestDeps>, resourceUr
         },
         paths: {
           '/projects': {
-            get: { security: [{ oauth: ['projects:read'] }], responses: {} },
+            get: { security: [{ oauth: scopes }], responses: {} },
           },
         },
       })

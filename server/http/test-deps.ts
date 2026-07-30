@@ -132,7 +132,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       configureAuthorization: vi.fn(),
       findAuthorization: vi.fn().mockResolvedValue(null),
       createConnection: vi.fn().mockImplementation(async (input) => input),
-      findConnectionByOwnerSubject: vi.fn().mockResolvedValue(null),
+      findConnectionByOwnerResource: vi.fn().mockResolvedValue(null),
       replaceConnectionAuthorization: vi.fn().mockResolvedValue(null),
       listConnectionsByUser: vi.fn().mockResolvedValue([]),
       listConnectionsByOrganizations: vi.fn().mockResolvedValue([]),

@@ -276,16 +276,20 @@ Feature: Agent identity and external API authorization
     Scenario: An Agent requests first access to an external API resource
       Given an enabled external API resource has active authorization configuration
       And the Agent's home space has no account connection for that resource
-      When the Agent discovers the resource and requests exact OpenAPI scopes
+      When the Agent discovers every target operation required by the current task
+      And requests their combined exact OpenAPI scope set once
       Then Realmroot creates a pending access request without requiring a connection
       When the controller opens the approval page
-      Then the controller can select an existing account or connect a new account with the exact requested scopes
-      And OAuth returns the controller to the same approval
-      When the controller binds the account connection and approves the request
+      Then Realmroot shows the home space's single connected account without account-selection controls
+      Or requires the controller to connect that resource account before deciding the Agent request
+      And the new account authorization requests the target's current Agent-delegable scope catalog
+      When OAuth returns after connecting the account
+      Then Realmroot returns to the pending Agent approval with that account displayed
+      When the controller separately approves the exact Agent scopes and grant lifetime
       Then Realmroot records a resource account connection owned by the Agent's home space
       And stores its refresh credential encrypted
       And never exposes the refresh credential through an API, audit event, or error
-      And binds that connection to the request and grant
+      And binds the broad account connection to the exact request and grant
       And the Agent can obtain a DPoP-bound target access token
 
     @entrypoint:product-ui @journey:resource-account-reauthorization
@@ -314,7 +318,8 @@ Feature: Agent identity and external API authorization
     Scenario: A controller decides an Agent resource request in one step
       Given an Agent resource access request is pending
       When an authorized controller approves it
-      Then the controller confirms the resource account, exact scopes, and one-time, limited, or persistent mode
+      Then the controller confirms the displayed resource account, exact scopes, and one-time, limited, or persistent mode
+      And no account-selection control is displayed
       And scope expansion, another account, or another resource requires a new approval
       And a denied request cannot issue a target token
 

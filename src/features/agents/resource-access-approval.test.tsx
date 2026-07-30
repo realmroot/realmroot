@@ -86,8 +86,9 @@ describe('Agent resource access approval', () => {
     render(<ResourceAccessApproval />)
 
     expect(await screen.findByText('agent-1')).toBeTruthy()
-    expect(screen.getByText('connection-1')).toBeTruthy()
+    expect(screen.queryByText('connection-1')).toBeNull()
     expect(screen.getByText('ZPan Demo')).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: 'ZPan Demo' })).toBeNull()
     expect(screen.getAllByText('projects:read')).toHaveLength(2)
     expect(screen.getByText('Read project status')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
@@ -102,7 +103,7 @@ describe('Agent resource access approval', () => {
     expect(await screen.findByText('Resource access approved')).toBeTruthy()
   })
 
-  it('[spec: agent-identity/external-resource-first-access] connects an exact-scope account before approval', async () => {
+  it('[spec: agent-identity/external-resource-first-access] connects an account before allowing a separate approval', async () => {
     api.getAgentResourceApproval.mockResolvedValue({
       ...request,
       target: { type: 'api-resource', apiResourceId: 'resource-1' },
@@ -113,9 +114,9 @@ describe('Agent resource access approval', () => {
     })
     render(<ResourceAccessApproval />)
 
-    expect(await screen.findByText('No connected account covers these exact scopes.')).toBeTruthy()
+    expect(await screen.findByText('Connect your ZPan account before deciding this Agent request.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Connect a new ZPan account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect ZPan account' }))
     await waitFor(() =>
       expect(api.createAccountConnection).toHaveBeenCalledWith({
         context: 'access-request',
@@ -123,19 +124,69 @@ describe('Agent resource access approval', () => {
         approvalToken: 'approval token',
       }),
     )
+    expect(api.decideAgentResourceApproval).not.toHaveBeenCalled()
+  })
+
+  it('[spec: agent-identity/external-resource-first-access] displays the connected account after OAuth and waits for approval', async () => {
+    window.history.replaceState(null, '', '/agent/resource-access/approve')
+    window.location.hash = ''
+    window.sessionStorage.setItem('realmroot.resource-access-approval-token', 'approval token')
+    api.getAgentResourceApproval.mockResolvedValue({
+      ...request,
+      target: { type: 'api-resource', apiResourceId: 'resource-1' },
+    })
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [{ ...connection, id: 'connection-2' }],
+      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+
+    render(<ResourceAccessApproval />)
+
+    expect(await screen.findByText('ZPan Demo')).toBeTruthy()
+    expect(api.decideAgentResourceApproval).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
+    await waitFor(() =>
+      expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
+        decision: 'approve',
+        mode: 'once',
+        accountConnectionId: 'connection-2',
+      }),
+    )
+    expect(await screen.findByText('Resource access approved')).toBeTruthy()
+    expect(window.sessionStorage.getItem('realmroot.resource-access-approval-token')).toBeNull()
+  })
+
+  it('rejects multiple connected accounts instead of presenting selection controls', async () => {
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [connection, { ...connection, id: 'connection-2' }],
+      pagination: { limit: 50, offset: 0, total: 2, hasMore: false, nextOffset: null },
+    })
+
+    render(<ResourceAccessApproval />)
+
+    expect(await screen.findByText('This resource has more than one connected account.')).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: /ZPan Demo/ })).toBeNull()
   })
 
   it('reports account connection failures from Error and unknown values', async () => {
+    api.getAgentResourceApproval.mockResolvedValue({
+      ...request,
+      target: { type: 'api-resource', apiResourceId: 'resource-1' },
+    })
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [],
+      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+    })
     api.createAccountConnection
       .mockRejectedValueOnce(new Error('Account authorization expired'))
       .mockRejectedValueOnce('offline')
     render(<ResourceAccessApproval />)
     await screen.findByText('agent-1')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect a new ZPan account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect ZPan account' }))
     expect(await screen.findByText('Account authorization expired')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect a new ZPan account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect ZPan account' }))
     expect(await screen.findByText('Unable to start account authorization.')).toBeTruthy()
   })
 
