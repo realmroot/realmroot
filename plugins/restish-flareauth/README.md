@@ -25,7 +25,9 @@ the proof target from RFC 9728 and RFC 8414 for external resources, uses the
 FlareAuth token operation for native resources, adds the standard `DPoP` header,
 and stores the resulting short-lived token with the protected Agent state.
 
-The API resource's `resourceUrl` can then be connected directly:
+The plugin stores issued target tokens in protected state and removes the raw
+token from Restish output. The API resource's `resourceUrl` can then be connected
+directly:
 
 ```bash
 restish api connect projects https://api.example.com --replace --yes

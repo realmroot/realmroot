@@ -150,7 +150,12 @@ describe('external API resource authorization', () => {
     })
 
     await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
-      resources: [{ id: 'resource-1', connections: [{ id: 'connection-1', subjectHint: '••••er-1' }] }],
+      resources: [
+        {
+          id: 'resource-1',
+          connections: [{ id: 'connection-1', subjectHint: '••••er-1', grantedScopes: ['projects:read'] }],
+        },
+      ],
     })
     const first = await createAgentAccessRequest(
       deps,
@@ -276,7 +281,7 @@ describe('external API resource authorization', () => {
       tokenType: 'DPoP',
       expiresIn: 300,
       expiresAt: expect.any(String),
-      permissions: ['projects:read'],
+      scopes: ['projects:read'],
       apiResource: 'https://projects.example.com/api',
       resourceUrl: 'https://projects.example.com/api',
     })

@@ -141,7 +141,7 @@ function ResourceConnectionsPanel({
                   id: resource.id,
                   icon: <KeyRound size={16} />,
                   title: resource.name,
-                  meta: `${resource.resourceUrl} · ${resource.permissions.map((permission) => permission.value).join(', ')}`,
+                  meta: `${resource.resourceUrl} · ${resource.scopes.map((scope) => scope.value).join(', ')}`,
                   status: tt('Not connected'),
                   action: <Button onClick={() => void connect(resource.id)}>{tt('Connect')}</Button>,
                 },
@@ -151,7 +151,7 @@ function ResourceConnectionsPanel({
               id: connection.id,
               icon: <KeyRound size={16} />,
               title: `${resource.name} · ${connection.displayName}`,
-              meta: connection.permissions.join(', '),
+              meta: connection.scopes.join(', '),
               status: tt('Connected'),
               action: (
                 <Button

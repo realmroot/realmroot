@@ -76,7 +76,7 @@ export function ResourceAccessApproval() {
           <p className="text-sm font-medium text-muted-foreground">API authorization</p>
           <h1 className="text-2xl font-semibold">Approve Agent resource access</h1>
           <p className="text-sm text-muted-foreground">
-            Confirm the exact resource, permissions, Agent, and host before granting access.
+            Confirm the exact resource, scopes, Agent, and host before granting access.
           </p>
         </div>
         {request?.target.type === 'api-resource' ? (
@@ -86,7 +86,7 @@ export function ResourceAccessApproval() {
               <RequestField label="Resource account" value={request.target.accountConnectionId} />
             ) : null}
             <RequestField label="Resource" value={request.target.apiResourceId} />
-            <RequestField label="Exact permissions" value={request.permissions.join(' ')} wide />
+            <RequestField label="Exact scopes" value={request.scopes.join(' ')} wide />
             {request.reason ? <RequestField label="Reason" value={request.reason} wide /> : null}
           </dl>
         ) : null}

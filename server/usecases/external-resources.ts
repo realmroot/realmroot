@@ -293,7 +293,7 @@ export async function createAccountConnection(
   const pending = await createResourceConnectionIntent(
     deps,
     input.apiResourceId,
-    { owner: input.owner, scopes: input.permissions },
+    { owner: input.owner, scopes: input.scopes },
     actorUserId,
     callbackOrigin,
   )
@@ -303,7 +303,7 @@ export async function createAccountConnection(
     owner: pending.owner,
     displayName: null,
     subjectHint: null,
-    permissions: input.permissions ?? [],
+    scopes: input.scopes ?? [],
     status: 'pending_authorization',
     credentialExpiresAt: null,
     authorizationUrl: pending.authorizationUrl,
@@ -381,6 +381,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       continue
     }
     const scopes = (await deps.authorization.listScopes(resourceId, page)).items
+    const requestableScopes = new Set(scopes.map((scope) => scope.value))
     resources.push({
       id: resource.id,
       identifier: resource.identifier,
@@ -397,7 +398,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
                 id: connection.id,
                 displayName: connection.displayName,
                 subjectHint: redactSubject(connection.externalSubject),
-                grantedScopes: connection.grantedScopes,
+                grantedScopes: connection.grantedScopes.filter((scope) => requestableScopes.has(scope)),
               }))
           : [],
       grants: grants
@@ -422,12 +423,12 @@ export async function listAgentApiResources(
     audience: resource.audience,
     resourceUrl: resource.resourceUrl,
     authorizationMode: resource.authorizationMode,
-    permissions: resource.scopes,
+    scopes: resource.scopes,
     accountConnections: resource.connections.map((connection) => ({
       id: connection.id,
       displayName: connection.displayName,
       subjectHint: connection.subjectHint,
-      permissions: connection.grantedScopes,
+      scopes: connection.grantedScopes,
     })),
     accessGrants: resource.grants.map((grant) =>
       toAccessGrant({
@@ -545,7 +546,7 @@ export async function createAccessRequest(
       {
         resourceId: input.target.apiResourceId,
         connectionId: input.target.accountConnectionId ?? null,
-        scopes: input.permissions,
+        scopes: input.scopes,
         reason: input.reason,
       },
       principal,
@@ -843,7 +844,7 @@ export async function issueTargetAccessToken(
     tokenType: 'DPoP' as const,
     expiresIn,
     expiresAt: new Date(now.getTime() + expiresIn * 1000).toISOString(),
-    permissions: request.scopes,
+    scopes: request.scopes,
     apiResource: resource.audience,
     resourceUrl: resource.resourceUrl,
   }
@@ -934,7 +935,7 @@ async function issueNativeAccessToken(
     tokenType: 'DPoP' as const,
     expiresIn: Math.max(1, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
     expiresAt: expiresAt.toISOString(),
-    permissions: request.scopes,
+    scopes: request.scopes,
     apiResource: resource.audience,
     resourceUrl: resource.resourceUrl,
   }
@@ -1491,7 +1492,7 @@ function toAccountConnection(record: ResourceAccountConnectionRecord): AccountCo
       : { type: 'organization', organizationId: record.ownerOrganizationId! },
     displayName: record.displayName,
     subjectHint: redactSubject(record.externalSubject),
-    permissions: record.grantedScopes,
+    scopes: record.grantedScopes,
     status: record.status as 'active' | 'revoked',
     credentialExpiresAt: record.credentialExpiresAt?.toISOString() ?? null,
     authorizationUrl: null,
@@ -1512,7 +1513,7 @@ function toAccessRequest(
       apiResourceId: request.resourceId,
       ...(request.connectionId ? { accountConnectionId: request.connectionId } : {}),
     },
-    permissions: request.scopes,
+    scopes: request.scopes,
     reason: request.reason,
     status: request.status,
     approval: request.approvalUrl
@@ -1538,7 +1539,7 @@ function toAccessGrant(record: AgentAccessGrantRecord): AccessGrant {
       apiResourceId: record.resourceId,
       ...(record.connectionId ? { accountConnectionId: record.connectionId } : {}),
     },
-    permissions: record.scopes,
+    scopes: record.scopes,
     mode: record.mode as AccessGrant['mode'],
     status: record.status as AccessGrant['status'],
     expiresAt: record.expiresAt?.toISOString() ?? null,

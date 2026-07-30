@@ -42,7 +42,19 @@ func handleCapabilityApprovalResponse(
 		if err := store.StoreTargetToken(requestOrigin, grantID, token); err != nil {
 			return plugin.ResponseMiddlewareOutput{}, err
 		}
-		return plugin.ResponseMiddlewareOutput{}, nil
+		body, ok := input.Response.Body.(map[string]any)
+		if !ok {
+			return plugin.ResponseMiddlewareOutput{}, errors.New("target API token response is not an object")
+		}
+		safeBody := make(map[string]any, len(body)-1)
+		for key, value := range body {
+			if key != "accessToken" {
+				safeBody[key] = value
+			}
+		}
+		return plugin.ResponseMiddlewareOutput{
+			Response: &plugin.HookResponseUpdate{Body: safeBody},
+		}, nil
 	}
 	if input.Request.Method == http.MethodPost && requestURL.Path == "/api/agent/access-requests" {
 		finder, ok := states.(resourceStateFinder)

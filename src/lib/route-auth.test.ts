@@ -1,13 +1,16 @@
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { loadAccountProfile, requireAccountProfile } from '@/lib/route-auth'
+import { loadAccountProfile, requireAccountProfile, takeAccountReturnTarget } from '@/lib/route-auth'
 
 const base = 'http://localhost:3000'
 const server = setupServer()
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
-afterEach(() => server.resetHandlers())
+afterEach(() => {
+  server.resetHandlers()
+  sessionStorage.clear()
+})
 afterAll(() => server.close())
 
 describe('loadAccountProfile', () => {
@@ -71,6 +74,24 @@ describe('requireAccountProfile', () => {
       const redirectResponse = error as Response & { options: { href?: string } }
       expect(redirectResponse.options.href).toBe('/auth/sign-in?return_to=%2Fprofile%3Ftab%3Dsecurity')
       expect(redirectResponse.headers.get('Location')).toBe('/auth/sign-in?return_to=%2Fprofile%3Ftab%3Dsecurity')
+    }
+  })
+
+  it('keeps fragment-bearing approval targets in browser storage', async () => {
+    server.use(http.get(`${base}/api/account/profile`, () => new HttpResponse(null, { status: 401 })))
+    const approval = '/agent/resource-access/approve#token=secret'
+
+    try {
+      await requireAccountProfile(approval)
+      expect.unreachable('should have thrown a redirect')
+    } catch (error) {
+      const redirectResponse = error as Response & { options: { href?: string } }
+      const href = redirectResponse.options.href!
+      expect(href).toMatch(/^\/auth\/sign-in\?return_key=/)
+      expect(href).not.toContain('secret')
+      const returnKey = new URL(href, base).searchParams.get('return_key')!
+      expect(takeAccountReturnTarget(returnKey)).toBe(approval)
+      expect(takeAccountReturnTarget(returnKey)).toBeUndefined()
     }
   })
 })

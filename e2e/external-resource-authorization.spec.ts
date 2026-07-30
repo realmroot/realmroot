@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { baseURL, resetAndBootstrap, signIn } from './helpers/real-app'
+import { admin, baseURL, resetAndBootstrap, signIn, signOut } from './helpers/real-app'
 import { createRestishAgentPlugin } from './helpers/restish-agent-plugin'
 
 const externalOrigin = `http://127.0.0.1:${process.env.E2E_EXTERNAL_PORT ?? '4399'}`
@@ -45,7 +45,7 @@ test.describe('external API resource authorization', () => {
         data: {
           apiResourceId: resource.id,
           owner: { type: 'user' },
-          permissions: ['projects:read', 'projects:write'],
+          scopes: ['projects:read', 'projects:write'],
         },
       })
       expect(intentResponse.status(), await intentResponse.text()).toBe(201)
@@ -53,36 +53,41 @@ test.describe('external API resource authorization', () => {
       await page.goto(intent.authorizationUrl)
       await page.waitForURL('**/connections?resource_connection=connected')
 
-      const discovered = await plugin.agentRequest<{
-        items: Array<{ id: string; accountConnections: Array<{ id: string }> }>
-      }>('/api/agent/api-resources')
+      const discovered = plugin.listAgentApiResources<{
+        items: Array<{
+          id: string
+          resourceUrl: string
+          scopes: Array<{ value: string }>
+          accountConnections: Array<{ id: string; scopes: string[] }>
+        }>
+      }>()
       const available = discovered.items.find((candidate) => candidate.id === resource.id)
-      expect(available?.accountConnections).toHaveLength(1)
+      expect(available).toMatchObject({
+        resourceUrl: externalResource,
+        scopes: expect.arrayContaining([
+          expect.objectContaining({ value: 'projects:read' }),
+          expect.objectContaining({ value: 'projects:write' }),
+        ]),
+        accountConnections: [{ scopes: ['projects:read', 'projects:write'] }],
+      })
       const connectionId = available!.accountConnections[0]!.id
 
-      const accessRequest = await plugin.agentRequest<{
-        id: string
-        approval: { url: string }
-      }>('/api/agent/access-requests', {
-        method: 'POST',
-        body: JSON.stringify({
-          target: { type: 'api-resource', apiResourceId: resource.id, accountConnectionId: connectionId },
-          permissions: ['projects:read'],
-          reason: 'List projects for the controller',
-        }),
+      const accessRequest = plugin.requestResourceAccess<{ status: string; grantId: string }>({
+        target: { type: 'api-resource', apiResourceId: resource.id, accountConnectionId: connectionId },
+        scopes: ['projects:read'],
+        reason: 'List projects for the controller',
       })
-      await page.goto(accessRequest.approval.url)
+      await page.goto(await accessRequest.approvalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent resource access' })).toBeVisible()
       await page.getByRole('button', { name: 'Approve exact access' }).click()
       await expect(page.getByRole('heading', { name: 'Resource access approved' })).toBeVisible()
 
-      const approved = await plugin.agentRequest<{ status: string; grantId: string }>(
-        `/api/agent/access-requests/${accessRequest.id}`,
-      )
+      const approved = await accessRequest.result
       expect(approved.status).toBe('approved')
 
       const lease = plugin.issueTargetAccessToken(approved.grantId)
-      expect(lease).toMatchObject({ tokenType: 'DPoP', permissions: ['projects:read'] })
+      expect(lease).toMatchObject({ tokenType: 'DPoP', scopes: ['projects:read'] })
+      expect(lease).not.toHaveProperty('accessToken')
 
       plugin.connectTarget('external-projects', externalResource)
       const directBody = plugin.targetRequest<{
@@ -108,6 +113,7 @@ test.describe('external API resource authorization', () => {
   })
 
   test(`[spec: agent-identity/native-api-resource-token]
+        [spec: agent-identity/agent-resource-approval-sign-in]
         an Agent calls an API that uses FlareAuth for identity and authorization`, async ({ page }) => {
     await signIn(page)
     const plugin = createRestishAgentPlugin(baseURL)
@@ -135,45 +141,49 @@ test.describe('external API resource authorization', () => {
       })
       expect(scopeResponse.status(), await scopeResponse.text()).toBe(201)
 
-      const discovered = await plugin.agentRequest<{
+      const discovered = plugin.listAgentApiResources<{
         items: Array<{
           id: string
           authorizationMode: string
+          resourceUrl: string
+          scopes: Array<{ value: string }>
           accountConnections: Array<{ id: string }>
         }>
-      }>('/api/agent/api-resources')
+      }>()
       expect(discovered.items).toContainEqual(
         expect.objectContaining({
           id: resource.id,
           authorizationMode: 'native',
+          resourceUrl: flareauthResource,
+          scopes: expect.arrayContaining([expect.objectContaining({ value: 'projects:read' })]),
           accountConnections: [],
         }),
       )
 
-      const accessRequest = await plugin.agentRequest<{
-        id: string
-        approval: { url: string }
-      }>('/api/agent/access-requests', {
-        method: 'POST',
-        body: JSON.stringify({
-          target: { type: 'api-resource', apiResourceId: resource.id },
-          permissions: ['projects:read'],
-          reason: 'List projects for the controller',
-        }),
+      const accessRequest = plugin.requestResourceAccess<{ status: string; grantId: string }>({
+        target: { type: 'api-resource', apiResourceId: resource.id },
+        scopes: ['projects:read'],
+        reason: 'List projects for the controller',
       })
-      await page.goto(accessRequest.approval.url)
+      await page.goto('/profile')
+      await signOut(page)
+      await page.goto(await accessRequest.approvalUrl)
+      await expect(page).toHaveURL(/\/auth\/sign-in\?return_key=/)
+      expect(page.url()).not.toContain('token=')
+      await page.getByRole('textbox', { name: 'Email or username' }).fill(admin.username)
+      await page.getByRole('textbox', { name: 'Password' }).fill(admin.password)
+      await page.getByRole('button', { name: 'Sign in' }).click()
       await expect(page.getByRole('heading', { name: 'Approve Agent resource access' })).toBeVisible()
       await expect(page.getByText('Resource account')).toHaveCount(0)
       await page.getByRole('button', { name: 'Approve exact access' }).click()
       await expect(page.getByRole('heading', { name: 'Resource access approved' })).toBeVisible()
 
-      const approved = await plugin.agentRequest<{ status: string; grantId: string }>(
-        `/api/agent/access-requests/${accessRequest.id}`,
-      )
+      const approved = await accessRequest.result
       expect(approved.status).toBe('approved')
 
       const lease = plugin.issueTargetAccessToken(approved.grantId)
-      expect(lease).toMatchObject({ tokenType: 'DPoP', permissions: ['projects:read'] })
+      expect(lease).toMatchObject({ tokenType: 'DPoP', scopes: ['projects:read'] })
+      expect(lease).not.toHaveProperty('accessToken')
 
       plugin.connectTarget('native-projects', flareauthResource)
       expect(plugin.targetRequest('native-projects', 'list-projects')).toMatchObject({

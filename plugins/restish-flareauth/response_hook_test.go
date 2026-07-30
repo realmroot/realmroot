@@ -39,6 +39,65 @@ func (s resourceStateRecorder) FindByOriginAndIdentityID(origin string, identity
 	return s.state, nil
 }
 
+type targetTokenStateRecorder struct {
+	origin  string
+	grantID string
+	token   targetTokenResponse
+}
+
+func (s *targetTokenStateRecorder) FindByOriginAndAgentID(string, string) (agentState, error) {
+	return agentState{}, http.ErrMissingFile
+}
+
+func (s *targetTokenStateRecorder) StoreTargetToken(origin string, grantID string, token targetTokenResponse) error {
+	s.origin = origin
+	s.grantID = grantID
+	s.token = token
+	return nil
+}
+
+func TestTargetTokenResponseStoresAndRedactsAccessToken(t *testing.T) {
+	states := &targetTokenStateRecorder{}
+	output, err := handleCapabilityApprovalResponse(
+		plugin.ResponseMiddlewareInput{
+			Request: plugin.HookRequest{
+				Method: "POST",
+				URI:    "https://auth.example.com/api/agent/access-grants/grant-1/tokens",
+			},
+			Response: plugin.HookResponse{
+				Status: 200,
+				Body: map[string]any{
+					"accessToken": "secret-token",
+					"tokenType":   "DPoP",
+					"expiresAt":   "2026-07-30T00:00:00Z",
+					"resourceUrl": "https://api.example.com",
+					"scopes":      []any{"projects:read"},
+				},
+			},
+		},
+		&browserRecorder{},
+		states,
+		roundTripFunc(nil),
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if states.origin != "https://auth.example.com" || states.grantID != "grant-1" {
+		t.Fatalf("stored target = %q %q", states.origin, states.grantID)
+	}
+	if states.token.AccessToken != "secret-token" {
+		t.Fatalf("stored token = %#v", states.token)
+	}
+	body := output.Response.Body.(map[string]any)
+	if _, ok := body["accessToken"]; ok {
+		t.Fatalf("response exposed access token: %#v", body)
+	}
+	if body["tokenType"] != "DPoP" || body["resourceUrl"] != "https://api.example.com" {
+		t.Fatalf("redacted response = %#v", body)
+	}
+}
+
 func TestCapabilityApprovalResponseOpensAndWaitsForHostedApproval(t *testing.T) {
 	browser := &browserRecorder{}
 	state := capabilityTestState(t)

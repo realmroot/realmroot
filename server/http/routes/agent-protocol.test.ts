@@ -130,7 +130,7 @@ describe('Agent protocol routes', () => {
         apiResourceId: 'resource-1',
         accountConnectionId: 'connection-1',
       },
-      permissions: ['projects:read'],
+      scopes: ['projects:read'],
       reason: 'Read projects',
       status: 'pending',
       approval: {
@@ -157,7 +157,7 @@ describe('Agent protocol routes', () => {
           apiResourceId: 'resource-1',
           accountConnectionId: 'connection-1',
         },
-        permissions: ['projects:read'],
+        scopes: ['projects:read'],
         reason: 'Read projects',
       }),
     })
@@ -171,6 +171,28 @@ describe('Agent protocol routes', () => {
     )
   })
 
+  it('accepts scopes and rejects the obsolete permissions field for resource access', async () => {
+    vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
+    const createAccessRequest = vi.spyOn(externalResources, 'createAccessRequest')
+    const app = createRouteApp(
+      { getAgentSession: vi.fn().mockResolvedValue(session()) },
+      'https://auth.example.com/api/auth',
+    )
+
+    const response = await app.request('https://auth.example.com/api/agent/access-requests', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        target: { type: 'api-resource', apiResourceId: 'resource-1' },
+        permissions: ['projects:read'],
+        reason: 'Read projects',
+      }),
+    })
+
+    expect(response.status).toBe(400)
+    expect(createAccessRequest).not.toHaveBeenCalled()
+  })
+
   it('uses the unified grant token operation for native APIs [spec: agent-identity/native-api-resource-token]', async () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
     const issue = vi.spyOn(externalResources, 'issueTargetAccessToken').mockResolvedValue({
@@ -178,7 +200,7 @@ describe('Agent protocol routes', () => {
       tokenType: 'DPoP',
       expiresIn: 300,
       expiresAt: '2026-01-01T00:05:00.000Z',
-      permissions: ['projects:read'],
+      scopes: ['projects:read'],
       apiResource: 'https://projects.example.com/api',
       resourceUrl: 'https://projects.example.com/api',
     })

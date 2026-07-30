@@ -40,6 +40,10 @@ export function callbackURL() {
   if (params.has('client_id') && params.has('redirect_uri')) {
     return `/api/auth/oauth2/authorize${window.location.search}`
   }
+  const returnKey = params.get('return_key')
+  if (returnKey && /^[0-9a-f-]{36}$/i.test(returnKey)) {
+    return `/auth/continue?return_key=${encodeURIComponent(returnKey)}`
+  }
   return safeRedirectPath(params.get('callbackURL')) ?? safeRedirectPath(params.get('return_to')) ?? undefined
 }
 

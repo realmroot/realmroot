@@ -5,253 +5,197 @@ description: Operate FlareAuth and its registered API Resources with Restish v2,
 
 # FlareAuth
 
-Use this skill for three related tasks:
+Use this skill to establish a stable Agent identity and call registered API
+Resources. Read `references/restish-commands.md` for the exact generated Restish
+operations and request bodies.
 
-- Establishing and using a stable Agent identity.
-- Operating a FlareAuth deployment through its unified API.
-- Guiding product OIDC clients that integrate with FlareAuth.
+Only when the user explicitly asks to administer FlareAuth applications,
+Connectors, API Resources, users, settings, or product OIDC clients, read
+`references/management.md`. Do not request `management:read` or
+`management:write` while establishing identity or calling a registered API
+Resource.
 
-For Agent enrollment, stable identity creation, and the controller approval handoff,
-read `references/agent-identity.md`. Install and use the repository's Restish
-authentication adapter for AgentAuth key custody and proof signing; do not
-construct proof JWTs from memory. The adapter contributes no commands.
+## Resolve The Deployment Origin
 
-For the unified API Restish workflow, read
-`references/restish-commands.md`.
+Use `https://realmroot.dev` as the official hosted FlareAuth origin. It is a
+live production service, not a placeholder or development endpoint.
 
-## Setup
+Resolve the origin in this order:
 
-First identify the deployment origin you are operating. Use the exact auth
-origin from the user, deployment repository, Cloudflare Worker, or `/api/configz`
-response. Do not guess a production domain from the product name.
+1. use an origin explicitly supplied by the user for this task;
+2. otherwise use an already-set `AUTH_ORIGIN`, then `FLAREAUTH_ORIGIN`;
+3. otherwise default to `https://realmroot.dev`.
 
-On first use, an agent must establish the FlareAuth deployment origin before it
-changes anything. `AUTH_ORIGIN` is the FlareAuth deployment origin, such as a
-production custom domain or a `workers.dev` origin.
+Normalize the result into `AUTH_ORIGIN` without a trailing slash. It must be an
+absolute origin containing only scheme, host, and optional port—never append
+`/api` to the configured value. Prefer HTTPS. Use HTTP only when the user
+explicitly selects a local, test, or trusted self-hosted environment; never
+silently downgrade HTTPS.
 
-If the user did not provide `AUTH_ORIGIN`, inspect the deployment repository or
-Cloudflare Worker configuration when available. If neither is available, ask for
-the deployment origin before continuing.
+Use `realmroot` as the default local Restish API name. Allow the user to choose
+another name, especially when keeping hosted, test, and self-hosted deployments
+connected at the same time:
 
-For deployment operations, connect and authorize a Restish API first. The command
-sequence is in `references/restish-commands.md`; use that reference rather than
-reconstructing Restish commands from memory.
+```bash
+AUTH_ORIGIN="${AUTH_ORIGIN:-${FLAREAUTH_ORIGIN:-https://realmroot.dev}}"
+API_NAME="${API_NAME:-realmroot}"
+```
 
-## Authentication
+Do not ask for an origin merely because none was supplied; use the official
+default. Do not search for or assume access to FlareAuth source code.
 
-Restish command-line operations always authenticate as the Agent. The first
-protected OpenAPI command—normally `get-current-agent`—triggers transparent enrollment and
-waits for one controller approval. There is no `login` command and no
-administrator OAuth identity in the CLI.
+## Install The Restish Adapter
 
-Enrollment grants only the Agent's self-service identity. Tenant management
-operations require the AgentAuth capabilities `management:read` or
-`management:write`. Request them with the generated `request-agent-management-access`
-operation. FlareAuth reuses its existing Agent capability approval request and
-hosted approval page. The Restish adapter opens that page in the controller's
-browser automatically and keeps the capability-request command waiting. An
-approval returns the active grants; a denial exits with an error. The adapter
-never replays the previously denied business operation, so run that operation
-again after the capability request succeeds. Every CLI request remains the
-Agent's stable `(issuer, subject)` principal.
+Use Restish v2.3 or newer and Go 1.25.3 or newer:
 
-The stable Agent issuer is the same Better Auth OIDC issuer used by product
-clients: `AUTH_ORIGIN/api/auth`. FlareAuth publishes no second Agent-only
-issuer, token endpoint, or JWKS.
+```bash
+restish --version
+go version
+```
 
-For API access, first run `list-agent-api-resources` and inspect each resource's
-`authorizationMode`, `resourceUrl`, permissions, connections, and grants. Both
-modes use `create-agent-access-request`, controller approval, the returned
-`grantId`, and `issue-target-access-token`.
+Install the trusted adapter:
 
-- `external`: select an exact `accountConnectionId`; the target platform issues
-  the token.
-- `native`: omit `accountConnectionId`; FlareAuth issues the token for the
-  controller identity. Do not ask the controller to create a grant first.
+```bash
+go install github.com/saltbo/flareauth/plugins/restish-flareauth@latest
+restish plugin install "$(go env GOPATH)/bin/restish-flareauth" --yes
+restish plugin list
+```
 
-Never infer an account connection from a display name. The Restish plugin owns
-the independent DPoP key, RFC discovery, token cache, and request proofs; never
-construct them manually. The complete command sequence is in
-`references/restish-commands.md`.
+Require plugin `flareauth` version 0.3.0 or newer with the `auth` and
+`response-middleware` hooks. It must not expose `login`, `whoami`, or other
+business commands. Reinstall and stop if the installed version is older.
 
-If the API was already connected, sync its OpenAPI contract before operating
-it. Restish continues to use the locally held Agent and Host keys.
+The adapter stores Agent and Host private keys in protected local state with
+mode `0600`. Set `FLAREAUTH_PLUGIN_STATE_DIR` only when an explicit protected
+location is required. Never log, upload, or paste these keys.
 
-## OIDC Client Integration
+Optionally set a human-readable name before the first protected operation:
 
-Use the FlareAuth deployment issuer for product clients:
+```bash
+export FLAREAUTH_AGENT_NAME="Build Agent"
+```
+
+## Establish The Stable Agent Identity
+
+Connect the unified API and invoke the generated identity operation:
+
+```bash
+restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --replace --yes
+restish "$API_NAME" get-current-agent -o json
+```
+
+There is no login command. On first use, the adapter:
+
+1. discovers AgentAuth support;
+2. generates independent local Agent and Host keys;
+3. registers the Agent;
+4. opens a controller approval URL in the browser;
+5. keeps the original `get-current-agent` command waiting;
+6. creates the stable identity after the controller approves;
+7. signs and resumes the original request.
+
+The controller signs in and approves or denies enrollment. The Agent must not
+operate the approval page. The controller session authorizes enrollment but
+never becomes the Restish request identity.
+
+If interrupted, repeat `get-current-agent`; protected state resumes the pending
+enrollment. Persist `agent.issuer` and `agent.subject` as the Agent's account
+identifier. Later commands reuse this identity without login.
+
+The Agent issuer is the same Better Auth OIDC issuer used by product clients:
 
 ```text
 AUTH_ORIGIN/api/auth
 ```
 
-Prefer discovery metadata instead of hard-coding endpoints:
+FlareAuth publishes no second Agent-only issuer, token endpoint, or JWKS.
+
+## Call Registered API Resources
+
+Enrollment grants only the Agent's self-service identity. It grants neither
+tenant-management authority nor API Resource access. Do not request
+`management:read` or `management:write` for this workflow.
+
+Use the generated operations in `references/restish-commands.md` to:
+
+1. run `list-agent-api-resources`;
+2. select an exact resource ID, `authorizationMode`, `resourceUrl`, and scope
+   values;
+3. select an exact `accountConnectionId` only for `external`;
+4. run `create-agent-access-request`;
+5. wait while the controller approves or denies the exact request;
+6. read the returned `grantId`;
+7. run `issue-target-access-token`;
+8. connect the exact `resourceUrl` with Restish;
+9. invoke the target's generated OpenAPI operation.
+
+Use only scopes to express target authority:
+
+- For `external`, select an exact connected account. The target platform issues
+  the token.
+- For `native`, omit `accountConnectionId`. FlareAuth issues the token for the
+  controller identity.
+
+If an external resource has no connected account, tell the controller to
+connect one in Account Center. Never infer an account from a display name.
+Never ask the controller to pre-create a grant or provide a grant ID.
+
+The adapter opens the resource approval page and keeps
+`create-agent-access-request` waiting. The controller—not the Agent—reviews the
+resource, account, scopes, and reason. Approval never exposes the controller's
+refresh token or target-platform credentials to the Agent.
+
+## Let The Adapter Own Target Credentials
+
+The adapter generates a separate P-256 DPoP key for each grant. For `external`,
+it discovers the target token endpoint through RFC 9728 and RFC 8414. For
+`native`, it binds the proof to the FlareAuth token operation. It sends RFC 9449
+proofs, stores the issued token, and creates a fresh proof with `ath` for each
+target request.
+
+The target token is short-lived, audience-restricted, and DPoP-bound. Its issuer
+depends only on `authorizationMode`: the target platform for `external`, or
+FlareAuth for `native`. Restish output contains safe token metadata but not the
+raw access token.
+
+Connect the discovered `resourceUrl` directly. The target advertises its OpenAPI
+contract through an RFC 8631 `service-desc` link. The adapter matches requests
+against the exact `resourceUrl` and injects:
 
 ```text
-AUTH_ORIGIN/api/auth/.well-known/openid-configuration
+Authorization: DPoP TARGET_ACCESS_TOKEN
+DPoP: RESOURCE_REQUEST_PROOF
 ```
 
-Common product scopes are `openid profile email`. Add `offline_access` only
-when the client needs refresh tokens. Management scopes are reserved for the
-system CLI client and are not accepted on ordinary product clients.
+Never construct DPoP proofs, discover token endpoints manually, expose the
+access token, or use stored user credentials. FlareAuth never proxies target
+API traffic.
 
-Choose the client type by where the application runs:
+Treat `/.well-known/agent-configuration` as authoritative only for AgentAuth
+registration and stable identity. For external resources, treat RFC 9728 and
+RFC 8414 metadata as authoritative. Do not derive endpoints from names or
+provider-specific Connector configuration.
 
-| Client type | Use for | Secret | Typical grants |
-| --- | --- | --- | --- |
-| `public_spa` | Browser apps that cannot hold secrets | No | `authorization_code`, `refresh_token` |
-| `public_native` | Mobile, desktop, CLI, runner, daemon clients | No | `authorization_code`, `refresh_token`, device-code grant |
-| `confidential_web` | Server-side web apps and backends that can hold secrets | Yes | `authorization_code`, `refresh_token`, `client_credentials` when needed |
+## Handle Failures
 
-All authorization-code clients should use PKCE where their OIDC library
-supports it. Public clients use `tokenEndpointAuthMethod: none`; confidential
-clients use a client secret.
-
-## Creating OIDC Clients
-
-Connect and authorize an `API_NAME` before running these examples. Distinguish
-the FlareAuth deployment origin from the consuming product origin.
-`AUTH_ORIGIN` is where FlareAuth runs; `APP_ORIGIN` is the product application's
-origin used in OIDC redirect URIs.
-
-Create a public SPA application:
-
-```bash
-restish API_NAME create-application \
-  --rsh-validate \
-  -o json <<'JSON'
-{
-  "name": "Customer Portal",
-  "slug": "customer-portal",
-  "clientType": "public_spa",
-  "redirectUris": ["https://APP_ORIGIN/oidc/callback"],
-  "postLogoutRedirectUris": ["https://APP_ORIGIN/signed-out"],
-  "corsOrigins": ["https://APP_ORIGIN"],
-  "allowedGrantTypes": ["authorization_code", "refresh_token"],
-  "allowedScopes": ["openid", "profile", "email", "offline_access"],
-  "firstParty": true,
-  "trusted": true
-}
-JSON
-```
-
-Create a public native authorization-code application:
-
-```bash
-restish API_NAME create-application \
-  --rsh-validate \
-  -o json <<'JSON'
-{
-  "name": "Desktop App",
-  "slug": "desktop-app",
-  "clientType": "public_native",
-  "redirectUris": ["com.example.desktop:/callback", "http://127.0.0.1:8484/callback"],
-  "allowedGrantTypes": ["authorization_code", "refresh_token"],
-  "allowedScopes": ["openid", "profile", "email", "offline_access"],
-  "firstParty": true,
-  "trusted": true
-}
-JSON
-```
-
-Create a public native device-login application:
-
-```bash
-restish API_NAME create-application \
-  --rsh-validate \
-  -o json <<'JSON'
-{
-  "name": "Runner CLI",
-  "slug": "runner-cli",
-  "clientType": "public_native",
-  "redirectUris": ["com.example.runner:/callback"],
-  "allowedGrantTypes": ["urn:ietf:params:oauth:grant-type:device_code"],
-  "allowedScopes": ["openid", "profile", "email", "offline_access"],
-  "firstParty": true,
-  "trusted": true
-}
-JSON
-```
-
-Create a confidential web application:
-
-```bash
-restish API_NAME create-application \
-  --rsh-validate \
-  -o json <<'JSON'
-{
-  "name": "Admin Backend",
-  "slug": "admin-backend",
-  "clientType": "confidential_web",
-  "redirectUris": ["https://ADMIN_ORIGIN/oidc/callback"],
-  "postLogoutRedirectUris": ["https://ADMIN_ORIGIN/signed-out"],
-  "allowedGrantTypes": ["authorization_code", "refresh_token"],
-  "allowedScopes": ["openid", "profile", "email", "offline_access"],
-  "firstParty": true,
-  "trusted": true
-}
-JSON
-```
-
-For confidential clients, store the returned `clientSecret` immediately. It is
-shown only once. Add `client_credentials` only when that backend must act
-without a user.
-
-## Device Authorization Flow
-
-Use device authorization only with `public_native` clients.
-
-The discovery document advertises the device authorization endpoint and
-device-code grant when supported:
-
-```text
-device_authorization_endpoint: AUTH_ORIGIN/api/auth/device/code
-token_endpoint: AUTH_ORIGIN/api/auth/oauth2/token
-grant_type: urn:ietf:params:oauth:grant-type:device_code
-```
-
-Device flow:
-
-1. Request a device code from `/api/auth/device/code` with `client_id` and
-   scopes such as `openid profile email offline_access`.
-2. Show `user_code` and `verification_uri` to the user.
-3. The user opens `/device`, signs in, and approves or denies the request.
-4. Poll `/api/auth/oauth2/token` with the device-code grant.
-5. Handle RFC 8628 polling errors: `authorization_pending`, `slow_down`,
-   `access_denied`, and `expired_token`.
-6. On success, consume the OAuth/OIDC token response. `openid` returns an
-   `id_token`; `offline_access` returns a `refresh_token`.
-
-Device-code request:
-
-```bash
-curl -sS -X POST "$AUTH_ORIGIN/api/auth/device/code" \
-  -H "content-type: application/json" \
-  --data '{"client_id":"CLIENT_ID","scope":"openid profile email offline_access"}'
-```
-
-Token polling request:
-
-```bash
-curl -sS -X POST "$AUTH_ORIGIN/api/auth/oauth2/token" \
-  -H "content-type: application/x-www-form-urlencoded" \
-  --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
-  --data-urlencode "client_id=CLIENT_ID" \
-  --data-urlencode "device_code=DEVICE_CODE"
-```
-
-For generic OIDC client libraries, prefer discovery metadata and the library's
-device authorization support.
+- On invalid or absent AgentAuth proof, surface `401`.
+- On a target-token boundary failure, surface the target OAuth error. Do not
+  fall back to user credentials or a proxy.
+- On an invalid DPoP token or proof, surface the target resource's `401` and
+  `WWW-Authenticate: DPoP` challenge.
+- On resource approval denial or expiry, stop or create a new access request.
+  Never reuse the old approval URL.
+- On enrollment timeout, repeat `get-current-agent`. Never seed identity rows.
+- On a missing adapter, inspect `restish plugin list` and reinstall it.
 
 ## Guardrails
 
-- Always sync before operating a deployment you have not used recently.
-- Always confirm the deployment origin and Restish API name before making changes.
-- Prefer resource nouns and real IDs from list/get responses; do not infer IDs
-  from names.
-- System-managed applications such as `flareauth-cli` must not be deleted or modified.
-- Asset upload endpoints use `multipart/form-data` with a single `file` field.
-- Raw secrets are returned only once on creation or rotation; never expect list/detail responses to reveal secret material.
-- Generate Agent and Host private keys locally. Never place them in Restish request bodies, approval URLs, logs, or chat.
-- An Agent may initiate login, but it must not approve its own login, grants, or external API resource access.
-- For large changes, read current state first, apply the smallest patch, then read back the resource to verify.
+- Sync an existing Restish API connection before operating a deployment that
+  may have changed.
+- Use real IDs and URLs from list/get responses; never infer them from names.
+- Keep Agent keys, Host keys, approval tokens, access tokens, and target
+  credentials out of request bodies, logs, and chat.
+- Never let an Agent approve its own enrollment, management authority, grant,
+  or API Resource access.
+- Never request management capabilities as a prerequisite for identity or API
+  Resource operations.

@@ -434,7 +434,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
       connectableApiResourcesResponseSchema.parse({
         items: resources.map((resource) => ({
           ...resource,
-          permissions: resource.scopes,
+          scopes: resource.scopes,
         })),
         pagination: {
           limit: resources.length || 1,

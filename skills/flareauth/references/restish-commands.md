@@ -7,17 +7,24 @@ API base: AUTH_ORIGIN/api
 contract: AUTH_ORIGIN/api/openapi.json
 ```
 
-The contract contains `get-current-agent` and every permission-gated resource operation.
-There is no separate Management API command surface.
+The contract contains `get-current-agent` and every scope-gated resource
+operation. This reference covers only the Agent's self-service API Resource
+workflow. For explicit tenant-administration work, read `management.md`.
+
+## Contents
+
+- [Connect](#connect)
+- [Generated operations](#generated-operations)
+- [API Resource access](#api-resource-access)
 
 ## Connect
 
 These instructions require Restish v2 and the FlareAuth authentication adapter
-from `agent-identity.md`.
+installed as described in `../SKILL.md`.
 
 ```bash
-AUTH_ORIGIN=https://auth.example.com
-API_NAME=auth-example-com
+AUTH_ORIGIN="${AUTH_ORIGIN:-${FLAREAUTH_ORIGIN:-https://realmroot.dev}}"
+API_NAME="${API_NAME:-realmroot}"
 restish --version
 restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --replace --yes
 restish "$API_NAME" get-current-agent -o json
@@ -30,7 +37,7 @@ login command.
 Refresh an existing connection after a server upgrade:
 
 ```bash
-restish api sync API_NAME
+restish api sync "$API_NAME"
 ```
 
 ## Generated Operations
@@ -38,84 +45,41 @@ restish api sync API_NAME
 Use commands generated from OpenAPI `operationId` values:
 
 ```bash
-restish API_NAME --help
-restish API_NAME get-current-agent -o json
-restish API_NAME list-applications -o json
-restish API_NAME get-application app_123 -o json
+restish "$API_NAME" --help
+restish "$API_NAME" get-current-agent -o json
 ```
 
-For JSON bodies:
-
-```bash
-restish API_NAME create-application --rsh-validate -o json < application.json
-```
-
-Generic verbs remain available for diagnostics:
-
-```bash
-restish get API_NAME/management/applications
-```
-
-Use `restish doctor api API_NAME` for discovery problems and
-`restish api auth inspect API_NAME --redact` for shareable auth diagnostics.
-
-## Permission Model
-
-Every CLI request remains the Agent principal. Default enrollment permits
-the current Agent and Agent-owned resources. Tenant administration requires an active
-AgentAuth capability:
-
-- reads: `management:read`;
-- writes: `management:write`.
-
-A `403` names the missing capability. Request it through the unified OpenAPI:
-
-```bash
-restish API_NAME request-agent-management-access --rsh-validate -o json <<'JSON'
-{
-  "capabilities": ["management:read", "management:write"],
-  "reason": "Operate this FlareAuth tenant"
-}
-JSON
-```
-
-The FlareAuth Restish adapter automatically opens the returned
-`approval.verification_uri_complete` in the controller's browser. The controller
-uses the same hosted Agent approval page used by other AgentAuth capabilities.
-The request command waits and returns only after the grants are active; denial
-exits with an error. Repeating a pending or expired request opens a fresh
-approval link and invalidates the old one.
-
-After approval, repeat the original protected operation. The adapter deliberately
-does not replay it because that operation may mutate state. Never authenticate
-Restish as the controller.
-
-Destructive governance operations still require reading and confirming the
-exact target before execution.
+Use `restish doctor api "$API_NAME"` for discovery problems and
+`restish api auth inspect "$API_NAME" --redact` for shareable auth diagnostics.
 
 ## API Resource Access
 
-Discover the exact API resource, authorization mode, permissions, linked
-accounts where applicable, and any grants:
+The Agent's own identity is sufficient for this workflow. Do not request
+`management:read` or `management:write`.
+
+Discover the exact API resource, authorization mode, protected resource URL,
+requestable scopes, linked accounts where applicable, and any grants:
 
 ```bash
-restish API_NAME list-agent-api-resources -o json
-restish API_NAME list-agent-access-grants -o json
+restish "$API_NAME" list-agent-api-resources -o json
+restish "$API_NAME" list-agent-access-grants -o json
 ```
 
-Use IDs and permission values from the discovery response.
+Use the exact resource ID, `resourceUrl`, scope values, and connection ID from
+the discovery response. Do not infer a resource URL from its name, construct a
+target path, or invent scope values.
 
 For an `external` resource, include the exact connected target account:
 
 ```bash
-restish API_NAME create-agent-access-request --rsh-validate -o json <<'JSON'
+restish "$API_NAME" create-agent-access-request --rsh-validate -o json <<'JSON'
 {
   "target": {
     "type": "api-resource",
     "apiResourceId": "resource_123",
     "accountConnectionId": "connection_123"
   },
-  "permissions": ["projects:read"],
+  "scopes": ["projects:read"],
   "reason": "List projects for the controller"
 }
 JSON
@@ -124,13 +88,13 @@ JSON
 For a `native` resource, omit the account connection:
 
 ```bash
-restish API_NAME create-agent-access-request --rsh-validate -o json <<'JSON'
+restish "$API_NAME" create-agent-access-request --rsh-validate -o json <<'JSON'
 {
   "target": {
     "type": "api-resource",
     "apiResourceId": "resource_123"
   },
-  "permissions": ["projects:read"],
+  "scopes": ["projects:read"],
   "reason": "List projects for the controller"
 }
 JSON
@@ -145,19 +109,19 @@ If the command is interrupted after creating the request, use the returned
 request ID to resume inspection:
 
 ```bash
-restish API_NAME get-agent-access-request request_123 -o json
+restish "$API_NAME" get-agent-access-request request_123 -o json
 ```
 
 Issue the target-platform token:
 
 ```bash
-restish API_NAME issue-target-access-token grant_123 -o json
+restish "$API_NAME" issue-target-access-token grant_123 -o json
 ```
 
 The adapter creates a separate grant-specific DPoP key, performs RFC 9728 and
 RFC 8414 discovery when the mode is `external`, sends the RFC 9449 proof header,
-and stores the returned token. The result includes `resourceUrl`; it is not a
-FlareAuth session token.
+and stores the returned token. Restish output contains safe token metadata,
+including `resourceUrl`, but not the raw access token.
 
 Connect the target resource directly. Its resource URL must advertise an
 OpenAPI contract with an RFC 8631 `service-desc` Link header:
@@ -177,5 +141,5 @@ manually discover token endpoints, expose the access token, or construct DPoP
 JWTs.
 
 If an `external` resource has no account connection, tell the controller to
-connect that target account at `AUTH_ORIGIN/connections`. An empty account
+connect that target account at `$AUTH_ORIGIN/connections`. An empty account
 connection list is expected for `native`.

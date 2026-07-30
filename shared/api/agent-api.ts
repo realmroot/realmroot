@@ -14,7 +14,7 @@ import {
 import { paginationMetadataSchema } from './pagination'
 
 const nonEmptyString = z.string().trim().min(1)
-const permissionListSchema = z
+const scopeListSchema = z
   .array(nonEmptyString)
   .min(1)
   .transform((values) => [...new Set(values)].sort())
@@ -112,13 +112,13 @@ export const agentApiResourcesResponseSchema = z.object({
       audience: z.string(),
       resourceUrl: z.url(),
       authorizationMode: z.enum(['native', 'external']),
-      permissions: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
+      scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       accountConnections: z.array(
         z.object({
           id: z.string(),
           displayName: z.string(),
           subjectHint: z.string(),
-          permissions: z.array(z.string()),
+          scopes: z.array(z.string()),
         }),
       ),
       accessGrants: z.array(z.lazy(() => accessGrantSchema)),
@@ -135,7 +135,7 @@ export const connectableApiResourcesResponseSchema = z.object({
       name: z.string(),
       audience: z.string(),
       resourceUrl: z.url(),
-      permissions: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
+      scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
     }),
   ),
   pagination: paginationMetadataSchema,
@@ -151,7 +151,7 @@ export const accountConnectionSchema = z.object({
   ]),
   displayName: z.string().nullable(),
   subjectHint: z.string().nullable(),
-  permissions: z.array(z.string()),
+  scopes: z.array(z.string()),
   status: accountConnectionStatusSchema,
   credentialExpiresAt: z.iso.datetime().nullable(),
   authorizationUrl: z.url().nullable(),
@@ -160,16 +160,18 @@ export const accountConnectionSchema = z.object({
   updatedAt: z.iso.datetime(),
 })
 
-export const createAccountConnectionSchema = z.object({
-  apiResourceId: nonEmptyString,
-  owner: z
-    .discriminatedUnion('type', [
-      z.object({ type: z.literal('user') }),
-      z.object({ type: z.literal('organization'), organizationId: nonEmptyString }),
-    ])
-    .default({ type: 'user' }),
-  permissions: permissionListSchema.optional(),
-})
+export const createAccountConnectionSchema = z
+  .object({
+    apiResourceId: nonEmptyString,
+    owner: z
+      .discriminatedUnion('type', [
+        z.object({ type: z.literal('user') }),
+        z.object({ type: z.literal('organization'), organizationId: nonEmptyString }),
+      ])
+      .default({ type: 'user' }),
+    scopes: scopeListSchema.optional(),
+  })
+  .strict()
 
 export const accountConnectionsResponseSchema = z.object({
   items: z.array(accountConnectionSchema),
@@ -187,17 +189,19 @@ export const accessTargetSchema = z.discriminatedUnion('type', [
   }),
 ])
 
-export const createAccessRequestSchema = z.object({
-  target: accessTargetSchema,
-  permissions: permissionListSchema,
-  reason: z.string().trim().max(500).nullable().optional(),
-})
+export const createAccessRequestSchema = z
+  .object({
+    target: accessTargetSchema,
+    scopes: scopeListSchema,
+    reason: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict()
 
 export const accessRequestSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   target: accessTargetSchema,
-  permissions: z.array(z.string()),
+  scopes: z.array(z.string()),
   reason: z.string().nullable(),
   status: agentAccessRequestStatusSchema,
   approval: z
@@ -242,7 +246,7 @@ export const accessGrantSchema = z.object({
     apiResourceId: z.string(),
     accountConnectionId: z.string().optional(),
   }),
-  permissions: z.array(z.string()),
+  scopes: z.array(z.string()),
   mode: agentAccessGrantModeSchema,
   status: z.enum(['active', 'revoked', 'consumed', 'expired']),
   expiresAt: z.iso.datetime().nullable(),
@@ -261,7 +265,7 @@ export const targetTokenSchema = z.object({
   tokenType: z.literal('DPoP'),
   expiresIn: z.number().int().positive().max(3600),
   expiresAt: z.iso.datetime(),
-  permissions: z.array(z.string()),
+  scopes: z.array(z.string()),
   apiResource: z.string(),
   resourceUrl: z.url(),
 })

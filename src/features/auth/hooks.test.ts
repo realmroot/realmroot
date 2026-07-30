@@ -84,6 +84,12 @@ describe('auth callback URL resolution', () => {
     expect(callbackURL()).toBe('/profile')
   })
 
+  it('resolves an opaque browser continuation key without exposing its target', () => {
+    window.history.pushState(null, '', '/auth/sign-in?return_key=123e4567-e89b-12d3-a456-426614174000')
+
+    expect(callbackURL()).toBe('/auth/continue?return_key=123e4567-e89b-12d3-a456-426614174000')
+  })
+
   it('rejects unsafe hosted callback paths', () => {
     window.history.pushState(
       null,

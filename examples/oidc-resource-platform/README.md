@@ -19,6 +19,27 @@ platform validates the Agent assertion through the OAuth client's standard
 RFC 8693. It does not configure FlareAuth as an identity provider and does not
 implement a FlareAuth-specific grant, token type, metadata field, or claim.
 
-Run it with `pnpm run example:resource-platform`. Its protected resource URL is `http://127.0.0.1:4100/api`. The demo authorization endpoint automatically selects `demo-user`; production platforms should use their normal login and consent experience.
+Run both example modes against a local FlareAuth deployment:
+
+```bash
+FLAREAUTH_ORIGIN=http://localhost:4189 pnpm run example:resource-platform
+```
+
+The example publishes two protected resources:
+
+- External authorization: `http://127.0.0.1:4100/api`, with
+  `/openapi-external.json`.
+- Native FlareAuth authorization: `http://127.0.0.1:4100/flareauth-api`, with
+  `/openapi-native.json`.
+
+Both resource URLs advertise their OpenAPI contract through an RFC 8631
+`service-desc` Link header. `FLAREAUTH_ORIGIN` must exactly match the FlareAuth
+issuer origin used for native tokens. The external demo authorization endpoint
+automatically selects `demo-user`; production platforms should use their normal
+login and consent experience.
 
 In FlareAuth Console, create an external API Resource with audience `http://127.0.0.1:4100/api`, add the `projects:read` and `projects:write` scopes, then configure external authorization using the same resource URL and dynamic registration.
+
+To exercise native mode, create a native API Resource whose audience and
+resource URL are both `http://127.0.0.1:4100/flareauth-api`, then add the same
+scopes. No external authorization configuration or account connection is used.

@@ -252,7 +252,7 @@ describe('Agent identity enrollment over real D1', () => {
       harness.deps,
       {
         target: { type: 'api-resource', apiResourceId: resource.id },
-        permissions: ['repo:read'],
+        scopes: ['repo:read'],
         reason: 'Read repositories',
       },
       principal,
@@ -281,7 +281,7 @@ describe('Agent identity enrollment over real D1', () => {
     )
     expect(issued).toMatchObject({
       tokenType: 'DPoP',
-      permissions: ['repo:read'],
+      scopes: ['repo:read'],
       apiResource: 'https://api.example.com',
     })
     const jwksResponse = await harness.request('/api/auth/jwks')
