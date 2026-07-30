@@ -13,27 +13,41 @@ operations from `AUTH_ORIGIN/api/openapi.json`.
 
 ## Discover The Resource
 
-List the Agent-visible resources and existing grants:
+Translate the user's goal into the required capability and operation before
+searching. Storage, wallets, payments, and paid APIs are capability patterns,
+not fixed resource names.
+
+Inspect pagination, then list every page of Agent-visible resources and
+existing grants:
 
 ```bash
+restish "$API_NAME" list-agent-api-resources --help
 restish "$API_NAME" list-agent-api-resources -o json
+restish "$API_NAME" list-agent-access-grants --help
 restish "$API_NAME" list-agent-access-grants -o json
 ```
 
-Select the exact `apiResourceId`, `authorizationMode`, `resourceUrl`, requested
-scope values, and—only for `external`—`accountConnectionId` from the response.
+Search the discovered identifiers, names, scope values, and scope descriptions
+for the required capability. Consider only resources whose status is
+`available`. Select the exact `apiResourceId`, `authorizationMode`,
+`resourceUrl`, requested scope values, and—only for `external`—
+`accountConnectionId` from the response.
 An external resource without a linked account requires the controller to
 connect one at `$AUTH_ORIGIN/connections`. A native resource has no account
 connection.
 
 When several resources or accounts satisfy the request and the user's task does
 not determine one, present their discovered identifiers and labels for
-selection. Reuse an active grant only when its resource, account, and scope set
-exactly match the selected request; otherwise create a new least-privilege
-request.
+selection. Use the same selection path when the published metadata is
+insufficient to establish a single match. Reuse an active grant only when its
+resource, account, and scope set exactly match the selected request; otherwise
+create a new least-privilege request.
 
-Discovery is complete when every value needed by the access request is present
-in a response. Tenant-management capabilities are outside this branch.
+Discovery is complete when either every value needed by one matching access
+request is present in a response, or every resource page has been checked and
+no registered resource provides the capability. In the latter case, report the
+missing capability without creating an access request. Tenant-management
+capabilities are outside this branch.
 
 ## Request Access
 

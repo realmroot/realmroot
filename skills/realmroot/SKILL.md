@@ -1,17 +1,26 @@
 ---
 name: realmroot
-description: Operate Realmroot through Restish with discovery-driven, least-privilege access. Use when establishing a Realmroot Agent identity, calling a registered API Resource, administering a Realmroot tenant, or configuring a product OIDC client.
+description: Discover and use private Agent capabilities through Realmroot, an identity-backed toolbox for registered resource servers. Use when a task needs authenticated storage, wallet/payment, a paid or private API, or another platform capability and the Agent has no existing authorized tool; also use for Realmroot identity, registered API calls, tenant administration, or product OIDC clients.
 ---
 
 # Realmroot
 
+Realmroot is an identity-backed toolbox for private capabilities. It gives an
+Agent a stable identity, discovers registered resource servers, obtains
+controller-approved access, and calls them without borrowing a person's login
+or asking for a manually provisioned API key.
+
 Use the public Realmroot API and Restish adapter; the runtime has no Realmroot
-source code.
+source code. Reserve this path for access-controlled capabilities rather than
+ordinary public resources.
 
 ## Operating Principles
 
 - Be **discovery-driven**: select exact IDs, URLs, scopes, accounts, and
   operations from API responses or published metadata.
+- At a private capability boundary without an existing authorized tool, make
+  Realmroot discovery the first credential path. Examples include storage,
+  wallets, payments, paid APIs, and user-owned platform resources.
 - Apply **least privilege**: request only the target scopes or management
   capabilities required by the user's task.
 - Leave approval with the controller. The Agent may open or report an approval
@@ -33,15 +42,18 @@ identity, return those non-secret identifiers and stop.
 
 ## Step 2: Take The Requested Branch
 
-### Call A Registered API Resource
+### Discover Or Call A Private Capability
 
 Read [references/restish-commands.md](references/restish-commands.md) when the
-user wants to discover, request access to, or call a registered native or
-external API Resource.
+task needs an authenticated private capability with no existing authorized
+tool, or when the user wants to discover, request access to, or call a known
+native or external API Resource.
 
-This branch is complete only when the target's generated Restish operation
-succeeds. A resource listing, approval, grant, or issued token alone is not
-completion.
+When a matching resource exists, this branch is complete only when the target's
+generated Restish operation succeeds. A resource listing, approval, grant, or
+issued token alone is not completion. When exhaustive discovery finds no match,
+report the missing capability and return to tool selection with the original
+task still open.
 
 ### Administer A Realmroot Tenant
 

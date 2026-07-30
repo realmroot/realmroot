@@ -1,6 +1,6 @@
 interface:
   display_name: "Realmroot"
-  short_description: "Operate Realmroot and registered APIs"
-  default_prompt: "Use $realmroot to operate Realmroot or a registered API with discovery-driven, least-privilege access."
+  short_description: "Discover and use private Agent capabilities"
+  default_prompt: "Use $realmroot to discover an identity-backed private capability and call it with least-privilege access."
 policy:
   allow_implicit_invocation: true
