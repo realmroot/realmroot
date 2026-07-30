@@ -99,12 +99,16 @@ func authenticateRequest(
 	client httpDoer,
 	prompt approvalPrompt,
 ) (plugin.AuthHookOutput, error) {
+	runtime, err := agentRuntime()
+	if err != nil {
+		return plugin.AuthHookOutput{}, err
+	}
 	if input.Params["provider"] != authProvider {
 		credentials, ok := states.(resourceCredentialStore)
 		if !ok {
 			return plugin.AuthHookOutput{}, nil
 		}
-		return authenticateTargetRequest(input, credentials, client)
+		return authenticateTargetRequest(input, credentials, client, runtime)
 	}
 	origin, err := realmrootOrigin(input.Request.URI)
 	if err != nil {
@@ -114,7 +118,13 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	target := agentTarget{API: input.API, Profile: input.Profile, Name: "default", Origin: origin}
+	target := agentTarget{
+		API:     input.API,
+		Profile: input.Profile,
+		Runtime: runtime,
+		Origin:  origin,
+		Issuer:  configuration.AgentIdentityIssuer,
+	}
 	state, err := ensureAgentIdentity(context.Background(), states, client, prompt, target, configuration)
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
@@ -159,8 +169,9 @@ func authenticateTargetRequest(
 	input plugin.AuthHookInput,
 	states resourceCredentialStore,
 	client httpDoer,
+	runtime string,
 ) (plugin.AuthHookOutput, error) {
-	reference, err := states.FindByResourceURL(input.Request.URI)
+	reference, err := states.FindByResourceURL(input.Request.URI, runtime)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return plugin.AuthHookOutput{}, nil
@@ -558,6 +569,8 @@ func registerAgent(
 	state := agentState{
 		Version:         agentStateVersion,
 		Origin:          target.Origin,
+		Issuer:          target.Issuer,
+		Runtime:         target.Runtime,
 		Name:            name,
 		AgentID:         registration.AgentID,
 		HostID:          registration.HostID,

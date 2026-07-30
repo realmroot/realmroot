@@ -13,14 +13,16 @@ import (
 
 const (
 	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 2
+	agentStateVersion = 3
+	identityDirectory = "identities"
 )
 
 type agentTarget struct {
 	API     string
 	Profile string
-	Name    string
+	Runtime string
 	Origin  string
+	Issuer  string
 }
 
 type stableIdentity struct {
@@ -49,6 +51,8 @@ type dpopCredential struct {
 type agentState struct {
 	Version              int                       `json:"version"`
 	Origin               string                    `json:"origin"`
+	Issuer               string                    `json:"issuer"`
+	Runtime              string                    `json:"runtime"`
 	Name                 string                    `json:"name"`
 	AgentID              string                    `json:"agent_id"`
 	HostID               string                    `json:"host_id"`
@@ -82,13 +86,13 @@ type resourceCredentialReference struct {
 }
 
 type resourceCredentialStore interface {
-	FindByResourceURL(resourceURL string) (resourceCredentialReference, error)
+	FindByResourceURL(resourceURL string, runtime string) (resourceCredentialReference, error)
 	UpdateCredential(reference resourceCredentialReference, credential dpopCredential) error
 	DeleteCredential(reference resourceCredentialReference) error
 }
 
 type targetTokenStore interface {
-	StoreTargetToken(origin string, grantID string, token targetTokenResponse) error
+	StoreTargetToken(origin string, runtime string, grantID string, token targetTokenResponse) error
 }
 
 type fileStateStore struct {
@@ -108,7 +112,14 @@ func newFileStateStore() *fileStateStore {
 }
 
 func (s *fileStateStore) Create(target agentTarget, state agentState) (string, error) {
-	path := s.path(target)
+	state.Version = agentStateVersion
+	state.Origin = target.Origin
+	state.Issuer = target.Issuer
+	state.Runtime = target.Runtime
+	return s.createPath(s.path(target), state)
+}
+
+func (s *fileStateStore) createPath(path string, state agentState) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", fmt.Errorf("create Agent state directory: %w", err)
 	}
@@ -132,6 +143,26 @@ func (s *fileStateStore) Create(target agentTarget, state agentState) (string, e
 
 func (s *fileStateStore) Load(target agentTarget) (agentState, error) {
 	path := s.path(target)
+	state, err := s.loadPath(path)
+	if err == nil {
+		if err := validateAgentState(state, target); err != nil {
+			return agentState{}, err
+		}
+		if state.Origin != target.Origin {
+			state.Origin = target.Origin
+			if err := s.updatePath(path, state); err != nil {
+				return agentState{}, fmt.Errorf("update Agent state origin: %w", err)
+			}
+		}
+		return state, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return agentState{}, err
+	}
+	return s.migrateLegacy(target)
+}
+
+func (s *fileStateStore) loadPath(path string) (agentState, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return agentState{}, fmt.Errorf("read Agent state metadata: %w", err)
@@ -151,11 +182,85 @@ func (s *fileStateStore) Load(target agentTarget) (agentState, error) {
 		return agentState{}, fmt.Errorf("decode Agent state: %w", err)
 	}
 	if state.Version == 1 {
-		state.Version = agentStateVersion
+		state.Version = 2
 		state.DPoPCredentials = nil
 		if err := s.updatePath(path, state); err != nil {
 			return agentState{}, fmt.Errorf("upgrade Agent state: %w", err)
 		}
+	}
+	return state, nil
+}
+
+func (s *fileStateStore) Update(target agentTarget, state agentState) error {
+	state.Version = agentStateVersion
+	state.Origin = target.Origin
+	state.Issuer = target.Issuer
+	state.Runtime = target.Runtime
+	return s.updatePath(s.path(target), state)
+}
+
+type legacyState struct {
+	path  string
+	state agentState
+}
+
+func (s *fileStateStore) migrateLegacy(target agentTarget) (agentState, error) {
+	states, err := s.legacyStates()
+	if err != nil {
+		return agentState{}, err
+	}
+	exactPath := s.legacyPath(target)
+	var exactPending *legacyState
+	var completed []legacyState
+	var pending []legacyState
+	for _, candidate := range states {
+		if candidate.state.Identity != nil && candidate.state.Identity.Issuer == target.Issuer {
+			if candidate.path == exactPath {
+				return s.migrateState(target, candidate)
+			}
+			completed = append(completed, candidate)
+			continue
+		}
+		if candidate.state.Identity == nil && candidate.state.Origin == target.Origin {
+			if candidate.path == exactPath {
+				value := candidate
+				exactPending = &value
+			}
+			pending = append(pending, candidate)
+		}
+	}
+	if len(completed) == 1 {
+		return s.migrateState(target, completed[0])
+	}
+	if len(completed) > 1 {
+		return agentState{}, fmt.Errorf(
+			"multiple local Agent identities match issuer %q; invoke an existing Restish API name first to select its identity",
+			target.Issuer,
+		)
+	}
+	if exactPending != nil {
+		return s.migrateState(target, *exactPending)
+	}
+	if len(pending) == 1 {
+		return s.migrateState(target, pending[0])
+	}
+	if len(pending) > 1 {
+		return agentState{}, fmt.Errorf("multiple pending local Agent registrations match origin %q", target.Origin)
+	}
+	return agentState{}, os.ErrNotExist
+}
+
+func (s *fileStateStore) migrateState(target agentTarget, candidate legacyState) (agentState, error) {
+	state := candidate.state
+	state.Version = agentStateVersion
+	state.Origin = target.Origin
+	state.Issuer = target.Issuer
+	state.Runtime = target.Runtime
+	if _, err := s.createPath(s.path(target), state); err != nil {
+		return agentState{}, fmt.Errorf("migrate Agent state: %w", err)
+	}
+	if err := os.Remove(candidate.path); err != nil {
+		return agentState{}, fmt.Errorf("remove migrated Agent state %s: %w", candidate.path, err)
 	}
 	if err := validateAgentState(state, target); err != nil {
 		return agentState{}, err
@@ -163,8 +268,41 @@ func (s *fileStateStore) Load(target agentTarget) (agentState, error) {
 	return state, nil
 }
 
-func (s *fileStateStore) Update(target agentTarget, state agentState) error {
-	return s.updatePath(s.path(target), state)
+func (s *fileStateStore) legacyStates() ([]legacyState, error) {
+	var states []legacyState
+	err := filepath.WalkDir(s.root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if errors.Is(walkErr, os.ErrNotExist) {
+				return nil
+			}
+			return walkErr
+		}
+		if entry.IsDir() {
+			if path == filepath.Join(s.root, identityDirectory) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".json" {
+			return nil
+		}
+		state, err := s.loadPath(path)
+		if err != nil {
+			return err
+		}
+		if state.Version != 2 && state.Version != agentStateVersion {
+			return fmt.Errorf("unsupported Agent state version %d", state.Version)
+		}
+		if err := validateAgentStateCredentials(state); err != nil {
+			return err
+		}
+		states = append(states, legacyState{path: path, state: state})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read legacy Agent states: %w", err)
+	}
+	return states, nil
 }
 
 func (s *fileStateStore) updatePath(path string, state agentState) error {
@@ -195,9 +333,12 @@ func (s *fileStateStore) updatePath(path string, state agentState) error {
 	return nil
 }
 
-func (s *fileStateStore) FindByResourceURL(resourceURL string) (resourceCredentialReference, error) {
+func (s *fileStateStore) FindByResourceURL(resourceURL string, runtime string) (resourceCredentialReference, error) {
 	var matched *resourceCredentialReference
 	err := s.walkStates(func(path string, state agentState) error {
+		if state.Runtime != runtime {
+			return nil
+		}
 		for _, credential := range state.DPoPCredentials {
 			if !resourceURLMatches(credential.ResourceURL, resourceURL) {
 				continue
@@ -234,12 +375,17 @@ func (s *fileStateStore) DeleteCredential(reference resourceCredentialReference)
 	return s.updatePath(reference.path, reference.state)
 }
 
-func (s *fileStateStore) StoreTargetToken(origin string, grantID string, token targetTokenResponse) error {
+func (s *fileStateStore) StoreTargetToken(
+	origin string,
+	runtime string,
+	grantID string,
+	token targetTokenResponse,
+) error {
 	var matchedPath string
 	var matchedState agentState
 	var matchedCredential dpopCredential
 	err := s.walkStates(func(path string, state agentState) error {
-		if state.Origin != origin {
+		if state.Origin != origin || state.Runtime != runtime {
 			return nil
 		}
 		for _, credential := range state.DPoPCredentials {
@@ -330,15 +476,8 @@ func (s *fileStateStore) walkStates(visit func(path string, state agentState) er
 		if err := json.Unmarshal(data, &state); err != nil {
 			return nil
 		}
-		if state.Version == 1 {
-			state.Version = agentStateVersion
-			state.DPoPCredentials = nil
-			if err := s.updatePath(path, state); err != nil {
-				return fmt.Errorf("upgrade Agent state: %w", err)
-			}
-		}
 		if state.Version != agentStateVersion {
-			return fmt.Errorf("unsupported Agent state version %d", state.Version)
+			return nil
 		}
 		if err := validateAgentStateCredentials(state); err != nil {
 			return err
@@ -348,18 +487,36 @@ func (s *fileStateStore) walkStates(visit func(path string, state agentState) er
 }
 
 func (s *fileStateStore) path(target agentTarget) string {
-	encode := func(value string) string {
-		return base64.RawURLEncoding.EncodeToString([]byte(value))
-	}
-	return filepath.Join(s.root, encode(target.API), encode(target.Profile), encode(target.Name)+".json")
+	return filepath.Join(
+		s.root,
+		identityDirectory,
+		encodeStatePathPart(target.Issuer),
+		encodeStatePathPart(target.Runtime)+".json",
+	)
+}
+
+func (s *fileStateStore) legacyPath(target agentTarget) string {
+	return filepath.Join(
+		s.root,
+		encodeStatePathPart(target.API),
+		encodeStatePathPart(target.Profile),
+		encodeStatePathPart("default")+".json",
+	)
+}
+
+func encodeStatePathPart(value string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(value))
 }
 
 func validateAgentState(state agentState, target agentTarget) error {
 	if state.Version != agentStateVersion {
 		return fmt.Errorf("unsupported Agent state version %d", state.Version)
 	}
-	if state.Origin != target.Origin {
-		return fmt.Errorf("Agent state origin %q does not match Restish API origin %q", state.Origin, target.Origin)
+	if state.Issuer != target.Issuer {
+		return fmt.Errorf("Agent state issuer %q does not match discovered issuer %q", state.Issuer, target.Issuer)
+	}
+	if state.Runtime != target.Runtime {
+		return fmt.Errorf("Agent state runtime %q does not match current runtime %q", state.Runtime, target.Runtime)
 	}
 	return validateAgentStateCredentials(state)
 }

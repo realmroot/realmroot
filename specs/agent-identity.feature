@@ -45,6 +45,17 @@ Feature: Agent identity and external API authorization
       And Realmroot never substitutes the approving user's identity for the Agent
       And the controller's browser session is used only to approve enrollment or authority
 
+    @entrypoint:restish @journey:agent-runtime-identity-continuity
+    Scenario: Restish API aliases and sessions reuse the runtime Agent identity
+      Given the plugin detects the current Agent runtime or reads an explicit runtime declaration
+      And one Realmroot issuer is connected through multiple Restish API names or profiles
+      When the Agent invokes Realmroot operations across those connections and later runtime sessions
+      Then the plugin reuses one host registration and stable Agent issuer and subject for that runtime
+      And Restish API names, profiles, and runtime session identifiers do not create another Agent identity
+      And another runtime uses a separately secured local identity
+      And another Realmroot issuer uses a separately secured local identity
+      And an explicitly supplied AGENT runtime selects that runtime identity instead of the detected runtime
+
     @e2e @entrypoint:restish @journey:agent-management-authority
     Scenario: An Agent gains resource access without changing identity
       Given an Agent identity has only its default self-service authority

@@ -41,6 +41,7 @@ func (s resourceStateRecorder) FindByOriginAndIdentityID(origin string, identity
 
 type targetTokenStateRecorder struct {
 	origin  string
+	runtime string
 	grantID string
 	token   targetTokenResponse
 }
@@ -49,8 +50,14 @@ func (s *targetTokenStateRecorder) FindByOriginAndAgentID(string, string) (agent
 	return agentState{}, http.ErrMissingFile
 }
 
-func (s *targetTokenStateRecorder) StoreTargetToken(origin string, grantID string, token targetTokenResponse) error {
+func (s *targetTokenStateRecorder) StoreTargetToken(
+	origin string,
+	runtime string,
+	grantID string,
+	token targetTokenResponse,
+) error {
 	s.origin = origin
+	s.runtime = runtime
 	s.grantID = grantID
 	s.token = token
 	return nil
@@ -83,8 +90,8 @@ func TestTargetTokenResponseStoresAndRedactsAccessToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if states.origin != "https://auth.example.com" || states.grantID != "grant-1" {
-		t.Fatalf("stored target = %q %q", states.origin, states.grantID)
+	if states.origin != "https://auth.example.com" || states.runtime == "" || states.grantID != "grant-1" {
+		t.Fatalf("stored target = %q %q %q", states.origin, states.runtime, states.grantID)
 	}
 	if states.token.AccessToken != "secret-token" {
 		t.Fatalf("stored token = %#v", states.token)

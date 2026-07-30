@@ -61,7 +61,17 @@ restish plugin debug restish-realmroot -- --rsh-plugin-manifest
 
 ## State
 
-State is keyed by Restish API and profile.
+State is keyed by the discovered Realmroot Agent issuer and the current Agent
+runtime. Restish API names, profiles, and individual runtime sessions do not
+change the identity. By default the plugin detects the runtime from the same
+tool environment markers used by Agent Kanban. Set `AGENT` to an explicit
+runtime name when a runtime needs to declare or override its identity key.
+
+Each runtime gets a separate Agent identity by default. Reusing the same
+`AGENT` value intentionally reuses that runtime identity across sessions.
+Existing API/profile-keyed state is migrated when it can be matched
+unambiguously to the discovered issuer.
+
 The default root is:
 
 ```text

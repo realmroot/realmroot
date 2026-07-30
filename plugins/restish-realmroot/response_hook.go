@@ -38,8 +38,12 @@ func handleCapabilityApprovalResponse(
 		if err := json.Unmarshal(encoded, &token); err != nil {
 			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("decode target API token response: %w", err)
 		}
+		runtime, err := agentRuntime()
+		if err != nil {
+			return plugin.ResponseMiddlewareOutput{}, err
+		}
 		requestOrigin := requestURL.Scheme + "://" + requestURL.Host
-		if err := store.StoreTargetToken(requestOrigin, grantID, token); err != nil {
+		if err := store.StoreTargetToken(requestOrigin, runtime, grantID, token); err != nil {
 			return plugin.ResponseMiddlewareOutput{}, err
 		}
 		body, ok := input.Response.Body.(map[string]any)

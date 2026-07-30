@@ -192,7 +192,11 @@ func testEnsureDPoPCredentialReplacesGrantForSameResource(t *testing.T) {
 		t.Context(),
 		states,
 		client,
-		agentTarget{Origin: state.Origin},
+		agentTarget{
+			Origin:  state.Origin,
+			Issuer:  "https://auth.example.com/api/auth",
+			Runtime: defaultAgentRuntime,
+		},
 		state,
 		agentConfiguration{Issuer: "https://auth.example.com/api/auth"},
 		"grant-new",
@@ -415,7 +419,7 @@ func (s *memoryStateStore) Update(_ agentTarget, state agentState) error {
 	return nil
 }
 
-func (s *memoryStateStore) FindByResourceURL(resourceURL string) (resourceCredentialReference, error) {
+func (s *memoryStateStore) FindByResourceURL(resourceURL string, _ string) (resourceCredentialReference, error) {
 	for _, credential := range s.state.DPoPCredentials {
 		if resourceURLMatches(credential.ResourceURL, resourceURL) {
 			return resourceCredentialReference{state: s.state, credential: credential}, nil
@@ -434,7 +438,7 @@ func (s *memoryStateStore) DeleteCredential(reference resourceCredentialReferenc
 	return nil
 }
 
-func (s *memoryStateStore) StoreTargetToken(_ string, grantID string, token targetTokenResponse) error {
+func (s *memoryStateStore) StoreTargetToken(_ string, _ string, grantID string, token targetTokenResponse) error {
 	for resourceID, credential := range s.state.DPoPCredentials {
 		if credential.GrantID != grantID {
 			continue
