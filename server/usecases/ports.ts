@@ -455,9 +455,11 @@ export interface ExternalResourceRepository {
     resource: ApiResourceRecordInput,
     authorization: ExternalResourceAuthorizationRecord,
   ): Promise<void>
-  upsertAuthorization(input: ExternalResourceAuthorizationRecord): Promise<ExternalResourceAuthorizationRecord>
+  configureAuthorization(
+    input: ExternalResourceAuthorizationRecord,
+  ): Promise<ExternalResourceAuthorizationRecord | null>
   findAuthorization(resourceId: string): Promise<ExternalResourceAuthorizationRecord | null>
-  createConnection(input: ResourceAccountConnectionRecord): Promise<ResourceAccountConnectionRecord>
+  createConnection(input: ResourceAccountConnectionRecord): Promise<ResourceAccountConnectionRecord | null>
   findConnectionByOwnerSubject(input: {
     resourceId: string
     externalSubject: string
@@ -466,6 +468,7 @@ export interface ExternalResourceRepository {
   }): Promise<ResourceAccountConnectionRecord | null>
   replaceConnectionAuthorization(
     id: string,
+    resourceId: string,
     input: {
       displayName: string
       encryptedTokens: string
@@ -484,9 +487,9 @@ export interface ExternalResourceRepository {
     input: { encryptedTokens: string; credentialExpiresAt: Date | null; updatedAt: Date },
   ): Promise<ResourceAccountConnectionRecord | null>
   revokeConnection(id: string, now: Date): Promise<boolean>
-  createConnectionIntent(input: ResourceConnectionIntentRecord): Promise<ResourceConnectionIntentRecord>
+  createConnectionIntent(input: ResourceConnectionIntentRecord): Promise<ResourceConnectionIntentRecord | null>
   consumeConnectionIntent(stateHash: string, now: Date): Promise<ResourceConnectionIntentRecord | null>
-  createAccessRequest(input: AgentAccessRequestRecord): Promise<AgentAccessRequestRecord>
+  createAccessRequest(input: AgentAccessRequestRecord): Promise<AgentAccessRequestRecord | null>
   findAccessRequest(id: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByGrant(grantId: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByApprovalTokenHash(tokenHash: string): Promise<AgentAccessRequestRecord | null>
@@ -504,13 +507,13 @@ export interface ExternalResourceRepository {
   ): Promise<AgentAccessRequestRecord | null>
   consumeAccessRequest(id: string, now: Date): Promise<boolean>
   listPendingAccessRequestsByConnections(connectionIds: string[]): Promise<AgentAccessRequestRecord[]>
-  createGrant(input: AgentAccessGrantRecord): Promise<AgentAccessGrantRecord>
+  createGrant(input: AgentAccessGrantRecord): Promise<AgentAccessGrantRecord | null>
   findGrant(id: string): Promise<AgentAccessGrantRecord | null>
   listActiveGrantsByAgent(agentIdentityId: string): Promise<AgentAccessGrantRecord[]>
   listActiveGrantsByConnection(connectionId: string): Promise<AgentAccessGrantRecord[]>
   revokeGrant(id: string, now: Date): Promise<boolean>
   consumeGrant(id: string, now: Date): Promise<boolean>
-  createTokenLease(input: ExternalTokenLeaseRecord): Promise<ExternalTokenLeaseRecord>
+  createTokenLease(input: ExternalTokenLeaseRecord): Promise<ExternalTokenLeaseRecord | null>
   listActiveTokenLeasesByGrant(grantId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
   listActiveTokenLeasesByBinding(bindingId: string, now: Date): Promise<ExternalTokenLeaseRecord[]>
   revokeTokenLease(id: string, now: Date): Promise<boolean>
@@ -897,11 +900,12 @@ export interface AuthorizationRepository {
   cancelInvitation(id: string): Promise<void>
   createResource(input: ApiResourceRecordInput): Promise<ApiResourceResponse>
   listResources(pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<ApiResourceResponse>>
+  listEnabledResources(): Promise<ApiResourceResponse[]>
   findResource(id: string): Promise<ApiResourceResponse | null>
   findResourceByResourceUrl(resourceUrl: string): Promise<ApiResourceResponse | null>
-  updateResource(id: string, patch: UpdateApiResourceRequest): Promise<void>
-  archiveResource(id: string, now: Date): Promise<void>
-  restoreResource(id: string, now: Date): Promise<void>
+  updateResource(id: string, patch: UpdateApiResourceRequest): Promise<boolean>
+  archiveResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
+  restoreResource(id: string, now: Date, audit: AgentAuditEventRecord): Promise<void>
   deleteResource(id: string): Promise<ApiResourceReferenceCounts | null>
   createRole(input: RoleRecordInput): Promise<RoleResponse>
   listRoles(pagination: PaginationQuery): Promise<AuthorizationPaginatedResult<RoleResponse>>

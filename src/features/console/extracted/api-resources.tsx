@@ -43,7 +43,7 @@ import {
   type z,
 } from '../console-shared'
 import { SimpleCreateDialog } from '../helpers/helpers-create'
-import { MutationError, StatusBadge } from '../helpers/helpers-dialogs'
+import { DangerConfirmDialog, MutationError, StatusBadge } from '../helpers/helpers-dialogs'
 import { AuthorizationForm } from '../helpers/helpers-forms'
 import {
   apiResourceDetailTabs,
@@ -175,8 +175,8 @@ export function ApiResourcesPage() {
                 <TableCell>
                   <StatusBadge
                     active={resource.enabled && !resource.archivedAt}
-                    activeLabel="Enabled"
-                    inactiveLabel={resource.archivedAt ? 'Archived' : 'Disabled'}
+                    activeLabel={tt('Enabled')}
+                    inactiveLabel={tt(resource.archivedAt ? 'Archived' : 'Disabled')}
                   />
                 </TableCell>
               </TableRow>
@@ -207,6 +207,7 @@ export function ApiResourceDetailPage({
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [selectedTab, setSelectedTab] = useState<ApiResourceDetailSection>(section)
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false)
   const resourceQuery = useQuery({
     queryKey: [...consoleQueryKeys.apiResources, resourceId],
     queryFn: () => getApiResource(resourceId),
@@ -231,8 +232,10 @@ export function ApiResourceDetailPage({
     },
   })
   const archivalMutation = useMutation({
-    mutationFn: () => (resource?.archivedAt ? restoreApiResource(resourceId) : archiveApiResource(resourceId)),
+    mutationFn: (action: 'archive' | 'restore') =>
+      action === 'archive' ? archiveApiResource(resourceId) : restoreApiResource(resourceId),
     onSuccess: (updated) => {
+      setArchiveConfirmOpen(false)
       queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
       return queryClient.invalidateQueries({
         queryKey: consoleQueryKeys.apiResources,
@@ -255,7 +258,7 @@ export function ApiResourceDetailPage({
             <Undo2 data-icon="inline-start" /> {tt('Back to API resources')}{' '}
           </a>
           <ObjectHeader
-            badge={resource.archivedAt ? 'Archived' : resource.enabled ? 'Enabled' : 'Disabled'}
+            badge={tt(resource.archivedAt ? 'Archived' : resource.enabled ? 'Enabled' : 'Disabled')}
             id={resource.identifier}
             title={resource.name}
           />
@@ -289,7 +292,7 @@ export function ApiResourceDetailPage({
                         </p>
                         <Button
                           disabled={archivalMutation.isPending}
-                          onClick={() => archivalMutation.mutate()}
+                          onClick={() => archivalMutation.mutate('restore')}
                           type="button"
                           variant="secondary"
                         >
@@ -341,9 +344,9 @@ export function ApiResourceDetailPage({
                           </Button>
                           <Button
                             disabled={archivalMutation.isPending}
-                            onClick={() => archivalMutation.mutate()}
+                            onClick={() => setArchiveConfirmOpen(true)}
                             type="button"
-                            variant="secondary"
+                            variant="danger"
                           >
                             {tt('Archive resource')}
                           </Button>
@@ -374,6 +377,18 @@ export function ApiResourceDetailPage({
 
             <ApiResourceSummaryCard resource={resource} />
           </div>
+          <DangerConfirmDialog
+            actionLabel={tt('Archive resource')}
+            description={tt(
+              'Archiving this resource permanently revokes its active connections, access grants, pending requests, and token leases. Restoring the resource will not restore that authorization.',
+            )}
+            error={archivalMutation.error}
+            onClose={() => setArchiveConfirmOpen(false)}
+            onConfirm={() => archivalMutation.mutate('archive')}
+            open={archiveConfirmOpen}
+            pending={archivalMutation.isPending}
+            title={tt('Archive API resource')}
+          />
         </div>
       ) : null}
     </ResourcePage>

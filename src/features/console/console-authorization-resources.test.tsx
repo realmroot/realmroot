@@ -1,5 +1,5 @@
 import type { ApiResource } from '@shared/api/agent-api'
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiResourceSummaryCard } from '@/features/console/extracted/api-resource-summary-card'
 import { ApiResourceDetailPage, ApiResourcesPage } from '@/features/console/extracted/api-resources'
@@ -394,6 +394,12 @@ describe('console API resources and roles', () => {
 
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Archive resource' }))
+    const dialog = screen.getByRole('dialog')
+    expect(
+      within(dialog).getByText(/permanently revokes its active connections, access grants, pending requests/),
+    ).toBeTruthy()
+    expect(requests).toEqual([])
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Archive resource' }))
 
     expect(await screen.findByText('Archived')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Restore resource' })).toBeTruthy()

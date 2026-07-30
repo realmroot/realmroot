@@ -20,6 +20,7 @@ import {
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/authorization'
 import { Hono } from 'hono'
+import { getPrincipal } from '../../middleware/authn'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -77,16 +78,31 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
 
   return app
     .put('/:resourceId/archival', async (c) => {
-      await archiveResource(getDeps(c), c.req.param('resourceId'))
+      await archiveResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
       return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
     })
     .delete('/:resourceId/archival', async (c) => {
-      await restoreResource(getDeps(c), c.req.param('resourceId'))
+      await restoreResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
       return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
     })
 
   function requireCanonicalOrigin() {
     if (!canonicalOrigin) throw new Error('External API resource registration requires the configured base URL.')
     return canonicalOrigin.replace(/\/$/, '')
+  }
+}
+
+function resourceMutationActor(c: Parameters<typeof getPrincipal>[0]) {
+  const principal = getPrincipal(c)
+  return {
+    controllerUserId: principal.user?.id ?? null,
+    agent: principal.agent
+      ? {
+          issuer: principal.agent.issuer,
+          subject: principal.agent.subject,
+          identityId: principal.agent.identityId,
+          hostId: principal.agent.hostId,
+        }
+      : null,
   }
 }

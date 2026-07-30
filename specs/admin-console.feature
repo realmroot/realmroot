@@ -135,6 +135,8 @@ Feature: Admin Console
   Scenario: API resource settings archive and restore a resource
     Given an API resource exists
     When I archive the API resource from its settings
+    Then the Console asks me to confirm that existing authorization will be revoked
+    When I confirm the archive
     Then the Console marks it archived and offers restoration
     When I restore the API resource
     Then the Console marks it disabled and does not enable it automatically

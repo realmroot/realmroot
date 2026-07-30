@@ -129,7 +129,7 @@ describe('external API resource authorization', () => {
         clientId: 'realmroot-client',
       }),
     )
-    expect(deps.externalResources.upsertAuthorization).not.toHaveBeenCalled()
+    expect(deps.externalResources.configureAuthorization).not.toHaveBeenCalled()
     expect(deps.authorization.updateResource).not.toHaveBeenCalled()
     expect(deps.connectors.create).not.toHaveBeenCalled()
   })
@@ -289,11 +289,13 @@ describe('external API resource authorization', () => {
     }
     vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue(intent)
     vi.mocked(deps.externalResources.findConnectionByOwnerSubject).mockResolvedValue(existing)
-    vi.mocked(deps.externalResources.replaceConnectionAuthorization).mockImplementation(async (id, input) => ({
-      ...existing,
-      ...input,
-      id,
-    }))
+    vi.mocked(deps.externalResources.replaceConnectionAuthorization).mockImplementation(
+      async (id, _resourceId, input) => ({
+        ...existing,
+        ...input,
+        id,
+      }),
+    )
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
       if (request.url.endsWith('/token')) {
         return Response.json({
@@ -331,6 +333,7 @@ describe('external API resource authorization', () => {
     })
     expect(deps.externalResources.replaceConnectionAuthorization).toHaveBeenCalledWith(
       'connection-1',
+      'resource-1',
       expect.objectContaining({
         displayName: 'Renamed Project Owner',
         encryptedTokens: expect.stringContaining('replacement-refresh'),
@@ -896,6 +899,7 @@ describe('external API resource authorization', () => {
         items: [native],
         pagination: { limit: 100, offset: 0, total: 1, hasMore: false, nextOffset: null },
       }),
+      listEnabledResources: vi.fn().mockResolvedValue([native]),
       listAgentRoleAssignments: vi
         .fn()
         .mockResolvedValue([{ role: { id: 'role-1', key: 'projects-reader' }, scopes: ['projects:read'] }]),
@@ -956,6 +960,33 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('discovers enabled resources independently of archived management pagination', async () => {
+    const deps = createTestDeps()
+    const active = nativeResource()
+    const managementPage = vi.fn().mockResolvedValue({
+      items: Array.from({ length: 100 }, (_, index) => ({
+        ...nativeResource(),
+        id: `archived-${index}`,
+        archivedAt: now.toISOString(),
+        enabled: false,
+      })),
+      pagination: { limit: 100, offset: 0, total: 101, hasMore: true, nextOffset: 100 },
+    })
+    Object.assign(deps.authorization, {
+      findResource: vi.fn().mockResolvedValue(active),
+      listResources: managementPage,
+      listEnabledResources: vi.fn().mockResolvedValue([active]),
+      listAgentRoleAssignments: vi.fn().mockResolvedValue([]),
+    })
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    mockResourceOpenApi(deps, active.resourceUrl)
+
+    await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
+      resources: [{ id: active.id }],
+    })
+    expect(managementPage).not.toHaveBeenCalled()
+  })
+
   it('[spec: agent-identity/agent-resource-discovery-isolation] marks one unavailable OpenAPI contract without hiding healthy resources', async () => {
     const deps = createTestDeps()
     const healthy = nativeResource()
@@ -970,6 +1001,7 @@ describe('external API resource authorization', () => {
         items: [unavailable, healthy],
         pagination: { total: 2, limit: 100, offset: 0, hasMore: false, nextOffset: null },
       }),
+      listEnabledResources: vi.fn().mockResolvedValue([unavailable, healthy]),
       findResource: vi.fn().mockImplementation(async (id) => {
         if (id === healthy.id) return healthy
         if (id === unavailable.id) return unavailable
@@ -1177,7 +1209,7 @@ describe('external API resource authorization', () => {
       const deps = createTestDeps()
       authorizationDeps(deps)
       vi.mocked(deps.authorization.findResource).mockResolvedValue(configuredResource)
-      vi.mocked(deps.externalResources.upsertAuthorization).mockImplementation(async (record) => record)
+      vi.mocked(deps.externalResources.configureAuthorization).mockImplementation(async (record) => record)
       const protocolResponses = [
         protectedResponse ?? Response.json(protectedBody),
         serverResponse ?? Response.json(serverBody),
@@ -1550,10 +1582,10 @@ describe('external API resource authorization', () => {
       completeResourceConnectionIntent(deps, { state: 'invalid', code: 'code' }, 'https://auth.example.com'),
     ).rejects.toThrow('Resource connection state is invalid')
 
-    vi.mocked(deps.authorization.listResources).mockResolvedValue({
-      items: [resource(), { ...resource(), id: 'disabled', enabled: false }, { ...nativeResource(), id: 'native' }],
-      pagination: { total: 3, limit: 100, offset: 0, hasMore: false, nextOffset: null },
-    })
+    vi.mocked(deps.authorization.listEnabledResources).mockResolvedValue([
+      resource(),
+      { ...nativeResource(), id: 'native' },
+    ])
     vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(null)
     await expect(listConnectableExternalResources(deps)).resolves.toEqual({ resources: [] })
   })
@@ -1588,10 +1620,10 @@ describe('external API resource authorization', () => {
         revokedAt: now,
       },
     ])
-    vi.mocked(deps.authorization.listResources).mockResolvedValue({
-      items: [resource(), { ...nativeResource(), id: 'missing' }],
-      pagination: { total: 2, limit: 100, offset: 0, hasMore: false, nextOffset: null },
-    })
+    vi.mocked(deps.authorization.listEnabledResources).mockResolvedValue([
+      resource(),
+      { ...nativeResource(), id: 'missing' },
+    ])
     vi.mocked(deps.authorization.findResource).mockImplementation(async (id) =>
       id === 'resource-1' ? resource() : null,
     )
@@ -1955,6 +1987,7 @@ function authorizationDeps(deps: ReturnType<typeof createTestDeps>) {
   Object.assign(deps.authorization, {
     findResource: vi.fn().mockResolvedValue(resource()),
     listResources: vi.fn().mockResolvedValue({ items: [resource()], total: 1, limit: 100, offset: 0 }),
+    listEnabledResources: vi.fn().mockResolvedValue([resource()]),
     listAgentRoleAssignments: vi.fn().mockResolvedValue([
       {
         role: {
@@ -1972,7 +2005,7 @@ function authorizationDeps(deps: ReturnType<typeof createTestDeps>) {
         scopes: ['projects:read'],
       },
     ]),
-    updateResource: vi.fn().mockResolvedValue(undefined),
+    updateResource: vi.fn().mockResolvedValue(true),
   })
   vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
   mockResourceOpenApi(deps, resource().resourceUrl)

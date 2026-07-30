@@ -101,9 +101,12 @@ Feature: Unified Realmroot resource API
     When I archive the API resource with Restish
     Then the resource is disabled and hidden from Agent discovery
     And its active authorization records are revoked while history remains
+    And the archive and its actor are recorded in the Agent audit log
+    And concurrent requests cannot create new active authorization for the archived resource
     When I restore the API resource with Restish
     Then the resource remains disabled
     And its previous authorization records remain inactive
+    And the restoration is recorded in the Agent audit log
 
 
   @entrypoint:restish @journey:management-restish-webhook-crud

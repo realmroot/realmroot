@@ -29,8 +29,6 @@ import { readDeclaredScopes, validateRequestedScopes, validateResourceContract }
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
 const accessTokenType = 'urn:ietf:params:oauth:token-type:access_token'
-const page = { limit: 100, offset: 0 }
-
 export interface AgentResourcePrincipal {
   issuer: string
   subject: string
@@ -59,8 +57,10 @@ export async function configureExternalResourceAuthorization(
     input,
     callbackOrigin,
   )
-  const configured = await deps.externalResources.upsertAuthorization(record)
-  await deps.authorization.updateResource(resourceId, { enabled: true })
+  const configured = await deps.externalResources.configureAuthorization(record)
+  if (!configured) {
+    throw badRequest('Archived API resources must be restored before reconfiguration.')
+  }
   return toExternalAuthorization(configured)
 }
 
@@ -229,7 +229,7 @@ export async function createResourceConnectionIntent(
   const verifier = randomToken()
   const now = new Date()
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
-  await deps.externalResources.createConnectionIntent({
+  const created = await deps.externalResources.createConnectionIntent({
     id,
     stateHash: await sha256(state),
     resourceId,
@@ -244,6 +244,7 @@ export async function createResourceConnectionIntent(
     createdAt: now,
     updatedAt: now,
   })
+  if (!created) throw notFound('Enabled external API resource was not found.')
   const redirectUri = resourceConnectionCallbackUrl(callbackOrigin)
   const url = new URL(authorization.authorizationEndpoint)
   url.searchParams.set('response_type', 'code')
@@ -328,7 +329,7 @@ export async function completeResourceConnectionIntent(
     updatedAt: now,
   }
   const connection = existing
-    ? await deps.externalResources.replaceConnectionAuthorization(existing.id, authorizationInput)
+    ? await deps.externalResources.replaceConnectionAuthorization(existing.id, intent.resourceId, authorizationInput)
     : await deps.externalResources.createConnection({
         id: connectionId,
         resourceId: intent.resourceId,
@@ -338,7 +339,7 @@ export async function completeResourceConnectionIntent(
         ...authorizationInput,
         createdAt: now,
       })
-  if (!connection) throw notFound('Resource account connection was not found.')
+  if (!connection) throw badRequest('The API resource was archived while completing the connection.')
   return {
     ...toResourceConnection(connection),
     returnTo: intent.returnTo,
@@ -437,8 +438,8 @@ export async function getAccountConnection(
 }
 
 export async function listConnectableExternalResources(deps: Deps) {
-  const resources = (await deps.authorization.listResources(page)).items.filter(
-    (resource) => resource.enabled && resource.authorizationMode === 'external',
+  const resources = (await deps.authorization.listEnabledResources()).filter(
+    (resource) => resource.authorizationMode === 'external',
   )
   const connectable = []
   for (const resource of resources) {
@@ -470,9 +471,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
     : await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId!])
   const activeConnections = connections.filter((connection) => connection.status === 'active')
   const grants = await deps.externalResources.listActiveGrantsByAgent(principal.identityId)
-  const configuredResources = (await deps.authorization.listResources(page)).items.filter(
-    (resource) => resource.enabled,
-  )
+  const configuredResources = await deps.authorization.listEnabledResources()
   const visibleResourceIds = new Set([
     ...activeConnections.map((connection) => connection.resourceId),
     ...configuredResources.map((resource) => resource.id),
@@ -481,7 +480,11 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
   for (const resourceId of visibleResourceIds) {
     const resource = await deps.authorization.findResource(resourceId)
     const authorization = await deps.externalResources.findAuthorization(resourceId)
-    if (!resource?.enabled || (resource.authorizationMode === 'external' && authorization?.status !== 'active')) {
+    if (
+      !resource?.enabled ||
+      resource.archivedAt ||
+      (resource.authorizationMode === 'external' && authorization?.status !== 'active')
+    ) {
       continue
     }
     const scopes = await discoverAgentResourceScopes(deps, resource.resourceUrl)
@@ -642,6 +645,7 @@ export async function createAgentAccessRequest(
     updatedAt: now,
   }
   const created = await deps.externalResources.createAccessRequest(request)
+  if (!created) throw forbidden('Enabled API resource is required.')
   await appendResourceAudit(deps, {
     action: 'api_resource.access_requested',
     result: existingGrant ? 'allowed' : 'pending',
@@ -841,6 +845,7 @@ export async function decideAgentAccessRequest(
     createdAt: now,
     updatedAt: now,
   })
+  if (!grant) throw badRequest('The API resource was archived before access could be approved.')
   const decided = await deps.externalResources.decideAccessRequest(request.id, {
     status: 'approved',
     grantId: grant.id,
@@ -975,7 +980,7 @@ export async function issueTargetAccessToken(
   }
   const now = new Date()
   const leaseId = createId('tokenlease')
-  await deps.externalResources.createTokenLease({
+  const lease = await deps.externalResources.createTokenLease({
     id: leaseId,
     grantId: grant.id,
     requestId: request.id,
@@ -990,6 +995,7 @@ export async function issueTargetAccessToken(
     revokedAt: null,
     createdAt: now,
   })
+  if (!lease) throw forbidden('Active Agent access grant is required.')
   await deps.externalResources.consumeAccessRequest(request.id, now)
   if (grant.mode === 'once') await deps.externalResources.consumeGrant(grant.id, now)
   await appendResourceAudit(deps, {
@@ -1068,7 +1074,7 @@ async function issueNativeAccessToken(
     'at+jwt',
   )
   const leaseId = createId('tokenlease')
-  await deps.externalResources.createTokenLease({
+  const lease = await deps.externalResources.createTokenLease({
     id: leaseId,
     grantId: grant.id,
     requestId: request.id,
@@ -1083,6 +1089,7 @@ async function issueNativeAccessToken(
     revokedAt: null,
     createdAt: now,
   })
+  if (!lease) throw forbidden('Active Agent access grant is required.')
   await deps.externalResources.consumeAccessRequest(request.id, now)
   if (grant.mode === 'once') await deps.externalResources.consumeGrant(grant.id, now)
   await appendResourceAudit(deps, {
@@ -1333,7 +1340,7 @@ async function requireActiveExternalAuthorization(deps: Deps, resourceId: string
 
 async function requireEnabledResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
-  if (!resource?.enabled) throw notFound('Enabled API resource was not found.')
+  if (!resource?.enabled || resource.archivedAt) throw notFound('Enabled API resource was not found.')
   if (resource.authorizationMode === 'external') {
     await requireActiveExternalAuthorization(deps, resourceId)
   }

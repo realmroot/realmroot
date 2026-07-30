@@ -44,6 +44,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const timestamp = '2026-07-30T00:00:00.000Z'
 const pagination = { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null }
+const actor = { controllerUserId: 'user-1', agent: null }
 const organization: OrganizationResponse = {
   id: 'org-1',
   slug: 'acme',
@@ -230,25 +231,71 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(getResource(deps, resource.id)).resolves.toBe(resource)
     await expect(updateResource(deps, resource.id, { name: 'Projects 2' })).resolves.toBe(resource)
     authorization.archiveResource.mockResolvedValue(undefined)
-    await expect(archiveResource(deps, resource.id)).resolves.toBe(resource)
-    expect(authorization.archiveResource).toHaveBeenCalledWith(resource.id, expect.any(Date))
+    await expect(archiveResource(deps, resource.id, actor)).resolves.toBe(resource)
+    expect(authorization.archiveResource).toHaveBeenCalledWith(
+      resource.id,
+      expect.any(Date),
+      expect.objectContaining({
+        action: 'api_resource.archived',
+        controllerUserId: 'user-1',
+        resourceId: resource.id,
+      }),
+    )
 
     authorization.findResource.mockResolvedValueOnce({ ...resource, archivedAt: timestamp }).mockResolvedValue(resource)
     authorization.restoreResource.mockResolvedValue(undefined)
-    await expect(restoreResource(deps, resource.id)).resolves.toBe(resource)
-    expect(authorization.restoreResource).toHaveBeenCalledWith(resource.id, expect.any(Date))
+    await expect(restoreResource(deps, resource.id, actor)).resolves.toBe(resource)
+    expect(authorization.restoreResource).toHaveBeenCalledWith(
+      resource.id,
+      expect.any(Date),
+      expect.objectContaining({
+        action: 'api_resource.restored',
+        controllerUserId: 'user-1',
+        resourceId: resource.id,
+      }),
+    )
+
+    authorization.archiveResource.mockClear()
+    authorization.findResource.mockResolvedValue(resource)
+    await archiveResource(deps, resource.id, {
+      controllerUserId: null,
+      agent: {
+        issuer: 'https://auth.example.com',
+        subject: 'agent-subject',
+        identityId: 'identity-1',
+        hostId: 'host-1',
+      },
+    })
+    expect(authorization.archiveResource).toHaveBeenCalledWith(
+      resource.id,
+      expect.any(Date),
+      expect.objectContaining({
+        controllerUserId: null,
+        subjectIssuer: 'https://auth.example.com',
+        subject: 'agent-subject',
+        agentIdentityId: 'identity-1',
+        hostId: 'host-1',
+      }),
+    )
 
     authorization.archiveResource.mockClear()
     authorization.findResource.mockResolvedValue({ ...resource, archivedAt: timestamp })
-    await archiveResource(deps, resource.id)
+    await archiveResource(deps, resource.id, actor)
     expect(authorization.archiveResource).not.toHaveBeenCalled()
 
     authorization.restoreResource.mockClear()
     authorization.findResource.mockResolvedValue(resource)
-    await restoreResource(deps, resource.id)
+    await restoreResource(deps, resource.id, actor)
     expect(authorization.restoreResource).not.toHaveBeenCalled()
 
     authorization.findResource.mockResolvedValue({ ...resource, archivedAt: timestamp })
+    await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({
+      status: 400,
+      message: 'Archived API resources must be restored before updating.',
+    })
+
+    authorization.findResource.mockResolvedValue(resource)
+    authorization.updateResource.mockResolvedValueOnce(false)
     await expect(updateResource(deps, resource.id, { enabled: true })).rejects.toMatchObject({
       status: 400,
       message: 'Archived API resources must be restored before updating.',
@@ -523,9 +570,10 @@ function repository() {
     cancelInvitation: vi.fn(),
     createResource: vi.fn(),
     listResources: vi.fn(),
+    listEnabledResources: vi.fn(),
     findResource: vi.fn().mockResolvedValue(null),
     findResourceByResourceUrl: vi.fn().mockResolvedValue(null),
-    updateResource: vi.fn(),
+    updateResource: vi.fn().mockResolvedValue(true),
     archiveResource: vi.fn(),
     restoreResource: vi.fn(),
     deleteResource: vi.fn(),

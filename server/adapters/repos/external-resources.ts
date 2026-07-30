@@ -1,5 +1,5 @@
 import type { ExternalResourceRepository } from '@server/usecases/ports'
-import { and, eq, gt, inArray, isNull } from 'drizzle-orm'
+import { and, eq, exists, gt, inArray, isNull, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
@@ -21,10 +21,35 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       ])
     },
 
-    async upsertAuthorization(input) {
-      const [row] = await db
+    async configureAuthorization(input) {
+      const authorizationWrite = db
         .insert(externalResourceAuthorization)
-        .values(input)
+        .select(
+          db
+            .select({
+              resourceId: apiResource.id,
+              resourceUrl: sql<string>`${input.resourceUrl}`.as('resource_url'),
+              issuer: sql<string>`${input.issuer}`.as('issuer'),
+              authorizationEndpoint: sql<string>`${input.authorizationEndpoint}`.as('authorization_endpoint'),
+              tokenEndpoint: sql<string>`${input.tokenEndpoint}`.as('token_endpoint'),
+              registrationEndpoint: sql<string | null>`${input.registrationEndpoint}`.as('registration_endpoint'),
+              revocationEndpoint: sql<string>`${input.revocationEndpoint}`.as('revocation_endpoint'),
+              jwksUri: sql<string>`${input.jwksUri}`.as('jwks_uri'),
+              userInfoEndpoint: sql<string | null>`${input.userInfoEndpoint}`.as('userinfo_endpoint'),
+              registrationMode: sql<string>`${input.registrationMode}`.as('registration_mode'),
+              clientId: sql<string>`${input.clientId}`.as('client_id'),
+              encryptedClientSecret: sql<string>`${input.encryptedClientSecret}`.as('encrypted_client_secret'),
+              encryptedRegistrationAccessToken: sql<string | null>`${input.encryptedRegistrationAccessToken}`.as(
+                'encrypted_registration_access_token',
+              ),
+              metadata: sql<Record<string, unknown>>`${JSON.stringify(input.metadata)}`.as('metadata'),
+              status: sql<string>`${input.status}`.as('status'),
+              createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+              updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
+            })
+            .from(apiResource)
+            .where(and(eq(apiResource.id, input.resourceId), isNull(apiResource.archivedAt))),
+        )
         .onConflictDoUpdate({
           target: externalResourceAuthorization.resourceId,
           set: {
@@ -45,8 +70,19 @@ export function createExternalResourceRepository(db: Database): ExternalResource
             updatedAt: input.updatedAt,
           },
         })
-        .returning()
-      return row
+      await db.batch([
+        authorizationWrite,
+        db
+          .update(apiResource)
+          .set({ enabled: true, updatedAt: input.updatedAt })
+          .where(and(eq(apiResource.id, input.resourceId), isNull(apiResource.archivedAt))),
+      ])
+      const [row] = await db
+        .select()
+        .from(externalResourceAuthorization)
+        .where(eq(externalResourceAuthorization.resourceId, input.resourceId))
+        .limit(1)
+      return row?.updatedAt.getTime() === input.updatedAt.getTime() ? row : null
     },
 
     async findAuthorization(resourceId) {
@@ -59,8 +95,32 @@ export function createExternalResourceRepository(db: Database): ExternalResource
     },
 
     async createConnection(input) {
-      const [row] = await db.insert(resourceAccountConnection).values(input).returning()
-      return row
+      const [row] = await db
+        .insert(resourceAccountConnection)
+        .select(
+          db
+            .select({
+              id: sql<string>`${input.id}`.as('id'),
+              resourceId: apiResource.id,
+              ownerUserId: sql<string | null>`${input.ownerUserId}`.as('owner_user_id'),
+              ownerOrganizationId: sql<string | null>`${input.ownerOrganizationId}`.as('owner_organization_id'),
+              externalSubject: sql<string>`${input.externalSubject}`.as('external_subject'),
+              displayName: sql<string>`${input.displayName}`.as('display_name'),
+              encryptedTokens: sql<string>`${input.encryptedTokens}`.as('encrypted_tokens'),
+              grantedScopes: sql<string[]>`${JSON.stringify(input.grantedScopes)}`.as('granted_scopes'),
+              status: sql<string>`${input.status}`.as('status'),
+              credentialExpiresAt: sql<Date | null>`${input.credentialExpiresAt?.getTime() ?? null}`.as(
+                'credential_expires_at',
+              ),
+              revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
+              createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+              updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
+            })
+            .from(apiResource)
+            .where(activeResource(input.resourceId)),
+        )
+        .returning()
+      return row ?? null
     },
 
     async findConnectionByOwnerSubject(input) {
@@ -81,11 +141,17 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row ?? null
     },
 
-    async replaceConnectionAuthorization(id, input) {
+    async replaceConnectionAuthorization(id, resourceId, input) {
       const [row] = await db
         .update(resourceAccountConnection)
         .set(input)
-        .where(eq(resourceAccountConnection.id, id))
+        .where(
+          and(
+            eq(resourceAccountConnection.id, id),
+            eq(resourceAccountConnection.resourceId, resourceId),
+            exists(db.select({ id: apiResource.id }).from(apiResource).where(activeResource(resourceId))),
+          ),
+        )
         .returning()
       return row ?? null
     },
@@ -135,8 +201,30 @@ export function createExternalResourceRepository(db: Database): ExternalResource
     },
 
     async createConnectionIntent(input) {
-      const [row] = await db.insert(resourceConnectionIntent).values(input).returning()
-      return row
+      const [row] = await db
+        .insert(resourceConnectionIntent)
+        .select(
+          db
+            .select({
+              id: sql<string>`${input.id}`.as('id'),
+              stateHash: sql<string>`${input.stateHash}`.as('state_hash'),
+              resourceId: apiResource.id,
+              ownerUserId: sql<string>`${input.ownerUserId}`.as('owner_user_id'),
+              ownerOrganizationId: sql<string | null>`${input.ownerOrganizationId}`.as('owner_organization_id'),
+              scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+              encryptedPkceVerifier: sql<string>`${input.encryptedPkceVerifier}`.as('encrypted_pkce_verifier'),
+              returnTo: sql<string>`${input.returnTo}`.as('return_to'),
+              status: sql<string>`${input.status}`.as('status'),
+              expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),
+              completedAt: sql<Date | null>`${input.completedAt?.getTime() ?? null}`.as('completed_at'),
+              createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+              updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
+            })
+            .from(apiResource)
+            .where(activeResource(input.resourceId)),
+        )
+        .returning()
+      return row ?? null
     },
 
     async consumeConnectionIntent(stateHash, now) {
@@ -155,8 +243,32 @@ export function createExternalResourceRepository(db: Database): ExternalResource
     },
 
     async createAccessRequest(input) {
-      const [row] = await db.insert(agentAccessRequest).values(input).returning()
-      return row
+      const [row] = await db
+        .insert(agentAccessRequest)
+        .select(
+          db
+            .select({
+              id: sql<string>`${input.id}`.as('id'),
+              resourceId: apiResource.id,
+              connectionId: sql<string | null>`${input.connectionId}`.as('connection_id'),
+              agentIdentityId: sql<string>`${input.agentIdentityId}`.as('agent_identity_id'),
+              bindingId: sql<string>`${input.bindingId}`.as('binding_id'),
+              scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+              reason: sql<string | null>`${input.reason}`.as('reason'),
+              status: sql<string>`${input.status}`.as('status'),
+              approvalTokenHash: sql<string>`${input.approvalTokenHash}`.as('approval_token_hash'),
+              encryptedApprovalToken: sql<string>`${input.encryptedApprovalToken}`.as('encrypted_approval_token'),
+              grantId: sql<string | null>`${input.grantId}`.as('grant_id'),
+              expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),
+              decidedAt: sql<Date | null>`${input.decidedAt?.getTime() ?? null}`.as('decided_at'),
+              createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+              updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
+            })
+            .from(apiResource)
+            .where(activeResource(input.resourceId)),
+        )
+        .returning()
+      return row ?? null
     },
 
     async findAccessRequest(id) {
@@ -201,10 +313,29 @@ export function createExternalResourceRepository(db: Database): ExternalResource
     },
 
     async decideAccessRequest(id, input) {
+      const conditions = [eq(agentAccessRequest.id, id), eq(agentAccessRequest.status, 'pending')]
+      if (input.status === 'approved' && input.grantId) {
+        conditions.push(
+          exists(
+            db
+              .select({ id: agentAccessGrant.id })
+              .from(agentAccessGrant)
+              .innerJoin(apiResource, eq(apiResource.id, agentAccessGrant.resourceId))
+              .where(
+                and(
+                  eq(agentAccessGrant.id, input.grantId),
+                  eq(agentAccessGrant.status, 'active'),
+                  eq(apiResource.enabled, true),
+                  isNull(apiResource.archivedAt),
+                ),
+              ),
+          ),
+        )
+      }
       const [row] = await db
         .update(agentAccessRequest)
         .set(input)
-        .where(and(eq(agentAccessRequest.id, id), eq(agentAccessRequest.status, 'pending')))
+        .where(and(...conditions))
         .returning()
       return row ?? null
     },
@@ -228,8 +359,29 @@ export function createExternalResourceRepository(db: Database): ExternalResource
     },
 
     async createGrant(input) {
-      const [row] = await db.insert(agentAccessGrant).values(input).returning()
-      return row
+      const [row] = await db
+        .insert(agentAccessGrant)
+        .select(
+          db
+            .select({
+              id: sql<string>`${input.id}`.as('id'),
+              resourceId: apiResource.id,
+              connectionId: sql<string | null>`${input.connectionId}`.as('connection_id'),
+              agentIdentityId: sql<string>`${input.agentIdentityId}`.as('agent_identity_id'),
+              scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+              mode: sql<string>`${input.mode}`.as('mode'),
+              status: sql<string>`${input.status}`.as('status'),
+              grantedByUserId: sql<string>`${input.grantedByUserId}`.as('granted_by_user_id'),
+              expiresAt: sql<Date | null>`${input.expiresAt?.getTime() ?? null}`.as('expires_at'),
+              revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
+              createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+              updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
+            })
+            .from(apiResource)
+            .where(activeResource(input.resourceId)),
+        )
+        .returning()
+      return row ?? null
     },
 
     async findGrant(id) {
@@ -272,8 +424,36 @@ export function createExternalResourceRepository(db: Database): ExternalResource
     },
 
     async createTokenLease(input) {
-      const [row] = await db.insert(externalTokenLease).values(input).returning()
-      return row
+      const [row] = await db
+        .insert(externalTokenLease)
+        .select(
+          db
+            .select({
+              id: sql<string>`${input.id}`.as('id'),
+              grantId: agentAccessGrant.id,
+              requestId: sql<string>`${input.requestId}`.as('request_id'),
+              bindingId: sql<string>`${input.bindingId}`.as('binding_id'),
+              encryptedAccessToken: sql<string>`${input.encryptedAccessToken}`.as('encrypted_access_token'),
+              tokenHash: sql<string>`${input.tokenHash}`.as('token_hash'),
+              confirmationJkt: sql<string>`${input.confirmationJkt}`.as('confirmation_jkt'),
+              scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+              expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),
+              revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
+              createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+            })
+            .from(agentAccessGrant)
+            .innerJoin(apiResource, eq(apiResource.id, agentAccessGrant.resourceId))
+            .where(
+              and(
+                eq(agentAccessGrant.id, input.grantId),
+                eq(agentAccessGrant.status, 'active'),
+                eq(apiResource.enabled, true),
+                isNull(apiResource.archivedAt),
+              ),
+            ),
+        )
+        .returning()
+      return row ?? null
     },
 
     async listActiveTokenLeasesByGrant(grantId, now) {
@@ -310,5 +490,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .returning({ id: externalTokenLease.id })
       return Boolean(row)
     },
+  }
+
+  function activeResource(resourceId: string) {
+    return and(eq(apiResource.id, resourceId), eq(apiResource.enabled, true), isNull(apiResource.archivedAt))
   }
 }
