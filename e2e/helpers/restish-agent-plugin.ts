@@ -48,7 +48,7 @@ export interface RestishAgentPlugin {
     resourceUrl: string
   }
   connectTarget(apiName: string, resourceUrl: string): void
-  targetRequest<T>(apiName: string, operation: string): T
+  targetRequest<T>(apiName: string, path: string): T
   listApplications(): { applications: unknown[] }
   dispose(): void
 }
@@ -63,6 +63,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   const binary = join(root, 'restish-realmroot')
   const apiName = 'realmroot-e2e-plugin'
   const approvalFile = join(root, 'approval-url')
+  const targetURLs = new Map<string, string>()
   mkdirSync(configDir)
   mkdirSync(stateDir)
 
@@ -201,16 +202,19 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
         resourceUrl: string
       }>('issue-target-access-token', [grantId]),
     connectTarget: (targetAPIName, resourceUrl) => {
-      execFileSync('restish', ['api', 'connect', targetAPIName, resourceUrl, '--replace', '--yes'], {
+      execFileSync('restish', ['api', 'connect', targetAPIName, resourceUrl, '--no-discover', '--replace', '--yes'], {
         cwd: repoRoot,
         env: environment,
         encoding: 'utf8',
       })
+      targetURLs.set(targetAPIName, resourceUrl.replace(/\/$/, ''))
     },
-    targetRequest: <T>(targetAPIName: string, operation: string) => {
+    targetRequest: <T>(targetAPIName: string, path: string) => {
+      const resourceURL = targetURLs.get(targetAPIName)
+      if (!resourceURL) throw new Error(`Target API "${targetAPIName}" is not connected`)
       try {
         return JSON.parse(
-          execFileSync('restish', [targetAPIName, operation, '--rsh-output-format', 'json'], {
+          execFileSync('restish', ['get', `${resourceURL}/${path}`, '--rsh-output-format', 'json'], {
             cwd: repoRoot,
             env: environment,
             encoding: 'utf8',
@@ -219,7 +223,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
       } catch (error) {
         const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
         throw new Error(
-          `Restish ${targetAPIName} ${operation} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
+          `Restish ${targetAPIName}/${path} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
           { cause: error },
         )
       }

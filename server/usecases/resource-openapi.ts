@@ -17,7 +17,7 @@ export async function validateRequestedScopes(deps: Deps, resourceUrl: string, r
   }
 }
 
-async function readDeclaredScopes(deps: Deps, resourceUrl: string): Promise<ResourceScopeDefinition[]> {
+export async function readDeclaredScopes(deps: Deps, resourceUrl: string): Promise<ResourceScopeDefinition[]> {
   const resourceResponse = await deps.externalHttp.fetch(
     new Request(resourceUrl, {
       headers: { accept: 'application/json, application/problem+json, */*' },

@@ -23,7 +23,7 @@ import type {
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
 import { getAgentRoleAuthorization } from './authorization'
-import { validateRequestedScopes } from './resource-openapi'
+import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
@@ -383,6 +383,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       audience: resource.audience,
       resourceUrl: resource.resourceUrl,
       authorizationMode: resource.authorizationMode,
+      scopes: await readDeclaredScopes(deps, resource.resourceUrl),
       connections:
         resource.authorizationMode === 'external'
           ? activeConnections
@@ -418,6 +419,7 @@ export async function listAgentApiResources(
     audience: resource.audience,
     resourceUrl: resource.resourceUrl,
     authorizationMode: resource.authorizationMode,
+    scopes: resource.scopes,
     accountConnections: resource.connections.map((connection) => ({
       id: connection.id,
       displayName: connection.displayName,

@@ -177,6 +177,7 @@ describe('external API resource authorization', () => {
       resources: [
         {
           id: 'resource-1',
+          scopes: [{ value: 'projects:read', description: 'Read projects' }],
           connections: [{ id: 'connection-1', subjectHint: '••••er-1', grantedScopes: ['projects:read'] }],
         },
       ],
@@ -477,7 +478,14 @@ describe('external API resource authorization', () => {
       resources: [{ authorizationMode: 'native', connections: [], grants: [{ id: 'grant-1' }] }],
     })
     await expect(listAgentApiResources(deps, principal(), { limit: 10, offset: 0 })).resolves.toMatchObject({
-      items: [{ id: 'resource-1', accountConnections: [], accessGrants: [{ id: 'grant-1' }] }],
+      items: [
+        {
+          id: 'resource-1',
+          scopes: [{ value: 'projects:read', description: 'Read projects' }],
+          accountConnections: [],
+          accessGrants: [{ id: 'grant-1' }],
+        },
+      ],
       pagination: { total: 1 },
     })
     const created = await createAccessRequest(

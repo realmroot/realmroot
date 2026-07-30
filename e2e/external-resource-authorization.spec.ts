@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 import { admin, baseURL, resetAndBootstrap, signIn, signOut } from './helpers/real-app'
 import { createRestishAgentPlugin } from './helpers/restish-agent-plugin'
 
@@ -22,7 +22,7 @@ test.describe('external API resource authorization', () => {
       await page.goto(await whoami.approvalUrl)
       await page.getByRole('button', { name: 'Approve login' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
-      await whoami.result
+      const identity = await whoami.result
 
       const resourceResponse = await page.request.post('/api/api-resources', {
         data: {
@@ -36,6 +36,7 @@ test.describe('external API resource authorization', () => {
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
       const resource = (await resourceResponse.json()) as { id: string }
+      await grantAgentResourceScope(page, resource.id, identity.agent.id, 'e2e-projects-reader')
       const intentResponse = await page.request.post('/api/account/account-connections', {
         data: {
           apiResourceId: resource.id,
@@ -85,7 +86,7 @@ test.describe('external API resource authorization', () => {
       const directBody = plugin.targetRequest<{
         projects: Array<{ id: string; name: string }>
         authorization: { sub: string; act: { sub: string; host?: unknown }; scope: string }
-      }>('external-projects', 'list-projects')
+      }>('external-projects', 'projects')
       expect(directBody).toMatchObject({
         projects: [{ id: 'project-1', name: 'Agent-ready project' }],
         authorization: {
@@ -98,7 +99,7 @@ test.describe('external API resource authorization', () => {
 
       const revoked = await page.request.delete(`/api/account/access-grants/${approved.grantId}`)
       expect(revoked.status()).toBe(204)
-      expect(() => plugin.targetRequest('external-projects', 'list-projects')).toThrow()
+      expect(() => plugin.targetRequest('external-projects', 'projects')).toThrow()
     } finally {
       plugin.dispose()
     }
@@ -115,7 +116,7 @@ test.describe('external API resource authorization', () => {
       await page.goto(await whoami.approvalUrl)
       await page.getByRole('button', { name: 'Approve login' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
-      await whoami.result
+      const identity = await whoami.result
 
       const resourceResponse = await page.request.post('/api/api-resources', {
         data: {
@@ -128,6 +129,7 @@ test.describe('external API resource authorization', () => {
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
       const resource = (await resourceResponse.json()) as { id: string }
+      await grantAgentResourceScope(page, resource.id, identity.agent.id, 'e2e-realmroot-projects-reader')
 
       const discovered = plugin.listAgentApiResources<{
         items: Array<{
@@ -174,7 +176,7 @@ test.describe('external API resource authorization', () => {
       expect(lease).not.toHaveProperty('accessToken')
 
       plugin.connectTarget('native-projects', realmrootResource)
-      expect(plugin.targetRequest('native-projects', 'list-projects')).toMatchObject({
+      expect(plugin.targetRequest('native-projects', 'projects')).toMatchObject({
         projects: [{ id: 'project-1', name: 'Realmroot-native project' }],
         authorization: {
           sub: expect.any(String),
@@ -190,3 +192,21 @@ test.describe('external API resource authorization', () => {
     }
   })
 })
+
+async function grantAgentResourceScope(page: Page, resourceId: string, agentIdentityId: string, key: string) {
+  const roleResponse = await page.request.post('/api/roles', {
+    data: { key, name: 'Projects reader', resourceId },
+  })
+  expect(roleResponse.status(), await roleResponse.text()).toBe(201)
+  const role = (await roleResponse.json()) as { id: string }
+
+  const scopesResponse = await page.request.put(`/api/roles/${role.id}/scopes`, {
+    data: { scopes: ['projects:read'] },
+  })
+  expect(scopesResponse.status(), await scopesResponse.text()).toBe(204)
+
+  const assignmentResponse = await page.request.post('/api/roles/assignments/agents', {
+    data: { roleId: role.id, subjectId: agentIdentityId },
+  })
+  expect(assignmentResponse.status(), await assignmentResponse.text()).toBe(204)
+}

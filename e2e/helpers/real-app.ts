@@ -79,6 +79,7 @@ export function resetLocalData() {
     DELETE FROM external_resource_authorization;
     DELETE FROM agent_identity_binding;
     DELETE FROM agent_enrollment_intent;
+    DELETE FROM agent_role_assignment;
     DELETE FROM agent_identity;
     DELETE FROM agent_capability_grant;
     DELETE FROM agent;
@@ -88,12 +89,10 @@ export function resetLocalData() {
     DELETE FROM user_role_assignment;
     DELETE FROM application_role_assignment;
     DELETE FROM member_role_assignment;
-    DELETE FROM role_permission;
+    DELETE FROM role_scope;
     DELETE FROM invitation;
     DELETE FROM member;
     DELETE FROM role;
-    DELETE FROM api_permission;
-    DELETE FROM api_scope;
     DELETE FROM api_resource;
     DELETE FROM application_consent;
     DELETE FROM application_client_secret;
