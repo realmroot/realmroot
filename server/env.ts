@@ -33,7 +33,7 @@ export interface SendEmail {
  * transactional `SendEmail` wrapper, and the optional runtime config vars below are
  * declared by hand because they are deployment secrets/vars, not wrangler bindings.
  */
-export type Env = Omit<Cloudflare.Env, 'EMAIL'> & {
+type RuntimeEnvOverrides = {
   EMAIL: SendEmail
   EXTERNAL_HTTP?: Fetcher
   BETTER_AUTH_URL?: string
@@ -49,6 +49,8 @@ export type Env = Omit<Cloudflare.Env, 'EMAIL'> & {
   WEBAUTHN_RP_NAME?: string
   WEBAUTHN_ORIGINS?: string
 }
+
+export type Env = Omit<Cloudflare.Env, keyof RuntimeEnvOverrides> & RuntimeEnvOverrides
 
 export interface RuntimeConfig {
   authSecret: string
