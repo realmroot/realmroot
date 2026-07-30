@@ -53,16 +53,39 @@ Connect Restish directly to each shortlisted `resourceUrl` and inspect the
 target's generated operations before choosing scopes or requesting access:
 
 ```bash
-TARGET_API=corp-projects
+TARGET_API=projects
 RESOURCE_URL=https://api.example.com
 restish api connect "$TARGET_API" "$RESOURCE_URL" --yes
 restish "$TARGET_API" --help
 restish "$TARGET_API" list-projects --help
 ```
 
-Use a user-supplied or unused local `TARGET_API` name. Reuse an existing name
-only when inspection shows the exact `resourceUrl`; retarget it with
-`--replace` only when the user explicitly selects that change.
+`TARGET_API` identifies the target's logical service, not the selected resource
+URL or request context. Choose a user-supplied name or a stable semantic service
+name from the target contract. Never include an environment, deployment,
+hostname, account, tenant, profile, or credential context in it; names such as
+`projects-local`, `projects-staging`, and `projects-production` are invalid.
+
+Before connecting, run `restish api list` and inspect the semantic service
+candidate with `restish api inspect`. If the logical service is already
+connected, reuse its API name. When the selected `resourceUrl` differs from its
+default base URL, add or select a profile instead of creating another API name
+or retargeting the existing one:
+
+```bash
+TARGET_API=projects
+TARGET_PROFILE=staging
+RESOURCE_URL=https://staging-api.example.com
+restish api set "$TARGET_API" \
+  "profiles.${TARGET_PROFILE}.base_url: ${RESOURCE_URL}"
+restish api inspect "$TARGET_API"
+restish -p "$TARGET_PROFILE" "$TARGET_API" --help
+```
+
+Profiles also separate account, tenant, and credential contexts for the same
+logical target service. Create another API name only for a genuinely different
+logical service. Retarget an existing default with `--replace` only when the
+user explicitly asks to replace that service's default context.
 
 The target publishes its OpenAPI contract through a `service-desc` link. Treat
 that contract—not Realmroot—as the authority for operation names, arguments,
@@ -145,8 +168,12 @@ Run the target operation selected during inspection:
 
 ```bash
 restish "$TARGET_API" list-projects -o json
+restish -p "$TARGET_PROFILE" "$TARGET_API" list-projects -o json
 ```
 
+Use the first form for the default context and the second for a named profile.
+Keep the target profile selected with an explicit `-p "$TARGET_PROFILE"` or a
+matching `RSH_PROFILE` whenever the operation does not use the default context.
 The adapter authenticates requests matching the registered `resourceUrl` and
 refreshes reusable grants when needed.
 

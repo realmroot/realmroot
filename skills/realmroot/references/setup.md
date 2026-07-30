@@ -17,8 +17,8 @@ Use an origin explicitly supplied for the task, then an existing `AUTH_ORIGIN`,
 then `REALMROOT_ORIGIN`; otherwise use the hosted production origin
 `https://id.realmroot.dev`.
 
-Normalize it into `AUTH_ORIGIN` and use `realmroot` as the default local API
-name:
+Normalize it into `AUTH_ORIGIN`. Use the stable local API name `realmroot`
+unless the user explicitly supplied another service-level alias:
 
 ```bash
 AUTH_ORIGIN="${AUTH_ORIGIN:-${REALMROOT_ORIGIN:-https://id.realmroot.dev}}"
@@ -26,13 +26,20 @@ AUTH_ORIGIN="${AUTH_ORIGIN%/}"
 API_NAME="${API_NAME:-realmroot}"
 ```
 
+`API_NAME` identifies the Realmroot service, not the selected deployment. Never
+derive it from `AUTH_ORIGIN`, a hostname, an environment, a profile, an account,
+a tenant, or a credential context. Do not create names such as
+`realmroot-local`, `realmroot-staging`, or `realmroot-production`; represent
+those contexts with profiles under the same API name.
+
 Accept only an absolute origin containing a scheme, host, and optional port.
 Use HTTPS except for an explicitly selected local or trusted test environment.
 The configured origin has no `/api` suffix, path, query, fragment, or user
 information.
 
-Deployment resolution is complete when `AUTH_ORIGIN` and `API_NAME` contain the
-exact values that subsequent commands will use.
+Deployment resolution is complete when `AUTH_ORIGIN` contains the exact
+deployment selected for subsequent commands and `API_NAME` remains the stable
+service alias.
 
 ## Prepare Restish
 
@@ -64,35 +71,35 @@ Preparation is complete when all three required versions are confirmed.
 
 ## Connect The API
 
-For a new API name or an intentional retarget, connect the unified OpenAPI
-contract:
+If the stable API name is not connected yet, connect the unified OpenAPI
+contract. The resulting `default` profile is a request context; it does not
+change the meaning of the API name:
 
 ```bash
-restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --replace --yes
+restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --yes
 restish api set "$API_NAME" 'command_layout: tags'
 ```
 
-For an existing connection that still targets the resolved origin, refresh its
-contract:
+For an existing connection, inspect it before changing anything. If its default
+base URL already matches the resolved origin, refresh its contract:
 
 ```bash
+restish api inspect "$API_NAME"
 restish api sync "$API_NAME"
 restish api set "$API_NAME" 'command_layout: tags'
 ```
 
-Inspect before proceeding when the target is uncertain:
+If the resolved origin differs, keep the API name and existing default profile
+unchanged and add or select a profile for that origin. Never use `--replace` or
+another API name merely to switch environments.
 
-```bash
-restish api inspect "$API_NAME"
-```
-
-Connection is complete when the inspected base URL is exactly
-`$AUTH_ORIGIN/api`.
+Connection is complete when inspection shows the resolved origin as either the
+default base URL or the selected profile base URL.
 
 ## Add A Profile
 
-Use this section only when the user needs another environment or credential
-context under the same local API name:
+Use a named profile whenever the resolved deployment or credential context
+differs from the API's existing default context:
 
 ```bash
 PROFILE_NAME=staging
@@ -113,7 +120,9 @@ different issuer uses a separate identity.
 
 Profile setup is complete when inspection shows the exact profile base URL and
 its explicit `auth whoami` call succeeds. Keep the selected
-`RSH_PROFILE` and matching `AUTH_ORIGIN` for every later branch command.
+`RSH_PROFILE` and matching `AUTH_ORIGIN` for every later branch command. Adding
+more Realmroot deployments or credential contexts always adds profiles, never
+API names.
 
 ## Establish Identity
 

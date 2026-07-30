@@ -32,9 +32,14 @@ token from Restish output. The API resource's `resourceUrl` can then be connecte
 directly:
 
 ```bash
-restish api connect projects https://api.example.com --replace --yes
+restish api connect projects https://api.example.com --yes
 restish projects list-projects -o json
 ```
+
+An API name identifies one logical service. Keep the same API name across its
+environments, deployments, accounts, tenants, and credential contexts, and use
+Restish profiles for those contexts. Do not create environment-qualified names
+such as `projects-staging`; add `profiles.staging.base_url` to `projects`.
 
 Restish follows the resource's RFC 8631 `service-desc` link to its OpenAPI
 contract. The global auth hook recognizes the registered resource URL and adds
