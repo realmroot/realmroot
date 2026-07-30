@@ -85,6 +85,7 @@ export const resourceConnectionIntent = sqliteTable(
     ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
     encryptedPkceVerifier: text('encrypted_pkce_verifier').notNull(),
+    returnTo: text('return_to').notNull().default('account-center'),
     status: text('status').notNull().default('pending'),
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
     completedAt: integer('completed_at', { mode: 'timestamp_ms' }),

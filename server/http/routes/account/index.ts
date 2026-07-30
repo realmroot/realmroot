@@ -19,6 +19,7 @@ import {
   getAccountAccessRequest,
   getAccountAccessRequestByToken,
   getAccountConnection,
+  listAccessRequestConnections,
   listAccountAccessRequests,
   listAccountConnections,
   listConnectableExternalResources,
@@ -421,9 +422,13 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   })
 
   app.get('/account-connections', async (c) => {
+    const pagination = readQuery(c, paginationQuerySchema)
+    const approvalToken = c.req.query('approvalToken')
     return c.json(
       accountConnectionsResponseSchema.parse(
-        await listAccountConnections(getDeps(c), getPrincipal(c).user!.id, readQuery(c, paginationQuerySchema)),
+        approvalToken
+          ? await listAccessRequestConnections(getDeps(c), approvalToken, getPrincipal(c).user!.id, pagination)
+          : await listAccountConnections(getDeps(c), getPrincipal(c).user!.id, pagination),
       ),
     )
   })

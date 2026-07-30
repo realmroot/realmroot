@@ -395,6 +395,7 @@ export interface ResourceConnectionIntentRecord {
   ownerOrganizationId: string | null
   scopes: string[]
   encryptedPkceVerifier: string
+  returnTo: string
   status: string
   expiresAt: Date
   completedAt: Date | null
@@ -471,7 +472,13 @@ export interface ExternalResourceRepository {
   listPendingAccessRequests(): Promise<AgentAccessRequestRecord[]>
   decideAccessRequest(
     id: string,
-    input: { status: 'approved' | 'denied'; grantId: string | null; decidedAt: Date; updatedAt: Date },
+    input: {
+      status: 'approved' | 'denied'
+      grantId: string | null
+      connectionId?: string | null
+      decidedAt: Date
+      updatedAt: Date
+    },
   ): Promise<AgentAccessRequestRecord | null>
   consumeAccessRequest(id: string, now: Date): Promise<boolean>
   listPendingAccessRequestsByConnections(connectionIds: string[]): Promise<AgentAccessRequestRecord[]>

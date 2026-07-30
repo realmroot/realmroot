@@ -85,6 +85,13 @@
       "when": 1785384585819,
       "tag": "20260730040945_romantic_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1785391917588,
+      "tag": "20260730061157_minor_firebird",
+      "breakpoints": true
     }
   ]
 }

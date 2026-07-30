@@ -159,18 +159,28 @@ export const accountConnectionSchema = z.object({
   updatedAt: z.iso.datetime(),
 })
 
-export const createAccountConnectionSchema = z
-  .object({
-    apiResourceId: nonEmptyString,
-    owner: z
-      .discriminatedUnion('type', [
-        z.object({ type: z.literal('user') }),
-        z.object({ type: z.literal('organization'), organizationId: nonEmptyString }),
-      ])
-      .default({ type: 'user' }),
-    scopes: scopeListSchema,
-  })
-  .strict()
+export const createAccountConnectionSchema = z.discriminatedUnion('context', [
+  z
+    .object({
+      context: z.literal('resource'),
+      apiResourceId: nonEmptyString,
+      owner: z
+        .discriminatedUnion('type', [
+          z.object({ type: z.literal('user') }),
+          z.object({ type: z.literal('organization'), organizationId: nonEmptyString }),
+        ])
+        .default({ type: 'user' }),
+      scopes: scopeListSchema,
+    })
+    .strict(),
+  z
+    .object({
+      context: z.literal('access-request'),
+      accessRequestId: nonEmptyString,
+      approvalToken: nonEmptyString,
+    })
+    .strict(),
+])
 
 export const accountConnectionsResponseSchema = z.object({
   items: z.array(accountConnectionSchema),
@@ -226,6 +236,7 @@ export const decideAccessRequestSchema = z
     decision: z.enum(['approve', 'deny']),
     mode: agentAccessGrantModeSchema.optional(),
     expiresAt: z.iso.datetime().optional(),
+    accountConnectionId: nonEmptyString.optional(),
     approvalToken: nonEmptyString.optional(),
   })
   .superRefine((input, ctx) => {

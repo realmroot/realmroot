@@ -231,20 +231,28 @@ Feature: Agent identity and external API authorization
       Then the OAuth redirect URI and JWKS URI use the configured deployment origin
       And a later Account Center authorization request uses that same redirect URI
 
-    @e2e @entrypoint:product-ui @journey:resource-account-connection
-    Scenario: A user connects an account to an external API resource
-      Given an external API resource is enabled
-      When a user completes authorization code with PKCE in Account Center
-      Then Realmroot records a resource account connection owned by the user's home space
+    @e2e @entrypoint:agent-protocol @journey:external-resource-first-access
+    Scenario: An Agent requests first access to an external API resource
+      Given an enabled external API resource has active authorization configuration
+      And the Agent's home space has no account connection for that resource
+      When the Agent discovers the resource and requests exact OpenAPI scopes
+      Then Realmroot creates a pending access request without requiring a connection
+      When the controller opens the approval page
+      Then the controller can select an existing account or connect a new account with the exact requested scopes
+      And OAuth returns the controller to the same approval
+      When the controller binds the account connection and approves the request
+      Then Realmroot records a resource account connection owned by the Agent's home space
       And stores its refresh credential encrypted
       And never exposes the refresh credential through an API, audit event, or error
-      And connecting the account grants no Agent permission
+      And binds that connection to the request and grant
+      And the Agent can obtain a DPoP-bound target access token
 
     @entrypoint:agent-protocol @journey:agent-resource-discovery
     Scenario: An Agent discovers accounts and requests exact resource authority
-      Given connected resource accounts exist in the Agent's home space
+      Given enabled native and externally authorized API resources exist
       When the Agent lists available resources
-      Then Realmroot returns enabled resources, protected resource URLs, redacted accounts, and active grants
+      Then Realmroot returns enabled resources even when an external resource has no connected account
+      And returns protected resource URLs, redacted accounts, and active grants
       When Restish reads a target OpenAPI operation and the Agent requests an account and its exact scope set without an applicable grant
       Then Realmroot validates that scope set against the current target OpenAPI contract
       And assigned resource roles restrict the request when present

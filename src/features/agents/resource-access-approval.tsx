@@ -1,15 +1,32 @@
-import type { AccessRequest, DecideAccessRequest } from '@shared/api/agent-api'
-import { CheckCircle2, XCircle } from 'lucide-react'
+import type { AccessRequest, AccountConnection, DecideAccessRequest } from '@shared/api/agent-api'
+import { CheckCircle2, Link2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
-import { decideAgentResourceApproval, getAgentResourceApproval } from '@/lib/api/account'
+import {
+  createAccountConnection,
+  decideAgentResourceApproval,
+  getAgentResourceApproval,
+  listApprovalAccountConnections,
+  listExternalApiResources,
+} from '@/lib/api/account'
 
 type ApprovalMode = NonNullable<DecideAccessRequest['mode']>
+const approvalTokenStorageKey = 'realmroot.resource-access-approval-token'
 
 export function ResourceAccessApproval() {
-  const token = useMemo(() => new URLSearchParams(window.location.hash.slice(1)).get('token') ?? '', [])
+  const token = useMemo(() => {
+    const hashToken = new URLSearchParams(window.location.hash.slice(1)).get('token')
+    if (hashToken) {
+      window.sessionStorage.setItem(approvalTokenStorageKey, hashToken)
+      return hashToken
+    }
+    return window.sessionStorage.getItem(approvalTokenStorageKey) ?? ''
+  }, [])
   const [request, setRequest] = useState<AccessRequest | null>(null)
+  const [connections, setConnections] = useState<AccountConnection[]>([])
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null)
+  const [externalResourceName, setExternalResourceName] = useState<string | null>(null)
   const [mode, setMode] = useState<ApprovalMode>('once')
   const [expiresAt, setExpiresAt] = useState('')
   const [decision, setDecision] = useState<'approved' | 'denied' | null>(null)
@@ -21,8 +38,28 @@ export function ResourceAccessApproval() {
       setError('Approval token is missing.')
       return
     }
-    void getAgentResourceApproval(token)
-      .then(setRequest)
+    void Promise.all([
+      getAgentResourceApproval(token),
+      listApprovalAccountConnections(token),
+      listExternalApiResources(),
+    ])
+      .then(([accessRequest, availableConnections, resources]) => {
+        const target = accessRequest.target
+        setRequest(accessRequest)
+        setConnections(availableConnections.items)
+        setExternalResourceName(
+          target.type === 'api-resource'
+            ? (resources.items.find((resource) => resource.id === target.apiResourceId)?.name ?? null)
+            : null,
+        )
+        const callbackConnectionId = new URLSearchParams(window.location.search).get('accountConnectionId')
+        setSelectedConnectionId(
+          callbackConnectionId ??
+            (target.type === 'api-resource'
+              ? (target.accountConnectionId ?? availableConnections.items[0]?.id ?? null)
+              : null),
+        )
+      })
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : 'Unable to load the Agent resource request.')
       })
@@ -38,13 +75,32 @@ export function ResourceAccessApproval() {
           : {
               decision: 'approve',
               mode,
+              ...(selectedConnectionId ? { accountConnectionId: selectedConnectionId } : {}),
               ...(mode === 'until' ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
             }
       await decideAgentResourceApproval(request!.id, token, input)
+      window.sessionStorage.removeItem(approvalTokenStorageKey)
       setDecision(nextDecision === 'approve' ? 'approved' : 'denied')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to decide the Agent resource request.')
     } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function connectAccount() {
+    setSubmitting(true)
+    setError(null)
+    try {
+      const connection = await createAccountConnection({
+        context: 'access-request',
+        accessRequestId: request!.id,
+        approvalToken: token,
+      })
+      if (!connection.authorizationUrl) throw new Error('The authorization URL was not returned.')
+      window.location.assign(connection.authorizationUrl)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to start account authorization.')
       setSubmitting(false)
     }
   }
@@ -90,6 +146,33 @@ export function ResourceAccessApproval() {
             {request.reason ? <RequestField label="Reason" value={request.reason} wide /> : null}
           </dl>
         ) : null}
+        {request?.target.type === 'api-resource' && externalResourceName ? (
+          <fieldset className="space-y-3 rounded-md border border-border bg-card p-4" disabled={submitting}>
+            <legend className="px-1 text-sm font-semibold">{externalResourceName} account</legend>
+            {connections.length > 0 ? (
+              connections.map((connection) => (
+                <label className="flex items-start gap-2 text-sm" key={connection.id}>
+                  <input
+                    checked={selectedConnectionId === connection.id}
+                    name="accountConnection"
+                    onChange={() => setSelectedConnectionId(connection.id)}
+                    type="radio"
+                  />
+                  <span>
+                    <span className="block font-medium">{connection.displayName}</span>
+                    <span className="block text-xs text-muted-foreground">{connection.scopes.join(' ')}</span>
+                  </span>
+                </label>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No connected account covers these exact scopes.</p>
+            )}
+            <Button onClick={() => void connectAccount()} type="button" variant="outline">
+              <Link2 data-icon="inline-start" />
+              Connect a new {externalResourceName} account
+            </Button>
+          </fieldset>
+        ) : null}
         <fieldset className="space-y-3 rounded-md border border-border bg-card p-4" disabled={!request || submitting}>
           <legend className="px-1 text-sm font-semibold">Grant lifetime</legend>
           {(['once', 'until', 'persistent'] as const).map((value) => (
@@ -117,7 +200,12 @@ export function ResourceAccessApproval() {
         {error ? <Status tone="error">{error}</Status> : null}
         <div className="flex gap-3">
           <Button
-            disabled={!request || submitting || (mode === 'until' && !expiresAt)}
+            disabled={
+              !request ||
+              submitting ||
+              (externalResourceName !== null && !selectedConnectionId) ||
+              (mode === 'until' && !expiresAt)
+            }
             onClick={() => void submit('approve')}
           >
             {submitting ? 'Updating…' : 'Approve exact access'}

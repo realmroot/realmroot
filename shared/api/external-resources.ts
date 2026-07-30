@@ -51,6 +51,7 @@ export const resourceConnectionOwnerSchema = z.discriminatedUnion('type', [
 export const createResourceConnectionIntentRequestSchema = z.object({
   owner: resourceConnectionOwnerSchema.default({ type: 'user' }),
   scopes: scopeListSchema,
+  returnTo: z.enum(['account-center', 'access-approval']).optional(),
 })
 
 export const resourceConnectionIntentResponseSchema = z.object({
@@ -126,6 +127,7 @@ export const decideAgentAccessRequestSchema = z.object({
   decision: z.enum(['approve', 'deny']),
   mode: agentAccessGrantModeSchema.optional(),
   expiresAt: z.iso.datetime().optional(),
+  accountConnectionId: nonEmptyString.optional(),
 })
 
 export const agentAccessApprovalTokenQuerySchema = z.object({ token: nonEmptyString })

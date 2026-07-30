@@ -8,12 +8,18 @@ export function createResourceConnectionRoutes(canonicalOrigin?: string) {
   const app = new Hono()
 
   app.get('/oauth/callback', async (c) => {
-    await completeResourceConnectionIntent(
+    const connection = await completeResourceConnectionIntent(
       getDeps(c),
       readQuery(c, resourceConnectionCallbackQuerySchema),
       canonicalOrigin ?? new URL(c.req.url).origin,
     )
-    return c.redirect(`${canonicalOrigin ?? new URL(c.req.url).origin}/connections?resource_connection=connected`)
+    const origin = canonicalOrigin ?? new URL(c.req.url).origin
+    if (connection.returnTo === 'access-approval') {
+      return c.redirect(
+        `${origin}/agent/resource-access/approve?accountConnectionId=${encodeURIComponent(connection.id)}`,
+      )
+    }
+    return c.redirect(`${origin}/connections?resource_connection=connected`)
   })
 
   return app

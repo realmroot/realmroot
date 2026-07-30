@@ -186,6 +186,7 @@ export async function createResourceConnectionIntent(
     ownerOrganizationId: input.owner.type === 'organization' ? input.owner.organizationId : null,
     scopes: requestedScopes,
     encryptedPkceVerifier: await deps.secrets.seal(verifier, connectionIntentContext(id)),
+    returnTo: input.returnTo ?? 'account-center',
     status: 'pending',
     expiresAt,
     completedAt: null,
@@ -274,7 +275,10 @@ export async function completeResourceConnectionIntent(
     createdAt: now,
     updatedAt: now,
   }
-  return toResourceConnection(await deps.externalResources.createConnection(record))
+  return {
+    ...toResourceConnection(await deps.externalResources.createConnection(record)),
+    returnTo: intent.returnTo,
+  }
 }
 
 export async function listResourceConnections(deps: Deps, actorUserId: string) {
@@ -288,31 +292,72 @@ export async function createAccountConnection(
   actorUserId: string,
   callbackOrigin: string,
 ): Promise<AccountConnection> {
+  if (input.context === 'access-request') {
+    const request = await requirePendingAccessRequestByToken(deps, input.approvalToken)
+    if (request.id !== input.accessRequestId) throw notFound('Agent access request was not found.')
+    await requireControlledRequestTarget(deps, request, actorUserId)
+    const resource = await requireEnabledResource(deps, request.resourceId)
+    if (resource.authorizationMode !== 'external') {
+      throw badRequest('Native API resources do not use account connections.')
+    }
+    const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
+    if (!identity) throw notFound('Active Agent identity was not found.')
+    const owner = identity.identity.ownerOrganizationId
+      ? { type: 'organization' as const, organizationId: identity.identity.ownerOrganizationId }
+      : { type: 'user' as const }
+    const pending = await createResourceConnectionIntent(
+      deps,
+      request.resourceId,
+      { owner, scopes: request.scopes, returnTo: 'access-approval' },
+      actorUserId,
+      callbackOrigin,
+    )
+    return toPendingAccountConnection(pending, request.scopes)
+  }
   const pending = await createResourceConnectionIntent(
     deps,
     input.apiResourceId,
-    { owner: input.owner, scopes: input.scopes },
+    { owner: input.owner, scopes: input.scopes, returnTo: 'account-center' },
     actorUserId,
     callbackOrigin,
   )
-  return {
-    id: pending.id,
-    apiResourceId: pending.resourceId,
-    owner: pending.owner,
-    displayName: null,
-    subjectHint: null,
-    scopes: input.scopes ?? [],
-    status: 'pending_authorization',
-    credentialExpiresAt: null,
-    authorizationUrl: pending.authorizationUrl,
-    expiresAt: pending.expiresAt,
-    createdAt: pending.createdAt,
-    updatedAt: pending.updatedAt,
-  }
+  return toPendingAccountConnection(pending, input.scopes)
 }
 
 export async function listAccountConnections(deps: Deps, actorUserId: string, pagination: PaginationInput) {
   const connections = (await deps.externalResources.listConnectionsByUser(actorUserId)).map(toAccountConnection)
+  return {
+    items: connections.slice(pagination.offset, pagination.offset + pagination.limit),
+    pagination: paginationMetadata({ ...pagination, total: connections.length }),
+  }
+}
+
+export async function listAccessRequestConnections(
+  deps: Deps,
+  approvalToken: string,
+  actorUserId: string,
+  pagination: PaginationInput,
+) {
+  const request = await requirePendingAccessRequestByToken(deps, approvalToken)
+  await requireControlledRequestTarget(deps, request, actorUserId)
+  const resource = await requireEnabledResource(deps, request.resourceId)
+  if (resource.authorizationMode !== 'external') {
+    return { items: [], pagination: paginationMetadata({ ...pagination, total: 0 }) }
+  }
+  const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
+  if (!identity) throw notFound('Active Agent identity was not found.')
+  const connections = (
+    identity.identity.ownerOrganizationId
+      ? await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId])
+      : await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId!)
+  )
+    .filter(
+      (connection) =>
+        connection.resourceId === request.resourceId &&
+        connection.status === 'active' &&
+        request.scopes.every((scope) => connection.grantedScopes.includes(scope)),
+    )
+    .map(toAccountConnection)
   return {
     items: connections.slice(pagination.offset, pagination.offset + pagination.limit),
     pagination: paginationMetadata({ ...pagination, total: connections.length }),
@@ -367,7 +412,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
   )
   const visibleResourceIds = new Set([
     ...activeConnections.map((connection) => connection.resourceId),
-    ...configuredResources.filter((resource) => resource.authorizationMode === 'native').map((resource) => resource.id),
+    ...configuredResources.map((resource) => resource.id),
   ])
   const resources = []
   for (const resourceId of visibleResourceIds) {
@@ -459,10 +504,15 @@ export async function createAgentAccessRequest(
   const resource = await requireEnabledResource(deps, input.resourceId)
   const connection = input.connectionId ? await deps.externalResources.findConnection(input.connectionId) : null
   if (resource.authorizationMode === 'external') {
-    if (!connection || connection.resourceId !== resource.id || connection.status !== 'active') {
+    if (
+      input.connectionId &&
+      (!connection || connection.resourceId !== resource.id || connection.status !== 'active')
+    ) {
       throw notFound('Active resource account connection was not found.')
     }
-    assertConnectionInHomeSpace(connection, identity.identity.ownerUserId, identity.identity.ownerOrganizationId)
+    if (connection) {
+      assertConnectionInHomeSpace(connection, identity.identity.ownerUserId, identity.identity.ownerOrganizationId)
+    }
   } else if (connection) {
     throw badRequest('Native API resources do not use account connections.')
   }
@@ -478,7 +528,7 @@ export async function createAgentAccessRequest(
   const scopes = [...new Set(input.scopes)].sort()
   const existingGrant = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).find(
     (grant) =>
-      grant.connectionId === connection?.id &&
+      grant.connectionId === (connection?.id ?? null) &&
       grant.resourceId === resource.id &&
       exactScopes(grant.scopes, scopes) &&
       (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
@@ -490,7 +540,7 @@ export async function createAgentAccessRequest(
   const pending = (await deps.externalResources.listPendingAccessRequestsByAgent(principal.identityId, now)).find(
     (request) =>
       request.resourceId === resource.id &&
-      request.connectionId === connection?.id &&
+      request.connectionId === (connection?.id ?? null) &&
       exactScopes(request.scopes, scopes),
   )
   if (pending) {
@@ -649,7 +699,7 @@ export async function decideAgentAccessRequest(
   if (!request || request.status !== 'pending' || request.expiresAt.getTime() <= Date.now()) {
     throw notFound('Pending Agent access request was not found.')
   }
-  const connection = await requireControlledRequestTarget(deps, request, actorUserId)
+  const controlledConnection = await requireControlledRequestTarget(deps, request, actorUserId)
   const now = new Date()
   if (input.decision === 'deny') {
     const decided = await deps.externalResources.decideAccessRequest(request.id, {
@@ -663,7 +713,7 @@ export async function decideAgentAccessRequest(
       action: 'api_resource.access_decided',
       result: 'denied',
       resourceId: request.resourceId,
-      connection,
+      connection: controlledConnection,
       request,
       grantId: null,
       controllerUserId: actorUserId,
@@ -684,12 +734,29 @@ export async function decideAgentAccessRequest(
     requestIdentity.identity.ownerOrganizationId,
     request.scopes,
   )
+  const connectionId = input.accountConnectionId ?? request.connectionId
+  let connection: ResourceAccountConnectionRecord | null = null
+  if (resource.authorizationMode === 'external') {
+    if (!connectionId) throw badRequest('An account connection is required to approve external API access.')
+    connection = await requireControlledConnection(deps, connectionId, actorUserId)
+    if (connection.resourceId !== resource.id || connection.status !== 'active') {
+      throw badRequest('The selected account connection does not belong to this API resource.')
+    }
+    assertConnectionInHomeSpace(
+      connection,
+      requestIdentity.identity.ownerUserId,
+      requestIdentity.identity.ownerOrganizationId,
+    )
+    assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
+  } else if (connectionId) {
+    throw badRequest('Native API resources do not use account connections.')
+  }
   const expiresAt = input.mode === 'until' ? new Date(input.expiresAt!) : null
   if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Grant expiry must be in the future.')
   const grant = await deps.externalResources.createGrant({
     id: createId('accessgrant'),
     resourceId: request.resourceId,
-    connectionId: request.connectionId,
+    connectionId,
     agentIdentityId: request.agentIdentityId,
     scopes: request.scopes,
     mode: input.mode!,
@@ -703,6 +770,7 @@ export async function decideAgentAccessRequest(
   const decided = await deps.externalResources.decideAccessRequest(request.id, {
     status: 'approved',
     grantId: grant.id,
+    connectionId,
     decidedAt: now,
     updatedAt: now,
   })
@@ -1537,6 +1605,26 @@ function toAccountConnection(record: ResourceAccountConnectionRecord): AccountCo
     expiresAt: null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+  }
+}
+
+function toPendingAccountConnection(
+  pending: Awaited<ReturnType<typeof createResourceConnectionIntent>>,
+  scopes: string[],
+): AccountConnection {
+  return {
+    id: pending.id,
+    apiResourceId: pending.resourceId,
+    owner: pending.owner,
+    displayName: null,
+    subjectHint: null,
+    scopes,
+    status: 'pending_authorization',
+    credentialExpiresAt: null,
+    authorizationUrl: pending.authorizationUrl,
+    expiresAt: pending.expiresAt,
+    createdAt: pending.createdAt,
+    updatedAt: pending.updatedAt,
   }
 }
 

@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ResourceAccessApproval } from './resource-access-approval'
 
 const api = vi.hoisted(() => ({
+  createAccountConnection: vi.fn(),
   decideAgentResourceApproval: vi.fn(),
   getAgentResourceApproval: vi.fn(),
+  listApprovalAccountConnections: vi.fn(),
+  listExternalApiResources: vi.fn(),
 }))
 
 vi.mock('@/lib/api/account', () => api)
@@ -28,11 +31,50 @@ const request = {
   updatedAt: '2026-08-01T00:00:00.000Z',
 }
 
+const connection = {
+  id: 'connection-1',
+  apiResourceId: 'resource-1',
+  owner: { type: 'user' as const, userId: 'user-1' },
+  displayName: 'ZPan Demo',
+  subjectHint: '••••demo',
+  scopes: ['projects:read'],
+  status: 'active' as const,
+  credentialExpiresAt: null,
+  authorizationUrl: null,
+  expiresAt: null,
+  createdAt: '2026-08-01T00:00:00.000Z',
+  updatedAt: '2026-08-01T00:00:00.000Z',
+}
+
 describe('Agent resource access approval', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/agent/resource-access/approve')
     window.location.hash = 'token=approval%20token'
+    window.sessionStorage.clear()
     api.getAgentResourceApproval.mockResolvedValue(request)
     api.decideAgentResourceApproval.mockResolvedValue({ ...request, status: 'approved' })
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [connection],
+      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+    api.listExternalApiResources.mockResolvedValue({
+      items: [
+        {
+          id: 'resource-1',
+          name: 'ZPan',
+          identifier: 'zpan',
+          audience: 'https://zpan.test',
+          resourceUrl: 'https://zpan.test/api',
+        },
+      ],
+      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+    api.createAccountConnection.mockResolvedValue({
+      ...connection,
+      id: 'connection-2',
+      status: 'pending_authorization',
+      authorizationUrl: 'https://zpan.test/authorize',
+    })
   })
 
   afterEach(() => {
@@ -46,7 +88,8 @@ describe('Agent resource access approval', () => {
 
     expect(await screen.findByText('agent-1')).toBeTruthy()
     expect(screen.getByText('connection-1')).toBeTruthy()
-    expect(screen.getByText('projects:read')).toBeTruthy()
+    expect(screen.getByText('ZPan Demo')).toBeTruthy()
+    expect(screen.getAllByText('projects:read')).toHaveLength(2)
     expect(screen.getByText('Read project status')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
 
@@ -54,9 +97,33 @@ describe('Agent resource access approval', () => {
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
         decision: 'approve',
         mode: 'once',
+        accountConnectionId: 'connection-1',
       }),
     )
     expect(await screen.findByText('Resource access approved')).toBeTruthy()
+  })
+
+  it('[spec: agent-identity/external-resource-first-access] connects an exact-scope account before approval', async () => {
+    api.getAgentResourceApproval.mockResolvedValue({
+      ...request,
+      target: { type: 'api-resource', apiResourceId: 'resource-1' },
+    })
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [],
+      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+    })
+    render(<ResourceAccessApproval />)
+
+    expect(await screen.findByText('No connected account covers these exact scopes.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Connect a new ZPan account' }))
+    await waitFor(() =>
+      expect(api.createAccountConnection).toHaveBeenCalledWith({
+        context: 'access-request',
+        accessRequestId: 'request-1',
+        approvalToken: 'approval token',
+      }),
+    )
   })
 
   it('approves access until the selected expiry and can deny', async () => {
@@ -89,6 +156,7 @@ describe('Agent resource access approval', () => {
 
   it('reports missing tokens and load failures', async () => {
     window.location.hash = ''
+    window.sessionStorage.clear()
     render(<ResourceAccessApproval />)
     expect(screen.getByText('Approval token is missing.')).toBeTruthy()
     cleanup()

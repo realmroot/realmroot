@@ -1,0 +1,1 @@
+ALTER TABLE `resource_connection_intent` ADD `return_to` text DEFAULT 'account-center' NOT NULL;

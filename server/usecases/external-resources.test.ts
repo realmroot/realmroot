@@ -19,6 +19,7 @@ import {
   getApiResource,
   getExternalResourceAuthorization,
   issueTargetAccessToken,
+  listAccessRequestConnections,
   listAccountAccessRequests,
   listAccountConnections,
   listAgentAccessGrants,
@@ -194,14 +195,14 @@ describe('external API resource authorization', () => {
     })
   })
 
-  it('discovers accounts and deduplicates an exact JIT request [spec: agent-identity/agent-resource-discovery]', async () => {
+  it(`discovers an external resource and creates an exact request before any connection
+      [spec: agent-identity/agent-resource-discovery]
+      [spec: agent-identity/external-resource-first-access]`, async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    const connection = connectionRecord()
     const identity = identityAggregate()
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identity)
-    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([connection])
-    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([])
     vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
     vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
     let pending: AgentAccessRequestRecord[] = []
@@ -216,19 +217,19 @@ describe('external API resource authorization', () => {
         {
           id: 'resource-1',
           scopes: [{ value: 'projects:read', description: 'Read projects' }],
-          connections: [{ id: 'connection-1', subjectHint: '••••er-1', grantedScopes: ['projects:read'] }],
+          connections: [],
         },
       ],
     })
     const first = await createAgentAccessRequest(
       deps,
-      { resourceId: 'resource-1', connectionId: 'connection-1', scopes: ['projects:read'], reason: 'Read projects' },
+      { resourceId: 'resource-1', connectionId: null, scopes: ['projects:read'], reason: 'Read projects' },
       principal(),
       'https://auth.example.com',
     )
     const repeated = await createAgentAccessRequest(
       deps,
-      { resourceId: 'resource-1', connectionId: 'connection-1', scopes: ['projects:read'], reason: 'Repeated' },
+      { resourceId: 'resource-1', connectionId: null, scopes: ['projects:read'], reason: 'Repeated' },
       principal(),
       'https://auth.example.com',
     )
@@ -241,7 +242,7 @@ describe('external API resource authorization', () => {
   it('lets the account controller approve an exact request once [spec: agent-identity/agent-resource-approval]', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    const request = requestRecord()
+    const request = { ...requestRecord(), connectionId: null }
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
     vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue(request)
@@ -256,12 +257,21 @@ describe('external API resource authorization', () => {
     const decided = await decideAgentAccessRequestByToken(
       deps,
       'approval-token',
-      { decision: 'approve', mode: 'once' },
+      { decision: 'approve', mode: 'once', accountConnectionId: 'connection-1' },
       'user-1',
     )
     expect(decided).toMatchObject({ status: 'approved', hostId: 'host-1', scopes: ['projects:read'] })
     expect(deps.externalResources.createGrant).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: 'once', scopes: ['projects:read'], grantedByUserId: 'user-1' }),
+      expect.objectContaining({
+        connectionId: 'connection-1',
+        mode: 'once',
+        scopes: ['projects:read'],
+        grantedByUserId: 'user-1',
+      }),
+    )
+    expect(deps.externalResources.decideAccessRequest).toHaveBeenCalledWith(
+      'request-1',
+      expect.objectContaining({ connectionId: 'connection-1' }),
     )
   })
 
@@ -523,6 +533,7 @@ describe('external API resource authorization', () => {
       createAccountConnection(
         deps,
         {
+          context: 'resource',
           apiResourceId: 'resource-1',
           owner: { type: 'organization', organizationId: 'organization-1' },
           scopes: ['projects:read'],
@@ -552,6 +563,177 @@ describe('external API resource authorization', () => {
     await expect(revokeResourceConnection(deps, 'connection-1', 'user-1')).rejects.toThrow(
       'Resource account connection is already revoked.',
     )
+  })
+
+  it('[spec: agent-identity/external-resource-first-access] derives approval connection scopes and owner from the pending request', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const request = { ...requestRecord(), connectionId: null }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.externalResources.createConnectionIntent).mockImplementation(async (record) => record)
+
+    await expect(
+      createAccountConnection(
+        deps,
+        {
+          context: 'access-request',
+          accessRequestId: request.id,
+          approvalToken: 'approval-token',
+        },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      apiResourceId: 'resource-1',
+      owner: { type: 'user', userId: 'user-1' },
+      scopes: ['projects:read'],
+      status: 'pending_authorization',
+    })
+    expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceId: 'resource-1',
+        ownerUserId: 'user-1',
+        scopes: ['offline_access', 'openid', 'projects:read'],
+        returnTo: 'access-approval',
+      }),
+    )
+
+    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
+      connectionRecord(),
+      { ...connectionRecord(), id: 'wrong-scopes', grantedScopes: ['projects:write'] },
+    ])
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1' }],
+      pagination: { total: 1 },
+    })
+  })
+
+  it('enforces first-access connection context boundaries', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const request = { ...requestRecord(), connectionId: null }
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
+    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.createConnectionIntent).mockImplementation(async (record) => record)
+
+    await expect(
+      createAccountConnection(
+        deps,
+        { context: 'access-request', accessRequestId: 'another-request', approvalToken: 'approval-token' },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Agent access request was not found')
+
+    const native = nativeResource()
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(native)
+    mockResourceOpenApi(deps, native.resourceUrl)
+    await expect(
+      createAccountConnection(
+        deps,
+        { context: 'access-request', accessRequestId: request.id, approvalToken: 'approval-token' },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Native API resources do not use account connections')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(resource())
+    mockResourceOpenApi(deps, resource().resourceUrl)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce(identityAggregate()).mockResolvedValueOnce(null)
+    await expect(
+      createAccountConnection(
+        deps,
+        { context: 'access-request', accessRequestId: request.id, approvalToken: 'approval-token' },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Active Agent identity was not found')
+
+    const organizationIdentity = {
+      ...identityAggregate(),
+      identity: {
+        ...identityAggregate().identity,
+        ownerUserId: null,
+        ownerOrganizationId: 'org-1',
+      },
+    }
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(organizationIdentity)
+    Object.assign(deps.authorization, {
+      findMemberByOrganizationUser: vi.fn().mockResolvedValue({ role: 'owner' }),
+    })
+    await expect(
+      createAccountConnection(
+        deps,
+        { context: 'access-request', accessRequestId: request.id, approvalToken: 'approval-token' },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({ owner: { type: 'organization', organizationId: 'org-1' } })
+
+    vi.mocked(deps.externalResources.listConnectionsByOrganizations).mockResolvedValue([
+      { ...connectionRecord(), ownerUserId: null, ownerOrganizationId: 'org-1' },
+      { ...connectionRecord(), id: 'wrong-resource', resourceId: 'resource-2' },
+      { ...connectionRecord(), id: 'revoked', status: 'revoked' },
+      { ...connectionRecord(), id: 'wrong-scope', grantedScopes: ['projects:write'] },
+    ])
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({ items: [{ id: 'connection-1' }], pagination: { total: 1 } })
+  })
+
+  it('rejects invalid connection selections when approving first access', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const request = { ...requestRecord(), connectionId: null }
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+
+    await expect(
+      decideAgentAccessRequest(deps, request.id, { decision: 'approve', mode: 'once' }, 'user-1'),
+    ).rejects.toThrow('An account connection is required')
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connectionRecord(),
+      resourceId: 'resource-2',
+    })
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'once', accountConnectionId: 'connection-1' },
+        'user-1',
+      ),
+    ).rejects.toThrow('does not belong to this API resource')
+
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connectionRecord(),
+      grantedScopes: ['projects:write'],
+    })
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'once', accountConnectionId: 'connection-1' },
+        'user-1',
+      ),
+    ).rejects.toThrow('connected account boundary')
+
+    const native = nativeResource()
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(native)
+    mockResourceOpenApi(deps, native.resourceUrl)
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'once', accountConnectionId: 'connection-1' },
+        'user-1',
+      ),
+    ).rejects.toThrow('Native API resources do not use account connections')
   })
 
   it('supports native resource discovery and access request wrappers', async () => {
@@ -600,9 +782,9 @@ describe('external API resource authorization', () => {
     )
     expect(created).toMatchObject({
       target: { type: 'api-resource', apiResourceId: 'resource-1' },
-      status: 'pending',
-      approval: { url: expect.stringContaining('/agent/resource-access/approve#token=') },
-      grantId: null,
+      status: 'approved',
+      approval: null,
+      grantId: 'grant-1',
     })
     await expect(
       createAccessRequest(

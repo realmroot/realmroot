@@ -10,6 +10,7 @@ import {
   linkAccount,
   listAccountAgents,
   listAccountConnections,
+  listApprovalAccountConnections,
   listExternalApiResources,
   retireAgent,
   revokeAccountConnection,
@@ -219,8 +220,10 @@ describe('account API client over the real network boundary', () => {
 
     await expect(listExternalApiResources()).resolves.toMatchObject({ items: [] })
     await expect(listAccountConnections()).resolves.toMatchObject({ items: [] })
+    await expect(listApprovalAccountConnections('approval token')).resolves.toMatchObject({ items: [] })
     await expect(
       createAccountConnection({
+        context: 'resource',
         apiResourceId: 'resource-1',
         owner: { type: 'user' },
         scopes: ['projects:read'],

@@ -10,10 +10,10 @@ const realmrootResource = `${nativeOrigin}/api`
 test.describe('external API resource authorization', () => {
   test.beforeEach(resetAndBootstrap)
 
-  test(`[spec: agent-identity/resource-account-connection]
+  test(`[spec: agent-identity/external-resource-first-access]
         [spec: agent-identity/agent-direct-resource-access]
         [spec: agent-identity/agent-resource-revocation]
-        a controller connects a target account and an Agent calls the target directly`, async ({ page }) => {
+        an Agent requests first access and the controller connects a target account`, async ({ page }) => {
     await signIn(page)
     const plugin = createRestishAgentPlugin(baseURL)
 
@@ -37,17 +37,6 @@ test.describe('external API resource authorization', () => {
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
       const resource = (await resourceResponse.json()) as { id: string }
       await grantAgentResourceScope(page, resource.id, identity.agent.id, 'e2e-projects-reader')
-      const intentResponse = await page.request.post('/api/account/account-connections', {
-        data: {
-          apiResourceId: resource.id,
-          owner: { type: 'user' },
-          scopes: ['projects:read'],
-        },
-      })
-      expect(intentResponse.status(), await intentResponse.text()).toBe(201)
-      const intent = (await intentResponse.json()) as { authorizationUrl: string }
-      await page.goto(intent.authorizationUrl)
-      await page.waitForURL('**/connections?resource_connection=connected')
 
       const discovered = plugin.listAgentApiResources<{
         items: Array<{
@@ -61,17 +50,22 @@ test.describe('external API resource authorization', () => {
       expect(available).toMatchObject({
         resourceUrl: externalResource,
         scopes: expect.arrayContaining([expect.objectContaining({ value: 'projects:read' })]),
-        accountConnections: [{ scopes: ['projects:read'] }],
+        accountConnections: [],
       })
-      const connectionId = available!.accountConnections[0]!.id
 
       const accessRequest = plugin.requestResourceAccess<{ status: string; grantId: string }>({
-        target: { type: 'api-resource', apiResourceId: resource.id, accountConnectionId: connectionId },
+        target: { type: 'api-resource', apiResourceId: resource.id },
         scopes: ['projects:read'],
         reason: 'List projects for the controller',
       })
       await page.goto(await accessRequest.approvalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent resource access' })).toBeVisible()
+      await expect(page.getByText('No connected account covers these exact scopes.')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Approve exact access' })).toBeDisabled()
+      await page.getByRole('button', { name: 'Connect a new E2E Projects API account' }).click()
+      await page.waitForURL('**/agent/resource-access/approve?accountConnectionId=*')
+      await expect(page.getByRole('heading', { name: 'Approve Agent resource access' })).toBeVisible()
+      await expect(page.getByRole('radio', { name: /Demo Project Owner/ })).toBeChecked()
       await page.getByRole('button', { name: 'Approve exact access' }).click()
       await expect(page.getByRole('heading', { name: 'Resource access approved' })).toBeVisible()
 

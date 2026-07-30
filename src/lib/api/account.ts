@@ -150,6 +150,17 @@ export function listAccountConnections() {
   )
 }
 
+export function listApprovalAccountConnections(approvalToken: string) {
+  return fetch(`/api/account/account-connections?approvalToken=${encodeURIComponent(approvalToken)}`, {
+    credentials: 'same-origin',
+  }).then((response) =>
+    readJsonResponse<{
+      items: AccountConnection[]
+      pagination: import('@shared/api/pagination').PaginationMetadata
+    }>(response),
+  )
+}
+
 export function createAccountConnection(input: CreateAccountConnection) {
   return fetch('/api/account/account-connections', {
     method: 'POST',
