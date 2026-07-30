@@ -458,6 +458,24 @@ export interface ExternalResourceRepository {
   upsertAuthorization(input: ExternalResourceAuthorizationRecord): Promise<ExternalResourceAuthorizationRecord>
   findAuthorization(resourceId: string): Promise<ExternalResourceAuthorizationRecord | null>
   createConnection(input: ResourceAccountConnectionRecord): Promise<ResourceAccountConnectionRecord>
+  findConnectionByOwnerSubject(input: {
+    resourceId: string
+    externalSubject: string
+    ownerUserId: string | null
+    ownerOrganizationId: string | null
+  }): Promise<ResourceAccountConnectionRecord | null>
+  replaceConnectionAuthorization(
+    id: string,
+    input: {
+      displayName: string
+      encryptedTokens: string
+      grantedScopes: string[]
+      status: 'active'
+      credentialExpiresAt: Date | null
+      revokedAt: null
+      updatedAt: Date
+    },
+  ): Promise<ResourceAccountConnectionRecord | null>
   listConnectionsByUser(userId: string): Promise<ResourceAccountConnectionRecord[]>
   listConnectionsByOrganizations(organizationIds: string[]): Promise<ResourceAccountConnectionRecord[]>
   findConnection(id: string): Promise<ResourceAccountConnectionRecord | null>

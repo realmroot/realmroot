@@ -63,6 +63,33 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row
     },
 
+    async findConnectionByOwnerSubject(input) {
+      const ownerCondition = input.ownerOrganizationId
+        ? eq(resourceAccountConnection.ownerOrganizationId, input.ownerOrganizationId)
+        : eq(resourceAccountConnection.ownerUserId, input.ownerUserId!)
+      const [row] = await db
+        .select()
+        .from(resourceAccountConnection)
+        .where(
+          and(
+            eq(resourceAccountConnection.resourceId, input.resourceId),
+            eq(resourceAccountConnection.externalSubject, input.externalSubject),
+            ownerCondition,
+          ),
+        )
+        .limit(1)
+      return row ?? null
+    },
+
+    async replaceConnectionAuthorization(id, input) {
+      const [row] = await db
+        .update(resourceAccountConnection)
+        .set(input)
+        .where(eq(resourceAccountConnection.id, id))
+        .returning()
+      return row ?? null
+    },
+
     async listConnectionsByUser(userId) {
       return db
         .select()

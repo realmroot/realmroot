@@ -1,4 +1,4 @@
-import { badRequest } from '@server/domain/errors'
+import { badGateway, badRequest } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import { parse as parseYaml } from 'yaml'
 
@@ -32,23 +32,42 @@ export async function validateRequestedScopes(deps: Deps, resourceUrl: string, r
 }
 
 export async function readDeclaredScopes(deps: Deps, resourceUrl: string): Promise<ResourceScopeDefinition[]> {
-  const resourceResponse = await deps.externalHttp.fetch(
+  const resourceResponse = await fetchForDiscovery(
+    deps,
     new Request(resourceUrl, {
       headers: { accept: 'application/json, application/problem+json, */*' },
     }),
+    'resource',
+    'Business resource could not be reached during OpenAPI discovery.',
   )
   if (!resourceResponse.ok) throw badRequest('Business resource discovery failed.')
   const documentUrl = serviceDescriptionUrl(resourceResponse.headers.get('link'), resourceUrl)
-  const documentResponse = await deps.externalHttp.fetch(
+  const documentResponse = await fetchForDiscovery(
+    deps,
     new Request(documentUrl, {
       headers: { accept: 'application/openapi+json, application/json, application/yaml, text/yaml' },
     }),
+    'openapi_document',
+    'Business resource OpenAPI document could not be reached.',
   )
   if (!documentResponse.ok) throw badRequest('Business resource OpenAPI discovery failed.')
 
   const source = await documentResponse.text()
   const document = parseDocument(source, documentResponse.headers.get('content-type'))
   return extractResourceScopes(document)
+}
+
+async function fetchForDiscovery(
+  deps: Deps,
+  request: Request,
+  stage: 'resource' | 'openapi_document',
+  message: string,
+) {
+  try {
+    return await deps.externalHttp.fetch(request)
+  } catch {
+    throw badGateway(message, { stage, url: request.url })
+  }
 }
 
 export function extractResourceScopes(document: unknown): ResourceScopeDefinition[] {

@@ -264,6 +264,88 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('reauthorizes the same external account without replacing its connection identity [spec: agent-identity/resource-account-reauthorization]', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const intent: ResourceConnectionIntentRecord = {
+      id: 'replacement-intent',
+      stateHash: 'state-hash',
+      resourceId: 'resource-1',
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+      scopes: ['offline_access', 'openid', 'projects:read', 'projects:write'],
+      encryptedPkceVerifier: 'sealed:pkce-verifier',
+      returnTo: 'access-approval',
+      status: 'completed',
+      expiresAt: new Date(Date.now() + 300_000),
+      completedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
+    }
+    const existing = {
+      ...connectionRecord(),
+      status: 'revoked',
+      revokedAt: now,
+    }
+    vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue(intent)
+    vi.mocked(deps.externalResources.findConnectionByOwnerSubject).mockResolvedValue(existing)
+    vi.mocked(deps.externalResources.replaceConnectionAuthorization).mockImplementation(async (id, input) => ({
+      ...existing,
+      ...input,
+      id,
+    }))
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      if (request.url.endsWith('/token')) {
+        return Response.json({
+          access_token: 'replacement-access',
+          refresh_token: 'replacement-refresh',
+          token_type: 'Bearer',
+          expires_in: 600,
+          scope: 'openid offline_access projects:read projects:write',
+        })
+      }
+      if (request.url.endsWith('/userinfo')) {
+        return Response.json({ sub: 'target-user-1', name: 'Renamed Project Owner' })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    await expect(
+      completeResourceConnectionIntent(
+        deps,
+        { state: 'replacement-state', code: 'replacement-code' },
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      id: 'connection-1',
+      displayName: 'Renamed Project Owner',
+      grantedScopes: ['offline_access', 'openid', 'projects:read', 'projects:write'],
+      status: 'active',
+      returnTo: 'access-approval',
+    })
+    expect(deps.externalResources.findConnectionByOwnerSubject).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      externalSubject: 'target-user-1',
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+    })
+    expect(deps.externalResources.replaceConnectionAuthorization).toHaveBeenCalledWith(
+      'connection-1',
+      expect.objectContaining({
+        displayName: 'Renamed Project Owner',
+        encryptedTokens: expect.stringContaining('replacement-refresh'),
+        grantedScopes: ['offline_access', 'openid', 'projects:read', 'projects:write'],
+        status: 'active',
+        revokedAt: null,
+      }),
+    )
+    expect(deps.secrets.seal).toHaveBeenCalledWith(
+      expect.stringContaining('replacement-refresh'),
+      'resource-connection:connection-1:tokens',
+    )
+    expect(deps.externalResources.createConnection).not.toHaveBeenCalled()
+  })
+
   it(`discovers an external resource and creates an exact request before any connection
       [spec: agent-identity/agent-resource-discovery]
       [spec: agent-identity/external-resource-first-access]`, async () => {

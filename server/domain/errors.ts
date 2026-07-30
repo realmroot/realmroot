@@ -5,6 +5,7 @@ export type ErrorCode =
   | 'not_found'
   | 'conflict'
   | 'resource_in_use'
+  | 'bad_gateway'
   | 'internal_error'
 
 export class ApiError extends Error {
@@ -38,6 +39,8 @@ export const forbidden = (message = 'Admin access is required.') => new ApiError
 export const notFound = (message = 'Resource not found.') => new ApiError(404, 'not_found', message)
 export const resourceInUse = (message: string, details: Record<string, unknown>) =>
   new ApiError(409, 'resource_in_use', message, details)
+export const badGateway = (message: string, details?: Record<string, unknown>) =>
+  new ApiError(502, 'bad_gateway', message, details)
 export const oauthError = (
   error: string,
   description: string,
