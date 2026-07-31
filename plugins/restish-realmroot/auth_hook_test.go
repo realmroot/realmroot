@@ -509,6 +509,13 @@ func (s *memoryStateStore) Update(_ agentTarget, state agentState) error {
 	return nil
 }
 
+func (s *memoryStateStore) FindByOriginAndAgentID(origin string, agentID string) (agentState, error) {
+	if !s.exists || s.state.Origin != origin || s.state.AgentID != agentID {
+		return agentState{}, os.ErrNotExist
+	}
+	return s.state, nil
+}
+
 func (s *memoryStateStore) FindByResourceURL(resourceURL string, _ string) (resourceCredentialReference, error) {
 	for _, credential := range s.state.DPoPCredentials {
 		if resourceURLMatches(credential.ResourceURL, resourceURL) {

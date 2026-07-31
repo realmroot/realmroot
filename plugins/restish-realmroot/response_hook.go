@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/rest-sh/restish/v2/plugin"
@@ -18,6 +19,11 @@ func handleCapabilityApprovalResponse(
 	states capabilityStateFinder,
 	client httpDoer,
 ) (plugin.ResponseMiddlewareOutput, error) {
+	if input.Response.Status == http.StatusUnauthorized {
+		if err := removeRejectedTargetCredential(input.Request.URI, states); err != nil {
+			return plugin.ResponseMiddlewareOutput{}, err
+		}
+	}
 	if input.Response.Status < 200 || input.Response.Status >= 300 {
 		return plugin.ResponseMiddlewareOutput{}, nil
 	}
@@ -137,6 +143,28 @@ func handleCapabilityApprovalResponse(
 			"agent_capability_grants": status.AgentCapabilityGrants,
 		}},
 	}, nil
+}
+
+func removeRejectedTargetCredential(requestURI string, states capabilityStateFinder) error {
+	credentials, ok := states.(resourceCredentialStore)
+	if !ok {
+		return nil
+	}
+	runtime, err := agentRuntime()
+	if err != nil {
+		return err
+	}
+	reference, err := credentials.FindByResourceURL(requestURI, runtime)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := credentials.DeleteCredential(reference); err != nil {
+		return fmt.Errorf("remove target credential rejected by resource server: %w", err)
+	}
+	return nil
 }
 
 func handleResourceAccessApproval(

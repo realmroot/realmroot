@@ -127,6 +127,18 @@ describe('Agent resource access approval', () => {
     expect(api.decideAgentResourceApproval).not.toHaveBeenCalled()
   })
 
+  it('shows that the controller request is still loading before enabling decisions', () => {
+    api.getAgentResourceApproval.mockReturnValue(new Promise(() => {}))
+    api.listApprovalAccountConnections.mockReturnValue(new Promise(() => {}))
+    api.listExternalApiResources.mockReturnValue(new Promise(() => {}))
+
+    render(<ResourceAccessApproval />)
+
+    expect(screen.getByText('Loading resource access request…')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Deny' }).hasAttribute('disabled')).toBe(true)
+  })
+
   it('[spec: agent-identity/external-resource-first-access] displays the connected account after OAuth and waits for approval', async () => {
     window.history.replaceState(null, '', '/agent/resource-access/approve')
     window.location.hash = ''
