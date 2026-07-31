@@ -61,6 +61,20 @@ Every workflow deployment applies pending D1 migrations before publishing code.
 Review migration release notes before intentionally deploying an older commit:
 database migrations are not rolled back by selecting older code.
 
+## Agent Client Compatibility
+
+Deploying a new Worker does not update globally installed Realmroot skills or
+the Restish adapter. After an Agent protocol or resource-authorization upgrade,
+update both with the procedure in [Use From Agents](../../README.md#use-from-agents)
+before running the smoke journey.
+
+The adapter migrates protected local state in place. Stable Agent and Host keys
+survive supported upgrades, while ambiguous legacy or authorization-mode-less
+DPoP credential caches are removed. This deliberately requires a current active
+resource grant instead of silently carrying target authority across an
+incompatible model change. Do not restore discarded credentials from backups or
+manually edit the state files.
+
 ## Smoke Tests
 
 After deployment, verify:

@@ -83,7 +83,7 @@ scope.
 Native API Resource tokens use the same issuer, JWKS, and key lifecycle as
 product OAuth tokens. They are five-minute `at+jwt` access tokens containing:
 
-- the controller identity as `sub`;
+- the Agent's personal-owner user ID or organization home-space ID as `sub`;
 - the stable Agent as the RFC 8693 `act` actor, including its issuer, subject,
   and `ai_agent` subject profile;
 - the exact approved `scope`;

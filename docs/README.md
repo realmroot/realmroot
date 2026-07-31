@@ -26,6 +26,12 @@ The runtime OpenAPI document at `/api/openapi.json` is authoritative for paths,
 operations, schemas, and required capabilities. Do not copy its endpoint
 inventory into prose documentation.
 
+## Guides
+
+- [Agent access](guides/agent-access.md): stable enrollment, management
+  authority, native and external API grants, direct DPoP access, and lifecycle
+  controls.
+
 ## Integration
 
 - [Resource server integration](integrations/resource-servers.md): connect

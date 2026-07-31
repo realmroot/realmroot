@@ -1,4 +1,4 @@
-Feature: Agent identity and external API authorization
+Feature: Agent identity and delegated API authorization
   As an Agent controller
   I want Agents to have durable identities and request constrained access to connected API resources
   So that Agents can act independently or by delegation without receiving refresh tokens

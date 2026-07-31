@@ -67,6 +67,12 @@ Document-level `security` is also supported. A scope mentioned only in
 The resource URL and OpenAPI document must remain reachable because Realmroot
 revalidates scopes at request, approval, and token-issuance boundaries.
 
+An enabled resource whose contract is temporarily unavailable remains visible
+to Agents with `status: unavailable` and no requestable scopes; it does not
+block discovery of other resources. Access requests and token issuance still
+fail closed because Realmroot revalidates the selected resource contract. An
+administrator may save an unreachable resource only as a disabled draft.
+
 ## Native Authorization
 
 Use native mode when the product already uses Realmroot as its authorization
@@ -305,9 +311,16 @@ configure its `client_id` and `client_secret` in Realmroot. The redirect URI and
 Realmroot starts authorization code with S256 PKCE using:
 
 - `resource`: the registered resource URL;
-- `scope`: the requested business scopes plus `openid offline_access`;
+- `scope`: the connection scope set plus `openid offline_access`;
 - the canonical Realmroot redirect URI;
 - `state`, `code_challenge`, and `code_challenge_method=S256`.
+
+One personal or organization home space can have only one connected account for
+an API Resource. When connection starts from a pending Agent approval,
+Realmroot requests the resource's complete current Agent-delegable OpenAPI scope
+catalog for the account connection; the later Agent grant remains limited to
+the exact scopes displayed in that approval. Authorization-server
+`scopes_supported` metadata is not used as the resource scope catalog.
 
 The token endpoint must authenticate the client with
 `client_secret_basic`, validate the code and verifier, and return
@@ -318,6 +331,15 @@ Realmroot calls `userinfo_endpoint` with the subject access token. The response
 must contain `sub`; `name` or `preferred_username` may provide a display label.
 The refresh credential is encrypted by Realmroot and is never given to the
 Agent.
+
+If an existing connection does not cover a pending Agent request, the hosted
+approval blocks the Agent decision and asks the controller to expand the target
+account authorization first. Returning with the same external subject preserves
+the connection ID and replaces its encrypted credentials, granted scopes,
+display name, and expiry while restoring active status. Returning with a
+different subject is rejected until the existing account is disconnected.
+After OAuth, the controller returns to the pending request and decides the
+Agent scopes and lifetime separately.
 
 ### Support Agent And Token Exchange Grants
 

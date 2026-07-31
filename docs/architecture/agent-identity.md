@@ -19,6 +19,12 @@ Realmroot owns three records outside AgentAuth:
 AgentAuth remains the protocol adapter and source of host keys. A registered
 host without an active identity binding has no identity-level authority.
 
+The Restish adapter keys protected local identity state by the discovered
+Realmroot issuer and Agent runtime. API names, profiles, and individual runtime
+sessions are request contexts, not identities. The same runtime therefore
+reuses one stable Agent across aliases and profiles that resolve to the same
+issuer; another runtime or issuer gets separately secured state.
+
 Recovery preserves `(issuer, subject)`, revokes current registrations and
 bindings, and waits for a controller-approved replacement. Retirement is
 permanent: the subject stays reserved while all bindings remain revoked.
@@ -51,6 +57,12 @@ an access grant with one-time, limited, or persistent lifetime.
 Authority is never inferred from enrollment, home-space ownership, Connector
 configuration, or account connection. Expanding scopes, changing the external
 account, or changing the resource requires a new decision.
+
+The public lifecycle is intentionally expressed as Agent enrollment, access
+request, access grant, and audit event resources. Host credentials, identity
+bindings, OAuth connection intents, encrypted refresh credentials, and target
+token leases remain internal security records rather than parallel public
+resources.
 
 Realmroot Resource API authority is separate from business API authority.
 Operation-specific `{resource}:read` and `{resource}:write` capabilities allow
@@ -87,12 +99,19 @@ Realmroot is not an HTTP proxy. In both modes, an approved grant produces a
 short-lived, audience-restricted, DPoP-bound token that the Agent presents
 directly to the protected API.
 
+The Restish adapter owns a separate P-256 DPoP key per resource grant and keeps
+the resulting target token in protected local state. It retains only the
+current grant credential for an API Resource: approving a replacement grant
+replaces the old grant binding and DPoP key. Agent and Host proof keys, resource
+DPoP keys, and external-account refresh credentials are different credential
+domains; none of them is a substitute identity for the stable Agent.
+
 For `native`, Realmroot signs an `at+jwt` with its managed issuer keys. The
 token contains:
 
 - the protected resource audience;
 - the exact approved scope set;
-- the controller as `sub`;
+- the Agent's personal-owner user ID or organization home-space ID as `sub`;
 - the stable Agent issuer and subject in `act`, classified by
   `sub_profile: ai_agent`;
 - the DPoP public-key thumbprint in `cnf.jkt`;
@@ -130,6 +149,9 @@ Runnable implementations live in the
 [native resource server](../../examples/native-resource-server/README.md) and
 [external resource server](../../examples/external-resource-server/README.md)
 examples.
+
+For the product-level enrollment and access journey, see the
+[Agent access guide](../guides/agent-access.md).
 
 ## Audit Boundary
 

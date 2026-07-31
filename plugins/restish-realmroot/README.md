@@ -22,10 +22,12 @@ The unified contract generates `auth whoami`, `capability request`,
 API-relative requests. When an exact resource request is pending, the response
 hook opens the hosted controller decision page and waits for approval.
 
-For each access grant, the plugin creates a separate P-256 DPoP key. It discovers
-the proof target from RFC 9728 and RFC 8414 for external resources, uses the
-Realmroot token operation for native resources, adds the standard `DPoP` header,
-and stores the resulting short-lived token with the protected Agent state.
+For the current access grant on each API Resource, the plugin creates a separate
+P-256 DPoP key. It discovers the proof target from RFC 9728 and RFC 8414 for
+external resources, uses the Realmroot token operation for native resources,
+adds the standard `DPoP` header, and stores the resulting short-lived token with
+the protected Agent state. A newly approved grant for the same resource replaces
+the old local grant binding and DPoP key.
 
 The plugin stores issued target tokens in protected state and removes the raw
 token from Restish output. The API resource's `resourceUrl` can then be connected
@@ -79,6 +81,16 @@ Each runtime gets a separate Agent identity by default. Reusing the same
 Existing API/profile-keyed state is migrated when it can be matched
 unambiguously to the discovered issuer.
 
+The state schema is upgraded in place. Identity and Host keys are preserved,
+while incompatible legacy or authorization-mode-less DPoP credential caches are
+discarded. The next resource access then requires a current active grant rather
+than reusing ambiguous credentials from an older authorization model.
+
+Expired persistent or limited credentials are refreshed through their active
+grant with the same DPoP key. An expired one-time credential, an inactive grant,
+or a replacement grant removes the obsolete local resource credential and
+requires the applicable current grant or a new controller decision.
+
 The default root is:
 
 ```text
@@ -100,7 +112,7 @@ the Restish command surface.
 - The `auth` hook discovers endpoints, enrolls the Agent when needed, signs
   Realmroot requests, and authenticates matching target API requests.
 - The `response-middleware` hook opens and waits for controller approval when
-  a generated capability or external resource access operation returns pending.
+  a generated capability or API Resource access operation returns pending.
 - The Realmroot OpenAPI credential marker activates AgentAuth; registered target
   resource URLs activate DPoP authentication through the global hook.
 - Both hooks have a ten-minute deadline for their foreground approval flow.

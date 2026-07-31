@@ -56,6 +56,12 @@ access request
 access token <grant-id>
 ```
 
+The Agent-facing product model uses Agents, enrollments, API Resources, account
+connections, access requests, access grants, and audit events. Protocol
+registrations, Hosts, identity bindings, OAuth connection intents, client
+integration records, refresh credentials, and token leases remain internal
+security records rather than additional public resources.
+
 ## Authentication And Authorization
 
 Protected operations accept either:
@@ -78,6 +84,11 @@ the required authority receives `403`.
 The Agent enrollment and capability approval procedure belongs to the
 Realmroot skill and is intentionally not duplicated here.
 
+Management capabilities authorize this Resource API only. Access requests and
+grants authorize exact scopes on a protected business API and never imply a
+Realmroot management capability. The two approval systems share the stable
+Agent principal but do not exchange authority.
+
 ## Errors
 
 API errors use one JSON envelope:
@@ -92,8 +103,10 @@ API errors use one JSON envelope:
 }
 ```
 
-`code` is one of `bad_request`, `unauthorized`, `forbidden`, `not_found`, or
-`internal_error`.
+`code` is one of `bad_request`, `unauthorized`, `forbidden`, `not_found`,
+`conflict`, `resource_in_use`, `bad_gateway`, or `internal_error`. `details` is
+present only when the caller needs structured conflict or upstream-boundary
+context.
 
 ## Pagination
 
