@@ -102,9 +102,9 @@ app.get('/openapi.json', (_request, response) => {
 })
 
 app.post('/register', (request, response) => {
-  const redirectUri = firstString(request.body.redirect_uris)
+  const redirectUris = stringArray(request.body.redirect_uris)
   const jwksUri = requiredString(request.body.jwks_uri, 'jwks_uri')
-  if (!redirectUri) throw oauthError('invalid_client_metadata', 'Exactly one redirect URI is required.')
+  if (redirectUris.length === 0) throw oauthError('invalid_client_metadata', 'At least one redirect URI is required.')
   const grantTypes = stringArray(request.body.grant_types)
   if (
     !grantTypes.includes('authorization_code') ||
@@ -119,14 +119,14 @@ app.post('/register', (request, response) => {
   db.prepare('INSERT INTO oauth_client (client_id, client_secret, redirect_uri, jwks_uri) VALUES (?, ?, ?, ?)').run(
     clientId,
     clientSecret,
-    redirectUri,
+    JSON.stringify(redirectUris),
     jwksUri,
   )
   response.status(201).json({
     client_id: clientId,
     client_secret: clientSecret,
     client_id_issued_at: Math.floor(Date.now() / 1000),
-    redirect_uris: [redirectUri],
+    redirect_uris: redirectUris,
     token_endpoint_auth_method: 'client_secret_basic',
   })
 })
@@ -141,7 +141,9 @@ app.get('/authorize', (request, response) => {
     throw oauthError('invalid_request', 'Authorization code with S256 PKCE is required.')
   }
   const client = findClient(clientId)
-  if (client.redirect_uri !== redirectUri) throw oauthError('invalid_request', 'Redirect URI does not match.')
+  if (!stringArray(JSON.parse(client.redirect_uri)).includes(redirectUri)) {
+    throw oauthError('invalid_request', 'Redirect URI does not match.')
+  }
   const code = opaque('code')
   db.prepare(
     'INSERT INTO authorization_code (code_hash, client_id, redirect_uri, subject, scope, code_challenge, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -469,10 +471,6 @@ function requiredQuery(request: Request, name: string) {
 function requiredString(value: unknown, name: string) {
   if (typeof value !== 'string' || !value) throw oauthError('invalid_request', `${name} is required.`)
   return value
-}
-
-function firstString(value: unknown) {
-  return Array.isArray(value) && value.length === 1 && typeof value[0] === 'string' ? value[0] : null
 }
 
 function stringArray(value: unknown) {

@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from 'vitest'
 
 describe('Connector API schemas', () => {
-  it('accepts disabled, social, discovered OAuth, and explicit OAuth inputs', () => {
+  it('accepts disabled, social, and manual or dynamically registered OIDC inputs', () => {
     for (const input of [
       { providerType: 'social', providerId: 'google', displayName: 'Google', enabled: false },
       {
@@ -28,12 +28,10 @@ describe('Connector API schemas', () => {
       },
       {
         providerType: 'generic_oauth',
-        providerId: 'oauth-explicit',
-        displayName: 'OAuth explicit',
-        clientId: 'client',
-        clientSecret: 'secret',
-        authorizationEndpoint: 'https://issuer.example.com/authorize',
-        tokenEndpoint: 'https://issuer.example.com/token',
+        providerId: 'oauth-dynamic',
+        displayName: 'OAuth dynamic',
+        registrationMode: 'dynamic',
+        issuer: 'https://issuer.example.com',
       },
     ]) {
       expect(createConnectorRequestSchema.safeParse(input).success).toBe(true)
@@ -68,6 +66,12 @@ describe('Connector API schemas', () => {
         clientSecret: 'secret',
         authorizationEndpoint: 'https://issuer.example.com/authorize',
       },
+      {
+        providerType: 'generic_oauth',
+        providerId: 'disabled-incomplete-oidc',
+        displayName: 'Disabled incomplete OIDC',
+        enabled: false,
+      },
     ]
     for (const input of invalid) expect(createConnectorRequestSchema.safeParse(input).success).toBe(false)
   })
@@ -82,6 +86,7 @@ describe('Connector API schemas', () => {
         providerId: 'oauth',
         displayName: 'OAuth',
         enabled: true,
+        loginEnabled: true,
         clientId: 'client',
         clientSecretConfigured: true,
         issuer: 'https://issuer.example.com',
@@ -89,6 +94,9 @@ describe('Connector API schemas', () => {
         tokenEndpoint: null,
         userInfoEndpoint: null,
         jwksEndpoint: null,
+        registrationEndpoint: null,
+        revocationEndpoint: null,
+        registrationMode: 'manual',
         scopes: [],
         providerMetadata: {},
         createdAt: now,

@@ -57,7 +57,7 @@ describe('admin console users-detail-b', () => {
     expect(screen.getByText('OneTap')).toBeTruthy()
     expect(screen.getByText('Google')).toBeTruthy()
     expect(
-      Array.from(screen.getByRole('table').querySelectorAll('tbody tr'))
+      Array.from(screen.getAllByRole('table')[0]!.querySelectorAll('tbody tr'))
         .map((row) => row.querySelector('.font-medium')?.textContent)
         .slice(0, 5),
     ).toEqual(['Email', 'Phone (SMS)', 'Web3 wallet', 'Passkey', 'OneTap'])
@@ -96,6 +96,7 @@ describe('admin console users-detail-b', () => {
             slug: 'google',
             displayName: 'Google',
             enabled: true,
+            loginEnabled: true,
             providerId: 'google',
             providerType: 'social',
             clientId: 'google-client',

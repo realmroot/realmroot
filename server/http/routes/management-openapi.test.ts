@@ -163,6 +163,7 @@ describe('management routes 4', () => {
         clientSecret: 'secret://google',
         scopes: ['openid', 'email', 'profile'],
       }),
+      undefined,
     )
     expect(connectors.update).toHaveBeenCalledWith(expect.anything(), 'connector-1', {
       enabled: false,
@@ -208,6 +209,7 @@ describe('management routes 4', () => {
     expect(connectors.create).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ clientSecret: 'REVIEW_CLIENT_SECRET' }),
+      undefined,
     )
     expect(connectors.update).toHaveBeenCalledWith(
       expect.anything(),

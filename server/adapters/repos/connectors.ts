@@ -1,7 +1,7 @@
 import type { ConnectorRepository, SecretCipher } from '@server/usecases/ports'
 import { and, count, desc, eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { identityProviderConnector } from '../../db/schema'
+import { apiResource, identityProviderConnector } from '../../db/schema'
 
 export type ConnectorRow = typeof identityProviderConnector.$inferSelect
 export type ConnectorInsert = typeof identityProviderConnector.$inferInsert
@@ -41,24 +41,46 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
       return row ? decryptConnector(db, row, secrets) : null
     },
 
+    async countResourceReferences(id) {
+      const [result] = await db.select({ value: count() }).from(apiResource).where(eq(apiResource.connectorId, id))
+      return result?.value ?? 0
+    },
+
     async create(input) {
+      const clientSecretContext = input.clientSecret ? connectorSecretContext(input.id) : null
+      const registrationAccessTokenContext = input.registrationAccessToken
+        ? connectorRegistrationTokenContext(input.id)
+        : null
       const [row] = await db
         .insert(identityProviderConnector)
         .values({
           ...input,
           clientSecret: input.clientSecret
-            ? await secrets.seal(input.clientSecret, connectorSecretContext(input.id))
+            ? await secrets.seal(input.clientSecret, clientSecretContext!)
             : input.clientSecret,
+          clientSecretContext,
+          registrationAccessToken: input.registrationAccessToken
+            ? await secrets.seal(input.registrationAccessToken, registrationAccessTokenContext!)
+            : input.registrationAccessToken,
+          registrationAccessTokenContext,
         })
         .returning()
       return decryptConnector(db, row, secrets)
     },
 
     async update(id, input) {
-      const encryptedInput =
-        typeof input.clientSecret === 'string'
-          ? { ...input, clientSecret: await secrets.seal(input.clientSecret, connectorSecretContext(id)) }
-          : input
+      const encryptedInput = { ...input }
+      if (typeof input.clientSecret === 'string') {
+        encryptedInput.clientSecretContext = connectorSecretContext(id)
+        encryptedInput.clientSecret = await secrets.seal(input.clientSecret, encryptedInput.clientSecretContext)
+      }
+      if (typeof input.registrationAccessToken === 'string') {
+        encryptedInput.registrationAccessTokenContext = connectorRegistrationTokenContext(id)
+        encryptedInput.registrationAccessToken = await secrets.seal(
+          input.registrationAccessToken,
+          encryptedInput.registrationAccessTokenContext,
+        )
+      }
       const [row] = await db
         .update(identityProviderConnector)
         .set(encryptedInput)
@@ -75,25 +97,36 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
 
 async function decryptConnector(db: Database, row: ConnectorRow, secrets: SecretCipher): Promise<ConnectorRow> {
   const clientSecret = await readConnectorSecret(db, row, secrets)
+  const registrationAccessToken = row.registrationAccessToken
+    ? await secrets.open(
+        row.registrationAccessToken,
+        row.registrationAccessTokenContext ?? connectorRegistrationTokenContext(row.id),
+      )
+    : null
   return {
     ...row,
     clientSecret,
+    registrationAccessToken,
   }
 }
 
 async function readConnectorSecret(db: Database, row: ConnectorRow, secrets: SecretCipher) {
   if (!row.clientSecret) return null
-  const context = connectorSecretContext(row.id)
+  const context = row.clientSecretContext ?? connectorSecretContext(row.id)
   if (secrets.isSealed(row.clientSecret)) return secrets.open(row.clientSecret, context)
 
   const encrypted = await secrets.seal(row.clientSecret, context)
   await db
     .update(identityProviderConnector)
-    .set({ clientSecret: encrypted })
+    .set({ clientSecret: encrypted, clientSecretContext: context })
     .where(and(eq(identityProviderConnector.id, row.id), eq(identityProviderConnector.clientSecret, row.clientSecret)))
   return row.clientSecret
 }
 
 function connectorSecretContext(connectorId: string) {
   return `connector:${connectorId}:client-secret`
+}
+
+function connectorRegistrationTokenContext(connectorId: string) {
+  return `connector:${connectorId}:registration-token`
 }

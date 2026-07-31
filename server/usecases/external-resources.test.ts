@@ -1,11 +1,9 @@
 import { createTestDeps } from '@server/http/test-deps'
 import {
   completeResourceConnectionIntent,
-  configureExternalResourceAuthorization,
   createAccessRequest,
   createAccountConnection,
   createAgentAccessRequest,
-  createExternalApiResource,
   createResourceConnectionIntent,
   decideAccessRequest,
   decideAgentAccessRequest,
@@ -38,10 +36,11 @@ import type {
   AgentAccessGrantRecord,
   AgentAccessRequestRecord,
   AgentIdentityAggregate,
-  ExternalResourceAuthorizationRecord,
+  ConnectorRecord,
   ResourceAccountConnectionRecord,
   ResourceConnectionIntentRecord,
 } from '@server/usecases/ports'
+import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
 import type { ApiResourceResponse } from '@shared/api/authorization'
 import { exportJWK, generateKeyPair, type JWTHeaderParameters, SignJWT } from 'jose'
 import { describe, expect, it, vi } from 'vitest'
@@ -49,10 +48,28 @@ import { describe, expect, it, vi } from 'vitest'
 const now = new Date('2026-07-29T12:00:00.000Z')
 
 describe('external API resource authorization', () => {
-  it('discovers and registers a protocol-only target [spec: agent-identity/external-api-resource-registration]', async () => {
+  it('rejects an archived external resource connection intent', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({
+      ...resource(),
+      archivedAt: now.toISOString(),
+    })
+
+    await expect(
+      createResourceConnectionIntent(
+        deps,
+        'resource-1',
+        { owner: { type: 'user' }, scopes: [] },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).rejects.toThrow('Enabled external API resource was not found.')
+  })
+
+  it('validates a reusable OIDC connector when creating an external resource [spec: agent-identity/external-api-resource-registration]', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
       if (request.url === new URL(resource().resourceUrl).toString()) {
         return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
@@ -66,76 +83,17 @@ describe('external API resource authorization', () => {
           authorization_servers: ['https://projects.example.com'],
         })
       }
-      if (request.url.endsWith('/.well-known/oauth-authorization-server')) {
-        return Response.json(metadata())
-      }
-      if (request.url.endsWith('/register')) {
-        const body = (await request.json()) as Record<string, unknown>
-        expect(body).toMatchObject({
-          jwks_uri: 'https://auth.example.com/api/auth/jwks',
-          grant_types: [
-            'authorization_code',
-            'refresh_token',
-            'urn:ietf:params:oauth:grant-type:jwt-bearer',
-            'urn:ietf:params:oauth:grant-type:token-exchange',
-          ],
-        })
-        expect(body).not.toHaveProperty('resource')
-        return Response.json(
-          {
-            client_id: 'realmroot-client',
-            client_secret: 'target-secret',
-            registration_access_token: 'registration-token',
-          },
-          { status: 201 },
-        )
-      }
       return new Response(null, { status: 404 })
     })
 
     await expect(
-      createExternalApiResource(
-        deps,
-        {
-          identifier: 'projects',
-          name: 'Projects API',
-          resourceUrl: 'https://projects.example.com/api',
-          authorizationMode: 'external',
-        },
-        { registrationMode: 'dynamic' },
-        'https://auth.example.com',
-      ),
-    ).resolves.toMatchObject({
-      id: 'resource-1',
-      authorization: {
-        issuer: 'https://projects.example.com',
-        registrationMode: 'dynamic',
-        clientId: 'realmroot-client',
-        clientSecretConfigured: true,
-        status: 'active',
-      },
-    })
-    expect(deps.externalResources.createResourceWithAuthorization).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: expect.stringMatching(/^res_/),
-        identifier: 'projects',
-        resourceUrl: 'https://projects.example.com/api',
-        authorizationMode: 'external',
-        enabled: true,
-      }),
-      expect.objectContaining({
-        resourceId: expect.stringMatching(/^res_/),
-        registrationMode: 'dynamic',
-        clientId: 'realmroot-client',
-      }),
-    )
-    expect(deps.externalResources.configureAuthorization).not.toHaveBeenCalled()
-    expect(deps.authorization.updateResource).not.toHaveBeenCalled()
-    expect(deps.connectors.create).not.toHaveBeenCalled()
+      validateExternalResourceConnector(deps, 'https://projects.example.com/api', 'connector-1'),
+    ).resolves.toBeUndefined()
   })
 
-  it('does not persist an external resource when dynamic registration fails', async () => {
+  it('rejects a connector whose issuer does not authorize the resource', async () => {
     const deps = createTestDeps()
+    authorizationDeps(deps)
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
       if (request.url === 'https://projects.example.com/api') {
         return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
@@ -146,38 +104,21 @@ describe('external API resource authorization', () => {
       if (request.url.endsWith('/.well-known/oauth-protected-resource/api')) {
         return Response.json({
           resource: 'https://projects.example.com/api',
-          authorization_servers: ['https://projects.example.com'],
+          authorization_servers: ['https://different.example.com'],
         })
-      }
-      if (request.url.endsWith('/.well-known/oauth-authorization-server')) {
-        return Response.json(metadata())
-      }
-      if (request.url.endsWith('/register')) {
-        return Response.json({ error: 'invalid_client_metadata' }, { status: 400 })
       }
       return new Response(null, { status: 404 })
     })
 
     await expect(
-      createExternalApiResource(
-        deps,
-        {
-          identifier: 'projects',
-          name: 'Projects API',
-          resourceUrl: 'https://projects.example.com/api',
-          authorizationMode: 'external',
-        },
-        { registrationMode: 'dynamic' },
-        'https://auth.example.com',
-      ),
-    ).rejects.toThrow('Dynamic client registration failed.')
-    expect(deps.externalResources.createResourceWithAuthorization).not.toHaveBeenCalled()
+      validateExternalResourceConnector(deps, 'https://projects.example.com/api', 'connector-1'),
+    ).rejects.toThrow('authorization server does not match')
   })
 
   it('connects the user account with authorization code and PKCE [spec: agent-identity/resource-account-connection]', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     let intent: ResourceConnectionIntentRecord | null = null
     vi.mocked(deps.externalResources.createConnectionIntent).mockImplementation(async (record) => {
       intent = record
@@ -420,7 +361,7 @@ describe('external API resource authorization', () => {
     const identity = identityAggregate()
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identity)
     vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([])
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
     let pending: AgentAccessRequestRecord[] = []
     vi.mocked(deps.externalResources.listPendingAccessRequestsByAgent).mockImplementation(async () => pending)
@@ -528,7 +469,7 @@ describe('external API resource authorization', () => {
       ...connectionRecord(),
       credentialExpiresAt: new Date(Date.now() - 1),
     })
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     vi.mocked(deps.externalResources.createTokenLease).mockImplementation(async (record) => record)
     vi.mocked(deps.externalResources.consumeAccessRequest).mockResolvedValue(true)
     vi.mocked(deps.externalResources.consumeGrant).mockResolvedValue(true)
@@ -683,7 +624,7 @@ describe('external API resource authorization', () => {
       grantId: 'grant-1',
     })
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     vi.mocked(deps.externalResources.listActiveTokenLeasesByGrant).mockResolvedValue([
       {
         id: 'lease-1',
@@ -715,7 +656,7 @@ describe('external API resource authorization', () => {
   it('maps management and account resource views', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
       connectionRecord(),
       {
@@ -757,10 +698,26 @@ describe('external API resource authorization', () => {
     })
   })
 
+  it('defaults optional connector authorization metadata', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        registrationMode: null,
+        clientSecretContext: 'connector:connector-1:client-secret',
+        providerMetadata: null,
+      }),
+    )
+
+    await expect(getExternalResourceAuthorization(deps, 'resource-1')).resolves.toMatchObject({
+      registrationMode: 'manual',
+    })
+  })
+
   it('creates and revokes account connections, including organization control', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     Object.assign(deps.authorization, {
       findMemberByOrganizationUser: vi.fn().mockResolvedValue({ role: 'credential_manager' }),
     })
@@ -809,7 +766,7 @@ describe('external API resource authorization', () => {
     const request = { ...requestRecord(), connectionId: null }
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     vi.mocked(deps.externalResources.createConnectionIntent).mockImplementation(async (record) => record)
 
     await expect(
@@ -853,6 +810,14 @@ describe('external API resource authorization', () => {
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).rejects.toThrow('A resource home space cannot have more than one active account connection.')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(nativeResource())
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toEqual({
+      items: [],
+      pagination: expect.objectContaining({ total: 0 }),
+    })
   })
 
   it('enforces first-access connection context boundaries', async () => {
@@ -860,7 +825,7 @@ describe('external API resource authorization', () => {
     authorizationDeps(deps)
     const request = { ...requestRecord(), connectionId: null }
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.externalResources.createConnectionIntent).mockImplementation(async (record) => record)
 
@@ -1000,7 +965,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.createAccessRequest).mockImplementation(async (record) => record)
 
     await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
-      resources: [{ authorizationMode: 'native', connections: [], grants: [{ id: 'grant-1' }] }],
+      resources: [{ connectorId: null, connections: [], grants: [{ id: 'grant-1' }] }],
     })
     await expect(listAgentApiResources(deps, principal(), { limit: 10, offset: 0 })).resolves.toMatchObject({
       items: [
@@ -1097,7 +1062,7 @@ describe('external API resource authorization', () => {
       }),
     })
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(null)
+    vi.mocked(deps.connectors.findById).mockResolvedValue(null)
     vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
     mockResourceOpenApi(deps, healthy.resourceUrl)
 
@@ -1113,7 +1078,7 @@ describe('external API resource authorization', () => {
   it('lists, reads, denies, and approves controlled access requests', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     const pendingExternal = requestRecord()
     const pendingNative = { ...requestRecord(), id: 'request-2', connectionId: null }
     vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([connectionRecord()])
@@ -1197,7 +1162,7 @@ describe('external API resource authorization', () => {
       lease,
     ])
     vi.mocked(deps.externalResources.findGrant).mockResolvedValueOnce(null).mockResolvedValueOnce(grantRecord())
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     vi.mocked(deps.externalResources.revokeTokenLease).mockResolvedValue(true)
     vi.mocked(deps.externalHttp.fetch).mockResolvedValue(new Response(null, { status: 200 }))
     await revokeAgentResourceLeasesForBinding(deps, 'binding-1')
@@ -1282,168 +1247,6 @@ describe('external API resource authorization', () => {
         { issuer: principal().issuer, sign },
       ),
     ).rejects.toThrow('Active Agent access grant is required.')
-  })
-
-  it('rejects invalid external authorization discovery and client configuration', async () => {
-    const configure = async ({
-      protectedBody = {
-        resource: resource().resourceUrl,
-        authorization_servers: ['https://projects.example.com'],
-      },
-      serverBody = metadata(),
-      protectedResponse,
-      serverResponse,
-      registrationResponse,
-      input = { registrationMode: 'manual' as const, clientId: 'client', clientSecret: 'secret' },
-      configuredResource = resource(),
-      configuredResult = true,
-    }: {
-      protectedBody?: unknown
-      serverBody?: unknown
-      protectedResponse?: Response
-      serverResponse?: Response
-      registrationResponse?: Response
-      input?: Parameters<typeof configureExternalResourceAuthorization>[2]
-      configuredResource?: ApiResourceResponse | null
-      configuredResult?: boolean
-    }) => {
-      const deps = createTestDeps()
-      authorizationDeps(deps)
-      vi.mocked(deps.authorization.findResource).mockResolvedValue(configuredResource)
-      vi.mocked(deps.externalResources.configureAuthorization).mockImplementation(async (record) =>
-        configuredResult ? record : null,
-      )
-      const protocolResponses = [
-        protectedResponse ?? Response.json(protectedBody),
-        serverResponse ?? Response.json(serverBody),
-        ...(registrationResponse ? [registrationResponse] : []),
-      ]
-      vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
-        const resourceUrl = configuredResource?.resourceUrl ?? resource().resourceUrl
-        if (request.url === new URL(resourceUrl).toString()) {
-          return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
-        }
-        if (request.url === new URL('/openapi.json', resourceUrl).toString()) {
-          return Response.json({ openapi: '3.1.0', paths: {} })
-        }
-        return protocolResponses.shift() ?? new Response(null, { status: 404 })
-      })
-      return configureExternalResourceAuthorization(deps, 'resource-1', input, 'https://auth.example.com/')
-    }
-
-    await expect(configure({ configuredResource: null })).rejects.toThrow('External API resource was not found.')
-    await expect(configure({ configuredResource: { ...resource(), authorizationMode: 'native' } })).rejects.toThrow(
-      'External API resource was not found.',
-    )
-    await expect(configure({ configuredResource: { ...resource(), archivedAt: now.toISOString() } })).rejects.toThrow(
-      'Archived API resources must be restored before reconfiguration.',
-    )
-    await expect(configure({ configuredResult: false })).rejects.toThrow(
-      'Archived API resources must be restored before reconfiguration.',
-    )
-    await expect(
-      configure({ configuredResource: { ...resource(), resourceUrl: 'http://projects.example.com/api' } }),
-    ).rejects.toThrow('resource URL must use HTTPS')
-    await expect(configure({ protectedResponse: new Response(null, { status: 503 }) })).rejects.toThrow(
-      'Protected resource metadata discovery failed.',
-    )
-    await expect(configure({ protectedBody: [] })).rejects.toThrow('Protected resource metadata discovery failed.')
-    await expect(
-      configure({
-        protectedBody: {
-          resource: 'https://other.example.com/api',
-          authorization_servers: ['https://projects.example.com'],
-        },
-      }),
-    ).rejects.toThrow('does not match the configured resource URL')
-    await expect(
-      configure({ protectedBody: { resource: resource().resourceUrl, authorization_servers: [] } }),
-    ).rejects.toThrow('exactly one authorization server')
-    await expect(
-      configure({ protectedBody: { resource: resource().resourceUrl, authorization_servers: [42] } }),
-    ).rejects.toThrow('exactly one authorization server')
-    await expect(
-      configure({
-        protectedBody: {
-          resource: resource().resourceUrl,
-          authorization_servers: ['https://one.example.com', 'https://two.example.com'],
-        },
-      }),
-    ).rejects.toThrow('exactly one authorization server')
-    await expect(
-      configure({
-        protectedBody: {
-          resource: resource().resourceUrl,
-          authorization_servers: ['http://projects.example.com'],
-        },
-      }),
-    ).rejects.toThrow('authorization server issuer must use HTTPS')
-    await expect(configure({ serverResponse: new Response(null, { status: 503 }) })).rejects.toThrow(
-      'Authorization server metadata discovery failed.',
-    )
-    await expect(configure({ serverBody: { ...metadata(), issuer: 'https://wrong.example.com' } })).rejects.toThrow(
-      'issuer does not match',
-    )
-    await expect(configure({ serverBody: { ...metadata(), token_endpoint: undefined } })).rejects.toThrow(
-      'missing token_endpoint',
-    )
-    await expect(
-      configure({ serverBody: { ...metadata(), authorization_endpoint: 'https://user:secret@example.com' } }),
-    ).rejects.toThrow('authorization_endpoint must use HTTPS')
-    await expect(configure({ serverBody: { ...metadata(), grant_types_supported: [] } })).rejects.toThrow(
-      'Authorization server must support',
-    )
-    await expect(configure({ serverBody: { ...metadata(), dpop_signing_alg_values_supported: [] } })).rejects.toThrow(
-      'must advertise RFC 9449 DPoP support',
-    )
-    await expect(
-      configure({
-        serverBody: { ...metadata(), registration_endpoint: undefined },
-        input: { registrationMode: 'dynamic' },
-      }),
-    ).rejects.toThrow('does not support dynamic client registration')
-    await expect(
-      configure({
-        input: { registrationMode: 'dynamic' },
-        registrationResponse: new Response(null, { status: 400 }),
-      }),
-    ).rejects.toThrow('Dynamic client registration failed.')
-    await expect(
-      configure({
-        input: { registrationMode: 'dynamic' },
-        registrationResponse: new Response('not-json', { status: 201 }),
-      }),
-    ).rejects.toThrow('Dynamic client registration response is invalid.')
-    await expect(
-      configure({
-        input: { registrationMode: 'dynamic' },
-        registrationResponse: Response.json({ client_id: 'client' }, { status: 201 }),
-      }),
-    ).rejects.toThrow('missing client_secret')
-    await expect(
-      configure({ input: { registrationMode: 'manual', clientId: 'client', clientSecret: '' } }),
-    ).rejects.toThrow('OAuth client is incomplete')
-    await expect(configure({})).resolves.toMatchObject({
-      registrationMode: 'manual',
-      clientId: 'client',
-      status: 'active',
-    })
-    await expect(
-      configure({
-        configuredResource: {
-          ...resource(),
-          resourceUrl: 'https://projects.example.com/',
-        },
-        protectedBody: {
-          resource: 'https://projects.example.com/',
-          authorization_servers: ['https://projects.example.com/tenant'],
-        },
-        serverBody: {
-          ...metadata(),
-          issuer: 'https://projects.example.com/tenant',
-        },
-      }),
-    ).resolves.toMatchObject({ issuer: 'https://projects.example.com/tenant' })
   })
 
   it('enforces identity, resource, connection, and role scope boundaries on requests', async () => {
@@ -1675,13 +1478,13 @@ describe('external API resource authorization', () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
 
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValueOnce(null)
+    vi.mocked(deps.connectors.findById).mockResolvedValueOnce(null)
     await expect(getExternalResourceAuthorization(deps, 'resource-1')).rejects.toThrow(
       'External API resource authorization was not found.',
     )
     vi.mocked(deps.authorization.findResource).mockResolvedValueOnce(null)
     await expect(getApiResource(deps, 'missing')).rejects.toThrow('API resource was not found.')
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValueOnce(null)
+    vi.mocked(deps.connectors.findById).mockResolvedValueOnce(null)
     await expect(getApiResource(deps, 'resource-1')).resolves.toMatchObject({ authorization: null })
     vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue(null)
     await expect(
@@ -1692,7 +1495,7 @@ describe('external API resource authorization', () => {
       resource(),
       { ...nativeResource(), id: 'native' },
     ])
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(null)
+    vi.mocked(deps.connectors.findById).mockResolvedValue(null)
     await expect(listConnectableExternalResources(deps)).resolves.toEqual({ resources: [] })
   })
 
@@ -1733,7 +1536,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.authorization.findResource).mockImplementation(async (id) =>
       id === 'resource-1' ? resource() : null,
     )
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
 
     await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
       resources: [
@@ -2013,10 +1816,7 @@ describe('external API resource authorization', () => {
       ),
     ).rejects.toThrow('Organization credential manager access is required.')
 
-    vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue({
-      ...authorizationRecord(),
-      status: 'invalid',
-    })
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord({ enabled: false }))
     await expect(
       createResourceConnectionIntent(
         deps,
@@ -2065,6 +1865,9 @@ describe('external API resource authorization', () => {
     ])
     await revokeAgentResourceAccess(deps, 'identity-1')
     expect(deps.externalResources.revokeTokenLease).toHaveBeenCalledWith('lease-native', expect.any(Date))
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(null)
+    await expect(revokeAgentResourceAccess(deps, 'identity-1')).rejects.toThrow('API resource was not found.')
   })
 
   it('rejects unknown grants and missing host bindings in account views', async () => {
@@ -2113,7 +1916,7 @@ function authorizationDeps(deps: ReturnType<typeof createTestDeps>) {
     ]),
     updateResource: vi.fn().mockResolvedValue(true),
   })
-  vi.mocked(deps.externalResources.findAuthorization).mockResolvedValue(authorizationRecord())
+  vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
   mockResourceOpenApi(deps, resource().resourceUrl)
 }
 
@@ -2123,7 +1926,7 @@ function resource(): ApiResourceResponse {
     identifier: 'projects',
     name: 'Projects API',
     resourceUrl: 'https://projects.example.com/api',
-    authorizationMode: 'external',
+    connectorId: 'connector-1',
     description: 'Manage private projects',
     enabled: true,
     archivedAt: null,
@@ -2135,7 +1938,7 @@ function resource(): ApiResourceResponse {
 function nativeResource(): ApiResourceResponse {
   return {
     ...resource(),
-    authorizationMode: 'native',
+    connectorId: null,
     resourceUrl: 'https://auth.example.com/api/projects',
   }
 }
@@ -2160,25 +1963,34 @@ function metadata() {
   }
 }
 
-function authorizationRecord(): ExternalResourceAuthorizationRecord {
+function connectorRecord(overrides: Partial<ConnectorRecord> = {}): ConnectorRecord {
   return {
-    resourceId: 'resource-1',
-    resourceUrl: 'https://projects.example.com/api',
+    id: 'connector-1',
+    slug: 'projects',
+    providerType: 'generic_oauth',
+    providerId: 'projects',
+    displayName: 'Projects',
+    enabled: true,
+    loginEnabled: false,
+    clientId: 'realmroot-client',
+    clientSecret: 'target-secret',
+    clientSecretContext: null,
     issuer: 'https://projects.example.com',
     authorizationEndpoint: 'https://projects.example.com/authorize',
     tokenEndpoint: 'https://projects.example.com/token',
+    userInfoEndpoint: 'https://projects.example.com/userinfo',
+    jwksEndpoint: 'https://projects.example.com/jwks',
     registrationEndpoint: 'https://projects.example.com/register',
     revocationEndpoint: 'https://projects.example.com/revoke',
-    jwksUri: 'https://projects.example.com/jwks',
-    userInfoEndpoint: 'https://projects.example.com/userinfo',
     registrationMode: 'dynamic',
-    clientId: 'realmroot-client',
-    encryptedClientSecret: 'sealed:target-secret',
-    encryptedRegistrationAccessToken: null,
-    metadata: metadata(),
-    status: 'active',
+    registrationAccessToken: null,
+    registrationAccessTokenContext: null,
+    scopes: ['openid', 'offline_access'],
+    attributeMapping: null,
+    providerMetadata: metadata(),
     createdAt: now,
     updatedAt: now,
+    ...overrides,
   }
 }
 

@@ -28,7 +28,7 @@ const resource: ApiResourceResponse = {
   identifier: 'projects',
   name: 'Projects',
   resourceUrl: 'https://api.example.com',
-  authorizationMode: 'native',
+  connectorId: null,
   description: null,
   enabled: true,
   archivedAt: null,

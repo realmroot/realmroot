@@ -2,12 +2,13 @@ import { z } from 'zod'
 import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 export const connectorProviderTypes = ['social', 'generic_oauth'] as const
+export const oidcClientRegistrationModes = ['manual', 'dynamic'] as const
 
 export const connectorProviderTypeSchema = z.enum(connectorProviderTypes)
+export const oidcClientRegistrationModeSchema = z.enum(oidcClientRegistrationModes)
 
 const nonEmptyString = z.string().trim().min(1)
 const optionalUrl = z.url().optional()
-const nullableUrl = z.url().nullable()
 const scopesSchema = z.array(nonEmptyString)
 
 export const connectorProviderMetadataSchema = z.record(z.string(), z.unknown())
@@ -38,6 +39,7 @@ export const connectorResponseSchema = z.object({
   providerId: z.string(),
   displayName: z.string(),
   enabled: z.boolean(),
+  loginEnabled: z.boolean(),
   clientId: z.string().nullable(),
   clientSecretConfigured: z.boolean(),
   issuer: z.string().nullable(),
@@ -45,6 +47,9 @@ export const connectorResponseSchema = z.object({
   tokenEndpoint: z.string().nullable(),
   userInfoEndpoint: z.string().nullable(),
   jwksEndpoint: z.string().nullable(),
+  registrationEndpoint: z.string().nullable(),
+  revocationEndpoint: z.string().nullable(),
+  registrationMode: oidcClientRegistrationModeSchema.nullable(),
   scopes: z.array(z.string()),
   providerMetadata: connectorProviderMetadataSchema,
   createdAt: z.string(),
@@ -76,6 +81,8 @@ export const createConnectorRequestSchema = z
     providerId: nonEmptyString,
     displayName: nonEmptyString,
     enabled: z.boolean().optional(),
+    loginEnabled: z.boolean().optional(),
+    registrationMode: oidcClientRegistrationModeSchema.optional(),
     clientId: nonEmptyString.optional(),
     clientSecret: nonEmptyString.optional(),
     issuer: optionalUrl,
@@ -99,13 +106,9 @@ export const updateConnectorRequestSchema = z.object({
     .optional(),
   displayName: nonEmptyString.optional(),
   enabled: z.boolean().optional(),
+  loginEnabled: z.boolean().optional(),
   clientId: nonEmptyString.nullable().optional(),
   clientSecret: nonEmptyString.nullable().optional(),
-  issuer: nullableUrl.optional(),
-  authorizationEndpoint: nullableUrl.optional(),
-  tokenEndpoint: nullableUrl.optional(),
-  userInfoEndpoint: nullableUrl.optional(),
-  jwksEndpoint: nullableUrl.optional(),
   scopes: scopesSchema.optional(),
   providerMetadata: connectorProviderMetadataSchema.optional(),
 })
@@ -134,41 +137,34 @@ export const unlinkAccountQuerySchema = z.object({
 type ConnectorBoundaryInput = z.infer<typeof createConnectorRequestSchema>
 
 function validateConnectorFields(input: ConnectorBoundaryInput, ctx: z.RefinementCtx) {
-  if (input.enabled === false) return
-  if (!input.clientId) {
-    ctx.addIssue({ code: 'custom', path: ['clientId'], message: 'clientId is required.' })
-  }
-  if (!input.clientSecret) {
+  const dynamicOidc = input.providerType === 'generic_oauth' && input.registrationMode === 'dynamic'
+  if (input.providerType === 'generic_oauth' && !input.issuer) {
     ctx.addIssue({
       code: 'custom',
-      path: ['clientSecret'],
-      message: 'clientSecret is required.',
+      path: ['issuer'],
+      message: 'OIDC connectors require an issuer.',
     })
   }
-  if (input.providerType !== 'generic_oauth') return
-
   if (
+    input.providerType === 'generic_oauth' &&
     input.issuer &&
     (input.authorizationEndpoint || input.tokenEndpoint || input.userInfoEndpoint || input.jwksEndpoint)
   ) {
     ctx.addIssue({
       code: 'custom',
       path: ['issuer'],
-      message: 'Generic OAuth uses either issuer discovery or explicit endpoints, not both.',
+      message: 'OIDC endpoints are discovered from the issuer and cannot be supplied explicitly.',
     })
   }
-  if (!input.issuer && !input.authorizationEndpoint) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['issuer'],
-      message: 'Generic OAuth requires issuer or authorizationEndpoint.',
-    })
+  if (input.enabled === false && input.providerType === 'social') return
+  if (!dynamicOidc && !input.clientId) {
+    ctx.addIssue({ code: 'custom', path: ['clientId'], message: 'clientId is required.' })
   }
-  if (!input.issuer && !input.tokenEndpoint) {
+  if (!dynamicOidc && !input.clientSecret) {
     ctx.addIssue({
       code: 'custom',
-      path: ['tokenEndpoint'],
-      message: 'Generic OAuth requires tokenEndpoint when issuer is not provided.',
+      path: ['clientSecret'],
+      message: 'clientSecret is required.',
     })
   }
 }
@@ -179,6 +175,7 @@ export type ConnectorProviderType = z.infer<typeof connectorProviderTypeSchema>
 export type ConnectorResponse = z.infer<typeof connectorResponseSchema>
 export type ConnectorTemplate = z.infer<typeof connectorTemplateSchema>
 export type ConnectorReadinessResponse = z.infer<typeof connectorReadinessResponseSchema>
+export type OidcClientRegistrationMode = z.infer<typeof oidcClientRegistrationModeSchema>
 export type ListConnectorTemplatesResponse = z.infer<typeof listConnectorTemplatesResponseSchema>
 export type CreateConnectorRequest = z.infer<typeof createConnectorRequestSchema>
 export type UpdateConnectorRequest = z.infer<typeof updateConnectorRequestSchema>

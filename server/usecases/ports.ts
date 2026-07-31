@@ -273,13 +273,20 @@ export interface ConnectorRecord {
   providerId: string
   displayName: string
   enabled: boolean
+  loginEnabled: boolean
   clientId: string | null
   clientSecret: string | null
+  clientSecretContext: string | null
   issuer: string | null
   authorizationEndpoint: string | null
   tokenEndpoint: string | null
   userInfoEndpoint: string | null
   jwksEndpoint: string | null
+  registrationEndpoint: string | null
+  revocationEndpoint: string | null
+  registrationMode: string | null
+  registrationAccessToken: string | null
+  registrationAccessTokenContext: string | null
   scopes: string[] | null
   attributeMapping: Record<string, string> | null
   providerMetadata: Record<string, unknown> | null
@@ -294,13 +301,20 @@ export interface ConnectorRecordInput {
   providerId: string
   displayName: string
   enabled?: boolean
+  loginEnabled?: boolean
   clientId?: string | null
   clientSecret?: string | null
+  clientSecretContext?: string | null
   issuer?: string | null
   authorizationEndpoint?: string | null
   tokenEndpoint?: string | null
   userInfoEndpoint?: string | null
   jwksEndpoint?: string | null
+  registrationEndpoint?: string | null
+  revocationEndpoint?: string | null
+  registrationMode?: string | null
+  registrationAccessToken?: string | null
+  registrationAccessTokenContext?: string | null
   scopes?: string[] | null
   attributeMapping?: Record<string, string> | null
   providerMetadata?: Record<string, unknown> | null
@@ -313,6 +327,7 @@ export interface ConnectorRepository {
   listEnabled(): Promise<ConnectorRecord[]>
   findById(id: string): Promise<ConnectorRecord | null>
   findByProviderId(providerId: string): Promise<ConnectorRecord | null>
+  countResourceReferences(id: string): Promise<number>
   create(input: ConnectorRecordInput): Promise<ConnectorRecord>
   update(id: string, input: Partial<ConnectorRecordInput>): Promise<ConnectorRecord | null>
   delete(id: string): Promise<void>
@@ -353,6 +368,7 @@ export interface AgentAuditRepository {
 
 export interface ExternalResourceAuthorizationRecord {
   resourceId: string
+  connectorId: string
   resourceUrl: string
   issuer: string
   authorizationEndpoint: string
@@ -451,14 +467,6 @@ export interface ExternalTokenLeaseRecord {
 }
 
 export interface ExternalResourceRepository {
-  createResourceWithAuthorization(
-    resource: ApiResourceRecordInput,
-    authorization: ExternalResourceAuthorizationRecord,
-  ): Promise<void>
-  configureAuthorization(
-    input: ExternalResourceAuthorizationRecord,
-  ): Promise<ExternalResourceAuthorizationRecord | null>
-  findAuthorization(resourceId: string): Promise<ExternalResourceAuthorizationRecord | null>
   createConnection(input: ResourceAccountConnectionRecord): Promise<ResourceAccountConnectionRecord | null>
   findConnectionByOwnerResource(input: {
     resourceId: string

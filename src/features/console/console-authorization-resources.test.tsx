@@ -136,7 +136,7 @@ describe('console API resources and roles', () => {
       identifier: 'projects',
       name: 'Projects API',
       resourceUrl: 'https://projects.example.com/api',
-      authorizationMode: 'external' as const,
+      connectorId: 'connector-1',
       enabled: false,
       authorization: null,
     }
@@ -175,7 +175,7 @@ describe('console API resources and roles', () => {
       if (request.method === 'POST') {
         requests.push({ ...request, body: await request.body })
         if (request.url === '/api/api-resources') {
-          return jsonResponse({ ...apiResource, authorizationMode: 'external', authorization: null }, 201)
+          return jsonResponse({ ...apiResource, connectorId: 'connector-1', authorization: null }, 201)
         }
         if (request.url === '/api/roles') return jsonResponse({ ...role, resourceId: 'resource-1' }, 201)
       }
@@ -183,12 +183,26 @@ describe('console API resources and roles', () => {
         return jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination })
       }
       if (request.url === '/api/roles') return jsonResponse({ roles: [], pagination: emptyPagination })
+      if (request.url.startsWith('/api/connectors')) {
+        return jsonResponse({
+          connectors: [
+            {
+              id: 'connector-1',
+              providerType: 'generic_oauth',
+              displayName: 'Projects OIDC',
+              issuer: 'https://projects.example.com',
+              enabled: true,
+            },
+          ],
+          pagination: emptyPagination,
+        })
+      }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
     renderWithQuery(<ApiResourcesPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'New external resource' }))
-    expect(screen.getByRole('heading', { name: 'Create external API resource' })).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'New API resource' }))
+    expect(screen.getByRole('heading', { name: 'Create API resource' })).toBeTruthy()
     for (const [label, value] of [
       ['Identifier', 'projects'],
       ['Name', 'Projects API'],
@@ -197,21 +211,21 @@ describe('console API resources and roles', () => {
     ]) {
       fireEvent.change(screen.getByLabelText(label), { target: { value } })
     }
+    fireEvent.change(screen.getByLabelText('OIDC connector'), { target: { value: 'connector-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/api-resources',
         method: 'POST',
         body: expect.objectContaining({
-          authorizationMode: 'external',
-          authorization: { registrationMode: 'dynamic' },
+          connectorId: 'connector-1',
         }),
       }),
     )
 
     cleanup()
     renderWithQuery(<ApiResourcesPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'New local resource' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'New API resource' }))
     for (const [label, value] of [
       ['Identifier', 'local'],
       ['Name', 'Local API'],
@@ -224,7 +238,7 @@ describe('console API resources and roles', () => {
       expect(requests).toContainEqual({
         url: '/api/api-resources',
         method: 'POST',
-        body: expect.objectContaining({ authorizationMode: 'native' }),
+        body: expect.not.objectContaining({ connectorId: expect.anything() }),
       }),
     )
 
@@ -251,24 +265,23 @@ describe('console API resources and roles', () => {
   it('shows validation errors for incomplete resource creation', async () => {
     vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse({ items: [], pagination: emptyPagination }))
     renderWithQuery(<ApiResourcesPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'New local resource' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'New API resource' }))
     fireEvent.submit(
-      screen
-        .getByRole('heading', { name: 'Create local API resource' })
-        .closest('[role="dialog"]')!
-        .querySelector('form')!,
+      screen.getByRole('heading', { name: 'Create API resource' }).closest('[role="dialog"]')!.querySelector('form')!,
     )
     expect(await screen.findByText(/Invalid input/)).toBeTruthy()
   })
 
-  it('updates native resources and configures manual external authorization', async () => {
+  it('updates native resources and changes an external resource connector [spec: agent-identity/external-api-resource-registration]', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
-    const external = {
+    const external: ApiResource = {
       ...apiResource,
       name: 'Projects API',
-      authorizationMode: 'external' as const,
+      connectorId: 'connector-1',
       resourceUrl: 'https://projects.example.com/api',
+      enabled: false,
       authorization: {
+        connectorId: 'connector-1',
         resourceUrl: 'https://projects.example.com/api',
         issuer: 'https://projects.example.com',
         authorizationEndpoint: 'https://projects.example.com/authorize',
@@ -285,6 +298,29 @@ describe('console API resources and roles', () => {
         updatedAt: apiResource.updatedAt,
       },
     }
+    const oidcConnector = {
+      id: 'connector-1',
+      slug: 'projects',
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects OIDC',
+      enabled: true,
+      loginEnabled: false,
+      clientId: 'realmroot',
+      clientSecretConfigured: true,
+      issuer: 'https://projects.example.com',
+      authorizationEndpoint: 'https://projects.example.com/authorize',
+      tokenEndpoint: 'https://projects.example.com/token',
+      userInfoEndpoint: 'https://projects.example.com/userinfo',
+      jwksEndpoint: 'https://projects.example.com/jwks',
+      registrationEndpoint: 'https://projects.example.com/register',
+      revocationEndpoint: 'https://projects.example.com/revoke',
+      registrationMode: 'manual',
+      scopes: ['openid'],
+      providerMetadata: {},
+      createdAt: apiResource.createdAt,
+      updatedAt: apiResource.updatedAt,
+    }
     let selected: ApiResource = { ...apiResource, authorization: null }
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
@@ -298,6 +334,19 @@ describe('console API resources and roles', () => {
       if (request.url === '/api/api-resources/resource-1' && request.method === 'DELETE') {
         requests.push({ ...request, body: null })
         return new Response(null, { status: 204 })
+      }
+      if (request.url.startsWith('/api/connectors') && request.method === 'GET') {
+        return jsonResponse({
+          connectors: [
+            oidcConnector,
+            {
+              ...oidcConnector,
+              id: 'connector-2',
+              displayName: 'Projects OIDC 2',
+            },
+          ],
+          pagination: emptyPagination,
+        })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
@@ -337,34 +386,27 @@ describe('console API resources and roles', () => {
     cleanup()
     selected = external
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect(await screen.findByText(/Issuer.*https:\/\/projects\.example\.com/)).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'OIDC connector' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'External API' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save resource' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/api-resources/resource-1',
         method: 'PATCH',
-        body: expect.not.objectContaining({ resourceUrl: expect.anything() }),
+        body: expect.objectContaining({ resourceUrl: external.resourceUrl }),
       }),
     )
-    fireEvent.change(screen.getByLabelText('Client registration'), { target: { value: 'manual' } })
-    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'manual-client' } })
-    fireEvent.change(screen.getByLabelText('Client secret'), { target: { value: 'secret' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover and configure' }))
+    fireEvent.change(screen.getByLabelText('OIDC connector'), { target: { value: 'connector-2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Change connector' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/api-resources/resource-1',
         method: 'PATCH',
-        body: {
-          resourceUrl: 'https://projects.example.com/api',
-          authorization: {
-            registrationMode: 'manual',
-            clientId: 'manual-client',
-            clientSecret: 'secret',
-          },
-        },
+        body: { connectorId: 'connector-2' },
       }),
     )
+    expect((await screen.findAllByText(/https:\/\/projects\.example\.com/)).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Detach connector' })).toBeNull()
   })
 
   it('[spec: admin-console/admin-archive-api-resource] archives and restores an API resource as disabled', async () => {
@@ -419,14 +461,14 @@ describe('console API resources and roles', () => {
     })
   })
 
-  it('retries resource queries and dynamically configures an unconfigured external resource', async () => {
+  it('retries resource queries and directs unconfigured resources to OIDC connectors', async () => {
     let listFailed = true
     let detailFailed = true
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     const external = {
       ...apiResource,
       name: 'Projects API',
-      authorizationMode: 'external' as const,
+      connectorId: 'connector-missing',
       enabled: false,
       resourceUrl: 'https://projects.example.com/api',
       authorization: null,
@@ -445,6 +487,9 @@ describe('console API resources and roles', () => {
         requests.push({ ...request, body: await request.body })
         return jsonResponse(external)
       }
+      if (request.url.startsWith('/api/connectors') && request.method === 'GET') {
+        return jsonResponse({ connectors: [], pagination: emptyPagination })
+      }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
@@ -460,21 +505,10 @@ describe('console API resources and roles', () => {
     detailFailed = false
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('button', { name: 'Enable' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }))
-    fireEvent.change(screen.getByLabelText('Protected resource URL'), {
-      target: { value: 'https://projects.example.com/api' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Discover and configure' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/api-resources/resource-1',
-        method: 'PATCH',
-        body: {
-          resourceUrl: 'https://projects.example.com/api',
-          authorization: { registrationMode: 'dynamic' },
-        },
-      }),
+    expect((await screen.findByRole('link', { name: 'Open Connectors' })).getAttribute('href')).toBe(
+      '/console/connectors',
     )
+    expect(requests).toEqual([])
   })
 
   it('updates and deletes custom roles while disabling scopes for global roles', async () => {

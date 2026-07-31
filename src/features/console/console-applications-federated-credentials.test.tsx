@@ -109,7 +109,7 @@ describe('admin console application federated credentials', () => {
               identifier: 'https://auth.example.com/api/runner',
               audience: 'https://auth.example.com/api/runner',
               resourceUrl: 'https://auth.example.com/api/runner',
-              authorizationMode: 'native',
+              connectorId: null,
               description: null,
               enabled: true,
               authorization: null,

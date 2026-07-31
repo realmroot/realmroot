@@ -164,7 +164,7 @@ describe('admin console webhooks-content', () => {
     expect(screen.getByRole('columnheader', { name: 'Resource' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Resource URL' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New local resource' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New API resource' }))
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'billing-api' } })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Billing API' } })
     fireEvent.change(screen.getByLabelText('Resource URL'), { target: { value: 'https://billing.example.com' } })
@@ -187,7 +187,6 @@ describe('admin console webhooks-content', () => {
             identifier: 'billing-api',
             name: 'Billing API',
             resourceUrl: 'https://billing.example.com',
-            authorizationMode: 'native',
             description: 'Billing resource',
           },
         },

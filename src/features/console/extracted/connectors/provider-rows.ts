@@ -51,24 +51,6 @@ export function connectorProviderRows(
       template,
     }
   })
-  const unmatchedGenericRows = connectors
-    .filter(
-      (connector) =>
-        connector.providerType !== 'social' && !templates.some((t) => t.providerId === connector.providerId),
-    )
-    .map((connector) => ({
-      key: `${connector.providerType}:${connector.id}`,
-      displayName: connector.displayName,
-      description: connectorDescription(connector.providerType),
-      icon: 'oauth',
-      providerId: connector.providerId,
-      providerType: connector.providerType,
-      typeLabel: connectorTypeLabel(connector.providerType),
-      configurationLabel: 'Boundary configured',
-      enabled: connector.enabled,
-      connector,
-      template: null,
-    }))
   return [
     {
       key: 'builtin:email',
@@ -136,12 +118,11 @@ export function connectorProviderRows(
       template: null,
     },
     ...connectorRows,
-    ...unmatchedGenericRows,
   ]
 }
 
 function connectorTypeLabel(providerType: 'social' | 'generic_oauth') {
-  if (providerType === 'generic_oauth') return 'Generic OAuth'
+  if (providerType === 'generic_oauth') return 'OIDC'
   return 'Social'
 }
 

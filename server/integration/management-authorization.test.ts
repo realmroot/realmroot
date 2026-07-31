@@ -101,11 +101,60 @@ describe('authorization management over real D1', () => {
 
   it('requires authorization reconfiguration when an external resource URL changes [spec: agent-identity/external-api-resource-reconfiguration]', async () => {
     const cookie = await signInAdmin(harness)
+    const now = new Date()
+    const connector = await harness.deps.connectors.create({
+      id: 'connector-projects',
+      slug: 'projects',
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects OIDC',
+      enabled: true,
+      loginEnabled: false,
+      clientId: 'projects-client',
+      clientSecret: 'projects-secret',
+      clientSecretContext: null,
+      issuer: 'https://projects.example.com',
+      authorizationEndpoint: 'https://projects.example.com/authorize',
+      tokenEndpoint: 'https://projects.example.com/token',
+      userInfoEndpoint: 'https://projects.example.com/userinfo',
+      jwksEndpoint: 'https://projects.example.com/jwks',
+      registrationEndpoint: null,
+      revocationEndpoint: 'https://projects.example.com/revoke',
+      registrationMode: 'manual',
+      registrationAccessToken: null,
+      registrationAccessTokenContext: null,
+      scopes: ['openid', 'offline_access'],
+      attributeMapping: null,
+      providerMetadata: {
+        grant_types_supported: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          'urn:ietf:params:oauth:grant-type:token-exchange',
+        ],
+        dpop_signing_alg_values_supported: ['ES256'],
+      },
+      createdAt: now,
+      updatedAt: now,
+    })
+    harness.deps.externalHttp.fetch = async (request) => {
+      if (request.url.endsWith('/.well-known/oauth-protected-resource/api')) {
+        return Response.json({
+          resource: request.url.includes('new-projects')
+            ? 'https://new-projects.example.com/api'
+            : 'https://projects.example.com/api',
+          authorization_servers: [
+            request.url.includes('new-projects') ? 'https://different.example.com' : connector.issuer,
+          ],
+        })
+      }
+      return resourceOpenApiFetch(request)
+    }
     const resource = await createResource(harness.deps, {
       identifier: 'projects-api',
       name: 'Projects API',
       resourceUrl: 'https://projects.example.com/api',
-      authorizationMode: 'external',
+      connectorId: connector.id,
     })
 
     const response = await harness.request(`/api/api-resources/${resource.id}`, {
@@ -116,7 +165,7 @@ describe('authorization management over real D1', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      error: { message: 'Changing an external API resource URL requires authorization reconfiguration.' },
+      error: { message: 'External API resource authorization server does not match the selected OIDC connector.' },
     })
   })
 
@@ -208,55 +257,74 @@ describe('authorization management over real D1', () => {
     ).resolves.toEqual([{ id: 'connection-history' }])
   })
 
-  it('configures external authorization atomically only while the resource is unarchived [spec: management-api/management-api-resource-archival]', async () => {
+  it('changes an OIDC connector only while the resource is unarchived [spec: management-api/management-api-resource-archival]', async () => {
     const cookie = await signInAdmin(harness)
+    const now = new Date()
+    const connector = await harness.deps.connectors.create({
+      id: 'connector-conditional',
+      slug: 'conditional',
+      providerType: 'generic_oauth',
+      providerId: 'conditional',
+      displayName: 'Conditional OIDC',
+      enabled: true,
+      loginEnabled: false,
+      clientId: 'conditional-client',
+      clientSecret: 'conditional-secret',
+      clientSecretContext: null,
+      issuer: 'https://conditional.example.com',
+      authorizationEndpoint: 'https://conditional.example.com/authorize',
+      tokenEndpoint: 'https://conditional.example.com/token',
+      userInfoEndpoint: 'https://conditional.example.com/userinfo',
+      jwksEndpoint: 'https://conditional.example.com/jwks',
+      registrationEndpoint: null,
+      revocationEndpoint: 'https://conditional.example.com/revoke',
+      registrationMode: 'manual',
+      registrationAccessToken: null,
+      registrationAccessTokenContext: null,
+      scopes: ['openid', 'offline_access'],
+      attributeMapping: null,
+      providerMetadata: {
+        grant_types_supported: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          'urn:ietf:params:oauth:grant-type:token-exchange',
+        ],
+        dpop_signing_alg_values_supported: ['ES256'],
+      },
+      createdAt: now,
+      updatedAt: now,
+    })
+    harness.deps.externalHttp.fetch = async (request) => {
+      if (request.url.endsWith('/.well-known/oauth-protected-resource/api')) {
+        return Response.json({
+          resource: 'https://conditional.example.com/api',
+          authorization_servers: [connector.issuer],
+        })
+      }
+      return resourceOpenApiFetch(request)
+    }
     const resource = await createResource(harness.deps, {
       identifier: 'conditional-external',
       name: 'Conditional external API',
       resourceUrl: 'https://conditional.example.com/api',
-      authorizationMode: 'external',
-      enabled: false,
+      connectorId: connector.id,
     })
-    const now = new Date()
-    const authorization = {
-      resourceId: resource.id,
-      resourceUrl: resource.resourceUrl,
-      issuer: 'https://conditional.example.com',
-      authorizationEndpoint: 'https://conditional.example.com/authorize',
-      tokenEndpoint: 'https://conditional.example.com/token',
-      registrationEndpoint: null,
-      revocationEndpoint: 'https://conditional.example.com/revoke',
-      jwksUri: 'https://conditional.example.com/jwks',
-      userInfoEndpoint: 'https://conditional.example.com/userinfo',
-      registrationMode: 'manual',
-      clientId: 'conditional-client',
-      encryptedClientSecret: 'conditional-secret',
-      encryptedRegistrationAccessToken: null,
-      metadata: {},
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-    }
-
-    await expect(harness.deps.externalResources.configureAuthorization(authorization)).resolves.toMatchObject({
-      resourceId: resource.id,
-    })
-    await expect(harness.deps.authorization.findResource(resource.id)).resolves.toMatchObject({ enabled: true })
 
     const archived = await harness.request(`/api/api-resources/${resource.id}/archival`, {
       method: 'PUT',
       headers: { cookie },
     })
     expect(archived.status).toBe(200)
-    await expect(
-      harness.deps.externalResources.configureAuthorization({
-        ...authorization,
-        clientId: 'late-client',
-        updatedAt: new Date(now.getTime() + 1),
-      }),
-    ).resolves.toBeNull()
-    await expect(harness.deps.externalResources.findAuthorization(resource.id)).resolves.toMatchObject({
-      clientId: 'conditional-client',
+    const lateAssociation = await harness.request(`/api/api-resources/${resource.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ connectorId: connector.id }),
+    })
+    expect(lateAssociation.status).toBe(400)
+    await expect(harness.deps.authorization.findResource(resource.id)).resolves.toMatchObject({
+      connectorId: connector.id,
+      archivedAt: expect.any(String),
     })
   })
 

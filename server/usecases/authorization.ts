@@ -7,6 +7,7 @@ import {
 } from '@server/usecases/authorization-utils'
 import type { Deps } from '@server/usecases/deps'
 import type { RoleAssignmentScope } from '@server/usecases/ports'
+import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
 import {
   validateRequestedScopes,
   validateResourceContract,
@@ -136,16 +137,19 @@ export async function cancelInvitation(deps: Deps, organizationId: string, id: s
 }
 
 export async function createResource(deps: Deps, input: CreateApiResourceRequest) {
-  const authorizationMode = input.authorizationMode ?? 'native'
-  const enabled = authorizationMode === 'external' ? false : (input.enabled ?? true)
+  const enabled = input.enabled ?? true
   validateResourceUrl(input.resourceUrl)
-  if (enabled) await validateResourceContract(deps, input.resourceUrl)
+  if (input.connectorId) {
+    await validateExternalResourceConnector(deps, input.resourceUrl, input.connectorId)
+  } else if (enabled) {
+    await validateResourceContract(deps, input.resourceUrl)
+  }
   return deps.authorization.createResource({
     id: createId('res'),
     identifier: input.identifier,
     name: input.name,
     resourceUrl: input.resourceUrl,
-    authorizationMode,
+    connectorId: input.connectorId ?? null,
     description: input.description ?? null,
     enabled,
   })
@@ -167,15 +171,17 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
   const resource = await getResource(deps, id)
   if (resource.archivedAt) throw badRequest('Archived API resources must be restored before updating.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
-  if (resource.authorizationMode === 'external' && input.enabled === true) {
-    const authorization = await deps.externalResources.findAuthorization(id)
-    if (authorization?.status !== 'active') {
-      throw badRequest('External API resource authorization must be configured before enabling the resource.')
-    }
+  if (input.connectorId !== undefined && (input.connectorId === null) !== (resource.connectorId === null)) {
+    throw badRequest('API resource authorization mode cannot change after creation.')
   }
+  const connectorId = input.connectorId ?? resource.connectorId
+  const resourceUrl = input.resourceUrl ?? resource.resourceUrl
   const enabled = input.enabled ?? resource.enabled
-  if (enabled && (input.enabled === true || input.resourceUrl !== undefined)) {
-    await validateResourceContract(deps, input.resourceUrl ?? resource.resourceUrl)
+  const boundaryChanged = input.connectorId !== undefined || input.resourceUrl !== undefined
+  if (connectorId && (boundaryChanged || input.enabled === true)) {
+    await validateExternalResourceConnector(deps, resourceUrl, connectorId)
+  } else if (!connectorId && enabled && (input.enabled === true || input.resourceUrl !== undefined)) {
+    await validateResourceContract(deps, resourceUrl)
   }
   if (!(await deps.authorization.updateResource(id, input))) {
     throw badRequest('Archived API resources must be restored before updating.')

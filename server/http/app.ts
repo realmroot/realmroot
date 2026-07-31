@@ -79,6 +79,7 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.use('*', depsMiddleware(deps))
   app.use('*', requestContext())
   app.use('*', accessLog())
+  app.on(['GET', 'HEAD'], ['/.well-known/jwks.json', '/api/auth/jwks'], (c) => publishJwks(c, auth))
   app.use(
     '/api/*',
     trustedOriginCors(config.trustedOrigins ?? [], {
@@ -131,6 +132,26 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
   app.route('/api', createUnifiedApiRoutes(auth, config))
 
   return app
+}
+
+async function publishJwks(c: Context, auth: AuthHandler) {
+  c.header('access-control-allow-origin', '*')
+  c.header('content-type', 'application/json; charset=UTF-8')
+  if (c.req.method === 'HEAD') return c.body(null)
+
+  const url = new URL(c.req.url)
+  url.pathname = '/api/auth/jwks'
+  const response = await auth.handler(new Request(url, { headers: c.req.raw.headers }))
+  if (!response.ok) return response
+
+  const jwks = (await response.json()) as { keys: JsonWebKey[] }
+  return c.json({
+    keys: jwks.keys.map((key) => ({
+      ...key,
+      use: 'sig',
+      key_ops: ['verify'],
+    })),
+  })
 }
 
 export function createRpcApp(auth: AuthHandler, config: AppConfig = {}) {

@@ -1,4 +1,3 @@
-import { badRequest } from '@server/domain/errors'
 import {
   archiveResource,
   createResource,
@@ -6,12 +5,7 @@ import {
   restoreResource,
   updateResource,
 } from '@server/usecases/authorization'
-import {
-  configureExternalResourceAuthorization,
-  createExternalApiResource,
-  getApiResource,
-  listApiResources,
-} from '@server/usecases/external-resources'
+import { getApiResource, listApiResources } from '@server/usecases/external-resources'
 import {
   apiResourceSchema,
   apiResourcesResponseSchema,
@@ -24,7 +18,7 @@ import { getPrincipal } from '../../middleware/authn'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
-export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
+export function createManagementApiResourcesRoute() {
   const app = new Hono()
 
   app.get('/', async (c) =>
@@ -33,15 +27,9 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
 
   app.post('/', async (c) => {
     const input = await readJson(c, createApiResourceSchema)
-    const { authorization, ...resourceInput } = input
-    const resource = authorization
-      ? await createExternalApiResource(getDeps(c), resourceInput, authorization, requireCanonicalOrigin())
-      : await createResource(getDeps(c), resourceInput)
+    const resource = await createResource(getDeps(c), input)
     c.header('Location', `/api/api-resources/${encodeURIComponent(resource.id)}`)
-    return c.json(
-      apiResourceSchema.parse(authorization ? resource : await getApiResource(getDeps(c), resource.id)),
-      201,
-    )
+    return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
   })
 
   app.get('/:resourceId', async (c) =>
@@ -50,24 +38,7 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
 
   app.patch('/:resourceId', async (c) => {
     const input = await readJson(c, updateApiResourceSchema)
-    const { authorization, ...resourceInput } = input
-    if (resourceInput.resourceUrl !== undefined && !authorization) {
-      const current = await getApiResource(getDeps(c), c.req.param('resourceId'))
-      if (current.authorizationMode === 'external' && current.resourceUrl !== resourceInput.resourceUrl) {
-        throw badRequest('Changing an external API resource URL requires authorization reconfiguration.')
-      }
-    }
-    if (Object.keys(resourceInput).length > 0) {
-      await updateResource(getDeps(c), c.req.param('resourceId'), resourceInput)
-    }
-    if (authorization) {
-      await configureExternalResourceAuthorization(
-        getDeps(c),
-        c.req.param('resourceId'),
-        authorization,
-        requireCanonicalOrigin(),
-      )
-    }
+    await updateResource(getDeps(c), c.req.param('resourceId'), input)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
   })
 
@@ -85,11 +56,6 @@ export function createManagementApiResourcesRoute(canonicalOrigin?: string) {
       await restoreResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))
       return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), c.req.param('resourceId'))))
     })
-
-  function requireCanonicalOrigin() {
-    if (!canonicalOrigin) throw new Error('External API resource registration requires the configured base URL.')
-    return canonicalOrigin.replace(/\/$/, '')
-  }
 }
 
 function resourceMutationActor(c: Parameters<typeof getPrincipal>[0]) {

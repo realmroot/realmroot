@@ -24,13 +24,24 @@ test.describe('external API resource authorization', () => {
       await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
       const identity = await whoami.result
 
+      const connectorResponse = await page.request.post('/api/connectors', {
+        data: {
+          providerType: 'generic_oauth',
+          providerId: 'e2e-projects',
+          displayName: 'E2E Projects OIDC',
+          issuer: externalOrigin,
+          registrationMode: 'dynamic',
+          loginEnabled: false,
+        },
+      })
+      expect(connectorResponse.status(), await connectorResponse.text()).toBe(201)
+      const connector = (await connectorResponse.json()) as { id: string }
       const resourceResponse = await page.request.post('/api/api-resources', {
         data: {
           identifier: 'e2e-projects',
           name: 'E2E Projects API',
           resourceUrl: externalResource,
-          authorizationMode: 'external',
-          authorization: { registrationMode: 'dynamic' },
+          connectorId: connector.id,
         },
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
@@ -129,7 +140,6 @@ test.describe('external API resource authorization', () => {
           identifier: 'e2e-realmroot-projects',
           name: 'E2E Realmroot Projects API',
           resourceUrl: realmrootResource,
-          authorizationMode: 'native',
         },
       })
       expect(resourceResponse.status(), await resourceResponse.text()).toBe(201)
@@ -139,7 +149,7 @@ test.describe('external API resource authorization', () => {
       const discovered = plugin.listAgentApiResources<{
         items: Array<{
           id: string
-          authorizationMode: string
+          connectorId: string | null
           resourceUrl: string
           scopes: Array<{ value: string }>
           accountConnections: Array<{ id: string }>
@@ -148,7 +158,7 @@ test.describe('external API resource authorization', () => {
       expect(discovered.items).toContainEqual(
         expect.objectContaining({
           id: resource.id,
-          authorizationMode: 'native',
+          connectorId: null,
           resourceUrl: realmrootResource,
           scopes: expect.arrayContaining([expect.objectContaining({ value: 'projects:read' })]),
           accountConnections: [],

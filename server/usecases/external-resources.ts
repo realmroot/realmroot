@@ -14,9 +14,7 @@ import type {
   CreateAccessRequest,
   CreateAccountConnection,
 } from '@shared/api/agent-api'
-import type { CreateApiResourceRequest } from '@shared/api/authorization'
 import type {
-  ConfigureExternalResourceAuthorizationRequest,
   CreateAgentAccessRequest,
   CreateResourceConnectionIntentRequest,
   DecideAgentAccessRequest,
@@ -24,7 +22,7 @@ import type {
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
 import { getAgentRoleAuthorization } from './authorization'
-import { readDeclaredScopes, validateRequestedScopes, validateResourceContract } from './resource-openapi'
+import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
@@ -42,152 +40,11 @@ export interface AgentAssertionSigner {
   sign(payload: Record<string, unknown>, type: 'JWT' | 'at+jwt'): Promise<string>
 }
 
-export async function configureExternalResourceAuthorization(
-  deps: Deps,
-  resourceId: string,
-  input: ConfigureExternalResourceAuthorizationRequest,
-  callbackOrigin: string,
-) {
-  const resource = await requireExternalResource(deps, resourceId)
-  if (resource.archivedAt) throw badRequest('Archived API resources must be restored before reconfiguration.')
-  const record = await prepareExternalResourceAuthorization(
-    deps,
-    resourceId,
-    resource.resourceUrl,
-    input,
-    callbackOrigin,
-  )
-  const configured = await deps.externalResources.configureAuthorization(record)
-  if (!configured) {
-    throw badRequest('Archived API resources must be restored before reconfiguration.')
-  }
-  return toExternalAuthorization(configured)
-}
-
-export async function createExternalApiResource(
-  deps: Deps,
-  input: CreateApiResourceRequest,
-  authorization: ConfigureExternalResourceAuthorizationRequest,
-  callbackOrigin: string,
-): Promise<ApiResource> {
-  const resourceId = createId('res')
-  const resourceUrl = requireNetworkUrl(input.resourceUrl, 'resource URL')
-  const record = await prepareExternalResourceAuthorization(
-    deps,
-    resourceId,
-    resourceUrl,
-    authorization,
-    callbackOrigin,
-  )
-  await deps.externalResources.createResourceWithAuthorization(
-    {
-      id: resourceId,
-      identifier: input.identifier,
-      name: input.name,
-      resourceUrl,
-      authorizationMode: 'external',
-      description: input.description ?? null,
-      enabled: true,
-    },
-    record,
-  )
-  return getApiResource(deps, resourceId)
-}
-
-async function prepareExternalResourceAuthorization(
-  deps: Deps,
-  resourceId: string,
-  configuredResourceUrl: string,
-  input: ConfigureExternalResourceAuthorizationRequest,
-  callbackOrigin: string,
-) {
-  const resourceUrl = requireNetworkUrl(configuredResourceUrl, 'resource URL')
-  await validateResourceContract(deps, resourceUrl)
-  const protectedMetadata = await fetchObject(
-    deps,
-    protectedResourceMetadataUrl(resourceUrl),
-    'Protected resource metadata discovery failed.',
-  )
-  if (protectedMetadata.resource !== resourceUrl) {
-    throw badRequest('Protected resource metadata does not match the configured resource URL.')
-  }
-  const authorizationServers = stringArray(protectedMetadata.authorization_servers)
-  if (authorizationServers.length !== 1) {
-    throw badRequest('External API resource must advertise exactly one authorization server.')
-  }
-  const issuer = requireNetworkUrl(authorizationServers[0]!, 'authorization server issuer').replace(/\/$/, '')
-  const metadata = await fetchObject(
-    deps,
-    authorizationServerMetadataUrl(issuer),
-    'Authorization server metadata discovery failed.',
-  )
-  if (metadata.issuer !== issuer) {
-    throw badRequest('Authorization server metadata issuer does not match the protected resource.')
-  }
-
-  const authorizationEndpoint = requiredMetadataUrl(metadata, 'authorization_endpoint')
-  const tokenEndpoint = requiredMetadataUrl(metadata, 'token_endpoint')
-  const revocationEndpoint = requiredMetadataUrl(metadata, 'revocation_endpoint')
-  const jwksUri = requiredMetadataUrl(metadata, 'jwks_uri')
-  const userInfoEndpoint = requiredMetadataUrl(metadata, 'userinfo_endpoint')
-  const registrationEndpoint =
-    typeof metadata.registration_endpoint === 'string'
-      ? requireNetworkUrl(metadata.registration_endpoint, 'registration endpoint')
-      : null
-  const grants = stringArray(metadata.grant_types_supported)
-  if (
-    !grants.includes('authorization_code') ||
-    !grants.includes('refresh_token') ||
-    !grants.includes(jwtBearerGrantType) ||
-    !grants.includes(tokenExchangeGrantType)
-  ) {
-    throw badRequest(
-      'Authorization server must support authorization_code, refresh_token, the RFC 7523 JWT bearer grant, and RFC 8693 token exchange.',
-    )
-  }
-  if (stringArray(metadata.dpop_signing_alg_values_supported).length === 0) {
-    throw badRequest('Authorization server must advertise RFC 9449 DPoP support.')
-  }
-  let clientId = input.clientId ?? null
-  let clientSecret = input.clientSecret ?? null
-  let registrationAccessToken: string | null = null
-  if (input.registrationMode === 'dynamic') {
-    if (!registrationEndpoint) throw badRequest('Authorization server does not support dynamic client registration.')
-    const registration = await registerClient(deps, registrationEndpoint, callbackOrigin)
-    clientId = registration.clientId
-    clientSecret = registration.clientSecret
-    registrationAccessToken = registration.registrationAccessToken
-  }
-  if (!clientId || !clientSecret) throw badRequest('External API resource OAuth client is incomplete.')
-
-  const now = new Date()
-  const record: ExternalResourceAuthorizationRecord = {
-    resourceId,
-    resourceUrl,
-    issuer,
-    authorizationEndpoint,
-    tokenEndpoint,
-    registrationEndpoint,
-    revocationEndpoint,
-    jwksUri,
-    userInfoEndpoint,
-    registrationMode: input.registrationMode,
-    clientId,
-    encryptedClientSecret: await deps.secrets.seal(clientSecret, clientSecretContext(resourceId)),
-    encryptedRegistrationAccessToken: registrationAccessToken
-      ? await deps.secrets.seal(registrationAccessToken, registrationTokenContext(resourceId))
-      : null,
-    metadata,
-    status: 'active',
-    createdAt: now,
-    updatedAt: now,
-  }
-  return record
-}
+type ResolvedExternalAuthorization = ExternalResourceAuthorizationRecord
 
 export async function getExternalResourceAuthorization(deps: Deps, resourceId: string) {
   await requireExternalResource(deps, resourceId)
-  const authorization = await deps.externalResources.findAuthorization(resourceId)
+  const authorization = await findExternalAuthorization(deps, resourceId)
   if (!authorization) throw notFound('External API resource authorization was not found.')
   return toExternalAuthorization(authorization)
 }
@@ -195,7 +52,7 @@ export async function getExternalResourceAuthorization(deps: Deps, resourceId: s
 export async function getApiResource(deps: Deps, resourceId: string): Promise<ApiResource> {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource) throw notFound('API resource was not found.')
-  const authorization = await deps.externalResources.findAuthorization(resourceId)
+  const authorization = await findExternalAuthorization(deps, resourceId)
   return {
     ...resource,
     authorization: authorization ? omitResourceId(toExternalAuthorization(authorization)) : null,
@@ -278,10 +135,7 @@ export async function completeResourceConnectionIntent(
   const intent = await deps.externalResources.consumeConnectionIntent(await sha256(input.state), now)
   if (!intent) throw badRequest('Resource connection state is invalid, expired, or already used.')
   const authorization = await requireActiveExternalAuthorization(deps, intent.resourceId)
-  const clientSecret = await deps.secrets.open(
-    authorization.encryptedClientSecret,
-    clientSecretContext(intent.resourceId),
-  )
+  const clientSecret = authorizationClientSecret(authorization)
   const verifier = await deps.secrets.open(intent.encryptedPkceVerifier, connectionIntentContext(intent.id))
   const token = await postForm(
     deps,
@@ -364,7 +218,7 @@ export async function createAccountConnection(
     if (request.id !== input.accessRequestId) throw notFound('Agent access request was not found.')
     await requireControlledRequestTarget(deps, request, actorUserId)
     const resource = await requireEnabledResource(deps, request.resourceId)
-    if (resource.authorizationMode !== 'external') {
+    if (!resource.connectorId) {
       throw badRequest('Native API resources do not use account connections.')
     }
     const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
@@ -409,7 +263,7 @@ export async function listAccessRequestConnections(
   const request = await requirePendingAccessRequestByToken(deps, approvalToken)
   await requireControlledRequestTarget(deps, request, actorUserId)
   const resource = await requireEnabledResource(deps, request.resourceId)
-  if (resource.authorizationMode !== 'external') {
+  if (!resource.connectorId) {
     return { items: [], pagination: paginationMetadata({ ...pagination, total: 0 }) }
   }
   const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
@@ -441,11 +295,11 @@ export async function getAccountConnection(
 
 export async function listConnectableExternalResources(deps: Deps) {
   const resources = (await deps.authorization.listEnabledResources()).filter(
-    (resource) => resource.authorizationMode === 'external',
+    (resource) => resource.connectorId !== null,
   )
   const connectable = []
   for (const resource of resources) {
-    const authorization = await deps.externalResources.findAuthorization(resource.id)
+    const authorization = await findExternalAuthorization(deps, resource.id)
     if (authorization?.status !== 'active') continue
     connectable.push({
       id: resource.id,
@@ -481,11 +335,11 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
   const resources = []
   for (const resourceId of visibleResourceIds) {
     const resource = await deps.authorization.findResource(resourceId)
-    const authorization = await deps.externalResources.findAuthorization(resourceId)
+    const authorization = await findExternalAuthorization(deps, resourceId)
     if (
       !resource?.enabled ||
       resource.archivedAt ||
-      (resource.authorizationMode === 'external' && authorization?.status !== 'active')
+      (resource.connectorId !== null && authorization?.status !== 'active')
     ) {
       continue
     }
@@ -496,11 +350,11 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       name: resource.name,
       description: resource.description,
       resourceUrl: resource.resourceUrl,
-      authorizationMode: resource.authorizationMode,
+      connectorId: resource.connectorId,
       status: scopes ? 'available' : 'unavailable',
       scopes: scopes ?? [],
       connections:
-        resource.authorizationMode === 'external'
+        resource.connectorId !== null
           ? activeConnections
               .filter((connection) => connection.resourceId === resourceId)
               .map((connection) => ({
@@ -541,7 +395,7 @@ export async function listAgentApiResources(
     name: resource.name,
     description: resource.description,
     resourceUrl: resource.resourceUrl,
-    authorizationMode: resource.authorizationMode,
+    connectorId: resource.connectorId,
     status: resource.status,
     scopes: resource.scopes,
     accountConnections: resource.connections.map((connection) => ({
@@ -582,7 +436,7 @@ export async function createAgentAccessRequest(
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const resource = await requireEnabledResource(deps, input.resourceId)
   const connection = input.connectionId ? await deps.externalResources.findConnection(input.connectionId) : null
-  if (resource.authorizationMode === 'external') {
+  if (resource.connectorId !== null) {
     if (
       input.connectionId &&
       (!connection || connection.resourceId !== resource.id || connection.status !== 'active')
@@ -816,7 +670,7 @@ export async function decideAgentAccessRequest(
   )
   const connectionId = input.accountConnectionId ?? request.connectionId
   let connection: ResourceAccountConnectionRecord | null = null
-  if (resource.authorizationMode === 'external') {
+  if (resource.connectorId !== null) {
     if (!connectionId) throw badRequest('An account connection is required to approve external API access.')
     connection = await requireControlledConnection(deps, connectionId, actorUserId)
     if (connection.resourceId !== resource.id || connection.status !== 'active') {
@@ -909,7 +763,7 @@ export async function issueTargetAccessToken(
     identity.identity.ownerOrganizationId,
     grant.scopes,
   )
-  if (resource.authorizationMode === 'native') {
+  if (resource.connectorId === null) {
     return issueNativeAccessToken(
       deps,
       { grant, request, resource, identity, roleAuthorization },
@@ -922,7 +776,7 @@ export async function issueTargetAccessToken(
 
   const [connection, authorization] = await Promise.all([
     request.connectionId ? deps.externalResources.findConnection(request.connectionId) : null,
-    deps.externalResources.findAuthorization(request.resourceId),
+    findExternalAuthorization(deps, request.resourceId),
   ])
   if (!connection || connection.status !== 'active' || authorization?.status !== 'active') {
     throw forbidden('Active external API resource grant is required.')
@@ -942,7 +796,7 @@ export async function issueTargetAccessToken(
     },
     'JWT',
   )
-  const clientSecret = await deps.secrets.open(authorization.encryptedClientSecret, clientSecretContext(resource.id))
+  const clientSecret = authorizationClientSecret(authorization)
   const actorGrant = await postForm(
     deps,
     authorization.tokenEndpoint,
@@ -1191,12 +1045,12 @@ async function revokeTokenLeaseAtTarget(
 ) {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource) throw notFound('API resource was not found.')
-  if (resource.authorizationMode === 'native') {
+  if (resource.connectorId === null) {
     await deps.externalResources.revokeTokenLease(lease.id, now)
     return
   }
   const authorization = await requireActiveExternalAuthorization(deps, resourceId)
-  const clientSecret = await deps.secrets.open(authorization.encryptedClientSecret, clientSecretContext(resourceId))
+  const clientSecret = authorizationClientSecret(authorization)
   const token = await deps.secrets.open(lease.encryptedAccessToken, tokenLeaseContext(lease.id))
   await postEmptyForm(
     deps,
@@ -1206,31 +1060,6 @@ async function revokeTokenLeaseAtTarget(
     clientSecret,
   )
   await deps.externalResources.revokeTokenLease(lease.id, now)
-}
-
-async function registerClient(deps: Deps, endpoint: string, callbackOrigin: string) {
-  const response = await deps.externalHttp.fetch(
-    new Request(endpoint, {
-      method: 'POST',
-      headers: { accept: 'application/json', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        client_name: 'Realmroot External API Resource',
-        redirect_uris: [resourceConnectionCallbackUrl(callbackOrigin)],
-        grant_types: ['authorization_code', 'refresh_token', jwtBearerGrantType, tokenExchangeGrantType],
-        response_types: ['code'],
-        token_endpoint_auth_method: 'client_secret_basic',
-        scope: 'openid offline_access',
-        jwks_uri: `${callbackOrigin.replace(/\/$/, '')}/api/auth/jwks`,
-      }),
-    }),
-  )
-  if (!response.ok) throw badRequest('Dynamic client registration failed.')
-  const body = await readObject(response, 'Dynamic client registration response is invalid.')
-  return {
-    clientId: requiredString(body, 'client_id', 'Dynamic client registration response'),
-    clientSecret: requiredString(body, 'client_secret', 'Dynamic client registration response'),
-    registrationAccessToken: optionalString(body, 'registration_access_token'),
-  }
 }
 
 async function refreshConnectionToken(
@@ -1245,10 +1074,7 @@ async function refreshConnectionToken(
     return requiredString(payload, 'accessToken', 'Stored resource connection')
   }
   const refreshToken = requiredString(payload, 'refreshToken', 'Stored resource connection')
-  const clientSecret = await deps.secrets.open(
-    authorization.encryptedClientSecret,
-    clientSecretContext(connection.resourceId),
-  )
+  const clientSecret = authorizationClientSecret(authorization)
   const token = await postForm(
     deps,
     authorization.tokenEndpoint,
@@ -1328,22 +1154,69 @@ async function requestHostId(deps: Deps, request: AgentAccessRequestRecord) {
 
 async function requireExternalResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
-  if (!resource || resource.authorizationMode !== 'external') throw notFound('External API resource was not found.')
+  if (!resource?.connectorId) throw notFound('External API resource was not found.')
   return resource
 }
 
 async function requireActiveExternalAuthorization(deps: Deps, resourceId: string) {
-  const authorization = await deps.externalResources.findAuthorization(resourceId)
+  const authorization = await findExternalAuthorization(deps, resourceId)
   if (!authorization || authorization.status !== 'active') {
     throw notFound('Active external API resource authorization was not found.')
   }
   return authorization
 }
 
+async function findExternalAuthorization(
+  deps: Deps,
+  resourceId: string,
+): Promise<ResolvedExternalAuthorization | null> {
+  const resource = await deps.authorization.findResource(resourceId)
+  if (!resource?.connectorId) return null
+  const connector = await deps.connectors.findById(resource.connectorId)
+  if (
+    !connector ||
+    connector.providerType !== 'generic_oauth' ||
+    !connector.clientId ||
+    !connector.clientSecret ||
+    !connector.issuer ||
+    !connector.authorizationEndpoint ||
+    !connector.tokenEndpoint ||
+    !connector.userInfoEndpoint ||
+    !connector.jwksEndpoint ||
+    !connector.revocationEndpoint
+  ) {
+    return null
+  }
+  return {
+    resourceId,
+    connectorId: connector.id,
+    resourceUrl: resource.resourceUrl,
+    issuer: connector.issuer,
+    authorizationEndpoint: connector.authorizationEndpoint,
+    tokenEndpoint: connector.tokenEndpoint,
+    registrationEndpoint: connector.registrationEndpoint,
+    revocationEndpoint: connector.revocationEndpoint,
+    jwksUri: connector.jwksEndpoint,
+    userInfoEndpoint: connector.userInfoEndpoint,
+    registrationMode: connector.registrationMode ?? 'manual',
+    clientId: connector.clientId,
+    encryptedClientSecret: connector.clientSecret,
+    encryptedRegistrationAccessToken: null,
+    metadata: connector.providerMetadata ?? {},
+    status: connector.enabled ? 'active' : 'invalid',
+    createdAt: connector.createdAt,
+    updatedAt: connector.updatedAt,
+  }
+}
+
+function authorizationClientSecret(authorization: ResolvedExternalAuthorization) {
+  return authorization.encryptedClientSecret
+}
+
 async function requireEnabledResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource?.enabled || resource.archivedAt) throw notFound('Enabled API resource was not found.')
-  if (resource.authorizationMode === 'external') {
+  if (resource.connectorId !== null) {
     await requireActiveExternalAuthorization(deps, resourceId)
   }
   return resource
@@ -1507,35 +1380,6 @@ async function readObject(response: Response, message: string) {
   return value as Record<string, unknown>
 }
 
-function protectedResourceMetadataUrl(resourceUrl: string) {
-  const resource = new URL(resourceUrl)
-  const path = resource.pathname === '/' ? '' : resource.pathname
-  const metadata = new URL(`/.well-known/oauth-protected-resource${path}`, resource.origin)
-  metadata.search = resource.search
-  return metadata.toString()
-}
-
-function authorizationServerMetadataUrl(issuer: string) {
-  const url = new URL(issuer)
-  return new URL(
-    `/.well-known/oauth-authorization-server${url.pathname === '/' ? '' : url.pathname}`,
-    url.origin,
-  ).toString()
-}
-
-function requiredMetadataUrl(metadata: Record<string, unknown>, field: string) {
-  return requireNetworkUrl(requiredString(metadata, field, 'Authorization server metadata'), field)
-}
-
-function requireNetworkUrl(value: string, label: string) {
-  const url = new URL(value)
-  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1'
-  if ((url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) || url.username || url.password) {
-    throw badRequest(`${label} must use HTTPS, except for loopback development URLs, and contain no userinfo.`)
-  }
-  return url.toString()
-}
-
 function requiredString(value: Record<string, unknown>, field: string, label: string) {
   const result = value[field]
   if (typeof result !== 'string' || result.length === 0) throw badRequest(`${label} is missing ${field}.`)
@@ -1552,10 +1396,6 @@ function requiredPositiveInteger(value: Record<string, unknown>, field: string, 
     throw badRequest(`${label} has invalid ${field}.`)
   }
   return result
-}
-
-function stringArray(value: unknown) {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : []
 }
 
 function scopeString(value: unknown) {
@@ -1595,6 +1435,7 @@ function exactScopes(left: string[], right: string[]) {
 function toExternalAuthorization(record: ExternalResourceAuthorizationRecord) {
   return {
     resourceId: record.resourceId,
+    connectorId: record.connectorId,
     resourceUrl: record.resourceUrl,
     issuer: record.issuer,
     authorizationEndpoint: record.authorizationEndpoint,
@@ -1762,14 +1603,6 @@ function redactSubject(subject: string) {
 
 function resourceConnectionCallbackUrl(origin: string) {
   return `${origin.replace(/\/$/, '')}/api/account-connections/oauth/callback`
-}
-
-function clientSecretContext(resourceId: string) {
-  return `external-resource:${resourceId}:client-secret`
-}
-
-function registrationTokenContext(resourceId: string) {
-  return `external-resource:${resourceId}:registration-token`
 }
 
 function connectionIntentContext(intentId: string) {

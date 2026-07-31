@@ -55,36 +55,7 @@ const socialTemplates = socialProviderIds.map((providerId) => ({
   },
 }))
 
-export const connectorTemplates: ConnectorTemplate[] = [
-  ...socialTemplates,
-  {
-    providerType: 'generic_oauth',
-    providerId: 'generic-oauth',
-    displayName: 'Generic OAuth',
-    icon: 'oauth',
-    requiredFields: ['clientId', 'clientSecret', 'issuer or authorizationEndpoint + tokenEndpoint'],
-    optionalFields: [
-      'scopes',
-      'issuer',
-      'authorizationEndpoint',
-      'tokenEndpoint',
-      'userInfoEndpoint',
-      'jwksEndpoint',
-      'providerMetadata.redirectURI',
-      'providerMetadata.pkce',
-      'providerMetadata.requireIssuerValidation',
-      'providerMetadata.overrideUserInfo',
-    ],
-    defaultScopes: ['openid', 'email', 'profile'],
-    endpoints: {
-      issuer: null,
-      authorizationEndpoint: null,
-      tokenEndpoint: null,
-      userInfoEndpoint: null,
-      jwksEndpoint: null,
-    },
-  },
-]
+export const connectorTemplates: ConnectorTemplate[] = socialTemplates
 
 export function isSupportedProvider(providerType: ConnectorProviderType, providerId: string) {
   if (providerType === 'generic_oauth') return true

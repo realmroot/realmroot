@@ -23,7 +23,7 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
   const app = new Hono()
 
   app.route('/applications', managementApplicationsRoute)
-  app.route('/api-resources', createManagementApiResourcesRoute(options.canonicalOrigin))
+  app.route('/api-resources', createManagementApiResourcesRoute())
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)
@@ -32,7 +32,7 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
 
   app.route('/', createManagementSettingsRoutes(options.securityPolicy))
   app.route('/', createManagementReadinessRoute({ securityPolicy: options.securityPolicy }))
-  app.route('/connectors', createManagementConnectorRoutes())
+  app.route('/connectors', createManagementConnectorRoutes(options.canonicalOrigin))
   app.route('/webhooks', createManagementWebhookRoutes())
 
   return app

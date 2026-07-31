@@ -8,7 +8,6 @@ import {
 import {
   agentAccessGrantModeSchema,
   agentAccessRequestStatusSchema,
-  configureExternalResourceAuthorizationRequestSchema,
   externalResourceAuthorizationSchema,
 } from './external-resources'
 import { paginationMetadataSchema } from './pagination'
@@ -85,23 +84,8 @@ export const apiResourcesResponseSchema = z.object({
   items: z.array(apiResourceSchema),
   pagination: paginationMetadataSchema,
 })
-export const configureApiResourceAuthorizationSchema = configureExternalResourceAuthorizationRequestSchema
 export const createApiResourceSchema = createApiResourceRequestSchema
-  .extend({
-    authorization: configureApiResourceAuthorizationSchema.optional(),
-  })
-  .superRefine((input, ctx) => {
-    if (input.authorizationMode === 'external' && !input.authorization) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['authorization'],
-        message: 'External API resources require OIDC authorization configuration.',
-      })
-    }
-  })
-export const updateApiResourceSchema = updateApiResourceRequestSchema.extend({
-  authorization: configureApiResourceAuthorizationSchema.optional(),
-})
+export const updateApiResourceSchema = updateApiResourceRequestSchema
 
 export const agentApiResourcesResponseSchema = z.object({
   items: z.array(
@@ -111,7 +95,7 @@ export const agentApiResourcesResponseSchema = z.object({
       name: z.string(),
       description: z.string().nullable(),
       resourceUrl: z.url(),
-      authorizationMode: z.enum(['native', 'external']),
+      connectorId: z.string().nullable(),
       status: z.enum(['available', 'unavailable']),
       scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
       accountConnections: z.array(

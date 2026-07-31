@@ -4,32 +4,6 @@ import { agentIdentity, agentIdentityBinding } from './agent-identity-tables'
 import { user } from './auth-tables'
 import { apiResource, organization } from './authorization-tables'
 
-export const externalResourceAuthorization = sqliteTable('external_resource_authorization', {
-  resourceId: text('resource_id')
-    .primaryKey()
-    .references(() => apiResource.id, { onDelete: 'cascade' }),
-  resourceUrl: text('resource_url').notNull(),
-  issuer: text('issuer').notNull(),
-  authorizationEndpoint: text('authorization_endpoint').notNull(),
-  tokenEndpoint: text('token_endpoint').notNull(),
-  registrationEndpoint: text('registration_endpoint'),
-  revocationEndpoint: text('revocation_endpoint').notNull(),
-  jwksUri: text('jwks_uri').notNull(),
-  userInfoEndpoint: text('userinfo_endpoint'),
-  registrationMode: text('registration_mode').notNull(),
-  clientId: text('client_id').notNull(),
-  encryptedClientSecret: text('encrypted_client_secret').notNull(),
-  encryptedRegistrationAccessToken: text('encrypted_registration_access_token'),
-  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
-  status: text('status').notNull().default('active'),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .notNull(),
-})
-
 export const resourceAccountConnection = sqliteTable(
   'resource_account_connection',
   {

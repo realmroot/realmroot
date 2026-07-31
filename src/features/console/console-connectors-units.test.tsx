@@ -61,7 +61,7 @@ describe('connector provider rows', () => {
     expect(byKey['social:google'].enabled).toBe(false)
   })
 
-  it('labels unmatched OAuth connectors', () => {
+  it('keeps OIDC connectors out of the built-in and social provider rows', () => {
     const unmatchedOAuth = {
       ...connector,
       id: 'connector-oauth',
@@ -80,7 +80,35 @@ describe('connector provider rows', () => {
     const byProvider = Object.fromEntries(rows.map((row) => [row.providerId, row]))
 
     expect(byProvider.google.configurationLabel).toBe('Credentials required')
-    expect(byProvider['partner-oauth'].icon).toBe('oauth')
+    expect(byProvider['partner-oauth']).toBeUndefined()
+  })
+
+  it('describes configured and unconfigured generic OIDC templates', () => {
+    const oidcTemplate = {
+      ...templates[0]!,
+      providerType: 'generic_oauth' as const,
+      providerId: 'enterprise-oidc',
+      displayName: 'Enterprise OIDC',
+    }
+    const configured = {
+      ...connector,
+      providerType: 'generic_oauth' as const,
+      providerId: 'enterprise-oidc',
+      clientSecretConfigured: false,
+    } as ConnectorResponse
+
+    const configuredRow = connectorProviderRows([oidcTemplate], [configured], undefined, undefined).at(-1)
+    const emptyRow = connectorProviderRows([oidcTemplate], [], undefined, undefined).at(-1)
+
+    expect(configuredRow).toMatchObject({
+      description: 'Standards-based OAuth/OIDC connector',
+      typeLabel: 'OIDC',
+      configurationLabel: 'Boundary configured',
+    })
+    expect(emptyRow).toMatchObject({
+      configurationLabel: 'Not configured',
+      enabled: false,
+    })
   })
 })
 

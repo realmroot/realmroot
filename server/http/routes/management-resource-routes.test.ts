@@ -110,67 +110,6 @@ describe('management resource routes', () => {
     expect(authorizationService.assignAgentRole).toHaveBeenCalledWith(assignmentBody(), 'admin-1')
   })
 
-  it('uses the configured origin for dynamic external client registration [spec: agent-identity/external-api-resource-canonical-callback]', async () => {
-    const createExternal = vi.spyOn(externalResourcesUsecase, 'createExternalApiResource').mockResolvedValue({
-      id: 'resource-1',
-      identifier: 'projects',
-      name: 'Projects',
-      resourceUrl: 'https://projects.example.com/api',
-      description: null,
-      authorizationMode: 'external',
-      enabled: true,
-      archivedAt: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-      authorization: {
-        resourceUrl: 'https://projects.example.com/api',
-        issuer: 'https://projects.example.com',
-        authorizationEndpoint: 'https://projects.example.com/authorize',
-        tokenEndpoint: 'https://projects.example.com/token',
-        registrationEndpoint: 'https://projects.example.com/register',
-        revocationEndpoint: 'https://projects.example.com/revoke',
-        jwksUri: 'https://projects.example.com/jwks',
-        userInfoEndpoint: 'https://projects.example.com/userinfo',
-        registrationMode: 'dynamic',
-        clientId: 'client',
-        clientSecretConfigured: true,
-        status: 'active',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      },
-    })
-    const { app } = await loadAuthorizationRoutes()
-
-    const response = await app.request('https://preview.example.net/api-resources', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        identifier: 'projects',
-        name: 'Projects',
-        resourceUrl: 'https://projects.example.com/api',
-        authorizationMode: 'external',
-        authorization: {
-          registrationMode: 'dynamic',
-        },
-      }),
-    })
-
-    expect(response.status).toBe(201)
-    expect(createExternal).toHaveBeenCalledWith(
-      expect.anything(),
-      {
-        identifier: 'projects',
-        name: 'Projects',
-        resourceUrl: 'https://projects.example.com/api',
-        authorizationMode: 'external',
-      },
-      {
-        registrationMode: 'dynamic',
-      },
-      'https://auth.example.com',
-    )
-  })
-
   it('routes management connector requests to the connector service', async () => {
     const { app, connectorService } = await loadConnectorRoutes()
 
@@ -242,7 +181,7 @@ async function loadAuthorizationRoutes() {
     name: 'Contacts',
     resourceUrl: 'https://api.example.com',
     description: null,
-    authorizationMode: 'native' as const,
+    connectorId: null,
     enabled: true,
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -267,7 +206,7 @@ async function loadAuthorizationRoutes() {
   const { managementRolesRoute } = await import('@server/http/routes/management/roles')
   const { createProtectedResourceRoutes } = await import('@server/http/routes/management')
   const app = withAdminContext()
-  app.route('/api-resources', createManagementApiResourcesRoute('https://auth.example.com'))
+  app.route('/api-resources', createManagementApiResourcesRoute())
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)
   app.route('/', createProtectedResourceRoutes({ authApi: {} as never, canonicalOrigin: 'https://auth.example.com' }))
@@ -387,6 +326,7 @@ function connectorServiceMock() {
     providerId: 'github',
     displayName: 'GitHub',
     enabled: true,
+    loginEnabled: true,
     clientId: 'client-id',
     clientSecretConfigured: true,
     issuer: null,
@@ -394,6 +334,9 @@ function connectorServiceMock() {
     tokenEndpoint: null,
     userInfoEndpoint: null,
     jwksEndpoint: null,
+    registrationEndpoint: null,
+    revocationEndpoint: null,
+    registrationMode: null,
     scopes: [],
     providerMetadata: {},
     createdAt: '2026-01-01T00:00:00.000Z',

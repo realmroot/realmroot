@@ -31,7 +31,8 @@ restish get "$API_NAME/agent/access-grants?limit=100&offset=0" -o json
 Search the discovered identifiers, names, catalog descriptions, scope values,
 and scope descriptions for the required capability. Consider only resources
 whose status is `available`. Shortlist the exact `apiResourceId`,
-`authorizationMode`, and `resourceUrl`; do not request access yet.
+`connectorId` and `resourceUrl`; a null Connector means native authorization.
+Do not request access yet.
 An external resource may have no linked account yet; the controller can choose
 or connect one during hosted approval. A native resource has no account
 connection.

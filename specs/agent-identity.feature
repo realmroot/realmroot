@@ -246,30 +246,31 @@ Feature: Agent identity and external API authorization
   Rule: External API resources use target-issued authorization
 
     @entrypoint:product-ui @journey:external-api-resource-registration
-    Scenario: An administrator registers an external API resource by protocol
+    Scenario: An administrator creates an external API resource with an OIDC connector
       Given a target resource publishes protected-resource and authorization-server metadata
-      When an administrator creates an external API resource from its resource URL
-      Then Realmroot discovers its issuer, OAuth endpoints, token exchange, DPoP, and revocation
+      And a standard OIDC connector exists for its authorization server
+      When an administrator creates the API resource and selects that connector
+      Then Realmroot validates the resource issuer, token exchange, DPoP, and revocation against the connector
       And the resource URL advertises its OpenAPI contract with a standard service-desc link
       And Realmroot derives every requestable scope only from that OpenAPI contract
       And authorization-server scopes_supported is not a scope catalog
-      And Realmroot registers or uses an explicitly configured OAuth client
-      And Realmroot persists the resource and authorization atomically only after registration succeeds
+      And the resource stores only its connector association rather than another OAuth client
       And the resource cannot be enabled for Agents when a required capability is absent
-      And no identity Connector or HTTP proxy configuration is created
+      And the same connector can independently be enabled for Realmroot login
 
     @entrypoint:restish @journey:external-api-resource-reconfiguration
-    Scenario: Changing an external API resource URL reconfigures its protocol boundary
-      Given an external API resource has active authorization-server metadata and OAuth client configuration
-      When an administrator changes its resource URL
-      Then the same request must provide replacement authorization configuration
-      And Realmroot rediscovers the target metadata before enabling the changed resource
+    Scenario: Changing an external API resource URL revalidates its connector boundary
+      Given an external API resource is associated with an active OIDC connector
+      When an administrator changes its resource URL or selects another OIDC connector
+      Then Realmroot rediscovers the target metadata
+      And the resource remains enabled only when its authorization server matches the associated connector
+      And the resource cannot remove its connector or become natively authorized
 
     @entrypoint:restish @journey:external-api-resource-canonical-callback
-    Scenario: External OAuth registration uses the deployment's canonical callback
+    Scenario: OIDC connector registration uses the deployment's canonical callbacks
       Given Realmroot is reached through a non-canonical request origin
-      When an administrator dynamically registers an external API resource
-      Then the OAuth redirect URI and JWKS URI use the configured deployment origin
+      When an administrator dynamically registers an OIDC connector
+      Then its login and resource-account redirect URIs and JWKS URI use the configured deployment origin
       And a later Account Center authorization request uses that same redirect URI
 
     @e2e @entrypoint:agent-protocol @journey:external-resource-first-access

@@ -46,7 +46,7 @@ type agentAPIResourcesResponse struct {
 	Items []struct {
 		ID                string `json:"id"`
 		ResourceURL       string `json:"resourceUrl"`
-		AuthorizationMode string `json:"authorizationMode"`
+		ConnectorID       *string `json:"connectorId"`
 		AccessGrants      []struct {
 			ID     string `json:"id"`
 			Mode   string `json:"mode"`
@@ -261,7 +261,7 @@ func ensureDPoPCredential(
 				GrantMode:         grant.Mode,
 				ResourceID:        resource.ID,
 				ResourceURL:       resource.ResourceURL,
-				AuthorizationMode: resource.AuthorizationMode,
+				AuthorizationMode: authorizationMode(resource.ConnectorID),
 				PrivateKey:        privateKey,
 			}
 			if state.DPoPCredentials == nil {
@@ -275,6 +275,13 @@ func ensureDPoPCredential(
 		}
 	}
 	return dpopCredential{}, state, errors.New("active Agent access grant was not found in API resource discovery")
+}
+
+func authorizationMode(connectorID *string) string {
+	if connectorID == nil {
+		return "native"
+	}
+	return "external"
 }
 
 func refreshTargetToken(

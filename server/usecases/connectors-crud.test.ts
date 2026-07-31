@@ -1,11 +1,18 @@
 import type { ConnectorRow } from '@server/adapters/repos/connectors'
-import { connectorReadiness, createConnector, loadAuthConnectorConfig } from '@server/usecases/connectors'
+import {
+  connectorReadiness,
+  createConnector,
+  deleteConnector,
+  getConnector,
+  loadAuthConnectorConfig,
+  updateConnector,
+} from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import type { ConnectorRepository } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 2', () => {
-  it('reports generic OAuth endpoint readiness modes', async () => {
+  it('reports OIDC discovery readiness', async () => {
     const deps = {
       connectors: createRepository({
         byId: connector({
@@ -29,33 +36,35 @@ describe('service.test 2', () => {
         }),
         expect.objectContaining({
           key: 'oauthEndpoints',
-          ok: true,
-          message: 'Issuer discovery is configured.',
+          ok: false,
+          message: 'OIDC issuer or required discovered endpoints are missing.',
         }),
       ]),
     })
 
-    const explicitDeps = {
+    const discoveredDeps = {
       connectors: createRepository({
         byId: connector({
-          id: 'idp_generic_explicit',
+          id: 'idp_generic_discovered',
           providerType: 'generic_oauth',
           providerId: 'generic-oauth',
           clientSecret: 'GENERIC_SECRET',
-          issuer: null,
+          issuer: 'https://idp.example.com',
           authorizationEndpoint: 'https://idp.example.com/authorize',
           tokenEndpoint: 'https://idp.example.com/token',
+          userInfoEndpoint: 'https://idp.example.com/userinfo',
+          jwksEndpoint: 'https://idp.example.com/jwks',
         }),
       }),
     } as unknown as Deps
-    await expect(connectorReadiness(explicitDeps, 'idp_generic_explicit')).resolves.toEqual({
-      connectorId: 'idp_generic_explicit',
+    await expect(connectorReadiness(discoveredDeps, 'idp_generic_discovered')).resolves.toEqual({
+      connectorId: 'idp_generic_discovered',
       ready: true,
       checks: expect.arrayContaining([
         expect.objectContaining({
           key: 'oauthEndpoints',
           ok: true,
-          message: 'Explicit authorization and token endpoints are configured.',
+          message: 'OIDC issuer and discovered endpoints are configured.',
         }),
       ]),
     })
@@ -80,7 +89,7 @@ describe('service.test 2', () => {
         expect.objectContaining({
           key: 'oauthEndpoints',
           ok: false,
-          message: 'Configure issuer discovery or explicit authorization and token endpoints.',
+          message: 'OIDC issuer or required discovered endpoints are missing.',
         }),
       ]),
     })
@@ -173,22 +182,342 @@ describe('service.test 2', () => {
         }),
       ),
     ).resolves.toMatchObject({ trustedProviders: [] })
+  })
+
+  it('loads only OIDC connectors enabled for hosted login [spec: connectors-and-methods/oidc-login]', async () => {
+    const oidc = {
+      providerType: 'generic_oauth' as const,
+      issuer: 'https://idp.example.com',
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      jwksEndpoint: 'https://idp.example.com/jwks',
+      clientSecret: 'OIDC_SECRET',
+    }
+    const config = await loadAuthConnectorConfig(
+      createRepository({
+        enabled: [
+          connector({ ...oidc, providerId: 'login-oidc', loginEnabled: true }),
+          connector({ ...oidc, providerId: 'resource-only-oidc', loginEnabled: false }),
+        ],
+      }),
+    )
+
+    expect(config.trustedProviders).toEqual(['login-oidc'])
+    expect(config.genericOAuthProviders).toEqual([expect.objectContaining({ providerId: 'login-oidc' })])
+  })
+
+  it('uses canonical callbacks for dynamic OIDC registration [spec: agent-identity/external-api-resource-canonical-callback]', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          issuer: 'https://idp.example.com',
+          authorization_endpoint: 'https://idp.example.com/authorize',
+          token_endpoint: 'https://idp.example.com/token',
+          userinfo_endpoint: 'https://idp.example.com/userinfo',
+          jwks_uri: 'https://idp.example.com/jwks',
+          registration_endpoint: 'https://idp.example.com/register',
+          grant_types_supported: ['authorization_code'],
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          client_id: 'registered-client',
+          client_secret: 'registered-secret',
+        }),
+      )
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch },
+    } as unknown as Deps
+
+    await createConnector(
+      deps,
+      {
+        providerType: 'generic_oauth',
+        providerId: 'projects',
+        displayName: 'Projects',
+        issuer: 'https://idp.example.com',
+        registrationMode: 'dynamic',
+      },
+      'https://auth.example.com',
+    )
+
+    const registrationRequest = fetch.mock.calls[1]?.[0] as Request
+    await expect(registrationRequest.json()).resolves.toMatchObject({
+      redirect_uris: [
+        'https://auth.example.com/api/auth/callback/projects',
+        'https://auth.example.com/api/account-connections/oauth/callback',
+      ],
+      jwks_uri: 'https://auth.example.com/api/auth/jwks',
+    })
+    expect(deps.connectors.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({ grant_types_supported: ['authorization_code'] }),
+      }),
+    )
+  })
+
+  it.each([
+    ['a missing issuer', { issuer: undefined }, undefined, 'OIDC connectors require an issuer.'],
+    [
+      'an issuer query',
+      { issuer: 'https://idp.example.com?tenant=one' },
+      undefined,
+      'OIDC issuer cannot contain a query or fragment.',
+    ],
+    ['an unsafe issuer', { issuer: 'http://idp.example.com' }, undefined, 'OIDC issuer must use HTTPS'],
+    [
+      'failed discovery',
+      { issuer: 'https://idp.example.com' },
+      new Response(null, { status: 503 }),
+      'OIDC discovery failed.',
+    ],
+    [
+      'invalid discovery JSON',
+      { issuer: 'https://idp.example.com' },
+      new Response('invalid', { headers: { 'content-type': 'application/json' } }),
+      'OIDC discovery response is invalid.',
+    ],
+    [
+      'a mismatched discovery issuer',
+      { issuer: 'https://idp.example.com' },
+      Response.json({
+        ...discoveryMetadata(),
+        issuer: 'https://other.example.com',
+      }),
+      'OIDC discovery issuer does not match',
+    ],
+  ])('rejects OIDC connector creation with %s', async (_label, input, discovery, message) => {
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch: vi.fn().mockResolvedValue(discovery) },
+    } as unknown as Deps
+
     await expect(
       createConnector(deps, {
         providerType: 'generic_oauth',
-        providerId: 'mixed',
-        displayName: 'Mixed',
-        clientId: 'mixed-client',
-        clientSecret: 'MIXED_SECRET',
-        issuer: 'https://idp.example.com',
-        authorizationEndpoint: 'https://idp.example.com/authorize',
+        providerId: 'projects',
+        displayName: 'Projects',
+        clientId: 'client-1',
+        clientSecret: 'secret-1',
+        ...input,
       }),
-    ).rejects.toMatchObject({
-      status: 400,
-      message: 'Enabled generic OAuth connector uses either issuer discovery or explicit endpoints, not both.',
+    ).rejects.toThrow(message)
+  })
+
+  it.each([
+    ['client ID', { clientSecret: 'secret-1' }],
+    ['client secret', { clientId: 'client-1' }],
+  ])('requires a %s for manual OIDC registration', async (_label, credentials) => {
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch: vi.fn().mockResolvedValue(Response.json(discoveryMetadata())) },
+    } as unknown as Deps
+
+    await expect(
+      createConnector(deps, {
+        providerType: 'generic_oauth',
+        providerId: 'projects',
+        displayName: 'Projects',
+        issuer: 'https://idp.example.com',
+        registrationMode: 'manual',
+        ...credentials,
+      }),
+    ).rejects.toThrow('Manual OIDC registration requires client credentials.')
+  })
+
+  it.each([
+    [
+      'without provider registration support',
+      discoveryMetadata(),
+      'https://auth.example.com',
+      undefined,
+      'OIDC provider does not support dynamic client registration.',
+    ],
+    [
+      'without a callback origin',
+      discoveryMetadata({ registration_endpoint: 'https://idp.example.com/register' }),
+      undefined,
+      undefined,
+      'Dynamic OIDC registration requires the configured base URL.',
+    ],
+    [
+      'when registration fails',
+      discoveryMetadata({ registration_endpoint: 'https://idp.example.com/register' }),
+      'https://auth.example.com',
+      new Response(null, { status: 503 }),
+      'Dynamic OIDC client registration failed.',
+    ],
+    [
+      'when registration omits the client ID',
+      discoveryMetadata({ registration_endpoint: 'https://idp.example.com/register' }),
+      'https://auth.example.com',
+      Response.json({ client_secret: 'secret-1' }),
+      'Dynamic OIDC client registration response requires client_id.',
+    ],
+  ])('rejects dynamic OIDC registration %s', async (_label, discovery, callbackOrigin, registration, message) => {
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json(discovery))
+    if (registration) fetch.mockResolvedValueOnce(registration)
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch },
+    } as unknown as Deps
+
+    await expect(
+      createConnector(
+        deps,
+        {
+          providerType: 'generic_oauth',
+          providerId: 'projects',
+          displayName: 'Projects',
+          issuer: 'https://idp.example.com',
+          registrationMode: 'dynamic',
+        },
+        callbackOrigin,
+      ),
+    ).rejects.toThrow(message)
+  })
+
+  it('stores optional OIDC discovery and dynamic registration metadata', async () => {
+    const discovery = discoveryMetadata({
+      registration_endpoint: 'https://idp.example.com/register',
+      revocation_endpoint: 'https://idp.example.com/revoke',
     })
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: {
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce(Response.json(discovery))
+          .mockResolvedValueOnce(
+            Response.json({
+              client_id: 'registered-client',
+              client_secret: 'registered-secret',
+              registration_access_token: 'registration-token',
+            }),
+          ),
+      },
+    } as unknown as Deps
+
+    await createConnector(
+      deps,
+      {
+        providerType: 'generic_oauth',
+        providerId: 'projects',
+        displayName: 'Projects',
+        issuer: 'https://idp.example.com',
+        registrationMode: 'dynamic',
+      },
+      'https://auth.example.com/',
+    )
+
+    expect(deps.connectors.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        revocationEndpoint: 'https://idp.example.com/revoke',
+        registrationAccessToken: 'registration-token',
+      }),
+    )
+  })
+
+  it('creates a manually registered OIDC connector from discovery metadata', async () => {
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch: vi.fn().mockResolvedValue(Response.json(discoveryMetadata())) },
+    } as unknown as Deps
+
+    await createConnector(deps, {
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects',
+      issuer: 'https://idp.example.com',
+      registrationMode: 'manual',
+      clientId: 'client-1',
+      clientSecret: 'secret-1',
+    })
+
+    expect(deps.connectors.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: 'client-1',
+        clientSecret: 'secret-1',
+        registrationMode: 'manual',
+      }),
+    )
+  })
+
+  it('surfaces missing connector CRUD records', async () => {
+    const missing = { connectors: createRepository() } as unknown as Deps
+    await expect(getConnector(missing, 'missing')).rejects.toThrow('Connector not found.')
+    await expect(connectorReadiness(missing, 'missing')).rejects.toThrow('Connector not found.')
+    await expect(updateConnector(missing, 'missing', { enabled: false })).rejects.toThrow('Connector not found.')
+    await expect(deleteConnector(missing, 'missing')).rejects.toThrow('Connector not found.')
+
+    const disappeared = {
+      connectors: createRepository({ byId: connector(), updateResult: null }),
+    } as unknown as Deps
+    await expect(updateConnector(disappeared, 'idp_1', { enabled: false })).rejects.toThrow('Connector not found.')
+  })
+
+  it('keeps referenced connectors from being deleted', async () => {
+    const deps = {
+      connectors: createRepository({
+        byId: connector(),
+        resourceReferenceCount: 2,
+      }),
+    } as unknown as Deps
+
+    await expect(deleteConnector(deps, 'idp_1')).rejects.toMatchObject({
+      status: 409,
+      details: { apiResources: 2 },
+    })
+    expect(deps.connectors.delete).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['client ID', { clientId: null }, 'Enabled connector requires clientId.'],
+    ['issuer', { issuer: null }, 'Enabled OIDC connector requires issuer discovery.'],
+    [
+      'authorization endpoint',
+      { authorizationEndpoint: null },
+      'Enabled OIDC connector requires discovered authorization, token, and userinfo endpoints.',
+    ],
+    [
+      'token endpoint',
+      { tokenEndpoint: null },
+      'Enabled OIDC connector requires discovered authorization, token, and userinfo endpoints.',
+    ],
+    [
+      'userinfo endpoint',
+      { userInfoEndpoint: null },
+      'Enabled OIDC connector requires discovered authorization, token, and userinfo endpoints.',
+    ],
+  ])('rejects an enabled OIDC connector without its %s', async (_label, overrides, message) => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      issuer: 'https://idp.example.com',
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      ...overrides,
+    })
+    const deps = { connectors: createRepository({ byId: current }) } as unknown as Deps
+
+    await expect(updateConnector(deps, current.id, {})).rejects.toThrow(message)
   })
 })
+
+function discoveryMetadata(overrides: Record<string, unknown> = {}) {
+  return {
+    issuer: 'https://idp.example.com',
+    authorization_endpoint: 'https://idp.example.com/authorize',
+    token_endpoint: 'https://idp.example.com/token',
+    userinfo_endpoint: 'https://idp.example.com/userinfo',
+    jwks_uri: 'https://idp.example.com/jwks',
+    ...overrides,
+  }
+}
 
 function createRepository(
   overrides: {
@@ -196,6 +525,7 @@ function createRepository(
     byId?: ConnectorRow | null
     existingProvider?: ConnectorRow | null
     createResult?: ConnectorRow
+    resourceReferenceCount?: number
     updateResult?: ConnectorRow | null
   } = {},
 ): ConnectorRepository {
@@ -204,8 +534,9 @@ function createRepository(
     listEnabled: vi.fn().mockResolvedValue(overrides.enabled ?? []),
     findById: vi.fn().mockResolvedValue(overrides.byId ?? null),
     findByProviderId: vi.fn().mockResolvedValue(overrides.existingProvider ?? null),
+    countResourceReferences: vi.fn().mockResolvedValue(overrides.resourceReferenceCount ?? 0),
     create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
-    update: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
+    update: vi.fn().mockResolvedValue(overrides.updateResult === undefined ? connector() : overrides.updateResult),
     delete: vi.fn(),
   }
 }
@@ -219,13 +550,20 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     providerId: 'google',
     displayName: 'Google',
     enabled: true,
+    loginEnabled: true,
     clientId: 'client-id',
     clientSecret: 'GOOGLE_CLIENT_SECRET',
+    clientSecretContext: null,
     issuer: null,
     authorizationEndpoint: null,
     tokenEndpoint: null,
     userInfoEndpoint: null,
     jwksEndpoint: null,
+    registrationEndpoint: null,
+    revocationEndpoint: null,
+    registrationMode: null,
+    registrationAccessToken: null,
+    registrationAccessTokenContext: null,
     scopes: null,
     attributeMapping: null,
     providerMetadata: null,

@@ -24,7 +24,6 @@ import {
   deploymentSetting,
   deviceCode,
   emailServiceConfig,
-  externalResourceAuthorization,
   externalTokenLease,
   identityProviderConnector,
   invitation,
@@ -276,7 +275,6 @@ describe('schema.test 1', () => {
   })
 
   it('separates signing, credential custody, grants, OAuth state, and audit storage', () => {
-    expect(getTableConfig(externalResourceAuthorization).name).toBe('external_resource_authorization')
     expect(indexNames(resourceAccountConnection)).toEqual(
       expect.arrayContaining([
         'resourceAccountConnection_resourceId_idx',

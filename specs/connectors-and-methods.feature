@@ -42,6 +42,13 @@ Feature: Connectors and hosted method availability
     When the connector is available or unavailable
     Then hosted auth and native social endpoints enforce that state
 
+  @entrypoint:product-ui @journey:oidc-login
+  Scenario: A standard OIDC connector can provide hosted login
+    Given an enabled OIDC connector has login enabled
+    When I open hosted sign-in
+    Then the OIDC connector is offered as a sign-in method
+    And disabling login removes it without deleting the connector
+
   @entrypoint:product-ui @journey:connector-secret-upgrade
   Scenario: Existing connector credentials survive encrypted-custody upgrades
     Given an enabled connector was created before encrypted credential custody

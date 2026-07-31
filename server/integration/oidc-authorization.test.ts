@@ -130,11 +130,26 @@ describe('OIDC authorization over real D1', () => {
 
     const jwksResponse = await harness.request('/api/auth/jwks')
     expect(jwksResponse.status, await jwksResponse.clone().text()).toBe(200)
+    const jwksProbe = await harness.request('/api/auth/jwks', { method: 'HEAD' })
+    expect(jwksProbe.status).toBe(200)
+    expect(jwksProbe.headers.get('content-type')).toBe('application/json; charset=UTF-8')
     const jwks = (await jwksResponse.json()) as { keys: PublishedJwk[] }
+    const wellKnownJwks = await harness.request('/.well-known/jwks.json')
+    expect(wellKnownJwks.status, await wellKnownJwks.clone().text()).toBe(200)
+    expect(await wellKnownJwks.json()).toEqual(jwks)
+    expect((await harness.request('/.well-known/jwks.json', { method: 'HEAD' })).status).toBe(200)
     const signingKey = jwks.keys.find((key) => key.kid === header.kid)
-    expect(signingKey).toMatchObject({ alg: 'RS256', kty: 'RSA' })
+    expect(signingKey).toMatchObject({ alg: 'RS256', key_ops: ['verify'], kty: 'RSA', use: 'sig' })
     expect(jwks.keys).toEqual(
-      expect.arrayContaining([expect.objectContaining({ alg: 'ES256', kid: 'legacy-es256-key', kty: 'EC' })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          alg: 'ES256',
+          key_ops: ['verify'],
+          kid: 'legacy-es256-key',
+          kty: 'EC',
+          use: 'sig',
+        }),
+      ]),
     )
 
     const verificationKey = await crypto.subtle.importKey(

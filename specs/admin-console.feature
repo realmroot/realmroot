@@ -87,6 +87,14 @@ Feature: Admin Console
     When I open social connector settings
     Then provider settings and availability are visible
 
+  @entrypoint:product-ui @journey:admin-oidc-connector-inventory
+  Scenario: Connectors page manages multiple standard OIDC clients
+    Given multiple OIDC connectors are configured
+    When I open connectors
+    Then the existing sign-in provider inventory remains visible
+    And a separate OIDC connectors table appears below it
+    And I can create, edit, enable for login, and delete each OIDC connector independently
+
   @entrypoint:product-ui @journey:admin-sign-in-settings
   Scenario: Sign-in settings persist legal links and hosted auth copy
     When I update sign-in settings
@@ -127,6 +135,9 @@ Feature: Admin Console
   Scenario: API resources page creates an API resource
     When I create an API resource
     Then it appears in authorization inventory
+    And selecting an OIDC connector during creation makes it externally authorized
+    And omitting a connector makes it natively authorized
+    And its authorization mode cannot change after creation
     And its protected resource URL is the OAuth resource identifier and access-token audience
     And the business resource server OpenAPI contract remains the scope authority
     And the Console does not provide scope creation or editing

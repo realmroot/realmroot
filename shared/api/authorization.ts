@@ -82,7 +82,7 @@ export const apiResourceResponseSchema = z.object({
   identifier: z.string(),
   name: z.string(),
   resourceUrl: z.url(),
-  authorizationMode: z.enum(['native', 'external']),
+  connectorId: z.string().nullable(),
   description: z.string().nullable(),
   enabled: z.boolean(),
   archivedAt: z.iso.datetime().nullable(),
@@ -94,7 +94,7 @@ export const createApiResourceRequestSchema = z.object({
   identifier: nonEmptyString,
   name: nonEmptyString,
   resourceUrl: z.url(),
-  authorizationMode: z.enum(['native', 'external']).default('native'),
+  connectorId: nonEmptyString.optional(),
   description: optionalText,
   enabled: z.boolean().optional(),
 })
@@ -103,6 +103,7 @@ export const updateApiResourceRequestSchema = z.object({
   identifier: nonEmptyString.optional(),
   name: nonEmptyString.optional(),
   resourceUrl: z.url().optional(),
+  connectorId: nonEmptyString.nullable().optional(),
   description: optionalText,
   enabled: z.boolean().optional(),
 })

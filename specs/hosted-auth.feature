@@ -105,7 +105,10 @@ Feature: Hosted authentication
     Given a native OIDC client uses a standards-compliant JOSE verifier
     When Realmroot publishes discovery metadata and signs an identity token
     Then discovery advertises RS256 identity token signing
-    And the token can be verified with the published RSA public key
+    And public keys are also available from the conventional well-known JWKS endpoint
+    And the JWKS endpoints support metadata probes
+    And the published RSA public key declares signature verification usage
+    And the token can be verified with that key
 
   @entrypoint:product-ui @journey:oauth-consent
   Scenario: OAuth consent approves requested scopes

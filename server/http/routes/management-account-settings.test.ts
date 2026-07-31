@@ -288,6 +288,7 @@ describe('management account settings routes', () => {
         providerId: 'okta-main',
         displayName: 'Okta',
         clientId: 'client-id',
+        issuer: 'https://idp.example.com',
       }),
     })
 
