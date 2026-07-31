@@ -148,7 +148,11 @@ func authenticateRequest(
 			return plugin.AuthHookOutput{}, err
 		}
 		state = updatedState
-		proofTarget, err := dpopTokenTarget(context.Background(), client, state.Origin, grantID, credential)
+		issuerOrigin, err := stableIssuerOrigin(state.Issuer)
+		if err != nil {
+			return plugin.AuthHookOutput{}, err
+		}
+		proofTarget, err := dpopTokenTarget(context.Background(), client, issuerOrigin, grantID, credential)
 		if err != nil {
 			return plugin.AuthHookOutput{}, err
 		}
@@ -307,12 +311,16 @@ func refreshTargetToken(
 	state agentState,
 	credential dpopCredential,
 ) (dpopCredential, error) {
-	configuration, err := discoverAgentConfiguration(ctx, client, state.Origin)
+	issuerOrigin, err := stableIssuerOrigin(state.Issuer)
 	if err != nil {
 		return dpopCredential{}, err
 	}
-	tokenURL := state.Origin + "/api/agent/access-grants/" + url.PathEscape(credential.GrantID) + "/tokens"
-	proofTarget, err := dpopTokenTarget(ctx, client, state.Origin, credential.GrantID, credential)
+	configuration, err := discoverAgentConfiguration(ctx, client, issuerOrigin)
+	if err != nil {
+		return dpopCredential{}, err
+	}
+	tokenURL := issuerOrigin + "/api/agent/access-grants/" + url.PathEscape(credential.GrantID) + "/tokens"
+	proofTarget, err := dpopTokenTarget(ctx, client, issuerOrigin, credential.GrantID, credential)
 	if err != nil {
 		return dpopCredential{}, err
 	}
@@ -342,6 +350,14 @@ func refreshTargetToken(
 	credential.AccessToken = token.AccessToken
 	credential.ExpiresAt = &token.ExpiresAt
 	return credential, nil
+}
+
+func stableIssuerOrigin(issuer string) (string, error) {
+	parsed, err := validatedAbsoluteURL(issuer)
+	if err != nil {
+		return "", fmt.Errorf("Agent issuer is invalid: %w", err)
+	}
+	return parsed.Scheme + "://" + parsed.Host, nil
 }
 
 func dpopTokenTarget(

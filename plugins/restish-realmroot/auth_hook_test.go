@@ -323,11 +323,18 @@ func TestAuthHookRemovesExpiredOneTimeCredential(t *testing.T) {
 	}
 }
 
-func TestAuthHookRefreshesExpiredPersistentCredential(t *testing.T) {
+func TestAuthHookRefreshesNativeSandboxTokenAtCanonicalIssuerOrigin(t *testing.T) {
+	t.Run("[spec: agent-identity/restish-target-token-origin]", testAuthHookRefreshesNativeSandboxTokenAtCanonicalIssuerOrigin)
+}
+
+func testAuthHookRefreshesNativeSandboxTokenAtCanonicalIssuerOrigin(t *testing.T) {
 	state := authenticatedTestState(t)
+	state.Origin = "https://preview.example.net"
 	expiredAt := time.Now().Add(-time.Minute)
+	credential := targetCredential(t, "grant-1", "persistent", "expired-token", &expiredAt)
+	credential.ResourceURL = "https://wallet.example.com/api/sandbox"
 	state.DPoPCredentials = map[string]dpopCredential{
-		"resource-1": targetCredential(t, "grant-1", "persistent", "expired-token", &expiredAt),
+		"resource-1": credential,
 	}
 	states := &memoryStateStore{state: state, exists: true}
 	requests := 0
@@ -335,16 +342,28 @@ func TestAuthHookRefreshesExpiredPersistentCredential(t *testing.T) {
 		requests++
 		switch requests {
 		case 1:
+			if request.URL.String() != "https://auth.example.com/.well-known/agent-configuration" {
+				t.Fatalf("configuration URL = %s", request.URL)
+			}
 			return jsonResponse(200, testAgentConfiguration()), nil
 		case 2:
-			if request.URL.Path != "/api/agent/access-grants/grant-1/tokens" {
+			if request.URL.String() != "https://auth.example.com/api/agent/access-grants/grant-1/tokens" {
 				t.Fatalf("token URL = %s", request.URL)
+			}
+			proof := request.Header.Get("DPoP")
+			if proof == "" {
+				t.Fatal("missing token-endpoint DPoP proof")
+			}
+			claims := decodeJWTPayload(t, proof)
+			if claims["htm"] != http.MethodPost ||
+				claims["htu"] != "https://auth.example.com/api/agent/access-grants/grant-1/tokens" {
+				t.Fatalf("unexpected token-endpoint DPoP claims: %#v", claims)
 			}
 			return jsonResponse(200, map[string]any{
 				"accessToken": "fresh-token",
 				"tokenType":   "DPoP",
 				"expiresAt":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
-				"resourceUrl": "https://api.example.com/v1",
+				"resourceUrl": "https://wallet.example.com/api/sandbox",
 			}), nil
 		default:
 			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
@@ -352,7 +371,11 @@ func TestAuthHookRefreshesExpiredPersistentCredential(t *testing.T) {
 		}
 	})
 
-	output, err := authenticateRequest(targetHookInput(), states, client, &promptRecorder{})
+	input := targetHookInput()
+	input.API = "agent-wallet"
+	input.Profile = "sandbox"
+	input.Request.URI = "https://wallet.example.com/api/sandbox/wallet"
+	output, err := authenticateRequest(input, states, client, &promptRecorder{})
 
 	if err != nil {
 		t.Fatal(err)
@@ -362,6 +385,71 @@ func TestAuthHookRefreshesExpiredPersistentCredential(t *testing.T) {
 	}
 	if states.state.DPoPCredentials["resource-1"].AccessToken != "fresh-token" {
 		t.Fatalf("refreshed token was not stored: %#v", states.state.DPoPCredentials)
+	}
+}
+
+func TestRefreshExternalTargetTokenUsesCanonicalIssuerControlPlane(t *testing.T) {
+	t.Run("[spec: agent-identity/restish-target-token-origin]", testRefreshExternalTargetTokenUsesCanonicalIssuerControlPlane)
+}
+
+func testRefreshExternalTargetTokenUsesCanonicalIssuerControlPlane(t *testing.T) {
+	state := authenticatedTestState(t)
+	state.Origin = "https://preview.example.net"
+	credential := targetCredential(t, "grant-1", "persistent", "", nil)
+	credential.ResourceURL = "https://drive.example.com/api"
+	credential.AuthorizationMode = "external"
+	requests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		switch requests {
+		case 1:
+			if request.URL.String() != "https://auth.example.com/.well-known/agent-configuration" {
+				t.Fatalf("configuration URL = %s", request.URL)
+			}
+			return jsonResponse(200, testAgentConfiguration()), nil
+		case 2:
+			if request.URL.String() != "https://drive.example.com/.well-known/oauth-protected-resource/api" {
+				t.Fatalf("protected resource metadata URL = %s", request.URL)
+			}
+			return jsonResponse(200, map[string]any{
+				"resource":              "https://drive.example.com/api",
+				"authorization_servers": []string{"https://drive.example.com/api/auth"},
+			}), nil
+		case 3:
+			if request.URL.String() != "https://drive.example.com/.well-known/oauth-authorization-server/api/auth" {
+				t.Fatalf("authorization server metadata URL = %s", request.URL)
+			}
+			return jsonResponse(200, map[string]any{
+				"issuer":                            "https://drive.example.com/api/auth",
+				"token_endpoint":                    "https://drive.example.com/api/oauth2/token",
+				"dpop_signing_alg_values_supported": []string{"ES256"},
+			}), nil
+		case 4:
+			if request.URL.String() != "https://auth.example.com/api/agent/access-grants/grant-1/tokens" {
+				t.Fatalf("Realmroot token URL = %s", request.URL)
+			}
+			claims := decodeJWTPayload(t, request.Header.Get("DPoP"))
+			if claims["htu"] != "https://drive.example.com/api/oauth2/token" {
+				t.Fatalf("external token-endpoint DPoP claims: %#v", claims)
+			}
+			return jsonResponse(200, map[string]any{
+				"accessToken": "fresh-token",
+				"tokenType":   "DPoP",
+				"expiresAt":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+				"resourceUrl": "https://drive.example.com/api",
+			}), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
+			return nil, nil
+		}
+	})
+
+	refreshed, err := refreshTargetToken(t.Context(), client, state, credential)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refreshed.AccessToken != "fresh-token" || requests != 4 {
+		t.Fatalf("refreshed credential = %#v, requests = %d", refreshed, requests)
 	}
 }
 
@@ -405,6 +493,7 @@ func authenticatedTestState(t *testing.T) agentState {
 	return agentState{
 		Version:         agentStateVersion,
 		Origin:          "https://auth.example.com",
+		Issuer:          "https://auth.example.com/api/auth",
 		AgentID:         "agent-123",
 		HostID:          "host-123",
 		AgentKeyID:      "agent-key",
