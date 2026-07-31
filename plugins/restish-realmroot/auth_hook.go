@@ -44,10 +44,10 @@ type identityResponse struct {
 
 type agentAPIResourcesResponse struct {
 	Items []struct {
-		ID                string `json:"id"`
-		ResourceURL       string `json:"resourceUrl"`
-		ConnectorID       *string `json:"connectorId"`
-		AccessGrants      []struct {
+		ID           string  `json:"id"`
+		ResourceURL  string  `json:"resourceUrl"`
+		ConnectorID  *string `json:"connectorId"`
+		AccessGrants []struct {
 			ID     string `json:"id"`
 			Mode   string `json:"mode"`
 			Status string `json:"status"`
@@ -232,6 +232,11 @@ func ensureDPoPCredential(
 ) (dpopCredential, agentState, error) {
 	for _, credential := range state.DPoPCredentials {
 		if credential.GrantID == grantID {
+			if removeStaleResourceBindings(state, credential) {
+				if err := states.Update(target, state); err != nil {
+					return dpopCredential{}, state, err
+				}
+			}
 			return credential, state, nil
 		}
 	}
@@ -267,6 +272,7 @@ func ensureDPoPCredential(
 			if state.DPoPCredentials == nil {
 				state.DPoPCredentials = make(map[string]dpopCredential)
 			}
+			removeStaleResourceBindings(state, credential)
 			state.DPoPCredentials[resource.ID] = credential
 			if err := states.Update(target, state); err != nil {
 				return dpopCredential{}, state, err
@@ -275,6 +281,17 @@ func ensureDPoPCredential(
 		}
 	}
 	return dpopCredential{}, state, errors.New("active Agent access grant was not found in API resource discovery")
+}
+
+func removeStaleResourceBindings(state agentState, credential dpopCredential) bool {
+	changed := false
+	for resourceID, existing := range state.DPoPCredentials {
+		if resourceID != credential.ResourceID && existing.ResourceURL == credential.ResourceURL {
+			delete(state.DPoPCredentials, resourceID)
+			changed = true
+		}
+	}
+	return changed
 }
 
 func authorizationMode(connectorID *string) string {

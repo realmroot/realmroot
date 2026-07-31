@@ -155,6 +155,51 @@ func TestEnsureDPoPCredentialReplacesGrantForSameResource(t *testing.T) {
 	t.Run("[spec: agent-identity/restish-resource-credential-lifecycle]", testEnsureDPoPCredentialReplacesGrantForSameResource)
 }
 
+func TestEnsureDPoPCredentialReplacesRegisteredResourceAtSameURL(t *testing.T) {
+	t.Run(
+		"[spec: agent-identity/restish-resource-credential-lifecycle]",
+		testEnsureDPoPCredentialReplacesRegisteredResourceAtSameURL,
+	)
+}
+
+func TestEnsureDPoPCredentialRemovesStaleBindingForCachedGrant(t *testing.T) {
+	state := authenticatedTestState(t)
+	oldCredential := targetCredential(t, "grant-old", "persistent", "old-token", nil)
+	oldCredential.ResourceID = "resource-old"
+	newCredential := targetCredential(t, "grant-new", "persistent", "new-token", nil)
+	newCredential.ResourceID = "resource-new"
+	state.DPoPCredentials = map[string]dpopCredential{
+		"resource-old": oldCredential,
+		"resource-new": newCredential,
+	}
+	states := &memoryStateStore{state: state, exists: true}
+
+	credential, updated, err := ensureDPoPCredential(
+		t.Context(),
+		states,
+		roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
+			return nil, nil
+		}),
+		agentTarget{Origin: state.Origin, Issuer: "https://auth.example.com/api/auth", Runtime: defaultAgentRuntime},
+		state,
+		agentConfiguration{Issuer: "https://auth.example.com/api/auth"},
+		"grant-new",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credential.ResourceID != "resource-new" {
+		t.Fatalf("credential = %#v", credential)
+	}
+	if len(updated.DPoPCredentials) != 1 || updated.DPoPCredentials["resource-new"].GrantID != "grant-new" {
+		t.Fatalf("stale resource credential was retained: %#v", updated.DPoPCredentials)
+	}
+	if len(states.state.DPoPCredentials) != 1 {
+		t.Fatalf("cleaned state was not persisted: %#v", states.state.DPoPCredentials)
+	}
+}
+
 func testEnsureDPoPCredentialReplacesGrantForSameResource(t *testing.T) {
 	state := authenticatedTestState(t)
 	oldPrivateKey, err := newDPoPPrivateKey()
@@ -178,9 +223,9 @@ func testEnsureDPoPCredentialReplacesGrantForSameResource(t *testing.T) {
 		}
 		return jsonResponse(200, map[string]any{
 			"items": []map[string]any{{
-				"id":                "resource-1",
-				"resourceUrl":       "https://api.example.com/v1",
-				"connectorId":       nil,
+				"id":          "resource-1",
+				"resourceUrl": "https://api.example.com/v1",
+				"connectorId": nil,
 				"accessGrants": []map[string]any{{
 					"id": "grant-new", "mode": "persistent", "status": "active",
 				}},
@@ -212,6 +257,51 @@ func testEnsureDPoPCredentialReplacesGrantForSameResource(t *testing.T) {
 	}
 	if credential.PrivateKey == oldPrivateKey {
 		t.Fatal("replacement grant reused the obsolete DPoP key")
+	}
+}
+
+func testEnsureDPoPCredentialReplacesRegisteredResourceAtSameURL(t *testing.T) {
+	state := authenticatedTestState(t)
+	oldCredential := targetCredential(t, "grant-old", "persistent", "old-token", nil)
+	oldCredential.ResourceID = "resource-old"
+	state.DPoPCredentials = map[string]dpopCredential{"resource-old": oldCredential}
+	states := &memoryStateStore{state: state, exists: true}
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return jsonResponse(200, map[string]any{
+			"items": []map[string]any{{
+				"id":          "resource-new",
+				"resourceUrl": "https://api.example.com/v1",
+				"connectorId": "connector-1",
+				"accessGrants": []map[string]any{{
+					"id": "grant-new", "mode": "persistent", "status": "active",
+				}},
+			}},
+		}), nil
+	})
+
+	credential, updated, err := ensureDPoPCredential(
+		t.Context(),
+		states,
+		client,
+		agentTarget{Origin: state.Origin, Issuer: "https://auth.example.com/api/auth", Runtime: defaultAgentRuntime},
+		state,
+		agentConfiguration{Issuer: "https://auth.example.com/api/auth"},
+		"grant-new",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credential.ResourceID != "resource-new" || credential.AuthorizationMode != "external" {
+		t.Fatalf("credential = %#v", credential)
+	}
+	if len(updated.DPoPCredentials) != 1 {
+		t.Fatalf("obsolete resource credential was retained: %#v", updated.DPoPCredentials)
+	}
+	if _, exists := updated.DPoPCredentials["resource-old"]; exists {
+		t.Fatalf("obsolete resource binding was retained: %#v", updated.DPoPCredentials)
+	}
+	if updated.DPoPCredentials["resource-new"].GrantID != "grant-new" {
+		t.Fatalf("replacement credential was not stored: %#v", updated.DPoPCredentials)
 	}
 }
 

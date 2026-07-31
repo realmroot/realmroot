@@ -233,6 +233,7 @@ Feature: Agent identity and delegated API authorization
       Given Restish stores a DPoP credential for an Agent API resource
       When the controller approves a new access grant for the same resource
       Then the plugin replaces the old local grant binding with the new grant
+      And replacing the registered resource record at the same URL also removes the old record binding
       And target requests use only the new DPoP credential
       When a one-time token expires or Realmroot rejects an inactive grant
       Then the plugin removes that local resource credential
