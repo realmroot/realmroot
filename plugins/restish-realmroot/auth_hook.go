@@ -44,10 +44,10 @@ type identityResponse struct {
 
 type agentAPIResourcesResponse struct {
 	Items []struct {
-		ID                string `json:"id"`
-		ResourceURL       string `json:"resourceUrl"`
-		ConnectorID       *string `json:"connectorId"`
-		AccessGrants      []struct {
+		ID           string  `json:"id"`
+		ResourceURL  string  `json:"resourceUrl"`
+		ConnectorID  *string `json:"connectorId"`
+		AccessGrants []struct {
 			ID     string `json:"id"`
 			Mode   string `json:"mode"`
 			Status string `json:"status"`
@@ -266,6 +266,11 @@ func ensureDPoPCredential(
 			}
 			if state.DPoPCredentials == nil {
 				state.DPoPCredentials = make(map[string]dpopCredential)
+			}
+			for resourceID, existing := range state.DPoPCredentials {
+				if resourceID != resource.ID && existing.ResourceURL == resource.ResourceURL {
+					delete(state.DPoPCredentials, resourceID)
+				}
 			}
 			state.DPoPCredentials[resource.ID] = credential
 			if err := states.Update(target, state); err != nil {
