@@ -156,6 +156,29 @@ describe('Agent resource access approval', () => {
     expect(window.sessionStorage.getItem('realmroot.resource-access-approval-token')).toBeNull()
   })
 
+  it('[spec: agent-identity/resource-account-reauthorization] requires scope expansion for an existing account', async () => {
+    api.getAgentResourceApproval.mockResolvedValue({
+      ...request,
+      scopes: ['projects:read', 'projects:write'],
+    })
+
+    render(<ResourceAccessApproval />)
+
+    expect(
+      await screen.findByText('This account needs expanded authorization before it can cover every requested scope.'),
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Expand ZPan account access' }))
+    await waitFor(() =>
+      expect(api.createAccountConnection).toHaveBeenCalledWith({
+        context: 'access-request',
+        accessRequestId: 'request-1',
+        approvalToken: 'approval token',
+      }),
+    )
+    expect(api.decideAgentResourceApproval).not.toHaveBeenCalled()
+  })
+
   it('rejects multiple connected accounts instead of presenting selection controls', async () => {
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [connection, { ...connection, id: 'connection-2' }],

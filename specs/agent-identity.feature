@@ -310,10 +310,16 @@ Feature: Agent identity and external API authorization
     @entrypoint:product-ui @journey:resource-account-reauthorization
     Scenario: A controller reauthorizes a connected external resource account
       Given the controller's home space already has an account connection for an external API resource
-      When OAuth returns the same external subject with replacement credentials and scopes
+      And a pending Agent access request requires scopes that connection does not yet cover
+      When the controller opens the approval page
+      Then Realmroot displays the connected account as requiring expanded authorization
+      And prevents approval until the account covers every requested scope
+      When the controller reauthorizes that account for the resource's current scope catalog
+      And OAuth returns the same external subject with replacement credentials and scopes
       Then Realmroot preserves the account connection identity
       And replaces its encrypted credentials, scopes, display name, and expiry
       And restores the connection when it was previously revoked
+      And returns to the pending Agent approval so the controller can decide it separately
 
     @entrypoint:agent-protocol @journey:agent-resource-discovery
     Scenario: An Agent discovers accounts and requests exact resource authority

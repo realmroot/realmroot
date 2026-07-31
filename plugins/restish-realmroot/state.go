@@ -13,7 +13,7 @@ import (
 
 const (
 	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 3
+	agentStateVersion = 4
 	identityDirectory = "identities"
 )
 
@@ -181,9 +181,17 @@ func (s *fileStateStore) loadPath(path string) (agentState, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return agentState{}, fmt.Errorf("decode Agent state: %w", err)
 	}
-	if state.Version == 1 {
-		state.Version = 2
-		state.DPoPCredentials = nil
+	if state.Version > 0 && state.Version < agentStateVersion {
+		if state.Version < 3 {
+			state.DPoPCredentials = nil
+		} else {
+			for resourceID, credential := range state.DPoPCredentials {
+				if credential.AuthorizationMode != "native" && credential.AuthorizationMode != "external" {
+					delete(state.DPoPCredentials, resourceID)
+				}
+			}
+		}
+		state.Version = agentStateVersion
 		if err := s.updatePath(path, state); err != nil {
 			return agentState{}, fmt.Errorf("upgrade Agent state: %w", err)
 		}
@@ -475,6 +483,15 @@ func (s *fileStateStore) walkStates(visit func(path string, state agentState) er
 		var state agentState
 		if err := json.Unmarshal(data, &state); err != nil {
 			return nil
+		}
+		if state.Version > 0 &&
+			state.Version < agentStateVersion &&
+			state.Issuer != "" &&
+			state.Runtime != "" {
+			state, err = s.loadPath(path)
+			if err != nil {
+				return err
+			}
 		}
 		if state.Version != agentStateVersion {
 			return nil

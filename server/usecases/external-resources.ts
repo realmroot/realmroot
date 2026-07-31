@@ -276,9 +276,7 @@ export async function listAccessRequestConnections(
   if (resourceConnections.length > 1) {
     throw new Error('A resource home space cannot have more than one active account connection.')
   }
-  const connections = resourceConnections
-    .filter((connection) => request.scopes.every((scope) => connection.grantedScopes.includes(scope)))
-    .map(toAccountConnection)
+  const connections = resourceConnections.map(toAccountConnection)
   return {
     items: connections.slice(pagination.offset, pagination.offset + pagination.limit),
     pagination: paginationMetadata({ ...pagination, total: connections.length }),

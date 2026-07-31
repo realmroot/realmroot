@@ -101,6 +101,9 @@ export function ResourceAccessApproval() {
     }
   }
 
+  const connectionCoversRequest =
+    request !== null && connection !== null && request.scopes.every((scope) => connection.scopes.includes(scope))
+
   if (decision) {
     const approved = decision === 'approved'
     return (
@@ -143,10 +146,26 @@ export function ResourceAccessApproval() {
           <section className="space-y-3 rounded-md border border-border bg-card p-4">
             <h2 className="text-sm font-semibold">{externalResourceName} account</h2>
             {connection ? (
-              <div className="text-sm">
-                <p className="font-medium">{connection.displayName}</p>
-                <p className="text-xs text-muted-foreground">{connection.scopes.join(' ')}</p>
-              </div>
+              <>
+                <div className="text-sm">
+                  <p className="font-medium">{connection.displayName}</p>
+                  <p className="text-xs text-muted-foreground">{connection.scopes.join(' ')}</p>
+                </div>
+                {!connectionCoversRequest ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      This account needs expanded authorization before it can cover every requested scope.
+                    </p>
+                    <Button disabled={submitting} onClick={() => void connectAccount()} type="button" variant="outline">
+                      <Link2 data-icon="inline-start" />
+                      Expand {externalResourceName} account access
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      After OAuth, you will return here to approve the Agent’s exact scopes and lifetime separately.
+                    </p>
+                  </>
+                ) : null}
+              </>
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">
@@ -194,7 +213,7 @@ export function ResourceAccessApproval() {
             disabled={
               !request ||
               submitting ||
-              (externalResourceName !== null && !connection) ||
+              (externalResourceName !== null && !connectionCoversRequest) ||
               (mode === 'until' && !expiresAt)
             }
             onClick={() => void submit('approve')}

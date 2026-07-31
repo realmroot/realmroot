@@ -763,7 +763,11 @@ describe('external API resource authorization', () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
     mockResourceOpenApi(deps, resource().resourceUrl, ['projects:read', 'projects:write'])
-    const request = { ...requestRecord(), connectionId: null }
+    const request = {
+      ...requestRecord(),
+      connectionId: null,
+      scopes: ['projects:read', 'projects:write'],
+    }
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
     vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
@@ -795,11 +799,26 @@ describe('external API resource authorization', () => {
       }),
     )
 
-    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([connectionRecord()])
+    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
+      {
+        ...connectionRecord(),
+        grantedScopes: ['openid', 'offline_access', 'projects:read', 'projects:write'],
+      },
+    ])
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).resolves.toMatchObject({
       items: [{ id: 'connection-1' }],
+      pagination: { total: 1 },
+    })
+
+    vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([
+      { ...connectionRecord(), grantedScopes: ['projects:read'] },
+    ])
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'connection-1', scopes: ['projects:read'] }],
       pagination: { total: 1 },
     })
 
