@@ -35,9 +35,11 @@ Realmroot does not publish a second Agent-only issuer. OIDC remains the
 federation vocabulary, while the Agent profile defines how a stable non-human
 subject relates to hosts and controllers.
 
-The host key proves the current presenter; it is not the durable identity. For
-native API access, the controlling user or organization is the access-token
-subject and the Agent and host appear in the RFC 8693 actor chain.
+The Host authenticates the current AgentAuth registration; it is not an
+identity exposed to resource servers. For native API access, the controlling
+user or organization is the access-token subject and the stable Agent is the
+RFC 8693 actor. The DPoP confirmation claim proves possession of the separate
+resource key without turning that key or Host into an identity.
 
 ## Authority Model
 
@@ -91,7 +93,8 @@ token contains:
 - the protected resource audience;
 - the exact approved scope set;
 - the controller as `sub`;
-- the Agent and host actor chain in `act`;
+- the stable Agent issuer and subject in `act`, classified by
+  `sub_profile: ai_agent`;
 - the DPoP public-key thumbprint in `cnf.jkt`;
 - effective resource roles and the organization home space when applicable.
 
@@ -103,7 +106,21 @@ needed and submits a stable-Agent assertion using RFC 7523. The target issues an
 Agent actor token, then intersects the subject's scopes with the approved Agent
 scopes during RFC 8693 token exchange. The target authorization server issues
 the final DPoP-bound token with the connected user as `sub` and the Agent in
-`act.sub`.
+`act`. Targets that support Realmroot AgentInfo preserve the Agent's original
+issuer, subject, and `ai_agent` subject profile.
+
+## Agent Display Information
+
+Resource servers discover `agentinfo_endpoint` from the Agent issuer's OIDC or
+OAuth metadata and resolve the exact `(act.iss, act.sub)` pair. AgentInfo is a
+public, cacheable presentation projection containing the stable identifier,
+name, picture, and update time. Agents without a custom picture use Realmroot's
+versioned static placeholder at `/agent-picture-v1.svg`. AgentInfo excludes
+controllers, home spaces, Hosts, roles, scopes, grants, and authorization state.
+
+AgentInfo remains available for retired subjects so historical audit records
+keep a useful display name. It is never an authentication, authorization, or
+revocation input.
 
 Realmroot returns no target refresh token to the Agent. Revoking the grant,
 connection, credential, Agent, or host stops new issuance; active external

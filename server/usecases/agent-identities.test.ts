@@ -8,6 +8,7 @@ import {
   getAgent,
   getAgentEnrollmentIntent,
   getAgentIdentityByProtocolAgent,
+  getAgentInfo,
   getPersonalAgent,
   getPublicAgentEnrollment,
   listAllAgentIdentities,
@@ -30,6 +31,31 @@ import type {
 import { describe, expect, it, vi } from 'vitest'
 
 describe('Agent login identity', () => {
+  it('returns public display information for a stable Agent subject [spec: agent-identity/agent-info-resolution]', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.agentIdentities.findByIssuerSubject).mockResolvedValue(
+      identity({ status: 'retired', retiredAt: new Date('2026-08-02T00:00:00.000Z') }),
+    )
+
+    await expect(getAgentInfo(deps, 'https://auth.example.com', 'agt_stable')).resolves.toEqual({
+      iss: 'https://auth.example.com',
+      sub: 'agt_stable',
+      sub_profile: 'ai_agent',
+      name: 'Build Agent',
+      picture: 'https://auth.example.com/agent-picture-v1.svg',
+      updated_at: 1785542400,
+    })
+    expect(deps.agentIdentities.findByIssuerSubject).toHaveBeenCalledWith('https://auth.example.com', 'agt_stable')
+  })
+
+  it('does not resolve an unknown Agent subject', async () => {
+    const deps = createTestDeps()
+
+    await expect(getAgentInfo(deps, 'https://auth.example.com', 'agt_unknown')).rejects.toMatchObject({
+      status: 404,
+    })
+  })
+
   it('creates and binds one personal stable identity after controller approval', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.agentIdentities.findProtocolAgent).mockResolvedValue({

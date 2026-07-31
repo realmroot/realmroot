@@ -52,6 +52,8 @@ describe('app.test 1', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
+      agentinfo_endpoint: 'https://auth.example.com/api/auth/agentinfo',
+      agentinfo_claims_supported: ['iss', 'sub', 'sub_profile', 'name', 'picture', 'updated_at'],
       grant_types_supported: [
         'authorization_code',
         'refresh_token',
@@ -127,6 +129,8 @@ describe('app.test 1', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
+      agentinfo_endpoint: 'https://auth.example.com/api/auth/agentinfo',
+      agentinfo_claims_supported: ['iss', 'sub', 'sub_profile', 'name', 'picture', 'updated_at'],
       userinfo_endpoint: 'https://auth.example.com/api/auth/oauth2/userinfo',
       end_session_endpoint: 'https://auth.example.com/api/auth/oauth2/end-session',
     })
@@ -171,6 +175,8 @@ describe('app.test 1', () => {
       agent_identity_issuer: 'https://tenant.example.net/api/auth',
       agent_endpoint: 'https://tenant.example.net/api/agent',
       agent_enrollment_endpoint: 'https://tenant.example.net/api/agent/enrollments',
+      agentinfo_endpoint: 'https://tenant.example.net/api/auth/agentinfo',
+      agentinfo_claims_supported: ['iss', 'sub', 'sub_profile', 'name', 'picture', 'updated_at'],
       default_location: 'https://tenant.example.net/api/auth/capability/execute',
       modes: ['delegated'],
       approval_methods: ['device_authorization'],
@@ -184,6 +190,49 @@ describe('app.test 1', () => {
       request: expect.any(Request),
       asResponse: false,
     })
+  })
+
+  it('serves cacheable public AgentInfo for active and retired identities [spec: agent-identity/agent-info-resolution]', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.agentIdentities.findByIssuerSubject).mockResolvedValue({
+      id: 'identity-1',
+      issuer: 'https://auth.example.com/api/auth',
+      subject: 'agt_stable',
+      name: 'Build Agent',
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+      status: 'retired',
+      retiredAt: new Date('2026-08-02T00:00:00.000Z'),
+      createdAt: new Date('2026-08-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-08-02T00:00:00.000Z'),
+    })
+    const app = createApp(createAuthMock(), deps, { baseURL: 'https://auth.example.com' })
+    const response = await app.request('https://preview.example.net/api/auth/agentinfo?sub=agt_stable', {
+      headers: { origin: 'https://resource.example.com' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('access-control-allow-origin')).toBe('https://resource.example.com')
+    expect(response.headers.get('cache-control')).toBe('public, max-age=300')
+    expect(response.headers.get('etag')).toBe('"agt_stable:1785628800"')
+    await expect(response.json()).resolves.toEqual({
+      iss: 'https://auth.example.com/api/auth',
+      sub: 'agt_stable',
+      sub_profile: 'ai_agent',
+      name: 'Build Agent',
+      picture: 'https://auth.example.com/agent-picture-v1.svg',
+      updated_at: 1785628800,
+    })
+    expect(deps.agentIdentities.findByIssuerSubject).toHaveBeenCalledWith(
+      'https://auth.example.com/api/auth',
+      'agt_stable',
+    )
+
+    const cached = await app.request('https://preview.example.net/api/auth/agentinfo?sub=agt_stable', {
+      headers: { 'if-none-match': '"agt_stable:1785628800"' },
+    })
+    expect(cached.status).toBe(304)
+    expect(await cached.text()).toBe('')
   })
 
   it('does not publish a second root OpenID issuer [spec: agent-identity/agent-stable-issuer]', async () => {

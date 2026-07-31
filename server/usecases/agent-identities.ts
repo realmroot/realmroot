@@ -2,7 +2,7 @@ import { badRequest, forbidden, notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
 import type { AgentEnrollmentIntentRecord, AgentIdentityAggregate, AgentIdentityRecord } from '@server/usecases/ports'
-import type { Agent, AgentEnrollment } from '@shared/api/agent-api'
+import type { Agent, AgentEnrollment, AgentInfo } from '@shared/api/agent-api'
 import type {
   AgentEnrollmentIntent,
   AgentHomeSpace,
@@ -34,6 +34,19 @@ export async function getPersonalAgent(deps: Deps, agentId: string, actorUserId:
 
 export async function getAgent(deps: Deps, agentId: string): Promise<Agent> {
   return toAgent(await requireIdentity(deps, agentId))
+}
+
+export async function getAgentInfo(deps: Deps, issuer: string, subject: string): Promise<AgentInfo> {
+  const identity = await deps.agentIdentities.findByIssuerSubject(issuer, subject)
+  if (!identity) throw notFound('Agent information was not found.')
+  return {
+    iss: identity.issuer,
+    sub: identity.subject,
+    sub_profile: 'ai_agent',
+    name: identity.name,
+    picture: new URL('/agent-picture-v1.svg', issuer).toString(),
+    updated_at: Math.floor(identity.updatedAt.getTime() / 1000),
+  }
 }
 
 export async function listOrganizationAgentIdentities(

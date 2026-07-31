@@ -1229,10 +1229,11 @@ describe('external API resource authorization', () => {
         sub: 'org-1',
         groups: ['org-1'],
         roles: [],
-        act: expect.objectContaining({
-          sub: 'host-1',
-          act: expect.objectContaining({ sub: 'agt_stable' }),
-        }),
+        act: {
+          iss: 'https://auth.example.com/api/auth',
+          sub: 'agt_stable',
+          sub_profile: 'ai_agent',
+        },
       }),
       'at+jwt',
     )

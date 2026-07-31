@@ -102,13 +102,21 @@ test.describe('external API resource authorization', () => {
       plugin.connectTarget('external-projects', externalResource)
       const directBody = plugin.targetRequest<{
         projects: Array<{ id: string; name: string }>
-        authorization: { sub: string; act: { sub: string; host?: unknown }; scope: string }
+        authorization: {
+          sub: string
+          act: { iss: string; sub: string; sub_profile: string; host?: unknown }
+          scope: string
+        }
       }>('external-projects', 'projects')
       expect(directBody).toMatchObject({
         projects: [{ id: 'project-1', name: 'Agent-ready project' }],
         authorization: {
           sub: 'demo-user',
-          act: { sub: expect.any(String) },
+          act: {
+            iss: expect.any(String),
+            sub: expect.any(String),
+            sub_profile: 'ai_agent',
+          },
           scope: 'projects:read',
         },
       })
@@ -196,8 +204,9 @@ test.describe('external API resource authorization', () => {
         authorization: {
           sub: expect.any(String),
           act: {
-            actor_type: 'host',
-            act: { actor_type: 'agent', sub: expect.any(String) },
+            iss: expect.any(String),
+            sub: expect.any(String),
+            sub_profile: 'ai_agent',
           },
           scope: 'projects:read',
         },

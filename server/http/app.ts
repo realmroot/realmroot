@@ -34,6 +34,7 @@ import { requestContext } from './middleware/request-context'
 import { requireSecurityPolicy } from './middleware/security-policy'
 import { unifiedOpenApi, unifiedOpenApiLinkHeader, unifiedOpenApiPath } from './openapi/management'
 import { accountRoutes } from './routes/account'
+import { createAgentInfoRoutes } from './routes/agent-info'
 import { createAgentProtocolRoutes } from './routes/agent-protocol'
 import { createAccountAssetRoutes, createAssetRoutes, createProtectedResourceAssetRoutes } from './routes/assets'
 import type { ManagementAuthApi } from './routes/auth-api'
@@ -111,11 +112,17 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
         agent_identity_issuer: issuer,
         agent_enrollment_endpoint: new URL('/api/agent/enrollments', issuer).toString(),
         agent_endpoint: new URL('/api/agent', issuer).toString(),
+        agentinfo_endpoint: `${issuer}/agentinfo`,
+        agentinfo_claims_supported: agentInfoClaimsSupported,
         agent_token_endpoint: `${issuer}/oauth2/token`,
         agent_jwks_uri: `${issuer}/jwks`,
       })
     })
   })
+  app.route(
+    '/api/auth/agentinfo',
+    createAgentInfoRoutes((requestUrl) => oauthIssuer(config, requestUrl)),
+  )
   app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
     await requireOnboardingComplete(c.get('deps'))
     await requireHostedAuthMethodEnabled(c, configzOptions(c, config.securityPolicy))
@@ -314,16 +321,22 @@ async function maybeHandleTokenExchange(c: Context, issuer: string) {
 
 async function extendAgentOAuthMetadata(response: Response) {
   const metadata = (await response.json()) as Record<string, unknown>
+  const issuer = metadata.issuer
+  if (typeof issuer !== 'string') throw new Error('OAuth metadata has no issuer.')
   const headers = new Headers(response.headers)
   headers.delete('content-length')
   return Response.json(
     {
       ...metadata,
       dpop_signing_alg_values_supported: ['ES256', 'EdDSA'],
+      agentinfo_endpoint: `${issuer.replace(/\/$/, '')}/agentinfo`,
+      agentinfo_claims_supported: agentInfoClaimsSupported,
     },
     { status: response.status, headers },
   )
 }
+
+const agentInfoClaimsSupported = ['iss', 'sub', 'sub_profile', 'name', 'picture', 'updated_at'] as const
 
 function oauthIssuer(config: AppConfig, requestUrl: string) {
   return `${(config.baseURL ?? new URL(requestUrl).origin).replace(/\/$/, '')}/api/auth`

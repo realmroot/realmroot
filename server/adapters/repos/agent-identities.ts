@@ -54,6 +54,15 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return aggregate(db, identity)
     },
 
+    async findByIssuerSubject(issuer, subject) {
+      const [identity] = await db
+        .select()
+        .from(agentIdentity)
+        .where(and(eq(agentIdentity.issuer, issuer), eq(agentIdentity.subject, subject)))
+        .limit(1)
+      return identity ?? null
+    },
+
     async findIntent(id) {
       const [intent] = await db.select().from(agentEnrollmentIntent).where(eq(agentEnrollmentIntent.id, id)).limit(1)
       return intent ?? null

@@ -140,6 +140,7 @@ describe('Agent identity enrollment over real D1', () => {
       [spec: agent-identity/agent-host-revocation]
       [spec: agent-identity/agent-identity-recovery]
       [spec: agent-identity/agent-identity-retirement]
+      [spec: agent-identity/agent-info-resolution]
       [spec: agent-identity/agent-stable-issuer]`, async () => {
     const first = await seedAgent(harness, userId, 'identity-first')
     const firstIntent = await createIntent(harness, userId, {
@@ -198,6 +199,15 @@ describe('Agent identity enrollment over real D1', () => {
     expect(retired).toMatchObject({ subject: stableSubject, status: 'retired' })
     expect(retired.retiredAt).toBeInstanceOf(Date)
     expect(bindings.some((binding) => binding.status === 'active')).toBe(false)
+
+    const retiredInfo = await harness.request(`/api/auth/agentinfo?sub=${encodeURIComponent(stableSubject)}`)
+    expect(retiredInfo.status).toBe(200)
+    await expect(retiredInfo.json()).resolves.toMatchObject({
+      iss: 'http://localhost/api/auth',
+      sub: stableSubject,
+      sub_profile: 'ai_agent',
+      name: 'Release Agent',
+    })
   })
 
   it('rejects anonymous Agent enrollment', async () => {
@@ -216,6 +226,7 @@ describe('Agent identity enrollment over real D1', () => {
       [spec: agent-identity/native-api-resource-registration]
       [spec: agent-identity/native-api-resource-access-request]
       [spec: agent-identity/native-api-resource-token]
+      [spec: agent-identity/agent-info-resolution]
       [spec: agent-identity/agent-resource-grant-policy]`, async () => {
     const seeded = await seedAgent(harness, userId, 'token')
     const intent = await createIntent(harness, userId, {
@@ -244,6 +255,22 @@ describe('Agent identity enrollment over real D1', () => {
       protocolAgentId: seeded.agentId,
       hostId: seeded.hostId,
     }
+
+    const issuerMetadata = await harness.request('/.well-known/openid-configuration/api/auth')
+    expect(issuerMetadata.status).toBe(200)
+    await expect(issuerMetadata.json()).resolves.toMatchObject({
+      agentinfo_endpoint: 'http://localhost/api/auth/agentinfo',
+    })
+    const agentInfo = await harness.request(`/api/auth/agentinfo?sub=${encodeURIComponent(approved.agent.subject)}`)
+    expect(agentInfo.status).toBe(200)
+    await expect(agentInfo.json()).resolves.toEqual({
+      iss: 'http://localhost/api/auth',
+      sub: approved.agent.subject,
+      sub_profile: 'ai_agent',
+      name: 'Token Agent',
+      picture: 'http://localhost/agent-picture-v1.svg',
+      updated_at: expect.any(Number),
+    })
 
     const discovery = await listAgentApiResources(harness.deps, principal, { limit: 20, offset: 0 })
     expect(discovery.items).toEqual([
@@ -303,9 +330,9 @@ describe('Agent identity enrollment over real D1', () => {
       scope: 'repo:read',
       cnf: { jkt: expect.any(String) },
       act: {
-        sub: seeded.hostId,
-        actor_type: 'host',
-        act: { sub: approved.agent.subject, actor_type: 'agent' },
+        iss: 'http://localhost/api/auth',
+        sub: approved.agent.subject,
+        sub_profile: 'ai_agent',
       },
     })
     expect(decodeProtectedHeader(issued.accessToken)).toMatchObject({

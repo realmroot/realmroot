@@ -35,6 +35,17 @@ export const agentsResponseSchema = z.object({
   items: z.array(agentSchema),
   pagination: paginationMetadataSchema,
 })
+export const agentInfoQuerySchema = z.object({
+  sub: nonEmptyString,
+})
+export const agentInfoSchema = z.object({
+  iss: z.url(),
+  sub: z.string(),
+  sub_profile: z.literal('ai_agent'),
+  name: z.string(),
+  picture: z.url().optional(),
+  updated_at: z.number().int().nonnegative(),
+})
 export const auditEventsResponseSchema = z.object({
   items: z.array(agentAuditEventSchema),
   pagination: paginationMetadataSchema,
@@ -264,6 +275,7 @@ export const targetTokenSchema = z.object({
 })
 
 export type Agent = z.infer<typeof agentSchema>
+export type AgentInfo = z.infer<typeof agentInfoSchema>
 export type AgentEnrollment = z.infer<typeof agentEnrollmentSchema>
 export type ApiResource = z.infer<typeof apiResourceSchema>
 export type ConnectableApiResourcesResponse = z.infer<typeof connectableApiResourcesResponseSchema>

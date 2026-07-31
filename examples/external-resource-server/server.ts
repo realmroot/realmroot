@@ -316,11 +316,18 @@ async function tokenExchangeGrant(request: Request, response: Response, client: 
     throw oauthError('invalid_scope', 'Requested scope exceeds the connected user grant.')
   }
   const dpop = await verifyDpop(request, `${origin}/token`)
+  if (typeof actor.payload.agent_iss !== 'string' || actor.payload.sub_profile !== 'ai_agent') {
+    throw oauthError('invalid_grant', 'Actor access token has no stable Agent identity profile.')
+  }
   const jti = randomUUID()
   const accessToken = await new SignJWT({
     scope: requestedScope.join(' '),
     client_id: client.client_id,
-    act: { sub: actor.payload.sub },
+    act: {
+      iss: actor.payload.agent_iss,
+      sub: actor.payload.sub,
+      sub_profile: actor.payload.sub_profile,
+    },
     cnf: { jkt: dpop.jkt },
   })
     .setProtectedHeader({ alg: 'ES256', kid: publicJwk.kid, typ: 'at+jwt' })
@@ -355,7 +362,11 @@ async function jwtBearerGrant(request: Request, response: Response, client: Clie
   ) {
     throw oauthError('invalid_grant', 'JWT bearer assertion requires iss, sub, and jti claims.')
   }
-  const accessToken = await new SignJWT({ client_id: client.client_id })
+  const accessToken = await new SignJWT({
+    client_id: client.client_id,
+    agent_iss: verified.payload.iss,
+    sub_profile: 'ai_agent',
+  })
     .setProtectedHeader({ alg: 'ES256', kid: publicJwk.kid, typ: 'at+jwt' })
     .setIssuer(issuer)
     .setSubject(verified.payload.sub)

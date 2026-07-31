@@ -918,13 +918,8 @@ async function issueNativeAccessToken(
       cnf: { jkt: confirmationJkt },
       act: {
         iss: principal.issuer,
-        sub: principal.hostId,
-        actor_type: 'host',
-        act: {
-          iss: principal.issuer,
-          sub: principal.subject,
-          actor_type: 'agent',
-        },
+        sub: principal.subject,
+        sub_profile: 'ai_agent',
       },
     },
     'at+jwt',

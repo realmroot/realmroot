@@ -69,12 +69,14 @@ const publicOAuthMetadataPaths = new Set([
   '/api/auth/.well-known/openid-configuration',
   '/api/auth/.well-known/oauth-authorization-server',
   '/api/auth/jwks',
+  '/api/auth/agentinfo',
 ])
 
 const oauthClientCorsPaths = new Set([
   '/api/auth/.well-known/openid-configuration',
   '/api/auth/.well-known/oauth-authorization-server',
   '/api/auth/jwks',
+  '/api/auth/agentinfo',
   '/api/auth/oauth2/token',
   '/api/auth/oauth2/userinfo',
   '/api/auth/oauth2/revoke',

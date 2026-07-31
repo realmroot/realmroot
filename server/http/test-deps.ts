@@ -65,6 +65,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       listOrganization: vi.fn().mockResolvedValue([]),
       listAll: vi.fn().mockResolvedValue({ items: [], total: 0 }),
       findIdentity: vi.fn().mockResolvedValue(null),
+      findByIssuerSubject: vi.fn().mockResolvedValue(null),
       findIntent: vi.fn().mockResolvedValue(null),
       findProtocolAgent: vi.fn().mockResolvedValue(null),
       findBindingByProtocolAgent: vi.fn().mockResolvedValue(null),

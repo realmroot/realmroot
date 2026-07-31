@@ -84,12 +84,15 @@ Native API Resource tokens use the same issuer, JWKS, and key lifecycle as
 product OAuth tokens. They are five-minute `at+jwt` access tokens containing:
 
 - the controller identity as `sub`;
-- the Agent and host in the RFC 8693 `act` chain;
+- the stable Agent as the RFC 8693 `act` actor, including its issuer, subject,
+  and `ai_agent` subject profile;
 - the exact approved `scope`;
 - effective resource `roles` and applicable `groups`;
 - the DPoP key thumbprint in `cnf.jkt`.
 
-The protected API validates both the JWT and the request's RFC 9449 DPoP proof.
+The Host remains internal AgentAuth credential, binding, revocation, and audit
+context. The protected API validates both the JWT and the request's RFC 9449
+DPoP proof.
 See [Agent identity architecture](agent-identity.md) for the authority and
 resource-server model.
 

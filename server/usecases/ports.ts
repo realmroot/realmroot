@@ -674,6 +674,7 @@ export interface AgentIdentityRepository {
   listOrganization(organizationId: string): Promise<AgentIdentityAggregate[]>
   listAll(page: PaginationInput): Promise<PaginatedResult<AgentIdentityAggregate>>
   findIdentity(id: string): Promise<AgentIdentityAggregate | null>
+  findByIssuerSubject(issuer: string, subject: string): Promise<AgentIdentityRecord | null>
   findIntent(id: string): Promise<AgentEnrollmentIntentRecord | null>
   findProtocolAgent(id: string): Promise<AgentRecord | null>
   findBindingByProtocolAgent(id: string): Promise<AgentIdentityBindingRecord | null>

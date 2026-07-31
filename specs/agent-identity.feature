@@ -130,6 +130,18 @@ Feature: Agent identity and external API authorization
       And hosted Agent approval URLs use the configured deployment origin
       And Realmroot does not publish a second Agent-only OIDC issuer
 
+    @entrypoint:agent-protocol @journey:agent-info-resolution
+    Scenario: Resource servers resolve stable Agent display information
+      Given an active or retired Agent has a stable issuer and subject
+      When a resource server discovers the issuer metadata
+      Then Realmroot advertises the public AgentInfo endpoint and supported display claims
+      When the resource server requests AgentInfo for the stable subject
+      Then Realmroot returns the issuer, subject, Agent profile, name, picture, and last update time
+      And picture resolves to the Realmroot static file "/agent-picture-v1.svg" until the Agent has a custom picture
+      And permits the response to be cached and revalidated
+      But AgentInfo never returns controller, home space, Host, role, scope, grant, or authorization state
+      And AgentInfo is never authoritative for authentication or authorization
+
   Rule: Native API resources use the shared Agent access workflow
 
     @entrypoint:product-ui @journey:native-api-resource-registration
@@ -192,7 +204,9 @@ Feature: Agent identity and external API authorization
       And the plugin sends the DPoP proof in the standard DPoP header
       Then Realmroot issues a short-lived audience-bound JWT access token
       And the token uses the Better Auth issuer and signing keys
-      And the token identifies the controller as subject and the Agent and host in the RFC 8693 actor chain
+      And the token identifies the controller as subject and the stable Agent as the RFC 8693 actor
+      And the Agent actor carries its issuer, subject, and ai_agent subject profile
+      And the Host remains internal credential, binding, revocation, and audit context
       And the token carries only the approved scopes
       And groups identifies the Agent's organization home space
       And roles identifies the Agent's effective roles for that API resource
@@ -344,6 +358,7 @@ Feature: Agent identity and external API authorization
       And Realmroot exchanges the connected user's subject token and the target-issued Agent access token with RFC 8693
       And the target platform issues a short-lived DPoP-bound access token
       And the token identifies the target user as subject and the Agent in the RFC 8693 actor claim
+      And the target preserves the Agent issuer, subject, and ai_agent subject profile
       And no Realmroot-specific metadata, grant type, token type, or claim is required
       And Realmroot returns no refresh token
       And Restish stores but does not print the raw access token
