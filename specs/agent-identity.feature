@@ -238,6 +238,9 @@ Feature: Agent identity and delegated API authorization
       When a one-time token expires or Realmroot rejects an inactive grant
       Then the plugin removes that local resource credential
       And the Agent must request a new access grant
+      When the target API rejects a cached DPoP credential with HTTP 401
+      Then the plugin removes that local resource credential
+      And the Agent must discover the current connection state and request a new access grant before retrying
 
   Rule: Workload token exchange preserves authorization boundaries
 

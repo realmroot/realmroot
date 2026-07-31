@@ -72,7 +72,9 @@ describe('AccountConnectionsPage', () => {
     expect(await screen.findByText('No connected resource accounts.')).toBeTruthy()
     expect(screen.queryByText('Projects API')).toBeNull()
     expect(
-      screen.getByText('Invoke a protected target operation with Restish to start a scoped connection.'),
+      screen.getByText(
+        'Approve an Agent resource access request to connect this account through its scoped OAuth flow.',
+      ),
     ).toBeTruthy()
   })
 

@@ -90,6 +90,13 @@ Expired persistent or limited credentials are refreshed through their active
 grant with the same DPoP key. An expired one-time credential, an inactive grant,
 or a replacement grant removes the obsolete local resource credential and
 requires the applicable current grant or a new controller decision.
+A `401` from a matching target resource also removes its cached credential.
+Discover the current resource and connection state, then invoke `access request`
+with the exact task scopes and without `accountConnectionId`. The hosted
+approval offers the controller a scoped account connection when none exists;
+after OAuth, the controller separately approves the Agent grant. Issue its
+target token before retrying. Restish's target API logout does not own or clear
+Realmroot plugin state.
 
 The default root is:
 

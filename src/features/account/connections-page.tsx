@@ -124,7 +124,9 @@ function ResourceConnectionsPanel({
         />
         <ItemList
           empty={tt('No connected resource accounts.')}
-          emptyDescription={tt('Invoke a protected target operation with Restish to start a scoped connection.')}
+          emptyDescription={tt(
+            'Approve an Agent resource access request to connect this account through its scoped OAuth flow.',
+          )}
           items={connections
             .filter((connection) => connection.status === 'active')
             .map((connection) => {

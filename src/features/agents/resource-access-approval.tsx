@@ -207,6 +207,7 @@ export function ResourceAccessApproval() {
             />
           ) : null}
         </fieldset>
+        {!request && !error ? <Status>Loading resource access request…</Status> : null}
         {error ? <Status tone="error">{error}</Status> : null}
         <div className="flex gap-3">
           <Button

@@ -221,6 +221,69 @@ func TestCapabilityApprovalResponseIgnoresOtherResponses(t *testing.T) {
 	}
 }
 
+func TestTargetUnauthorizedResponseRemovesCachedCredential(t *testing.T) {
+	t.Run("[spec: agent-identity/restish-resource-credential-lifecycle]", func(t *testing.T) {
+		state := authenticatedTestState(t)
+		expiresAt := time.Now().Add(time.Minute)
+		state.DPoPCredentials = map[string]dpopCredential{
+			"resource-1": targetCredential(t, "grant-1", "persistent", "rejected-token", &expiresAt),
+		}
+		states := &memoryStateStore{state: state, exists: true}
+
+		output, err := handleCapabilityApprovalResponse(
+			plugin.ResponseMiddlewareInput{
+				Request: plugin.HookRequest{
+					Method: http.MethodPost,
+					URI:    "https://api.example.com/v1/projects",
+				},
+				Response: plugin.HookResponse{
+					Status:  http.StatusUnauthorized,
+					Headers: map[string][]string{"WWW-Authenticate": {`DPoP error="invalid_token"`}},
+				},
+			},
+			&browserRecorder{},
+			states,
+			roundTripFunc(nil),
+		)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(states.state.DPoPCredentials) != 0 {
+			t.Fatalf("rejected target credential was retained: %#v", states.state.DPoPCredentials)
+		}
+		if output.Response != nil || output.Follow != nil || output.Drop {
+			t.Fatalf("target response was changed: %#v", output)
+		}
+	})
+}
+
+func TestNonTargetUnauthorizedResponseDoesNotChangeCredentials(t *testing.T) {
+	state := authenticatedTestState(t)
+	expiresAt := time.Now().Add(time.Minute)
+	state.DPoPCredentials = map[string]dpopCredential{
+		"resource-1": targetCredential(t, "grant-1", "persistent", "access-token", &expiresAt),
+	}
+	states := &memoryStateStore{state: state, exists: true}
+
+	_, err := handleCapabilityApprovalResponse(
+		plugin.ResponseMiddlewareInput{
+			Request:  plugin.HookRequest{Method: http.MethodGet, URI: "https://other.example.com/private"},
+			Response: plugin.HookResponse{Status: http.StatusUnauthorized},
+		},
+		&browserRecorder{},
+		states,
+		roundTripFunc(nil),
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states.state.DPoPCredentials) != 1 {
+		t.Fatalf("unrelated credential was removed: %#v", states.state.DPoPCredentials)
+	}
+}
+
 func TestCapabilityApprovalResponseRejectsCrossOriginApprovalURL(t *testing.T) {
 	browser := &browserRecorder{}
 	_, err := handleCapabilityApprovalResponse(
