@@ -259,6 +259,31 @@ describe('service.test 2', () => {
     )
   })
 
+  it('falls back to RFC 8414 authorization-server metadata [spec: agent-identity/external-api-resource-registration]', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(Response.json(discoveryMetadata({ issuer: 'https://idp.example.com/oauth' })))
+    const deps = {
+      connectors: createRepository(),
+      externalHttp: { fetch },
+    } as unknown as Deps
+
+    await createConnector(deps, {
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects',
+      issuer: 'https://idp.example.com/oauth',
+      clientId: 'client-1',
+      clientSecret: 'secret-1',
+    })
+
+    expect(fetch.mock.calls.map(([request]) => (request as Request).url)).toEqual([
+      'https://idp.example.com/.well-known/openid-configuration/oauth',
+      'https://idp.example.com/.well-known/oauth-authorization-server/oauth',
+    ])
+  })
+
   it.each([
     ['a missing issuer', { issuer: undefined }, undefined, 'OIDC connectors require an issuer.'],
     [
@@ -272,7 +297,7 @@ describe('service.test 2', () => {
       'failed discovery',
       { issuer: 'https://idp.example.com' },
       new Response(null, { status: 503 }),
-      'OIDC discovery failed.',
+      'OAuth authorization server discovery failed.',
     ],
     [
       'invalid discovery JSON',
