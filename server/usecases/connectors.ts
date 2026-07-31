@@ -332,12 +332,19 @@ async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, c
   const issuer = requireNetworkUrl(input.issuer, 'OIDC issuer').replace(/\/$/, '')
   const issuerUrl = new URL(issuer)
   if (issuerUrl.search || issuerUrl.hash) throw badRequest('OIDC issuer cannot contain a query or fragment.')
-  const response = await deps.externalHttp.fetch(
+  let response = await deps.externalHttp.fetch(
     new Request(oidcDiscoveryUrl(issuer), {
       headers: { accept: 'application/json' },
     }),
   )
-  if (!response.ok) throw badRequest('OIDC discovery failed.')
+  if (!response.ok) {
+    response = await deps.externalHttp.fetch(
+      new Request(oauthAuthorizationServerDiscoveryUrl(issuer), {
+        headers: { accept: 'application/json' },
+      }),
+    )
+  }
+  if (!response.ok) throw badRequest('OAuth authorization server discovery failed.')
   const metadata = await readObject(response, 'OIDC discovery response is invalid.')
   if (metadata.issuer !== issuer) throw badRequest('OIDC discovery issuer does not match the configured issuer.')
 
@@ -398,6 +405,15 @@ function oidcDiscoveryUrl(issuer: string) {
   const url = new URL(issuer)
   const issuerPath = url.pathname.replace(/\/$/, '')
   url.pathname = `/.well-known/openid-configuration${issuerPath === '' ? '' : issuerPath}`
+  url.search = ''
+  url.hash = ''
+  return url.toString()
+}
+
+function oauthAuthorizationServerDiscoveryUrl(issuer: string) {
+  const url = new URL(issuer)
+  const issuerPath = url.pathname.replace(/\/$/, '')
+  url.pathname = `/.well-known/oauth-authorization-server${issuerPath === '' ? '' : issuerPath}`
   url.search = ''
   url.hash = ''
   return url.toString()

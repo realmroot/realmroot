@@ -263,6 +263,7 @@ Feature: Agent identity and delegated API authorization
     Scenario: An administrator creates an external API resource with an OIDC connector
       Given a target resource publishes protected-resource and authorization-server metadata
       And a standard OIDC connector exists for its authorization server
+      And Realmroot can discover that connector through OIDC or RFC 8414 authorization-server metadata
       When an administrator creates the API resource and selects that connector
       Then Realmroot validates the resource issuer, token exchange, DPoP, and revocation against the connector
       And the resource URL advertises its OpenAPI contract with a standard service-desc link
