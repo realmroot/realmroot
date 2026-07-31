@@ -308,6 +308,8 @@ deployed by the workflow. See [Deployment upgrades](docs/deploy/upgrades.md),
   approval, account connection, token, and revocation journey.
 - [Agent identity architecture](docs/architecture/agent-identity.md): stable
   identity, Host bindings, authority, credential, AgentInfo, and audit boundaries.
+- [Authorization boundaries](docs/architecture/authorization-boundaries.md):
+  resource-owned scopes, role semantics, issuance policy, and final enforcement.
 - [Resource server integration](docs/integrations/resource-servers.md): publish
   and validate native or external protected APIs.
 - [Resource API](docs/api/resource-api.md): Realmroot's administrative API and

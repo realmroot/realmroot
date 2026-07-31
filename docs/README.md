@@ -12,6 +12,9 @@ system, not as a second copy of executable contracts or product behaviour.
   protocol surface, token shapes, and client model.
 - [Agent identity](architecture/agent-identity.md): durable Agent identities,
   controller authority, and delegated API access.
+- [Authorization boundaries](architecture/authorization-boundaries.md): scope
+  ownership, role semantics and assignments, token issuance, and final
+  resource-server enforcement.
 - [Tenancy](architecture/tenancy.md): the deployment, user-pool, and isolation
   boundary.
 - [Security controls](architecture/security-controls.md): deployment security

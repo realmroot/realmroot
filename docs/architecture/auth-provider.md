@@ -74,9 +74,13 @@ Resource-aware authorization adds:
 - top-level `groups` and `roles` for standard consumers.
 
 Roles are policy objects that reference scope strings published by a business
-resource's OpenAPI contract. A subject's assignments determine eligible
-scopes; the actual authorization or Agent grant determines the exact token
-scope.
+resource's OpenAPI contract. Assignments contribute matching role claims and,
+for Agents with resource roles, impose an additional ceiling on requestable
+scopes. Roles never add scopes to a token; the actual consent or Agent grant
+determines its exact scope set.
+
+See [Authorization boundaries](authorization-boundaries.md) for scope ownership,
+role assignment subjects, issuance policy, and resource-server enforcement.
 
 ## Native Agent Tokens
 
