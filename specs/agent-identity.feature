@@ -242,6 +242,18 @@ Feature: Agent identity and delegated API authorization
       Then the plugin removes that local resource credential
       And the Agent must discover the current connection state and request a new access grant before retrying
 
+    @entrypoint:restish @journey:restish-target-token-origin
+    Scenario: Target token refresh uses the stable Agent issuer
+      Given one Realmroot issuer is available through a canonical origin and an alternate profile origin
+      And the alternate profile was the last Realmroot connection used by the Agent
+      When Restish refreshes a native API resource token from an existing grant
+      Then the plugin requests the token from the canonical origin of the stable Agent issuer
+      And the DPoP proof is bound to that canonical target token endpoint
+      And the native API resource URL and active target profile do not change the proof target
+      When Restish refreshes an external API resource token from an existing grant
+      Then the plugin still requests the Realmroot token operation from the canonical issuer origin
+      And the external DPoP proof remains bound to the target platform's discovered token endpoint
+
   Rule: Workload token exchange preserves authorization boundaries
 
     @entrypoint:agent-protocol @journey:workload-token-exchange-claims
