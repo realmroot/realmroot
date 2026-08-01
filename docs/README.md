@@ -4,6 +4,12 @@ This directory explains Realmroot's stable technical model and operational
 boundaries. It is written for engineers and Agents that need to understand the
 system, not as a second copy of executable contracts or product behaviour.
 
+## Product
+
+- [Value proposition](product/value-proposition.md): the Agent tool plane,
+  identity and trust infrastructure, product thesis, and responsibility
+  boundaries, in English and Chinese.
+
 ## Architecture
 
 - [Clean architecture](architecture/clean-architecture.md): source layout,

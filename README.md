@@ -5,12 +5,17 @@
 <h1 align="center">Realmroot</h1>
 
 <p align="center">
-  Stable identity and delegated access for AI Agents.
+  <strong>Every API, Agent-ready.</strong>
 </p>
 
 <p align="center">
-  Give every Agent a durable identity. Let users approve exactly what it can
-  access. Keep user credentials out of Agent hands.
+  Realmroot turns existing OpenAPI services into secure, discoverable tools for
+  Agents—without requiring every resource server to build and maintain a
+  separate Agent integration.
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
 <p align="center">
@@ -21,162 +26,200 @@
   <a href="package.json"><img src="https://img.shields.io/badge/TypeScript-6.x-3178c6.svg" alt="TypeScript 6.x" /></a>
 </p>
 
-## The Agent Identity Problem
+## Make The Existing Internet Available To Agents
 
-An Agent is not a browser session, a machine, or a private key. Runtimes restart,
-Hosts are replaced, keys rotate, and the same Agent may operate from more than
-one Host. If identity is tied to any of those details, the Agent either loses
-continuity or silently carries authority somewhere it should not.
+The internet already has decades of useful APIs. The missing piece is not
+another copy of every API—it is a reliable way for an Agent to discover the
+right capability, obtain the exact authority it needs, and invoke the existing
+service.
 
-Giving the Agent a user's API key is not a solution either. It collapses the
-user and Agent into one principal, grants more authority than the task needs,
-cannot express who approved the action, and makes safe revocation difficult.
-External services add another boundary: they own their users, OAuth servers,
-tokens, and consent.
+Purpose-built MCP servers and custom CLIs are useful when a tool needs a
+specialized interaction model. Requiring one for every resource server,
+however, creates a second integration surface with an open-ended maintenance
+cost. API and tool definitions can drift, security fixes must be applied twice,
+and each Agent runtime needs another adapter.
 
-Realmroot solves these as one identity and delegated-access system:
+Realmroot follows a reusable path:
 
-- the Agent has its own stable identity;
-- a person or organization controls that identity;
-- authority is requested for an exact resource and scope set;
-- the controller approves the request without becoming the Agent;
-- credentials remain with Realmroot and the local protocol adapter;
-- the Agent calls the resource directly with a short-lived, proof-of-possession
-  token;
-- every decision and revocation retains the Agent, Host, controller, resource,
-  scopes, and outcome as audit context.
+1. A resource server maintains its API, OpenAPI document, and permission
+   enforcement.
+2. Realmroot registers the resource, makes it discoverable, and handles Agent
+   identity and delegated authorization.
+3. Restish turns the OpenAPI contract into generic CLI operations.
+4. The Realmroot Skill teaches an Agent how to discover, request, and invoke
+   those operations.
 
-## A Stable Identity For Every Agent
+The resource server does not need an Agent-specific API. The Agent's available
+toolbox grows as more resource servers are registered with Realmroot.
 
-An Agent enrolls once and receives an immutable `(issuer, subject)` identity
-from the realm's existing OIDC issuer. It belongs to exactly one personal or
-organization home space, whose users govern it.
+## Two Layers Of Value
 
-The stable Agent is deliberately separate from its execution credentials:
+### The Agent Tool Plane
 
-| Concept | Responsibility |
-| --- | --- |
-| Agent | Durable product identity presented to resource servers. |
-| Host registration | Authenticates one runtime installation and its local keys. |
-| Identity binding | Allows that Host to act as the stable Agent. |
-| Controller | Approves enrollment and authority from a normal user session. |
-| Home space | Defines whether the Agent and connected resources belong to a person or organization. |
+Realmroot helps Agents solve two fundamental problems: **tool discovery** and
+**tool invocation**.
 
-Restish API names, profiles, runtime sessions, and key rotation do not define a
-new Agent. A controller can bind replacement or additional independently
-secured Hosts to the same identity without sharing private keys. Revoking one
-Host leaves the stable identity and its other Hosts intact. Recovery preserves
-the subject while revoking current bindings and resource authority; retirement
-reserves the subject permanently for historical audit.
+- discover registered private APIs as capabilities instead of preinstalling a
+  bespoke integration for each service;
+- inspect the service's live OpenAPI contract instead of relying on a copied
+  tool definition;
+- request only the resource and scopes needed for the current task;
+- use Restish as a generic, composable CLI over the API;
+- call the resource server directly with a short-lived credential.
 
-Resource servers see the stable Agent in the RFC 8693 `act` claim, not the Host
-that happened to present it. They can resolve its public name and picture from
-the issuer's cacheable AgentInfo endpoint. AgentInfo is display metadata only
-and never participates in authorization.
+### The Identity And Trust Foundation
 
-## Give Agents Authority Without Giving Away User Credentials
+Realmroot is also a complete, deployable identity root for a product or realm:
+
+- one user pool, issuer, client registry, administrative boundary, and security
+  policy;
+- hosted sign-in, sign-up, recovery, consent, MFA, passkeys, and sessions;
+- OIDC/OAuth integration for public, native, and confidential applications;
+- an Account Center for users and an Admin Console for operators;
+- stable Agent identities, controller relationships, delegated grants,
+  revocation, and audit context.
+
+This layer has value even without Agents: it prevents every product from
+rebuilding authentication flows, identity tables, application clients, account
+management, and administrative controls. For Agent workloads, it provides the
+people, organizations, applications, and policy boundary required to answer
+who controls an Agent and what it may request.
+
+Tools without identity are unsafe. Identity without useful capabilities does
+not complete the Agent's task. Realmroot joins both layers while leaving final
+business authorization where it belongs: inside the resource server.
+
+Read the [complete value proposition](docs/product/value-proposition.md) for
+the product thesis, responsibility boundaries, and value to each participant.
+
+## From OpenAPI To An Agent Tool
+
+```text
+Resource Server
+  stable API + OpenAPI + local permission enforcement
+                         │
+                         ▼
+Realmroot
+  resource discovery + Agent identity + delegated authorization
+                         │
+                         ▼
+Restish + Realmroot Skill
+  generic CLI operations + Agent operating procedure
+                         │
+                         ▼
+Agent
+  discover broadly → authorize precisely → call directly
+```
+
+Realmroot is not an HTTP proxy and does not replace the resource server's
+authorization logic. The resource server defines its scopes in OpenAPI, maps
+them to operations, and makes the final allow-or-deny decision. Realmroot
+recognizes those scopes, obtains controller approval, groups scopes into roles
+where useful, and signs the resulting authority into a token or coordinates
+issuance with an external authorization server.
+
+This avoids a central permission catalog that can drift away from the API code.
+See [Authorization boundaries](docs/architecture/authorization-boundaries.md)
+for the detailed ownership model.
+
+## Discover Broadly. Authorize Precisely. Call Directly.
+
+An Agent can inspect the resource catalog without receiving business authority.
+When it selects an operation, Realmroot derives the requestable scopes from the
+resource's live OpenAPI document. A controller reviews the Agent, resource,
+account, purpose, exact scopes, and grant lifetime.
 
 Enrollment establishes identity, not authority. Realmroot keeps two approval
 boundaries independent:
 
-- **Realmroot management capabilities** allow an Agent to operate specific
-  resources in Realmroot's own Resource API.
-- **API Resource grants** allow an Agent to call one protected business API with
-  an exact OpenAPI scope set.
+- **Realmroot management capabilities** let an Agent operate specific resources
+  in Realmroot's own Resource API.
+- **API Resource grants** let an Agent call one protected business API with an
+  exact scope set.
 
-For a business operation, the Agent discovers registered API Resources,
-inspects the target's OpenAPI contract, and requests only the scopes declared by
-the selected operation. A controller reviews the Agent, resource, account,
-reason, exact scopes, and grant lifetime. The resulting grant is one-time,
-limited, or persistent. Changing the resource, account, or scope set requires a
-new decision.
+The controller's browser session decides the request but never becomes the
+Agent's CLI principal. Roles can group scopes and constrain eligibility; they do
+not create implicit access. One-time, limited, persistent, expired, and revoked
+grants retain explicit lifecycle semantics and audit context.
 
-The controller's browser session only decides the request. CLI operations
-continue as the stable Agent and never adopt or impersonate the approving user.
-Roles may restrict which resource scopes an Agent is eligible to request, but
-roles and enrollment never create implicit access.
+## Stable Agent Identity And Delegated Access
 
-## Access User Resources Safely
+An Agent enrolls once and receives an immutable `(issuer, subject)` identity.
+That identity is separate from its Hosts, runtime sessions, API profiles, and
+keys. A controller can bind a replacement Host or revoke one compromised Host
+without changing the Agent subject or affecting its other Hosts.
 
-Realmroot supports two authorization boundaries with the same Agent request,
-grant, revocation, and audit model:
+Resource servers see the stable Agent in the RFC 8693 `act` claim rather than
+the runtime installation that presented it. Public AgentInfo provides cacheable
+display metadata only; it never participates in authorization.
+
+Realmroot supports two resource boundaries with the same request, approval,
+revocation, and audit model:
 
 | | Native API Resource | External API Resource |
 | --- | --- | --- |
-| Token issuer | Realmroot | The target platform |
-| User resource | Realmroot user or organization home space | One connected target account in that home space |
+| Token issuer | Realmroot | Target platform |
+| User resource | Realmroot user or organization home space | Connected target account |
 | User refresh credential exposed to Agent | Never | Never |
-| Adapter-held final token | Realmroot-signed, five-minute `at+jwt` | Short-lived target-issued DPoP token |
+| Final credential | Five-minute Realmroot `at+jwt` | Short-lived target DPoP token |
 | Subject | Personal owner or organization home space | Connected target user |
 | Actor | Stable Agent | Stable Agent |
 
-### Native Resources
+For native resources, the API trusts Realmroot's issuer and JWKS. For external
+resources, the target retains its users, OAuth server, tokens, and consent.
+Realmroot protects the connected user's refresh credential and uses standard
+PKCE, JWT bearer, token exchange, and DPoP flows to obtain narrowly delegated
+access.
 
-A product API trusts the Realmroot issuer and JWKS. Once a controller approves
-the Agent's exact scopes, Realmroot issues an audience-bound token containing
-the home-space subject, stable Agent actor, approved scopes, effective roles,
-organization group when applicable, and DPoP key thumbprint.
+For each resource grant, the Restish adapter creates a separate P-256 DPoP key,
+stores the short-lived token in protected local state, and removes the raw token
+from command output. The Agent then calls the resource URL directly. The
+resource server validates issuer, audience, scope, expiry, key binding, request
+proof, and replay protection.
 
-### External Resources
+The [Agent access guide](docs/guides/agent-access.md) and
+[Agent identity architecture](docs/architecture/agent-identity.md) describe the
+complete lifecycle and trust model.
 
-The target platform keeps its own users and authorization server. A controller
-connects one target account to the Agent's personal or organization home space
-with authorization code and S256 PKCE. Realmroot encrypts the refresh credential
-and never exposes it to the Agent, APIs, audit events, or errors.
+## What A Resource Server Needs To Do
 
-When access is approved, Realmroot refreshes the connected user's subject token,
-obtains a stable-Agent actor token with the RFC 7523 JWT bearer grant, and uses
-RFC 8693 token exchange to obtain the final target-issued token. The target
-intersects user authority with the Agent's approved scopes. If the connected
-account lacks a required scope, the controller must expand the account
-authorization before separately approving the Agent request.
+To make an API available to Agents, a resource server owns only its normal API
+contract and authorization boundary:
 
-## Direct, DPoP-Bound Access
+1. Maintain a stable protected resource URL.
+2. Advertise an OpenAPI 3.x document from that URL with an RFC 8631
+   `service-desc` link.
+3. Declare operation scopes with standard OpenAPI security requirements.
+4. Validate the issued token and enforce permissions locally.
+5. Register the resource in Realmroot as `native` or `external`.
 
-Realmroot is not an HTTP proxy and has no credential-injection egress endpoint.
-For the current grant on each API Resource, the Restish adapter creates a
-separate P-256 DPoP key, keeps the short-lived token in protected local state,
-and removes the raw token from command output.
+Choose `native` when the API trusts Realmroot as its authorization server.
+Choose `external` when the target owns its users and OAuth server. There is no
+Agent-specific endpoint or per-runtime adapter to maintain.
 
-The Agent calls the resource URL directly:
+The protocol and validation checklist is in
+[Resource server integration](docs/integrations/resource-servers.md). Runnable
+[native](examples/native-resource-server/README.md) and
+[external](examples/external-resource-server/README.md) examples implement both
+modes end to end.
 
-```text
-Agent -> Realmroot: approved grant + token-endpoint DPoP proof
-Realmroot -> target authorization server: subject/actor exchange (external only)
-Realmroot -> Agent adapter: short-lived DPoP token
-Agent adapter -> Resource API: Authorization: DPoP ... + fresh request proof
-Resource API: validate issuer, audience, scope, expiry, key binding, ath, and replay
+To design or review a resource-oriented OpenAPI contract, install the companion
+Skill:
+
+```bash
+npx skills add realmroot/realmroot -g --skill design-resource-api
 ```
 
-A newly approved grant for the same resource replaces the obsolete local grant
-binding and DPoP key. Persistent and limited grants can refresh short-lived
-tokens while active. One-time, expired, revoked, or otherwise inactive grants
-cannot silently regain access.
+Then invoke it with the API requirements or existing contract:
 
-## Security Properties
-
-- **Identity is not a credential.** Agent identity survives legitimate Host and
-  key changes; credentials remain independently revocable.
-- **Approval does not impersonate.** The controller authorizes the Agent but
-  never becomes its CLI principal.
-- **OpenAPI scopes are authoritative.** Realmroot does not maintain a second,
-  drifting business-scope catalog.
-- **Discovery fails safely.** One unavailable API does not hide healthy
-  resources, but it exposes no requestable scopes and cannot issue a token.
-- **User refresh credentials never reach the Agent.** They are encrypted with
-  purpose-specific envelopes inside Realmroot.
-- **Tokens are audience-restricted, short-lived, and DPoP-bound.** Resource
-  servers validate both the token and a fresh proof for every request.
-- **Business traffic is direct.** Realmroot authorizes access but never proxies
-  the protected API call.
-- **Revocation is scoped.** A Host, grant, account connection, credential, or
-  Agent can be revoked without disturbing unrelated Agents and resources.
-- **Audit excludes secrets.** Decisions retain useful identity and authority
-  context without tokens, authorization headers, or full payloads.
+```text
+Use $design-resource-api to model this API as resources, produce its OpenAPI
+contract, and justify any exceptional generated commands.
+```
 
 ## Quick Start For Agents
 
-Install the Realmroot skill globally for the Agent runtime that should use it:
+Install the Realmroot Skill globally for the Agent runtime that should use it:
 
 ```bash
 npx skills add realmroot/realmroot -g --skill realmroot
@@ -197,69 +240,33 @@ npx skills list -g
 Then give the Agent a goal:
 
 ```text
-Use Realmroot to add identity and delegated Agent access to this project.
+Use Realmroot to discover and call the private API capability needed for this task.
 ```
 
-On the first protected operation, the skill connects Realmroot's OpenAPI
-contract and the Restish adapter opens a hosted enrollment page. The controller
-approves once; the original operation resumes as the Agent. For a private API
-task, the Agent discovers the resource, inspects its contract, requests the
-least-privilege scopes, waits for approval, obtains a protected credential, and
-invokes the target operation. Discovery, approval, and token issuance are
-intermediate steps—the requested resource operation is the result.
+On the first protected operation, the Restish adapter opens a hosted enrollment
+or approval page. Once the controller approves, the original operation resumes
+as the Agent. Discovery, authorization, and token issuance are intermediate
+steps; completing the requested resource operation is the result.
 
 The exact setup and operating procedure lives in
-[`skills/realmroot`](skills/realmroot/SKILL.md).
-The skill and Restish adapter update independently; follow
+[`skills/realmroot`](skills/realmroot/SKILL.md). The Skill and Restish adapter
+update independently; follow
 [Deployment upgrades](docs/deploy/upgrades.md#agent-client-compatibility) when
-the Agent protocol or resource-authorization model changes.
+the protocol or resource-authorization model changes.
 
-## Make An API Available To Agents
+## Identity Infrastructure For Products
 
-An API Resource has one protected resource URL. An unauthenticated request to
-that exact URL advertises an OpenAPI 3.x document through an RFC 8631
-`service-desc` link. Protected operations declare their OAuth or OIDC scopes in
-standard OpenAPI security requirements.
+Realmroot can be deployed as the identity root for applications even before
+they add Agent capabilities:
 
-Choose `native` when the API trusts Realmroot as its authorization server.
-Choose `external` when the target owns its users and OAuth server. External
-integration uses standard protected-resource and authorization-server metadata,
-PKCE, refresh tokens, JWT bearer assertions, token exchange, DPoP, UserInfo,
-dynamic or configured OAuth clients, and revocation.
-
-The complete protocol and validation checklist is in
-[Resource server integration](docs/integrations/resource-servers.md). Runnable
-[native](examples/native-resource-server/README.md) and
-[external](examples/external-resource-server/README.md) examples implement both
-modes end to end.
-
-To design or review a resource-oriented OpenAPI contract, install the companion
-skill:
-
-```bash
-npx skills add realmroot/realmroot -g --skill design-resource-api
-```
-
-Then invoke it with the API requirements or existing OpenAPI contract:
-
-```text
-Use $design-resource-api to model this API as resources, produce its OpenAPI
-contract, and justify any exceptional generated commands.
-```
-
-## Human Identity And Application OIDC
-
-The same deployment is a complete identity root for the people who control
-Agents and the applications they use:
-
-- hosted sign-in, sign-up, recovery, consent, MFA, passkeys, and sessions;
-- one user pool and Better Auth OIDC issuer;
+- hosted authentication, consent, recovery, MFA, passkeys, and sessions;
+- one Better Auth OIDC issuer and user pool;
 - public, native, and confidential application clients;
-- Account Center for profile, credentials, linked accounts, authorized apps,
-  and personal Agents;
+- Account Center for profile, credentials, sessions, linked accounts,
+  authorized apps, and personal Agents;
 - Admin Console for applications, users, organizations, roles, connectors,
-  API Resources, security policy, branding, webhooks, Agents, and audit;
-- a unified, OpenAPI-described Resource API for administration and automation.
+  API Resources, security, branding, webhooks, Agents, and audit;
+- one OpenAPI-described Resource API for administration and automation.
 
 Applications discover the issuer at:
 
@@ -304,17 +311,17 @@ deployed by the workflow. See [Deployment upgrades](docs/deploy/upgrades.md),
 
 ## Documentation
 
+- [Value proposition](docs/product/value-proposition.md): why Realmroot combines
+  an Agent tool plane with identity and trust infrastructure.
 - [Agent access guide](docs/guides/agent-access.md): the product-level identity,
   approval, account connection, token, and revocation journey.
 - [Agent identity architecture](docs/architecture/agent-identity.md): stable
-  identity, Host bindings, authority, credential, AgentInfo, and audit boundaries.
+  identity, Host bindings, authority, credentials, AgentInfo, and audit.
 - [Authorization boundaries](docs/architecture/authorization-boundaries.md):
-  resource-owned scopes, role semantics, issuance policy, and final enforcement.
+  resource-owned scopes, role semantics, issuance policy, and enforcement.
 - [Resource server integration](docs/integrations/resource-servers.md): publish
   and validate native or external protected APIs.
 - [Resource API](docs/api/resource-api.md): Realmroot's administrative API and
   Agent capability model.
-- [Auth provider architecture](docs/architecture/auth-provider.md): issuer,
-  clients, claims, and workload token exchange.
 - [Technical documentation index](docs/README.md): all architecture,
   integration, and deployment documents.
