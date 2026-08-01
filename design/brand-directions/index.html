@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Realmroot 差异化品牌与产品界面方向提案：Grid Blue、Vermilion Signal、Clear Aqua、Solar Authority、Iris Frame、Matcha Root。"
+    />
+    <title>Realmroot · 品牌与 UI 方向</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body data-concept="grid-blue" data-screen="console">
+    <a class="skip-link" href="#prototype">跳到设计稿</a>
+
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+      <symbol id="i-app" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 20V9"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v5c0 5.2-3.4 8.7-8 10-4.6-1.3-8-4.8-8-10V6l8-3Z"/><path d="m9 12 2 2 4-4"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 20v-1.8c0-2.3-2-4.2-4.5-4.2h-3C6 14 4 15.9 4 18.2V20M10 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM17 11a2.5 2.5 0 1 0 0-5M18 14.5c1.3.6 2 1.8 2 3.3V20"/></symbol>
+      <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="13" rx="3"/><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M16 7l2 2M14 9l2 2"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7-.8-1.8.9-1.9L15 4l-1.9.9-1.8-.8-.8-2h-3l-.7 2-1.8.8L3.1 4 1 6.1 1.9 8l-.8 1.8-2 .7v3l2 .7.8 1.8-.9 1.9L3.1 20l1.9-.9 1.8.8.7 2h3l.8-2 1.8-.8 1.9.9 2.1-2.1-.9-1.9.8-1.8 2-.7Z" transform="translate(2 -1) scale(.83)"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+      <symbol id="i-device" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 18h6"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    </svg>
+
+    <header class="proposal-header">
+      <div class="proposal-brand">
+        <span class="proposal-monogram">R</span>
+        <span>Realmroot</span>
+        <span class="proposal-label">品牌方向提案 · 01</span>
+      </div>
+      <p>Identity infrastructure for people, applications, and agents.</p>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="intro-title">
+        <p class="kicker">Realmroot brand system study</p>
+        <h1 id="intro-title">One realm. Every actor.<br />Explicit authority.</h1>
+        <p class="intro-copy">
+          为用户、应用、API 与 Agent 运行一个共同的身份与委托授权根。六套方案共享同一布局，只比较品牌色与 Design System。
+        </p>
+      </section>
+
+      <section class="concept-picker" aria-labelledby="concept-title">
+        <div class="section-heading">
+          <p class="kicker">六个方向 · 同一信息布局</p>
+          <h2 id="concept-title">选择品牌气质</h2>
+        </div>
+
+        <div class="concept-grid">
+          <button class="concept-card is-selected" data-select-concept="grid-blue" type="button" aria-pressed="true">
+            <span class="concept-index">A / 线框</span>
+            <span class="concept-name">Grid Blue</span>
+            <span class="concept-cn">网格蓝</span>
+            <span class="swatches" aria-label="墨蓝、系统蓝、浅蓝、纯白色">
+              <i style="--swatch:#071221"></i><i style="--swatch:#075fe4"></i><i style="--swatch:#b9d1f0"></i><i style="--swatch:#ffffff"></i>
+            </span>
+            <span class="concept-summary">白色侧栏、方角、细线和零阴影。理性、精确，最接近基础设施工具。</span>
+          </button>
+
+          <button class="concept-card" data-select-concept="vermilion-signal" type="button" aria-pressed="false">
+            <span class="concept-index">B / 信号</span>
+            <span class="concept-name">Vermilion Signal</span>
+            <span class="concept-cn">朱红信号</span>
+            <span class="swatches" aria-label="炭黑、朱红、纯白色">
+              <i style="--swatch:#1d1c1a"></i><i style="--swatch:#d33a18"></i><i style="--swatch:#ffffff"></i>
+            </span>
+            <span class="concept-summary">白色画布与冷静中性色，朱红只作为明确指令。直接、有行动感，不做暖色铺底。</span>
+          </button>
+
+          <button class="concept-card" data-select-concept="clear-aqua" type="button" aria-pressed="false">
+            <span class="concept-index">C / 清澈</span>
+            <span class="concept-name">Clear Aqua</span>
+            <span class="concept-cn">清透水色</span>
+            <span class="swatches" aria-label="炭黑、水色、纯白色">
+              <i style="--swatch:#142022"></i><i style="--swatch:#007b83"></i><i style="--swatch:#ffffff"></i>
+            </span>
+            <span class="concept-summary">白色主体、清透水色交互与轻量边界。冷静、开放，比传统安全蓝更有辨识度。</span>
+          </button>
+
+          <button class="concept-card" data-select-concept="solar-authority" type="button" aria-pressed="false">
+            <span class="concept-index">D / 权限</span>
+            <span class="concept-name">Solar Authority</span>
+            <span class="concept-cn">太阳权限</span>
+            <span class="swatches" aria-label="炭黑、太阳黄、纯白色">
+              <i style="--swatch:#171914"></i><i style="--swatch:#ffd43b"></i><i style="--swatch:#ffffff"></i>
+            </span>
+            <span class="concept-summary">白色内容区、太阳黄操作面与深色文字。鲜明、乐观，用高对比表达显式权限。</span>
+          </button>
+
+          <button class="concept-card" data-select-concept="iris-frame" type="button" aria-pressed="false">
+            <span class="concept-index">E / 边界</span>
+            <span class="concept-name">Iris Frame</span>
+            <span class="concept-cn">鸢尾边界</span>
+            <span class="swatches" aria-label="深紫、鸢尾紫、浅紫、纯白色">
+              <i style="--swatch:#25105b"></i><i style="--swatch:#643ae8"></i><i style="--swatch:#cfc0ff"></i><i style="--swatch:#ffffff"></i>
+            </span>
+            <span class="concept-summary">白色主体、紫色边界线和框选状态。用“域的边界”形成识别，而不是铺满颜色。</span>
+          </button>
+
+          <button class="concept-card" data-select-concept="matcha-root" type="button" aria-pressed="false">
+            <span class="concept-index">F / 茶室</span>
+            <span class="concept-name">Matcha Root</span>
+            <span class="concept-cn">抹茶信任根</span>
+            <span class="swatches" aria-label="炭黑、抹茶绿、近白色">
+              <i style="--swatch:#172018"></i><i style="--swatch:#587a35"></i><i style="--swatch:#f8faf8"></i>
+            </span>
+            <span class="concept-summary">白色内容画布与中性色组件，抹茶只用于操作和选中态。清新、安静，不把整个界面染绿。</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="design-stage" id="prototype" aria-labelledby="prototype-title">
+        <div class="stage-toolbar">
+          <div>
+            <p class="kicker">交互设计稿</p>
+            <h2 id="prototype-title">完整产品语言</h2>
+          </div>
+          <div class="screen-switcher" role="group" aria-label="选择预览界面">
+            <button class="is-active" data-select-screen="console" type="button">管理控制台</button>
+            <button data-select-screen="auth" type="button">Hosted Auth</button>
+            <button data-select-screen="account" type="button">账户中心</button>
+          </div>
+        </div>
+
+        <div class="prototype-frame">
+          <section class="mock-screen console-screen is-visible" data-screen-panel="console" aria-label="管理控制台设计稿">
+            <header class="product-topbar">
+              <div class="product-brand"><span class="brand-mark"><i></i><i></i><i></i></span><strong>realmroot</strong><em>Console</em></div>
+              <div class="topbar-actions"><button type="button">Acme workspace</button><span class="avatar">SL</span></div>
+            </header>
+            <div class="console-layout">
+              <aside class="product-sidebar">
+                <nav aria-label="控制台导航">
+                  <p>Overview</p>
+                  <a class="is-current" href="#prototype"><svg><use href="#i-grid"/></svg>Dashboard</a>
+                  <p>Identity</p>
+                  <a href="#prototype"><svg><use href="#i-app"/></svg>Applications <span>6</span></a>
+                  <a href="#prototype"><svg><use href="#i-users"/></svg>Users <span>1.2k</span></a>
+                  <a href="#prototype"><svg><use href="#i-bot"/></svg>Agents <b>3</b></a>
+                  <p>Access</p>
+                  <a href="#prototype"><svg><use href="#i-key"/></svg>API resources</a>
+                  <a href="#prototype"><svg><use href="#i-link"/></svg>Connectors</a>
+                  <a href="#prototype"><svg><use href="#i-shield"/></svg>Security</a>
+                </nav>
+                <a class="sidebar-settings" href="#prototype"><svg><use href="#i-settings"/></svg>Workspace settings</a>
+              </aside>
+              <div class="console-main">
+                <div class="page-title-row">
+                  <div><p class="eyebrow">Overview / Live</p><h3>Identity posture</h3><p>Monitor the people, applications and agents connected to your realm.</p></div>
+                  <button class="secondary-button" type="button"><svg><use href="#i-search"/></svg> Search</button>
+                </div>
+                <div class="metric-grid">
+                  <article><span>Total identities</span><strong>1,284</strong><small><b>+8.2%</b> over 30 days</small></article>
+                  <article><span>Active applications</span><strong>6</strong><small>All systems operational</small></article>
+                  <article><span>Delegated agents</span><strong>12</strong><small><b>3 requests</b> need review</small></article>
+                </div>
+                <div class="dashboard-grid">
+                  <article class="activity-panel">
+                    <div class="panel-heading"><div><span>Identity activity</span><strong>8,420</strong></div><button type="button">30 days</button></div>
+                    <div class="chart" role="img" aria-label="过去 30 天身份活动平稳上升，近期达到 8,420 次">
+                      <span></span><span></span><span></span><span></span>
+                      <svg viewBox="0 0 640 180" preserveAspectRatio="none" aria-hidden="true"><path class="chart-area" d="M0 155 C55 145 70 120 118 126 S190 106 236 116 S305 74 356 91 S428 56 472 67 S548 28 640 42 L640 180 L0 180 Z"/><path class="chart-line" d="M0 155 C55 145 70 120 118 126 S190 106 236 116 S305 74 356 91 S428 56 472 67 S548 28 640 42"/></svg>
+                    </div>
+                  </article>
+                  <article class="review-panel">
+                    <div class="panel-heading"><div><span>Needs attention</span><small>3 open items</small></div><a href="#prototype">View all <svg><use href="#i-arrow"/></svg></a></div>
+                    <ul>
+                      <li><i><svg><use href="#i-bot"/></svg></i><div><strong>Agent access request</strong><span>Sales Copilot · 6 min ago</span></div><button aria-label="更多选项" type="button"><svg><use href="#i-more"/></svg></button></li>
+                      <li><i><svg><use href="#i-key"/></svg></i><div><strong>Credential expires soon</strong><span>Billing API · 2 days</span></div><button aria-label="更多选项" type="button"><svg><use href="#i-more"/></svg></button></li>
+                      <li><i><svg><use href="#i-shield"/></svg></i><div><strong>MFA policy draft</strong><span>Not yet enforced</span></div><button aria-label="更多选项" type="button"><svg><use href="#i-more"/></svg></button></li>
+                    </ul>
+                  </article>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="mock-screen auth-screen" data-screen-panel="auth" aria-label="Hosted Auth 设计稿">
+            <div class="auth-context">
+              <div class="context-brand"><span class="context-app-mark">N</span><div><strong>Northstar</strong><span>requests access through Realmroot</span></div></div>
+              <div class="context-message"><p class="eyebrow">Secure access</p><h3>Your identity stays at the root.</h3><p>Sign in once to securely access the applications and agents your organization trusts.</p></div>
+              <ul><li><svg><use href="#i-check"/></svg>Passkeys and MFA ready</li><li><svg><use href="#i-check"/></svg>Tenant policies enforced</li></ul>
+              <small>Protected by Realmroot · Privacy · Terms</small>
+            </div>
+            <div class="auth-form-wrap">
+              <form class="auth-card">
+                <div class="mobile-brand product-brand"><span class="brand-mark"><i></i><i></i><i></i></span><strong>realmroot</strong></div>
+                <p class="eyebrow">Welcome back</p>
+                <h3>Sign in to continue</h3>
+                <p>Use your work identity to continue to Northstar.</p>
+                <label for="email">Email address</label>
+                <input id="email" type="email" value="sarah@acme.dev" autocomplete="email" />
+                <div class="label-row"><label for="password">Password</label><a href="#prototype">Forgot password?</a></div>
+                <input id="password" type="password" value="realmroot" autocomplete="current-password" />
+                <button class="primary-button" type="button">Continue <svg><use href="#i-arrow"/></svg></button>
+                <div class="or"><span>or continue with</span></div>
+                <button class="passkey-button" type="button"><svg><use href="#i-key"/></svg>Use a passkey</button>
+                <small class="signup-copy">New to Acme? <a href="#prototype">Create an account</a></small>
+              </form>
+            </div>
+          </section>
+
+          <section class="mock-screen account-screen" data-screen-panel="account" aria-label="账户中心设计稿">
+            <header class="product-topbar">
+              <div class="product-brand"><span class="brand-mark"><i></i><i></i><i></i></span><strong>realmroot</strong><em>Account</em></div>
+              <span class="avatar">SL</span>
+            </header>
+            <div class="account-layout">
+              <aside class="account-sidebar">
+                <div class="account-person"><span class="avatar avatar-large">SL</span><div><strong>Sarah Lin</strong><span>sarah@acme.dev</span></div></div>
+                <nav aria-label="账户导航">
+                  <a class="is-current" href="#prototype"><svg><use href="#i-user"/></svg>Profile</a>
+                  <a href="#prototype"><svg><use href="#i-shield"/></svg>Security</a>
+                  <a href="#prototype"><svg><use href="#i-link"/></svg>Connections</a>
+                </nav>
+              </aside>
+              <div class="account-main">
+                <div class="page-title-row"><div><p class="eyebrow">Personal account</p><h3>Your profile</h3><p>Information shared with applications you trust.</p></div></div>
+                <section class="profile-section">
+                  <div class="section-title"><div><h4>Identity</h4><p>Your visible account details.</p></div><button class="secondary-button" type="button">Edit profile</button></div>
+                  <dl><div><dt>Profile photo</dt><dd><span class="avatar avatar-large">SL</span><span>Sarah Lin<small>Personal avatar</small></span></dd></div><div><dt>Display name</dt><dd>Sarah Lin</dd></div><div><dt>Email address</dt><dd>sarah@acme.dev <span class="verified"><svg><use href="#i-check"/></svg>Verified</span></dd></div></dl>
+                </section>
+                <section class="profile-section security-summary">
+                  <div class="section-title"><div><h4>Security posture</h4><p>Two safeguards are active.</p></div><a href="#prototype">Manage security <svg><use href="#i-arrow"/></svg></a></div>
+                  <div class="security-grid"><article><i><svg><use href="#i-key"/></svg></i><div><strong>2 passkeys</strong><span>Last used today</span></div></article><article><i><svg><use href="#i-device"/></svg></i><div><strong>3 active sessions</strong><span>No unusual activity</span></div></article></div>
+                </section>
+              </div>
+            </div>
+          </section>
+        </div>
+        <p class="prototype-note">设计稿使用同一套真实产品结构横向比较：Console 信息密度、Hosted Auth 信任感、Account Center 个人体验。</p>
+      </section>
+
+      <section class="decision-guide" aria-labelledby="decision-title">
+        <div class="section-heading"><p class="kicker">如何选择</p><h2 id="decision-title">不是选颜色，是选第一印象</h2></div>
+        <div class="decision-table" role="table" aria-label="六个品牌方向对比">
+          <div class="decision-row decision-head" role="row"><span role="columnheader">方向</span><span role="columnheader">用户第一感受</span><span role="columnheader">最适合</span><span role="columnheader">风险</span></div>
+          <div class="decision-row" role="row"><strong role="cell">A · Grid Blue</strong><span role="cell">理性、精确、工具化</span><span role="cell">Console / API / 文档</span><span role="cell">品牌情绪最克制</span></div>
+          <div class="decision-row" role="row"><strong role="cell">B · Vermilion Signal</strong><span role="cell">果断、清晰、有行动感</span><span role="cell">Console / 管理操作</span><span role="cell">需与危险状态严格区分</span></div>
+          <div class="decision-row" role="row"><strong role="cell">C · Clear Aqua</strong><span role="cell">清透、冷静、开放</span><span role="cell">跨 Console 与 Hosted Auth</span><span role="cell">需避免普通企业青色</span></div>
+          <div class="decision-row" role="row"><strong role="cell">D · Solar Authority</strong><span role="cell">鲜明、乐观、权限可见</span><span role="cell">Agent / Delegation / Console</span><span role="cell">黄色必须搭配深色文字</span></div>
+          <div class="decision-row" role="row"><strong role="cell">E · Iris Frame</strong><span role="cell">独立、边界明确、现代</span><span role="cell">统一主品牌与产品框架</span><span role="cell">必须避免 AI 紫色渐变</span></div>
+          <div class="decision-row" role="row"><strong role="cell">F · Matcha Root</strong><span role="cell">清爽、沉静、有秩序</span><span role="cell">跨 Console、Auth 与 Account</span><span role="cell">品牌色必须保持低占比</span></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="proposal-footer"><span>Realmroot brand direction study</span><span>2026 · Design for trust</span></footer>
+  </body>
+</html>
