@@ -238,6 +238,7 @@ async function loadAuthorizationRoutes() {
     resourceUrl: 'https://api.example.com',
     description: null,
     connectorId: null,
+    authorizationDetails: [],
     enabled: true,
     ownerOrganizationId: 'org-1',
     accessEligibility: { mode: 'realm' as const, organizationIds: [] },

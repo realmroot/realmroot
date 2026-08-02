@@ -374,6 +374,14 @@ describe('console API resources and roles', () => {
       target: { value: 'https://projects.example.com/api' },
     })
     fireEvent.change(screen.getByLabelText('Authorization model'), { target: { value: 'connector-1' } })
+    fireEvent.change(screen.getByLabelText('Authorization detail templates'), { target: { value: '{' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText(/JSON/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Authorization detail templates'), {
+      target: {
+        value: JSON.stringify([{ type: 'project_access', actions: ['read'], project_id: 'project-1' }]),
+      },
+    })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Projects' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -387,6 +395,7 @@ describe('console API resources and roles', () => {
             identifier: 'projects',
             resourceUrl: 'https://projects.example.com/api',
             connectorId: 'connector-1',
+            authorizationDetails: [{ type: 'project_access', actions: ['read'], project_id: 'project-1' }],
             description: 'Projects',
             ownerOrganizationId: 'org-1',
             accessEligibility: { mode: 'realm', organizationIds: [] },
@@ -476,6 +485,7 @@ describe('console API resources and roles', () => {
           name: 'Selected API',
           identifier: 'selected-api',
           resourceUrl: 'https://selected.example.com/api',
+          authorizationDetails: [],
           ownerOrganizationId: betaOrganization.id,
           accessEligibility: { mode: 'organizations', organizationIds: [betaOrganization.id] },
           availableToAgents: false,
@@ -724,12 +734,15 @@ describe('console API resources and roles', () => {
     selected = {
       ...apiResource,
       connectorId: 'connector-1',
+      authorizationDetails: [{ type: 'project_access', actions: ['read'], project_id: 'project-1' }],
       authorization: {
         connectorId: 'connector-1',
         resourceUrl: 'https://projects.example.com/api',
         issuer: 'https://projects.example.com',
         authorizationEndpoint: 'https://projects.example.com/authorize',
         tokenEndpoint: 'https://projects.example.com/token',
+        pushedAuthorizationRequestEndpoint: null,
+        authorizationDetailsTypesSupported: [],
         registrationEndpoint: null,
         revocationEndpoint: 'https://projects.example.com/revoke',
         jwksUri: 'https://projects.example.com/jwks',
@@ -747,12 +760,23 @@ describe('console API resources and roles', () => {
     const provider = screen.getByRole('heading', { name: 'Authorization provider' }).closest('section') as HTMLElement
     fireEvent.click(within(provider).getByRole('button', { name: 'Edit' }))
     fireEvent.change(await screen.findByLabelText('OIDC connector'), { target: { value: 'connector-2' } })
+    fireEvent.change(screen.getByLabelText('Authorization detail templates'), { target: { value: '{}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Authorization detail templates'), {
+      target: {
+        value: JSON.stringify([{ type: 'project_access', actions: ['read'], project_id: 'project-1' }]),
+      },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/api-resources/resource-1',
         method: 'PATCH',
-        body: { connectorId: 'connector-2' },
+        body: {
+          connectorId: 'connector-2',
+          authorizationDetails: [{ type: 'project_access', actions: ['read'], project_id: 'project-1' }],
+        },
       }),
     )
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Authorization' }), { button: 0, ctrlKey: false })

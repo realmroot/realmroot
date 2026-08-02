@@ -149,7 +149,14 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
   await validateResourceEligibility(deps, accessEligibility)
   validateResourceUrl(input.resourceUrl)
   if (input.connectorId) {
-    await validateExternalResourceConnector(deps, input.resourceUrl, input.connectorId)
+    await validateExternalResourceConnector(
+      deps,
+      input.resourceUrl,
+      input.connectorId,
+      input.authorizationDetails ?? [],
+    )
+  } else if ((input.authorizationDetails?.length ?? 0) > 0) {
+    throw badRequest('Authorization details require an external API resource connector.')
   } else if (enabled) {
     await validateResourceContract(deps, input.resourceUrl)
   }
@@ -159,6 +166,7 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     name: input.name,
     resourceUrl: input.resourceUrl,
     connectorId: input.connectorId ?? null,
+    authorizationDetails: input.authorizationDetails ?? [],
     description: input.description ?? null,
     enabled,
     ownerOrganizationId,
@@ -199,10 +207,14 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
   }
   const connectorId = input.connectorId ?? resource.connectorId
   const resourceUrl = input.resourceUrl ?? resource.resourceUrl
+  const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
   const enabled = input.enabled ?? resource.enabled
-  const boundaryChanged = input.connectorId !== undefined || input.resourceUrl !== undefined
+  const boundaryChanged =
+    input.connectorId !== undefined || input.resourceUrl !== undefined || input.authorizationDetails !== undefined
   if (connectorId && (boundaryChanged || input.enabled === true)) {
-    await validateExternalResourceConnector(deps, resourceUrl, connectorId)
+    await validateExternalResourceConnector(deps, resourceUrl, connectorId, authorizationDetails)
+  } else if (!connectorId && authorizationDetails.length > 0) {
+    throw badRequest('Authorization details require an external API resource connector.')
   } else if (!connectorId && enabled && (input.enabled === true || input.resourceUrl !== undefined)) {
     await validateResourceContract(deps, resourceUrl)
   }

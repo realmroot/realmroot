@@ -80,6 +80,7 @@ export function ResourceAccessApproval() {
           : {
               decision: 'approve',
               mode,
+              authorizationDetails: request!.authorizationDetails,
               ...(connection ? { accountConnectionId: connection.id } : {}),
               ...(mode === 'until' ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
             }
@@ -111,7 +112,10 @@ export function ResourceAccessApproval() {
   }
 
   const connectionCoversRequest =
-    request !== null && connection !== null && request.scopes.every((scope) => connection.scopes.includes(scope))
+    request !== null &&
+    connection !== null &&
+    request.scopes.every((scope) => connection.scopes.includes(scope)) &&
+    authorizationDetailsAreCovered(request.authorizationDetails, connection.authorizationDetails)
   const expiryIsValid = mode !== 'until' || isFutureExpiry(expiresAt)
 
   if (decision) {
@@ -181,6 +185,14 @@ export function ResourceAccessApproval() {
                 </li>
               ))}
             </ul>
+          </section>
+        ) : null}
+        {request?.target.type === 'api-resource' && request.authorizationDetails.length > 0 ? (
+          <section className="decisionPermissions" aria-label="Requested authorization details">
+            <h2>Requested context</h2>
+            <pre className="whitespace-pre-wrap break-all text-xs">
+              <code>{request.authorizationDetails.map((detail) => JSON.stringify(detail)).join('\n')}</code>
+            </pre>
           </section>
         ) : null}
         {request?.target.type === 'api-resource' && resourceName && requiresAccountConnection && connection ? (
@@ -297,6 +309,31 @@ function isFutureExpiry(value: string) {
 
 function clearStoredApproval() {
   window.sessionStorage.removeItem(approvalTokenStorageKey)
+}
+
+function authorizationDetailsAreCovered(
+  requested: AccessRequestApproval['authorizationDetails'],
+  connected: AccountConnection['authorizationDetails'],
+) {
+  const available = connected.map(canonicalJson)
+  return requested.every((detail) => {
+    const index = available.indexOf(canonicalJson(detail))
+    if (index === -1) return false
+    available.splice(index, 1)
+    return true
+  })
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    const object = value as Record<string, unknown>
+    return `{${Object.keys(object)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(object[key])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value)
 }
 
 function RequestField({ label, value, name, id }: { label: string; value?: string; name?: string; id?: string }) {

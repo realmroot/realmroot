@@ -5,6 +5,7 @@ import {
   createApiResourceRequestSchema,
   updateApiResourceRequestSchema,
 } from './authorization'
+import { authorizationDetailsSchema } from './authorization-details'
 import {
   agentAccessGrantModeSchema,
   agentAccessRequestStatusSchema,
@@ -99,6 +100,7 @@ export const managementAgentAccessRequestSchema = z.object({
   agentId: z.string(),
   resource: managementAgentResourceSchema,
   scopes: z.array(z.string()),
+  authorizationDetails: authorizationDetailsSchema,
   reason: z.string().nullable(),
   status: agentAccessRequestStatusSchema,
   expiresAt: z.iso.datetime(),
@@ -121,6 +123,7 @@ export const managementAgentAccessGrantSchema = z.object({
   agentId: z.string(),
   resource: managementAgentResourceSchema,
   scopes: z.array(z.string()),
+  authorizationDetails: authorizationDetailsSchema,
   mode: agentAccessGrantModeSchema,
   status: z.enum(['active', 'revoked', 'consumed', 'expired']),
   expiresAt: z.iso.datetime().nullable(),
@@ -215,6 +218,7 @@ export const agentApiResourcesResponseSchema = z.object({
           displayName: z.string(),
           subjectHint: z.string(),
           scopes: z.array(z.string()),
+          authorizationDetails: authorizationDetailsSchema,
         }),
       ),
       accessGrants: z.array(z.lazy(() => accessGrantSchema)),
@@ -246,6 +250,7 @@ export const accountConnectionSchema = z.object({
   displayName: z.string().nullable(),
   subjectHint: z.string().nullable(),
   scopes: z.array(z.string()),
+  authorizationDetails: authorizationDetailsSchema,
   status: accountConnectionStatusSchema,
   credentialExpiresAt: z.iso.datetime().nullable(),
   authorizationUrl: z.url().nullable(),
@@ -297,6 +302,7 @@ export const createAccessRequestSchema = z
   .object({
     target: accessTargetSchema,
     scopes: scopeListSchema,
+    authorizationDetails: authorizationDetailsSchema.default([]),
     reason: z.string().trim().max(500).nullable().optional(),
   })
   .strict()
@@ -306,6 +312,7 @@ export const accessRequestSchema = z.object({
   agentId: z.string(),
   target: accessTargetSchema,
   scopes: z.array(z.string()),
+  authorizationDetails: authorizationDetailsSchema,
   reason: z.string().nullable(),
   status: agentAccessRequestStatusSchema,
   approval: z
@@ -342,6 +349,7 @@ export const decideAccessRequestSchema = z
     mode: agentAccessGrantModeSchema.optional(),
     expiresAt: z.iso.datetime().optional(),
     accountConnectionId: nonEmptyString.optional(),
+    authorizationDetails: authorizationDetailsSchema.default([]),
     approvalToken: nonEmptyString.optional(),
   })
   .superRefine((input, ctx) => {
@@ -362,6 +370,7 @@ export const accessGrantSchema = z.object({
     accountConnectionId: z.string().optional(),
   }),
   scopes: z.array(z.string()),
+  authorizationDetails: authorizationDetailsSchema,
   mode: agentAccessGrantModeSchema,
   status: z.enum(['active', 'revoked', 'consumed', 'expired']),
   expiresAt: z.iso.datetime().nullable(),
@@ -381,6 +390,7 @@ export const targetTokenSchema = z.object({
   expiresIn: z.number().int().positive().max(3600),
   expiresAt: z.iso.datetime(),
   scopes: z.array(z.string()),
+  authorizationDetails: authorizationDetailsSchema,
   resourceUrl: z.url(),
 })
 
@@ -397,8 +407,8 @@ export type ApiResource = z.infer<typeof apiResourceSchema>
 export type ConnectableApiResourcesResponse = z.infer<typeof connectableApiResourcesResponseSchema>
 export type AccountConnection = z.infer<typeof accountConnectionSchema>
 export type CreateAccountConnection = z.infer<typeof createAccountConnectionSchema>
-export type CreateAccessRequest = z.infer<typeof createAccessRequestSchema>
+export type CreateAccessRequest = z.input<typeof createAccessRequestSchema>
 export type AccessRequest = z.infer<typeof accessRequestSchema>
 export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>
-export type DecideAccessRequest = z.infer<typeof decideAccessRequestSchema>
+export type DecideAccessRequest = z.input<typeof decideAccessRequestSchema>
 export type AccessGrant = z.infer<typeof accessGrantSchema>

@@ -360,6 +360,11 @@ async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, c
     typeof metadata.revocation_endpoint === 'string'
       ? requireNetworkUrl(metadata.revocation_endpoint, 'revocation endpoint')
       : null
+  const authorizationDetailsTypes = optionalStringArray(
+    metadata,
+    'authorization_details_types_supported',
+    'OIDC discovery response',
+  )
 
   if ((input.registrationMode ?? 'manual') === 'manual') {
     if (!input.clientId || !input.clientSecret)
@@ -387,6 +392,7 @@ async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, c
     callbackOrigin.replace(/\/$/, ''),
     input.providerId,
     input.displayName,
+    authorizationDetailsTypes,
   )
   return {
     issuer,
@@ -425,6 +431,7 @@ async function registerOidcClient(
   origin: string,
   providerId: string,
   displayName: string,
+  authorizationDetailsTypes: string[],
 ) {
   const response = await deps.externalHttp.fetch(
     new Request(endpoint, {
@@ -446,6 +453,7 @@ async function registerOidcClient(
         token_endpoint_auth_method: 'client_secret_basic',
         scope: 'openid profile email offline_access',
         jwks_uri: `${origin}/api/auth/jwks`,
+        ...(authorizationDetailsTypes.length > 0 ? { authorization_details_types: authorizationDetailsTypes } : {}),
       }),
     }),
   )
@@ -472,6 +480,15 @@ function requiredString(value: Record<string, unknown>, field: string, label: st
   const result = value[field]
   if (typeof result !== 'string' || result.length === 0) throw badRequest(`${label} requires ${field}.`)
   return result
+}
+
+function optionalStringArray(value: Record<string, unknown>, field: string, label: string) {
+  const result = value[field]
+  if (result === undefined) return []
+  if (!Array.isArray(result) || result.some((item) => typeof item !== 'string' || item.length === 0)) {
+    throw badRequest(`${label} has invalid ${field}.`)
+  }
+  return [...new Set(result)]
 }
 
 function requireNetworkUrl(value: string, label: string) {

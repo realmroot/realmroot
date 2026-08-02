@@ -553,6 +553,14 @@ function AgentRequestDialog({
                   <dd className="text-xs">{new Date(request.expiresAt).toLocaleString()}</dd>
                 </div>
               </div>
+              {request.authorizationDetails.length > 0 ? (
+                <div className="grid gap-1 pt-3">
+                  <dt className="text-xs text-muted-foreground">{tt('Authorization context')}</dt>
+                  <dd className="whitespace-pre-wrap break-all font-mono text-xs">
+                    {request.authorizationDetails.map((detail) => JSON.stringify(detail)).join('\n')}
+                  </dd>
+                </div>
+              ) : null}
             </dl>
             <Field label={tt('Access duration')}>
               <SelectInput
@@ -596,6 +604,7 @@ function AgentRequestDialog({
                 onDecision(request, {
                   decision: 'approve',
                   mode,
+                  authorizationDetails: request.authorizationDetails,
                   ...(mode === 'until' ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
                 })
               }

@@ -135,6 +135,7 @@ export async function listManagementAgentAccessRequests(
       agentId: request.agentIdentityId,
       resource: resources.get(request.resourceId)!,
       scopes: request.scopes,
+      authorizationDetails: request.authorizationDetails,
       reason: request.reason,
       status:
         request.status === 'pending' && request.expiresAt.getTime() <= now ? ('expired' as const) : request.status,
@@ -156,6 +157,7 @@ export async function getManagementAgentAccessRequest(deps: Deps, requestId: str
     agentId: request.agentIdentityId,
     resource: resources.get(request.resourceId)!,
     scopes: request.scopes,
+    authorizationDetails: request.authorizationDetails,
     reason: request.reason,
     status: request.status,
     expiresAt: request.expiresAt.toISOString(),
@@ -180,6 +182,7 @@ export async function listManagementAgentAccessGrants(
       agentId: grant.agentIdentityId,
       resource: resources.get(grant.resourceId)!,
       scopes: grant.scopes,
+      authorizationDetails: grant.authorizationDetails,
       mode: grant.mode,
       status:
         grant.status === 'active' && grant.expiresAt && grant.expiresAt.getTime() <= Date.now()
@@ -202,6 +205,7 @@ export async function getManagementAgentAccessGrant(deps: Deps, grantId: string)
     agentId: grant.agentIdentityId,
     resource: resources.get(grant.resourceId)!,
     scopes: grant.scopes,
+    authorizationDetails: grant.authorizationDetails,
     mode: grant.mode,
     status:
       grant.status === 'active' && grant.expiresAt && grant.expiresAt.getTime() <= Date.now()

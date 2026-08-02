@@ -27,6 +27,7 @@ import type {
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '@shared/api/authorization'
+import type { AuthorizationDetail } from '@shared/api/authorization-details'
 import type { ConfigzConfigResponse } from '@shared/api/configz'
 import type {
   DeveloperConsoleAccessPolicyResponse,
@@ -425,6 +426,8 @@ export interface ExternalResourceAuthorizationRecord {
   issuer: string
   authorizationEndpoint: string
   tokenEndpoint: string
+  pushedAuthorizationRequestEndpoint: string | null
+  authorizationDetailsTypesSupported: string[]
   registrationEndpoint: string | null
   revocationEndpoint: string
   jwksUri: string
@@ -448,6 +451,7 @@ export interface ResourceAccountConnectionRecord {
   displayName: string
   encryptedTokens: string
   grantedScopes: string[]
+  authorizationDetails: AuthorizationDetail[]
   status: string
   credentialExpiresAt: Date | null
   revokedAt: Date | null
@@ -462,6 +466,7 @@ export interface ResourceConnectionIntentRecord {
   ownerUserId: string
   ownerOrganizationId: string | null
   scopes: string[]
+  authorizationDetails: AuthorizationDetail[]
   encryptedPkceVerifier: string
   returnTo: string
   status: string
@@ -478,6 +483,7 @@ export interface AgentAccessRequestRecord {
   agentIdentityId: string
   bindingId: string
   scopes: string[]
+  authorizationDetails: AuthorizationDetail[]
   reason: string | null
   status: string
   approvalTokenHash: string
@@ -495,6 +501,7 @@ export interface AgentAccessGrantRecord {
   connectionId: string | null
   agentIdentityId: string
   scopes: string[]
+  authorizationDetails: AuthorizationDetail[]
   mode: string
   status: string
   grantedByUserId: string
@@ -523,6 +530,7 @@ export interface ExternalTokenLeaseRecord {
   tokenHash: string
   confirmationJkt: string
   scopes: string[]
+  authorizationDetails: AuthorizationDetail[]
   expiresAt: Date
   revokedAt: Date | null
   createdAt: Date
@@ -543,6 +551,7 @@ export interface ExternalResourceRepository {
       displayName: string
       encryptedTokens: string
       grantedScopes: string[]
+      authorizationDetails: AuthorizationDetail[]
       status: 'active'
       credentialExpiresAt: Date | null
       revokedAt: null

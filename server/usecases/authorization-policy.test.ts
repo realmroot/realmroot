@@ -25,6 +25,7 @@ const resource: ApiResourceResponse = {
   name: 'Documents API',
   resourceUrl: 'https://api.example.com',
   connectorId: null,
+  authorizationDetails: [],
   description: null,
   enabled: true,
   ownerOrganizationId: 'org-home',

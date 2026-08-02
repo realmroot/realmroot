@@ -27,6 +27,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               displayName: sql<string>`${input.displayName}`.as('display_name'),
               encryptedTokens: sql<string>`${input.encryptedTokens}`.as('encrypted_tokens'),
               grantedScopes: sql<string[]>`${JSON.stringify(input.grantedScopes)}`.as('granted_scopes'),
+              authorizationDetails: sql<
+                typeof input.authorizationDetails
+              >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
               status: sql<string>`${input.status}`.as('status'),
               credentialExpiresAt: sql<Date | null>`${input.credentialExpiresAt?.getTime() ?? null}`.as(
                 'credential_expires_at',
@@ -125,6 +128,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               ownerUserId: sql<string>`${input.ownerUserId}`.as('owner_user_id'),
               ownerOrganizationId: sql<string | null>`${input.ownerOrganizationId}`.as('owner_organization_id'),
               scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+              authorizationDetails: sql<
+                typeof input.authorizationDetails
+              >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
               encryptedPkceVerifier: sql<string>`${input.encryptedPkceVerifier}`.as('encrypted_pkce_verifier'),
               returnTo: sql<string>`${input.returnTo}`.as('return_to'),
               status: sql<string>`${input.status}`.as('status'),
@@ -167,6 +173,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               agentIdentityId: sql<string>`${input.agentIdentityId}`.as('agent_identity_id'),
               bindingId: sql<string>`${input.bindingId}`.as('binding_id'),
               scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+              authorizationDetails: sql<
+                typeof input.authorizationDetails
+              >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
               reason: sql<string | null>`${input.reason}`.as('reason'),
               status: sql<string>`${input.status}`.as('status'),
               approvalTokenHash: sql<string>`${input.approvalTokenHash}`.as('approval_token_hash'),
@@ -317,6 +326,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               connectionId: sql<string | null>`${input.connectionId}`.as('connection_id'),
               agentIdentityId: sql<string>`${input.agentIdentityId}`.as('agent_identity_id'),
               scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+              authorizationDetails: sql<
+                typeof input.authorizationDetails
+              >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
               mode: sql<string>`${input.mode}`.as('mode'),
               status: sql<string>`${input.status}`.as('status'),
               grantedByUserId: sql<string>`${input.grantedByUserId}`.as('granted_by_user_id'),
@@ -462,6 +474,9 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               tokenHash: sql<string>`${input.tokenHash}`.as('token_hash'),
               confirmationJkt: sql<string>`${input.confirmationJkt}`.as('confirmation_jkt'),
               scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+              authorizationDetails: sql<
+                typeof input.authorizationDetails
+              >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
               expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),
               revokedAt: sql<Date | null>`${input.revokedAt?.getTime() ?? null}`.as('revoked_at'),
               createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),

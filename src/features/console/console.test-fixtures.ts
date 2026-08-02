@@ -243,6 +243,7 @@ export const apiResource = {
   description: 'Management surface',
   resourceUrl: 'https://auth.example.com/api',
   connectorId: null,
+  authorizationDetails: [],
   enabled: true,
   ownerOrganizationId: 'org-1',
   accessEligibility: { mode: 'realm' as const, organizationIds: [] },

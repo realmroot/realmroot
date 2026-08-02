@@ -21,6 +21,7 @@ const request = {
     accountConnectionId: 'connection-1',
   },
   scopes: ['projects:read'],
+  authorizationDetails: [{ type: 'project', project_id: 'project-1', actions: ['read'] }],
   reason: 'Read project status',
   status: 'pending' as const,
   approval: null,
@@ -40,6 +41,7 @@ const connection = {
   displayName: 'ZPan Demo',
   subjectHint: '••••demo',
   scopes: ['projects:read'],
+  authorizationDetails: [{ actions: ['read'], project_id: 'project-1', type: 'project' }],
   status: 'active' as const,
   credentialExpiresAt: null,
   authorizationUrl: null,
@@ -96,6 +98,7 @@ describe('Agent resource access approval', () => {
     expect(screen.queryByRole('radio', { name: 'ZPan Demo' })).toBeNull()
     expect(screen.getAllByText('projects:read')).toHaveLength(2)
     expect(screen.getByText('Read project status')).toBeTruthy()
+    expect(screen.getByText('{"type":"project","project_id":"project-1","actions":["read"]}')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
 
     await waitFor(() =>
@@ -103,6 +106,7 @@ describe('Agent resource access approval', () => {
         decision: 'approve',
         mode: 'once',
         accountConnectionId: 'connection-1',
+        authorizationDetails: [{ type: 'project', project_id: 'project-1', actions: ['read'] }],
       }),
     )
     expect(await screen.findByText('Resource access approved')).toBeTruthy()
@@ -112,6 +116,7 @@ describe('Agent resource access approval', () => {
     api.getAgentResourceApproval.mockResolvedValue({
       ...request,
       target: { type: 'api-resource', apiResourceId: 'resource-1' },
+      authorizationDetails: [],
       resource: { id: 'resource-1', name: 'Billing API' },
     })
     api.listApprovalAccountConnections.mockResolvedValue({
@@ -189,6 +194,7 @@ describe('Agent resource access approval', () => {
         decision: 'approve',
         mode: 'once',
         accountConnectionId: 'connection-2',
+        authorizationDetails: [{ type: 'project', project_id: 'project-1', actions: ['read'] }],
       }),
     )
     expect(await screen.findByText('Resource access approved')).toBeTruthy()

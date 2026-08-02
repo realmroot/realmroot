@@ -83,10 +83,14 @@ describe('planned Account Center journeys', () => {
       },
     ]
     store.agentIdentities = [agent('agent-active', 'Build Agent', 'active')]
+    const requestedAuthorizationDetails = [{ type: 'project_access', project_id: 'project-1', actions: ['read'] }]
     let decision: unknown = null
     server.use(
       http.get(`${base}/api/account/access-requests`, () =>
-        json({ items: [accessRequest()], pagination: pagination(1) }),
+        json({
+          items: [{ ...accessRequest(), authorizationDetails: requestedAuthorizationDetails }],
+          pagination: pagination(1),
+        }),
       ),
       http.put(`${base}/api/account/access-requests/request-1/decision`, async ({ request }) => {
         decision = await request.json()
@@ -124,6 +128,7 @@ describe('planned Account Center journeys', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Review request' }))
     expect(await screen.findByRole('heading', { name: 'Review Agent access request' })).toBeTruthy()
+    expect(screen.getByText('{"type":"project_access","project_id":"project-1","actions":["read"]}')).toBeTruthy()
     closeDialogWithEscape()
     fireEvent.click(screen.getByRole('button', { name: 'Review request' }))
     fireEvent.change(screen.getByLabelText('Access duration'), { target: { value: 'until' } })
@@ -131,7 +136,14 @@ describe('planned Account Center journeys', () => {
     expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.change(expiry, { target: { value: '2099-01-01T12:00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
-    await waitFor(() => expect(decision).toEqual({ decision: 'approve', mode: 'until', expiresAt: expect.any(String) }))
+    await waitFor(() =>
+      expect(decision).toEqual({
+        decision: 'approve',
+        mode: 'until',
+        authorizationDetails: requestedAuthorizationDetails,
+        expiresAt: expect.any(String),
+      }),
+    )
   })
 
   it.each([
@@ -588,6 +600,7 @@ function accessRequest(): AccessRequestApproval {
     target: { type: 'api-resource', apiResourceId: 'resource-1' },
     resource: { id: 'resource-1', name: 'Projects API' },
     scopes: ['projects:read'],
+    authorizationDetails: [],
     reason: 'Read projects',
     status: 'pending',
     approval: { url: 'https://identity.example.com/approve', expiresAt: '2099-01-01T00:00:00.000Z' },

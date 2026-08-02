@@ -1,11 +1,17 @@
 import { badRequest, notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import { validateResourceContract } from '@server/usecases/resource-openapi'
+import type { AuthorizationDetail } from '@shared/api/authorization-details'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
 const jwtBearerGrantType = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
 
-export async function validateExternalResourceConnector(deps: Deps, resourceUrlInput: string, connectorId: string) {
+export async function validateExternalResourceConnector(
+  deps: Deps,
+  resourceUrlInput: string,
+  connectorId: string,
+  authorizationDetails: AuthorizationDetail[] = [],
+) {
   const connector = await deps.connectors.findById(connectorId)
   if (!connector || connector.providerType !== 'generic_oauth') {
     throw notFound('OIDC connector was not found.')
@@ -56,6 +62,16 @@ export async function validateExternalResourceConnector(deps: Deps, resourceUrlI
   if (stringArray(connector.providerMetadata?.dpop_signing_alg_values_supported).length === 0) {
     throw badRequest('OIDC connector must advertise RFC 9449 DPoP support for external API access.')
   }
+  if (authorizationDetails.length === 0) return
+  const supportedTypes = stringArray(connector.providerMetadata?.authorization_details_types_supported)
+  if (authorizationDetails.some((detail) => !supportedTypes.includes(detail.type))) {
+    throw badRequest('OIDC connector does not support every configured authorization detail type.')
+  }
+  const pushedAuthorizationRequestEndpoint = connector.providerMetadata?.pushed_authorization_request_endpoint
+  if (typeof pushedAuthorizationRequestEndpoint !== 'string') {
+    throw badRequest('RAR-enabled external API resources require RFC 9126 pushed authorization requests.')
+  }
+  requireNetworkUrl(pushedAuthorizationRequestEndpoint, 'pushed authorization request endpoint')
 }
 
 async function fetchObject(deps: Deps, url: string, message: string) {

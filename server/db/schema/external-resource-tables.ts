@@ -1,3 +1,4 @@
+import type { AuthorizationDetail } from '@shared/api/authorization-details'
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { agentIdentity, agentIdentityBinding } from './agent-identity-tables'
@@ -17,6 +18,10 @@ export const resourceAccountConnection = sqliteTable(
     displayName: text('display_name').notNull(),
     encryptedTokens: text('encrypted_tokens').notNull(),
     grantedScopes: text('granted_scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    authorizationDetails: text('authorization_details', { mode: 'json' })
+      .$type<AuthorizationDetail[]>()
+      .notNull()
+      .default(sql`'[]'`),
     status: text('status').notNull().default('active'),
     credentialExpiresAt: integer('credential_expires_at', { mode: 'timestamp_ms' }),
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
@@ -58,6 +63,10 @@ export const resourceConnectionIntent = sqliteTable(
       .references(() => user.id, { onDelete: 'restrict' }),
     ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'restrict' }),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    authorizationDetails: text('authorization_details', { mode: 'json' })
+      .$type<AuthorizationDetail[]>()
+      .notNull()
+      .default(sql`'[]'`),
     encryptedPkceVerifier: text('encrypted_pkce_verifier').notNull(),
     returnTo: text('return_to').notNull().default('account-center'),
     status: text('status').notNull().default('pending'),
@@ -93,6 +102,10 @@ export const agentAccessRequest = sqliteTable(
       .notNull()
       .references(() => agentIdentityBinding.id, { onDelete: 'restrict' }),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    authorizationDetails: text('authorization_details', { mode: 'json' })
+      .$type<AuthorizationDetail[]>()
+      .notNull()
+      .default(sql`'[]'`),
     reason: text('reason'),
     status: text('status').notNull().default('pending'),
     approvalTokenHash: text('approval_token_hash').notNull().unique(),
@@ -128,6 +141,10 @@ export const agentAccessGrant = sqliteTable(
       .notNull()
       .references(() => agentIdentity.id, { onDelete: 'restrict' }),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    authorizationDetails: text('authorization_details', { mode: 'json' })
+      .$type<AuthorizationDetail[]>()
+      .notNull()
+      .default(sql`'[]'`),
     mode: text('mode').notNull(),
     status: text('status').notNull().default('active'),
     grantedByUserId: text('granted_by_user_id')
@@ -167,6 +184,10 @@ export const externalTokenLease = sqliteTable(
     tokenHash: text('token_hash').notNull().unique(),
     confirmationJkt: text('confirmation_jkt').notNull(),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>().notNull(),
+    authorizationDetails: text('authorization_details', { mode: 'json' })
+      .$type<AuthorizationDetail[]>()
+      .notNull()
+      .default(sql`'[]'`),
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
