@@ -83,10 +83,102 @@ describe('admin console hosted experience', () => {
     expect(screen.getByLabelText('Text')).toHaveProperty('value', '#18302d')
     expect(screen.getByLabelText('Border')).toHaveProperty('value', '#bdd7d2')
 
+    fireEvent.click(screen.getByRole('button', { name: /Clean Cobalt/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Custom/ }))
+    fireEvent.change(screen.getByLabelText('Primary color picker'), { target: { value: '#12524e' } })
+    fireEvent.change(screen.getByLabelText('Page background'), { target: { value: '#f5fbf9' } })
     fireEvent.change(screen.getByLabelText('Text'), { target: { value: '#102724' } })
+    fireEvent.change(screen.getByLabelText('Border'), { target: { value: '#aacbc5' } })
+    expect(
+      screen.getByLabelText('Acme Auth hosted sign-in preview').closest('.brandingPreview')?.getAttribute('style'),
+    ).toContain('--brand-primary: #12524e')
     expect(
       screen.getByLabelText('Acme Auth hosted sign-in preview').closest('.brandingPreview')?.getAttribute('style'),
     ).toContain('--auth-text-color: #102724')
+  })
+
+  it('uses the tested default scheme when optional brand and link values are unset', async () => {
+    const defaultBranding = {
+      ...brandingSettings,
+      branding: {
+        logoUrl: null,
+        faviconUrl: null,
+        primaryColor: null,
+        backgroundColor: null,
+        customCss: null,
+      },
+    }
+    const defaultSignIn = {
+      ...signInSettings,
+      links: { termsUri: null, privacyUri: null, supportEmail: null },
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(defaultBranding))
+      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(defaultSignIn))
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<BrandingPage />)
+
+    expect((await screen.findByRole('button', { name: /Clear Aqua/ })).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Brand assets' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByLabelText('Logo URL')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Favicon URL')).toHaveProperty('value', '')
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Legal & support' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByLabelText('Terms URL')).toHaveProperty('value', '')
+  })
+
+  it('uploads and previews both hosted brand assets', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/branding/logo' && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ asset: { id: 'logo-2', publicUrl: 'https://cdn.example.com/logo.svg' } }))
+      }
+      if (url === '/api/branding/favicon' && init?.method === 'POST') {
+        return Promise.resolve(
+          jsonResponse({ asset: { id: 'favicon-2', publicUrl: 'https://cdn.example.com/favicon.png' } }),
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<BrandingPage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Brand assets' }), { button: 0, ctrlKey: false })
+    fireEvent.change(await screen.findByLabelText('Favicon URL'), {
+      target: { value: 'https://cdn.example.com/manual-favicon.png' },
+    })
+    fireEvent.change(screen.getByLabelText('Upload logo'), {
+      target: { files: [new File(['logo'], 'logo.svg', { type: 'image/svg+xml' })] },
+    })
+    fireEvent.change(screen.getByLabelText('Upload favicon'), {
+      target: { files: [new File(['favicon'], 'favicon.png', { type: 'image/png' })] },
+    })
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Logo URL')).toHaveProperty('value', 'https://cdn.example.com/logo.svg'),
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('Favicon URL')).toHaveProperty('value', 'https://cdn.example.com/favicon.png'),
+    )
+  })
+
+  it('retries all hosted experience dependencies after a load failure', async () => {
+    let attempts = 0
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      if (String(input) === '/api/branding-settings') {
+        attempts += 1
+        return attempts === 1
+          ? Promise.resolve(jsonResponse({ error: { message: 'Experience unavailable.' } }, 503))
+          : Promise.resolve(jsonResponse(brandingSettings))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<BrandingPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('heading', { name: 'Color scheme' })).toBeTruthy()
+    expect(attempts).toBe(2)
   })
 
   it('updates brand assets in the preview, falls back cleanly, and surfaces upload errors', async () => {

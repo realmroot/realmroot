@@ -94,6 +94,11 @@ describe('admin console sign-in and preview controls', () => {
     ) as HTMLElement
     fireEvent.click(within(methods).getByRole('button', { name: 'Edit' }))
     fireEvent.click(await screen.findByRole('switch', { name: 'Password' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Passkey' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Email code' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Social login' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Phone' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Web3 wallet' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText('Sign-in save failed.')).toBeTruthy()
   })

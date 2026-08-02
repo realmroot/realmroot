@@ -15,7 +15,7 @@ export function createAccountStore() {
       canCreateOrganization: true,
       showOrganizations: false,
       realmOperator: false,
-      consoleOrganizations: [],
+      consoleOrganizations: [] as Array<{ organizationId: string; level: string }>,
     },
     profile: {
       id: 'user-1',
@@ -57,6 +57,7 @@ export function createAccountStore() {
       applicationName: string
       scopes: string[]
       grantedAt: string
+      expiresAt?: string | null
     }>,
     agents: [] as Array<{
       id: string

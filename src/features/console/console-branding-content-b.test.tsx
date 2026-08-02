@@ -45,8 +45,14 @@ describe('admin console account center and deferred configuration', () => {
     expect(screen.getByRole('heading', { name: 'Visible sections' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Profile field permissions' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Save account center' })).toBeNull()
+    fireEvent.click(screen.getByRole('switch', { name: 'Profile section' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Password section' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Connected accounts and apps' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Sessions section' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Display name' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Username' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Avatar' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Email changes' }))
     fireEvent.click(screen.getByRole('button', { name: 'Open account center' }))
     expect(open).toHaveBeenCalledWith('/profile', '_blank', 'noopener')
     fireEvent.click(await screen.findByRole('button', { name: 'Save account center' }))
@@ -54,7 +60,17 @@ describe('admin console account center and deferred configuration', () => {
     await waitFor(() =>
       expect(requests).toEqual([
         {
-          accountCenter: expect.objectContaining({ sessionsViewEnabled: false, usernameEditable: false }),
+          accountCenter: {
+            avatarEditable: false,
+            connectedAccountsEnabled: false,
+            dangerZoneEnabled: false,
+            displayNameEditable: false,
+            emailChangeEnabled: false,
+            passwordChangeEnabled: false,
+            profileEditingEnabled: false,
+            sessionsViewEnabled: false,
+            usernameEditable: false,
+          },
         },
       ]),
     )

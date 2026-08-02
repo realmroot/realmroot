@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { i18n } from '@/lib/i18n'
 import {
   base,
   configz,
@@ -63,6 +64,18 @@ describe('AccountProfilePage', () => {
     expect(screen.getByText('Europe/London')).toBeTruthy()
   })
 
+  it('changes the Account Center language from the preferences dialog', async () => {
+    renderWithClient(<AccountProfilePage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Preferences' }), { button: 0, ctrlKey: false })
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Change' }))[0]!)
+    fireEvent.change(await screen.findByLabelText('Language'), { target: { value: 'zh' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith('偏好设置已更新'))
+    expect(i18n.language).toBe('zh')
+    await i18n.changeLanguage('en')
+  })
+
   it('downloads a machine-readable account snapshot [spec: account-center/account-data-export]', async () => {
     const createObjectURL = vi.fn(() => 'blob:account-export')
     const revokeObjectURL = vi.fn()
@@ -80,6 +93,41 @@ describe('AccountProfilePage', () => {
     expect(createObjectURL).toHaveBeenCalledOnce()
     expect(download).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:account-export')
+  })
+
+  it('omits disabled connected-account and session data from an export', async () => {
+    const limited = configz()
+    limited.accountCenter = {
+      ...limited.accountCenter,
+      connectedAccountsEnabled: false,
+      sessionsViewEnabled: false,
+    }
+    let protectedDataRequests = 0
+    server.use(
+      http.get(`${base}/api/configz`, () => HttpResponse.json(limited)),
+      http.get(`${base}/api/account/applications`, () => {
+        protectedDataRequests += 1
+        return HttpResponse.json({ applications: [] })
+      }),
+      http.get(`${base}/api/account/linked-accounts`, () => {
+        protectedDataRequests += 1
+        return HttpResponse.json({ accounts: [] })
+      }),
+      http.get(`${base}/api/account/sessions`, () => {
+        protectedDataRequests += 1
+        return HttpResponse.json({ sessions: [] })
+      }),
+    )
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:limited-export') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    renderWithClient(<AccountProfilePage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Account' }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByRole('button', { name: 'Download data' }))
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Account data downloaded.'))
+    expect(protectedDataRequests).toBe(0)
   })
 
   it('shows a loading state then renders profile sections', async () => {
@@ -226,6 +274,22 @@ describe('AccountProfilePage', () => {
     expect(success).not.toHaveBeenCalled()
   })
 
+  it('clears optional avatar and username profile fields', async () => {
+    renderWithClient(<AccountProfilePage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Change avatar/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save avatar' }))
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Profile updated.'))
+    expect(store.profile.avatarAssetId).toBeNull()
+
+    success.mockClear()
+    fireEvent.click(await screen.findByRole('button', { name: /Edit username/ }))
+    fireEvent.change(await screen.findByLabelText('Username'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save identifiers' }))
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Profile updated.'))
+    expect(store.profile.username).toBeNull()
+  })
+
   it('hides identity and identifier rows when their settings are disabled', async () => {
     const limited = configz()
     limited.accountCenter = {
@@ -269,6 +333,9 @@ describe('AccountProfilePage', () => {
     renderWithClient(<AccountProfilePage />)
     expect(await screen.findByText('Profile editing is disabled for this account center.')).toBeTruthy()
     expect(screen.queryByText('Jane Stone')).toBeNull()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Account' }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByRole('button', { name: 'Download data' }))
+    expect(success).not.toHaveBeenCalled()
   })
 
   it('triggers the hidden file input from the upload button', async () => {

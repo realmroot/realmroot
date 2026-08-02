@@ -10,6 +10,7 @@ globalThis.ResizeObserver ??= class ResizeObserver {
   observe() {}
   unobserve() {}
 }
+Element.prototype.scrollIntoView ??= () => {}
 
 afterEach(() => {
   cleanup()
@@ -75,10 +76,26 @@ describe('admin console applications-detail-a', () => {
             pagination: {
               limit: 50,
               offset: 0,
-              total: active ? 1 : 0,
-              hasMore: false,
-              nextOffset: null,
+              total: active ? 51 : 0,
+              hasMore: active,
+              nextOffset: active ? 50 : null,
             },
+          }),
+        )
+      }
+      if (url === '/api/application-authorizations?applicationId=app-1&limit=50&offset=50' && method === 'GET') {
+        return Promise.resolve(
+          jsonResponse({
+            authorizations: active
+              ? [
+                  {
+                    ...authorization,
+                    organization: { id: 'org-1', name: 'Acme Inc.' },
+                    expiresAt: '2027-07-01T12:00:00.000Z',
+                  },
+                ]
+              : [],
+            pagination: { limit: 50, offset: 50, total: active ? 51 : 0, hasMore: false, nextOffset: null },
           }),
         )
       }
@@ -102,6 +119,12 @@ describe('admin console applications-detail-a', () => {
     expect(screen.getByText('openid')).toBeTruthy()
     expect(screen.getByText('Does not expire')).toBeTruthy()
     expect(screen.queryByRole('columnheader', { name: 'Last used' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('Acme Inc.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
+    expect(await screen.findByText('Realm')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('Acme Inc.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
     expect(await screen.findByText(/Jane Doe’s approval/)).toBeTruthy()
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Revoke authorization' }))
@@ -153,6 +176,8 @@ describe('admin console applications-detail-a', () => {
       'Authorizations',
       'Settings',
     ])
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OAuth' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByRole('heading', { name: 'Redirects and origins' })).toBeTruthy()
 
     cleanup()
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
@@ -220,6 +245,46 @@ describe('admin console applications-detail-a', () => {
     cleanup()
     renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="settings" />)
     await screen.findByRole('heading', { name: 'Customer portal' })
+    const details = screen.getByRole('heading', { name: 'Application details' }).closest('section') as HTMLElement
+    fireEvent.click(within(details).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Updated portal' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Updated client' } })
+    fireEvent.change(screen.getByLabelText('Homepage URL'), { target: { value: 'https://portal.example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/applications/app-1',
+        method: 'PATCH',
+        body: {
+          name: 'Updated portal',
+          description: 'Updated client',
+          homepageUrl: 'https://portal.example.com',
+        },
+      }),
+    )
+
+    const audience = screen.getByRole('heading', { name: 'Ownership & audience' }).closest('section') as HTMLElement
+    fireEvent.click(within(audience).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Owner'), { target: { value: 'org-1' } })
+    fireEvent.change(screen.getByLabelText('Who can sign in'), { target: { value: 'organizations' } })
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Allowed Organizations' }))
+    fireEvent.click(screen.getAllByRole('option', { name: /Acme Inc/ }).find((option) => option.tagName === 'DIV')!)
+    fireEvent.change(screen.getByLabelText('Who can sign in'), { target: { value: 'users' } })
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Allowed users' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Jane Doe/ }))
+    fireEvent.change(screen.getByLabelText('Who can sign in'), { target: { value: 'public' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/applications/app-1',
+        method: 'PATCH',
+        body: {
+          ownerOrganizationId: 'org-1',
+          audience: { mode: 'public', organizationIds: ['org-1'], userIds: ['user-1'] },
+        },
+      }),
+    )
+
     const consent = screen.getByRole('heading', { name: 'User consent' }).closest('section') as HTMLElement
     fireEvent.click(within(consent).getByRole('button', { name: 'Edit' }))
     fireEvent.change(await screen.findByLabelText('Publisher relationship'), { target: { value: 'third-party' } })
@@ -242,10 +307,18 @@ describe('admin console applications-detail-a', () => {
       }),
     )
     expect(await screen.findByRole('button', { name: 'Enable application' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Enable application' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/applications/app-1',
+        method: 'PATCH',
+        body: { disabled: false, disabledReason: null },
+      }),
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete application' }))
     expect(await screen.findByRole('heading', { name: 'Delete application' })).toBeTruthy()
-    expect(screen.getByText(/Deleting Customer portal/)).toBeTruthy()
+    expect(screen.getByText(/Deleting Updated portal/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete application' }))
     fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete application' }))
@@ -310,10 +383,18 @@ describe('admin console applications-detail-a', () => {
 
     expect(await screen.findByText(/Version 1 · created/)).toBeTruthy()
     expect(screen.queryByText('fas_existing')).toBeNull()
+    const authorization = screen.getByRole('heading', { name: 'Authorization' }).closest('section') as HTMLElement
+    fireEvent.click(within(authorization).getByRole('button', { name: 'Edit' }))
+    expect(await screen.findByRole('checkbox', { name: 'Client credentials' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Client credentials' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }))
     const confirmation = await screen.findByRole('alertdialog', { name: 'Rotate client secret?' })
     expect(within(confirmation).getByText(/current client secret will stop working immediately/i)).toBeTruthy()
-    fireEvent.click(within(confirmation).getByRole('button', { name: 'Rotate secret' }))
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }))
+    const confirmed = await screen.findByRole('alertdialog', { name: 'Rotate client secret?' })
+    fireEvent.click(within(confirmed).getByRole('button', { name: 'Rotate secret' }))
     expect(await screen.findByText('fas_rotated_secret')).toBeTruthy()
     fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' })[0]!)
     await waitFor(() => expect(screen.queryByText('fas_rotated_secret')).toBeNull())

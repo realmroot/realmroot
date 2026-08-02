@@ -18,12 +18,6 @@ vi.mock('sonner', () => ({
   toast: { success: (...a: unknown[]) => success(...a), error: (...a: unknown[]) => errorToast(...a) },
 }))
 
-const signOut = vi.fn().mockResolvedValue({})
-vi.mock('@/lib/auth-client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/auth-client')>()
-  return { ...actual, signOut: () => signOut() }
-})
-
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, className, to }: { children: ReactNode; className?: string; to: string }) => (
     <a className={className} href={to}>
@@ -46,7 +40,6 @@ afterEach(() => {
   server.resetHandlers()
   success.mockClear()
   errorToast.mockClear()
-  signOut.mockClear()
   Object.assign(store, createAccountStore())
 })
 afterAll(() => server.close())
@@ -356,6 +349,22 @@ describe('AccountSecurityPage', () => {
     expect(screen.getByText('otpauth://abc')).toBeTruthy()
   })
 
+  it('renders QR-only enrollment details when no manual setup value is returned', async () => {
+    server.use(
+      http.post(`${base}/api/account/security/mfa/totp-enrollment`, () =>
+        HttpResponse.json({ qrCode: 'data:image/png;base64,QR' }),
+      ),
+    )
+    renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
+    fireEvent.click(await screen.findByRole('button', { name: /Enroll authenticator app/ }))
+    fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'pw' } })
+    fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
+    expect(await screen.findByAltText('Authenticator app QR code')).toBeTruthy()
+    expect(screen.queryByText('Manual setup key')).toBeNull()
+    expect(screen.queryByText('Enrollment URI')).toBeNull()
+  })
+
   it('cancels the TOTP enroll, verify, disable, and passkey dialogs', async () => {
     const enrolled = createAccountStore()
     enrolled.security.mfa.enabled = true
@@ -376,6 +385,38 @@ describe('AccountSecurityPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByLabelText('Passkey name')).toBeNull())
     expect(success).not.toHaveBeenCalled()
+  })
+
+  it('resets MFA and passkey editor state when dialogs are dismissed from their close control', async () => {
+    renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
+    fireEvent.click(await screen.findByRole('button', { name: /Enroll authenticator app/ }))
+    fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'temporary' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByLabelText('Password')).toBeNull())
+
+    await openSecurityTab('Passkeys')
+    fireEvent.click(screen.getByRole('button', { name: /Add passkey/ }))
+    fireEvent.change(await screen.findByLabelText('Passkey name'), { target: { value: 'Temporary key' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByLabelText('Passkey name')).toBeNull())
+  })
+
+  it('resets verify and disable credentials when enrolled MFA dialogs are dismissed', async () => {
+    const enrolled = createAccountStore()
+    enrolled.security.mfa.enabled = true
+    Object.assign(store, enrolled)
+    renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify code' }))
+    fireEvent.change(await screen.findByLabelText('Authenticator code'), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByLabelText('Authenticator code')).toBeNull())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disable MFA' }))
+    fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'temporary' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByLabelText('Password')).toBeNull())
   })
 
   it('cancels the TOTP enroll dialog and clears enrollment', async () => {
@@ -415,5 +456,26 @@ describe('AccountSecurityPage', () => {
     await openSecurityTab('Passkeys')
     expect(await screen.findByText('2 passkeys added for passwordless sign-in.')).toBeTruthy()
     expect(screen.getByText('Unnamed passkey')).toBeTruthy()
+  })
+
+  it('uses empty collection fallbacks when optional security payload fields are absent', async () => {
+    const sparseConfig = configz()
+    Object.assign(sparseConfig, {
+      identityProviders: undefined,
+      builtInProviders: { ...sparseConfig.builtInProviders, web3Wallet: undefined },
+    })
+    server.use(
+      http.get(`${base}/api/configz`, () => HttpResponse.json(sparseConfig)),
+      http.get(`${base}/api/account/security`, () => HttpResponse.json({})),
+      http.get(`${base}/api/account/security/passkeys`, () => HttpResponse.json({})),
+      http.get(`${base}/api/account/sessions`, () => HttpResponse.json({})),
+      http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({})),
+    )
+    renderWithClient(<AccountSecurityPage />)
+    expect(await screen.findByText('No sign-in connectors are available.')).toBeTruthy()
+    await openSecurityTab('Passkeys')
+    expect(screen.getByText('No passkeys have been added yet.')).toBeTruthy()
+    await openSecurityTab('Sessions')
+    expect(screen.getByText('No active sessions.')).toBeTruthy()
   })
 })

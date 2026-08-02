@@ -35,6 +35,49 @@ function securityFetch(requests: unknown[]) {
 }
 
 describe('admin console security policies', () => {
+  it('renders explicit disabled factors and configured abuse protections', async () => {
+    const alternate = {
+      policy: {
+        ...securityPolicy.policy,
+        mfa: {
+          mode: 'optional' as const,
+          authenticatorAppEnabled: false,
+          emailOtpEnabled: true,
+          backupCodesEnabled: false,
+        },
+        passkeys: { ...securityPolicy.policy.passkeys, enabled: false },
+        captcha: {
+          ...securityPolicy.policy.captcha,
+          enabled: true,
+          provider: 'hcaptcha' as const,
+          siteKey: 'site-key-1',
+          secretConfigured: true,
+        },
+        blocklist: { blockSubaddressing: true, entries: ['blocked.test'] },
+      },
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      if (String(input) === '/api/security/policy') return Promise.resolve(jsonResponse(alternate))
+      return consoleSharedFetch(input, init)
+    })
+
+    const mfa = renderWithQuery(<MfaPage />)
+    expect(await screen.findByText('Optional')).toBeTruthy()
+    expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Available').length).toBeGreaterThan(0)
+    mfa.unmount()
+
+    renderWithQuery(<SecurityCaptchaPage />)
+    expect(await screen.findByText('hCaptcha')).toBeTruthy()
+    expect(screen.getByText('site-key-1')).toBeTruthy()
+    expect(screen.getByText('Configured')).toBeTruthy()
+    expect(screen.getByText('Blocked')).toBeTruthy()
+    const captcha = screen.getByRole('heading', { name: 'CAPTCHA' }).closest('section') as HTMLElement
+    fireEvent.click(within(captcha).getByRole('button', { name: 'Configure' }))
+    expect(await screen.findByPlaceholderText('Leave blank to keep the current key')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+  })
+
   it('shows available factors and persists the MFA prompt policy [spec: admin-console/admin-security-policy]', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))

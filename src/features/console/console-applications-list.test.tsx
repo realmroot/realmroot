@@ -35,7 +35,7 @@ describe('admin console applications-list', () => {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(application, 201))
       }
-      if (url === '/api/applications') {
+      if (url.startsWith('/api/applications')) {
         return Promise.resolve(jsonResponse({ applications: [application], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -54,10 +54,22 @@ describe('admin console applications-list', () => {
     fireEvent.change(screen.getByLabelText('Search applications'), { target: { value: 'missing' } })
     expect(await screen.findByText('No applications found')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Search applications'), { target: { value: 'Customer' } })
+    fireEvent.change(screen.getByLabelText('Filter owner'), { target: { value: 'org-1' } })
+    fireEvent.change(screen.getByLabelText('Filter type'), { target: { value: 'confidential_web' } })
+    expect(await screen.findByText('No applications found')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Filter type'), { target: { value: 'public_spa' } })
+    fireEvent.change(screen.getByLabelText('Filter audience'), { target: { value: 'users' } })
+    expect(await screen.findByText('No applications found')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Filter audience'), { target: { value: 'realm' } })
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Admin console' } })
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'admin-console' } })
     fireEvent.click(screen.getByRole('button', { name: /Traditional web app/ }))
+    fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'organizations' } })
+    expect(screen.getByRole('combobox', { name: 'Allowed Organizations' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'users' } })
+    expect(screen.getByRole('combobox', { name: 'Allowed users' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'realm' } })
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://app.example.com/callback' },
     })
@@ -264,5 +276,27 @@ describe('admin console applications-list', () => {
 
     expect(await screen.findByRole('button', { name: 'Saving…' })).toBeTruthy()
     resolveCreate(jsonResponse(application, 201))
+  })
+
+  it('retries failed application inventory requests', async () => {
+    let attempts = 0
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === '/api/applications') {
+        attempts += 1
+        return Promise.resolve(
+          attempts === 1
+            ? jsonResponse({ message: 'inventory unavailable' }, 503)
+            : jsonResponse({ applications: [application], pagination }),
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ApplicationsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('Customer portal')).toBeTruthy()
+    expect(attempts).toBe(2)
   })
 })

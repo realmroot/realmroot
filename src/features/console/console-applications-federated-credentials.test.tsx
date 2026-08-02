@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationFederatedCredentialsPage } from '@/features/console/extracted/applications/application-detail-pages'
+import { ApplicationDetailPage } from '@/features/console/extracted/applications/application-detail'
 import {
   ApplicationFederatedCredentialsPanel,
   parseFederatedCredentialForm,
@@ -73,7 +73,7 @@ describe('admin console application federated credentials', () => {
   })
 
   it('routes federated credentials into the OAuth detail section', async () => {
-    renderWithQuery(<ApplicationFederatedCredentialsPage applicationId="app-1" />)
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
 
     expect(await screen.findByText('app-1:oauth')).toBeTruthy()
   })

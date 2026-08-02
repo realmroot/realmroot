@@ -1,7 +1,12 @@
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { loadAccountProfile, requireAccountProfile, takeAccountReturnTarget } from '@/lib/route-auth'
+import {
+  loadAccountProfile,
+  loadDeveloperConsoleAccess,
+  requireAccountProfile,
+  takeAccountReturnTarget,
+} from '@/lib/route-auth'
 
 const base = 'http://localhost:3000'
 const server = setupServer()
@@ -59,6 +64,17 @@ describe('loadAccountProfile', () => {
   })
 })
 
+describe('loadDeveloperConsoleAccess', () => {
+  it('surfaces a failed access-policy response', async () => {
+    server.use(
+      http.get(`${base}/api/account/developer-console-access`, () =>
+        HttpResponse.json({ error: 'Access policy unavailable.' }, { status: 503 }),
+      ),
+    )
+    await expect(loadDeveloperConsoleAccess()).rejects.toThrow('Access policy unavailable.')
+  })
+})
+
 describe('requireAccountProfile', () => {
   it('returns the profile when authenticated', async () => {
     server.use(
@@ -68,6 +84,11 @@ describe('requireAccountProfile', () => {
       ),
     )
     expect(await requireAccountProfile('/profile')).toEqual({ user: { role: 'user' } })
+  })
+
+  it('does not require a second security lookup on the Security page', async () => {
+    server.use(http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: { role: 'user' } })))
+    expect(await requireAccountProfile('/security')).toEqual({ user: { role: 'user' } })
   })
 
   it('redirects an unenrolled user to Account Security when MFA is required', async () => {
@@ -115,5 +136,9 @@ describe('requireAccountProfile', () => {
       expect(takeAccountReturnTarget(returnKey)).toBe(approval)
       expect(takeAccountReturnTarget(returnKey)).toBeUndefined()
     }
+  })
+
+  it('does not read storage without a return key', () => {
+    expect(takeAccountReturnTarget(undefined)).toBeUndefined()
   })
 })

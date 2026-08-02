@@ -99,6 +99,7 @@ describe('management API client', () => {
     await management.createRoleAssignment({ roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' })
     await management.revokeRoleAssignment('assignment-1')
     await management.listApiResources()
+    await management.listApiResources({ ownerOrganizationId: 'org-1' })
     await management.getApiResource('resource-1')
     await management.createApiResource({
       identifier: 'management-api',
@@ -236,6 +237,7 @@ describe('management API client', () => {
       ['roleAssignments.post', { json: { roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' } }],
       ['roleAssignmentRevocation.put', { param: { id: 'assignment-1' } }],
       ['apiResources.get'],
+      ['apiResources.get', { query: { ownerOrganizationId: 'org-1' } }],
       ['apiResource.get', { param: { id: 'resource-1' } }],
       [
         'apiResources.post',
