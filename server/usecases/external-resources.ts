@@ -1626,8 +1626,14 @@ async function postForm(
 async function oauthErrorDetail(response: Response): Promise<string | null> {
   try {
     const body = (await response.json()) as Record<string, unknown>
-    const error = typeof body.error === 'string' ? body.error : null
-    const description = typeof body.error_description === 'string' ? body.error_description : null
+    const error =
+      typeof body.error === 'string' ? body.error : typeof body.code === 'string' ? body.code.toLowerCase() : null
+    const description =
+      typeof body.error_description === 'string'
+        ? body.error_description
+        : typeof body.message === 'string'
+          ? body.message
+          : null
     if (!error) return null
     return description ? `${error}: ${description}` : error
   } catch {
