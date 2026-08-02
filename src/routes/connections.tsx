@@ -1,10 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { AccountConnectionsPage } from '@/features/account/account-center'
-import { requireAccountProfile } from '@/lib/route-auth'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/connections')({
-  beforeLoad: async ({ location }) => {
-    await requireAccountProfile(location.href)
+  beforeLoad: () => {
+    throw redirect({ href: '/security' })
   },
-  component: AccountConnectionsPage,
 })

@@ -126,8 +126,8 @@ describe('AuthLayout', () => {
 
   it('returns default brand style when config is not loaded', () => {
     expect(brandingStyle(null)).toMatchObject({
-      '--brand-primary': '#b42318',
-      '--brand-background': '#f7f3ee',
+      '--brand-primary': '#007b83',
+      '--brand-background': '#ffffff',
     })
   })
 
@@ -135,7 +135,7 @@ describe('AuthLayout', () => {
     render(<BrandIdentity config={{ branding: { logoUrl: null } } as never} />)
 
     expect(screen.getByText('Realmroot')).toBeTruthy()
-    expect(screen.getByText('R')).toBeTruthy()
+    expect(document.querySelector('.realmrootMark')).toBeTruthy()
   })
 
   it('renders configured logo branding and optional eyebrow', () => {

@@ -6,7 +6,7 @@ import {
   ApplicationOidcClaimsForm,
   ApplicationsTableContent,
 } from '@/features/console/extracted/applications/application-detail-sections'
-import { application } from './console.test-utils'
+import { application, renderWithQuery } from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
   disconnect() {}
@@ -48,35 +48,39 @@ describe('ApplicationOidcClaimsForm', () => {
 })
 
 describe('ApplicationsTableContent', () => {
-  it('renders applications and toggles disabled state', () => {
+  it('renders applications and toggles disabled state', async () => {
     const onToggleDisabled = vi.fn()
-    render(
+    renderWithQuery(
       <ApplicationsTableContent
         applications={[app]}
         emptyDescription="No matches"
         emptyTitle="No matching apps"
         hasApplications
         onToggleDisabled={onToggleDisabled}
+        organizations={[]}
       />,
     )
-    fireEvent.click(screen.getByLabelText(`Actions for ${app.name}`))
+    fireEvent.pointerDown(await screen.findByLabelText(`Actions for ${app.name}`), { button: 0, ctrlKey: false })
     fireEvent.click(screen.getByText('Disable'))
     expect(onToggleDisabled).toHaveBeenCalledWith(app)
   })
 
-  it('renders the enable action for a disabled application', () => {
+  it('renders the enable action for a disabled application', async () => {
     const onToggleDisabled = vi.fn()
-    render(
+    renderWithQuery(
       <ApplicationsTableContent
-        applications={[{ ...app, disabled: true, firstParty: false }]}
+        applications={[
+          { ...app, disabled: true, audience: { mode: 'users', organizationIds: [], userIds: ['user-1'] } },
+        ]}
         emptyDescription="No matches"
         emptyTitle="No matching apps"
         hasApplications
         onToggleDisabled={onToggleDisabled}
+        organizations={[]}
       />,
     )
-    expect(screen.getByText('Third-party')).toBeTruthy()
-    fireEvent.click(screen.getByLabelText(`Actions for ${app.name}`))
+    expect(await screen.findByText('Assigned users')).toBeTruthy()
+    fireEvent.pointerDown(screen.getByLabelText(`Actions for ${app.name}`), { button: 0, ctrlKey: false })
     expect(screen.getByText('Enable')).toBeTruthy()
   })
 
@@ -88,6 +92,7 @@ describe('ApplicationsTableContent', () => {
         emptyTitle="No matching apps"
         hasApplications
         onToggleDisabled={vi.fn()}
+        organizations={[]}
       />,
     )
     expect(screen.getByText('No matching apps')).toBeTruthy()
@@ -101,6 +106,7 @@ describe('ApplicationsTableContent', () => {
         emptyTitle="No matching apps"
         hasApplications={false}
         onToggleDisabled={vi.fn()}
+        organizations={[]}
       />,
     )
     expect(screen.getByText('No applications yet')).toBeTruthy()

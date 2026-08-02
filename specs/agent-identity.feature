@@ -95,7 +95,10 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:agent-protocol @journey:agent-multi-host-continuity
     Scenario: One Agent identity can be used from independently secured hosts
       Given an Agent identity has an active host registration
-      When a controller enrolls the same Agent on another host with a different public key
+      When the Agent client requests another enrollment for that stable Agent from a host with a different public key
+      Then Realmroot creates a pending Agent enrollment and returns its hosted approval URL
+      And the Agent client can poll that enrollment through its canonical Agent protocol URI
+      When an authorized controller approves the hosted enrollment
       Then both host registrations resolve to the same Agent issuer and subject
       And neither host receives the other host's private key
 
@@ -356,10 +359,14 @@ Feature: Agent identity and delegated API authorization
     Scenario: A controller decides an Agent resource request in one step
       Given an Agent resource access request is pending
       When an authorized controller approves it
-      Then the controller confirms the displayed resource account, exact scopes, and one-time, limited, or persistent mode
+      Then the controller confirms the named Agent, named resource, displayed resource account, exact scopes, and one-time, limited, or persistent mode
+      And the Account Center request queue identifies the named Agent and named resource before the controller opens the decision
+      And stable Agent and resource identifiers remain visible as supporting information
+      And limited access accepts an exact future local date and time while rejecting empty or past values
       And no account-selection control is displayed
       And scope expansion, another account, or another resource requires a new approval
       And a denied request cannot issue a target token
+      And an incomplete approval URL shows only a recovery state without inactive authorization controls
 
     @e2e @entrypoint:product-ui @journey:agent-resource-approval-sign-in
     Scenario: A signed-out controller signs in without losing the Agent approval
@@ -415,3 +422,10 @@ Feature: Agent identity and delegated API authorization
       When Realmroot allows or denies the request
       Then the audit record identifies the controller authority, resource account, Agent, host, grant, scopes, and result
       And it excludes credentials, authorization headers, and complete request or response bodies
+
+    @entrypoint:product-ui @journey:agent-governance-audit
+    Scenario: Agent identity and management authority changes remain auditable
+      Given an Agent identity is governed by a controller or administrator
+      When the Agent is enrolled, recovered, retired, or receives a capability decision
+      Then Realmroot records the action, result, controller, stable Agent identity, host, and affected capabilities
+      And the audit event contains no host credential, session token, or approval code

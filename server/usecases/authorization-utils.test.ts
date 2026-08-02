@@ -3,7 +3,6 @@ import {
   dedupe,
   isAuthorizationClaim,
   selectTokenClaims,
-  toAssignmentInput,
   toTokenClaims,
 } from '@server/usecases/authorization-utils'
 import type { RoleAssignmentRecord } from '@server/usecases/ports'
@@ -16,9 +15,6 @@ const role: RoleResponse = {
   key: 'reader',
   name: 'Reader',
   description: null,
-  resourceId: null,
-  organizationId: null,
-  applicationId: null,
   system: false,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -31,6 +27,9 @@ const resource: ApiResourceResponse = {
   connectorId: null,
   description: null,
   enabled: true,
+  ownerOrganizationId: 'org-1',
+  accessEligibility: { mode: 'realm', organizationIds: [] },
+  availableToAgents: true,
   archivedAt: null,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -49,13 +48,7 @@ const organization: OrganizationResponse = {
 const assignments = [{ role, scopes: ['projects:read'] }] as RoleAssignmentRecord[]
 
 describe('authorization claim helpers', () => {
-  it('creates assignment and entity identifiers', () => {
-    expect(toAssignmentInput({ roleId: role.id, subjectId: 'user-1' }, null)).toMatchObject({
-      id: expect.stringMatching(/^assign_/),
-      roleId: role.id,
-      subjectId: 'user-1',
-      assignedByUserId: null,
-    })
+  it('creates entity identifiers and deduplicates claim values', () => {
     expect(createId('resource')).toMatch(/^resource_[a-f0-9]{32}$/)
     expect(dedupe(['reader', 'reader', 'writer'])).toEqual(['reader', 'writer'])
   })

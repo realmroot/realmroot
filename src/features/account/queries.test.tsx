@@ -98,6 +98,18 @@ describe('useAccountMutation', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['account', 'profile'] })
   })
 
+  it('can invalidate a collection without refetching active detail queries', async () => {
+    const client = newClient()
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => useAccountMutation(), { wrapper: wrapper(client) })
+
+    await result.current('Organization deleted.', async () => undefined, {
+      invalidateExact: [['account', 'organizations']],
+    })
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ exact: true, queryKey: ['account', 'organizations'] })
+  })
+
   it('reports an error message and calls the onError callback', async () => {
     const client = newClient()
     const onError = vi.fn()

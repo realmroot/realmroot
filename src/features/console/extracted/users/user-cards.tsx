@@ -111,7 +111,7 @@ export function UserProfileCard({
           {validationError ? <MutationError error={validationError} /> : null}
           <MutationError error={error} />
           <Button disabled={pending} type="submit">
-            {pending ? tt('Saving...') : tt('Save profile')}
+            {pending ? tt('Saving…') : tt('Save profile')}
           </Button>
         </form>
       </CardContent>
@@ -194,7 +194,7 @@ export function UserSecurityCard({
                     {formatDate(passkey.createdAt ?? undefined)}
                   </p>
                 </div>
-                <Button onClick={() => onDeletePasskey(passkey.id)} type="button" variant="danger">
+                <Button onClick={() => onDeletePasskey(passkey.id)} type="button" variant="destructive">
                   {' '}
                   {tt('Delete')}{' '}
                 </Button>
@@ -239,7 +239,7 @@ export function UserSessionsCard({
             <CardTitle>{tt('Sessions')}</CardTitle>
             <CardDescription>{tt('Revoke one session or require every device to sign in again.')}</CardDescription>
           </div>
-          <Button disabled={pending || sessions.length === 0} onClick={onRevokeAll} type="button" variant="danger">
+          <Button disabled={pending || sessions.length === 0} onClick={onRevokeAll} type="button" variant="destructive">
             {' '}
             {tt('Revoke all')}{' '}
           </Button>
@@ -259,7 +259,12 @@ export function UserSessionsCard({
                   {tt('; expires')} {formatDate(session.expiresAt)}
                 </p>
               </div>
-              <Button disabled={pending} onClick={() => onRevokeSession(session.id)} type="button" variant="danger">
+              <Button
+                disabled={pending}
+                onClick={() => onRevokeSession(session.id)}
+                type="button"
+                variant="destructive"
+              >
                 {' '}
                 {tt('Revoke')}{' '}
               </Button>

@@ -1,6 +1,6 @@
-import type { RoleAssignmentInput, RoleAssignmentRecord } from '@server/usecases/ports'
+import type { RoleAssignmentRecord } from '@server/usecases/ports'
 import type { ApplicationOidcClaims } from '@shared/api/applications'
-import type { ApiResourceResponse, AssignRoleRequest, OrganizationResponse } from '@shared/api/authorization'
+import type { ApiResourceResponse, OrganizationResponse } from '@shared/api/authorization'
 
 export interface AuthorizationTokenClaimInput {
   userId?: string | null
@@ -12,14 +12,6 @@ export interface AuthorizationTokenClaimInput {
   claimSelection?: ApplicationOidcClaims['accessToken']
 }
 
-export function toAssignmentInput(input: AssignRoleRequest, actorUserId: string | null): RoleAssignmentInput {
-  return {
-    ...input,
-    id: createId('assign'),
-    assignedByUserId: actorUserId,
-  }
-}
-
 export function toTokenClaims(
   input: AuthorizationTokenClaimInput,
   assignments: RoleAssignmentRecord[],
@@ -27,9 +19,12 @@ export function toTokenClaims(
   organization: OrganizationResponse | null = null,
 ) {
   const roles = dedupe(assignments.map((assignment) => assignment.role.key))
+  const assignedScopes = new Set(assignments.flatMap((assignment) => assignment.scopes))
+  const scopes =
+    resource && assignments.length > 0 ? input.scopes.filter((scope) => assignedScopes.has(scope)) : input.scopes
   const groups = input.organizationId ? [input.organizationId] : []
   const authorization = {
-    scopes: input.scopes,
+    scopes,
     groups,
     roles,
     ...(input.organizationId ? { organization_id: input.organizationId } : {}),

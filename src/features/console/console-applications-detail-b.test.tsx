@@ -1,8 +1,8 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationDetailPage } from '@/features/console/extracted/applications/application-detail'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
-import { AppRouter, queryClient } from '@/router'
+import { queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
   disconnect() {}
@@ -21,6 +21,7 @@ afterEach(() => {
 import {
   application,
   configz,
+  consoleAccountAccess,
   consoleAccountProfile,
   consoleSharedFetch,
   emptyPagination,
@@ -66,7 +67,7 @@ describe('admin console applications-detail-b', () => {
     expect(requests.filter((url) => url === '/api/applications/app-1')).toHaveLength(2)
   })
 
-  it('keeps application detail rendering stable when optional list fields are absent from the API response', async () => {
+  it('keeps application detail rendering stable when optional list fields are empty', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
@@ -77,22 +78,25 @@ describe('admin console applications-detail-b', () => {
         )
       }
       if (url === '/api/applications/app-1') {
-        const {
-          corsOrigins: _corsOrigins,
-          postLogoutRedirectUris: _postLogoutRedirectUris,
-          redirectUris: _redirectUris,
-          ...partial
-        } = application
-        return Promise.resolve(jsonResponse(partial))
+        return Promise.resolve(
+          jsonResponse({
+            ...application,
+            corsOrigins: [],
+            postLogoutRedirectUris: [],
+            redirectUris: [],
+          }),
+        )
       }
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<ApplicationDetailPage applicationId="app-1" />)
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
+    const redirects = screen.getByRole('heading', { name: 'Redirects and origins' }).closest('section') as HTMLElement
+    fireEvent.click(redirects.querySelector('button') as HTMLButtonElement)
     expect(screen.getByLabelText('Redirect URIs')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Post sign-out redirect URIs')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Post sign-out redirects')).toHaveProperty('value', '')
     expect(screen.getByLabelText('CORS origins')).toHaveProperty('value', '')
   })
 
@@ -100,7 +104,8 @@ describe('admin console applications-detail-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
       if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/readiness') {
         return Promise.resolve(
@@ -113,15 +118,15 @@ describe('admin console applications-detail-b', () => {
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
       return consoleSharedFetch(input, init)
     })
-    window.history.pushState(null, '', '/console/applications/app-1')
-
-    render(<AppRouter />)
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
+    const redirects = screen.getByRole('heading', { name: 'Redirects and origins' }).closest('section') as HTMLElement
+    fireEvent.click(redirects.querySelector('button') as HTMLButtonElement)
     fireEvent.change(screen.getByLabelText('Redirect URIs'), {
       target: { value: 'https://bad.example.com/callback' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save redirects and origins' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect((await screen.findAllByText('Redirect URI is not allowed.')).length).toBeGreaterThan(0)
   })
@@ -142,7 +147,7 @@ describe('admin console applications-detail-b', () => {
 
     expect(await screen.findByText('jane@example.com')).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'User' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Role' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Realm access' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Email' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Created' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()

@@ -15,9 +15,9 @@ describe('OidcCallbackRoute', () => {
 
     render(<OidcCallbackRoute />)
 
-    expect(screen.getByRole('heading', { name: 'Client callback' })).toBeTruthy()
-    expect(screen.getByText('Authorization response validated for this client integration.')).toBeTruthy()
-    expect(screen.getByText('code=code-1&state=state-1')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Authorization received.' })).toBeTruthy()
+    expect(screen.getByText('Authorization code received securely.')).toBeTruthy()
+    expect(screen.queryByText('code=code-1&state=state-1')).toBeNull()
   })
 
   it('rejects missing or mismatched callback state', () => {
@@ -26,6 +26,7 @@ describe('OidcCallbackRoute', () => {
 
     render(<OidcCallbackRoute />)
 
+    expect(screen.getByRole('heading', { name: 'Authorization could not continue.' })).toBeTruthy()
     expect(screen.getByText('Authorization response is missing a valid code and state.')).toBeTruthy()
   })
 
@@ -66,6 +67,7 @@ describe('OidcCallbackRoute', () => {
       return array
     })
     vi.spyOn(window.crypto.subtle, 'digest').mockResolvedValue(new Uint8Array([2, 3, 4]).buffer)
+    window.history.pushState(null, '', '/oidc/start?client_id=client-1')
 
     render(<OidcStartRoute />)
 
@@ -81,6 +83,7 @@ describe('OidcCallbackRoute', () => {
       return array
     })
     vi.spyOn(window.crypto.subtle, 'digest').mockResolvedValue(new Uint8Array([2, 3, 4]).buffer)
+    window.history.pushState(null, '', '/oidc/start?client_id=client-1')
 
     await startOidcAuthorization((url) => redirects.push(String(url)))
 
@@ -91,5 +94,15 @@ describe('OidcCallbackRoute', () => {
     expect(redirect.searchParams.get('state')).toBeTruthy()
     expect(window.sessionStorage.getItem('realmroot.oidc.state')).toBeTruthy()
     expect(window.sessionStorage.getItem('realmroot.oidc.verifier')).toBeTruthy()
+  })
+
+  it('keeps an incomplete OIDC start on a compact recovery page', async () => {
+    window.history.pushState(null, '', '/oidc/start')
+
+    render(<OidcStartRoute />)
+
+    expect(await screen.findByRole('heading', { name: 'Client sign-in could not start.' })).toBeTruthy()
+    expect(screen.getByText('A client ID is required to start OIDC sign-in.')).toBeTruthy()
+    expect(window.sessionStorage.getItem('realmroot.oidc.state')).toBeNull()
   })
 })

@@ -1,7 +1,7 @@
 import { badRequest, notFound } from '@server/domain/errors'
 import { hashPassword } from '@server/domain/password'
 import type { UserProfile, UserRepository } from '@server/usecases/ports'
-import { and, asc, count, desc, eq, isNull, like, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNull, like, type SQL } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { AccountProfileUpdateInput } from '../../../shared/api/account'
 import type { AdminUpdateUserInput, AdminUserListQuery } from '../../../shared/api/users'
@@ -14,8 +14,10 @@ export function createUserRepository(db: Database): UserRepository {
       return findUser(db, userId)
     },
 
-    async listManagedUsers(query) {
-      const where = managedUserWhere(query)
+    async listManagedUsers(query, userIds) {
+      if (userIds?.length === 0) return { items: [], total: 0, limit: query.limit, offset: query.offset }
+      const queryCondition = managedUserWhere(query)
+      const where = userIds ? and(queryCondition, inArray(user.id, userIds)) : queryCondition
       const orderColumn = managedUserSortColumn(query.sortBy)
       const order = query.sortDirection === 'asc' ? asc(orderColumn) : desc(orderColumn)
       const rows = where

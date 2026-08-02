@@ -12,6 +12,7 @@ import {
   resourceAccountConnection,
   resourceConnectionIntent,
   user,
+  webhookDeliveryRequest,
 } from '@server/db/schema'
 import { createResource } from '@server/usecases/authorization'
 import { discoverAgentResources } from '@server/usecases/external-resources'
@@ -59,6 +60,356 @@ describe('authorization management over real D1', () => {
 
     const response = await harness.request('/api/roles', { headers: { cookie: memberCookie } })
     expect(response.status).toBe(403)
+  })
+
+  it('constrains Organization Console inventory and exposes governed Agent detail [spec: admin-console/organization-console-resource-boundary] [spec: admin-console/admin-agent-governance-detail]', async () => {
+    const adminCookie = await signInAdmin(harness)
+    const developerId = await createUser(harness, adminCookie, {
+      email: 'developer@example.com',
+      username: 'developer',
+      displayName: 'Developer',
+      password: 'developer-password-2026',
+    })
+    const ownedOrganization = (await (
+      await postJson(harness, adminCookie, '/api/organizations', { slug: 'owned-team', name: 'Owned Team' })
+    ).json()) as { id: string }
+    const otherOrganization = (await (
+      await postJson(harness, adminCookie, '/api/organizations', { slug: 'other-team', name: 'Other Team' })
+    ).json()) as { id: string }
+    await postJson(harness, adminCookie, `/api/organizations/${ownedOrganization.id}/members`, {
+      userId: developerId,
+      role: 'developer',
+    })
+    await harness.request('/api/developer-settings', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        organizationCreation: 'admins_only',
+        approvedUserIds: [],
+        consoleAccess: 'all_organizations',
+        eligibleAccessLevels: ['owner', 'admin', 'developer'],
+        selectedOrganizationIds: [],
+      }),
+    })
+    const ownedWebhook = (await (
+      await postJson(harness, adminCookie, '/api/webhooks/endpoints', {
+        url: 'https://owned.example.com/webhooks',
+        events: ['session.revoked'],
+        enabled: true,
+        organizationId: ownedOrganization.id,
+      })
+    ).json()) as { endpoint: { id: string } }
+    const otherWebhook = (await (
+      await postJson(harness, adminCookie, '/api/webhooks/endpoints', {
+        url: 'https://other.example.com/webhooks',
+        events: ['session.revoked'],
+        enabled: true,
+        organizationId: otherOrganization.id,
+      })
+    ).json()) as { endpoint: { id: string } }
+
+    const ownedApplication = (await (
+      await postJson(harness, adminCookie, '/api/applications', {
+        name: 'Owned Portal',
+        clientType: 'public_spa',
+        redirectUris: ['https://owned.example.com/callback'],
+        ownerOrganizationId: ownedOrganization.id,
+      })
+    ).json()) as { id: string }
+    const otherApplication = (await (
+      await postJson(harness, adminCookie, '/api/applications', {
+        name: 'Other Portal',
+        clientType: 'public_spa',
+        redirectUris: ['https://other.example.com/callback'],
+        ownerOrganizationId: otherOrganization.id,
+      })
+    ).json()) as { id: string }
+    const ownedResource = (await (
+      await postJson(harness, adminCookie, '/api/api-resources', {
+        identifier: 'owned-api',
+        name: 'Owned API',
+        resourceUrl: 'https://owned.example.com/api',
+        enabled: false,
+        ownerOrganizationId: ownedOrganization.id,
+      })
+    ).json()) as { id: string }
+    const otherResource = (await (
+      await postJson(harness, adminCookie, '/api/api-resources', {
+        identifier: 'other-api',
+        name: 'Other API',
+        resourceUrl: 'https://other.example.com/api',
+        enabled: false,
+        ownerOrganizationId: otherOrganization.id,
+      })
+    ).json()) as { id: string }
+    const now = new Date()
+    await harness.db.insert(webhookDeliveryRequest).values([
+      {
+        id: 'owned-webhook-request',
+        endpointId: ownedWebhook.endpoint.id,
+        event: 'session.revoked',
+        status: 'failed',
+        attemptCount: 1,
+        httpStatus: 503,
+        error: 'Unavailable',
+        requestBody: '{"id":"evt_owned","type":"session.revoked","createdAt":"2026-01-01T00:00:00.000Z","data":{}}',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'other-webhook-request',
+        endpointId: otherWebhook.endpoint.id,
+        event: 'session.revoked',
+        status: 'failed',
+        attemptCount: 1,
+        httpStatus: 503,
+        error: 'Unavailable',
+        requestBody: '{"id":"evt_other","type":"session.revoked","createdAt":"2026-01-01T00:00:00.000Z","data":{}}',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ])
+    await harness.db.insert(agentIdentity).values([
+      {
+        id: 'owned-agent',
+        issuer: 'http://localhost/api/auth',
+        subject: 'owned-agent-subject',
+        name: 'Owned Agent',
+        ownerOrganizationId: ownedOrganization.id,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'other-agent',
+        issuer: 'http://localhost/api/auth',
+        subject: 'other-agent-subject',
+        name: 'Other Agent',
+        ownerOrganizationId: otherOrganization.id,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ])
+    await harness.db.insert(agentHost).values({
+      id: 'owned-host',
+      name: 'Developer laptop',
+      userId: developerId,
+      publicKey: 'public-key-material',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agent).values({
+      id: 'owned-protocol-agent',
+      name: 'Protocol registration',
+      userId: developerId,
+      hostId: 'owned-host',
+      status: 'active',
+      mode: 'delegated',
+      publicKey: 'protocol-public-key-material',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentIdentityBinding).values({
+      id: 'owned-agent-binding',
+      agentIdentityId: 'owned-agent',
+      protocolAgentId: 'owned-protocol-agent',
+      status: 'active',
+      boundAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentAccessRequest).values({
+      id: 'owned-access-request',
+      resourceId: ownedResource.id,
+      agentIdentityId: 'owned-agent',
+      bindingId: 'owned-agent-binding',
+      scopes: ['orders:read'],
+      reason: 'Prepare a report',
+      status: 'pending',
+      approvalTokenHash: 'owned-approval-token-hash',
+      encryptedApprovalToken: 'owned-encrypted-approval-token',
+      expiresAt: new Date(now.getTime() + 60_000),
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentAccessGrant).values({
+      id: 'owned-access-grant',
+      resourceId: ownedResource.id,
+      agentIdentityId: 'owned-agent',
+      scopes: ['orders:read'],
+      mode: 'persistent',
+      status: 'active',
+      grantedByUserId: developerId,
+      createdAt: now,
+      updatedAt: now,
+    })
+    const agentRole = (await (
+      await postJson(harness, adminCookie, '/api/roles', {
+        key: 'report.reader',
+        name: 'Report reader',
+      })
+    ).json()) as { id: string }
+    await postJson(harness, adminCookie, '/api/role-assignments', {
+      roleId: agentRole.id,
+      subjectType: 'agent',
+      subjectId: 'owned-agent',
+      organizationId: ownedOrganization.id,
+    })
+    await harness.db.insert(agentAuditEvent).values([
+      {
+        id: 'owned-agent-event',
+        action: 'agent.access.requested',
+        result: 'pending',
+        agentIdentityId: 'owned-agent',
+        occurredAt: now,
+      },
+      {
+        id: 'other-agent-event',
+        action: 'agent.access.requested',
+        result: 'pending',
+        agentIdentityId: 'other-agent',
+        occurredAt: now,
+      },
+    ])
+    const developerCookie = await signIn(harness, 'developer@example.com', 'developer-password-2026')
+
+    const webhookInventory = await harness.request('/api/webhooks/endpoints', {
+      headers: { cookie: developerCookie },
+    })
+    expect(webhookInventory.status).toBe(200)
+    await expect(webhookInventory.json()).resolves.toMatchObject({
+      endpoints: [{ id: ownedWebhook.endpoint.id, organizationId: ownedOrganization.id }],
+      pagination: { total: 1 },
+    })
+    const webhookRequests = await harness.request('/api/webhooks/requests', {
+      headers: { cookie: developerCookie },
+    })
+    await expect(webhookRequests.json()).resolves.toMatchObject({
+      requests: [{ id: 'owned-webhook-request', organizationId: ownedOrganization.id }],
+      pagination: { total: 1 },
+    })
+    expect(
+      (
+        await harness.request(`/api/webhooks/endpoints/${otherWebhook.endpoint.id}`, {
+          headers: { cookie: developerCookie },
+        })
+      ).status,
+    ).toBe(403)
+    expect(
+      (
+        await harness.request('/api/webhooks/endpoints', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie: developerCookie },
+          body: JSON.stringify({
+            url: 'https://forbidden.example.com/webhooks',
+            events: ['session.revoked'],
+            enabled: true,
+            organizationId: otherOrganization.id,
+          }),
+        })
+      ).status,
+    ).toBe(403)
+
+    const applicationsResponse = await harness.request('/api/applications', { headers: { cookie: developerCookie } })
+    expect(applicationsResponse.status).toBe(200)
+    await expect(applicationsResponse.json()).resolves.toMatchObject({
+      applications: [{ id: ownedApplication.id, ownerOrganizationId: ownedOrganization.id }],
+      pagination: { total: 1 },
+    })
+    const resourcesResponse = await harness.request('/api/api-resources', { headers: { cookie: developerCookie } })
+    expect(resourcesResponse.status).toBe(200)
+    await expect(resourcesResponse.json()).resolves.toMatchObject({
+      items: [{ id: ownedResource.id, ownerOrganizationId: ownedOrganization.id }],
+      pagination: { total: 1 },
+    })
+    const agentsResponse = await harness.request('/api/agents', { headers: { cookie: developerCookie } })
+    expect(agentsResponse.status).toBe(200)
+    await expect(agentsResponse.json()).resolves.toMatchObject({
+      items: [
+        {
+          id: 'owned-agent',
+          homeSpace: { type: 'organization', organizationId: ownedOrganization.id },
+          hostCount: 1,
+          roleCount: 1,
+          pendingRequestCount: 1,
+          activeGrantCount: 1,
+        },
+      ],
+      pagination: { total: 1 },
+    })
+    const agentDetail = await harness.request('/api/agents/owned-agent', { headers: { cookie: developerCookie } })
+    expect(agentDetail.status).toBe(200)
+    await expect(agentDetail.json()).resolves.toMatchObject({
+      agent: { id: 'owned-agent', hostCount: 1, roleCount: 1, pendingRequestCount: 1, activeGrantCount: 1 },
+    })
+    const hostsResponse = await harness.request('/api/agents/owned-agent/hosts', {
+      headers: { cookie: developerCookie },
+    })
+    expect(hostsResponse.status).toBe(200)
+    const hostInventory = (await hostsResponse.json()) as { items: Array<Record<string, unknown>> }
+    expect(hostInventory.items).toEqual([
+      expect.objectContaining({ id: 'owned-host', name: 'Developer laptop', credentialType: 'public_key' }),
+    ])
+    expect(hostInventory.items[0]).not.toHaveProperty('publicKey')
+    await expect(
+      (await harness.request('/api/agents/owned-agent/roles', { headers: { cookie: developerCookie } })).json(),
+    ).resolves.toMatchObject({ items: [{ id: agentRole.id, key: 'report.reader' }] })
+    const accessRequestsResponse = await harness.request('/api/agents/owned-agent/access-requests', {
+      headers: { cookie: developerCookie },
+    })
+    const accessRequests = (await accessRequestsResponse.json()) as { items: Array<Record<string, unknown>> }
+    expect(accessRequests.items).toEqual([
+      expect.objectContaining({ id: 'owned-access-request', scopes: ['orders:read'], status: 'pending' }),
+    ])
+    expect(accessRequests.items[0]).not.toHaveProperty('approvalTokenHash')
+    await expect(
+      (await harness.request('/api/agents/owned-agent/access-grants', { headers: { cookie: developerCookie } })).json(),
+    ).resolves.toMatchObject({ items: [{ id: 'owned-access-grant', scopes: ['orders:read'], status: 'active' }] })
+    const auditResponse = await harness.request('/api/audit-events', { headers: { cookie: developerCookie } })
+    expect(auditResponse.status).toBe(200)
+    await expect(auditResponse.json()).resolves.toMatchObject({
+      items: [{ id: 'owned-agent-event', agentIdentityId: 'owned-agent' }],
+      pagination: { total: 1 },
+    })
+    expect(
+      (await harness.request('/api/audit-events?agentId=other-agent', { headers: { cookie: developerCookie } })).status,
+    ).toBe(403)
+    expect((await harness.request(`/api/users/${developerId}`, { headers: { cookie: developerCookie } })).status).toBe(
+      200,
+    )
+    expect(
+      (await harness.request(`/api/users/${developerId}/security`, { headers: { cookie: developerCookie } })).status,
+    ).toBe(403)
+
+    expect(
+      (await harness.request(`/api/applications/${otherApplication.id}`, { headers: { cookie: developerCookie } }))
+        .status,
+    ).toBe(403)
+    expect(
+      (
+        await harness.request(`/api/api-resources/${otherResource.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json', cookie: developerCookie },
+          body: JSON.stringify({ name: 'Forbidden rename' }),
+        })
+      ).status,
+    ).toBe(403)
+    expect(
+      (
+        await harness.request(`/api/applications/${ownedApplication.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json', cookie: developerCookie },
+          body: JSON.stringify({ name: 'Owned Portal 2' }),
+        })
+      ).status,
+    ).toBe(200)
+
+    const realmInventory = await harness.request('/api/applications', { headers: { cookie: adminCookie } })
+    await expect(realmInventory.json()).resolves.toMatchObject({ pagination: { total: 2 } })
+    const realmAudit = await harness.request('/api/audit-events', { headers: { cookie: adminCookie } })
+    await expect(realmAudit.json()).resolves.toMatchObject({ pagination: { total: 2 } })
   })
 
   it('rejects an invalid api-resource payload with 400', async () => {
@@ -569,20 +920,41 @@ describe('authorization management over real D1', () => {
       password: 'assignee-password-2026',
     })
 
-    const resource = (await (
-      await postJson(harness, cookie, '/api/api-resources', {
-        identifier: 'https://roles.example.com',
-        name: 'Roles API',
-        resourceUrl: 'https://roles.example.com',
-      })
-    ).json()) as { id: string }
+    expect(
+      (
+        await postJson(harness, cookie, '/api/api-resources', {
+          identifier: 'https://roles.example.com',
+          name: 'Roles API',
+          resourceUrl: 'https://roles.example.com',
+        })
+      ).status,
+    ).toBe(201)
     const role = (await (
       await postJson(harness, cookie, '/api/roles', {
         key: 'editor',
         name: 'Editor',
-        resourceId: resource.id,
       })
     ).json()) as { id: string }
+
+    const duplicateRole = await harness.request('/api/roles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ key: 'editor', name: 'Duplicate editor' }),
+    })
+    expect(duplicateRole.status).toBe(409)
+    await expect(duplicateRole.json()).resolves.toMatchObject({
+      error: {
+        code: 'conflict',
+        message: 'Role key "editor" is already in use.',
+      },
+    })
+
+    const changedKey = await harness.request(`/api/roles/${role.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ key: 'renamed-editor' }),
+    })
+    expect(changedKey.status).toBe(400)
 
     const roles = await harness.request('/api/roles', { headers: { cookie } })
     expect(((await roles.json()) as { roles: unknown[] }).roles.length).toBeGreaterThanOrEqual(1)
@@ -596,22 +968,29 @@ describe('authorization management over real D1', () => {
     })
     expect(((await patched.json()) as { name: string }).name).toBe('Lead Editor')
 
-    const replaceScopes = await harness.request(`/api/roles/${role.id}/scopes`, {
+    const replacePermissions = await harness.request(`/api/roles/${role.id}/permissions`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ scopes: [] }),
+      body: JSON.stringify({ permissions: [] }),
     })
-    expect(replaceScopes.status).toBe(204)
+    expect(replacePermissions.status).toBe(204)
 
-    const roleScopes = await harness.request(`/api/roles/${role.id}/scopes`, {
+    const rolePermissions = await harness.request(`/api/roles/${role.id}/permissions`, {
       headers: { cookie },
     })
-    expect(((await roleScopes.json()) as { scopes: string[] }).scopes).toEqual([])
+    expect(((await rolePermissions.json()) as { permissions: unknown[] }).permissions).toEqual([])
 
-    // assignUserRole (top-level mount) writes a userRoleAssignment row.
-    await postJson(harness, cookie, '/api/roles/assignments/users', { roleId: role.id, subjectId: userId }, 204)
-    // assignUserRole (roles-scoped mount) is idempotent on conflict.
-    await postJson(harness, cookie, '/api/roles/assignments/users', { roleId: role.id, subjectId: userId }, 204)
+    const assignment = (await (
+      await postJson(harness, cookie, '/api/role-assignments', {
+        roleId: role.id,
+        subjectType: 'user',
+        subjectId: userId,
+      })
+    ).json()) as { id: string }
+    const assignments = await harness.request(`/api/role-assignments?roleId=${role.id}`, { headers: { cookie } })
+    expect(((await assignments.json()) as { assignments: Array<{ id: string }> }).assignments).toContainEqual(
+      expect.objectContaining({ id: assignment.id }),
+    )
 
     expect((await harness.request(`/api/roles/${role.id}`, { method: 'DELETE', headers: { cookie } })).status).toBe(204)
   })
@@ -630,7 +1009,9 @@ describe('authorization management over real D1', () => {
     ).json()) as { id: string }
 
     const list = await harness.request('/api/organizations', { headers: { cookie } })
-    expect(((await list.json()) as { organizations: unknown[] }).organizations.length).toBe(1)
+    expect(((await list.json()) as { organizations: Array<{ id: string }> }).organizations).toContainEqual(
+      expect.objectContaining({ id: organization.id }),
+    )
 
     expect((await harness.request(`/api/organizations/${organization.id}`, { headers: { cookie } })).status).toBe(200)
 
@@ -659,11 +1040,15 @@ describe('authorization management over real D1', () => {
     })
     expect(((await patchedMember.json()) as { role: string }).role).toBe('admin')
 
-    // assignMemberRole writes a memberRoleAssignment row.
     const role = (await (
       await postJson(harness, cookie, '/api/roles', { key: 'org-lead', name: 'Org Lead' })
     ).json()) as { id: string }
-    await postJson(harness, cookie, '/api/roles/assignments/members', { roleId: role.id, subjectId: member.id }, 204)
+    await postJson(harness, cookie, '/api/role-assignments', {
+      roleId: role.id,
+      subjectType: 'user',
+      subjectId: memberUserId,
+      organizationId: organization.id,
+    })
 
     const invitation = (await (
       await postJson(harness, cookie, `/api/organizations/${organization.id}/invitations`, {
@@ -717,12 +1102,10 @@ describe('authorization management over real D1', () => {
       id: string
     }
 
-    await postJson(
-      harness,
-      cookie,
-      '/api/roles/assignments/applications',
-      { roleId: role.id, subjectId: application.id },
-      204,
-    )
+    await postJson(harness, cookie, '/api/role-assignments', {
+      roleId: role.id,
+      subjectType: 'workload',
+      subjectId: application.id,
+    })
   })
 })

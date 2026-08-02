@@ -3,6 +3,8 @@ import type {
   ApplicationResponse,
   CreateApplicationRequest,
   CreateApplicationResponse,
+  ListApplicationAuthorizationsResponse,
+  ListApplicationsQuery,
   ListApplicationsResponse,
   ListClientSecretsResponse,
   ListRedirectUrisResponse,
@@ -14,13 +16,23 @@ import type {
 } from '@shared/api/applications'
 import type { UploadedAssetResponse } from '@shared/api/assets'
 import type {
+  AddMemberRequest,
+  ApiResourceContractResponse,
   ApiResourceResponse,
-  AssignRoleRequest,
+  CreateInvitationRequest,
   CreateOrganizationRequest,
+  CreateRoleAssignmentRequest,
   CreateRoleRequest,
+  InvitationResponse,
+  ListInvitationsResponse,
+  ListMembersResponse,
+  ListRoleAssignmentsQuery,
+  ListRoleAssignmentsResponse,
+  MemberResponse,
   OrganizationResponse,
+  RolePermissionsResponse,
   RoleResponse,
-  RoleScopesResponse,
+  UpdateMemberRequest,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '@shared/api/authorization'
@@ -41,6 +53,9 @@ import type {
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementCreateUserRequest,
+  ManagementDeveloperSettingsResponse,
+  ManagementEmailSettingsResponse,
+  ManagementGeneralSettingsResponse,
   ManagementReadinessResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
@@ -50,9 +65,12 @@ import type {
   UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
+  UpdateManagementDeveloperSettingsRequest,
+  UpdateManagementEmailSettingsRequest,
+  UpdateManagementGeneralSettingsRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
-import type { SecurityPolicy, UpdateSecurityPolicyInput } from '@shared/api/security'
+import type { SecurityPolicyResponse, UpdateSecurityPolicyInput } from '@shared/api/security'
 import type {
   CreateWebhookEndpointRequest,
   ListWebhookEndpointsQuery,
@@ -64,7 +82,7 @@ import type {
   WebhookEndpointSecretResponse,
   WebhookRequest,
 } from '@shared/api/webhooks'
-import { apiClient, readRpcResponse, uploadApiFile } from '@/lib/api'
+import { apiClient, readJsonResponse, readNoContentResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
 import { listApiResources } from './management-api-resources'
 
 export { consoleQueryKeys } from './console-query-keys'
@@ -77,7 +95,16 @@ export type AdminDashboard = {
   roles: ListRolesResponse
   apiResources: ListApiResourcesResponse
   signIn: ManagementSignInSettingsResponse
-  security: { policy: SecurityPolicy }
+  security: { policy: SecurityPolicyResponse }
+}
+
+export type OrganizationDashboard = {
+  organization: OrganizationResponse
+  applications: ListApplicationsResponse
+  users: ListManagementUsersResponse
+  apiResources: Awaited<ReturnType<typeof listApiResources>>
+  agents: Awaited<ReturnType<typeof getAgentInventory>>
+  assignments: ListRoleAssignmentsResponse
 }
 
 type ListOrganizationsResponse = {
@@ -117,8 +144,31 @@ export function getAdminDashboard(): Promise<AdminDashboard> {
   }))
 }
 
-export function listApplications() {
-  return readRpcResponse(apiClient.api.applications.$get())
+export function getOrganizationDashboard(organizationId: string): Promise<OrganizationDashboard> {
+  return Promise.all([
+    getOrganization(organizationId),
+    listApplications({ ownerOrganizationId: organizationId }),
+    listUsers({ organizationId, limit: 100 }),
+    listApiResources({ ownerOrganizationId: organizationId }),
+    getAgentInventory({ organizationId, limit: 100 }),
+    listRoleAssignments({ organizationId, limit: 100 }),
+  ]).then(([organization, applications, users, apiResources, agents, assignments]) => ({
+    organization,
+    applications,
+    users,
+    apiResources,
+    agents,
+    assignments,
+  }))
+}
+
+export function listApplications(query: Partial<ListApplicationsQuery> = {}) {
+  const serialized = stringifyQuery(query)
+  return readRpcResponse(
+    Object.keys(serialized).length === 0
+      ? apiClient.api.applications.$get()
+      : apiClient.api.applications.$get({ query: serialized }),
+  )
 }
 
 export function createApplication(input: CreateApplicationRequest): Promise<CreateApplicationResponse> {
@@ -169,6 +219,26 @@ export function rotateApplicationClientSecret(id: string): Promise<RotateClientS
   return readRpcResponse(apiClient.api.applications[':id']['client-secrets'].$post({ param: { id } }))
 }
 
+export function listApplicationAuthorizations(
+  applicationId: string,
+  query: Partial<PaginationQuery> = {},
+): Promise<ListApplicationAuthorizationsResponse> {
+  return readRpcResponse(
+    apiClient.api.applications[':applicationId'].authorizations.$get({
+      param: { applicationId },
+      query: stringifyQuery(query),
+    }),
+  )
+}
+
+export function revokeApplicationAuthorization(applicationId: string, authorizationId: string) {
+  return readRpcResponse(
+    apiClient.api.applications[':applicationId'].authorizations[':authorizationId'].$delete({
+      param: { applicationId, authorizationId },
+    }),
+  )
+}
+
 export function uploadApplicationLogo(id: string, file: File): Promise<UploadedAssetResponse> {
   return uploadApiFile(`/api/applications/${id}/logo`, file)
 }
@@ -178,7 +248,11 @@ export function listUsers(query: Partial<ManagementUserListQuery> = {}) {
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) params.set(key, String(value))
   }
-  return readRpcResponse(apiClient.api.users.$get({ query: Object.fromEntries(params) }))
+  return readRpcResponse(
+    params.size === 0
+      ? apiClient.api.users.$get({ query: {} })
+      : apiClient.api.users.$get({ query: Object.fromEntries(params) }),
+  )
 }
 
 export function createUser(input: ManagementCreateUserRequest) {
@@ -311,22 +385,87 @@ export function updateAccountCenterSettings(input: UpdateManagementAccountCenter
   return readRpcResponse(apiClient.api['account-center-settings'].$patch({ json: input }))
 }
 
+export function getDeveloperSettings(): Promise<ManagementDeveloperSettingsResponse> {
+  return readRpcResponse(apiClient.api['developer-settings'].$get())
+}
+
+export function updateDeveloperSettings(input: UpdateManagementDeveloperSettingsRequest) {
+  return readRpcResponse(apiClient.api['developer-settings'].$patch({ json: input }))
+}
+
+export function getGeneralSettings(): Promise<ManagementGeneralSettingsResponse> {
+  return readRpcResponse(apiClient.api['general-settings'].$get())
+}
+
+export function updateGeneralSettings(input: UpdateManagementGeneralSettingsRequest) {
+  return readRpcResponse(apiClient.api['general-settings'].$patch({ json: input }))
+}
+
+export function getEmailSettings(): Promise<ManagementEmailSettingsResponse> {
+  return readRpcResponse(apiClient.api['email-settings'].$get())
+}
+
+export function updateEmailSettings(input: UpdateManagementEmailSettingsRequest) {
+  return readRpcResponse(apiClient.api['email-settings'].$patch({ json: input }))
+}
+
 export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
   return readRpcResponse(apiClient.api.readiness.$get())
 }
 
-export function getAgentInventory(): Promise<{
-  items: import('@shared/api/agent-api').Agent[]
+export function getAgentInventory(query: Partial<import('@shared/api/agent-api').ListAgentsQuery> = {}): Promise<{
+  items: import('@shared/api/agent-api').ManagementAgent[]
   pagination: PaginationMetadata
 }> {
-  return readRpcResponse(apiClient.api.agents.$get())
+  const serialized = stringifyQuery(query)
+  return readRpcResponse(
+    Object.keys(serialized).length === 0
+      ? apiClient.api.agents.$get()
+      : apiClient.api.agents.$get({ query: serialized }),
+  )
 }
 
-export function getAgentAuditEvents(): Promise<{
+export function getAgent(agentId: string): Promise<{ agent: import('@shared/api/agent-api').ManagementAgent }> {
+  return readRpcResponse(apiClient.api.agents[':agentId'].$get({ param: { agentId } }))
+}
+
+export function listAgentHosts(agentId: string, query: Partial<PaginationQuery> = {}) {
+  return readRpcResponse(
+    apiClient.api.agents[':agentId'].hosts.$get({ param: { agentId }, query: stringifyQuery(query) }),
+  )
+}
+
+export function listAgentRoles(agentId: string, query: Partial<PaginationQuery> = {}) {
+  return readRpcResponse(
+    apiClient.api.agents[':agentId'].roles.$get({ param: { agentId }, query: stringifyQuery(query) }),
+  )
+}
+
+export function listAgentAccessRequests(agentId: string, query: Partial<PaginationQuery> = {}) {
+  return readRpcResponse(
+    apiClient.api.agents[':agentId']['access-requests'].$get({
+      param: { agentId },
+      query: stringifyQuery(query),
+    }),
+  )
+}
+
+export function listAgentAccessGrants(agentId: string, query: Partial<PaginationQuery> = {}) {
+  return readRpcResponse(
+    apiClient.api.agents[':agentId']['access-grants'].$get({
+      param: { agentId },
+      query: stringifyQuery(query),
+    }),
+  )
+}
+
+export function getAgentAuditEvents(
+  query: Partial<import('@shared/api/agent-api').ListAgentAuditEventsQuery> = {},
+): Promise<{
   items: AgentAuditEvent[]
   pagination: PaginationMetadata
 }> {
-  return readRpcResponse(apiClient.api['audit-events'].$get())
+  return readRpcResponse(apiClient.api['audit-events'].$get({ query: stringifyQuery(query) }))
 }
 
 export function emergencyRetireAgent(agentId: string) {
@@ -370,11 +509,13 @@ export function retryWebhookRequest(id: string): Promise<WebhookRequest> {
 }
 
 export function getSecurityPolicy() {
-  return readRpcResponse(apiClient.api.security.policy.$get())
+  return readRpcResponse(apiClient.api.security.policy.$get()) as Promise<{ policy: SecurityPolicyResponse }>
 }
 
 export function updateSecurityPolicy(input: UpdateSecurityPolicyInput) {
-  return readRpcResponse(apiClient.api.security.policy.$patch({ json: input }))
+  return readRpcResponse(apiClient.api.security.policy.$patch({ json: input })) as Promise<{
+    policy: SecurityPolicyResponse
+  }>
 }
 
 export function listOrganizations() {
@@ -391,6 +532,60 @@ export function createOrganization(input: CreateOrganizationRequest) {
 
 export function updateOrganization(id: string, input: UpdateOrganizationRequest) {
   return readRpcResponse(apiClient.api.organizations[':id'].$patch({ param: { id }, json: input }))
+}
+
+export function deleteOrganization(id: string) {
+  return fetch(`/api/organizations/${encodeURIComponent(id)}`, { method: 'DELETE' }).then(readNoContentResponse)
+}
+
+export function listOrganizationMembers(id: string): Promise<ListMembersResponse> {
+  return fetch(`/api/organizations/${encodeURIComponent(id)}/members`).then(readJsonResponse<ListMembersResponse>)
+}
+
+export function addOrganizationMember(id: string, input: AddMemberRequest): Promise<MemberResponse> {
+  return fetch(`/api/organizations/${encodeURIComponent(id)}/members`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  }).then(readJsonResponse<MemberResponse>)
+}
+
+export function updateOrganizationMember(
+  id: string,
+  memberId: string,
+  input: UpdateMemberRequest,
+): Promise<MemberResponse> {
+  return fetch(`/api/organizations/${encodeURIComponent(id)}/members/${encodeURIComponent(memberId)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  }).then(readJsonResponse<MemberResponse>)
+}
+
+export function removeOrganizationMember(id: string, memberId: string) {
+  return fetch(`/api/organizations/${encodeURIComponent(id)}/members/${encodeURIComponent(memberId)}`, {
+    method: 'DELETE',
+  }).then(readNoContentResponse)
+}
+
+export function listOrganizationInvitations(id: string): Promise<ListInvitationsResponse> {
+  return fetch(`/api/organizations/${encodeURIComponent(id)}/invitations`).then(
+    readJsonResponse<ListInvitationsResponse>,
+  )
+}
+
+export function createOrganizationInvitation(id: string, input: CreateInvitationRequest): Promise<InvitationResponse> {
+  return fetch(`/api/organizations/${encodeURIComponent(id)}/invitations`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  }).then(readJsonResponse<InvitationResponse>)
+}
+
+export function cancelOrganizationInvitation(id: string, invitationId: string) {
+  return fetch(`/api/organizations/${encodeURIComponent(id)}/invitations/${encodeURIComponent(invitationId)}`, {
+    method: 'DELETE',
+  }).then(readNoContentResponse)
 }
 
 export function uploadOrganizationLogo(id: string, file: File): Promise<UploadedAssetResponse> {
@@ -425,28 +620,34 @@ export function deleteRole(id: string) {
   return readRpcResponse(apiClient.api.roles[':id'].$delete({ param: { id } }))
 }
 
-export function listRoleScopes(id: string): Promise<RoleScopesResponse> {
-  return readRpcResponse(apiClient.api.roles[':id'].scopes.$get({ param: { id } }))
+export function listRolePermissions(id: string): Promise<RolePermissionsResponse> {
+  return readRpcResponse(apiClient.api.roles[':id'].permissions.$get({ param: { id } }))
 }
 
-export function replaceRoleScopes(id: string, scopes: string[]) {
-  return readRpcResponse(apiClient.api.roles[':id'].scopes.$put({ param: { id }, json: { scopes } }))
+export function replaceRolePermissions(id: string, permissions: Array<{ resourceId: string; scope: string }>) {
+  return readRpcResponse(apiClient.api.roles[':id'].permissions.$put({ param: { id }, json: { permissions } }))
 }
 
-export function assignUserRole(input: AssignRoleRequest) {
-  return readRpcResponse(apiClient.api.roles.assignments.users.$post({ json: input }))
+export function listRoleAssignments(
+  query: Partial<ListRoleAssignmentsQuery> = {},
+): Promise<ListRoleAssignmentsResponse> {
+  return readRpcResponse(
+    apiClient.api['role-assignments'].$get({
+      query: stringifyQuery(query) as Partial<Record<keyof ListRoleAssignmentsQuery, string>>,
+    }),
+  )
 }
 
-export function assignApplicationRole(input: AssignRoleRequest) {
-  return readRpcResponse(apiClient.api.roles.assignments.applications.$post({ json: input }))
+export function createRoleAssignment(input: CreateRoleAssignmentRequest) {
+  return readRpcResponse(apiClient.api['role-assignments'].$post({ json: input }))
 }
 
-export function assignMemberRole(input: AssignRoleRequest) {
-  return readRpcResponse(apiClient.api.roles.assignments.members.$post({ json: input }))
+export function revokeRoleAssignment(id: string) {
+  return readRpcResponse(apiClient.api['role-assignments'][':id'].$delete({ param: { id } }))
 }
 
-export function assignAgentRole(input: AssignRoleRequest) {
-  return readRpcResponse(apiClient.api.roles.assignments.agents.$post({ json: input }))
+export function getApiResourceContract(id: string): Promise<ApiResourceContractResponse> {
+  return readRpcResponse(apiClient.api['api-resources'][':id'].contract.$get({ param: { id } }))
 }
 
 export {

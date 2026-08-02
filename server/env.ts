@@ -27,14 +27,16 @@ export interface SendEmail {
 }
 
 /**
- * Bindings + declared vars (DB, ASSET_BUCKET, EMAIL_QUEUE, ASSETS, EMAIL_FROM,
- * EMAIL_FROM_NAME, BETTER_AUTH_SECRET) are typed from wrangler.toml via the generated
+ * Bindings + declared vars (DB, ASSET_BUCKET, ASSETS, and BETTER_AUTH_SECRET)
+ * are typed from wrangler.toml via the generated
  * `Cloudflare.Env` (regenerate with `pnpm cf-typegen`). EMAIL is narrowed to our
  * transactional `SendEmail` wrapper, and the optional runtime config vars below are
  * declared by hand because they are deployment secrets/vars, not wrangler bindings.
  */
 type RuntimeEnvOverrides = {
-  EMAIL: SendEmail
+  EMAIL?: SendEmail
+  EMAIL_FROM?: string
+  EMAIL_FROM_NAME?: string
   EXTERNAL_HTTP?: Fetcher
   BETTER_AUTH_URL?: string
   CREDENTIAL_ENCRYPTION_KEY?: string
@@ -56,7 +58,7 @@ export interface RuntimeConfig {
   authSecret: string
   baseURL: string
   credentialEncryptionKey: string
-  emailFrom: string
+  emailFrom?: string
   emailFromName?: string
   trustedOrigins: string[]
   securityPolicy: SecurityPolicy
@@ -76,16 +78,8 @@ export function validateEnv(env: Env, requestUrl: string): RuntimeConfig {
     throw new Error('ASSETS binding is not configured for this deployment.')
   }
 
-  if (!env.EMAIL) {
-    throw new Error('EMAIL binding is not configured for this deployment.')
-  }
-
   if (!env.ASSET_BUCKET) {
     throw new Error('ASSET_BUCKET binding is not configured for this deployment.')
-  }
-
-  if (!env.EMAIL_QUEUE) {
-    throw new Error('EMAIL_QUEUE binding is not configured for this deployment.')
   }
 
   if (!env.BETTER_AUTH_SECRET) {
@@ -94,10 +88,6 @@ export function validateEnv(env: Env, requestUrl: string): RuntimeConfig {
 
   if (!env.CREDENTIAL_ENCRYPTION_KEY || env.CREDENTIAL_ENCRYPTION_KEY.length < 32) {
     throw new Error('CREDENTIAL_ENCRYPTION_KEY must contain at least 32 characters.')
-  }
-
-  if (!env.EMAIL_FROM) {
-    throw new Error('EMAIL_FROM is not configured for this deployment.')
   }
 
   return {
@@ -165,7 +155,8 @@ function parseSecurityPolicy(env: Env, baseURL: string, trustedOrigins: string[]
       enabled: false,
       provider: 'turnstile',
       siteKey: '',
-      secretBinding: '',
+      projectId: null,
+      secretKey: '',
     },
     blocklist: {
       blockSubaddressing: false,

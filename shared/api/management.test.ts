@@ -2,6 +2,7 @@ import {
   createManagementFederatedCredentialRequestSchema,
   createManagementFederatedCredentialResponseSchema,
   listManagementFederatedCredentialsResponseSchema,
+  updateManagementBrandingSettingsRequestSchema,
   updateManagementFederatedCredentialRequestSchema,
 } from '@shared/api/management'
 import { describe, expect, it } from 'vitest'
@@ -77,5 +78,34 @@ describe('management API federated credential contracts', () => {
       credential,
     ])
     expect(createManagementFederatedCredentialResponseSchema.parse({ credential }).credential).toEqual(credential)
+  })
+})
+
+describe('management branding contracts', () => {
+  it('accepts managed asset paths and HTTPS external assets only [spec: admin-console/admin-branding-settings]', () => {
+    expect(
+      updateManagementBrandingSettingsRequestSchema.parse({
+        branding: {
+          logoUrl: '/api/assets/asset_0123456789abcdef',
+          faviconUrl: 'https://cdn.example.com/favicon.ico',
+        },
+      }),
+    ).toEqual({
+      branding: {
+        logoUrl: '/api/assets/asset_0123456789abcdef',
+        faviconUrl: 'https://cdn.example.com/favicon.ico',
+      },
+    })
+
+    expect(() =>
+      updateManagementBrandingSettingsRequestSchema.parse({
+        branding: { logoUrl: 'http://cdn.example.com/logo.png' },
+      }),
+    ).toThrow()
+    expect(() =>
+      updateManagementBrandingSettingsRequestSchema.parse({
+        branding: { logoUrl: '/uploads/logo.png' },
+      }),
+    ).toThrow()
   })
 })

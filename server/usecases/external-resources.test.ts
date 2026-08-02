@@ -1111,7 +1111,13 @@ describe('external API resource authorization', () => {
       requests: [{ id: 'request-1' }, { id: 'request-2' }],
     })
     await expect(listAccountAccessRequests(deps, 'user-1', { limit: 1, offset: 1 })).resolves.toMatchObject({
-      items: [{ id: 'request-2' }],
+      items: [
+        {
+          id: 'request-2',
+          agent: { id: 'identity-1', name: 'Project Agent' },
+          resource: { id: 'resource-1', name: 'Projects API' },
+        },
+      ],
       pagination: { total: 2 },
     })
     await expect(getAccountAccessRequest(deps, 'request-1', 'user-1')).resolves.toMatchObject({ id: 'request-1' })
@@ -1340,9 +1346,6 @@ describe('external API resource authorization', () => {
           key: 'writer',
           name: 'Writer',
           description: null,
-          resourceId: 'resource-1',
-          organizationId: null,
-          applicationId: null,
           system: false,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
@@ -1370,9 +1373,6 @@ describe('external API resource authorization', () => {
           key: 'reader',
           name: 'Reader',
           description: null,
-          resourceId: 'resource-1',
-          organizationId: null,
-          applicationId: null,
           system: false,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
@@ -1949,6 +1949,9 @@ function resource(): ApiResourceResponse {
     connectorId: 'connector-1',
     description: 'Manage private projects',
     enabled: true,
+    ownerOrganizationId: 'org-1',
+    accessEligibility: { mode: 'realm', organizationIds: [] },
+    availableToAgents: true,
     archivedAt: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),

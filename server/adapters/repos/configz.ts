@@ -7,13 +7,16 @@ import type {
   UpdateConfigzBrandingInput,
   UpdateConfigzSettingsInput,
 } from '@server/usecases/ports'
+import { emailServiceSettingsSchema, managementDeveloperSettingsResponseSchema } from '@shared/api/management'
 import type { SQL } from 'drizzle-orm'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   accountCenterSetting,
   brandingSetting,
+  emailServiceConfig,
   identityProviderConnector,
+  organization,
   signInExperience,
   uploadedAsset,
 } from '../../db/schema'
@@ -21,6 +24,7 @@ import {
 const settingsId = 'default'
 const globalBrandingId = 'branding_default'
 const accountCenterSettingsId = 'account_center_default'
+const emailSettingsId = 'email_default'
 
 export function createDrizzleConfigzRepository(db: Database): ConfigzRepository {
   return {
@@ -66,6 +70,36 @@ export function createDrizzleConfigzRepository(db: Database): ConfigzRepository 
       return rows[0] ? toAccountCenterSettings(rows[0]) : null
     },
 
+    async getDeveloperSettings() {
+      const settings = await this.getSettings()
+      const configured = readObjectMetadata(settings?.metadata ?? null, 'developerPolicy')
+      const rows = await db.select({ id: organization.id, metadata: organization.metadata }).from(organization)
+      return managementDeveloperSettingsResponseSchema.parse({
+        organizationCreation: configured.organizationCreation ?? 'admins_only',
+        approvedUserIds: configured.approvedUserIds ?? [],
+        consoleAccess: configured.consoleAccess ?? 'realm_operators',
+        eligibleAccessLevels: configured.eligibleAccessLevels ?? ['owner', 'admin'],
+        selectedOrganizationIds: rows
+          .filter((row) => organizationConsoleEnabled(row.metadata))
+          .map((row) => row.id)
+          .sort(),
+      })
+    },
+
+    async getEmailSettings() {
+      const rows = await db.select().from(emailServiceConfig).where(eq(emailServiceConfig.id, emailSettingsId)).limit(1)
+      const row = rows[0]
+      return row
+        ? emailServiceSettingsSchema.parse({
+            provider: row.provider,
+            enabled: row.enabled,
+            fromEmail: row.fromEmail,
+            fromName: row.fromName,
+            replyToEmail: row.replyToEmail,
+          })
+        : null
+    },
+
     async updateAccountCenterSettings(input) {
       const current = (await this.getAccountCenterSettings()) ?? defaultAccountCenterSettings
       const next = { ...current, ...input }
@@ -86,6 +120,50 @@ export function createDrizzleConfigzRepository(db: Database): ConfigzRepository 
         .onConflictDoUpdate({
           target: accountCenterSetting.id,
           set: patch,
+        })
+    },
+
+    async updateDeveloperSettings(input) {
+      const current = await this.getSettings()
+      const rows = await db.select({ id: organization.id, metadata: organization.metadata }).from(organization)
+      const selected = new Set(input.consoleAccess === 'selected_organizations' ? input.selectedOrganizationIds : [])
+      const metadata = {
+        ...(current?.metadata ?? {}),
+        developerPolicy: {
+          organizationCreation: input.organizationCreation,
+          approvedUserIds: input.organizationCreation === 'approved_users' ? input.approvedUserIds : [],
+          consoleAccess: input.consoleAccess,
+          eligibleAccessLevels: input.eligibleAccessLevels,
+        },
+      }
+      const statements: Parameters<typeof db.batch>[0] = [
+        db
+          .insert(signInExperience)
+          .values({ ...settingsInsertDefaults(current), id: settingsId, metadata, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: signInExperience.id,
+            set: { metadata, updatedAt: new Date() },
+          }),
+        ...rows.map((row) =>
+          db
+            .update(organization)
+            .set({
+              metadata: withOrganizationConsoleEnabled(row.metadata, selected.has(row.id)),
+              updatedAt: new Date(),
+            })
+            .where(eq(organization.id, row.id)),
+        ),
+      ]
+      await db.batch(statements)
+    },
+
+    async updateEmailSettings(input) {
+      await db
+        .insert(emailServiceConfig)
+        .values({ id: emailSettingsId, ...input, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: emailServiceConfig.id,
+          set: { ...input, updatedAt: new Date() },
         })
     },
 
@@ -145,7 +223,7 @@ async function findBranding(db: Database, where: SQL) {
 
 function toSettingsPatch(input: UpdateConfigzSettingsInput, metadata: Record<string, unknown> | null) {
   const nextMetadata =
-    input.copy || input.builtInProviders || input.emailOtpEnabled !== undefined
+    input.copy || input.builtInProviders || input.emailOtpEnabled !== undefined || input.usernameEnabled !== undefined
       ? {
           ...(metadata ?? {}),
           ...(input.copy ? { copy: { ...readCopyMetadata(metadata), ...input.copy } } : {}),
@@ -160,6 +238,7 @@ function toSettingsPatch(input: UpdateConfigzSettingsInput, metadata: Record<str
               }
             : {}),
           ...(input.emailOtpEnabled !== undefined ? { emailOtpEnabled: input.emailOtpEnabled } : {}),
+          ...(input.usernameEnabled !== undefined ? { usernameEnabled: input.usernameEnabled } : {}),
         }
       : undefined
 
@@ -211,6 +290,8 @@ function toBrandingPatch(input: UpdateConfigzBrandingInput) {
   return withoutUndefined({
     applicationId: null,
     organizationId: null,
+    logoAssetId: input.logoUrl === null ? null : undefined,
+    faviconAssetId: input.faviconUrl === null ? null : undefined,
     logoUrl: input.logoUrl,
     faviconUrl: input.faviconUrl,
     primaryColor: input.primaryColor,
@@ -263,6 +344,27 @@ function readObjectMetadata(metadata: Record<string, unknown> | null, key: strin
   return metadata && typeof metadata[key] === 'object' && metadata[key] !== null
     ? (metadata[key] as Record<string, unknown>)
     : {}
+}
+
+function organizationConsoleEnabled(metadata: Record<string, unknown> | null) {
+  const realmroot = readObjectMetadata(metadata, 'realmroot')
+  const consoleSettings = readObjectMetadata(realmroot, 'console')
+  return consoleSettings.enabled === true
+}
+
+function withOrganizationConsoleEnabled(metadata: Record<string, unknown> | null, enabled: boolean) {
+  const realmroot = readObjectMetadata(metadata, 'realmroot')
+  const consoleSettings = readObjectMetadata(realmroot, 'console')
+  return {
+    ...(metadata ?? {}),
+    realmroot: {
+      ...realmroot,
+      console: {
+        ...consoleSettings,
+        enabled,
+      },
+    },
+  }
 }
 
 function withoutUndefined<T extends Record<string, unknown>>(input: T) {

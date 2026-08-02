@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { TextInput } from '@/components/ui/field'
+import { TextInput } from '@/components/product-form'
 import { ConsoleActionBar, ConsoleDetailStack, ConsoleToolbar } from '@/features/console/console-primitives'
 
 describe('console primitives', () => {
@@ -21,7 +21,7 @@ describe('console primitives', () => {
     )
 
     expect(screen.getByRole('button', { name: 'Filter' }).parentElement?.className).toContain('consoleToolbar')
-    expect(screen.getByLabelText('Search').className).toContain('textInput')
+    expect(screen.getByLabelText('Search').getAttribute('data-slot')).toBe('input')
     expect(screen.getByText('Details').parentElement?.className).toContain('consoleDetailStack')
     expect(screen.getByRole('button', { name: 'Save' }).parentElement?.className).toContain('stickyActionBar')
   })

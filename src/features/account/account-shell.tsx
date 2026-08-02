@@ -1,96 +1,173 @@
+import type { AccountProfileResponse } from '@shared/api/account'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
+  AppWindow,
+  Bot,
+  Building2,
   Check,
-  ChevronRight,
+  Gauge,
   Languages,
   LayoutDashboard,
   LoaderCircle,
   LogOut,
+  Menu,
   Moon,
-  Settings,
+  Shield,
   Sun,
   UserRound,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { BrandIdentity, brandingStyle } from '@/components/layout/auth-layout'
+import { brandingStyle } from '@/components/layout/auth-layout'
+import { RealmrootWordmark } from '@/components/realmroot-brand'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Status } from '@/components/ui/status'
 import { signOut } from '@/lib/auth-client'
 import { normalizeLanguage, tt } from '@/lib/i18n'
 import { useTheme } from '@/lib/theme'
+import { cn } from '@/lib/utils'
 import type { AccountCenterSection, defaultAccountCenterSettings } from './settings'
 import type { UserProfile } from './types'
 
 type AccountCenterSettings = typeof defaultAccountCenterSettings
 
+const accountNavGroups = [
+  {
+    label: 'Your account',
+    items: [
+      { section: 'overview' as const, href: '/account', label: 'Overview', icon: Gauge },
+      { section: 'profile' as const, href: '/profile', label: 'Profile', icon: UserRound },
+      { section: 'security' as const, href: '/security', label: 'Sign-in & security', icon: Shield },
+    ],
+  },
+  {
+    label: 'Access & authority',
+    items: [
+      { section: 'applications' as const, href: '/account/applications', label: 'Applications', icon: AppWindow },
+      { section: 'agents' as const, href: '/account/agents', label: 'Agents', icon: Bot },
+      { section: 'organizations' as const, href: '/account/organizations', label: 'Organizations', icon: Building2 },
+    ],
+  },
+]
+
 export function AccountPageShell({
+  access,
   accountCenter,
   children,
   config,
   profile,
   section,
 }: {
+  access: AccountProfileResponse['access']
   accountCenter: AccountCenterSettings
   children: ReactNode
   config: Parameters<typeof brandingStyle>[0]
   profile: UserProfile | null
   section: AccountCenterSection
 }) {
+  void accountCenter
   const navigate = useNavigate()
+  const [navigationOpen, setNavigationOpen] = useState(false)
+  const navigationTriggerRef = useRef<HTMLButtonElement>(null)
+
+  function changeNavigation(open: boolean) {
+    setNavigationOpen(open)
+    if (!open) window.setTimeout(() => navigationTriggerRef.current?.focus(), 0)
+  }
+
   async function signOutFromAccount() {
     try {
       await signOut()
-      toast.success(tt('Sign out'))
+      toast.success(tt('Signed out'))
       await navigate({ to: '/auth/sign-in' })
     } catch (mutationError) {
       toast.error(mutationError instanceof Error ? tt(mutationError.message) : tt('Account update failed.'))
     }
   }
+
   return (
     <main className="accountShell" style={brandingStyle(config)}>
-      <div className="accountChrome">
-        <div className="accountTopbar">
-          <BrandIdentity config={config} />
-          <div className="accountTopbarActions">
-            {profile ? <AccountUserMenu profile={profile} onSignOut={() => void signOutFromAccount()} /> : null}
-          </div>
+      <a className="skipLink" href="#account-content">
+        {tt('Skip to content')}
+      </a>
+      <header className="accountProductTopbar">
+        <div className="flex min-w-0 items-center gap-2">
+          <Button
+            aria-label={tt('Open Account Center navigation')}
+            className="accountMobileMenu"
+            onClick={() => setNavigationOpen(true)}
+            ref={navigationTriggerRef}
+            size="icon"
+            variant="ghost"
+          >
+            <Menu />
+          </Button>
+          <Link aria-label={tt('Account Center home')} to="/account">
+            <RealmrootWordmark context={tt('Account Center')} />
+          </Link>
         </div>
-        <section className="accountContent">
-          <div className="accountWorkspace">
-            <AccountSidebar accountCenter={accountCenter} section={section} />
-            {children}
+        <div className="flex items-center gap-2">
+          <div className="accountDeploymentContext hidden sm:flex">
+            <Shield aria-hidden="true" />
+            <span>identity.acme.dev</span>
           </div>
+          {profile ? (
+            <AccountUserMenu access={access} profile={profile} onSignOut={() => void signOutFromAccount()} />
+          ) : null}
+        </div>
+      </header>
+      <div className="accountShellLayout">
+        <AccountSidebar access={access} section={section} />
+        <section className="accountContent" id="account-content" tabIndex={-1}>
+          {children}
         </section>
       </div>
+      <Sheet onOpenChange={changeNavigation} open={navigationOpen}>
+        <SheetContent
+          className="accountMobileNavSheet w-72 p-0"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            navigationTriggerRef.current?.focus()
+          }}
+          side="left"
+        >
+          <SheetHeader className="border-b">
+            <SheetTitle>{tt('Account Center')}</SheetTitle>
+            <SheetDescription className="sr-only">{tt('Navigate Account Center pages.')}</SheetDescription>
+          </SheetHeader>
+          <AccountSidebar access={access} onNavigate={() => setNavigationOpen(false)} section={section} />
+        </SheetContent>
+      </Sheet>
     </main>
   )
 }
 
 export function AccountPageLoading({ config }: { config: Parameters<typeof brandingStyle>[0] }) {
-  const { t } = useTranslation()
   return (
     <main className="accountShell" style={brandingStyle(config)}>
-      <div className="accountChrome">
-        <div className="accountTopbar">
-          <BrandIdentity config={config} />
-        </div>
-        <section className="accountContent">
-          <Status>
-            <LoaderCircle className="spin" size={18} />
-            {t('account.loading')}
-          </Status>
-        </section>
-      </div>
+      <header className="accountProductTopbar">
+        <RealmrootWordmark context={tt('Account Center')} />
+      </header>
+      <section className="accountStandaloneState">
+        <Status>
+          <LoaderCircle className="spin" size={18} />
+          {tt('Loading account center')}
+        </Status>
+      </section>
     </main>
   )
 }
@@ -104,94 +181,93 @@ export function AccountPageError({
 }) {
   return (
     <main className="accountShell" style={brandingStyle(config)}>
-      <div className="accountChrome">
-        <div className="accountTopbar">
-          <BrandIdentity config={config} />
-        </div>
-        <section className="accountContent">
-          <Status tone="error">{message}</Status>
-        </section>
-      </div>
+      <header className="accountProductTopbar">
+        <RealmrootWordmark context={tt('Account Center')} />
+      </header>
+      <section className="accountStandaloneState">
+        <Status tone="error">{message}</Status>
+      </section>
     </main>
   )
 }
 
 function AccountSidebar({
-  accountCenter,
+  access,
+  onNavigate,
   section,
 }: {
-  accountCenter: AccountCenterSettings
+  access: AccountProfileResponse['access']
+  onNavigate?: () => void
   section: AccountCenterSection
 }) {
-  const items = accountNavItems(accountCenter)
   return (
-    <aside className="accountSidebar" aria-label={tt('Account center')}>
-      <nav className="accountNav" aria-label={tt('Account center')}>
-        {items.map((item) => (
-          <Link
-            aria-current={section === item.section ? 'page' : undefined}
-            className="accountNavItem"
-            data-active={section === item.section ? 'true' : undefined}
-            key={item.section}
-            to={item.href}
-          >
-            {item.icon}
-            <span>{item.label}</span>
-          </Link>
+    <aside className="accountSidebar">
+      <nav aria-label={tt('Account Center')} className="accountNav">
+        {accountNavGroups.map((group) => (
+          <div className="accountNavGroup" key={group.label}>
+            <p>{tt(group.label)}</p>
+            {group.items
+              .filter((item) => item.section !== 'organizations' || access.showOrganizations)
+              .map((item) => (
+                <Link
+                  aria-current={section === item.section ? 'page' : undefined}
+                  className={cn('accountNavItem', section === item.section && 'is-active')}
+                  key={item.section}
+                  onClick={onNavigate}
+                  to={item.href}
+                >
+                  <item.icon aria-hidden="true" />
+                  <span>{tt(item.label)}</span>
+                </Link>
+              ))}
+          </div>
         ))}
       </nav>
     </aside>
   )
 }
 
-function accountNavItems(accountCenter: AccountCenterSettings) {
-  return [
-    { section: 'profile' as const, href: '/profile', label: tt('Profile'), icon: <UserRound size={18} /> },
-    { section: 'security' as const, href: '/security', label: tt('Security'), icon: <Settings size={18} /> },
-    ...(accountCenter.connectedAccountsEnabled
-      ? [
-          {
-            section: 'connections' as const,
-            href: '/connections',
-            label: tt('Connections'),
-            icon: <ChevronRight size={18} />,
-          },
-        ]
-      : []),
-  ]
-}
-
-function AccountUserMenu({ profile, onSignOut }: { profile: UserProfile; onSignOut: () => void }) {
+function AccountUserMenu({
+  access,
+  profile,
+  onSignOut,
+}: {
+  access: AccountProfileResponse['access']
+  profile: UserProfile
+  onSignOut: () => void
+}) {
   const { i18n } = useTranslation()
   const { setTheme, theme } = useTheme()
   const language = normalizeLanguage(i18n.language)
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger aria-label={tt('Account menu')} className="accountAvatarMenuTrigger">
-        {profile.image ? (
-          <img alt="" className="accountMenuAvatar accountMenuAvatarTrigger" src={profile.image} />
-        ) : (
-          <span className="accountMenuAvatar accountMenuAvatarFallback">
-            <UserRound size={18} />
-          </span>
-        )}
+      <DropdownMenuTrigger asChild>
+        <Button aria-label={tt('Account menu')} className="rounded-full" size="icon" variant="ghost">
+          <Avatar>
+            {profile.image ? <AvatarImage alt="" src={profile.image} /> : null}
+            <AvatarFallback className="bg-primary/10 font-semibold text-primary">
+              {profile.displayName.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuItem disabled>
-          <span>{profile.email}</span>
-        </DropdownMenuItem>
-        {profile.role === 'admin' ? (
-          <Link
-            className="flex min-h-8 w-full items-center rounded-sm px-2 text-left text-sm hover:bg-muted"
-            to="/console"
-          >
-            <LayoutDashboard size={16} />
-            <span>{tt('Console')}</span>
-          </Link>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel>
+          <span className="block truncate text-sm font-semibold">{profile.displayName}</span>
+          <span className="block truncate text-xs font-normal text-muted-foreground">{profile.email}</span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {access.realmOperator || access.consoleOrganizations.length ? (
+          <DropdownMenuItem asChild>
+            <Link to="/console">
+              <LayoutDashboard />
+              <span>{tt('Console')}</span>
+            </Link>
+          </DropdownMenuItem>
         ) : null}
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
-            <Languages size={16} />
+            <Languages />
             <span>{tt('Language')}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
@@ -205,7 +281,7 @@ function AccountUserMenu({ profile, onSignOut }: { profile: UserProfile; onSignO
         </DropdownMenuSub>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
-            {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+            {theme === 'dark' ? <Moon /> : <Sun />}
             <span>{tt('Theme')}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
@@ -217,9 +293,10 @@ function AccountUserMenu({ profile, onSignOut }: { profile: UserProfile; onSignO
             />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DropdownMenuItem onClick={onSignOut}>
-          <LogOut size={16} />
-          <span>{tt('account.signOut')}</span>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onSignOut} variant="destructive">
+          <LogOut />
+          <span>{tt('Sign out')}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -236,12 +313,11 @@ function AccountPreferenceSubmenu({
       {options.map((option) => (
         <DropdownMenuItem
           aria-checked={option.active}
-          className="accountSubmenuItem"
           key={option.label}
           onClick={option.onSelect}
           role="menuitemradio"
         >
-          <Check aria-hidden="true" className={option.active ? 'accountSubmenuCheck' : 'accountSubmenuCheckHidden'} />
+          <Check className={cn(!option.active && 'invisible')} />
           <span>{option.label}</span>
         </DropdownMenuItem>
       ))}

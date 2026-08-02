@@ -47,8 +47,7 @@ export function createAccountAssetRoutes(securityPolicy?: SecurityPolicy) {
       throw forbidden('Avatar editing is disabled for this account center.')
     }
     const deps = getDeps(c)
-    const origin = requestOrigin(c)
-    const asset = await uploadAsset(deps, origin, {
+    const asset = await uploadAsset(deps, {
       purpose: 'avatar',
       file: await readUploadFile(c.req.raw),
       actorUserId: getPrincipal(c).user!.id,
@@ -71,7 +70,7 @@ export function createProtectedResourceAssetRoutes() {
 
   app.post('/applications/:applicationId/logo', async (c) => {
     const deps = getDeps(c)
-    const asset = await uploadAsset(deps, requestOrigin(c), {
+    const asset = await uploadAsset(deps, {
       purpose: 'application_logo',
       file: await readUploadFile(c.req.raw),
       actorUserId: getPrincipal(c).user?.id ?? null,
@@ -82,7 +81,7 @@ export function createProtectedResourceAssetRoutes() {
 
   app.post('/organizations/:organizationId/logo', async (c) => {
     const deps = getDeps(c)
-    const asset = await uploadAsset(deps, requestOrigin(c), {
+    const asset = await uploadAsset(deps, {
       purpose: 'organization_logo',
       file: await readUploadFile(c.req.raw),
       actorUserId: getPrincipal(c).user?.id ?? null,
@@ -93,7 +92,7 @@ export function createProtectedResourceAssetRoutes() {
 
   app.post('/branding/logo', async (c) => {
     const deps = getDeps(c)
-    const asset = await uploadAsset(deps, requestOrigin(c), {
+    const asset = await uploadAsset(deps, {
       purpose: 'branding_logo',
       file: await readUploadFile(c.req.raw),
       actorUserId: getPrincipal(c).user?.id ?? null,
@@ -104,7 +103,7 @@ export function createProtectedResourceAssetRoutes() {
 
   app.post('/branding/favicon', async (c) => {
     const deps = getDeps(c)
-    const asset = await uploadAsset(deps, requestOrigin(c), {
+    const asset = await uploadAsset(deps, {
       purpose: 'favicon',
       file: await readUploadFile(c.req.raw),
       actorUserId: getPrincipal(c).user?.id ?? null,
@@ -114,10 +113,6 @@ export function createProtectedResourceAssetRoutes() {
   })
 
   return app
-}
-
-function requestOrigin(c: Context) {
-  return new URL(c.req.url).origin
 }
 
 async function readUploadFile(request: Request) {

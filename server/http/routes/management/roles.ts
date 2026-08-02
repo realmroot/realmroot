@@ -1,25 +1,19 @@
 import {
-  assignAgentRole,
-  assignApplicationRole,
-  assignMemberRole,
-  assignUserRole,
   createRole,
   deleteRole,
   getRole,
-  listRoleScopes,
+  listRolePermissions,
   listRoles,
-  replaceRoleScopes,
+  replaceRolePermissions,
   updateRole,
 } from '@server/usecases/authorization'
 import {
-  assignRoleRequestSchema,
   createRoleRequestSchema,
   paginationQuerySchema,
-  replaceRoleScopesRequestSchema,
+  replaceRolePermissionsRequestSchema,
   updateRoleRequestSchema,
 } from '@shared/api/authorization'
 import { Hono } from 'hono'
-import { getActorUserId } from '../../middleware/authn'
 import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
@@ -42,32 +36,12 @@ managementRolesRoute.delete('/:roleId', async (c) => {
   return c.body(null, 204)
 })
 
-managementRolesRoute.get('/:roleId/scopes', async (c) =>
-  c.json(await listRoleScopes(getDeps(c), c.req.param('roleId'))),
+managementRolesRoute.get('/:roleId/permissions', async (c) =>
+  c.json(await listRolePermissions(getDeps(c), c.req.param('roleId'))),
 )
 
-managementRolesRoute.put('/:roleId/scopes', async (c) => {
-  const body = await readJson(c, replaceRoleScopesRequestSchema)
-  await replaceRoleScopes(getDeps(c), c.req.param('roleId'), body.scopes)
-  return c.body(null, 204)
-})
-
-managementRolesRoute.post('/assignments/users', async (c) => {
-  await assignUserRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
-  return c.body(null, 204)
-})
-
-managementRolesRoute.post('/assignments/applications', async (c) => {
-  await assignApplicationRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
-  return c.body(null, 204)
-})
-
-managementRolesRoute.post('/assignments/members', async (c) => {
-  await assignMemberRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
-  return c.body(null, 204)
-})
-
-managementRolesRoute.post('/assignments/agents', async (c) => {
-  await assignAgentRole(getDeps(c), await readJson(c, assignRoleRequestSchema), getActorUserId(c))
+managementRolesRoute.put('/:roleId/permissions', async (c) => {
+  const body = await readJson(c, replaceRolePermissionsRequestSchema)
+  await replaceRolePermissions(getDeps(c), c.req.param('roleId'), body.permissions)
   return c.body(null, 204)
 })

@@ -271,6 +271,7 @@ describe('management routes 4', () => {
         url: 'https://events.example.com/realmroot',
         events: ['user.created'],
         enabled: true,
+        organizationId: null,
       }),
     })
     const detail = await app.request('/api/webhooks/endpoints/wh_1', { headers })
@@ -309,24 +310,38 @@ describe('management routes 4', () => {
       pagination: { limit: 2, offset: 4, total: 1, hasMore: false, nextOffset: null },
     })
     await expect(requestDetail.json()).resolves.toEqual(webhookRequestResponse())
-    expect(retried.status).toBe(202)
-    await expect(retried.json()).resolves.toEqual({ ...webhookRequestResponse(), status: 'pending' })
+    expect(retried.status).toBe(200)
+    await expect(retried.json()).resolves.toEqual({
+      ...webhookRequestResponse(),
+      status: 'delivered',
+      attemptCount: 2,
+      httpStatus: 204,
+      error: null,
+    })
     expect(deleted.status).toBe(204)
 
-    expect(webhooks.listEndpoints).toHaveBeenCalledWith(expect.anything(), {
-      limit: 10,
-      offset: 5,
-      search: 'auth',
-      status: 'enabled',
-    })
+    expect(webhooks.listEndpoints).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        limit: 10,
+        offset: 5,
+        search: 'auth',
+        status: 'enabled',
+      },
+      undefined,
+    )
     expect(webhooks.createEndpoint).toHaveBeenCalledWith(
       expect.anything(),
-      { url: 'https://events.example.com/realmroot', events: ['user.created'], enabled: true },
+      { url: 'https://events.example.com/realmroot', events: ['user.created'], enabled: true, organizationId: null },
       'admin-1',
     )
     expect(webhooks.updateEndpoint).toHaveBeenCalledWith(expect.anything(), 'wh_1', { enabled: false })
     expect(webhooks.rotateSecret).toHaveBeenCalledWith(expect.anything(), 'wh_1')
-    expect(webhooks.listRequests).toHaveBeenCalledWith(expect.anything(), { limit: 2, offset: 4, status: 'failed' })
+    expect(webhooks.listRequests).toHaveBeenCalledWith(
+      expect.anything(),
+      { limit: 2, offset: 4, status: 'failed' },
+      undefined,
+    )
     expect(webhooks.getRequest).toHaveBeenCalledWith(expect.anything(), 'whr_1')
     expect(webhooks.retryRequest).toHaveBeenCalledWith(expect.anything(), 'whr_1')
     expect(webhooks.deleteEndpoint).toHaveBeenCalledWith(expect.anything(), 'wh_1')

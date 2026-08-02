@@ -12,6 +12,12 @@ Feature: Connectors and hosted method availability
     When I change the Email connector settings
     Then hosted Email code sign-in follows the saved settings
 
+  @entrypoint:product-ui @journey:connectors-passkeys
+  Scenario: Passkey connector manages its relying party configuration
+    When I change the Passkey connector settings
+    Then the relying party name, identifier, allowed origins, and sign-up availability are persisted
+    And hosted passkey authentication uses the saved relying party configuration
+
   @entrypoint:product-ui @journey:sign-in-method-availability
   Scenario: Hosted sign-in empty-state logic respects enabled methods
     Given only selected built-in methods are enabled

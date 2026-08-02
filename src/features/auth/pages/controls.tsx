@@ -166,7 +166,7 @@ export function SignInCardBody({
     </>
   )
 }
-function AuthMethodDivider() {
+export function AuthMethodDivider() {
   return (
     <div className="authMethodDivider" aria-hidden="true">
       <span>{tt('or')}</span>
@@ -366,11 +366,13 @@ export function CaptchaTokenField({
   useEffect(() => {
     if (!config?.captcha?.enabled || !config.captcha.siteKey || !containerRef.current) return
     let disposed = false
-    let widget: string | null = null
-    loadTurnstileScript()
+    let widget: string | number | null = null
+    const provider = config.captcha.provider
+    loadCaptchaScript(provider)
       .then(() => {
-        if (disposed || !containerRef.current || !window.turnstile) return
-        widget = window.turnstile.render(containerRef.current, {
+        if (disposed || !containerRef.current) return
+        const api = captchaWidgetApi(provider)
+        widget = api.render(containerRef.current, {
           sitekey: config.captcha.siteKey,
           callback: onChange,
           'expired-callback': () => onChange(''),
@@ -381,9 +383,9 @@ export function CaptchaTokenField({
     return () => {
       disposed = true
       onChange('')
-      if (widget && window.turnstile) window.turnstile.remove(widget)
+      if (widget !== null) captchaWidgetApi(provider).dispose(widget)
     }
-  }, [config?.captcha?.enabled, config?.captcha?.siteKey, onChange])
+  }, [config?.captcha?.enabled, config?.captcha?.provider, config?.captcha?.siteKey, onChange])
   if (!config?.captcha?.enabled) return null
   return (
     <Field label={tt('CAPTCHA')}>
@@ -406,35 +408,89 @@ export function resetCaptchaState(
   setCaptchaToken('')
   setCaptchaResetKey((value) => value + 1)
 }
-let turnstileScriptPromise: Promise<void> | null = null
-function loadTurnstileScript() {
-  if (window.turnstile) return Promise.resolve()
-  if (turnstileScriptPromise) return turnstileScriptPromise
-  turnstileScriptPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-turnstile-script="true"]')
+type CaptchaProvider = 'turnstile' | 'hcaptcha' | 'recaptcha-enterprise'
+const captchaScriptPromises = new Map<CaptchaProvider, Promise<void>>()
+
+function loadCaptchaScript(provider: CaptchaProvider) {
+  if (captchaWidgetReady(provider)) return Promise.resolve()
+  const pending = captchaScriptPromises.get(provider)
+  if (pending) return pending
+  const promise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[data-captcha-provider="${provider}"]`)
     if (existing) {
       existing.addEventListener('load', () => resolve(), {
         once: true,
       })
-      existing.addEventListener('error', () => reject(new Error('CAPTCHA script failed to load.')), {
-        once: true,
-      })
+      existing.addEventListener(
+        'error',
+        () => {
+          existing.remove()
+          reject(new Error('CAPTCHA script failed to load.'))
+        },
+        {
+          once: true,
+        },
+      )
       return
     }
     const script = document.createElement('script')
     script.async = true
     script.defer = true
-    script.dataset.turnstileScript = 'true'
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    script.dataset.captchaProvider = provider
+    if (provider === 'turnstile') script.dataset.turnstileScript = 'true'
+    script.src = captchaScriptUrl(provider)
     script.addEventListener('load', () => resolve(), {
       once: true,
     })
-    script.addEventListener('error', () => reject(new Error('CAPTCHA script failed to load.')), {
-      once: true,
-    })
+    script.addEventListener(
+      'error',
+      () => {
+        script.remove()
+        reject(new Error('CAPTCHA script failed to load.'))
+      },
+      {
+        once: true,
+      },
+    )
     document.head.appendChild(script)
   })
-  return turnstileScriptPromise
+  const tracked = promise.catch((error) => {
+    captchaScriptPromises.delete(provider)
+    throw error
+  })
+  captchaScriptPromises.set(provider, tracked)
+  return tracked
+}
+
+function captchaScriptUrl(provider: CaptchaProvider) {
+  if (provider === 'turnstile') return 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+  if (provider === 'hcaptcha') return 'https://js.hcaptcha.com/1/api.js?render=explicit'
+  return 'https://www.google.com/recaptcha/enterprise.js?render=explicit'
+}
+
+function captchaWidgetReady(provider: CaptchaProvider) {
+  if (provider === 'turnstile') return Boolean(window.turnstile)
+  if (provider === 'hcaptcha') return Boolean(window.hcaptcha)
+  return Boolean(window.grecaptcha?.enterprise)
+}
+
+function captchaWidgetApi(provider: CaptchaProvider) {
+  if (provider === 'turnstile' && window.turnstile) {
+    return {
+      render: window.turnstile.render,
+      dispose: (widget: string | number) => window.turnstile?.remove(String(widget)),
+    }
+  }
+  if (provider === 'hcaptcha' && window.hcaptcha) {
+    return { render: window.hcaptcha.render, dispose: (widget: string | number) => window.hcaptcha?.remove(widget) }
+  }
+  if (provider === 'recaptcha-enterprise' && window.grecaptcha?.enterprise) {
+    return {
+      render: window.grecaptcha.enterprise.render,
+      dispose: (widget: string | number) => window.grecaptcha?.enterprise.reset(Number(widget)),
+    }
+  }
+  throw new Error('CAPTCHA provider script did not initialize.')
 }
 export async function submitRequest(setSubmit: (state: SubmitState) => void, operation: () => Promise<string>) {
   setSubmit({

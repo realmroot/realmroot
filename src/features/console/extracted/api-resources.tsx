@@ -1,153 +1,200 @@
-import { type ApiResource, createApiResourceSchema } from '@shared/api/agent-api'
+import type { ApiResource } from '@shared/api/agent-api'
+import {
+  type ApiResourceContractResponse,
+  type ApiResourceEligibilityMode,
+  createApiResourceRequestSchema,
+  type OrganizationResponse,
+  updateApiResourceRequestSchema,
+} from '@shared/api/authorization'
+import type { ConnectorResponse } from '@shared/api/connectors'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate } from '@tanstack/react-router'
+import { ArrowLeft, Plus } from 'lucide-react'
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
+import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
+import { TableEmptyRow } from '@/components/table-empty-row'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   archiveApiResource,
   consoleQueryKeys,
   createApiResource,
-  deleteApiResource,
   getApiResource,
+  getApiResourceContract,
   listApiResources,
   listConnectors,
+  listOrganizations,
+  listRoleAssignments,
+  listRolePermissions,
+  listRoles,
   restoreApiResource,
   updateApiResource,
 } from '@/lib/api/management'
-import {
-  type ApiResourceDetailSection,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  createApiResourceRequestSchema,
-  Dialog,
-  emptyForm,
-  Field,
-  type FormState,
-  Plus,
-  SelectInput,
-  Table,
-  TableBody,
-  TableCell,
-  TableEmptyRow,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TextInput,
-  Trash2,
-  tt,
-  Undo2,
-  updateApiResourceRequestSchema,
-  useEffect,
-  useMutation,
-  useNavigate,
-  useQuery,
-  useQueryClient,
-  useState,
-  type z,
-} from '../console-shared'
+import { useConsoleScope } from '@/lib/console-context'
+import { tt } from '@/lib/i18n'
+import type { ApiResourceDetailSection, FormState } from '../console-shared'
+import { emptyForm } from '../console-shared'
 import { FormDialog } from '../helpers/helpers-create'
-import { DangerConfirmDialog, MutationError, StatusBadge } from '../helpers/helpers-dialogs'
-import { AuthorizationForm } from '../helpers/helpers-forms'
+import { DangerConfirmDialog, ErrorState, LoadingState, StatusBadge } from '../helpers/helpers-dialogs'
+import { ListToolbar, navigateConsoleTab, ResourcePage } from '../helpers/helpers-resource'
+import { formatDate, nullableString, parseForm, setValue, useAdminMutation } from '../helpers/helpers-utils'
 import {
-  apiResourceDetailTabs,
-  DetailTabs,
-  ListToolbar,
-  navigateConsoleTab,
-  ObjectHeader,
-  ResourcePage,
-} from '../helpers/helpers-resource'
-import { parseForm, setValue, useAdminMutation } from '../helpers/helpers-utils'
-import { ApiResourceSummaryCard } from './api-resource-summary-card'
+  IdentityMultiSelect,
+  OrganizationOwnerField,
+  organizationOptions,
+  ownerLabel,
+  resourceEligibilityLabel,
+  selectionSummary,
+} from '../helpers/ownership-access-controls'
+
+type ResourceEditor = 'details' | 'eligibility' | 'connector' | null
 
 export function ApiResourcesPage() {
+  const { organizationId: context } = useConsoleScope()
+  const [owner, setOwner] = useState(context ?? '')
   const query = useQuery({
-    queryKey: consoleQueryKeys.apiResources,
-    queryFn: listApiResources,
+    queryKey: [...consoleQueryKeys.apiResources, { ownerOrganizationId: owner || undefined }],
+    queryFn: () => listApiResources({ ownerOrganizationId: owner || undefined }),
   })
+  const connectorsQuery = useQuery({ queryKey: consoleQueryKeys.connectors, queryFn: listConnectors })
+  const organizationsQuery = useQuery({ queryKey: consoleQueryKeys.organizations, queryFn: listOrganizations })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
-  const connectorsQuery = useQuery({
-    queryKey: consoleQueryKeys.connectors,
-    queryFn: listConnectors,
-  })
-  const oidcConnectors = (connectorsQuery.data?.connectors ?? []).filter(
-    (connector) => connector.providerType === 'generic_oauth' && connector.enabled,
-  )
   const [search, setSearch] = useState('')
+  const [authorization, setAuthorization] = useState('')
+  const [status, setStatus] = useState('')
+  useEffect(() => setOwner(context ?? ''), [context])
   const createMutation = useAdminMutation({
     mutationFn: createApiResource,
     onSuccess: () => {
       setDialogOpen(false)
-      return queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.apiResources,
-      })
+      return queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
     },
   })
-  const resources = query.data?.items ?? []
-  const visibleResources = resources.filter((resource) =>
-    [resource.name, resource.identifier, resource.resourceUrl, resource.description ?? ''].some((value) =>
-      value.toLowerCase().includes(search.trim().toLowerCase()),
-    ),
+  const connectors = (connectorsQuery.data?.connectors ?? []).filter(
+    (connector) => connector.providerType === 'generic_oauth' && connector.enabled,
   )
+  const organizations = organizationsQuery.data?.organizations ?? []
+  const resources = query.data?.items ?? []
+  const visibleResources = resources.filter((resource) => {
+    const matchesSearch = [resource.name, resource.identifier, resource.resourceUrl, resource.description ?? ''].some(
+      (value) => value.toLowerCase().includes(search.trim().toLowerCase()),
+    )
+    const resourceStatus = resource.archivedAt ? 'archived' : resource.enabled ? 'enabled' : 'disabled'
+    return (
+      matchesSearch &&
+      (!authorization || (resource.connectorId ? 'external' : 'native') === authorization) &&
+      (!status || resourceStatus === status) &&
+      (!owner || resource.ownerOrganizationId === owner)
+    )
+  })
   return (
     <ResourcePage
-      title={tt('API resources')}
-      description={tt('Register protected APIs, OpenAPI contracts, and permission surfaces.')}
+      title={tt('Resource servers')}
+      description={tt('Review protected APIs, their authorization model, ownership, and lifecycle across this Realm.')}
       action={
         <Button onClick={() => setDialogOpen(true)}>
-          <Plus data-icon="inline-start" /> {tt('New API resource')}{' '}
+          <Plus />
+          {tt('New resource server')}
         </Button>
       }
       auxiliary={
         <ApiResourceCreateDialog
-          connectors={oidcConnectors}
+          connectors={connectors}
+          defaultOwnerOrganizationId={context}
           error={createMutation.errorMessage}
+          key={context ?? 'realm'}
           onClose={() => setDialogOpen(false)}
-          onSubmit={(form) => {
-            createMutation.mutate(createApiResourceSchema.parse(parseForm(createApiResourceRequestSchema, form)))
-          }}
+          onSubmit={createMutation.mutate}
           open={dialogOpen}
+          organizations={organizations}
           pending={createMutation.isPending}
         />
       }
-      error={query.error}
       empty={resources.length === 0}
-      emptyDescription="Register APIs before issuing access tokens for protected resources."
-      emptyTitle="No API resources yet"
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
+      emptyDescription="Register a protected API before applications and Agents can request its scopes."
+      emptyTitle="No resource servers yet"
+      error={query.error ?? organizationsQuery.error ?? connectorsQuery.error}
+      loading={query.isLoading || organizationsQuery.isLoading || connectorsQuery.isLoading}
+      onRetry={() => Promise.all([query.refetch(), organizationsQuery.refetch(), connectorsQuery.refetch()])}
       toolbar={
         <ListToolbar>
           <TextInput
-            aria-label={tt('Search API resources')}
+            aria-label={tt('Search resource servers')}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={tt('Search API resources')}
+            placeholder={tt('Search resource servers')}
             value={search}
           />
+          <SelectInput
+            aria-label={tt('Filter authorization')}
+            onChange={(event) => setAuthorization(event.target.value)}
+            value={authorization}
+          >
+            <option value="">{tt('Any authorization')}</option>
+            <option value="native">{tt('Native')}</option>
+            <option value="external">{tt('External')}</option>
+          </SelectInput>
+          <SelectInput
+            aria-label={tt('Filter status')}
+            onChange={(event) => setStatus(event.target.value)}
+            value={status}
+          >
+            <option value="">{tt('Any status')}</option>
+            <option value="enabled">{tt('Enabled')}</option>
+            <option value="disabled">{tt('Disabled')}</option>
+            <option value="archived">{tt('Archived')}</option>
+          </SelectInput>
+          <SelectInput aria-label={tt('Filter owner')} onChange={(event) => setOwner(event.target.value)} value={owner}>
+            <option value="">{tt('Any owner')}</option>
+            {organizationOptions(organizations).map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.label}
+              </option>
+            ))}
+          </SelectInput>
         </ListToolbar>
       }
     >
-      <Table>
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead>{tt('Resource')}</TableHead>
-            <TableHead>{tt('Resource URL')}</TableHead>
-            <TableHead>{tt('Authorization')}</TableHead>
-            <TableHead>{tt('Status')}</TableHead>
+            <TableHead className="w-[30%]">{tt('Resource server')}</TableHead>
+            <TableHead className="w-[13%]">{tt('Authorization')}</TableHead>
+            <TableHead className="w-[19%]">{tt('Protected resource')}</TableHead>
+            <TableHead className="w-[10%]">{tt('Status')}</TableHead>
+            <TableHead className="w-[16%]">{tt('Owner')}</TableHead>
+            <TableHead className="w-[10%]">{tt('Updated')}</TableHead>
+            <TableHead className="w-14" />
           </TableRow>
         </TableHeader>
         <TableBody>
           {visibleResources.length ? (
             visibleResources.map((resource) => (
               <TableRow key={resource.id}>
-                <TableCell>
-                  <a className="font-medium hover:underline" href={`/console/api-resources/${resource.id}`}>
+                <TableCell className="min-w-0">
+                  <Link
+                    className="block truncate font-medium hover:underline"
+                    params={{ resourceId: resource.id }}
+                    search={context ? { context } : {}}
+                    to="/console/api-resources/$resourceId"
+                  >
                     {resource.name}
-                  </a>
-                  <div className="text-xs text-muted-foreground">{resource.identifier}</div>
+                  </Link>
+                  <span className="block truncate font-mono text-xs text-muted-foreground" title={resource.id}>
+                    {resource.id}
+                  </span>
                 </TableCell>
-                <TableCell>{resource.resourceUrl}</TableCell>
-                <TableCell>{resource.connectorId ? tt('External issuer') : tt('Native (Realmroot)')}</TableCell>
+                <TableCell>
+                  <Badge variant="outline">{resource.connectorId ? tt('External') : tt('Native')}</Badge>
+                </TableCell>
+                <TableCell className="truncate font-mono text-xs" title={resource.resourceUrl}>
+                  {resource.resourceUrl}
+                </TableCell>
                 <TableCell>
                   <StatusBadge
                     active={resource.enabled && !resource.archivedAt}
@@ -155,17 +202,36 @@ export function ApiResourcesPage() {
                     inactiveLabel={tt(resource.archivedAt ? 'Archived' : 'Disabled')}
                   />
                 </TableCell>
+                <TableCell className="truncate" title={ownerLabel(resource.ownerOrganizationId, organizations)}>
+                  {ownerLabel(resource.ownerOrganizationId, organizations)}
+                </TableCell>
+                <TableCell>{formatDate(resource.updatedAt)}</TableCell>
+                <TableCell className="text-right">
+                  <Button asChild size="sm" variant="ghost">
+                    <Link
+                      params={{ resourceId: resource.id }}
+                      search={context ? { context } : {}}
+                      to="/console/api-resources/$resourceId"
+                    >
+                      {tt('Open')}
+                    </Link>
+                  </Button>
+                </TableCell>
               </TableRow>
             ))
           ) : (
             <TableEmptyRow
-              colSpan={4}
+              colSpan={7}
               description={
-                search
-                  ? tt('No API resources match the current search.')
-                  : tt('Register APIs before issuing access tokens for protected resources.')
+                search || authorization || status || owner
+                  ? tt('No resource servers match the current filters.')
+                  : tt('Register a protected API before issuing access tokens.')
               }
-              title={search ? tt('No API resources found') : tt('No API resources yet')}
+              title={
+                search || authorization || status || owner
+                  ? tt('No resource servers found')
+                  : tt('No resource servers yet')
+              }
             />
           )}
         </TableBody>
@@ -176,62 +242,150 @@ export function ApiResourcesPage() {
 
 function ApiResourceCreateDialog({
   connectors,
+  defaultOwnerOrganizationId,
   error,
   onClose,
   onSubmit,
   open,
+  organizations,
   pending,
 }: {
   connectors: Array<{ id: string; displayName: string; issuer: string | null }>
+  defaultOwnerOrganizationId?: string
   error: string | null
   onClose: () => void
-  onSubmit: (form: FormState) => void
+  onSubmit: (input: Parameters<typeof createApiResource>[0]) => void
   open: boolean
+  organizations: OrganizationResponse[]
   pending: boolean
 }) {
   const [form, setForm] = useState<FormState>(emptyForm)
+  const [ownerOrganizationId, setOwnerOrganizationId] = useState('')
+  const [eligibilityMode, setEligibilityMode] = useState<ApiResourceEligibilityMode>('realm')
+  const [eligibleOrganizationIds, setEligibleOrganizationIds] = useState<string[]>([])
+  const [availableToAgents, setAvailableToAgents] = useState(true)
   const [validationError, setValidationError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!open || ownerOrganizationId) return
+    setOwnerOrganizationId(
+      defaultOwnerOrganizationId ??
+        organizations.find((organization) => organization.id === 'org_platform')?.id ??
+        organizations[0]?.id ??
+        '',
+    )
+  }, [defaultOwnerOrganizationId, open, organizations, ownerOrganizationId])
   return (
     <Dialog open={open}>
       <FormDialog
+        description={tt('Register a protected API and choose how its actors become eligible for authority.')}
         error={validationError ?? error}
         onClose={onClose}
         onSubmit={(event) => {
           event.preventDefault()
           try {
             setValidationError(null)
-            onSubmit(form)
+            onSubmit(
+              parseForm(createApiResourceRequestSchema, {
+                ...form,
+                ownerOrganizationId,
+                accessEligibility: { mode: eligibilityMode, organizationIds: eligibleOrganizationIds },
+                availableToAgents,
+              }),
+            )
           } catch (submitError) {
             setValidationError(submitError instanceof Error ? tt(submitError.message) : tt('Invalid form input.'))
           }
         }}
         pending={pending}
-        title={tt('Create API resource')}
+        title={tt('New resource server')}
       >
-        <Field label={tt('Identifier')}>
-          <TextInput onChange={(event) => setValue(setForm, 'identifier', event.target.value)} required />
-        </Field>
         <Field label={tt('Name')}>
-          <TextInput onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
+          <TextInput name="name" onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
         </Field>
-        <Field label={tt('Resource URL')}>
-          <TextInput onChange={(event) => setValue(setForm, 'resourceUrl', event.target.value)} required />
+        <Field label={tt('Identifier')}>
+          <TextInput
+            name="identifier"
+            onChange={(event) => setValue(setForm, 'identifier', event.target.value)}
+            required
+          />
         </Field>
-        <Field label={tt('OIDC connector')}>
+        <Field label={tt('Protected resource URL')}>
+          <TextInput
+            name="resourceUrl"
+            onChange={(event) => setValue(setForm, 'resourceUrl', event.target.value)}
+            required
+            type="url"
+          />
+        </Field>
+        <OrganizationOwnerField
+          onChange={setOwnerOrganizationId}
+          organizations={organizations}
+          value={ownerOrganizationId}
+        />
+        <Field
+          help={tt(
+            'Native uses Realmroot authorization. Selecting a connector delegates authorization to that provider. This cannot be changed after creation.',
+          )}
+          label={tt('Authorization model')}
+        >
           <SelectInput
+            name="connectorId"
             onChange={(event) => setValue(setForm, 'connectorId', event.target.value)}
             value={form.connectorId ?? ''}
           >
-            <option value="">{tt('None — use native authorization')}</option>
+            <option value="">{tt('Native (Realmroot)')}</option>
             {connectors.map((connector) => (
               <option key={connector.id} value={connector.id}>
-                {connector.displayName} — {connector.issuer}
+                {tt('External')} · {connector.displayName} — {connector.issuer}
               </option>
             ))}
           </SelectInput>
         </Field>
+        <Field
+          help={tt(
+            'Eligibility controls who may request permissions from this server; roles still decide which scopes they receive.',
+          )}
+          label={tt('Access eligibility')}
+        >
+          <SelectInput
+            name="eligibilityMode"
+            onChange={(event) => setEligibilityMode(event.target.value as ApiResourceEligibilityMode)}
+            value={eligibilityMode}
+          >
+            <option value="realm">{tt('All Realm actors')}</option>
+            <option value="owner_organization">{tt('Owning Organization only')}</option>
+            <option value="organizations">{tt('Selected Organizations')}</option>
+          </SelectInput>
+        </Field>
+        {eligibilityMode === 'organizations' ? (
+          <IdentityMultiSelect
+            emptyLabel={tt('No Organizations found')}
+            label={tt('Eligible Organizations')}
+            onChange={setEligibleOrganizationIds}
+            options={organizationOptions(organizations).filter((organization) => organization.id !== 'org_platform')}
+            placeholder={tt('Select Organizations')}
+            value={eligibleOrganizationIds}
+          />
+        ) : null}
+        <div className="flex items-start justify-between gap-4">
+          <span>
+            <strong className="block text-sm">{tt('Available to Agents')}</strong>
+            <small className="text-muted-foreground">
+              {tt('Eligible Agent identities may discover and request these scopes.')}
+            </small>
+          </span>
+          <Switch
+            aria-label={tt('Available to Agents')}
+            checked={availableToAgents}
+            onCheckedChange={setAvailableToAgents}
+          />
+        </div>
         <Field label={tt('Description')}>
-          <TextInput onChange={(event) => setValue(setForm, 'description', event.target.value)} />
+          <TextArea
+            name="description"
+            onChange={(event) => setValue(setForm, 'description', event.target.value)}
+            rows={3}
+          />
         </Field>
       </FormDialog>
     </Dialog>
@@ -240,289 +394,767 @@ function ApiResourceCreateDialog({
 
 export function ApiResourceDetailPage({
   resourceId,
-  section = 'settings',
+  section = 'overview',
 }: {
   resourceId: string
   section?: ApiResourceDetailSection
 }) {
+  const { organizationId: context } = useConsoleScope()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [selectedTab, setSelectedTab] = useState<ApiResourceDetailSection>(section)
-  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false)
+  const [editor, setEditor] = useState<ResourceEditor>(null)
+  const [archiveOpen, setArchiveOpen] = useState(false)
   const resourceQuery = useQuery({
     queryKey: [...consoleQueryKeys.apiResources, resourceId],
     queryFn: () => getApiResource(resourceId),
   })
+  const contractQuery = useQuery({
+    enabled: selectedTab === 'resources',
+    queryFn: () => getApiResourceContract(resourceId),
+    queryKey: [...consoleQueryKeys.apiResources, resourceId, 'contract'],
+  })
+  const connectorsQuery = useQuery({ queryKey: consoleQueryKeys.connectors, queryFn: listConnectors })
+  const organizationsQuery = useQuery({ queryKey: consoleQueryKeys.organizations, queryFn: listOrganizations })
   const resource = resourceQuery.data
-  const updateMutation = useMutation({
-    mutationFn: (input: z.infer<typeof updateApiResourceRequestSchema>) => updateApiResource(resourceId, input),
+  const updateMutation = useAdminMutation({
+    mutationFn: (input: Parameters<typeof updateApiResource>[1]) => updateApiResource(resourceId, input),
     onSuccess: (updated) => {
       queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
-      return queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.apiResources,
-      })
-    },
-  })
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteApiResource(resourceId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.apiResources,
-      })
-      await navigate({ href: '/console/api-resources' })
+      setEditor(null)
+      return queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
     },
   })
   const archivalMutation = useMutation({
     mutationFn: (action: 'archive' | 'restore') =>
       action === 'archive' ? archiveApiResource(resourceId) : restoreApiResource(resourceId),
     onSuccess: (updated) => {
-      setArchiveConfirmOpen(false)
-      queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
-      return queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.apiResources,
-      })
-    },
-  })
-  useEffect(() => setSelectedTab(section), [section])
-  return (
-    <ResourcePage
-      title={resource?.name ?? tt('API resource')}
-      description={tt('Manage the protected API URL and authoritative business OpenAPI location.')}
-      framed={false}
-      error={resourceQuery.error}
-      loading={resourceQuery.isLoading}
-      onRetry={() => resourceQuery.refetch()}
-    >
-      {resource ? (
-        <div className="consoleDetailStack">
-          <a className="consoleBackLink" href="/console/api-resources">
-            <Undo2 data-icon="inline-start" /> {tt('Back to API resources')}{' '}
-          </a>
-          <ObjectHeader
-            badge={tt(resource.archivedAt ? 'Archived' : resource.enabled ? 'Enabled' : 'Disabled')}
-            id={resource.identifier}
-            title={resource.name}
-          />
-          <DetailTabs
-            label={tt('API resource detail sections')}
-            onChange={(value) => {
-              const next = value as ApiResourceDetailSection
-              setSelectedTab(next)
-              navigateConsoleTab(navigate, `/console/api-resources/${resourceId}/${next}`)
-            }}
-            tabs={apiResourceDetailTabs()}
-            value={selectedTab}
-          />
-          <div className="grid gap-4 xl:grid-cols-2">
-            {selectedTab === 'settings' ? (
-              <>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{tt('Resource settings')}</CardTitle>
-                    <CardDescription>
-                      {tt('The resource URL is used for OAuth resource requests and access-token audiences.')}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {resource.archivedAt ? (
-                      <div className="space-y-4">
-                        <p className="text-sm text-muted-foreground">
-                          {tt(
-                            'Archived resources remain available for authorization history but cannot be enabled or edited.',
-                          )}
-                        </p>
-                        <Button
-                          disabled={archivalMutation.isPending}
-                          onClick={() => archivalMutation.mutate('restore')}
-                          type="button"
-                          variant="secondary"
-                        >
-                          {tt('Restore resource')}
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <AuthorizationForm
-                          buttonLabel="Save resource"
-                          defaults={{
-                            identifier: resource.identifier,
-                            name: resource.name,
-                            resourceUrl: resource.resourceUrl,
-                            description: resource.description ?? '',
-                          }}
-                          error={updateMutation.error}
-                          fields={[
-                            ['identifier', 'Identifier'],
-                            ['name', 'Name'],
-                            ['resourceUrl', 'Resource URL'],
-                            ['description', 'Description'],
-                          ]}
-                          onSubmit={(form) => {
-                            updateMutation.mutate(parseForm(updateApiResourceRequestSchema, form))
-                          }}
-                          pending={updateMutation.isPending}
-                        />
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <Button
-                            disabled={updateMutation.isPending}
-                            onClick={() =>
-                              updateMutation.mutate({
-                                enabled: !resource.enabled,
-                              })
-                            }
-                            type="button"
-                            variant="secondary"
-                          >
-                            {resource.enabled ? 'Disable' : 'Enable'}
-                          </Button>
-                          <Button
-                            disabled={archivalMutation.isPending}
-                            onClick={() => setArchiveConfirmOpen(true)}
-                            type="button"
-                            variant="danger"
-                          >
-                            {tt('Archive resource')}
-                          </Button>
-                          <Button
-                            disabled={deleteMutation.isPending}
-                            onClick={() => deleteMutation.mutate()}
-                            type="button"
-                            variant="danger"
-                          >
-                            <Trash2 data-icon="inline-start" /> {tt('Delete resource')}{' '}
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                    <MutationError error={archivalMutation.error} />
-                    <MutationError error={deleteMutation.error} />
-                  </CardContent>
-                </Card>
-                {resource.connectorId && !resource.archivedAt ? (
-                  <ExternalAuthorizationCard
-                    authorization={resource.authorization}
-                    currentConnectorId={resource.connectorId}
-                    resourceId={resource.id}
-                    resourceUrl={resource.resourceUrl}
-                  />
-                ) : null}
-              </>
-            ) : null}
-
-            <ApiResourceSummaryCard resource={resource} />
-          </div>
-          <DangerConfirmDialog
-            actionLabel={tt('Archive resource')}
-            description={tt(
-              'Archiving this resource permanently revokes its active connections, access grants, pending requests, and token leases. Restoring the resource will not restore that authorization.',
-            )}
-            error={archivalMutation.error}
-            onClose={() => setArchiveConfirmOpen(false)}
-            onConfirm={() => archivalMutation.mutate('archive')}
-            open={archiveConfirmOpen}
-            pending={archivalMutation.isPending}
-            title={tt('Archive API resource')}
-          />
-        </div>
-      ) : null}
-    </ResourcePage>
-  )
-}
-
-function ExternalAuthorizationCard({
-  authorization,
-  currentConnectorId,
-  resourceId,
-  resourceUrl,
-}: {
-  authorization: ApiResource['authorization']
-  currentConnectorId: string
-  resourceId: string
-  resourceUrl: string
-}) {
-  const queryClient = useQueryClient()
-  const connectorsQuery = useQuery({
-    queryKey: consoleQueryKeys.connectors,
-    queryFn: listConnectors,
-  })
-  const oidcConnectors = (connectorsQuery.data?.connectors ?? []).filter(
-    (connector) => connector.providerType === 'generic_oauth',
-  )
-  const [connectorId, setConnectorId] = useState('')
-  useEffect(() => {
-    setConnectorId(currentConnectorId)
-  }, [currentConnectorId])
-  const mutation = useMutation({
-    mutationFn: (nextConnectorId: string) => updateApiResource(resourceId, { connectorId: nextConnectorId }),
-    onSuccess: (updated) => {
+      setArchiveOpen(false)
       queryClient.setQueryData([...consoleQueryKeys.apiResources, resourceId], updated)
       return queryClient.invalidateQueries({ queryKey: consoleQueryKeys.apiResources })
     },
   })
+  useEffect(() => setSelectedTab(section), [section])
+  if (resourceQuery.isLoading || organizationsQuery.isLoading)
+    return <LoadingState label={tt('Loading resource server')} />
+  const loadError = resourceQuery.error ?? organizationsQuery.error
+  if (loadError)
+    return (
+      <ErrorState
+        error={loadError}
+        onRetry={() => Promise.all([resourceQuery.refetch(), organizationsQuery.refetch()])}
+      />
+    )
+  if (!resource) return <ErrorState error={new Error(tt('Resource server not found.'))} />
+  const organizations = organizationsQuery.data?.organizations ?? []
+  const mode = resource.connectorId ? 'external' : 'native'
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{tt('OIDC connector')}</CardTitle>
-        <CardDescription>
-          {tt('Associate a reusable OIDC client for account authorization and direct Agent token exchange.')}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4">
-          <p className="text-sm text-muted-foreground">
-            {tt('Protected resource URL')}: {resourceUrl}
-          </p>
-          {authorization ? (
-            <div className="rounded-md border border-border p-3 text-sm">
-              <div className="font-medium">
-                {oidcConnectors.find((connector) => connector.id === authorization.connectorId)?.displayName ??
-                  authorization.connectorId}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {authorization.issuer} · {tt('Status')}: {tt(authorization.status)}
-              </div>
+    <>
+      <div className="consoleDetailStack">
+        <Link className="consoleBackLink" search={context ? { context } : {}} to="/console/api-resources">
+          <ArrowLeft />
+          {tt('Resource servers')}
+        </Link>
+        <header className="consoleDetailHeader">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1>{resource.name}</h1>
+              <Badge variant={resource.archivedAt ? 'outline' : resource.enabled ? 'secondary' : 'outline'}>
+                {tt(resource.archivedAt ? 'Archived' : resource.enabled ? 'Enabled' : 'Disabled')}
+              </Badge>
             </div>
-          ) : null}
-          {oidcConnectors.length ? (
-            <SelectInput
-              aria-label={tt('OIDC connector')}
-              onChange={(event) => setConnectorId(event.target.value)}
-              value={connectorId}
-            >
-              <option value="">{tt('Select an OIDC connector')}</option>
-              {oidcConnectors.map((connector) => (
-                <option disabled={!connector.enabled} key={connector.id} value={connector.id}>
-                  {connector.displayName} — {connector.issuer}
-                </option>
-              ))}
-            </SelectInput>
-          ) : !authorization ? (
-            <p className="text-sm text-muted-foreground">
-              {tt('Create an OIDC connector on the Connectors page before enabling this resource.')}{' '}
-              <a className="font-medium underline" href="/console/connectors">
-                {tt('Open Connectors')}
-              </a>
-            </p>
-          ) : null}
-          <MutationError error={mutation.error} />
-          <div className="flex flex-wrap gap-2">
-            {oidcConnectors.length ? (
-              <Button
-                disabled={
-                  !connectorId ||
-                  connectorId === authorization?.connectorId ||
-                  !oidcConnectors.find((connector) => connector.id === connectorId)?.enabled ||
-                  mutation.isPending
-                }
-                onClick={() => mutation.mutate(connectorId)}
-                type="button"
-              >
-                {mutation.isPending ? tt('Validating...') : tt('Change connector')}
-              </Button>
-            ) : null}
+            <p>{resource.description ?? tt('Protected API registered in this Realm.')}</p>
+            <span className="consoleDetailMeta">
+              {mode === 'native' ? tt('Native authorization') : tt('External authorization')} · {resource.id}
+            </span>
           </div>
+        </header>
+        <Tabs
+          onValueChange={(value) => {
+            const next = value as ApiResourceDetailSection
+            setSelectedTab(next)
+            navigateConsoleTab(navigate, `/console/api-resources/${resourceId}/${next}`, context)
+          }}
+          value={selectedTab}
+        >
+          <TabsList className="w-full justify-start" variant="line">
+            <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
+            <TabsTrigger value="resources">{tt('Resources')}</TabsTrigger>
+            <TabsTrigger value="authority">{tt(mode === 'native' ? 'Roles & grants' : 'Authorization')}</TabsTrigger>
+            <TabsTrigger value="settings">{tt('Settings')}</TabsTrigger>
+          </TabsList>
+          <TabsContent className="mt-5" value="overview">
+            <ResourceOverview mode={mode} organizations={organizations} resource={resource} />
+          </TabsContent>
+          <TabsContent className="mt-5" value="resources">
+            <ProtectedResources
+              contract={contractQuery.data}
+              error={contractQuery.error}
+              loading={contractQuery.isLoading}
+              onRetry={() => contractQuery.refetch()}
+            />
+          </TabsContent>
+          <TabsContent className="mt-5" value="authority">
+            <ResourceAuthority context={context} mode={mode} resource={resource} />
+          </TabsContent>
+          <TabsContent className="mt-5" value="settings">
+            <ResourceSettings
+              connectors={connectorsQuery.data?.connectors ?? []}
+              mode={mode}
+              onArchive={() => setArchiveOpen(true)}
+              onEditConnector={() => setEditor('connector')}
+              onEditDetails={() => setEditor('details')}
+              onEditEligibility={() => setEditor('eligibility')}
+              onRestore={() => archivalMutation.mutate('restore')}
+              onToggle={() => updateMutation.mutate({ enabled: !resource.enabled })}
+              organizations={organizations}
+              resource={resource}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
+      <ResourceEditorSheet
+        connectors={(connectorsQuery.data?.connectors ?? []).filter(
+          (connector) => connector.providerType === 'generic_oauth',
+        )}
+        editor={editor}
+        error={updateMutation.errorMessage}
+        onClose={() => setEditor(null)}
+        onSave={(input) => updateMutation.mutate(input)}
+        organizations={organizations}
+        pending={updateMutation.isPending}
+        resource={resource}
+      />
+      <DangerConfirmDialog
+        actionLabel={tt('Archive resource server')}
+        description={tt(
+          'Archiving revokes active connections, grants, pending requests, and token leases. Restoring does not restore that authority.',
+        )}
+        error={archivalMutation.error}
+        onClose={() => setArchiveOpen(false)}
+        onConfirm={() => archivalMutation.mutate('archive')}
+        open={archiveOpen}
+        pending={archivalMutation.isPending}
+        title={tt('Archive {{name}}?', { name: resource.name })}
+      />
+    </>
+  )
+}
+
+function ResourceOverview({
+  mode,
+  organizations,
+  resource,
+}: {
+  mode: 'native' | 'external'
+  organizations: OrganizationResponse[]
+  resource: ApiResource
+}) {
+  return (
+    <div className="detailFlatRows">
+      <DetailRow label="Owner" value={ownerLabel(resource.ownerOrganizationId, organizations)} />
+      <DetailRow
+        label="Authorization"
+        value={mode === 'native' ? tt('Native · Realmroot') : tt('External OIDC provider')}
+      />
+      <DetailRow label="Access eligibility" value={resourceEligibilityLabel(resource.accessEligibility.mode)} />
+      {resource.accessEligibility.mode === 'organizations' ? (
+        <DetailRow
+          label="Eligible Organizations"
+          value={selectionSummary(resource.accessEligibility.organizationIds, organizationOptions(organizations))}
+        />
+      ) : null}
+      <DetailRow label="Available to Agents" value={resource.availableToAgents ? tt('Yes') : tt('No')} />
+      <DetailRow label="Protected resource URL" value={<code>{resource.resourceUrl}</code>} />
+      <DetailRow label="Identifier" value={<code>{resource.identifier}</code>} />
+      <DetailRow label="Created" value={formatDate(resource.createdAt)} />
+      <DetailRow label="Last updated" value={formatDate(resource.updatedAt)} />
+    </div>
+  )
+}
+
+function ProtectedResources({
+  contract,
+  error,
+  loading,
+  onRetry,
+}: {
+  contract?: ApiResourceContractResponse
+  error: Error | null
+  loading: boolean
+  onRetry: () => void
+}) {
+  if (loading) return <LoadingState label={tt('Reading protected resources')} />
+  if (error) return <ErrorState error={error} onRetry={onRetry} />
+  const operations = contract?.operations ?? []
+  return (
+    <div className="overflow-hidden rounded-xl border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{tt('Resource')}</TableHead>
+            <TableHead>{tt('Path')}</TableHead>
+            <TableHead>{tt('Required scope')}</TableHead>
+            <TableHead>{tt('Description')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {operations.length ? (
+            operations.map((operation) => (
+              <TableRow key={`${operation.method}:${operation.path}:${operation.operationId ?? ''}`}>
+                <TableCell>
+                  <span className="font-medium">
+                    {operation.summary ?? operation.operationId ?? tt('Protected operation')}
+                  </span>
+                  {operation.summary && operation.operationId ? (
+                    <code className="mt-0.5 block text-xs text-muted-foreground">{operation.operationId}</code>
+                  ) : null}
+                </TableCell>
+                <TableCell>
+                  <span className="inline-flex items-center gap-2">
+                    <Badge variant="outline">{operation.method}</Badge>
+                    <code className="text-xs">{operation.path}</code>
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <ScopeRequirements scopeSets={operation.requiredScopeSets} />
+                </TableCell>
+                <TableCell className="max-w-80 text-sm text-muted-foreground">
+                  {operation.description ?? tt('—')}
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableEmptyRow
+              colSpan={4}
+              description={tt('The published OpenAPI contract does not declare any OAuth-protected operations.')}
+              title={tt('No protected resources')}
+            />
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function ScopeRequirements({ scopeSets }: { scopeSets: string[][] }) {
+  return (
+    <div className="flex max-w-md flex-wrap items-center gap-1.5">
+      {scopeSets.map((scopes, index) => (
+        <span className="contents" key={scopes.join('\u0000') || 'authenticated'}>
+          {index > 0 ? <span className="px-0.5 text-xs text-muted-foreground">{tt('or')}</span> : null}
+          <span className="inline-flex flex-wrap items-center gap-1">
+            {scopes.length ? (
+              scopes.map((scope, scopeIndex) => (
+                <span className="contents" key={scope}>
+                  {scopeIndex > 0 ? <span className="text-xs text-muted-foreground">+</span> : null}
+                  <Badge variant="secondary">
+                    <code>{scope}</code>
+                  </Badge>
+                </span>
+              ))
+            ) : (
+              <Badge variant="outline">{tt('Authenticated')}</Badge>
+            )}
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function ResourceAuthority({
+  context,
+  mode,
+  resource,
+}: {
+  context?: string
+  mode: 'native' | 'external'
+  resource: ApiResource
+}) {
+  const rolesQuery = useQuery({
+    enabled: mode === 'native',
+    queryFn: listRoles,
+    queryKey: consoleQueryKeys.roles,
+  })
+  const roles = rolesQuery.data?.roles ?? []
+  const permissionsQueries = useQueries({
+    queries: roles.map((role) => ({
+      enabled: mode === 'native',
+      queryFn: () => listRolePermissions(role.id),
+      queryKey: [...consoleQueryKeys.roles, role.id, 'permissions'],
+    })),
+  })
+  const assignmentsQueries = useQueries({
+    queries: roles.map((role) => ({
+      enabled: mode === 'native',
+      queryFn: () => listRoleAssignments({ limit: 1, roleId: role.id, status: 'active' }),
+      queryKey: [...consoleQueryKeys.roles, role.id, 'assignments', { status: 'active' }],
+    })),
+  })
+  if (mode === 'external') {
+    return (
+      <div className="detailFlatRows">
+        <DetailRow label="Authority source" value={tt('External OIDC provider')} />
+        <DetailRow label="Issuer" value={<code>{resource.authorization?.issuer ?? tt('Not configured')}</code>} />
+        <DetailRow
+          label="Connection status"
+          value={resource.authorization ? tt(resource.authorization.status) : tt('Not configured')}
+        />
+        <DetailRow
+          label="Client registration"
+          value={resource.authorization ? tt(resource.authorization.registrationMode) : tt('Not configured')}
+        />
+      </div>
+    )
+  }
+  if (
+    rolesQuery.isLoading ||
+    permissionsQueries.some((query) => query.isLoading) ||
+    assignmentsQueries.some((query) => query.isLoading)
+  ) {
+    return <LoadingState label={tt('Loading roles and grants')} />
+  }
+  const error =
+    rolesQuery.error ??
+    permissionsQueries.find((query) => query.error)?.error ??
+    assignmentsQueries.find((query) => query.error)?.error
+  if (error) {
+    return (
+      <ErrorState
+        error={error}
+        onRetry={() =>
+          Promise.all([
+            rolesQuery.refetch(),
+            ...permissionsQueries.map((query) => query.refetch()),
+            ...assignmentsQueries.map((query) => query.refetch()),
+          ])
+        }
+      />
+    )
+  }
+  const rows = roles.flatMap((role, index) => {
+    const permissions = (permissionsQueries[index]?.data?.permissions ?? []).filter(
+      (permission) => permission.resourceId === resource.id,
+    )
+    if (!permissions.length) return []
+    return [
+      {
+        assignments: assignmentsQueries[index]?.data?.pagination.total ?? 0,
+        permissions,
+        role,
+      },
+    ]
+  })
+  return (
+    <div className="overflow-hidden rounded-xl border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{tt('Role')}</TableHead>
+            <TableHead>{tt('Permissions from this server')}</TableHead>
+            <TableHead>{tt('Active assignments')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.length ? (
+            rows.map(({ assignments, permissions, role }) => (
+              <TableRow key={role.id}>
+                <TableCell>
+                  <Link
+                    className="font-medium hover:underline"
+                    params={{ roleId: role.id }}
+                    search={context ? { context } : {}}
+                    to="/console/roles/$roleId"
+                  >
+                    {role.name}
+                  </Link>
+                  <code className="mt-0.5 block text-xs text-muted-foreground">{role.key}</code>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1.5">
+                    {permissions.map((permission) => (
+                      <Badge key={permission.scope} variant="secondary">
+                        <code>{permission.scope}</code>
+                      </Badge>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell>{assignments}</TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableEmptyRow
+              colSpan={3}
+              description={tt('Assign one of this server’s scopes to a Realm Role to make it reusable.')}
+              title={tt('No Roles use this server')}
+            />
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function ResourceSettings({
+  connectors,
+  mode,
+  onArchive,
+  onEditConnector,
+  onEditDetails,
+  onEditEligibility,
+  onRestore,
+  onToggle,
+  organizations,
+  resource,
+}: {
+  connectors: ConnectorResponse[]
+  mode: 'native' | 'external'
+  onArchive: () => void
+  onEditConnector: () => void
+  onEditDetails: () => void
+  onEditEligibility: () => void
+  onRestore: () => void
+  onToggle: () => void
+  organizations: OrganizationResponse[]
+  resource: ApiResource
+}) {
+  const connectorId = resource.authorization?.connectorId ?? resource.connectorId
+  const connector = connectors.find((candidate) => candidate.id === connectorId)
+  if (resource.archivedAt)
+    return (
+      <div className="detailFlatRows">
+        <DetailRow
+          action={<Button onClick={onRestore}>{tt('Restore resource server')}</Button>}
+          description="Restoring returns this server as a disabled draft; previous authority is not restored."
+          label="Archived resource server"
+          value={formatDate(resource.archivedAt)}
+        />
+      </div>
+    )
+  return (
+    <div className="detailSections">
+      <DetailSection
+        action={
+          <Button onClick={onEditDetails} variant="outline">
+            {tt('Edit')}
+          </Button>
+        }
+        description="Identity and protected URL used to recognize this API."
+        title="Resource server details"
+      >
+        <DetailRow label="Name" value={resource.name} />
+        <DetailRow label="Identifier" value={<code>{resource.identifier}</code>} />
+        <DetailRow label="Protected resource URL" value={<code>{resource.resourceUrl}</code>} />
+        <DetailRow label="Description" value={resource.description ?? tt('Not configured')} />
+      </DetailSection>
+      {mode === 'external' ? (
+        <DetailSection
+          action={
+            <Button onClick={onEditConnector} variant="outline">
+              {tt('Edit')}
+            </Button>
+          }
+          description="Reusable OIDC connection used for account authorization and Agent token exchange."
+          title="Authorization provider"
+        >
+          <DetailRow
+            label="Connector"
+            value={
+              connectorId ? (
+                <span className="grid gap-0.5">
+                  <span>{connector?.displayName ?? connectorId}</span>
+                  {connector ? <code className="text-xs text-muted-foreground">{connectorId}</code> : null}
+                </span>
+              ) : (
+                '—'
+              )
+            }
+          />
+          <DetailRow label="Issuer" value={resource.authorization?.issuer ?? '—'} />
+          <DetailRow label="Connection status" value={resource.authorization?.status ?? tt('Pending validation')} />
+        </DetailSection>
+      ) : null}
+      <DetailSection
+        action={
+          <Button onClick={onEditEligibility} variant="outline">
+            {tt('Edit')}
+          </Button>
+        }
+        description="Choose the responsible Organization and who may request this server’s scopes; roles still determine what they may do."
+        title="Ownership & access"
+      >
+        <DetailRow label="Owner" value={ownerLabel(resource.ownerOrganizationId, organizations)} />
+        <DetailRow label="Eligible actors" value={resourceEligibilityLabel(resource.accessEligibility.mode)} />
+        {resource.accessEligibility.mode === 'organizations' ? (
+          <DetailRow
+            label="Eligible Organizations"
+            value={selectionSummary(resource.accessEligibility.organizationIds, organizationOptions(organizations))}
+          />
+        ) : null}
+        <DetailRow
+          label="Available to Agents"
+          value={<Switch checked={resource.availableToAgents} disabled aria-label={tt('Available to Agents')} />}
+        />
+      </DetailSection>
+      <DetailSection
+        description="Control availability and permanently revoke active Realmroot authority."
+        title="Lifecycle"
+      >
+        <DetailRow
+          action={
+            <Button onClick={onToggle} variant={resource.enabled ? 'destructive' : 'outline'}>
+              {resource.enabled ? tt('Disable') : tt('Enable')}
+            </Button>
+          }
+          description="Disabling blocks new access while preserving configuration and grants."
+          label="Resource server status"
+          value={
+            <Badge variant={resource.enabled ? 'secondary' : 'outline'}>
+              {resource.enabled ? tt('Enabled') : tt('Disabled')}
+            </Badge>
+          }
+        />
+        <DetailRow
+          action={
+            <Button onClick={onArchive} variant="destructive">
+              {tt('Archive')}
+            </Button>
+          }
+          description="Revokes connections, grants, requests, and token leases while preserving audit history."
+          label="Archive resource server"
+          value={tt('Permanent revocation')}
+        />
+      </DetailSection>
+    </div>
+  )
+}
+
+function ResourceEditorSheet({
+  connectors,
+  editor,
+  error,
+  onClose,
+  onSave,
+  organizations,
+  pending,
+  resource,
+}: {
+  connectors: Array<{ id: string; displayName: string; issuer: string | null; enabled: boolean }>
+  editor: ResourceEditor
+  error?: string | null
+  onClose: () => void
+  onSave: (input: Parameters<typeof updateApiResource>[1]) => void
+  organizations: OrganizationResponse[]
+  pending: boolean
+  resource: ApiResource
+}) {
+  const [ownerOrganizationId, setOwnerOrganizationId] = useState(resource.ownerOrganizationId)
+  const [eligibilityMode, setEligibilityMode] = useState<ApiResourceEligibilityMode>(resource.accessEligibility.mode)
+  const [organizationIds, setOrganizationIds] = useState(resource.accessEligibility.organizationIds)
+  const [agents, setAgents] = useState(resource.availableToAgents)
+  useEffect(() => {
+    if (editor !== 'eligibility') return
+    setOwnerOrganizationId(resource.ownerOrganizationId)
+    setEligibilityMode(resource.accessEligibility.mode)
+    setOrganizationIds(resource.accessEligibility.organizationIds)
+    setAgents(resource.availableToAgents)
+  }, [editor, resource])
+  const formId = editor ? `resource-${editor}` : undefined
+  return (
+    <Sheet
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+      open={editor !== null}
+    >
+      <SheetContent className="h-full overflow-hidden sm:max-w-xl">
+        <SheetHeader className="shrink-0">
+          <SheetTitle>
+            {tt(
+              editor === 'details'
+                ? 'Edit resource server'
+                : editor === 'connector'
+                  ? 'Change authorization provider'
+                  : 'Edit ownership & access',
+            )}
+          </SheetTitle>
+          <SheetDescription>
+            {tt(
+              editor === 'details'
+                ? 'Update the protected API identity and URL.'
+                : editor === 'connector'
+                  ? 'Choose the configured OIDC connector used by this external server.'
+                  : 'Set the responsible Organization and who may request access without changing their permissions.',
+            )}
+          </SheetDescription>
+        </SheetHeader>
+        {editor === 'details' ? (
+          <form
+            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            id={formId}
+            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault()
+              const form = new FormData(event.currentTarget)
+              onSave(
+                parseForm(updateApiResourceRequestSchema, {
+                  name: form.get('name'),
+                  identifier: form.get('identifier'),
+                  resourceUrl: form.get('resourceUrl'),
+                  description: nullableString(String(form.get('description') ?? '')),
+                }),
+              )
+            }}
+          >
+            <Field label={tt('Name')}>
+              <TextInput defaultValue={resource.name} name="name" required />
+            </Field>
+            <Field label={tt('Identifier')}>
+              <TextInput defaultValue={resource.identifier} name="identifier" required />
+            </Field>
+            <Field label={tt('Protected resource URL')}>
+              <TextInput defaultValue={resource.resourceUrl} name="resourceUrl" required type="url" />
+            </Field>
+            <Field label={tt('Description')}>
+              <TextArea defaultValue={resource.description ?? ''} name="description" rows={4} />
+            </Field>
+          </form>
+        ) : null}
+        {editor === 'connector' ? (
+          <form
+            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            id={formId}
+            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault()
+              onSave({ connectorId: String(new FormData(event.currentTarget).get('connectorId') ?? '') })
+            }}
+          >
+            <Field label={tt('OIDC connector')}>
+              <SelectInput defaultValue={resource.connectorId ?? ''} name="connectorId" required>
+                {connectors.map((connector) => (
+                  <option disabled={!connector.enabled} key={connector.id} value={connector.id}>
+                    {connector.displayName} — {connector.issuer}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+          </form>
+        ) : null}
+        {editor === 'eligibility' ? (
+          <form
+            className="grid min-h-0 flex-1 gap-6 overflow-y-auto px-4 py-5"
+            id={formId}
+            onSubmit={(event) => {
+              event.preventDefault()
+              onSave({
+                ownerOrganizationId,
+                accessEligibility: { mode: eligibilityMode, organizationIds },
+                availableToAgents: agents,
+              })
+            }}
+          >
+            <OrganizationOwnerField
+              onChange={setOwnerOrganizationId}
+              organizations={organizations}
+              value={ownerOrganizationId}
+            />
+            <Field
+              help={tt('Roles and grants still determine the scopes an eligible actor receives.')}
+              label={tt('Eligible actors')}
+            >
+              <SelectInput
+                onChange={(event) => setEligibilityMode(event.target.value as ApiResourceEligibilityMode)}
+                value={eligibilityMode}
+              >
+                <option value="realm">{tt('All Realm actors')}</option>
+                <option value="owner_organization">{tt('Owning Organization only')}</option>
+                <option value="organizations">{tt('Selected Organizations')}</option>
+              </SelectInput>
+            </Field>
+            {eligibilityMode === 'organizations' ? (
+              <IdentityMultiSelect
+                emptyLabel={tt('No Organizations found')}
+                label={tt('Eligible Organizations')}
+                onChange={setOrganizationIds}
+                options={organizationOptions(organizations).filter(
+                  (organization) => organization.id !== 'org_platform',
+                )}
+                placeholder={tt('Select Organizations')}
+                value={organizationIds}
+              />
+            ) : null}
+            <div className="flex items-start justify-between gap-4">
+              <span>
+                <strong className="block text-sm">{tt('Available to Agents')}</strong>
+                <small className="text-muted-foreground">
+                  {tt('Eligible Agent identities may discover and request these scopes.')}
+                </small>
+              </span>
+              <Switch aria-label={tt('Available to Agents')} checked={agents} onCheckedChange={setAgents} />
+            </div>
+          </form>
+        ) : null}
+        {error ? (
+          <p className="px-4 text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <SheetFooter className="shrink-0">
+          <Button onClick={onClose} variant="outline">
+            {tt('Cancel')}
+          </Button>
+          <Button disabled={pending} form={formId} type="submit">
+            {pending ? tt('Saving…') : tt('Save changes')}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function DetailSection({
+  action,
+  children,
+  description,
+  title,
+}: {
+  action?: ReactNode
+  children: ReactNode
+  description: string
+  title: string
+}) {
+  return (
+    <section className="detailSection">
+      <header>
+        <div>
+          <h2>{tt(title)}</h2>
+          <p>{tt(description)}</p>
         </div>
-      </CardContent>
-    </Card>
+        {action}
+      </header>
+      <div className="detailFlatRows">{children}</div>
+    </section>
+  )
+}
+function DetailRow({
+  action,
+  description,
+  label,
+  value,
+}: {
+  action?: ReactNode
+  description?: string
+  label: string
+  value: ReactNode
+}) {
+  return (
+    <div className="detailFlatRow">
+      <div>
+        <strong>{tt(label)}</strong>
+        {description ? <span>{tt(description)}</span> : null}
+      </div>
+      <span>{value}</span>
+      {action ?? <i />}
+    </div>
   )
 }

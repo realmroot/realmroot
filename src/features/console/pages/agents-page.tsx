@@ -1,176 +1,147 @@
-import type { Agent } from '@shared/api/agent-api'
-import type { AgentAuditEvent } from '@shared/api/agents'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, ScrollText, Trash2 } from 'lucide-react'
+import type { ManagementAgent } from '@shared/api/agent-api'
+import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { ChevronRight, Search } from 'lucide-react'
+import { useState } from 'react'
+import { SelectInput } from '@/components/product-form'
+import { TableEmptyRow } from '@/components/table-empty-row'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableEmptyRow, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { consoleQueryKeys, emergencyRetireAgent, getAgentAuditEvents, getAgentInventory } from '@/lib/api/management'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { consoleQueryKeys, getAgentInventory } from '@/lib/api/management'
+import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
-import { ResourcePage } from '../helpers/helpers-resource'
-import { MetricCard } from './dashboard-page'
+import { ListToolbar, ResourcePage } from '../helpers/helpers-resource'
 
 export function AgentsPage() {
-  const queryClient = useQueryClient()
-  const agentsQuery = useQuery({
-    queryKey: consoleQueryKeys.agents,
-    queryFn: getAgentInventory,
+  const { organizationId: context } = useConsoleScope()
+  const [search, setSearch] = useState('')
+  const [ownerType, setOwnerType] = useState('any')
+  const [status, setStatus] = useState('any')
+  const query = useQuery({
+    queryKey: [...consoleQueryKeys.agents, { organizationId: context }],
+    queryFn: () => getAgentInventory({ organizationId: context }),
   })
-  const auditQuery = useQuery({
-    queryKey: [...consoleQueryKeys.agents, 'audit'],
-    queryFn: getAgentAuditEvents,
+  const agents = (query.data?.items ?? []).filter((agent) => {
+    const type = agent.homeSpace.type === 'personal' ? 'user' : 'organization'
+    return (
+      `${agent.name} ${agent.issuer} ${agent.subject}`.toLowerCase().includes(search.toLowerCase()) &&
+      (ownerType === 'any' || ownerType === type) &&
+      (status === 'any' || agent.status === status)
+    )
   })
-  const retireMutation = useMutation({
-    mutationFn: emergencyRetireAgent,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents }),
-  })
-
   return (
     <ResourcePage
-      description={tt('Govern stable Agents and review their authorization history.')}
-      error={agentsQuery.error ?? auditQuery.error ?? retireMutation.error}
-      framed={false}
-      loading={agentsQuery.isLoading || auditQuery.isLoading}
-      onRetry={() => Promise.all([agentsQuery.refetch(), auditQuery.refetch()])}
+      description={tt('Review stable Agent identities belonging to people and Organizations across this Realm.')}
+      empty={agents.length === 0}
+      emptyDescription={
+        search ? tt('No Agents match the current filters.') : tt('Agents appear here after an enrollment is approved.')
+      }
+      emptyTitle={search ? tt('No Agents found') : tt('No Agents enrolled')}
+      error={query.error}
+      loading={query.isLoading}
+      onRetry={() => query.refetch()}
       title={tt('Agents')}
+      toolbar={
+        <ListToolbar>
+          <InputGroup className="w-full sm:w-72">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              aria-label={tt('Search Agents')}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={tt('Search Agents')}
+              value={search}
+            />
+          </InputGroup>
+          <SelectInput
+            aria-label={tt('Filter owner type')}
+            onChange={(event) => setOwnerType(event.target.value)}
+            value={ownerType}
+          >
+            <option value="any">{tt('Any owner type')}</option>
+            <option value="user">{tt('User')}</option>
+            <option value="organization">{tt('Organization')}</option>
+          </SelectInput>
+          <SelectInput
+            aria-label={tt('Filter Agent status')}
+            onChange={(event) => setStatus(event.target.value)}
+            value={status}
+          >
+            <option value="any">{tt('Any status')}</option>
+            <option value="active">{tt('Active')}</option>
+            <option value="retired">{tt('Retired')}</option>
+          </SelectInput>
+        </ListToolbar>
+      }
     >
-      <div className="grid gap-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <MetricCard
-            detail={tt('Stable Agent identities in this tenant.')}
-            label={tt('Agents')}
-            value={agentsQuery.data?.pagination.total ?? 0}
-          />
-          <MetricCard
-            detail={tt('Recorded Agent authorization decisions.')}
-            label={tt('Audit events')}
-            value={auditQuery.data?.pagination.total ?? 0}
-          />
-        </div>
-        <AgentTable
-          agents={agentsQuery.data?.items ?? []}
-          pending={retireMutation.isPending}
-          retire={(id) => retireMutation.mutate(id)}
-        />
-        <AgentAuditTable events={auditQuery.data?.items ?? []} />
-      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{tt('Agent')}</TableHead>
+            <TableHead>{tt('Roles')}</TableHead>
+            <TableHead>{tt('Access grants')}</TableHead>
+            <TableHead>{tt('Status')}</TableHead>
+            <TableHead>{tt('Owner')}</TableHead>
+            <TableHead>{tt('Updated')}</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {agents.length ? (
+            agents.map((agent) => <AgentRow agent={agent} context={context} key={agent.id} />)
+          ) : (
+            <TableEmptyRow
+              colSpan={7}
+              description={tt('Agents appear after enrollment approval.')}
+              title={tt('No Agents found')}
+            />
+          )}
+        </TableBody>
+      </Table>
     </ResourcePage>
   )
 }
 
-function AgentTable({ agents, pending, retire }: { agents: Agent[]; pending: boolean; retire: (id: string) => void }) {
+function AgentRow({ agent, context }: { agent: ManagementAgent; context?: string }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{tt('Stable Agents')}</CardTitle>
-        <CardDescription>{tt('Protocol credentials and bindings remain internal to Realmroot.')}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{tt('Agent')}</TableHead>
-              <TableHead>{tt('Home space')}</TableHead>
-              <TableHead>{tt('Status')}</TableHead>
-              <TableHead>{tt('Emergency action')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {agents.length ? (
-              agents.map((agent) => (
-                <TableRow key={agent.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Bot className="size-4 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">{agent.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {agent.issuer} · {agent.subject}
-                        </p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {agent.homeSpace.type === 'personal'
-                      ? `User ${agent.homeSpace.userId}`
-                      : `Organization ${agent.homeSpace.organizationId}`}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>{agent.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      disabled={pending || agent.status === 'retired'}
-                      onClick={() => retire(agent.id)}
-                      type="button"
-                      variant="ghost"
-                    >
-                      <Trash2 data-icon="inline-start" /> {tt('Retire')}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableEmptyRow
-                colSpan={4}
-                title={tt('No Agents.')}
-                description={tt('Enrolled Agents will appear here.')}
-              />
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  )
-}
-
-function AgentAuditTable({ events }: { events: AgentAuditEvent[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{tt('Agent audit')}</CardTitle>
-        <CardDescription>{tt('Authorization decisions without credentials or request bodies.')}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{tt('Decision')}</TableHead>
-              <TableHead>{tt('Agent')}</TableHead>
-              <TableHead>{tt('Target')}</TableHead>
-              <TableHead>{tt('Time')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {events.length ? (
-              events.map((event) => (
-                <TableRow key={event.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <ScrollText className="size-4 text-muted-foreground" />
-                      <Badge variant={event.result === 'allowed' ? 'secondary' : 'outline'}>{event.result}</Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{event.action}</p>
-                  </TableCell>
-                  <TableCell>{event.agentIdentityId ?? tt('Unresolved')}</TableCell>
-                  <TableCell>
-                    {event.resourceId ?? tt('Realmroot')}
-                    {event.scopes?.length ? ` · ${event.scopes.join(' ')}` : null}
-                  </TableCell>
-                  <TableCell>{new Date(event.occurredAt).toLocaleString()}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableEmptyRow
-                colSpan={4}
-                title={tt('No Agent audit events.')}
-                description={tt('Agent authorization decisions will appear here.')}
-              />
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <TableRow className="cursor-pointer">
+      <TableCell>
+        <Link
+          className="block"
+          params={{ agentId: agent.id }}
+          search={context ? { context } : {}}
+          to="/console/agents/$agentId"
+        >
+          <strong>{agent.name}</strong>
+          <span className="block max-w-60 truncate font-mono text-xs text-muted-foreground">
+            {agent.issuer} · {agent.subject}
+          </span>
+        </Link>
+      </TableCell>
+      <TableCell>{agent.roleCount.toLocaleString()}</TableCell>
+      <TableCell>{agent.activeGrantCount.toLocaleString()}</TableCell>
+      <TableCell>
+        <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>{agent.status}</Badge>
+      </TableCell>
+      <TableCell>
+        <span className="block font-medium">{agent.owner.displayName}</span>
+        <span className="block max-w-52 truncate text-xs text-muted-foreground">
+          {agent.owner.type === 'organization' ? tt('Organization') : tt('User')} · <code>{agent.owner.id}</code>
+        </span>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">{new Date(agent.updatedAt).toLocaleDateString()}</TableCell>
+      <TableCell className="text-right">
+        <Link
+          aria-label={tt('Open {{name}}', { name: agent.name })}
+          params={{ agentId: agent.id }}
+          search={context ? { context } : {}}
+          to="/console/agents/$agentId"
+        >
+          <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+        </Link>
+      </TableCell>
+    </TableRow>
   )
 }

@@ -1,4 +1,5 @@
-import { badRequest, notFound } from '@server/domain/errors'
+import { badRequest, forbidden, notFound } from '@server/domain/errors'
+import { platformOrganization } from '@server/domain/platform-organization'
 import {
   buildDeniedAuthorizationUrl,
   createClientSecret,
@@ -20,6 +21,7 @@ import {
   type CreateApplicationResponse,
   type CreateConsentRequest,
   defaultApplicationOidcClaims,
+  type ListApplicationAuthorizationsResponse,
   type ListApplicationsResponse,
   type ListClientSecretsResponse,
   type PaginationQuery,
@@ -49,6 +51,10 @@ export async function createApplication(
   const clientSecret = input.clientType === 'confidential_web' ? createClientSecret() : null
   const secretHash = clientSecret ? await hashProviderSecret(clientSecret) : null
   const secretPrefix = clientSecret ? clientSecret.slice(0, 12) : null
+  const ownerOrganizationId = input.ownerOrganizationId ?? platformOrganization.id
+  if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
+  const audience = input.audience ?? { mode: 'realm' as const, organizationIds: [], userIds: [] }
+  await validateApplicationAudience(deps, audience)
 
   const application = await deps.applications.create({
     application: {
@@ -65,6 +71,8 @@ export async function createApplication(
       trusted: input.trusted ?? false,
       disabled: false,
       disabledReason: null,
+      ownerOrganizationId,
+      audience,
       redirectUris: settings.redirectUris,
       postLogoutRedirectUris,
       corsOrigins,
@@ -101,8 +109,9 @@ export async function listApplications(
   deps: Deps,
   issuer: string,
   pagination: PaginationQuery,
+  ownerOrganizationIds?: string[],
 ): Promise<ListApplicationsResponse> {
-  const result = await deps.applications.list(pagination)
+  const result = await deps.applications.list(pagination, ownerOrganizationIds)
   const applications = await Promise.all(
     result.items.map(async (application) =>
       toResponse(issuer, application, (await deps.applications.listSecrets(application.id, defaultPagination())).items),
@@ -140,6 +149,8 @@ export async function updateApplication(
       ? normalizePostLogoutRedirectUris(application.clientType, input.postLogoutRedirectUris)
       : undefined
   const corsOrigins = input.corsOrigins !== undefined ? normalizeCorsOrigins(input.corsOrigins) : undefined
+  if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
+  if (input.audience) await validateApplicationAudience(deps, input.audience)
 
   await deps.applications.update(id, {
     slug: input.slug,
@@ -151,6 +162,8 @@ export async function updateApplication(
     trusted: input.trusted,
     disabled: input.disabled,
     disabledReason: input.disabledReason,
+    ownerOrganizationId: input.ownerOrganizationId,
+    audience: input.audience,
     redirectUris: settings?.redirectUris,
     postLogoutRedirectUris,
     corsOrigins,
@@ -195,6 +208,41 @@ export async function listApplicationSecrets(
   return {
     secrets: result.items.map(toSecretMetadata),
     pagination: result.pagination,
+  }
+}
+
+export async function listApplicationAuthorizations(
+  deps: Deps,
+  id: string,
+  pagination: PaginationQuery,
+): Promise<ListApplicationAuthorizationsResponse> {
+  await requireApplication(deps, id)
+  const result = await deps.applications.listAuthorizations(id, pagination)
+  return {
+    authorizations: result.items.map((authorization) => ({
+      id: authorization.id,
+      user: {
+        id: authorization.userId,
+        displayName: authorization.userDisplayName,
+        email: authorization.userEmail,
+      },
+      organization:
+        authorization.organizationId && authorization.organizationName
+          ? { id: authorization.organizationId, name: authorization.organizationName }
+          : null,
+      scopes: authorization.scopes,
+      permissions: authorization.permissions,
+      grantedAt: authorization.grantedAt.toISOString(),
+      expiresAt: authorization.expiresAt?.toISOString() ?? null,
+    })),
+    pagination: result.pagination,
+  }
+}
+
+export async function revokeApplicationAuthorization(deps: Deps, applicationId: string, authorizationId: string) {
+  await requireApplication(deps, applicationId)
+  if (!(await deps.applications.revokeAuthorization(applicationId, authorizationId))) {
+    throw notFound('Application authorization was not found.')
   }
 }
 
@@ -246,6 +294,7 @@ export async function loadConsentRequest(
   if (!application.redirectUris.includes(input.redirectUri)) {
     throw badRequest('redirect_uri is not registered for this client.')
   }
+  await assertApplicationAudience(deps, application, user.id)
 
   const requestedScopes = normalizeRequestedScopes(input.scope, application.allowedScopes)
   const existingConsent = await deps.applications.findConsent(application.id, user.id)
@@ -285,6 +334,7 @@ export async function createConsent(deps: Deps, input: CreateConsentRequest, use
   if (!application || application.disabled) {
     throw notFound('OAuth client was not found.')
   }
+  await assertApplicationAudience(deps, application, userId)
   const requestedScopes = normalizeRequestedScopes(input.scopes.join(' '), application.allowedScopes)
   const consent = await deps.applications.createConsent({
     applicationId: application.id,
@@ -335,6 +385,8 @@ function toResponse(
     trusted: application.trusted,
     disabled: application.disabled,
     disabledReason: application.disabledReason,
+    ownerOrganizationId: application.ownerOrganizationId,
+    audience: application.audience,
     redirectUris: application.redirectUris,
     postLogoutRedirectUris: application.postLogoutRedirectUris,
     corsOrigins: application.corsOrigins,
@@ -357,4 +409,43 @@ function toResponse(
     createdAt: application.createdAt.toISOString(),
     updatedAt: application.updatedAt.toISOString(),
   }
+}
+
+async function requireActiveOrganization(deps: Deps, organizationId: string) {
+  const organization = await deps.authorization.findOrganization(organizationId)
+  if (!organization) throw notFound('Owner Organization was not found.')
+  if (organization.disabled) throw badRequest('Owner Organization must be active.')
+}
+
+async function validateApplicationAudience(deps: Deps, audience: ApplicationResponse['audience']) {
+  if (audience.mode === 'organizations') {
+    for (const organizationId of audience.organizationIds) await requireActiveOrganization(deps, organizationId)
+    return
+  }
+  if (audience.mode === 'users') {
+    for (const userId of audience.userIds) await deps.users.getUser(userId)
+    return
+  }
+  if (audience.mode === 'public' && (await deps.configz.getSettings())?.signupEnabled === false) {
+    throw badRequest('Public application audience requires external registration to be enabled.')
+  }
+}
+
+export async function assertApplicationAudience(
+  deps: Pick<Deps, 'authorization'>,
+  application: Pick<ApplicationAggregate, 'audience'>,
+  userId: string,
+) {
+  if (application.audience.mode === 'realm' || application.audience.mode === 'public') return
+  if (application.audience.mode === 'users') {
+    if (application.audience.userIds.includes(userId)) return
+    throw forbidden('This application is not available to the current user.')
+  }
+
+  for (const organizationId of application.audience.organizationIds) {
+    const organization = await deps.authorization.findOrganization(organizationId)
+    if (!organization || organization.disabled) continue
+    if (await deps.authorization.findMemberByOrganizationUser(organizationId, userId)) return
+  }
+  throw forbidden('This application is not available to the current user.')
 }

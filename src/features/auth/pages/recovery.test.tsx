@@ -73,6 +73,7 @@ describe('ForgotPasswordPage resend and reset', () => {
 
     fireEvent.change(screen.getByLabelText('One-time code'), { target: { value: '123456' } })
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password-1' } })
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'new-password-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
 
     await waitFor(() =>

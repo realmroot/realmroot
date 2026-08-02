@@ -261,7 +261,7 @@ describe('hosted auth pages 4', () => {
     render(<SignInPage />)
 
     expect(await screen.findByRole('button', { name: 'Continue with Phone' })).toBeTruthy()
-    expect(screen.queryByText('No sign-in methods are enabled. Contact the workspace administrator.')).toBeNull()
+    expect(screen.queryByText('No sign-in methods are enabled. Contact the Realm operator.')).toBeNull()
   })
 
   it('surfaces native auth submission failures', async () => {

@@ -14,9 +14,10 @@ import {
 import { type ComponentProps, type FormEvent, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createSiweMessage } from 'viem/siwe'
 import { AuthLayout } from '@/components/layout/auth-layout'
+import { LinkButton } from '@/components/link-button'
+import { Field, TextInput } from '@/components/product-form'
 import { ProviderIcon } from '@/components/provider-icon'
-import { Button, LinkButton } from '@/components/ui/button'
-import { Field, TextInput } from '@/components/ui/field'
+import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
 import { ApiRequestError } from '@/lib/api'
 import {
@@ -112,6 +113,32 @@ declare global {
         },
       ) => string
       remove: (widget: string) => void
+    }
+    hcaptcha?: {
+      render: (
+        element: HTMLElement,
+        options: {
+          sitekey: string
+          callback: (token: string) => void
+          'expired-callback': () => void
+          'error-callback': () => void
+        },
+      ) => string | number
+      remove: (widget: string | number) => void
+    }
+    grecaptcha?: {
+      enterprise: {
+        render: (
+          element: HTMLElement,
+          options: {
+            sitekey: string
+            callback: (token: string) => void
+            'expired-callback': () => void
+            'error-callback': () => void
+          },
+        ) => number
+        reset: (widget: number) => void
+      }
     }
     google?: {
       accounts: {

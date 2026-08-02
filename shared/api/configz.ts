@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { captchaProviderSchema } from './security'
 
 const nullableUrlSchema = z.string().nullable()
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/)
@@ -124,7 +125,7 @@ export const configzConfigResponseSchema = z.object({
   accountCenter: configzAccountCenterSchema,
   captcha: z.object({
     enabled: z.boolean(),
-    provider: z.literal('turnstile'),
+    provider: captchaProviderSchema,
     siteKey: z.string(),
   }),
 })

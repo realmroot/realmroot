@@ -1,3 +1,4 @@
+import type { ApiResourceResponse } from '@shared/api/authorization'
 import type { apiResource, invitation, member, organization, role } from '../../db/schema'
 
 export function toOrganization(row: typeof organization.$inferSelect) {
@@ -41,7 +42,7 @@ export function toInvitation(row: typeof invitation.$inferSelect) {
   }
 }
 
-export function toResource(row: typeof apiResource.$inferSelect) {
+export function toResource(row: typeof apiResource.$inferSelect, organizationIds: string[] = []) {
   return {
     id: row.id,
     identifier: row.identifier,
@@ -50,10 +51,21 @@ export function toResource(row: typeof apiResource.$inferSelect) {
     connectorId: row.connectorId,
     description: row.description,
     enabled: row.enabled,
+    ownerOrganizationId: row.ownerOrganizationId,
+    accessEligibility: {
+      mode: toResourceEligibilityMode(row.accessEligibilityMode),
+      organizationIds,
+    },
+    availableToAgents: row.availableToAgents,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
+}
+
+function toResourceEligibilityMode(value: string): ApiResourceResponse['accessEligibility']['mode'] {
+  if (value === 'owner_organization' || value === 'organizations') return value
+  return 'realm'
 }
 
 export function toRole(row: typeof role.$inferSelect) {
@@ -62,9 +74,6 @@ export function toRole(row: typeof role.$inferSelect) {
     key: row.key,
     name: row.name,
     description: row.description,
-    resourceId: row.resourceId,
-    organizationId: row.organizationId,
-    applicationId: row.applicationId,
     system: row.system,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

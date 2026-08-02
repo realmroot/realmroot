@@ -231,6 +231,12 @@ describe('management users and account routes', () => {
 
   it('updates account profile at the request boundary and delegates email and password flows [spec: account-center/email-update] [spec: account-center/password-update] [spec: account-center/linked-account-unlink]', async () => {
     const auth = createAuthMock()
+    auth.api.changePassword.mockResolvedValueOnce(
+      Response.json(
+        { token: 'replacement-session' },
+        { headers: { 'set-cookie': 'better-auth.session_token=replacement-session; Path=/; HttpOnly' } },
+      ),
+    )
     const users = createUserRepositoryMock()
     const app = createApp(auth, createTestDeps({ users }))
     const headers = userHeaders()
@@ -255,7 +261,7 @@ describe('management users and account routes', () => {
       body: JSON.stringify({ email: 'grace@example.com', otp: '123456' }),
     })
     await app.request('/api/account/email/verification', { method: 'POST', headers })
-    await app.request('/api/account/password/change', {
+    const passwordResponse = await app.request('/api/account/password/change', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -308,6 +314,7 @@ describe('management users and account routes', () => {
       headers: expect.any(Headers),
     })
     expect(auth.api.changePassword).toHaveBeenCalledWith({
+      asResponse: true,
       body: {
         currentPassword: 'old-password',
         newPassword: 'new-password',
@@ -315,6 +322,7 @@ describe('management users and account routes', () => {
       },
       headers: expect.any(Headers),
     })
+    expect(passwordResponse.headers.get('set-cookie')).toContain('replacement-session')
     expect(auth.api.linkSocialAccount).toHaveBeenCalledWith({
       body: {
         provider: 'google',
@@ -379,7 +387,7 @@ function createAuthMock() {
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
       requestEmailChangeEmailOTP: vi.fn().mockResolvedValue({ success: true }),
       changeEmailEmailOTP: vi.fn().mockResolvedValue({ success: true }),
-      changePassword: vi.fn().mockResolvedValue({ status: true }),
+      changePassword: vi.fn().mockResolvedValue(Response.json({ status: true })),
       linkSocialAccount: vi.fn().mockResolvedValue({ url: 'https://accounts.example.com/oauth', redirect: true }),
       oAuth2LinkAccount: vi.fn().mockResolvedValue({ url: 'https://idp.example.com/oauth', redirect: true }),
       unlinkAccount: vi.fn().mockResolvedValue({ status: true }),

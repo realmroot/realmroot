@@ -2,9 +2,6 @@ import {
   addMember,
   archiveResource,
   assignAgentRole,
-  assignApplicationRole,
-  assignMemberRole,
-  assignUserRole,
   buildTokenClaims,
   cancelInvitation,
   createInvitation,
@@ -22,10 +19,10 @@ import {
   listMembers,
   listOrganizations,
   listResources,
-  listRoleScopes,
+  listRolePermissions,
   listRoles,
   removeMember,
-  replaceRoleScopes,
+  replaceRolePermissions,
   restoreResource,
   updateMember,
   updateOrganization,
@@ -85,6 +82,9 @@ const resource: ApiResourceResponse = {
   connectorId: null,
   description: null,
   enabled: true,
+  ownerOrganizationId: organization.id,
+  accessEligibility: { mode: 'realm', organizationIds: [] },
+  availableToAgents: true,
   archivedAt: null,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -94,9 +94,6 @@ const role: RoleResponse = {
   key: 'projects-reader',
   name: 'Projects reader',
   description: null,
-  resourceId: resource.id,
-  organizationId: null,
-  applicationId: null,
   system: false,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -188,6 +185,21 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(cancelInvitation(deps, organization.id, 'missing')).rejects.toMatchObject({ status: 404 })
     authorization.findInvitation.mockResolvedValue({ ...invitation, organizationId: 'org-2' })
     await expect(cancelInvitation(deps, organization.id, invitation.id)).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('rejects demoting or removing the last Organization Owner', async () => {
+    const authorization = repository()
+    const deps = { authorization } as unknown as Deps
+    authorization.findMember.mockResolvedValue({ ...member, role: 'owner' })
+    authorization.countMembersByRole.mockResolvedValue(1)
+
+    await expect(updateMember(deps, organization.id, member.id, { role: 'admin' })).rejects.toMatchObject({
+      status: 400,
+      message: 'Transfer Organization ownership before changing or removing the last Owner.',
+    })
+    await expect(removeMember(deps, organization.id, member.id)).rejects.toMatchObject({ status: 400 })
+    expect(authorization.updateMember).not.toHaveBeenCalled()
+    expect(authorization.removeMember).not.toHaveBeenCalled()
   })
 
   it('manages native and external API resources', async () => {
@@ -417,12 +429,12 @@ describe('authorization CRUD and assignment policy', () => {
     expect(authorization.updateResource).not.toHaveBeenCalled()
   })
 
-  it('manages roles and validates immutable ownership fields', async () => {
+  it('manages Realm roles and their resource-qualified permissions', async () => {
     const authorization = repository()
     authorization.createRole.mockResolvedValue(role)
     authorization.listRoles.mockResolvedValue({ items: [role], pagination })
     authorization.findRole.mockResolvedValue(role)
-    authorization.listRoleScopes.mockResolvedValue(['projects:read'])
+    authorization.listRolePermissions.mockResolvedValue([{ resourceId: resource.id, scope: 'projects:read' }])
     const deps = { authorization } as unknown as Deps
 
     await createRole(deps, { key: role.key, name: role.name })
@@ -430,19 +442,15 @@ describe('authorization CRUD and assignment policy', () => {
       expect.objectContaining({
         id: expect.stringMatching(/^role_/),
         description: null,
-        resourceId: null,
-        organizationId: null,
-        applicationId: null,
         system: false,
       }),
     )
     await expect(listRoles(deps, { limit: 20, offset: 0 })).resolves.toEqual({ roles: [role], pagination })
     await expect(getRole(deps, role.id)).resolves.toBe(role)
     await expect(updateRole(deps, role.id, { name: 'Reader 2' })).resolves.toBe(role)
-    await expect(updateRole(deps, role.id, { resourceId: 'resource-2' })).rejects.toMatchObject({ status: 400 })
-    await expect(updateRole(deps, role.id, { organizationId: 'org-2' })).rejects.toMatchObject({ status: 400 })
-    await expect(updateRole(deps, role.id, { applicationId: 'app-2' })).rejects.toMatchObject({ status: 400 })
-    await expect(listRoleScopes(deps, role.id)).resolves.toEqual({ scopes: ['projects:read'] })
+    await expect(listRolePermissions(deps, role.id)).resolves.toEqual({
+      permissions: [{ resourceId: resource.id, scope: 'projects:read' }],
+    })
     await expect(deleteRole(deps, role.id)).resolves.toBeUndefined()
     authorization.findRole.mockResolvedValue({ ...role, system: true })
     await expect(deleteRole(deps, role.id)).rejects.toMatchObject({ status: 400 })
@@ -450,48 +458,47 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(getRole(deps, 'missing')).rejects.toMatchObject({ status: 404 })
   })
 
-  it('validates role scope ownership and subject assignment scope', async () => {
+  it('[spec: admin-console/admin-create-role] validates multi-resource role permissions', async () => {
     const authorization = repository()
-    authorization.findRole.mockResolvedValue({ ...role, resourceId: null })
-    const deps = { authorization } as unknown as Deps
-    await expect(replaceRoleScopes(deps, role.id, ['projects:read'])).rejects.toMatchObject({ status: 400 })
-
-    authorization.findRole.mockResolvedValue({ ...role, organizationId: organization.id })
-    await expect(assignUserRole(deps, { roleId: role.id, subjectId: 'user-1' }, null)).rejects.toMatchObject({
-      status: 400,
-    })
-    authorization.findRole.mockResolvedValue({ ...role, organizationId: null, applicationId: 'app-1' })
-    await expect(assignUserRole(deps, { roleId: role.id, subjectId: 'user-1' }, null)).rejects.toMatchObject({
-      status: 400,
-    })
-    authorization.findRole.mockResolvedValue({ ...role, resourceId: null })
-    await assignUserRole(deps, { roleId: role.id, subjectId: 'user-1', expiresAt: null }, 'admin-1')
-    expect(authorization.assignUserRole).toHaveBeenCalledWith(
-      expect.objectContaining({ id: expect.stringMatching(/^assign_/), assignedByUserId: 'admin-1' }),
+    authorization.findRole.mockResolvedValue(role)
+    authorization.findResource.mockResolvedValue(resource)
+    const secondResource = { ...resource, id: 'resource-2', resourceUrl: 'https://other.example.com' }
+    authorization.findResource.mockImplementation(async (id) =>
+      id === resource.id ? resource : id === secondResource.id ? secondResource : null,
     )
+    const externalHttp = {
+      fetch: vi.fn(async (request: Request) => {
+        const source = request.url.startsWith(secondResource.resourceUrl) ? secondResource : resource
+        if (request.url === new URL(source.resourceUrl).toString()) {
+          return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+        }
+        return Response.json({
+          openapi: '3.1.0',
+          components: {
+            securitySchemes: {
+              oauth: {
+                type: 'oauth2',
+                flows: { clientCredentials: { tokenUrl: '/token', scopes: { [`${source.identifier}:read`]: 'Read' } } },
+              },
+            },
+          },
+          paths: {
+            '/items': { get: { security: [{ oauth: [`${source.identifier}:read`] }] } },
+          },
+        })
+      }),
+    }
+    const deps = { authorization, externalHttp } as unknown as Deps
+    const permissions = [
+      { resourceId: resource.id, scope: 'projects:read' },
+      { resourceId: secondResource.id, scope: 'projects:read' },
+    ]
 
-    authorization.findRole.mockResolvedValue({ ...role, organizationId: organization.id, applicationId: null })
-    await expect(assignApplicationRole(deps, { roleId: role.id, subjectId: 'app-1' }, null)).rejects.toMatchObject({
-      status: 400,
-    })
-    authorization.findRole.mockResolvedValue({ ...role, organizationId: null, applicationId: 'app-2' })
-    await expect(assignApplicationRole(deps, { roleId: role.id, subjectId: 'app-1' }, null)).rejects.toMatchObject({
-      status: 400,
-    })
-    authorization.findRole.mockResolvedValue({ ...role, organizationId: null, applicationId: 'app-1' })
-    await assignApplicationRole(deps, { roleId: role.id, subjectId: 'app-1' }, null)
-
-    authorization.findMember.mockResolvedValue(member)
-    authorization.findRole.mockResolvedValue({ ...role, applicationId: 'app-1' })
-    await expect(assignMemberRole(deps, { roleId: role.id, subjectId: member.id }, null)).rejects.toMatchObject({
-      status: 400,
-    })
-    authorization.findRole.mockResolvedValue({ ...role, applicationId: null, organizationId: 'org-2' })
-    await expect(assignMemberRole(deps, { roleId: role.id, subjectId: member.id }, null)).rejects.toMatchObject({
-      status: 400,
-    })
-    authorization.findRole.mockResolvedValue({ ...role, applicationId: null, organizationId: organization.id })
-    await assignMemberRole(deps, { roleId: role.id, subjectId: member.id }, null)
+    await replaceRolePermissions(deps, role.id, permissions)
+    expect(authorization.replaceRolePermissions).toHaveBeenCalledWith(role.id, permissions)
+    await expect(
+      replaceRolePermissions(deps, role.id, [{ resourceId: resource.id, scope: 'projects:write' }]),
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('validates Agent role assignments and deduplicates eligibility', async () => {
@@ -499,14 +506,6 @@ describe('authorization CRUD and assignment policy', () => {
     const agentIdentities = { findIdentity: vi.fn() }
     const deps = { authorization, agentIdentities } as unknown as Deps
 
-    authorization.findRole.mockResolvedValue({ ...role, resourceId: null })
-    await expect(assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, null)).rejects.toMatchObject({
-      status: 400,
-    })
-    authorization.findRole.mockResolvedValue({ ...role, applicationId: 'app-1' })
-    await expect(assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, null)).rejects.toMatchObject({
-      status: 400,
-    })
     authorization.findRole.mockResolvedValue(role)
     agentIdentities.findIdentity.mockResolvedValue(null)
     await expect(assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, null)).rejects.toMatchObject({
@@ -516,25 +515,20 @@ describe('authorization CRUD and assignment policy', () => {
     await expect(assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, null)).rejects.toMatchObject({
       status: 404,
     })
-    authorization.findRole.mockResolvedValue({ ...role, organizationId: organization.id })
     agentIdentities.findIdentity.mockResolvedValue({
-      identity: { status: 'active', ownerOrganizationId: 'org-2' },
-      bindings: [],
-    })
-    await expect(assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, null)).rejects.toMatchObject({
-      status: 400,
-    })
-    authorization.findRole.mockResolvedValue(role)
-    agentIdentities.findIdentity.mockResolvedValue({
-      identity: { status: 'active', ownerOrganizationId: null },
+      identity: { status: 'active', ownerOrganizationId: null, ownerUserId: 'user-1' },
       bindings: [],
     })
     await assignAgentRole(deps, { roleId: role.id, subjectId: 'agent-1' }, null)
+    expect(authorization.createRoleAssignment).toHaveBeenCalledWith(
+      expect.objectContaining({ subjectType: 'agent', subjectId: 'agent-1', organizationId: null }),
+    )
 
     authorization.listAgentRoleAssignments.mockResolvedValue([
       { role, scopes: ['projects:write', 'projects:read'] },
       { role, scopes: ['projects:read'] },
     ])
+    authorization.findResource.mockResolvedValue(resource)
     await expect(getAgentRoleAuthorization(deps, 'agent-1', resource.id)).resolves.toEqual({
       roles: [role.key],
       scopes: ['projects:read', 'projects:write'],
@@ -546,10 +540,9 @@ describe('authorization CRUD and assignment policy', () => {
     const assignment = { role, scopes: ['projects:read'] }
     authorization.findResourceByResourceUrl.mockResolvedValue(resource)
     authorization.findOrganization.mockResolvedValue(organization)
+    authorization.findMemberByOrganizationUser.mockResolvedValue({ id: 'member-1' })
     authorization.listUserRoleAssignments.mockResolvedValue([assignment])
     authorization.listApplicationRoleAssignments.mockResolvedValue([assignment])
-    authorization.findMemberByOrganizationUser.mockResolvedValue(member)
-    authorization.listMemberRoleAssignments.mockResolvedValue([assignment])
     const deps = { authorization } as unknown as Deps
 
     await expect(
@@ -592,7 +585,9 @@ describe('authorization CRUD and assignment policy', () => {
     })
     authorization.findResourceByResourceUrl.mockResolvedValue(resource)
     authorization.findMemberByOrganizationUser.mockResolvedValue(null)
-    await buildTokenClaims(deps, { userId: 'user-1', organizationId: organization.id, scopes: [] })
+    await expect(
+      buildTokenClaims(deps, { userId: 'user-1', organizationId: organization.id, scopes: [] }),
+    ).rejects.toMatchObject({ status: 403 })
     await buildTokenClaims(deps, { applicationId: 'app-1', scopes: [] })
     await buildTokenClaims(deps, { scopes: [] })
   })
@@ -609,6 +604,7 @@ function repository() {
     listMembers: vi.fn(),
     findMember: vi.fn().mockResolvedValue(null),
     findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
+    countMembersByRole: vi.fn().mockResolvedValue(1),
     updateMember: vi.fn(),
     removeMember: vi.fn(),
     createInvitation: vi.fn(),
@@ -629,15 +625,13 @@ function repository() {
     findRole: vi.fn().mockResolvedValue(null),
     updateRole: vi.fn(),
     deleteRole: vi.fn(),
-    listRoleScopes: vi.fn(),
-    replaceRoleScopes: vi.fn(),
-    assignUserRole: vi.fn(),
-    assignApplicationRole: vi.fn(),
-    assignMemberRole: vi.fn(),
-    assignAgentRole: vi.fn(),
+    listRolePermissions: vi.fn(),
+    replaceRolePermissions: vi.fn(),
+    listRoleAssignments: vi.fn(),
+    createRoleAssignment: vi.fn(),
+    revokeRoleAssignment: vi.fn(),
     listUserRoleAssignments: vi.fn().mockResolvedValue([]),
     listApplicationRoleAssignments: vi.fn().mockResolvedValue([]),
-    listMemberRoleAssignments: vi.fn().mockResolvedValue([]),
     listAgentRoleAssignments: vi.fn().mockResolvedValue([]),
   }
 }

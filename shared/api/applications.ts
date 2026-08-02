@@ -36,9 +36,33 @@ const nonEmptyString = z.string().trim().min(1)
 const optionalUrl = z.url().optional()
 const customDataSchema = z.record(z.string(), z.unknown())
 
+export const applicationAudienceModeSchema = z.enum(['realm', 'organizations', 'users', 'public'])
+export const applicationAudienceSchema = z
+  .object({
+    mode: applicationAudienceModeSchema,
+    organizationIds: z.array(nonEmptyString).default([]),
+    userIds: z.array(nonEmptyString).default([]),
+  })
+  .superRefine((audience, context) => {
+    if (audience.mode === 'organizations' && audience.organizationIds.length === 0) {
+      context.addIssue({ code: 'custom', path: ['organizationIds'], message: 'Select at least one Organization.' })
+    }
+    if (audience.mode === 'users' && audience.userIds.length === 0) {
+      context.addIssue({ code: 'custom', path: ['userIds'], message: 'Select at least one user.' })
+    }
+  })
+  .transform((audience) => ({
+    mode: audience.mode,
+    organizationIds: audience.mode === 'organizations' ? [...new Set(audience.organizationIds)].sort() : [],
+    userIds: audience.mode === 'users' ? [...new Set(audience.userIds)].sort() : [],
+  }))
+
 // Re-exported from the canonical pagination module so existing
 // `@shared/api/applications` import sites keep working.
 export { paginationMetadataSchema, paginationQuerySchema }
+export const listApplicationsQuerySchema = paginationQuerySchema.extend({
+  ownerOrganizationId: nonEmptyString.optional(),
+})
 
 export const applicationSecretMetadataSchema = z.object({
   id: z.string(),
@@ -110,6 +134,8 @@ export const applicationResponseSchema = z
     trusted: z.boolean(),
     disabled: z.boolean(),
     disabledReason: z.string().nullable(),
+    ownerOrganizationId: z.string(),
+    audience: applicationAudienceSchema,
     redirectUris: z.array(z.string()),
     postLogoutRedirectUris: z.array(z.string()),
     corsOrigins: z.array(z.string()),
@@ -149,6 +175,8 @@ export const createApplicationRequestSchema = z.object({
   allowedScopes: z.array(userConfigurableApplicationScopeSchema).min(1).optional(),
   firstParty: z.boolean().optional(),
   trusted: z.boolean().optional(),
+  ownerOrganizationId: nonEmptyString.optional(),
+  audience: applicationAudienceSchema.optional(),
   oidcClaims: applicationOidcClaimsSchema.optional(),
 })
 
@@ -173,6 +201,8 @@ export const updateApplicationRequestSchema = z.object({
   trusted: z.boolean().optional(),
   disabled: z.boolean().optional(),
   disabledReason: z.string().trim().max(500).nullable().optional(),
+  ownerOrganizationId: nonEmptyString.optional(),
+  audience: applicationAudienceSchema.optional(),
   oidcClaims: applicationOidcClaimsSchema.optional(),
 })
 
@@ -192,6 +222,30 @@ export const listApplicationsResponseSchema = z.object({
 
 export const listClientSecretsResponseSchema = z.object({
   secrets: z.array(applicationSecretMetadataSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const applicationAuthorizationSchema = z.object({
+  id: z.string(),
+  user: z.object({
+    id: z.string(),
+    displayName: z.string(),
+    email: z.email(),
+  }),
+  organization: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .nullable(),
+  scopes: z.array(applicationScopeSchema),
+  permissions: z.array(z.string()),
+  grantedAt: z.string(),
+  expiresAt: z.string().nullable(),
+})
+
+export const listApplicationAuthorizationsResponseSchema = z.object({
+  authorizations: z.array(applicationAuthorizationSchema),
   pagination: paginationMetadataSchema,
 })
 
@@ -239,8 +293,11 @@ export const hostedConsentApprovalRequestSchema = createConsentRequestSchema.omi
 
 export type ApplicationResponse = z.infer<typeof applicationResponseSchema>
 export type ApplicationOidcClaims = z.infer<typeof applicationOidcClaimsSchema>
+export type ApplicationAudience = z.infer<typeof applicationAudienceSchema>
+export type ApplicationAudienceMode = z.infer<typeof applicationAudienceModeSchema>
 export type CreateApplicationResponse = z.infer<typeof createApplicationResponseSchema>
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>
+export type ListApplicationsQuery = z.infer<typeof listApplicationsQuerySchema>
 export type PaginationMetadata = z.infer<typeof paginationMetadataSchema>
 export type CreateApplicationRequest = z.infer<typeof createApplicationRequestSchema>
 export type UpdateApplicationRequest = z.infer<typeof updateApplicationRequestSchema>
@@ -249,6 +306,8 @@ export type RotateClientSecretResponse = z.infer<typeof rotateClientSecretRespon
 export type ListApplicationsResponse = z.infer<typeof listApplicationsResponseSchema>
 export type ListClientSecretsResponse = z.infer<typeof listClientSecretsResponseSchema>
 export type ListRedirectUrisResponse = z.infer<typeof listRedirectUrisResponseSchema>
+export type ApplicationAuthorization = z.infer<typeof applicationAuthorizationSchema>
+export type ListApplicationAuthorizationsResponse = z.infer<typeof listApplicationAuthorizationsResponseSchema>
 export type ConsentRequestResponse = z.infer<typeof consentRequestResponseSchema>
 export type CreateConsentRequest = z.infer<typeof createConsentRequestSchema>
 export type HostedConsentApprovalRequest = z.infer<typeof hostedConsentApprovalRequestSchema>

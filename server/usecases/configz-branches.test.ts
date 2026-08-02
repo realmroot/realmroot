@@ -88,10 +88,20 @@ function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository 
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => null,
     getAccountCenterSettings: async () => null,
+    getDeveloperSettings: async () => ({
+      organizationCreation: 'admins_only',
+      approvedUserIds: [],
+      consoleAccess: 'realm_operators',
+      eligibleAccessLevels: ['owner', 'admin'],
+      selectedOrganizationIds: [],
+    }),
+    getEmailSettings: async () => null,
     listEnabledIdentityProviders: async () => [],
     updateSettings: async () => undefined,
     updateBranding: async () => undefined,
     updateAccountCenterSettings: async () => undefined,
+    updateDeveloperSettings: async () => undefined,
+    updateEmailSettings: async () => undefined,
   }
 }
 

@@ -10,8 +10,6 @@ import type { Deps } from '@server/usecases/deps'
 import type { AssetRepository, AssetStorage } from '@server/usecases/ports'
 import { describe, expect, it, vi } from 'vitest'
 
-const origin = 'https://auth.example.com'
-
 function depsWith(assets: AssetRepository, assetStorage: AssetStorage): Deps {
   return { assets, assetStorage } as unknown as Deps
 }
@@ -22,7 +20,7 @@ describe('AssetService', () => {
     const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
     const deps = depsWith(repository, storage)
 
-    const response = await uploadAsset(deps, origin, {
+    const response = await uploadAsset(deps, {
       purpose: 'avatar',
       file: new File([pngBytes()], 'Ada Lovelace.png', { type: 'image/png' }),
       actorUserId: 'user-1',
@@ -37,7 +35,7 @@ describe('AssetService', () => {
       id: response.asset.id,
       purpose: 'avatar',
       storageKey: expect.stringContaining(response.asset.id),
-      publicUrl: `https://auth.example.com/api/assets/${response.asset.id}`,
+      publicUrl: `/api/assets/${response.asset.id}`,
       contentType: 'image/png',
       byteSize: 8,
       checksumSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -45,7 +43,7 @@ describe('AssetService', () => {
     })
     expect(response.asset).toMatchObject({
       purpose: 'avatar',
-      publicUrl: `https://auth.example.com/api/assets/${response.asset.id}`,
+      publicUrl: `/api/assets/${response.asset.id}`,
       contentType: 'image/png',
       byteSize: 8,
     })
@@ -55,7 +53,7 @@ describe('AssetService', () => {
     const deps = depsWith(createRepository(), { put: vi.fn(), get: vi.fn() })
 
     await expect(
-      uploadAsset(deps, origin, {
+      uploadAsset(deps, {
         purpose: 'application_logo',
         file: new File(['<svg />'], 'logo.svg', { type: 'image/svg+xml' }),
         actorUserId: 'admin-1',
@@ -63,7 +61,7 @@ describe('AssetService', () => {
     ).rejects.toMatchObject({ status: 400, message: 'Unsupported file type for application_logo.' })
 
     await expect(
-      uploadAsset(deps, origin, {
+      uploadAsset(deps, {
         purpose: 'application_logo',
         file: new File(['<svg />'], 'logo.png', { type: 'image/png' }),
         actorUserId: 'admin-1',
@@ -71,7 +69,7 @@ describe('AssetService', () => {
     ).rejects.toMatchObject({ status: 400, message: 'Unsupported file type for application_logo.' })
 
     await expect(
-      uploadAsset(deps, origin, {
+      uploadAsset(deps, {
         purpose: 'favicon',
         file: new File([new Uint8Array(512 * 1024 + 1)], 'favicon.png', { type: 'image/png' }),
         actorUserId: 'admin-1',
@@ -84,7 +82,7 @@ describe('AssetService', () => {
     const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
     const deps = depsWith(repository, storage)
 
-    const response = await uploadAsset(deps, origin, {
+    const response = await uploadAsset(deps, {
       purpose: 'favicon',
       file: new File([icoBytes()], 'favicon.ico', { type: 'image/vnd.microsoft.icon' }),
       actorUserId: 'admin-1',
@@ -101,12 +99,12 @@ describe('AssetService', () => {
     const storage = { put: vi.fn().mockResolvedValue(undefined), get: vi.fn() }
     const deps = depsWith(createRepository(), storage)
 
-    await uploadAsset(deps, origin, {
+    await uploadAsset(deps, {
       purpose: 'avatar',
       file: new File([jpegBytes()], 'avatar.jpg', { type: 'image/jpeg' }),
       actorUserId: 'user-1',
     })
-    await uploadAsset(deps, origin, {
+    await uploadAsset(deps, {
       purpose: 'application_logo',
       file: new File([webpBytes()], 'logo.webp', { type: 'image/webp' }),
       actorUserId: 'admin-1',
@@ -137,7 +135,7 @@ describe('AssetService', () => {
     const deps = depsWith(repository, storage)
 
     await expect(
-      uploadAsset(deps, origin, {
+      uploadAsset(deps, {
         purpose: 'avatar',
         file: new File([], 'avatar.png', { type: 'image/png' }),
         actorUserId: 'user-1',

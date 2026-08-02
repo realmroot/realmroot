@@ -152,7 +152,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Email.*Runtime disabled.*Not enabled/ }))
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Email' })).getByRole('switch', { name: 'Enabled' }))
     fireEvent.change(screen.getByLabelText('OTP length'), { target: { value: '8' } })
-    fireEvent.change(screen.getByLabelText('Code expiry seconds'), { target: { value: '600' } })
+    fireEvent.change(screen.getByLabelText('Code expiry'), { target: { value: '600' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
@@ -168,7 +168,16 @@ describe('admin console users-detail-b', () => {
     await waitFor(() => {
       expect(requests).toContainEqual({
         url: '/api/security/policy',
-        body: { policy: { passkeys: { enabled: true } } },
+        body: {
+          policy: {
+            passkeys: {
+              enabled: true,
+              origins: ['https://auth.example.com'],
+              rpId: 'auth.example.com',
+              rpName: 'Acme Auth',
+            },
+          },
+        },
       })
     })
 
@@ -301,7 +310,7 @@ describe('admin console users-detail-b', () => {
     expect(await screen.findByRole('heading', { name: 'Google' })).toBeTruthy()
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Google' })).getByRole('button', { name: 'Delete' }))
     expect(await screen.findByRole('heading', { name: 'Delete connector' })).toBeTruthy()
-    fireEvent.click(within(screen.getAllByRole('dialog').at(-1)!).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
     await waitFor(() => {
       expect(requests).toContainEqual({ url: '/api/connectors/connector-1', method: 'DELETE', body: null })
     })

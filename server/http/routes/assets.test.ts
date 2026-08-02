@@ -235,7 +235,7 @@ function assetFixture() {
   return {
     id: 'asset-1',
     purpose: 'avatar' as const,
-    publicUrl: 'https://auth.example.com/api/assets/asset-1',
+    publicUrl: '/api/assets/asset-1',
     contentType: 'image/png',
     byteSize: 6,
     checksumSha256: 'checksum-1',
@@ -267,7 +267,7 @@ function setupAssetMocks(
   assets: ReturnType<typeof createAssetServiceMock>,
   accountCenter: Record<string, unknown> = {},
 ) {
-  vi.spyOn(assetsUsecase, 'uploadAsset').mockImplementation((_d, _origin, input) => assets.upload(input))
+  vi.spyOn(assetsUsecase, 'uploadAsset').mockImplementation((_d, input) => assets.upload(input))
   vi.spyOn(assetsUsecase, 'getAssetObject').mockImplementation((_d, id) => assets.getObject(id))
   vi.spyOn(assetsUsecase, 'updateUserAvatar').mockImplementation((_d, userId, a) => assets.updateUserAvatar(userId, a))
   vi.spyOn(assetsUsecase, 'updateApplicationLogo').mockImplementation((_d, id, a) =>

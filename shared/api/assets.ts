@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+export const managedAssetPathSchema = z.string().regex(/^\/api\/assets\/[A-Za-z0-9_-]+$/)
+
 export const assetPurposeSchema = z.enum([
   'avatar',
   'application_logo',

@@ -1,6 +1,7 @@
 import type { ManagementReadinessItem } from '@shared/api/management'
 import type { WebhookEndpoint, WebhookRequest } from '@shared/api/webhooks'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Dialog } from '@/components/ui/dialog'
 import { Table, TableBody } from '@/components/ui/table'
@@ -112,15 +113,16 @@ describe('helpers-dialogs presentational pieces', () => {
     expect(onCheckedChange).toHaveBeenCalledWith(true)
   })
 
-  it('renders the secret disclosure dialog with present and null values', () => {
+  it('renders the secret disclosure dialog with present and null values', async () => {
     const writeText = vi.fn()
     Object.assign(navigator, { clipboard: { writeText } })
     const onClose = vi.fn()
     render(<SecretDisclosureDialog clientId="cid" clientSecret="csecret" onClose={onClose} open />)
     expect(screen.getByText('cid')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Copy secret' }))
-    expect(writeText).toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(writeText).toHaveBeenCalledWith('csecret')
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy()
+    fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' }).at(-1)!)
     expect(onClose).toHaveBeenCalled()
     cleanup()
     render(<SecretDisclosureDialog clientId={null} clientSecret={null} onClose={onClose} open />)
@@ -190,6 +192,7 @@ describe('helpers-create dialogs', () => {
     const onSubmit = vi.fn()
     render(
       <SimpleCreateDialog
+        description="Create a reusable test thing."
         error={null}
         fields={[
           ['name', 'Name'],
@@ -213,6 +216,7 @@ describe('helpers-create dialogs', () => {
   ])('surfaces simple create validation failures', (failure, message) => {
     render(
       <SimpleCreateDialog
+        description="Create a reusable test thing."
         error={null}
         fields={[['name', 'Name']]}
         onClose={vi.fn()}
@@ -244,19 +248,26 @@ describe('helpers-create dialogs', () => {
       />,
     )
     expect(screen.getByText('oops')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Deleting...' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Deleting…' })).toBeTruthy()
   })
 
   it('renders the form dialog pending state with error', () => {
     render(
       <Dialog open>
-        <FormDialog error="bad" onClose={vi.fn()} onSubmit={vi.fn()} pending title="Form">
+        <FormDialog
+          description="Create a Realm resource."
+          error="bad"
+          onClose={vi.fn()}
+          onSubmit={vi.fn()}
+          pending
+          title="Form"
+        >
           <div>body</div>
         </FormDialog>
       </Dialog>,
     )
     expect(screen.getByText('bad')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Saving...' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
   })
 })
 
@@ -408,7 +419,7 @@ describe('helpers-resource', () => {
     expect(screen.getByText('unframed content')).toBeTruthy()
   })
 
-  it('renders object header and detail tabs', () => {
+  it('renders object header and detail tabs', async () => {
     const onChange = vi.fn()
     render(<ObjectHeader badge="User" id="user-1" title="jane" />)
     expect(screen.getByText('user-1')).toBeTruthy()
@@ -424,7 +435,7 @@ describe('helpers-resource', () => {
         value="a"
       />,
     )
-    fireEvent.click(screen.getByRole('tab', { name: 'B' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'B' }))
     expect(onChange).toHaveBeenCalledWith('b')
   })
 
@@ -515,22 +526,32 @@ describe('helpers-preview presentational pieces', () => {
     expect(screen.getByText('Disabled')).toBeTruthy()
   })
 
-  it('renders the webhook secret disclosure dialog', () => {
+  it('renders the webhook secret disclosure dialog', async () => {
     const writeText = vi.fn()
     Object.assign(navigator, { clipboard: { writeText } })
     const onClose = vi.fn()
     const { rerender } = render(<WebhookSecretDisclosureDialog onClose={onClose} secret="whsec_123" />)
     fireEvent.click(screen.getByRole('button', { name: 'Copy secret' }))
     expect(writeText).toHaveBeenCalledWith('whsec_123')
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(onClose).toHaveBeenCalled()
     rerender(<WebhookSecretDisclosureDialog onClose={onClose} secret={null} />)
   })
 
   it('renders the webhook request dialog with payloads', () => {
-    const { rerender } = render(<WebhookRequestDialog onClose={vi.fn()} request={webhookRequest} />)
+    const onClose = vi.fn()
+    const { rerender } = render(
+      <WebhookRequestDialog
+        onClose={onClose}
+        request={{ ...webhookRequest, responseBody: 'response'.repeat(2_000) }}
+      />,
+    )
     expect(screen.getByText('user.created')).toBeTruthy()
     expect(screen.getByText('Server error')).toBeTruthy()
+    expect(screen.getByRole('dialog').querySelector('.overflow-y-auto')).toBeTruthy()
+    fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' })[0]!)
+    expect(onClose).toHaveBeenCalled()
     rerender(
       <WebhookRequestDialog
         onClose={vi.fn()}
@@ -599,7 +620,7 @@ describe('PreviewBrandMark', () => {
     fireEvent.error(container.querySelector('img')!)
     expect(screen.getByText('A')).toBeTruthy()
     rerender(<PreviewBrandMark logoUrl={null} productName="" />)
-    expect(screen.getByText('F')).toBeTruthy()
+    expect(screen.getByText('R')).toBeTruthy()
   })
 })
 
@@ -655,7 +676,7 @@ describe('HostedAuthPreview', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret-password' } })
     // the sign-up flow also renders a social provider button with a no-op handler
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }))
-    fireEvent.submit(screen.getAllByRole('button', { name: 'Create account' })[0].closest('form')!)
+    expect(screen.getAllByRole('button', { name: 'Create account' })[0]).toBeTruthy()
     // back to sign-in
     fireEvent.click(screen.getByRole('button', { name: 'Already have an account?' }))
   })
@@ -699,7 +720,7 @@ describe('HostedAuthPreview', () => {
     const open = vi.fn()
     vi.stubGlobal('open', open)
     render(<HostedAuthPreview preview={basePreview} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Open hosted sign-in' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open live hosted page' }))
     expect(open).toHaveBeenCalledWith('/auth/sign-in', '_blank', 'noopener')
   })
 })

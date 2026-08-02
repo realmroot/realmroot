@@ -1,4 +1,6 @@
+import { Link } from '@tanstack/react-router'
 import { consoleQueryKeys, createUser, listUsers, requestPasswordReset, updateUser } from '@/lib/api/management'
+import { useConsoleScope } from '@/lib/console-context'
 import {
   Button,
   DropdownMenu,
@@ -25,9 +27,17 @@ import {
 import { CreateUserDialog } from '../../helpers/helpers-create'
 import { StatusBadge } from '../../helpers/helpers-dialogs'
 import { ListToolbar, ResourcePage } from '../../helpers/helpers-resource'
-import { formatDate, formatRole, useAdminMutation, userDisplayName } from '../../helpers/helpers-utils'
+import {
+  formatDate,
+  formatRealmAccess,
+  hasRealmAdminAccess,
+  setRealmAdminAccess,
+  useAdminMutation,
+  userDisplayName,
+} from '../../helpers/helpers-utils'
 
 export function UsersPage() {
+  const { organizationId: context, realmOperator } = useConsoleScope()
   const [search, setSearch] = useState('')
   const [role, setRole] = useState('')
   const [banned, setBanned] = useState('')
@@ -40,6 +50,7 @@ export function UsersPage() {
         role,
         banned,
         offset,
+        context,
       },
     ],
     queryFn: () =>
@@ -61,6 +72,7 @@ export function UsersPage() {
           : {}),
         limit: 10,
         offset,
+        organizationId: realmOperator ? undefined : context,
       }),
   })
   const queryClient = useQueryClient()
@@ -74,26 +86,31 @@ export function UsersPage() {
       })
     },
   })
+  const users = query.data?.users ?? []
   return (
     <ResourcePage
       title={tt('Users')}
-      description={tt('Create users, inspect profile state, reset passwords, and adjust administrative flags.')}
+      description={tt('Manage the human identities that sign in, join Organizations, and delegate authority.')}
       action={
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus data-icon="inline-start" /> {tt('New user')}{' '}
-        </Button>
+        realmOperator ? (
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus data-icon="inline-start" /> {tt('New user')}{' '}
+          </Button>
+        ) : null
       }
       auxiliary={
-        <CreateUserDialog
-          error={createMutation.errorMessage}
-          onClose={() => setDialogOpen(false)}
-          onSubmit={createMutation.mutate}
-          open={dialogOpen}
-          pending={createMutation.isPending}
-        />
+        realmOperator ? (
+          <CreateUserDialog
+            error={createMutation.errorMessage}
+            onClose={() => setDialogOpen(false)}
+            onSubmit={createMutation.mutate}
+            open={dialogOpen}
+            pending={createMutation.isPending}
+          />
+        ) : null
       }
       error={query.error}
-      empty={query.data?.users.length === 0}
+      empty={users.length === 0}
       emptyDescription={
         search ? 'No users match the current search.' : 'Create a user to verify sign-in and account-center behavior.'
       }
@@ -143,64 +160,75 @@ export function UsersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>{tt('User')}</TableHead>
-              <TableHead>{tt('Role')}</TableHead>
+              <TableHead>{tt('Realm access')}</TableHead>
               <TableHead>{tt('Email')}</TableHead>
-              <TableHead>{tt('Created')}</TableHead>
               <TableHead>{tt('Status')}</TableHead>
+              <TableHead>{tt('Created')}</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {query.data?.users.length ? (
-              query.data.users.map((user) => (
+            {users.length ? (
+              users.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
-                    <a className="font-medium hover:underline" href={`/console/users/${user.id}`}>
+                    <Link
+                      className="font-medium hover:underline"
+                      params={{ userId: user.id }}
+                      search={context ? { context } : {}}
+                      to="/console/users/$userId"
+                    >
                       {userDisplayName(user)}
-                    </a>
+                    </Link>
                     <div className="text-xs text-muted-foreground">{user.id}</div>
                   </TableCell>
-                  <TableCell>{formatRole(user.role)}</TableCell>
+                  <TableCell>{formatRealmAccess(user.role)}</TableCell>
                   <TableCell>
                     <div>{user.email ?? 'Unknown'}</div>
                     <div className="text-xs text-muted-foreground">
                       {user.emailVerified ? 'Verified' : 'Unverified'}
                     </div>
                   </TableCell>
-                  <TableCell>{formatDate(user.createdAt)}</TableCell>
                   <TableCell>
                     <StatusBadge active={!user.banned} activeLabel="Active" inactiveLabel="Banned" />
                   </TableCell>
+                  <TableCell>{formatDate(user.createdAt)}</TableCell>
                   <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger aria-label={`Actions for ${user.email ?? user.id}`}>
-                        <MoreHorizontal data-icon="inline-start" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuGroup>
-                          {user.email ? (
-                            <DropdownMenuItem onClick={() => requestPasswordReset(user.email ?? '')}>
+                    {realmOperator ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button aria-label={`Actions for ${user.email ?? user.id}`} size="icon-sm" variant="ghost">
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuGroup>
+                            {user.email ? (
+                              <DropdownMenuItem onClick={() => requestPasswordReset(user.email ?? '')}>
+                                {' '}
+                                {tt('Send password reset')}{' '}
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuItem
+                              onClick={() =>
+                                updateUser(user.id, {
+                                  role: setRealmAdminAccess(user.role, !hasRealmAdminAccess(user.role)),
+                                }).then(() =>
+                                  queryClient.invalidateQueries({
+                                    queryKey: consoleQueryKeys.users,
+                                  }),
+                                )
+                              }
+                            >
                               {' '}
-                              {tt('Send password reset')}{' '}
+                              {hasRealmAdminAccess(user.role)
+                                ? tt('Remove Realm administrator')
+                                : tt('Make Realm administrator')}{' '}
                             </DropdownMenuItem>
-                          ) : null}
-                          <DropdownMenuItem
-                            onClick={() =>
-                              updateUser(user.id, {
-                                role: user.role === 'admin' ? 'user' : 'admin',
-                              }).then(() =>
-                                queryClient.invalidateQueries({
-                                  queryKey: consoleQueryKeys.users,
-                                }),
-                              )
-                            }
-                          >
-                            {' '}
-                            {tt('Toggle admin role')}{' '}
-                          </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))

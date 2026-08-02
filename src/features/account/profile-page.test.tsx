@@ -11,6 +11,14 @@ import {
   renderWithClient,
 } from './account.test-utils'
 import { AccountProfilePage } from './profile-page'
+import { accountTimeZoneStorageKey } from './utils'
+
+globalThis.ResizeObserver ??= class ResizeObserver {
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+}
+Element.prototype.scrollIntoView ??= () => {}
 
 const success = vi.fn()
 const errorToast = vi.fn()
@@ -36,14 +44,47 @@ afterEach(() => {
   server.resetHandlers()
   success.mockClear()
   errorToast.mockClear()
+  window.localStorage.removeItem(accountTimeZoneStorageKey)
   Object.assign(store, createAccountStore())
 })
 afterAll(() => server.close())
 
 describe('AccountProfilePage', () => {
+  it('persists the selected time zone for Account Center dates [spec: account-center/account-preferences]', async () => {
+    renderWithClient(<AccountProfilePage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Preferences' }), { button: 0, ctrlKey: false })
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Change' }))[1]!)
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Time zone' }))
+    fireEvent.change(await screen.findByPlaceholderText('Search time zones…'), { target: { value: 'Europe/London' } })
+    fireEvent.click(await screen.findByRole('option', { name: 'Europe/London' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(window.localStorage.getItem(accountTimeZoneStorageKey)).toBe('Europe/London'))
+    expect(screen.getByText('Europe/London')).toBeTruthy()
+  })
+
+  it('downloads a machine-readable account snapshot [spec: account-center/account-data-export]', async () => {
+    const createObjectURL = vi.fn(() => 'blob:account-export')
+    const revokeObjectURL = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
+    const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    renderWithClient(<AccountProfilePage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Account' }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByRole('button', { name: 'Download data' }))
+
+    await waitFor(() => expect(success.mock.calls.length + errorToast.mock.calls.length).toBeGreaterThan(0))
+    expect(errorToast).not.toHaveBeenCalled()
+    expect(success).toHaveBeenCalledWith('Account data downloaded.')
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    expect(download).toHaveBeenCalledOnce()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:account-export')
+  })
+
   it('shows a loading state then renders profile sections', async () => {
     renderWithClient(<AccountProfilePage />)
-    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Change avatar/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Edit display name/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Edit username/ })).toBeTruthy()
@@ -72,7 +113,7 @@ describe('AccountProfilePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save display name' }))
 
     await waitFor(() => expect(success).toHaveBeenCalledWith('Profile updated.'))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jane Updated' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Jane Updated')).toBeTruthy())
     expect(store.profile.displayName).toBe('Jane Updated')
   })
 
@@ -84,6 +125,31 @@ describe('AccountProfilePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save identifiers' }))
     await waitFor(() => expect(success).toHaveBeenCalledWith('Profile updated.'))
     expect(store.profile.username).toBe('jane-new')
+  })
+
+  it('patches only the profile field owned by the active editor', async () => {
+    const patches: Array<Record<string, unknown>> = []
+    server.use(
+      http.patch(`${base}/api/account/profile`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        patches.push(body)
+        Object.assign(store.profile, body)
+        return HttpResponse.json({ user: store.profile })
+      }),
+    )
+    renderWithClient(<AccountProfilePage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Edit display name/ }))
+    fireEvent.change(await screen.findByLabelText('Display name'), { target: { value: 'Narrow Patch' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save display name' }))
+    await waitFor(() => expect(patches).toHaveLength(1))
+
+    fireEvent.click(await screen.findByRole('button', { name: /Edit username/ }))
+    fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'narrow-patch' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save identifiers' }))
+    await waitFor(() => expect(patches).toHaveLength(2))
+
+    expect(patches).toEqual([{ displayName: 'Narrow Patch' }, { username: 'narrow-patch' }])
   })
 
   it('uploads an avatar and previews it', async () => {
@@ -131,9 +197,11 @@ describe('AccountProfilePage', () => {
   it('cancels a dialog without mutating', async () => {
     renderWithClient(<AccountProfilePage />)
     fireEvent.click(await screen.findByRole('button', { name: /Edit display name/ }))
-    expect(await screen.findByLabelText('Display name')).toBeTruthy()
+    fireEvent.change(await screen.findByLabelText('Display name'), { target: { value: 'Unsaved name' } })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByLabelText('Display name')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: /Edit display name/ }))
+    expect(await screen.findByLabelText('Display name')).toHaveProperty('value', store.profile.displayName)
     expect(success).not.toHaveBeenCalled()
   })
 
@@ -169,7 +237,7 @@ describe('AccountProfilePage', () => {
     }
     server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(limited)))
     renderWithClient(<AccountProfilePage />)
-    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Change avatar/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Edit display name/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Edit username/ })).toBeNull()
@@ -196,11 +264,11 @@ describe('AccountProfilePage', () => {
     expect(avatarRow.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.com/a.png')
   })
 
-  it('renders without a title when no profile is returned', async () => {
-    server.use(http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: null })))
+  it('renders the unavailable profile section when no profile is returned', async () => {
+    server.use(http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: null, access: store.access })))
     renderWithClient(<AccountProfilePage />)
     expect(await screen.findByText('Profile editing is disabled for this account center.')).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Jane Stone' })).toBeNull()
+    expect(screen.queryByText('Jane Stone')).toBeNull()
   })
 
   it('triggers the hidden file input from the upload button', async () => {
@@ -230,7 +298,7 @@ describe('AccountProfilePage', () => {
     // password dialog lives on the profile page only when password panel is shown via security page;
     // here we exercise the profile-account password-less path and confirm no password dialog leaks
     renderWithClient(<AccountProfilePage />)
-    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
     expect(screen.queryByLabelText('Current password')).toBeNull()
   })
 })

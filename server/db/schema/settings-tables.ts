@@ -26,6 +26,7 @@ export const webhookEndpoint = sqliteTable(
     url: text('url').notNull(),
     events: text('events', { mode: 'json' }).$type<string[]>().notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
+    organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
     signingSecret: text('signing_secret').notNull(),
     secretPrefix: text('secret_prefix').notNull(),
     createdByUserId: text('created_by_user_id').references(() => user.id, { onDelete: 'set null' }),
@@ -39,6 +40,7 @@ export const webhookEndpoint = sqliteTable(
   },
   (table) => [
     index('webhookEndpoint_enabled_idx').on(table.enabled),
+    index('webhookEndpoint_organizationId_idx').on(table.organizationId),
     index('webhookEndpoint_createdByUserId_idx').on(table.createdByUserId),
   ],
 )

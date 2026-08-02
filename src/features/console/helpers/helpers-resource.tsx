@@ -1,3 +1,4 @@
+import { useConsoleScope } from '@/lib/console-context'
 import {
   AlertCircle,
   Badge,
@@ -61,7 +62,7 @@ export function ResourcePage({
         />
       ) : null}
       {!loading && !error && framed ? (
-        <Card className="consoleResourceFrame">
+        <Card className="consoleResourceFrame border py-0 shadow-none ring-0">
           <CardContent className="p-0">{children}</CardContent>
         </Card>
       ) : null}
@@ -72,7 +73,7 @@ export function ResourcePage({
 }
 export function ListToolbar({ children }: { children: ReactNode }) {
   return (
-    <ConsoleToolbar className="consoleListToolbar rounded-lg border border-border bg-background">
+    <ConsoleToolbar className="consoleListToolbar rounded-xl border border-border bg-background">
       <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col sm:auto-cols-max">{children}</div>
     </ConsoleToolbar>
   )
@@ -105,8 +106,8 @@ export function DetailTabs({
   value: string
 }) {
   return (
-    <Tabs setValue={onChange} value={value}>
-      <TabsList aria-label={label} className="flex w-full flex-wrap sm:inline-flex sm:w-auto">
+    <Tabs onValueChange={onChange} value={value}>
+      <TabsList aria-label={label} className="flex w-full flex-wrap sm:inline-flex sm:w-auto" variant="line">
         {tabs.map((tab) =>
           createElement(
             TabsTrigger,
@@ -121,70 +122,96 @@ export function DetailTabs({
     </Tabs>
   )
 }
-export function navigateConsoleTab(navigate: ReturnType<typeof useNavigate>, href: string) {
+export function navigateConsoleTab(navigate: ReturnType<typeof useNavigate>, href: string, context?: string) {
   if (window.location.pathname.startsWith('/console/'))
     void navigate({
       to: href,
+      search: context ? { context } : {},
     })
 }
 export function userDetailTabs(): DetailTab[] {
   return [
     {
-      value: 'profile',
-      label: 'Profile',
+      value: 'overview',
+      label: 'Overview',
     },
     {
-      value: 'security',
-      label: 'Security',
+      value: 'authentication',
+      label: 'Authentication',
     },
     {
       value: 'sessions',
       label: 'Sessions',
     },
     {
-      value: 'linked-accounts',
-      label: 'Linked accounts',
+      value: 'agents',
+      label: 'Agents',
     },
     {
-      value: 'applications',
-      label: 'Applications',
+      value: 'authorized-apps',
+      label: 'Authorized apps',
     },
     {
-      value: 'operations',
-      label: 'Operations',
+      value: 'settings',
+      label: 'Settings',
     },
   ]
 }
 export function organizationDetailTabs(): DetailTab[] {
   return [
     {
-      value: 'settings',
-      label: 'Settings',
+      value: 'overview',
+      label: 'Overview',
     },
     {
-      value: 'authorization',
-      label: 'Authorization',
+      value: 'members',
+      label: 'Members',
+    },
+    {
+      value: 'agents',
+      label: 'Agents',
+    },
+    {
+      value: 'activity',
+      label: 'Activity',
+    },
+    {
+      value: 'settings',
+      label: 'Settings',
     },
   ]
 }
 export function roleDetailTabs(): DetailTab[] {
   return [
     {
-      value: 'settings',
-      label: 'Settings',
+      value: 'overview',
+      label: 'Overview',
     },
     {
-      value: 'scopes',
-      label: 'Scopes',
+      value: 'permissions',
+      label: 'Permissions',
     },
     {
       value: 'assignments',
       label: 'Assignments',
     },
+    {
+      value: 'activity',
+      label: 'Activity',
+    },
+    {
+      value: 'settings',
+      label: 'Settings',
+    },
   ]
 }
 export function apiResourceDetailTabs(): DetailTab[] {
-  return [{ value: 'settings', label: 'Settings' }]
+  return [
+    { value: 'overview', label: 'Overview' },
+    { value: 'resources', label: 'Resources' },
+    { value: 'authority', label: 'Roles & grants' },
+    { value: 'settings', label: 'Settings' },
+  ]
 }
 export function SetupChecklist({ items, title }: { items: ManagementReadinessItem[]; title: string }) {
   return (
@@ -250,6 +277,7 @@ export function RoutedSettingsTabs<TValue extends string>({
   tabs: ReadonlyArray<readonly [TValue, string, string]>
 }) {
   const navigate = useNavigate()
+  const { organizationId } = useConsoleScope()
   return (
     <nav aria-label={ariaLabel} className="flex flex-wrap gap-6 border-b border-border">
       {tabs.map(([value, label, to]) => (
@@ -259,14 +287,14 @@ export function RoutedSettingsTabs<TValue extends string>({
             'relative -mb-px inline-flex min-h-10 items-center justify-center border-b-2 border-transparent px-1 text-sm font-medium text-muted-foreground',
             active === value && 'border-primary text-primary',
           )}
-          href={to}
+          href={organizationId ? `${to}?context=${encodeURIComponent(organizationId)}` : to}
           key={value}
           onClick={(event) => {
             if (event.defaultPrevented || event.button !== 0) return
             if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return
             event.preventDefault()
             onSelect?.(value)
-            navigateConsoleTab(navigate, to)
+            navigateConsoleTab(navigate, to, organizationId)
           }}
         >
           {label}

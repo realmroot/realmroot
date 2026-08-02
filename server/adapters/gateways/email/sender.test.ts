@@ -1,4 +1,4 @@
-import { createEmailSender } from '@server/adapters/gateways/email/sender'
+import { createConfiguredEmailSender, createEmailSender } from '@server/adapters/gateways/email/sender'
 import { renderEmailTemplate } from '@server/adapters/gateways/email/templates'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -48,6 +48,38 @@ describe('createEmailSender', () => {
       expect.objectContaining({
         from: 'noreply@example.com',
       }),
+    )
+  })
+
+  it('[spec: admin-console/admin-email-delivery-settings] loads persisted sender settings for every message', async () => {
+    const send = vi.fn().mockResolvedValue({ messageId: 'email-3' })
+    let enabled = true
+    const sender = createConfiguredEmailSender(
+      { send },
+      async () => ({
+        provider: 'cloudflare_email',
+        enabled,
+        fromEmail: 'auth@example.com',
+        fromName: 'Acme Realm',
+        replyToEmail: 'support@example.com',
+      }),
+      { from: 'fallback@example.com' },
+    )
+
+    await sender.send({
+      to: 'user@example.com',
+      template: { type: 'otp', otp: '123456' },
+    })
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: { email: 'auth@example.com', name: 'Acme Realm' },
+        replyTo: 'support@example.com',
+      }),
+    )
+
+    enabled = false
+    await expect(sender.send({ to: 'user@example.com', template: { type: 'otp', otp: '123456' } })).rejects.toThrow(
+      'Email delivery is disabled.',
     )
   })
 })

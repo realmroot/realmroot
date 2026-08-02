@@ -58,6 +58,12 @@ export async function readJsonResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>
 }
 
+export async function readNoContentResponse(response: Response): Promise<void> {
+  if (!response.ok) {
+    throw new ApiRequestError(await responseMessage(response), response.status)
+  }
+}
+
 export function getPlatformStatus() {
   return readRpcResponse(apiClient.api.health.$get())
 }

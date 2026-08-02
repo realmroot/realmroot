@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRouter, queryClient } from '@/router'
 
@@ -21,6 +22,7 @@ import {
   application,
   brandingSettings,
   configz,
+  consoleAccountAccess,
   consoleAccountProfile,
   consolePasskey,
   consoleRouteFetch,
@@ -35,7 +37,6 @@ import {
   profile,
   role,
   signInSettings,
-  user,
   userApplication,
 } from './console.test-utils'
 
@@ -44,7 +45,8 @@ describe('console route navigation', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
       if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/readiness') {
@@ -71,33 +73,29 @@ describe('console route navigation', () => {
     for (const [path, finalPath, heading] of [
       ['/console', '/console', 'Dashboard'],
       ['/console/applications', '/console/applications', 'Applications'],
-      ['/console/sign-in-experience', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
+      ['/console/sign-in-experience', '/console/sign-in-experience/theme', 'Experience'],
       [
         '/console/sign-in-experience/sign-up-and-sign-in',
-        '/console/sign-in-experience/sign-up-and-sign-in',
-        'Sign-up and sign-in',
+        '/console/sign-in-experience/sign-in',
+        'Sign-in & registration',
       ],
-      ['/console/sign-in-experience/branding', '/console/sign-in-experience/branding', 'Branding'],
-      ['/console/sign-in-experience/account-center', '/console/sign-in-experience/account-center', 'Account Center'],
-      ['/console/sign-in-experience/content', '/console/sign-in-experience/content', 'Content'],
-      ['/console/security', '/console/security/captcha', 'CAPTCHA'],
-      ['/console/security/captcha', '/console/security/captcha', 'CAPTCHA'],
-      ['/console/security/blocklist', '/console/security/blocklist', 'Blocklist'],
-      ['/console/security/general', '/console/security/general', 'General security'],
-      ['/console/mfa', '/console/mfa', 'Multi-factor authentication'],
-      ['/console/connectors', '/console/connectors', 'Connectors'],
-      ['/console/organization-template', '/console/organization-template/organization-roles', 'Organization roles'],
-      [
-        '/console/organization-template/organization-roles',
-        '/console/organization-template/organization-roles',
-        'Organization roles',
-      ],
-      ['/console/customize-jwt', '/console/customize-jwt', 'Custom JWT'],
+      ['/console/sign-in-experience/sign-in', '/console/sign-in-experience/sign-in', 'Sign-in & registration'],
+      ['/console/sign-in-experience/branding', '/console/sign-in-experience/theme', 'Experience'],
+      ['/console/sign-in-experience/theme', '/console/sign-in-experience/theme', 'Experience'],
+      ['/console/sign-in-experience/assets', '/console/sign-in-experience/assets', 'Experience'],
+      ['/console/sign-in-experience/legal', '/console/sign-in-experience/legal', 'Experience'],
+      ['/console/sign-in-experience/account-center', '/console/sign-in-experience/theme', 'Experience'],
+      ['/console/sign-in-experience/content', '/console/sign-in-experience/legal', 'Experience'],
+      ['/console/security', '/console/security/sign-in', 'Security policies'],
+      ['/console/security/sign-in', '/console/security/sign-in', 'Security policies'],
+      ['/console/security/mfa', '/console/security/mfa', 'Security policies'],
+      ['/console/security/abuse', '/console/security/abuse', 'Security policies'],
+      ['/console/connectors', '/console/connectors', 'Identity providers'],
       ['/console/webhooks', '/console/webhooks/endpoints', 'Webhooks'],
       ['/console/webhooks/endpoints', '/console/webhooks/endpoints', 'Webhooks'],
       ['/console/webhooks/requests', '/console/webhooks/requests', 'Webhooks'],
-      ['/console/tenant-settings', '/console/tenant-settings/oidc-configs', 'Settings'],
-      ['/console/tenant-settings/oidc-configs', '/console/tenant-settings/oidc-configs', 'Settings'],
+      ['/console/tenant-settings', '/console/tenant-settings/general', 'Settings'],
+      ['/console/tenant-settings/general', '/console/tenant-settings/general', 'Settings'],
     ] as const) {
       window.history.pushState(null, '', path)
       render(<AppRouter />)
@@ -111,52 +109,52 @@ describe('console route navigation', () => {
     }
   })
 
-  it('navigates sign-in experience tabs through routable tab links [spec: admin-console/admin-sign-in-experience-routes]', async () => {
+  it('navigates Experience tabs through routable tab controls [spec: admin-console/admin-sign-in-experience-routes]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
-    window.history.pushState(null, '', '/console/sign-in-experience/sign-up-and-sign-in')
+    window.history.pushState(null, '', '/console/sign-in-experience/theme')
 
     render(<AppRouter />)
 
-    expect(await screen.findByRole('heading', { name: 'Sign-up and sign-in' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Experience' })).toBeTruthy()
 
-    for (const [label, path, heading] of [
-      ['Branding', '/console/sign-in-experience/branding', 'Branding'],
-      ['Account Center', '/console/sign-in-experience/account-center', 'Account Center'],
-      ['Content', '/console/sign-in-experience/content', 'Content'],
-      ['Sign-up and sign-in', '/console/sign-in-experience/sign-up-and-sign-in', 'Sign-up and sign-in'],
+    for (const [label, path] of [
+      ['Brand assets', '/console/sign-in-experience/assets'],
+      ['Legal & support', '/console/sign-in-experience/legal'],
+      ['Color scheme', '/console/sign-in-experience/theme'],
     ] as const) {
-      fireEvent.click(screen.getByRole('link', { name: label }))
+      await userEvent.click(await screen.findByRole('tab', { name: label }))
 
       await waitFor(() => expect(window.location.pathname).toBe(path))
-      expect((await screen.findAllByRole('heading', { name: heading })).length).toBeGreaterThan(0)
-      expect(screen.getByRole('link', { name: label }).getAttribute('aria-current')).toBe('page')
+      expect((await screen.findAllByRole('heading', { name: 'Experience' })).length).toBeGreaterThan(0)
+      expect(screen.getByRole('tab', { name: label }).getAttribute('aria-selected')).toBe('true')
     }
-    expect(screen.queryByRole('link', { name: 'Desktop' })).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Mobile' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Desktop' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Mobile' })).toBeTruthy()
   })
 
-  it('navigates between Sign-in and account tabs from the shared tab bar', async () => {
+  it('keeps Sign-in & registration separate from Experience navigation', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleRouteFetch)
-    window.history.pushState(null, '', '/console/sign-in-experience/sign-up-and-sign-in')
+    window.history.pushState(null, '', '/console/sign-in-experience/sign-in')
 
     render(<AppRouter />)
 
-    expect(await screen.findByRole('heading', { name: 'Sign-up and sign-in' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Branding' })).toHaveProperty(
+    expect(await screen.findByRole('heading', { name: 'Sign-in & registration' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Experience' })).toHaveProperty(
       'href',
-      `${window.location.origin}/console/sign-in-experience/branding`,
+      `${window.location.origin}/console/sign-in-experience/theme`,
     )
-    fireEvent.click(screen.getByRole('link', { name: 'Branding' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Experience' }))
 
-    expect(await screen.findByRole('heading', { name: 'Branding' })).toBeTruthy()
-    await waitFor(() => expect(window.location.pathname).toBe('/console/sign-in-experience/branding'))
+    expect(await screen.findByRole('heading', { name: 'Experience' })).toBeTruthy()
+    await waitFor(() => expect(window.location.pathname).toBe('/console/sign-in-experience/theme'))
   })
 
   it('renders authorization detail routes with route params', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
       if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       if (url === '/api/readiness') {
@@ -198,14 +196,67 @@ describe('console route navigation', () => {
       }
       if (url === '/api/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
+      if (url.startsWith('/api/organizations/org-1/members')) {
+        return Promise.resolve(jsonResponse({ members: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/organizations/org-1/invitations')) {
+        return Promise.resolve(jsonResponse({ invitations: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/agents?')) {
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/agents/agent-1') {
+        return Promise.resolve(
+          jsonResponse({
+            agent: {
+              id: 'agent-1',
+              issuer: 'https://identity.acme.dev',
+              subject: 'agt_build',
+              name: 'Build Agent',
+              homeSpace: { type: 'organization', organizationId: 'org-1' },
+              owner: { id: 'org-1', type: 'organization', displayName: 'Acme' },
+              status: 'active',
+              retiredAt: null,
+              hostCount: 1,
+              roleCount: 1,
+              pendingRequestCount: 0,
+              activeGrantCount: 1,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          }),
+        )
+      }
+      if (
+        url.startsWith('/api/agents/agent-1/hosts') ||
+        url.startsWith('/api/agents/agent-1/roles') ||
+        url.startsWith('/api/agents/agent-1/access-requests') ||
+        url.startsWith('/api/agents/agent-1/access-grants')
+      ) {
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/audit-events?')) {
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+      }
       return consoleSharedFetch(input, init)
     })
 
-    window.history.pushState(null, '', '/console/roles/role-1')
+    window.history.pushState(null, '', '/console/roles/role-1?context=org-1')
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Admin' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/console/roles/role-1/settings')
+    expect(window.location.pathname).toBe('/console/roles/role-1/overview')
+    expect(window.location.search).toBe('?context=org-1')
+
+    cleanup()
+    queryClient.clear()
+    window.history.pushState(null, '', '/console/users/user-1?context=org-1')
+    render(<AppRouter />)
+
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/console/users/user-1/overview')
+    expect(window.location.search).toBe('?context=org-1')
+    expect(screen.getByRole('tab', { name: 'Authentication' })).toBeTruthy()
 
     cleanup()
     queryClient.clear()
@@ -213,7 +264,7 @@ describe('console route navigation', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/console/api-resources/resource-1/settings')
+    expect(window.location.pathname).toBe('/console/api-resources/resource-1/overview')
 
     cleanup()
     queryClient.clear()
@@ -221,93 +272,14 @@ describe('console route navigation', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
-    expect(window.location.pathname).toBe('/console/organizations/org-1/settings')
+    expect(window.location.pathname).toBe('/console/organizations/org-1/overview')
 
-    for (const scenario of [
-      {
-        path: '/console/applications/app-1/branding',
-        heading: 'Customer portal',
-        tab: 'Branding',
-        text: 'Application branding',
-        nextTab: 'Settings',
-        nextPath: '/console/applications/app-1/settings',
-        nextText: 'General settings',
-      },
-      {
-        path: '/console/users/user-1/security',
-        heading: 'Jane Stone',
-        tab: 'Security',
-        text: 'MFA and passkeys',
-        nextTab: 'Sessions',
-        nextPath: '/console/users/user-1/sessions',
-        nextText: 'Sessions',
-      },
-      {
-        path: '/console/users/user-1/applications',
-        heading: 'Jane Stone',
-        tab: 'Applications',
-        text: 'Authorized applications',
-        nextTab: 'Linked accounts',
-        nextPath: '/console/users/user-1/linked-accounts',
-        nextText: 'Linked accounts',
-      },
-      {
-        path: '/console/organizations/org-1/authorization',
-        heading: 'Acme',
-        tab: 'Authorization',
-        text: 'Authorization model',
-        nextTab: 'Settings',
-        nextPath: '/console/organizations/org-1/settings',
-        nextText: 'General',
-      },
-      {
-        path: '/console/roles/role-1/scopes',
-        heading: 'Admin',
-        tab: 'Scopes',
-        text: 'Scope eligibility',
-        nextTab: 'Assignments',
-        nextPath: '/console/roles/role-1/assignments',
-        nextText: 'Assign role',
-      },
-      {
-        path: '/console/roles/role-1/assignments',
-        heading: 'Admin',
-        tab: 'Assignments',
-        text: 'Assignments',
-        nextTab: 'Settings',
-        nextPath: '/console/roles/role-1/settings',
-        nextText: 'Role settings',
-      },
-      {
-        path: '/console/webhooks/requests',
-        heading: 'Webhooks',
-        tab: 'Requests',
-        text: 'Recent requests',
-        nextTab: 'Endpoints',
-        nextPath: '/console/webhooks/endpoints',
-        nextText: 'Create endpoint',
-      },
-    ] as const) {
-      cleanup()
-      queryClient.clear()
-      window.history.pushState(null, '', scenario.path)
-      render(<AppRouter />)
+    cleanup()
+    queryClient.clear()
+    window.history.pushState(null, '', '/console/agents/agent-1')
+    render(<AppRouter />)
 
-      expect(await screen.findByRole('heading', { name: scenario.heading })).toBeTruthy()
-      let activeRouteTab =
-        screen.queryByRole('tab', { name: scenario.tab }) ?? screen.queryByRole('link', { name: scenario.tab })
-      if (!activeRouteTab) activeRouteTab = await screen.findByRole('link', { name: scenario.tab })
-      expect(activeRouteTab.getAttribute('aria-selected') ?? activeRouteTab.getAttribute('aria-current')).toMatch(
-        /^(true|page)$/,
-      )
-      expect((await screen.findAllByText(scenario.text)).length).toBeGreaterThan(0)
-      expect(window.location.pathname).toBe(scenario.path)
-
-      fireEvent.click(
-        screen.queryByRole('tab', { name: scenario.nextTab }) ?? screen.getByRole('link', { name: scenario.nextTab }),
-      )
-      await waitFor(() => expect(window.location.pathname).toBe(scenario.nextPath))
-      expect((await screen.findAllByText(scenario.nextText)).length).toBeGreaterThan(0)
-    }
+    expect(await screen.findByRole('heading', { name: 'Build Agent' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/console/agents/agent-1/overview')
   })
 })

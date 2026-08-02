@@ -58,7 +58,7 @@ describe('account pages', () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountProfilePage />)
 
-    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
     await waitFor(() => expect(requests).toEqual(['/api/configz', '/api/account/profile']))
   })
 
@@ -66,7 +66,7 @@ describe('account pages', () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountSecurityPage />)
 
-    expect(await screen.findByRole('heading', { name: 'Multi-factor authentication' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Sign-in & security' })).toBeTruthy()
     await waitFor(() =>
       expect(requests).toEqual([
         '/api/configz',
@@ -74,6 +74,7 @@ describe('account pages', () => {
         '/api/account/security',
         '/api/account/security/passkeys',
         '/api/account/sessions',
+        '/api/account/linked-accounts',
       ]),
     )
   })
@@ -108,7 +109,19 @@ function mockAccountFetch() {
     const path = String(input)
     requests.push(path)
     if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
-    if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
+    if (path === '/api/account/profile') {
+      return Promise.resolve(
+        jsonResponse({
+          user: profile(),
+          access: {
+            canCreateOrganization: true,
+            showOrganizations: false,
+            realmOperator: false,
+            consoleOrganizations: [],
+          },
+        }),
+      )
+    }
     if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security }))
     if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
     if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))

@@ -25,6 +25,7 @@ export type MutationHandler = <T>(
   operation: () => Promise<T>,
   options?: {
     invalidate?: readonly (readonly unknown[])[]
+    invalidateExact?: readonly (readonly unknown[])[]
     onError?: (message: string) => void
   },
 ) => Promise<T | undefined>

@@ -66,9 +66,16 @@ export function AccountConnectionsPage() {
   if (error)
     return <AccountPageError config={config} message={error instanceof Error ? error.message : tt('Unable to load.')} />
   const profile = profileQuery.data?.user ?? null
-  if (!profile) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
+  const access = profileQuery.data?.access
+  if (!profile || !access) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
   return (
-    <AccountPageShell accountCenter={accountCenter} config={config} profile={profile} section="connections">
+    <AccountPageShell
+      access={access}
+      accountCenter={accountCenter}
+      config={config}
+      profile={profile}
+      section="applications"
+    >
       <div className="accountSectionStackFlat">
         <ConnectionsPanel
           accounts={linkedAccountsQuery.data?.accounts ?? []}
@@ -254,7 +261,7 @@ function ConnectionsPanel({
   )
 }
 
-function ConnectionsSection({
+export function ConnectionsSection({
   accounts,
   confirm,
   mutate,
@@ -276,8 +283,8 @@ function ConnectionsSection({
       linkAccount({
         providerType: provider.providerType === 'generic_oauth' ? 'generic_oauth' : 'social',
         providerId: provider.providerId,
-        callbackURL: `${window.location.origin}/linked-accounts`,
-        errorCallbackURL: `${window.location.origin}/profile`,
+        callbackURL: `${window.location.origin}/security`,
+        errorCallbackURL: `${window.location.origin}/security`,
       }),
     )
     const redirectUrl = readRedirectUrl(result)

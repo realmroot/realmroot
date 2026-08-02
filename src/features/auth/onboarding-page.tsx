@@ -1,8 +1,9 @@
 import { KeyRound } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
-import { Button, LinkButton } from '@/components/ui/button'
-import { Field, TextInput } from '@/components/ui/field'
+import { LinkButton } from '@/components/link-button'
+import { Field, TextInput } from '@/components/product-form'
+import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
 import { useConfigz } from '@/features/auth/hooks'
 import { createOnboardingAdmin, getOnboardingStatus } from '@/lib/api'
@@ -81,11 +82,18 @@ export function OnboardingRoute() {
       ) : (
         <form className="formStack" onSubmit={onSubmit}>
           <Field label={tt('Name')}>
-            <TextInput autoComplete="name" onChange={(event) => setName(event.target.value)} required value={name} />
+            <TextInput
+              autoComplete="name"
+              name="name"
+              onChange={(event) => setName(event.target.value)}
+              required
+              value={name}
+            />
           </Field>
           <Field label={tt('Email')}>
             <TextInput
               autoComplete="email"
+              name="email"
               onChange={(event) => setEmail(event.target.value)}
               required
               type="email"
@@ -93,11 +101,17 @@ export function OnboardingRoute() {
             />
           </Field>
           <Field label={tt('Username')}>
-            <TextInput autoComplete="username" onChange={(event) => setUsername(event.target.value)} value={username} />
+            <TextInput
+              autoComplete="username"
+              name="username"
+              onChange={(event) => setUsername(event.target.value)}
+              value={username}
+            />
           </Field>
           <Field label={tt('Password')}>
             <TextInput
               autoComplete="new-password"
+              name="password"
               minLength={8}
               onChange={(event) => setPassword(event.target.value)}
               required

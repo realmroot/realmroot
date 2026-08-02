@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/sign-in-experience/content')({
-  component: ContentSettingsPage,
+  beforeLoad: () => {
+    throw redirect({ href: '/console/sign-in-experience/legal' })
+  },
 })

@@ -89,6 +89,32 @@ export const accountCenterSettings = {
   },
 }
 
+export const developerSettings = {
+  organizationCreation: 'admins_only' as const,
+  approvedUserIds: [],
+  consoleAccess: 'realm_operators' as const,
+  eligibleAccessLevels: ['owner', 'admin'] as const,
+  selectedOrganizationIds: [],
+}
+
+export const generalSettings = {
+  realmName: 'Realmroot',
+  issuer: 'https://auth.example.com/api/auth',
+  oidcDiscoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+  jwksUrl: 'https://auth.example.com/api/auth/jwks',
+  managementApiUrl: 'https://auth.example.com/api/openapi.json',
+}
+
+export const emailSettings = {
+  provider: 'cloudflare_email' as const,
+  enabled: true,
+  fromEmail: 'noreply@example.com',
+  fromName: 'Realmroot',
+  replyToEmail: null,
+  bindingAvailable: true,
+  source: 'database' as const,
+}
+
 export const securityPolicy = {
   policy: {
     mfa: { mode: 'required' },
@@ -116,7 +142,8 @@ export const securityPolicy = {
       enabled: false,
       provider: 'turnstile',
       siteKey: '',
-      secretBinding: '',
+      projectId: null,
+      secretConfigured: false,
     },
     blocklist: {
       blockSubaddressing: false,
@@ -257,7 +284,7 @@ export const configz = {
   copy: {
     productName: 'Acme',
     headline: 'Sign in to Acme.',
-    description: 'Use your workspace identity.',
+    description: 'Use your Realmroot identity.',
   },
   auth: {
     basePath: '/api/auth',

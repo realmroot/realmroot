@@ -7,6 +7,13 @@ Feature: Hosted authentication
     Given a first admin exists
     And hosted auth reads runtime settings from /api/configz
 
+  @entrypoint:product-ui @journey:application-audience-enforcement
+  Scenario: Application audience gates authorization
+    Given I am signed in
+    And an application is limited to assigned users or selected Organizations
+    When I begin authorization for that application
+    Then authorization continues only when I am directly assigned or belong to an allowed active Organization
+
   @entrypoint:product-ui @journey:public-sign-in
   Scenario: Hosted sign-in renders enabled methods
     When I open /auth/sign-in
@@ -59,6 +66,7 @@ Feature: Hosted authentication
   Scenario: Email OTP sign-in completes code flow
     Given email code sign-in is enabled
     When I request an email code
+    Then the selected email-code form replaces the method chooser
     And I submit the latest verification code
     Then I am authenticated
 
@@ -72,8 +80,9 @@ Feature: Hosted authentication
   Scenario: Password recovery requests and completes OTP reset
     Given a user exists with password sign-in
     When I request password recovery
-    And I submit the latest reset code with a new password
+    And I submit the latest reset code with matching new-password confirmation
     Then the password is changed
+    And the confirmation offers a return to hosted sign-in
 
   @entrypoint:product-ui @journey:email-verification
   Scenario: Email verification requests and completes verification
@@ -81,6 +90,7 @@ Feature: Hosted authentication
     When I request verification
     And I submit the latest verification code
     Then the email is marked verified
+    And the confirmation offers a return to hosted sign-in
 
   @entrypoint:product-ui @journey:hosted-auth-error-flow
   Scenario: Hosted auth errors show recovery UI
@@ -115,6 +125,7 @@ Feature: Hosted authentication
     Given a third-party OIDC application requests scopes
     When I approve consent
     Then Realmroot redirects to the client callback with an authorization result
+    And an incomplete consent URL shows a recovery state without exposing validation internals
 
   @entrypoint:product-ui @journey:oauth-consent-account-switch
   Scenario: OAuth consent can switch accounts without losing the request
@@ -139,4 +150,6 @@ Feature: Hosted authentication
   Scenario: OIDC client callback lands on the local callback page
     Given an OIDC callback response is produced
     When the browser follows the callback URL
-    Then the local callback route renders the result
+    Then the local callback route validates state without exposing the authorization code
+    And it shows a compact success or recovery state
+    And an incomplete local OIDC start shows a recovery state without opening the authorization server error page

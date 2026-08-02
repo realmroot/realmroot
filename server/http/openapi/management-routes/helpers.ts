@@ -14,6 +14,8 @@ export {
   applicationResponseSchema,
   createApplicationRequestSchema,
   createApplicationResponseSchema,
+  listApplicationAuthorizationsResponseSchema,
+  listApplicationsQuerySchema,
   listApplicationsResponseSchema,
   listClientSecretsResponseSchema,
   listRedirectUrisResponseSchema,
@@ -25,20 +27,24 @@ export { uploadedAssetResponseSchema } from '@shared/api/assets'
 export {
   addMemberRequestSchema,
   apiResourceResponseSchema,
-  assignRoleRequestSchema,
   createApiResourceRequestSchema,
   createInvitationRequestSchema,
   createOrganizationRequestSchema,
+  createRoleAssignmentRequestSchema,
   createRoleRequestSchema,
+  listApiResourcesQuerySchema,
   listApiResourcesResponseSchema,
   listInvitationsResponseSchema,
   listMembersResponseSchema,
   listOrganizationsResponseSchema,
+  listRoleAssignmentsQuerySchema,
+  listRoleAssignmentsResponseSchema,
   listRolesResponseSchema,
   organizationResponseSchema,
-  replaceRoleScopesRequestSchema,
+  replaceRolePermissionsRequestSchema,
+  roleAssignmentResponseSchema,
+  rolePermissionsResponseSchema,
   roleResponseSchema,
-  roleScopesResponseSchema,
   updateApiResourceRequestSchema,
   updateMemberRequestSchema,
   updateOrganizationRequestSchema,
@@ -62,7 +68,10 @@ export {
   managementBrandingSettingsResponseSchema,
   managementConnectorResponseSchema,
   managementCreateUserRequestSchema,
+  managementDeveloperSettingsResponseSchema,
+  managementEmailSettingsResponseSchema,
   managementErrorResponseSchema,
+  managementGeneralSettingsResponseSchema,
   managementPasswordResetRequestSchema,
   managementReadinessResponseSchema,
   managementSignInSettingsResponseSchema,
@@ -73,10 +82,13 @@ export {
   updateManagementAccountCenterSettingsRequestSchema,
   updateManagementBrandingSettingsRequestSchema,
   updateManagementConnectorRequestSchema,
+  updateManagementDeveloperSettingsRequestSchema,
+  updateManagementEmailSettingsRequestSchema,
   updateManagementFederatedCredentialRequestSchema,
+  updateManagementGeneralSettingsRequestSchema,
   updateManagementSignInSettingsRequestSchema,
 } from '@shared/api/management'
-export { securityPolicySchema, updateSecurityPolicySchema } from '@shared/api/security'
+export { securityPolicyResponseSchema, updateSecurityPolicySchema } from '@shared/api/security'
 export {
   createWebhookEndpointRequestSchema,
   listWebhookEndpointsQuerySchema,
@@ -90,7 +102,6 @@ export {
 } from '@shared/api/webhooks'
 export type { ZodType } from 'zod'
 
-import { assignRoleRequestSchema } from '@shared/api/authorization'
 import { managementErrorResponseSchema } from '@shared/api/management'
 
 export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete'
@@ -141,6 +152,7 @@ export function params(...names: string[]) {
 }
 export const idParam = params('id')
 export const applicationIdParam = params('applicationId')
+export const applicationAuthorizationParam = params('applicationId', 'authorizationId')
 export const federatedCredentialParam = params('applicationId', 'credentialId')
 export const organizationIdParam = params('organizationId')
 export const userIdParam = params('id')
@@ -149,20 +161,3 @@ export const userPasskeyParam = params('id', 'passkeyId')
 export const memberParam = params('id', 'memberId')
 export const invitationParam = params('id', 'invitationId')
 export const agentIdentityParam = params('identityId')
-export function assignmentRoutes(): ManagementRouteConfig[] {
-  const assignments = [
-    ['roles/assignments/users', 'assignUserRole'],
-    ['roles/assignments/members', 'assignMemberRole'],
-    ['roles/assignments/applications', 'assignApplicationRole'],
-    ['roles/assignments/agents', 'assignAgentRole'],
-  ] as const
-  return assignments.map(([path, operationId]) => ({
-    method: 'post',
-    path: `/${path}`,
-    operationId,
-    summary: 'Assign role',
-    request: { body: jsonBody(assignRoleRequestSchema) },
-    response: z.object({ assignment: z.object({ id: z.string() }) }),
-    status: 201,
-  }))
-}

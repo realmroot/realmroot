@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import type { Agent } from './agent-api'
+import type { RolePermission, RoleResponse } from './authorization'
 import type { PaginationMetadata } from './pagination'
 import { usernameSchema } from './users'
 
@@ -41,6 +43,7 @@ export type AccountPasswordChangeInput = z.infer<typeof accountPasswordChangeSch
 export type AccountWalletAddressLinkInput = z.infer<typeof accountWalletAddressLinkSchema>
 
 export type AccountProfileResponse = {
+  activeOrganizationId: string | null
   user: {
     id: string
     email: string
@@ -52,6 +55,37 @@ export type AccountProfileResponse = {
     image: string | null
     role: string | null
   }
+  access: {
+    canCreateOrganization: boolean
+    showOrganizations: boolean
+    realmOperator: boolean
+    consoleOrganizations: Array<{
+      organizationId: string
+      accessLevel: 'owner' | 'admin' | 'developer'
+    }>
+  }
+}
+
+export type AccountOrganizationAgentsResponse = {
+  items: Agent[]
+  pagination: PaginationMetadata
+}
+
+export type AccountOrganizationAuthorityResponse = {
+  roles: Array<{
+    role: RoleResponse
+    permissions: RolePermission[]
+  }>
+  agentGrants: Array<{
+    id: string
+    agentId: string
+    agentName: string
+    resourceId: string
+    scopes: string[]
+    mode: string
+    expiresAt: string | null
+    createdAt: string
+  }>
 }
 
 export type LinkedAccountsResponse = {

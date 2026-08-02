@@ -47,7 +47,7 @@ describe('app.test 3', () => {
 
     expect(response.status).toBe(201)
     expect(getConfig).toHaveBeenCalled()
-    expect(uploadAsset).toHaveBeenCalledWith(expect.anything(), expect.any(String), {
+    expect(uploadAsset).toHaveBeenCalledWith(expect.anything(), {
       purpose: 'avatar',
       file: expect.objectContaining({ name: 'avatar.png', type: 'image/png' }),
       actorUserId: 'user-1',
@@ -70,11 +70,7 @@ describe('app.test 3', () => {
 
     expect(response.status).toBe(201)
     expect(getConfig).toHaveBeenCalled()
-    expect(uploadAsset).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.objectContaining({ actorUserId: 'user-1' }),
-    )
+    expect(uploadAsset).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ actorUserId: 'user-1' }))
   })
 })
 
@@ -288,7 +284,7 @@ function securityPolicy() {
       rejectSequential: false,
       rejectCustomWords: false,
     },
-    captcha: { enabled: false, provider: 'turnstile' as const, siteKey: '', secretBinding: '' },
+    captcha: { enabled: false, provider: 'turnstile' as const, siteKey: '', projectId: null, secretKey: '' },
     blocklist: { blockSubaddressing: false, entries: [] },
   }
 }

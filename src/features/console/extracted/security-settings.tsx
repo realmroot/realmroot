@@ -1,486 +1,672 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
+import { KeyRound, LifeBuoy, Mail, Pencil, Smartphone } from 'lucide-react'
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
+import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { consoleQueryKeys, getSecurityPolicy, updateSecurityPolicy } from '@/lib/api/management'
-import {
-  Field,
-  KeyRound,
-  LifeBuoy,
-  Mail,
-  type ReactNode,
-  SelectInput,
-  SettingRow,
-  Smartphone,
-  Switch,
-  TextArea,
-  TextInput,
-  tt,
-  useEffect,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useState,
-} from '../console-shared'
-import { MutationError, SwitchRow } from '../helpers/helpers-dialogs'
-import { ChangesSection, SettingsSection, SettingsSections } from '../helpers/helpers-preview'
-import { lines, ResourcePage, SecuritySectionTabs } from '../helpers/helpers-resource'
-import { shallowEqual } from '../helpers/helpers-utils'
-import { SignInSettingsPage } from './sign-in-settings'
+import { tt } from '@/lib/i18n'
+import { ErrorState, LoadingState } from '../helpers/helpers-dialogs'
+import { lines, ResourcePage } from '../helpers/helpers-resource'
+import { useAdminMutation } from '../helpers/helpers-utils'
 
-export function MfaPage() {
-  const query = useQuery({
-    queryKey: consoleQueryKeys.security,
-    queryFn: getSecurityPolicy,
-  })
+type SecuritySection = 'sign-in' | 'mfa' | 'abuse'
+type SecurityEditor = 'password' | 'sessions' | 'mfa' | 'captcha' | 'blocklist' | null
+type CaptchaProvider = 'turnstile' | 'hcaptcha' | 'recaptcha-enterprise'
+
+export function SecurityPoliciesPage({ section = 'sign-in' }: { section?: SecuritySection }) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [mode, setMode] = useState<'optional' | 'required'>('optional')
-  const [passkeysEnabled, setPasskeysEnabled] = useState(true)
-  const [authenticatorAppEnabled, setAuthenticatorAppEnabled] = useState(true)
-  const [emailOtpEnabled, setEmailOtpEnabled] = useState(false)
-  const [backupCodesEnabled, setBackupCodesEnabled] = useState(true)
-  const updateMutation = useMutation({
-    mutationFn: () =>
-      updateSecurityPolicy({
-        policy: {
-          mfa: {
-            mode,
-            authenticatorAppEnabled,
-            emailOtpEnabled,
-            backupCodesEnabled,
-          },
-          passkeys: {
-            enabled: passkeysEnabled,
-          },
-        },
-      }),
+  const query = useQuery({ queryKey: consoleQueryKeys.security, queryFn: getSecurityPolicy })
+  const [active, setActive] = useState<SecuritySection>(section)
+  const [editor, setEditor] = useState<SecurityEditor>(null)
+  const [captchaProvider, setCaptchaProvider] = useState<CaptchaProvider>('turnstile')
+  useEffect(() => setActive(section), [section])
+  useEffect(() => {
+    if (query.data) setCaptchaProvider(query.data.policy.captcha.provider)
+  }, [query.data])
+  const mutation = useAdminMutation({
+    mutationFn: updateSecurityPolicy,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.security,
-      })
+      await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.security })
+      setEditor(null)
     },
   })
-  useEffect(() => {
-    if (!query.data) return
-    setMode(query.data.policy.mfa.mode)
-    setPasskeysEnabled(query.data.policy.passkeys.enabled)
-    setAuthenticatorAppEnabled(query.data.policy.mfa.authenticatorAppEnabled ?? true)
-    setEmailOtpEnabled(query.data.policy.mfa.emailOtpEnabled ?? false)
-    setBackupCodesEnabled(query.data.policy.mfa.backupCodesEnabled ?? true)
-  }, [query.data])
-  const loadedPolicy = query.data
-    ? {
-        mode: query.data.policy.mfa.mode,
-        passkeysEnabled: query.data.policy.passkeys.enabled,
-        authenticatorAppEnabled: query.data.policy.mfa.authenticatorAppEnabled ?? true,
-        emailOtpEnabled: query.data.policy.mfa.emailOtpEnabled ?? false,
-        backupCodesEnabled: query.data.policy.mfa.backupCodesEnabled ?? true,
-      }
-    : null
-  const hasChanges = loadedPolicy
-    ? !shallowEqual(
-        {
-          mode,
-          passkeysEnabled,
-          authenticatorAppEnabled,
-          emailOtpEnabled,
-          backupCodesEnabled,
-        },
-        loadedPolicy,
-      )
-    : false
+  if (query.isLoading) return <LoadingState label={tt('Loading security policies')} />
+  if (query.error) return <ErrorState error={query.error} onRetry={() => query.refetch()} />
+  if (!query.data) return <ErrorState error={new Error(tt('Security policy not found.'))} />
+  const policy = query.data.policy
   return (
     <ResourcePage
-      title={tt('Multi-factor authentication')}
-      description={tt('Review tenant MFA factors and deployment policy for hosted account protection.')}
-      error={query.error}
+      title={tt('Security policies')}
+      description={tt(
+        'Review authentication strength, available factors, and abuse protections enforced across this Realm.',
+      )}
       framed={false}
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
     >
-      {query.data ? (
-        <form
-          className="grid gap-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            updateMutation.mutate()
-          }}
-        >
-          <SettingsSections>
-            <SettingsSection
-              title={tt('Factors')}
-              description={tt('Available second factors surfaced by account and deployment support.')}
+      <Tabs
+        onValueChange={(value) => {
+          const next = value as SecuritySection
+          setActive(next)
+          void navigate({ to: `/console/security/${next}` })
+        }}
+        value={active}
+      >
+        <TabsList className="w-full justify-start" variant="line">
+          <TabsTrigger value="sign-in">{tt('Sign-in security')}</TabsTrigger>
+          <TabsTrigger value="mfa">{tt('MFA')}</TabsTrigger>
+          <TabsTrigger value="abuse">{tt('Abuse prevention')}</TabsTrigger>
+        </TabsList>
+        <TabsContent className="mt-5" value="sign-in">
+          <div className="detailSections">
+            <SecuritySectionBlock
+              action={
+                <Button onClick={() => setEditor('password')} variant="outline">
+                  <Pencil />
+                  {tt('Edit')}
+                </Button>
+              }
+              description="Password rules applied whenever the built-in password connector is available."
+              title="Password policy"
             >
-              <div className="grid gap-3">
-                <MfaFactorSwitch
-                  checked={passkeysEnabled}
-                  description={`Use WebAuthn passkeys for this tenant (${query.data.policy.passkeys.rpName}).`}
-                  icon={<KeyRound size={18} />}
-                  label={tt('Passkeys')}
-                  onCheckedChange={setPasskeysEnabled}
-                />
-                <MfaFactorSwitch
-                  checked={authenticatorAppEnabled}
-                  description={tt('Allow users to enroll an authenticator app and verify time-based codes.')}
-                  icon={<Smartphone size={18} />}
-                  label={tt('Authenticator app')}
-                  onCheckedChange={setAuthenticatorAppEnabled}
-                />
-                <MfaFactorSwitch
-                  checked={emailOtpEnabled}
-                  description={tt(
-                    'Allow email verification codes as a second factor when email delivery is configured.',
-                  )}
-                  icon={<Mail size={18} />}
-                  label={tt('Email verification code')}
-                  onCheckedChange={setEmailOtpEnabled}
-                />
-                <MfaFactorSwitch
-                  checked={backupCodesEnabled}
-                  description={tt('Allow recovery backup codes generated during authenticator enrollment.')}
-                  icon={<LifeBuoy size={18} />}
-                  label={tt('Backup codes')}
-                  onCheckedChange={setBackupCodesEnabled}
-                />
-              </div>
-            </SettingsSection>
-            <SettingsSection
-              title={tt('Policy controls')}
-              description={tt('Prompt policy is persisted for hosted account access.')}
+              <DetailRow
+                label="Minimum length"
+                value={tt('{{count}} characters', { count: policy.password.minLength })}
+              />
+              <DetailRow label="Required character types" value={String(policy.password.requiredCharacterTypes)} />
+              <DetailRow label="Reject user information" value={status(policy.password.rejectUserInfo)} />
+              <DetailRow label="Reject sequential values" value={status(policy.password.rejectSequential)} />
+              <DetailRow
+                label="Custom blocked words"
+                value={policy.password.rejectCustomWords ? String(policy.password.customWords.length) : tt('Disabled')}
+              />
+            </SecuritySectionBlock>
+            <SecuritySectionBlock
+              action={
+                <Button onClick={() => setEditor('sessions')} variant="outline">
+                  <Pencil />
+                  {tt('Edit')}
+                </Button>
+              }
+              description="Current session lifetimes applied by the authentication runtime."
+              title="Session policy"
             >
-              <div className="grid gap-4">
-                <Field label={tt('Prompt policy')}>
-                  <SelectInput
-                    aria-label={tt('Prompt policy')}
-                    onChange={(event) => setMode(event.target.value as 'optional' | 'required')}
-                    value={mode}
-                  >
-                    <option value="required">{tt('Required')}</option>
-                    <option value="optional">{tt('Optional')}</option>
-                  </SelectInput>
-                </Field>
-                <SettingRow label={tt('Persisted mode')} value={query.data.policy.mfa.mode} />
-              </div>
-            </SettingsSection>
-            <ChangesSection
-              description={tt('Save or reset tenant MFA policy changes.')}
-              error={<MutationError error={updateMutation.error} />}
-              onDiscard={() => {
-                if (!loadedPolicy) return
-                setMode(loadedPolicy.mode)
-                setPasskeysEnabled(loadedPolicy.passkeysEnabled)
-                setAuthenticatorAppEnabled(loadedPolicy.authenticatorAppEnabled)
-                setEmailOtpEnabled(loadedPolicy.emailOtpEnabled)
-                setBackupCodesEnabled(loadedPolicy.backupCodesEnabled)
-              }}
-              pending={updateMutation.isPending}
-              saveLabel="Save changes"
-              visible={hasChanges}
-            />
-          </SettingsSections>
-        </form>
-      ) : null}
+              <DetailRow label="Session lifetime" value={formatDuration(policy.sessions.expiresInSeconds)} />
+              <DetailRow label="Refresh interval" value={formatDuration(policy.sessions.updateAgeSeconds)} />
+              <DetailRow label="Fresh authentication window" value={formatDuration(policy.sessions.freshAgeSeconds)} />
+              <DetailRow label="Cookie cache" value={formatDuration(policy.sessions.cookieCacheSeconds)} />
+            </SecuritySectionBlock>
+          </div>
+        </TabsContent>
+        <TabsContent className="mt-5" value="mfa">
+          <div className="detailSections">
+            <SecuritySectionBlock
+              action={
+                <Button onClick={() => setEditor('mfa')} variant="outline">
+                  <Pencil />
+                  {tt('Edit policy')}
+                </Button>
+              }
+              description="Factors users may enroll and the prompt requirement applied at sign-in."
+              title="Available factors"
+            >
+              <FactorRow
+                enabled={policy.passkeys.enabled}
+                icon={<KeyRound />}
+                label="Passkey"
+                note="RP configuration is managed in Builtin connectors."
+              />
+              <FactorRow
+                enabled={policy.mfa.authenticatorAppEnabled ?? true}
+                icon={<Smartphone />}
+                label="Authenticator app"
+                note="Time-based one-time codes."
+              />
+              <FactorRow
+                enabled={policy.mfa.emailOtpEnabled ?? false}
+                icon={<Mail />}
+                label="Email verification code"
+                note="Requires working email delivery."
+              />
+              <FactorRow
+                enabled={policy.mfa.backupCodesEnabled ?? true}
+                icon={<LifeBuoy />}
+                label="Backup codes"
+                note="Recovery codes generated at enrollment."
+              />
+            </SecuritySectionBlock>
+            <SecuritySectionBlock description="When Realmroot requires an additional factor." title="Enforcement">
+              <DetailRow
+                label="Prompt policy"
+                value={policy.mfa.mode === 'required' ? tt('Required') : tt('Optional')}
+              />
+            </SecuritySectionBlock>
+          </div>
+        </TabsContent>
+        <TabsContent className="mt-5" value="abuse">
+          <div className="detailSections">
+            <SecuritySectionBlock
+              action={
+                <Button onClick={() => setEditor('captcha')} variant="outline">
+                  <Pencil />
+                  {tt('Configure')}
+                </Button>
+              }
+              description="Challenge suspicious hosted sign-up, sign-in, and recovery traffic."
+              title="CAPTCHA"
+            >
+              <DetailRow label="Status" value={status(policy.captcha.enabled)} />
+              <DetailRow label="Provider" value={captchaProviderLabel(captchaProvider)} />
+              <DetailRow label="Site key" value={policy.captcha.siteKey || tt('Not configured')} />
+              <DetailRow
+                label="Secret"
+                value={policy.captcha.secretConfigured ? tt('Configured') : tt('Not configured')}
+              />
+            </SecuritySectionBlock>
+            <SecuritySectionBlock
+              action={
+                <Button onClick={() => setEditor('blocklist')} variant="outline">
+                  <Pencil />
+                  {tt('Edit')}
+                </Button>
+              }
+              description="Reject disposable domains, specific addresses, and unwanted alias patterns."
+              title="Email blocklist"
+            >
+              <DetailRow label="Blocked entries" value={String(policy.blocklist.entries.length)} />
+              <DetailRow
+                label="Subaddressing"
+                value={policy.blocklist.blockSubaddressing ? tt('Blocked') : tt('Allowed')}
+              />
+            </SecuritySectionBlock>
+          </div>
+        </TabsContent>
+      </Tabs>
+      <SecurityEditorSheet
+        captchaProvider={captchaProvider}
+        editor={editor}
+        error={mutation.errorMessage}
+        onCaptchaProvider={setCaptchaProvider}
+        onClose={() => {
+          setCaptchaProvider(policy.captcha.provider)
+          setEditor(null)
+        }}
+        onSave={(input) => mutation.mutate(input)}
+        pending={mutation.isPending}
+        policy={policy}
+      />
     </ResourcePage>
   )
 }
-function MfaFactorSwitch({
-  checked,
-  description,
-  icon,
-  label,
-  onCheckedChange,
+
+export function MfaPage() {
+  return <SecurityPoliciesPage section="mfa" />
+}
+export function SecurityPasswordPolicyPage() {
+  return <SecurityPoliciesPage section="sign-in" />
+}
+export function SecurityCaptchaPage() {
+  return <SecurityPoliciesPage section="abuse" />
+}
+export function SecurityBlocklistPage() {
+  return <SecurityPoliciesPage section="abuse" />
+}
+export function SecurityGeneralPage() {
+  return <SecurityPoliciesPage section="sign-in" />
+}
+
+function SecurityEditorSheet({
+  captchaProvider,
+  editor,
+  error,
+  onCaptchaProvider,
+  onClose,
+  onSave,
+  pending,
+  policy,
 }: {
-  checked: boolean
+  captchaProvider: CaptchaProvider
+  editor: SecurityEditor
+  error?: string | null
+  onCaptchaProvider: (provider: CaptchaProvider) => void
+  onClose: () => void
+  onSave: (input: Parameters<typeof updateSecurityPolicy>[0]) => void
+  pending: boolean
+  policy: Awaited<ReturnType<typeof getSecurityPolicy>>['policy']
+}) {
+  const [passkeys, setPasskeys] = useState(policy.passkeys.enabled)
+  const [authenticator, setAuthenticator] = useState(policy.mfa.authenticatorAppEnabled ?? true)
+  const [emailOtp, setEmailOtp] = useState(policy.mfa.emailOtpEnabled ?? false)
+  const [backupCodes, setBackupCodes] = useState(policy.mfa.backupCodesEnabled ?? true)
+  const [mfaMode, setMfaMode] = useState(policy.mfa.mode)
+  const [rejectCustomWords, setRejectCustomWords] = useState(policy.password.rejectCustomWords)
+  const [captchaEnabled, setCaptchaEnabled] = useState(policy.captcha.enabled)
+  useEffect(() => {
+    if (editor === 'password') setRejectCustomWords(policy.password.rejectCustomWords)
+    if (editor === 'mfa') {
+      setPasskeys(policy.passkeys.enabled)
+      setAuthenticator(policy.mfa.authenticatorAppEnabled ?? true)
+      setEmailOtp(policy.mfa.emailOtpEnabled ?? false)
+      setBackupCodes(policy.mfa.backupCodesEnabled ?? true)
+      setMfaMode(policy.mfa.mode)
+    }
+    if (editor === 'captcha') setCaptchaEnabled(policy.captcha.enabled)
+  }, [editor, policy])
+  const formId = editor ? `security-${editor}` : undefined
+  const captchaSecretReusable = policy.captcha.secretConfigured && captchaProvider === policy.captcha.provider
+  return (
+    <Sheet
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+      open={editor !== null}
+    >
+      <SheetContent className="h-full overflow-hidden sm:max-w-xl">
+        <SheetHeader className="shrink-0">
+          <SheetTitle>{tt(editorTitle(editor))}</SheetTitle>
+          <SheetDescription>{tt(editorDescription(editor))}</SheetDescription>
+        </SheetHeader>
+        {editor === 'password' ? (
+          <form
+            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            id={formId}
+            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault()
+              const form = new FormData(event.currentTarget)
+              onSave({
+                policy: {
+                  password: {
+                    minLength: Number(form.get('minLength')),
+                    requiredCharacterTypes: Number(form.get('requiredCharacterTypes')),
+                    rejectUserInfo: form.get('rejectUserInfo') === 'on',
+                    rejectSequential: form.get('rejectSequential') === 'on',
+                    rejectCustomWords,
+                    customWords: lines(String(form.get('customWords') ?? '')),
+                  },
+                },
+              })
+            }}
+          >
+            <Field label={tt('Minimum length')}>
+              <TextInput
+                defaultValue={String(policy.password.minLength)}
+                max={128}
+                min={8}
+                name="minLength"
+                required
+                type="number"
+              />
+            </Field>
+            <Field label={tt('Required character types')}>
+              <SelectInput defaultValue={String(policy.password.requiredCharacterTypes)} name="requiredCharacterTypes">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </SelectInput>
+            </Field>
+            <SwitchField
+              defaultChecked={policy.password.rejectUserInfo}
+              label="Reject user information"
+              name="rejectUserInfo"
+            />
+            <SwitchField
+              defaultChecked={policy.password.rejectSequential}
+              label="Reject repetitive or sequential characters"
+              name="rejectSequential"
+            />
+            <ControlledSwitch checked={rejectCustomWords} label="Reject custom words" onChange={setRejectCustomWords} />
+            <Field
+              help={
+                rejectCustomWords
+                  ? tt('One blocked word per line.')
+                  : tt('Enable custom word rejection to edit this list.')
+              }
+              label={tt('Custom words')}
+            >
+              <TextArea
+                defaultValue={policy.password.customWords.join('\n')}
+                disabled={!rejectCustomWords}
+                name="customWords"
+                rows={5}
+              />
+            </Field>
+          </form>
+        ) : null}
+        {editor === 'sessions' ? (
+          <form
+            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            id={formId}
+            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault()
+              const form = new FormData(event.currentTarget)
+              onSave({
+                policy: {
+                  sessions: {
+                    expiresInSeconds: Number(form.get('expiresInSeconds')),
+                    updateAgeSeconds: Number(form.get('updateAgeSeconds')),
+                    freshAgeSeconds: Number(form.get('freshAgeSeconds')),
+                    cookieCacheSeconds: Number(form.get('cookieCacheSeconds')),
+                  },
+                },
+              })
+            }}
+          >
+            <DurationSelect
+              label="Session lifetime"
+              name="expiresInSeconds"
+              value={policy.sessions.expiresInSeconds}
+              options={sessionLifetimeOptions}
+            />
+            <DurationSelect
+              label="Refresh interval"
+              name="updateAgeSeconds"
+              value={policy.sessions.updateAgeSeconds}
+              options={refreshIntervalOptions}
+            />
+            <DurationSelect
+              label="Fresh authentication window"
+              name="freshAgeSeconds"
+              value={policy.sessions.freshAgeSeconds}
+              options={freshWindowOptions}
+            />
+            <DurationSelect
+              label="Cookie cache"
+              name="cookieCacheSeconds"
+              value={policy.sessions.cookieCacheSeconds}
+              options={cookieCacheOptions}
+            />
+          </form>
+        ) : null}
+        {editor === 'mfa' ? (
+          <form
+            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            id={formId}
+            onSubmit={(event) => {
+              event.preventDefault()
+              onSave({
+                policy: {
+                  mfa: {
+                    mode: mfaMode,
+                    authenticatorAppEnabled: authenticator,
+                    emailOtpEnabled: emailOtp,
+                    backupCodesEnabled: backupCodes,
+                  },
+                  passkeys: { enabled: passkeys },
+                },
+              })
+            }}
+          >
+            <Field label={tt('Prompt policy')}>
+              <SelectInput
+                name="mfaMode"
+                onChange={(event) => setMfaMode(event.target.value as 'optional' | 'required')}
+                value={mfaMode}
+              >
+                <option value="optional">{tt('Optional')}</option>
+                <option value="required">{tt('Required')}</option>
+              </SelectInput>
+            </Field>
+            <ControlledSwitch checked={passkeys} label="Passkey" onChange={setPasskeys} />
+            <ControlledSwitch checked={authenticator} label="Authenticator app" onChange={setAuthenticator} />
+            <ControlledSwitch checked={emailOtp} label="Email verification code" onChange={setEmailOtp} />
+            <ControlledSwitch checked={backupCodes} label="Backup codes" onChange={setBackupCodes} />
+          </form>
+        ) : null}
+        {editor === 'captcha' ? (
+          <form
+            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            id={formId}
+            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault()
+              const form = new FormData(event.currentTarget)
+              const secretKey = String(form.get('secret') ?? '').trim()
+              onSave({
+                policy: {
+                  captcha: {
+                    enabled: captchaEnabled,
+                    provider: captchaProvider,
+                    siteKey: String(form.get('siteKey') ?? ''),
+                    projectId: captchaProvider === 'recaptcha-enterprise' ? String(form.get('projectId') ?? '') : null,
+                    ...(secretKey ? { secretKey } : {}),
+                  },
+                },
+              })
+            }}
+          >
+            <ControlledSwitch checked={captchaEnabled} label="Enable CAPTCHA" onChange={setCaptchaEnabled} />
+            <Field label={tt('Provider')}>
+              <SelectInput
+                name="captchaProvider"
+                onChange={(event) => onCaptchaProvider(event.target.value as CaptchaProvider)}
+                value={captchaProvider}
+              >
+                <option value="turnstile">Cloudflare Turnstile</option>
+                <option value="hcaptcha">hCaptcha</option>
+                <option value="recaptcha-enterprise">reCAPTCHA Enterprise</option>
+              </SelectInput>
+            </Field>
+            {captchaProvider === 'recaptcha-enterprise' ? (
+              <Field label={tt('Project ID')}>
+                <TextInput defaultValue={policy.captcha.projectId ?? ''} name="projectId" required={captchaEnabled} />
+              </Field>
+            ) : null}
+            <Field label={tt('Site key')}>
+              <TextInput defaultValue={policy.captcha.siteKey} name="siteKey" required={captchaEnabled} />
+            </Field>
+            <Field label={captchaProvider === 'recaptcha-enterprise' ? tt('API key') : tt('Secret key')}>
+              <TextInput
+                autoComplete="new-password"
+                name="secret"
+                placeholder={captchaSecretReusable ? tt('Leave blank to keep the current key') : undefined}
+                required={captchaEnabled && !captchaSecretReusable}
+                type="password"
+              />
+            </Field>
+          </form>
+        ) : null}
+        {editor === 'blocklist' ? (
+          <form
+            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            id={formId}
+            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault()
+              const form = new FormData(event.currentTarget)
+              onSave({
+                policy: {
+                  blocklist: {
+                    blockSubaddressing: form.get('blockSubaddressing') === 'on',
+                    entries: lines(String(form.get('entries') ?? '')),
+                  },
+                },
+              })
+            }}
+          >
+            <SwitchField
+              defaultChecked={policy.blocklist.blockSubaddressing}
+              label="Block email subaddressing"
+              name="blockSubaddressing"
+            />
+            <Field help={tt('One email address or bare domain per line.')} label={tt('Blocked addresses and domains')}>
+              <TextArea defaultValue={policy.blocklist.entries.join('\n')} name="entries" rows={8} />
+            </Field>
+          </form>
+        ) : null}
+        {error ? (
+          <p className="px-4 text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <SheetFooter className="shrink-0">
+          <Button onClick={onClose} variant="outline">
+            {tt('Cancel')}
+          </Button>
+          <Button disabled={pending} form={formId} type="submit">
+            {pending ? tt('Saving…') : tt('Save changes')}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function SecuritySectionBlock({
+  action,
+  children,
+  description,
+  title,
+}: {
+  action?: ReactNode
+  children: ReactNode
   description: string
-  icon: ReactNode
-  label: string
-  onCheckedChange: (checked: boolean) => void
+  title: string
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-md border border-border p-3">
-      <div
-        aria-hidden="true"
-        className="grid size-9 shrink-0 place-items-center rounded-md border border-border bg-muted text-primary"
-      >
-        {icon}
+    <section className="detailSection">
+      <header>
+        <div>
+          <h2>{tt(title)}</h2>
+          <p>{tt(description)}</p>
+        </div>
+        {action}
+      </header>
+      <div className="detailFlatRows">{children}</div>
+    </section>
+  )
+}
+function DetailRow({
+  action,
+  description,
+  label,
+  value,
+}: {
+  action?: ReactNode
+  description?: string
+  label: string
+  value: ReactNode
+}) {
+  return (
+    <div className="detailFlatRow">
+      <div>
+        <strong>{tt(label)}</strong>
+        {description ? <span>{tt(description)}</span> : null}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold leading-5">{label}</div>
-        <p className="m-0 text-sm leading-5 text-muted-foreground">{description}</p>
-      </div>
-      <Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} />
+      <span>{value}</span>
+      {action ?? <i />}
     </div>
   )
 }
-export function SecurityPasswordPolicyPage() {
-  return <SignInSettingsPage />
-}
-export function SecurityCaptchaPage() {
-  const query = useQuery({
-    queryKey: consoleQueryKeys.security,
-    queryFn: getSecurityPolicy,
-  })
-  const queryClient = useQueryClient()
-  const [enabled, setEnabled] = useState(false)
-  const [siteKey, setSiteKey] = useState('')
-  const [secretBinding, setSecretBinding] = useState('')
-  const updateMutation = useMutation({
-    mutationFn: () =>
-      updateSecurityPolicy({
-        policy: {
-          captcha: {
-            enabled,
-            provider: 'turnstile',
-            siteKey,
-            secretBinding,
-          },
-        },
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.security,
-      })
-    },
-  })
-  useEffect(() => {
-    if (!query.data) return
-    setEnabled(query.data.policy.captcha.enabled)
-    setSiteKey(query.data.policy.captcha.siteKey)
-    setSecretBinding(query.data.policy.captcha.secretBinding)
-  }, [query.data])
-  const loadedPolicy = query.data
-    ? {
-        enabled: query.data.policy.captcha.enabled,
-        siteKey: query.data.policy.captcha.siteKey,
-        secretBinding: query.data.policy.captcha.secretBinding,
-      }
-    : null
-  const hasChanges = loadedPolicy
-    ? !shallowEqual(
-        {
-          enabled,
-          siteKey,
-          secretBinding,
-        },
-        loadedPolicy,
-      )
-    : false
+function FactorRow({ enabled, icon, label, note }: { enabled: boolean; icon: ReactNode; label: string; note: string }) {
   return (
-    <ResourcePage
-      title={tt('CAPTCHA')}
-      description={tt('Review CAPTCHA provider setup for hosted sign-up, sign-in, and password recovery flows.')}
-      error={query.error}
-      framed={false}
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
-    >
-      <SecuritySectionTabs active="captcha" />
-      {query.data ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            updateMutation.mutate()
-          }}
-        >
-          <SettingsSections>
-            <SettingsSection
-              title={tt('Provider setup')}
-              description={tt('Configure Turnstile verification for hosted flows.')}
-            >
-              <div className="grid gap-4">
-                <SwitchRow checked={enabled} label={tt('Enable CAPTCHA')} onCheckedChange={setEnabled} />
-                <Field label={tt('Provider')}>
-                  <SelectInput aria-label={tt('Provider')} onChange={() => undefined} value="turnstile">
-                    <option value="turnstile">{tt('Turnstile')}</option>
-                  </SelectInput>
-                </Field>
-                <Field label={tt('Site key')}>
-                  <TextInput
-                    aria-label={tt('Site key')}
-                    onChange={(event) => setSiteKey(event.target.value)}
-                    value={siteKey}
-                  />
-                </Field>
-                <Field label={tt('Client secret')}>
-                  <TextInput
-                    aria-label={tt('Client secret')}
-                    onChange={(event) => setSecretBinding(event.target.value)}
-                    placeholder={tt('TURNSTILE_SECRET')}
-                    value={secretBinding}
-                  />
-                </Field>
-              </div>
-            </SettingsSection>
-            <ChangesSection
-              description={tt('Save or reset CAPTCHA policy changes.')}
-              error={<MutationError error={updateMutation.error} />}
-              onDiscard={() => {
-                if (!loadedPolicy) return
-                setEnabled(loadedPolicy.enabled)
-                setSiteKey(loadedPolicy.siteKey)
-                setSecretBinding(loadedPolicy.secretBinding)
-              }}
-              pending={updateMutation.isPending}
-              saveLabel="Save changes"
-              visible={hasChanges}
-            />
-          </SettingsSections>
-        </form>
-      ) : null}
-    </ResourcePage>
+    <div className="detailFlatRow">
+      <div className="flex !grid-cols-none items-start gap-3">
+        <span className="mt-0.5 text-primary">{icon}</span>
+        <span>
+          <strong className="block">{tt(label)}</strong>
+          <small className="text-muted-foreground">{tt(note)}</small>
+        </span>
+      </div>
+      <span>
+        <Badge variant={enabled ? 'secondary' : 'outline'}>{enabled ? tt('Available') : tt('Disabled')}</Badge>
+      </span>
+      <i />
+    </div>
   )
 }
-export function SecurityBlocklistPage() {
-  const query = useQuery({
-    queryKey: consoleQueryKeys.security,
-    queryFn: getSecurityPolicy,
-  })
-  const queryClient = useQueryClient()
-  const [blockSubaddressing, setBlockSubaddressing] = useState(false)
-  const [entries, setEntries] = useState('')
-  const updateMutation = useMutation({
-    mutationFn: () =>
-      updateSecurityPolicy({
-        policy: {
-          blocklist: {
-            blockSubaddressing,
-            entries: lines(entries),
-          },
-        },
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.security,
-      })
-    },
-  })
-  useEffect(() => {
-    if (!query.data) return
-    setBlockSubaddressing(query.data.policy.blocklist.blockSubaddressing)
-    setEntries(query.data.policy.blocklist.entries.join('\n'))
-  }, [query.data])
-  const loadedPolicy = query.data
-    ? {
-        blockSubaddressing: query.data.policy.blocklist.blockSubaddressing,
-        entries: query.data.policy.blocklist.entries.join('\n'),
-      }
-    : null
-  const hasChanges = loadedPolicy
-    ? !shallowEqual(
-        {
-          blockSubaddressing,
-          entries,
-        },
-        loadedPolicy,
-      )
-    : false
+function ControlledSwitch({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean
+  label: string
+  onChange: (checked: boolean) => void
+}) {
   return (
-    <ResourcePage
-      title={tt('Blocklist')}
-      description={tt('Review sign-up blocklist settings for email aliases, addresses, and domains.')}
-      error={query.error}
-      framed={false}
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
-    >
-      <SecuritySectionTabs active="blocklist" />
-      {query.data ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            updateMutation.mutate()
-          }}
-        >
-          <SettingsSections>
-            <SettingsSection title={tt('Email blocklist')} description={tt('Persist blocked email and domain rules.')}>
-              <div className="grid gap-4">
-                <SwitchRow
-                  checked={blockSubaddressing}
-                  label={tt('Block email subaddressing')}
-                  onCheckedChange={setBlockSubaddressing}
-                />
-                <Field
-                  label={tt('Custom email and domain blocklist')}
-                  help={tt('One email address or domain per line.')}
-                >
-                  <TextArea
-                    aria-label={tt('Custom email and domain blocklist')}
-                    onChange={(event) => setEntries(event.target.value)}
-                    placeholder={tt('blocked@example.com\nexample.org')}
-                    value={entries}
-                  />
-                </Field>
-              </div>
-            </SettingsSection>
-            <ChangesSection
-              description={tt('Save or reset blocklist changes.')}
-              error={<MutationError error={updateMutation.error} />}
-              onDiscard={() => {
-                if (!loadedPolicy) return
-                setBlockSubaddressing(loadedPolicy.blockSubaddressing)
-                setEntries(loadedPolicy.entries)
-              }}
-              pending={updateMutation.isPending}
-              saveLabel="Save changes"
-              visible={hasChanges}
-            />
-          </SettingsSections>
-        </form>
-      ) : null}
-    </ResourcePage>
+    <div className="flex items-center justify-between gap-4 text-sm">
+      <span>{tt(label)}</span>
+      <Switch aria-label={tt(label)} checked={checked} onCheckedChange={onChange} />
+    </div>
   )
 }
-export function SecurityGeneralPage() {
-  const query = useQuery({
-    queryKey: consoleQueryKeys.security,
-    queryFn: getSecurityPolicy,
-  })
+function SwitchField({ defaultChecked, label, name }: { defaultChecked: boolean; label: string; name: string }) {
   return (
-    <ResourcePage
-      title={tt('General security')}
-      description={tt('Review general protections tied to current deployment security policy.')}
-      error={query.error}
-      framed={false}
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
-    >
-      <SecuritySectionTabs active="general" />
-      {query.data ? (
-        <SettingsSections>
-          <SettingsSection
-            title={tt('Protection')}
-            description={tt('Tenant sign-in protections from persisted policy.')}
-          >
-            <div className="grid gap-3">
-              <SettingRow label={tt('MFA enforcement')} value={query.data.policy.mfa.mode} />
-              <SettingRow label={tt('Passkeys')} value={query.data.policy.passkeys.enabled ? 'Enabled' : 'Disabled'} />
-              <SettingRow
-                label={tt('CAPTCHA')}
-                value={query.data.policy.captcha.enabled ? 'Enabled for hosted flows' : 'Disabled'}
-              />
-              <SettingRow
-                label={tt('Email blocklist entries')}
-                value={String(query.data.policy.blocklist.entries.length)}
-              />
-              <SettingRow label={tt('Password minimum')} value={`${query.data.policy.password.minLength} characters`} />
-            </div>
-          </SettingsSection>
-          <SettingsSection
-            title={tt('Session policy')}
-            description={tt('Session lifetime values currently active in runtime.')}
-          >
-            <div className="grid gap-3">
-              <SettingRow label={tt('Session TTL')} value={`${query.data.policy.sessions.expiresInSeconds}s`} />
-              <SettingRow label={tt('Fresh age')} value={`${query.data.policy.sessions.freshAgeSeconds}s`} />
-            </div>
-          </SettingsSection>
-          <SettingsSection
-            title={tt('Headers and cookies')}
-            description={tt('Runtime-managed browser protection settings.')}
-          >
-            <div className="grid gap-3">
-              <SettingRow label={tt('Security headers')} value="Managed by Worker middleware" />
-              <SettingRow label={tt('Cookie cache')} value={`${query.data.policy.sessions.cookieCacheSeconds}s`} />
-            </div>
-          </SettingsSection>
-        </SettingsSections>
-      ) : null}
-    </ResourcePage>
+    <div className="flex items-center justify-between gap-4 text-sm">
+      <span>{tt(label)}</span>
+      <Switch aria-label={tt(label)} defaultChecked={defaultChecked} name={name} />
+    </div>
+  )
+}
+function status(enabled: boolean) {
+  return <Badge variant={enabled ? 'secondary' : 'outline'}>{enabled ? tt('Enabled') : tt('Disabled')}</Badge>
+}
+function formatDuration(seconds: number) {
+  if (seconds === 0) return tt('Every request')
+  if (seconds >= 86400) return durationLabel(Math.round(seconds / 86400), 'day')
+  if (seconds >= 3600) return durationLabel(Math.round(seconds / 3600), 'hour')
+  return durationLabel(Math.round(seconds / 60), 'minute')
+}
+function durationLabel(count: number, unit: 'day' | 'hour' | 'minute') {
+  return `${count} ${unit}${count === 1 ? '' : 's'}`
+}
+function captchaProviderLabel(provider: CaptchaProvider) {
+  return { turnstile: 'Cloudflare Turnstile', hcaptcha: 'hCaptcha', 'recaptcha-enterprise': 'reCAPTCHA Enterprise' }[
+    provider
+  ]
+}
+function editorTitle(editor: SecurityEditor) {
+  return (
+    {
+      password: 'Edit password policy',
+      sessions: 'Edit session policy',
+      mfa: 'Edit MFA policy',
+      captcha: 'Configure CAPTCHA',
+      blocklist: 'Edit email blocklist',
+    } as Record<Exclude<SecurityEditor, null>, string>
+  )[editor ?? 'password']
+}
+function editorDescription(editor: SecurityEditor) {
+  return (
+    {
+      password: 'Set the minimum strength required by the built-in password connector.',
+      sessions: 'Set how long sessions remain valid and when authentication must be refreshed.',
+      mfa: 'Choose available factors and when Realmroot requires an additional factor.',
+      captcha: 'Choose a provider and supply the credentials required by its hosted challenge.',
+      blocklist: 'Reject known addresses, domains, and unwanted subaddress aliases.',
+    } as Record<Exclude<SecurityEditor, null>, string>
+  )[editor ?? 'password']
+}
+
+const sessionLifetimeOptions = [3600, 28800, 86400, 604800, 2592000, 7776000]
+const refreshIntervalOptions = [0, 900, 3600, 86400, 604800]
+const freshWindowOptions = [300, 900, 3600, 28800, 86400]
+const cookieCacheOptions = [60, 300, 900, 3600]
+
+function DurationSelect({
+  label,
+  name,
+  options,
+  value,
+}: {
+  label: string
+  name: string
+  options: number[]
+  value: number
+}) {
+  const values = options.includes(value) ? options : [value, ...options]
+  return (
+    <Field label={tt(label)}>
+      <SelectInput defaultValue={String(value)} name={name}>
+        {values.map((seconds) => (
+          <option key={seconds} value={seconds}>
+            {formatDuration(seconds)}
+          </option>
+        ))}
+      </SelectInput>
+    </Field>
   )
 }

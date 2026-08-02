@@ -1,0 +1,2 @@
+ALTER TABLE `webhook_endpoint` ADD `organization_id` text REFERENCES organization(id);--> statement-breakpoint
+CREATE INDEX `webhookEndpoint_organizationId_idx` ON `webhook_endpoint` (`organization_id`);

@@ -213,7 +213,15 @@ describe('AgentService', () => {
   it('normalizes and hashes the Agent approval code before persisting an approval', async () => {
     const repository = createAgentRepositoryMock()
     repository.decideApproval.mockResolvedValue('approved')
-    const deps = { agents: repository } as unknown as Deps
+    repository.listCapabilityGrantsForAgent.mockResolvedValue([
+      { agentId: 'agent-1', capability: 'applications:read', status: 'pending' },
+    ])
+    const agentAudit = { append: vi.fn() }
+    const deps = {
+      agents: repository,
+      agentIdentities: createAgentIdentityRepositoryMock(),
+      agentAudit,
+    } as unknown as Deps
 
     await expect(
       decideAgentApproval(
@@ -236,12 +244,30 @@ describe('AgentService', () => {
       userId: 'user-1',
       now: expect.any(Date),
     })
+    expect(agentAudit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'agent.capability_decided',
+        result: 'allowed',
+        controllerUserId: 'user-1',
+        agentIdentityId: 'agid-1',
+        hostId: 'host-1',
+        scopes: ['applications:read'],
+      }),
+    )
   })
 
   it('preserves a nonstandard Agent approval code shape and returns denial', async () => {
     const repository = createAgentRepositoryMock()
     repository.decideApproval.mockResolvedValue('denied')
-    const deps = { agents: repository } as unknown as Deps
+    repository.listCapabilityGrantsForAgent.mockResolvedValue([
+      { agentId: 'agent-2', capability: 'users:write', status: 'pending' },
+    ])
+    const agentAudit = { append: vi.fn() }
+    const deps = {
+      agents: repository,
+      agentIdentities: createAgentIdentityRepositoryMock(),
+      agentAudit,
+    } as unknown as Deps
 
     await expect(
       decideAgentApproval(
@@ -263,6 +289,9 @@ describe('AgentService', () => {
       userId: 'user-2',
       now: expect.any(Date),
     })
+    expect(agentAudit.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'agent.capability_decided', result: 'denied', scopes: ['users:write'] }),
+    )
   })
 
   it('declares account data capabilities and resource-scoped management permissions', () => {
@@ -305,6 +334,7 @@ function createAgentRepositoryMock() {
     listAgentsForUser: vi.fn(),
     listHostsForAgents: vi.fn(),
     listCapabilityGrantsForUser: vi.fn(),
+    listCapabilityGrantsForAgent: vi.fn().mockResolvedValue([]),
     decideApproval: vi.fn(),
     revokeAgentForUser: vi.fn(),
     revokeCapabilityGrantForUser: vi.fn(),
@@ -336,6 +366,7 @@ function createAgentIdentityRepositoryMock() {
       },
       bindings: [],
     }),
+    findProtocolAgent: vi.fn().mockResolvedValue({ hostId: 'host-1' }),
   }
 }
 

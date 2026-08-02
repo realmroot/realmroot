@@ -1,4 +1,11 @@
 export { AccountConnectionsPage } from './connections-page'
+export {
+  AccountAgentsPage,
+  AccountApplicationsPage,
+  AccountOrganizationDetailPage,
+  AccountOrganizationsPage,
+  AccountOverviewPage,
+} from './planned-pages'
 export { AccountProfilePage } from './profile-page'
 export { AccountSecurityPage } from './security-page'
 export {

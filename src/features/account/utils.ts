@@ -1,6 +1,14 @@
+import QRCode from 'qrcode'
 import { createSiweMessage } from 'viem/siwe'
 import { createPasskeyRegistrationOptions, linkWalletAddress, verifyPasskeyRegistration } from '@/lib/api/account'
 import { requestWalletNonce } from '@/lib/auth-client'
+
+export const accountTimeZoneStorageKey = 'realmroot.account.time-zone'
+
+const supportedTimeZones =
+  (Intl as typeof Intl & { supportedValuesOf?: (key: 'timeZone') => string[] }).supportedValuesOf?.('timeZone') ?? []
+
+export const accountTimeZones = ['UTC', ...supportedTimeZones.filter((timeZone) => timeZone !== 'UTC')]
 
 export type TotpEnrollmentDisplay = {
   qrCode: string | null
@@ -11,16 +19,40 @@ export type TotpEnrollmentDisplay = {
 
 export function readTotpEnrollment(value: unknown): TotpEnrollmentDisplay {
   const record = asRecord(value)
+  const otpAuthUri =
+    readString(record.otpAuthUri) ??
+    readString(record.otpAuthURI) ??
+    readString(record.totpURI) ??
+    readString(record.totpUri) ??
+    readString(record.uri)
   return {
     qrCode: readString(record.qrCode) ?? readString(record.qrCodeUrl) ?? readString(record.qr),
-    otpAuthUri:
-      readString(record.otpAuthUri) ??
-      readString(record.otpAuthURI) ??
-      readString(record.totpURI) ??
-      readString(record.totpUri) ??
-      readString(record.uri),
-    secret: readString(record.secret),
+    otpAuthUri,
+    secret: readString(record.secret) ?? readOtpAuthSecret(otpAuthUri),
     backupCodes: readStringArray(record.backupCodes),
+  }
+}
+
+function readOtpAuthSecret(uri: string | null) {
+  if (!uri) return null
+  try {
+    return readString(new URL(uri).searchParams.get('secret'))
+  } catch {
+    return null
+  }
+}
+
+export async function withTotpQrCode(enrollment: TotpEnrollmentDisplay): Promise<TotpEnrollmentDisplay> {
+  if (enrollment.qrCode || !enrollment.otpAuthUri) return enrollment
+  const svg = await QRCode.toString(enrollment.otpAuthUri, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    type: 'svg',
+    width: 192,
+  })
+  return {
+    ...enrollment,
+    qrCode: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
   }
 }
 
@@ -155,7 +187,22 @@ export function readRequiredString(value: unknown, field: string) {
 }
 
 export function formatDate(value: string | Date) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value))
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: readAccountTimeZone() }).format(
+    new Date(value),
+  )
+}
+
+export function readAccountTimeZone() {
+  const stored = window.localStorage.getItem(accountTimeZoneStorageKey)
+  if (stored && accountTimeZones.includes(stored)) return stored
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+}
+
+export function saveAccountTimeZone(timeZone: string) {
+  if (!accountTimeZones.includes(timeZone)) {
+    throw new Error('Unsupported time zone.')
+  }
+  window.localStorage.setItem(accountTimeZoneStorageKey, timeZone)
 }
 
 export function readRedirectUrl(response: unknown) {

@@ -155,11 +155,13 @@ describe('hosted auth pages 5', () => {
 
     render(<ConsentPage />)
 
-    expect(await screen.findByRole('heading', { name: 'Client App' })).toBeTruthy()
-    expect(screen.getByText('Signed in as')).toBeTruthy()
+    expect(
+      await screen.findByRole('heading', { name: 'Client App wants to access your Realmroot account' }),
+    ).toBeTruthy()
+    expect(screen.getByText('Continue as')).toBeTruthy()
     expect(screen.getByText('Jane Stone')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Switch account' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow' }))
 
     await waitFor(() => {
       expect(requests).toEqual([
@@ -200,6 +202,11 @@ describe('hosted auth pages 5', () => {
   })
 
   it('surfaces OAuth consent load and approval failures [spec: hosted-auth/oauth-consent-deny]', async () => {
+    window.history.pushState(
+      null,
+      '',
+      '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback',
+    )
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
@@ -209,10 +216,16 @@ describe('hosted auth pages 5', () => {
     render(<ConsentPage />)
 
     expect(await screen.findByText('Consent request expired.')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe('/auth/sign-in')
+    expect(screen.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe(
+      '/auth/sign-in?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback',
+    )
     cleanup()
     vi.restoreAllMocks()
-    window.history.pushState(null, '', '/oauth/consent?client_id=client-1&state=state-1')
+    window.history.pushState(
+      null,
+      '',
+      '/oauth/consent?client_id=client-1&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state-1',
+    )
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url.startsWith('/api/configz')) return Promise.resolve(jsonResponse(configz))
@@ -239,19 +252,15 @@ describe('hosted auth pages 5', () => {
     })
     render(<ConsentPage />)
 
-    expect(await screen.findByText('OAuth client application')).toBeTruthy()
-    expect(document.querySelector('.applicationSummary img')?.getAttribute('width')).toBe('44')
-    expect(document.querySelector('.applicationSummary img')?.getAttribute('height')).toBe('44')
+    expect(await screen.findByText('Third-party application')).toBeTruthy()
     expect(document.querySelector('.consentAccount img')?.getAttribute('width')).toBe('40')
     expect(document.querySelector('.consentAccount img')?.getAttribute('height')).toBe('40')
     expect(screen.getByText('Share your email address and verification state.')).toBeTruthy()
     expect(screen.getByText('Allow refresh tokens for continued access.')).toBeTruthy()
     expect(screen.getByText('Allow this application to request this scope.')).toBeTruthy()
     expect(screen.getByText(/Previously approved on/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Deny' }).getAttribute('href')).toBe(
-      'https://client.example.com/callback?error=access_denied&state=state-1',
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Allow' }))
 
     expect(await screen.findByText('Consent approval failed.')).toBeTruthy()
   })
@@ -284,6 +293,7 @@ describe('hosted auth pages 5', () => {
 
     fireEvent.change(await screen.findByLabelText('One-time code'), { target: { value: '123456' } })
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password' } })
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'new-password' } })
     expect(document.querySelector('input[autocomplete="username"]')).toHaveProperty('value', 'jane@example.com')
     expect(screen.getByLabelText('New password').getAttribute('autocomplete')).toBe('new-password')
     fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
@@ -294,6 +304,8 @@ describe('hosted auth pages 5', () => {
         body: { email: 'jane@example.com', otp: '123456', password: 'new-password' },
       })
     })
+    expect(await screen.findByRole('heading', { name: 'Password reset.' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Continue to sign in' }).getAttribute('href')).toBe('/auth/sign-in')
   })
 
   it('creates accounts through native sign-up and removes password fields after success [spec: hosted-auth/sign-up]', async () => {
@@ -328,7 +340,9 @@ describe('hosted auth pages 5', () => {
         },
       })
     })
-    expect(await screen.findByText('Account created. Check your email if verification is required.')).toBeTruthy()
+    expect(
+      await screen.findByText('We sent a verification message to jane@example.com. Verify your address, then sign in.'),
+    ).toBeTruthy()
     expect(screen.queryByLabelText('Password')).toBeNull()
   })
 

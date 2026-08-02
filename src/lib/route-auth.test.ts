@@ -61,8 +61,30 @@ describe('loadAccountProfile', () => {
 
 describe('requireAccountProfile', () => {
   it('returns the profile when authenticated', async () => {
-    server.use(http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: { role: 'user' } })))
+    server.use(
+      http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: { role: 'user' } })),
+      http.get(`${base}/api/account/security`, () =>
+        HttpResponse.json({ security: { mfa: { enabled: false }, policy: { mfa: { mode: 'optional' } } } }),
+      ),
+    )
     expect(await requireAccountProfile('/profile')).toEqual({ user: { role: 'user' } })
+  })
+
+  it('redirects an unenrolled user to Account Security when MFA is required', async () => {
+    server.use(
+      http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: { role: 'user' } })),
+      http.get(`${base}/api/account/security`, () =>
+        HttpResponse.json({ security: { mfa: { enabled: false }, policy: { mfa: { mode: 'required' } } } }),
+      ),
+    )
+
+    try {
+      await requireAccountProfile('/console')
+      expect.unreachable('should have redirected to enrollment')
+    } catch (error) {
+      const redirectResponse = error as Response & { options: { href?: string } }
+      expect(redirectResponse.options.href).toBe('/security')
+    }
   })
 
   it('redirects to hosted sign-in with the return path when unauthenticated', async () => {

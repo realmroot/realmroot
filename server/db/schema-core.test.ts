@@ -11,13 +11,11 @@ import {
   agentHost,
   agentIdentity,
   agentIdentityBinding,
-  agentRoleAssignment,
   apiResource,
   application,
   applicationClientMetadata,
   applicationClientSecret,
   applicationConsent,
-  applicationRoleAssignment,
   approvalRequest,
   brandingSetting,
   customDomain,
@@ -29,7 +27,6 @@ import {
   invitation,
   jwks,
   member,
-  memberRoleAssignment,
   oauthAccessToken,
   oauthClient,
   oauthConsent,
@@ -39,13 +36,13 @@ import {
   resourceAccountConnection,
   resourceConnectionIntent,
   role,
-  roleScope,
+  roleAssignment,
+  rolePermission,
   session,
   signInExperience,
   twoFactor,
   uploadedAsset,
   user,
-  userRoleAssignment,
   verification,
   webhookDeliveryRequest,
   webhookEndpoint,
@@ -116,24 +113,18 @@ describe('schema.test 1', () => {
     )
   })
 
-  it('models resource authorization and subject-specific role assignments explicitly', () => {
-    expect(indexNames(roleScope)).toEqual(expect.arrayContaining(['roleScope_roleId_scope_unique']))
-    expect(indexNames(agentRoleAssignment)).toEqual(
-      expect.arrayContaining(['agentRoleAssignment_roleId_agentIdentityId_unique']),
+  it('models Realm roles with resource-qualified permissions and contextual assignments', () => {
+    expect(indexNames(rolePermission)).toEqual(
+      expect.arrayContaining(['rolePermission_roleId_resourceId_scope_unique', 'rolePermission_resourceId_idx']),
     )
-
-    expect(indexNames(userRoleAssignment)).toEqual(expect.arrayContaining(['userRoleAssignment_roleId_userId_unique']))
-    expect(indexNames(applicationRoleAssignment)).toEqual(
-      expect.arrayContaining(['applicationRoleAssignment_roleId_applicationId_unique']),
+    expect(indexNames(roleAssignment)).toEqual(
+      expect.arrayContaining(['roleAssignment_realm_unique', 'roleAssignment_organization_unique']),
     )
-    expect(indexNames(memberRoleAssignment)).toEqual(
-      expect.arrayContaining(['memberRoleAssignment_roleId_memberId_unique']),
-    )
-    expect(foreignKeyReferences(memberRoleAssignment)).toContainEqual({
-      columns: ['member_id'],
+    expect(foreignKeyReferences(rolePermission)).toContainEqual({
+      columns: ['resource_id'],
       foreignColumns: ['id'],
-      foreignTable: 'member',
-      onDelete: 'cascade',
+      foreignTable: 'api_resource',
+      onDelete: 'restrict',
     })
   })
 
@@ -162,7 +153,15 @@ describe('schema.test 1', () => {
 
     expect(getTableConfig(twoFactor).name).toBe('two_factor')
     expect(columnNames(twoFactor)).toEqual(
-      expect.arrayContaining(['id', 'secret', 'backup_codes', 'user_id', 'verified']),
+      expect.arrayContaining([
+        'id',
+        'secret',
+        'backup_codes',
+        'user_id',
+        'verified',
+        'failed_verification_count',
+        'locked_until',
+      ]),
     )
     expect(indexNames(twoFactor)).toEqual(expect.arrayContaining(['twoFactor_secret_idx', 'twoFactor_userId_idx']))
     expect(foreignKeyReferences(twoFactor)).toContainEqual({
@@ -491,12 +490,9 @@ const _schemaTables = [
   member,
   invitation,
   apiResource,
-  roleScope,
-  agentRoleAssignment,
+  rolePermission,
+  roleAssignment,
   role,
-  userRoleAssignment,
-  applicationRoleAssignment,
-  memberRoleAssignment,
   application,
   applicationClientSecret,
   applicationClientMetadata,

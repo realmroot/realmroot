@@ -25,7 +25,7 @@ export function testSecurityPolicy(): SecurityPolicy {
       rejectSequential: false,
       rejectCustomWords: false,
     },
-    captcha: { enabled: false, provider: 'turnstile', siteKey: '', secretBinding: '' },
+    captcha: { enabled: false, provider: 'turnstile', siteKey: '', projectId: null, secretKey: '' },
     blocklist: { blockSubaddressing: false, entries: [] },
   } as SecurityPolicy
 }
@@ -49,6 +49,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       listAgentsForUser: vi.fn().mockResolvedValue(emptyPage()),
       listHostsForAgents: vi.fn().mockResolvedValue([]),
       listCapabilityGrantsForUser: vi.fn().mockResolvedValue([]),
+      listCapabilityGrantsForAgent: vi.fn().mockResolvedValue([]),
       decideApproval: vi.fn(),
       revokeAgentForUser: vi.fn().mockResolvedValue(undefined),
       revokeCapabilityGrantForUser: vi.fn().mockResolvedValue(undefined),
@@ -63,6 +64,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     agentIdentities: {
       listPersonal: vi.fn().mockResolvedValue([]),
       listOrganization: vi.fn().mockResolvedValue([]),
+      listOwnedByOrganizations: vi.fn().mockResolvedValue(emptyPage()),
       listAll: vi.fn().mockResolvedValue({ items: [], total: 0 }),
       findIdentity: vi.fn().mockResolvedValue(null),
       findByIssuerSubject: vi.fn().mockResolvedValue(null),
@@ -96,6 +98,11 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
         pagination: { limit: 20, offset: 0, total: 0, hasMore: false, nextOffset: null },
       }),
       rotateSecret: vi.fn(),
+      listAuthorizations: vi.fn().mockResolvedValue({
+        items: [],
+        pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+      }),
+      revokeAuthorization: vi.fn().mockResolvedValue(true),
       findConsent: vi.fn().mockResolvedValue(null),
       revokeConsent: vi.fn().mockResolvedValue(true),
       createConsent: vi.fn(),
@@ -109,15 +116,31 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       updateBrandingAsset: vi.fn(),
     },
     assetStorage: { put: vi.fn(), get: vi.fn().mockResolvedValue(null) },
-    authorization: {},
+    authorization: {
+      countEffectiveAgentRoles: vi.fn().mockResolvedValue(new Map()),
+      listAgentRoleAssignments: vi.fn().mockResolvedValue([]),
+      listUserMemberships: vi.fn().mockResolvedValue([]),
+      findOrganization: vi.fn().mockResolvedValue(null),
+      hasPendingInvitation: vi.fn().mockResolvedValue(false),
+    },
     configz: {
       getSettings: vi.fn().mockResolvedValue(null),
       getBranding: vi.fn().mockResolvedValue(null),
       getAccountCenterSettings: vi.fn().mockResolvedValue(null),
+      getDeveloperSettings: vi.fn().mockResolvedValue({
+        organizationCreation: 'admins_only',
+        approvedUserIds: [],
+        consoleAccess: 'realm_operators',
+        eligibleAccessLevels: ['owner', 'admin', 'developer'],
+        selectedOrganizationIds: [],
+      }),
+      getEmailSettings: vi.fn().mockResolvedValue(null),
       listEnabledIdentityProviders: vi.fn().mockResolvedValue([]),
       updateSettings: vi.fn(),
       updateBranding: vi.fn(),
       updateAccountCenterSettings: vi.fn(),
+      updateDeveloperSettings: vi.fn(),
+      updateEmailSettings: vi.fn(),
     },
     connectors: {
       list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -144,6 +167,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       findAccessRequest: vi.fn().mockResolvedValue(null),
       findAccessRequestByGrant: vi.fn().mockResolvedValue(null),
       findAccessRequestByApprovalTokenHash: vi.fn().mockResolvedValue(null),
+      listAccessRequestsByAgent: vi.fn().mockResolvedValue(emptyPage()),
       listPendingAccessRequestsByAgent: vi.fn().mockResolvedValue([]),
       listPendingAccessRequests: vi.fn().mockResolvedValue([]),
       decideAccessRequest: vi.fn().mockResolvedValue(null),
@@ -152,6 +176,7 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       createGrant: vi.fn().mockImplementation(async (input) => input),
       findGrant: vi.fn().mockResolvedValue(null),
       listActiveGrantsByAgent: vi.fn().mockResolvedValue([]),
+      summarizeAgentAccess: vi.fn().mockResolvedValue(new Map()),
       listActiveGrantsByConnection: vi.fn().mockResolvedValue([]),
       revokeGrant: vi.fn().mockResolvedValue(false),
       consumeGrant: vi.fn().mockResolvedValue(false),
@@ -200,7 +225,14 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
       revokeRefreshTokenFamily: vi.fn(),
     },
     users: {
-      getUser: vi.fn(),
+      getUser: vi.fn().mockImplementation((id: string) =>
+        Promise.resolve({
+          id,
+          email: `${id}@example.com`,
+          emailVerified: true,
+          role: 'user',
+        }),
+      ),
       listManagedUsers: vi.fn().mockResolvedValue(emptyPage()),
       createManagedUser: vi.fn(),
       updateManagedUser: vi.fn(),
@@ -223,17 +255,24 @@ export function createTestDeps(overrides: Partial<Record<keyof Deps, unknown>> =
     },
     webhooks: {
       listEndpoints: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+      listSubscribedEndpoints: vi.fn().mockResolvedValue([]),
       findEndpoint: vi.fn().mockResolvedValue(null),
       createEndpoint: vi.fn(),
       updateEndpoint: vi.fn(),
       deleteEndpoint: vi.fn(),
       listRequests: vi.fn().mockResolvedValue({ items: [], total: 0 }),
       findRequest: vi.fn().mockResolvedValue(null),
+      createRequest: vi.fn(),
       updateRequest: vi.fn(),
     },
     email: { send: vi.fn() },
     jwks: { fetchKeys: vi.fn() },
   }
 
-  return { ...base, ...overrides } as unknown as Deps
+  return Object.fromEntries(
+    Object.entries(base).map(([key, value]) => [
+      key,
+      { ...value, ...((overrides[key as keyof Deps] as object | undefined) ?? {}) },
+    ]),
+  ) as unknown as Deps
 }

@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { CustomizeJwtPage } from '@/features/console/extracted/deployment-misc/misc'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/customize-jwt')({
-  component: CustomizeJwtPage,
+  beforeLoad: () => {
+    throw redirect({ href: '/console/applications' })
+  },
 })

@@ -44,12 +44,13 @@ describe('admin console applications-list', () => {
     renderWithQuery(<ApplicationsPage />)
 
     expect(await screen.findByText('Customer portal')).toBeTruthy()
-    expect(screen.getByRole('tab', { name: 'My apps' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByRole('tab', { name: 'Third-party apps' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Application name' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Client ID' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Ownership' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Application' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Type' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Audience' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Updated' })).toBeTruthy()
+    expect(screen.getByText('client-1')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Search applications'), { target: { value: 'missing' } })
     expect(await screen.findByText('No applications found')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Search applications'), { target: { value: 'Customer' } })
@@ -71,16 +72,14 @@ describe('admin console applications-list', () => {
             slug: 'admin-console',
             clientType: 'confidential_web',
             firstParty: true,
+            ownerOrganizationId: 'org-1',
+            audience: { mode: 'realm', organizationIds: [], userIds: [] },
             allowedGrantTypes: ['authorization_code', 'refresh_token'],
             redirectUris: ['https://app.example.com/callback'],
           },
         },
       ])
     })
-
-    fireEvent.change(screen.getByLabelText('Search applications'), { target: { value: '' } })
-    fireEvent.click(screen.getByRole('tab', { name: 'Third-party apps' }))
-    expect(await screen.findByText('No applications in this tab')).toBeTruthy()
   })
 
   it('closes the application dialog and toggles application availability', async () => {
@@ -105,7 +104,7 @@ describe('admin console applications-list', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('heading', { name: 'Create application' })).toBeNull()
 
-    fireEvent.click(screen.getByLabelText('Actions for Customer portal'))
+    fireEvent.pointerDown(screen.getByLabelText('Actions for Customer portal'), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByText('Disable'))
 
     await waitFor(() => {
@@ -113,7 +112,7 @@ describe('admin console applications-list', () => {
     })
   })
 
-  it('toggles third-party application availability from its tab', async () => {
+  it('toggles third-party application availability from the unified list', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     const thirdPartyApplication = { ...application, id: 'app-2', name: 'Partner app', firstParty: false }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -130,9 +129,8 @@ describe('admin console applications-list', () => {
 
     renderWithQuery(<ApplicationsPage />)
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Third-party apps' }))
     expect(await screen.findByText('Partner app')).toBeTruthy()
-    fireEvent.click(screen.getByLabelText('Actions for Partner app'))
+    fireEvent.pointerDown(screen.getByLabelText('Actions for Partner app'), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByText('Disable'))
 
     await waitFor(() => {
@@ -197,6 +195,8 @@ describe('admin console applications-list', () => {
           slug: 'server-app',
           clientType: 'confidential_web',
           firstParty: true,
+          ownerOrganizationId: 'org-1',
+          audience: { mode: 'realm', organizationIds: [], userIds: [] },
           allowedGrantTypes: ['authorization_code', 'refresh_token'],
           redirectUris: ['https://server.example.com/callback'],
         },
@@ -262,7 +262,7 @@ describe('admin console applications-list', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByRole('button', { name: 'Saving...' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeTruthy()
     resolveCreate(jsonResponse(application, 201))
   })
 })

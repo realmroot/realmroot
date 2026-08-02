@@ -8,6 +8,7 @@ import {
   createPage,
   createSecurityRepositoryMock,
   createUserRepositoryMock,
+  managementSecurityPolicy,
   securityPolicy,
   updatedSecurityPolicy,
 } from './management.test-utils'
@@ -313,7 +314,8 @@ describe('management routes 2', () => {
           enabled: true,
           provider: 'turnstile',
           siteKey: 'site-key-1',
-          secretBinding: 'TURNSTILE_SECRET',
+          projectId: null,
+          secretKey: 'secret-1',
         },
         blocklist: {
           blockSubaddressing: true,
@@ -331,9 +333,10 @@ describe('management routes 2', () => {
 
     expect(current.status).toBe(200)
     expect(updated.status).toBe(200)
-    await expect(current.json()).resolves.toEqual({ policy: securityPolicy() })
-    await expect(updated.json()).resolves.toEqual({ policy: updatedSecurityPolicy() })
-    expect(security.getPolicy).toHaveBeenCalledTimes(3)
+    await expect(current.json()).resolves.toEqual({ policy: managementSecurityPolicy(securityPolicy()) })
+    await expect(updated.json()).resolves.toEqual({ policy: managementSecurityPolicy(updatedSecurityPolicy()) })
+    expect(security.getPolicy).toHaveBeenCalledTimes(4)
+    expect(security.getSecurityState).toHaveBeenCalledWith('admin-1')
     expect(security.updatePolicy).toHaveBeenCalledWith(body)
   })
 

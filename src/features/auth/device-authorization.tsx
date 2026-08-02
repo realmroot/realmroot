@@ -1,7 +1,7 @@
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { Field, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
-import { Field, TextInput } from '@/components/ui/field'
 import { Status } from '@/components/ui/status'
 import { approveDeviceCode, denyDeviceCode, verifyDeviceCode } from '@/lib/auth-client'
 
@@ -74,6 +74,7 @@ export function DeviceVerification({ mode, userCode: initialUserCode = '' }: Dev
         <Field label="Device code">
           <TextInput
             autoComplete="one-time-code"
+            name="device-code"
             autoFocus
             inputMode="text"
             maxLength={12}
@@ -91,33 +92,39 @@ export function DeviceVerification({ mode, userCode: initialUserCode = '' }: Dev
 
   return (
     <div className="grid gap-5">
-      <dl className="grid gap-3 rounded-md border border-border bg-card p-4 text-sm">
-        <div className="grid gap-1">
-          <dt className="font-medium text-muted-foreground">Code</dt>
-          <dd className="font-mono text-lg text-foreground">{verifiedCode || normalizedCode || 'Missing code'}</dd>
-        </div>
-      </dl>
+      {verifiedCode || normalizedCode ? (
+        <dl className="decisionFacts">
+          <div>
+            <dt>Code</dt>
+            <dd>{verifiedCode || normalizedCode}</dd>
+          </div>
+        </dl>
+      ) : (
+        <Status tone="warning">
+          Enter the device code shown by the requesting application before approving access.
+        </Status>
+      )}
 
       {error ? <Status tone="error">{error}</Status> : null}
       {message ? <Status tone="success">{message}</Status> : null}
 
-      <div className="flex flex-wrap gap-3">
+      <div className="decisionActions">
+        <Button
+          disabled={!verifiedCode || submitting || !!message}
+          onClick={() => void decide('deny')}
+          type="button"
+          variant="outline"
+        >
+          <XCircle aria-hidden="true" />
+          Deny
+        </Button>
         <Button
           disabled={!verifiedCode || submitting || !!message}
           onClick={() => void decide('approve')}
           type="button"
         >
           <CheckCircle2 aria-hidden="true" />
-          {submitting ? 'Approving...' : 'Approve'}
-        </Button>
-        <Button
-          disabled={!verifiedCode || submitting || !!message}
-          onClick={() => void decide('deny')}
-          type="button"
-          variant="danger"
-        >
-          <XCircle aria-hidden="true" />
-          Deny
+          {submitting ? 'Approving…' : 'Approve'}
         </Button>
       </div>
     </div>

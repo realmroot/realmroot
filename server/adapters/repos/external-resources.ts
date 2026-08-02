@@ -1,5 +1,5 @@
 import type { ExternalResourceRepository } from '@server/usecases/ports'
-import { and, eq, exists, gt, inArray, isNull, sql } from 'drizzle-orm'
+import { and, count, desc, eq, exists, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
@@ -202,6 +202,21 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row ?? null
     },
 
+    async listAccessRequestsByAgent(agentIdentityId, page) {
+      const condition = eq(agentAccessRequest.agentIdentityId, agentIdentityId)
+      const [items, totals] = await Promise.all([
+        db
+          .select()
+          .from(agentAccessRequest)
+          .where(condition)
+          .orderBy(desc(agentAccessRequest.createdAt))
+          .limit(page.limit)
+          .offset(page.offset),
+        db.select({ value: count() }).from(agentAccessRequest).where(condition),
+      ])
+      return { items, total: totals[0]?.value ?? 0, ...page }
+    },
+
     async listPendingAccessRequestsByAgent(agentIdentityId, now) {
       return db
         .select()
@@ -307,6 +322,40 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .from(agentAccessGrant)
         .where(and(eq(agentAccessGrant.agentIdentityId, agentIdentityId), eq(agentAccessGrant.status, 'active')))
         .orderBy(agentAccessGrant.createdAt)
+    },
+
+    async summarizeAgentAccess(agentIdentityIds, now) {
+      if (agentIdentityIds.length === 0) return new Map()
+      const [requests, grants] = await Promise.all([
+        db
+          .select({ agentIdentityId: agentAccessRequest.agentIdentityId, value: count() })
+          .from(agentAccessRequest)
+          .where(
+            and(
+              inArray(agentAccessRequest.agentIdentityId, agentIdentityIds),
+              eq(agentAccessRequest.status, 'pending'),
+              gt(agentAccessRequest.expiresAt, now),
+            ),
+          )
+          .groupBy(agentAccessRequest.agentIdentityId),
+        db
+          .select({ agentIdentityId: agentAccessGrant.agentIdentityId, value: count() })
+          .from(agentAccessGrant)
+          .where(
+            and(
+              inArray(agentAccessGrant.agentIdentityId, agentIdentityIds),
+              eq(agentAccessGrant.status, 'active'),
+              or(isNull(agentAccessGrant.expiresAt), gt(agentAccessGrant.expiresAt, now)),
+            ),
+          )
+          .groupBy(agentAccessGrant.agentIdentityId),
+      ])
+      const summaries = new Map(
+        agentIdentityIds.map((agentIdentityId) => [agentIdentityId, { pendingRequestCount: 0, activeGrantCount: 0 }]),
+      )
+      for (const row of requests) summaries.get(row.agentIdentityId)!.pendingRequestCount = row.value
+      for (const row of grants) summaries.get(row.agentIdentityId)!.activeGrantCount = row.value
+      return summaries
     },
 
     async listActiveGrantsByConnection(connectionId) {

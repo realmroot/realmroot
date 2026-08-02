@@ -443,6 +443,34 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     return this.consents.get(consentKey(applicationId, userId)) ?? null
   }
 
+  async listAuthorizations(applicationId: string, pagination: { limit: number; offset: number }) {
+    const authorizations = [...this.consents.entries()]
+      .filter(([key]) => key.startsWith(`${applicationId}:`))
+      .map(([key, consent]) => ({
+        ...consent,
+        userId: key.slice(applicationId.length + 1),
+        userDisplayName: 'Test user',
+        userEmail: 'user@example.com',
+        organizationId: null,
+        organizationName: null,
+        permissions: [],
+        expiresAt: null,
+      }))
+    return {
+      items: authorizations.slice(pagination.offset, pagination.offset + pagination.limit),
+      pagination: toPaginationMetadata(pagination, authorizations.length),
+    }
+  }
+
+  async revokeAuthorization(applicationId: string, authorizationId: string) {
+    const entry = [...this.consents.entries()].find(
+      ([key, consent]) => key.startsWith(`${applicationId}:`) && consent.id === authorizationId,
+    )
+    if (!entry) return false
+    this.consents.delete(entry[0])
+    return true
+  }
+
   async revokeConsent(consentId: string, userId: string) {
     const entry = [...this.consents.entries()].find(
       ([key, consent]) => key.endsWith(`:${userId}`) && consent.id === consentId,

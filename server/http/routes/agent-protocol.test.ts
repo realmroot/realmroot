@@ -99,6 +99,64 @@ describe('Agent protocol routes', () => {
     )
   })
 
+  it('creates and exposes an additional-host enrollment [spec: agent-identity/agent-multi-host-continuity]', async () => {
+    const now = new Date('2026-08-01T00:00:00.000Z')
+    const intent = {
+      id: 'enrollment-1',
+      agentIdentityId: 'identity-1',
+      requestedName: null,
+      homeSpace: { type: 'personal' as const, userId: 'user-1' },
+      protocolAgentId: 'protocol-agent-1',
+      status: 'pending' as const,
+      expiresAt: new Date('2026-08-01T00:10:00.000Z'),
+      approvedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const enrollment = {
+      id: 'enrollment-1',
+      agentId: 'identity-1',
+      name: 'Build Agent',
+      kind: 'additional_host' as const,
+      homeSpace: { type: 'personal' as const, userId: 'user-1' },
+      status: 'pending' as const,
+      expiresAt: '2026-08-01T00:10:00.000Z',
+      decidedAt: null,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    }
+    const createEnrollment = vi
+      .spyOn(agentIdentities, 'createAdditionalAgentEnrollmentIntent')
+      .mockResolvedValue(intent)
+    vi.spyOn(agentIdentities, 'getPublicAgentEnrollment').mockResolvedValue(enrollment)
+    const readEnrollment = vi.spyOn(agentIdentities, 'getProtocolAgentEnrollment').mockResolvedValue(enrollment)
+    const app = createRouteApp(
+      { getAgentSession: vi.fn().mockResolvedValue(session()) },
+      'https://auth.example.com/api/auth',
+    )
+
+    const createResponse = await app.request('https://preview.example.net/api/agent/enrollments', {
+      method: 'POST',
+      headers: { authorization: 'Bearer agent-jwt', ...jsonHeaders() },
+      body: JSON.stringify({ agentId: 'identity-1' }),
+    })
+
+    expect(createResponse.status).toBe(201)
+    expect(createResponse.headers.get('location')).toBe('/api/agent/enrollments/enrollment-1')
+    await expect(createResponse.json()).resolves.toEqual({
+      enrollment,
+      verificationUri: 'https://auth.example.com/agent/enrollments/approve?intent_id=enrollment-1',
+    })
+    expect(createEnrollment).toHaveBeenCalledWith(expect.anything(), 'identity-1', 'protocol-agent-1', 'user-1')
+
+    const readResponse = await app.request('/api/agent/enrollments/enrollment-1', {
+      headers: { authorization: 'Bearer agent-jwt' },
+    })
+    expect(readResponse.status).toBe(200)
+    await expect(readResponse.json()).resolves.toEqual(enrollment)
+    expect(readEnrollment).toHaveBeenCalledWith(expect.anything(), 'enrollment-1', 'protocol-agent-1')
+  })
+
   it('uses the configured origin for hosted resource approval [spec: agent-identity/agent-stable-issuer]', async () => {
     const now = new Date('2026-08-01T00:00:00.000Z')
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue({

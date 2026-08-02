@@ -26,6 +26,7 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -37,6 +38,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   TextInput,
   Trash2,
   tt,
@@ -50,7 +55,7 @@ import {
 } from '../console-shared'
 import { ConfirmDialog } from '../helpers/helpers-create'
 import { StatusBadge } from '../helpers/helpers-dialogs'
-import { ResourcePage } from '../helpers/helpers-resource'
+import { ListToolbar, ResourcePage } from '../helpers/helpers-resource'
 import {
   connectorToForm,
   connectorUpdateForm,
@@ -87,7 +92,11 @@ export function ConnectorsPage() {
   })
   const queryClient = useQueryClient()
   const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(null)
+  const [selectedTab, setSelectedTab] = useState('builtin')
   const [deleteTarget, setDeleteTarget] = useState<ConnectorResponse | null>(null)
+  const [providerSearch, setProviderSearch] = useState('')
+  const [providerType, setProviderType] = useState('')
+  const [providerStatus, setProviderStatus] = useState('')
   const createMutation = useAdminMutation({
     mutationFn: createConnector,
     onSuccess: () => {
@@ -100,6 +109,17 @@ export function ConnectorsPage() {
   const connectors = query.data?.connectors ?? []
   const templates = templatesQuery.data?.templates ?? []
   const providerRows = connectorProviderRows(templates, connectors, signInQuery.data, securityQuery.data?.policy)
+  const visibleProviderRows = providerRows.filter((provider) => {
+    const query = providerSearch.trim().toLowerCase()
+    const matchesSearch =
+      !query ||
+      [provider.displayName, provider.providerId, provider.description].some((value) =>
+        value.toLowerCase().includes(query),
+      )
+    const matchesType = !providerType || provider.typeLabel === providerType
+    const matchesStatus = !providerStatus || (providerStatus === 'enabled' ? provider.enabled : !provider.enabled)
+    return matchesSearch && matchesType && matchesStatus
+  })
   const oidcConnectors = connectors.filter((connector) => connector.providerType === 'generic_oauth')
   const selectedOidc =
     selectedProviderKey?.startsWith('oidc:') && selectedProviderKey !== 'oidc:new'
@@ -151,8 +171,18 @@ export function ConnectorsPage() {
   })
   return (
     <ResourcePage
-      title={tt('Connectors')}
-      description={tt('Configure sign-in providers and platform-independent OAuth or API credential boundaries.')}
+      title={tt('Identity providers')}
+      description={tt(
+        'Configure built-in sign-in methods and reusable OIDC connections for authentication and external authorization.',
+      )}
+      action={
+        selectedTab === 'oidc' ? (
+          <Button onClick={() => setSelectedProviderKey('oidc:new')}>
+            <Plus />
+            {tt('Add OIDC connector')}
+          </Button>
+        ) : undefined
+      }
       error={query.error ?? templatesQuery.error ?? signInQuery.error ?? securityQuery.error}
       loading={query.isLoading || templatesQuery.isLoading || signInQuery.isLoading || securityQuery.isLoading}
       onRetry={() => {
@@ -162,102 +192,135 @@ export function ConnectorsPage() {
         void securityQuery.refetch()
       }}
     >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{tt('Provider')}</TableHead>
-            <TableHead>{tt('Type')}</TableHead>
-            <TableHead>{tt('Configuration')}</TableHead>
-            <TableHead>{tt('Provider')}</TableHead>
-            <TableHead>{tt('Status')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {providerRows.map((provider) => (
-            <TableRow
-              className="cursor-pointer"
-              key={provider.key}
-              onClick={() => setSelectedProviderKey(provider.key)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') setSelectedProviderKey(provider.key)
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <ProviderIcon provider={provider} />
-                  <div className="min-w-0">
-                    <div className="font-medium">{provider.displayName}</div>
-                    <div className="text-xs text-muted-foreground">{provider.description}</div>
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell>{provider.typeLabel}</TableCell>
-              <TableCell>{provider.configurationLabel}</TableCell>
-              <TableCell>{provider.providerId}</TableCell>
-              <TableCell>
-                <StatusBadge active={provider.enabled} activeLabel="Enabled" inactiveLabel="Not enabled" />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <div className="mt-8 flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold">{tt('OIDC connectors')}</h2>
-          <p className="text-sm text-muted-foreground">
-            {tt('Manage reusable OIDC clients for login and external API resources.')}
-          </p>
-        </div>
-        <Button onClick={() => setSelectedProviderKey('oidc:new')} type="button" variant="secondary">
-          <Plus data-icon="inline-start" /> {tt('Add OIDC connector')}
-        </Button>
-      </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{tt('Name')}</TableHead>
-            <TableHead>{tt('Issuer')}</TableHead>
-            <TableHead>{tt('Client ID')}</TableHead>
-            <TableHead>{tt('Login')}</TableHead>
-            <TableHead>{tt('Status')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {oidcConnectors.length ? (
-            oidcConnectors.map((connector) => (
-              <TableRow
-                className="cursor-pointer"
-                key={connector.id}
-                onClick={() => setSelectedProviderKey(`oidc:${connector.id}`)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') setSelectedProviderKey(`oidc:${connector.id}`)
-                }}
-                role="button"
-                tabIndex={0}
+      <Tabs onValueChange={setSelectedTab} value={selectedTab}>
+        <TabsList className="w-full justify-start px-4 pt-2" variant="line">
+          <TabsTrigger value="builtin">{tt('Builtin connectors')}</TabsTrigger>
+          <TabsTrigger value="oidc">{tt('OIDC connectors')}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="builtin">
+          <div className="p-4">
+            <ListToolbar>
+              <TextInput
+                aria-label={tt('Search providers')}
+                onChange={(event) => setProviderSearch(event.target.value)}
+                placeholder={tt('Search providers')}
+                value={providerSearch}
+              />
+              <SelectInput
+                aria-label={tt('Filter provider type')}
+                onChange={(event) => setProviderType(event.target.value)}
+                value={providerType}
               >
-                <TableCell>
-                  <div className="font-medium">{connector.displayName}</div>
-                  <div className="text-xs text-muted-foreground">{connector.providerId}</div>
-                </TableCell>
-                <TableCell>{connector.issuer}</TableCell>
-                <TableCell>{connector.clientId}</TableCell>
-                <TableCell>{connector.loginEnabled ? tt('Enabled') : tt('Disabled')}</TableCell>
-                <TableCell>
-                  <StatusBadge active={connector.enabled} activeLabel="Ready" inactiveLabel="Disabled" />
-                </TableCell>
+                <option value="">{tt('Any type')}</option>
+                <option value="Built-in">{tt('Built-in')}</option>
+                <option value="Social">{tt('Social')}</option>
+              </SelectInput>
+              <SelectInput
+                aria-label={tt('Filter provider status')}
+                onChange={(event) => setProviderStatus(event.target.value)}
+                value={providerStatus}
+              >
+                <option value="">{tt('Any status')}</option>
+                <option value="enabled">{tt('Enabled')}</option>
+                <option value="disabled">{tt('Not enabled')}</option>
+              </SelectInput>
+            </ListToolbar>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{tt('Provider')}</TableHead>
+                <TableHead>{tt('Type')}</TableHead>
+                <TableHead>{tt('Configuration')}</TableHead>
+                <TableHead>{tt('Status')}</TableHead>
               </TableRow>
-            ))
-          ) : (
-            <TableEmptyRow
-              colSpan={5}
-              description={tt('Add a standard OIDC client for hosted login or external API authorization.')}
-              title={tt('No OIDC connectors yet')}
-            />
-          )}
-        </TableBody>
-      </Table>
+            </TableHeader>
+            <TableBody>
+              {visibleProviderRows.length ? (
+                visibleProviderRows.map((provider) => (
+                  <TableRow
+                    className="cursor-pointer"
+                    key={provider.key}
+                    onClick={() => setSelectedProviderKey(provider.key)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') setSelectedProviderKey(provider.key)
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <ProviderIcon provider={provider} />
+                        <div className="min-w-0">
+                          <div className="font-medium">{provider.displayName}</div>
+                          <div className="font-mono text-xs text-muted-foreground">{provider.providerId}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{provider.typeLabel}</TableCell>
+                    <TableCell>{provider.configurationLabel}</TableCell>
+                    <TableCell>
+                      <StatusBadge active={provider.enabled} activeLabel="Enabled" inactiveLabel="Not enabled" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableEmptyRow
+                  colSpan={4}
+                  description={tt('Adjust the search or filters to find a provider.')}
+                  title={tt('No providers found')}
+                />
+              )}
+            </TableBody>
+          </Table>
+        </TabsContent>
+        <TabsContent value="oidc">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{tt('Name')}</TableHead>
+                <TableHead>{tt('Issuer')}</TableHead>
+                <TableHead>{tt('Client ID')}</TableHead>
+                <TableHead>{tt('Login')}</TableHead>
+                <TableHead>{tt('Status')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {oidcConnectors.length ? (
+                oidcConnectors.map((connector) => (
+                  <TableRow
+                    className="cursor-pointer"
+                    key={connector.id}
+                    onClick={() => setSelectedProviderKey(`oidc:${connector.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') setSelectedProviderKey(`oidc:${connector.id}`)
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <TableCell>
+                      <div className="font-medium">{connector.displayName}</div>
+                      <div className="text-xs text-muted-foreground">{connector.providerId}</div>
+                    </TableCell>
+                    <TableCell>{connector.issuer}</TableCell>
+                    <TableCell>{connector.clientId}</TableCell>
+                    <TableCell>{connector.loginEnabled ? tt('Enabled') : tt('Disabled')}</TableCell>
+                    <TableCell>
+                      <StatusBadge active={connector.enabled} activeLabel="Ready" inactiveLabel="Disabled" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableEmptyRow
+                  colSpan={5}
+                  description={tt('Add a standard OIDC client for hosted login or external API authorization.')}
+                  title={tt('No OIDC connectors yet')}
+                />
+              )}
+            </TableBody>
+          </Table>
+        </TabsContent>
+      </Tabs>
       <ConnectorProviderDrawer
         connector={detailQuery.data ?? selectedProvider?.connector ?? null}
         createError={createMutation.errorMessage}
@@ -278,12 +341,10 @@ export function ConnectorsPage() {
             input,
           })
         }
-        onUpdateBuiltInPasskey={(enabled) =>
+        onUpdateBuiltInPasskey={(passkeys) =>
           updateBuiltInSecurityMutation.mutate({
             policy: {
-              passkeys: {
-                enabled,
-              },
+              passkeys,
             },
           })
         }
@@ -359,7 +420,7 @@ function ConnectorProviderDrawer({
   onCreate: (input: z.infer<typeof createManagementConnectorRequestSchema>) => void
   onDelete: (connector: ConnectorResponse) => void
   onUpdate: (connector: ConnectorResponse, input: z.infer<typeof updateManagementConnectorRequestSchema>) => void
-  onUpdateBuiltInPasskey: (enabled: boolean) => void
+  onUpdateBuiltInPasskey: (input: SecurityPolicy['passkeys']) => void
   onUpdateBuiltInSignIn: (input: z.infer<typeof updateManagementSignInSettingsRequestSchema>) => void
   open: boolean
   provider: ConnectorProviderRow | null
@@ -414,6 +475,15 @@ function ConnectorProviderDrawer({
             <ProviderIcon className="providerIcon providerIconLarge" provider={provider} />
             {provider.displayName}
           </SheetTitle>
+          <SheetDescription>
+            {tt(
+              provider.providerType === 'builtin'
+                ? 'Configure this built-in sign-in method and its runtime behavior.'
+                : provider.providerType === 'generic_oauth'
+                  ? 'Configure this reusable OpenID Connect connection for sign-in or external authorization.'
+                  : 'Configure how this social provider authenticates users into the Realm.',
+            )}
+          </SheetDescription>
         </SheetHeader>
         {provider.providerType === 'builtin' ? (
           <BuiltinProviderPanel
@@ -470,7 +540,10 @@ function ConnectorProviderDrawer({
             <div className="min-h-0 flex-1 overflow-y-auto px-8">
               <div className="grid gap-5">
                 {error ? (
-                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                  <div
+                    className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+                    role="alert"
+                  >
                     {error}
                   </div>
                 ) : null}
@@ -488,6 +561,7 @@ function ConnectorProviderDrawer({
                   <Switch
                     aria-label={tt('Enabled')}
                     checked={form.enabled === 'true'}
+                    name="enabled"
                     onCheckedChange={(enabled) => setValue(setForm, 'enabled', String(enabled))}
                     type="button"
                   />
@@ -498,6 +572,7 @@ function ConnectorProviderDrawer({
                       <>
                         <Field label={tt('Name')}>
                           <TextInput
+                            name="displayName"
                             onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
                             required
                             value={form.displayName ?? ''}
@@ -505,6 +580,7 @@ function ConnectorProviderDrawer({
                         </Field>
                         <Field label={tt('Provider ID')}>
                           <TextInput
+                            name="providerId"
                             onChange={(event) => setValue(setForm, 'slug', event.target.value)}
                             required
                             value={form.slug ?? ''}
@@ -522,6 +598,7 @@ function ConnectorProviderDrawer({
                       <Switch
                         aria-label={tt('Allow hosted login')}
                         checked={form.loginEnabled === 'true'}
+                        name="loginEnabled"
                         onCheckedChange={(enabled) => setValue(setForm, 'loginEnabled', String(enabled))}
                         type="button"
                       />
@@ -529,6 +606,7 @@ function ConnectorProviderDrawer({
                     {!isExisting ? (
                       <Field label={tt('Client registration')}>
                         <SelectInput
+                          name="registrationMode"
                           onChange={(event) => setValue(setForm, 'registrationMode', event.target.value)}
                           value={form.registrationMode ?? 'manual'}
                         >
@@ -552,6 +630,7 @@ function ConnectorProviderDrawer({
                   <Switch
                     aria-label={tt('Allow users without an email')}
                     checked={form['metadata.allowUsersWithoutEmail'] === 'true'}
+                    name="allowUsersWithoutEmail"
                     onCheckedChange={(allowUsersWithoutEmail) =>
                       setValue(setForm, 'metadata.allowUsersWithoutEmail', String(allowUsersWithoutEmail))
                     }
@@ -584,7 +663,7 @@ function ConnectorProviderDrawer({
                 </Button>
               </SheetClose>
               <Button disabled={pending} type="submit">
-                {pending ? tt('Saving...') : tt('Save')}
+                {pending ? tt('Saving…') : tt('Save')}
               </Button>
             </SheetFooter>
           </form>

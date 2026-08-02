@@ -443,7 +443,7 @@ function securityPolicy() {
       rejectSequential: false,
       rejectCustomWords: false,
     },
-    captcha: { enabled: false, provider: 'turnstile' as const, siteKey: '', secretBinding: '' },
+    captcha: { enabled: false, provider: 'turnstile' as const, siteKey: '', projectId: null, secretKey: '' },
     blocklist: { blockSubaddressing: false, entries: [] },
   }
 }

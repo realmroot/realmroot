@@ -1,10 +1,14 @@
 import type { Agent, AgentEnrollment } from '@shared/api/agent-api'
+import { CircleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { AuthLayout } from '@/components/layout/auth-layout'
 import { Button } from '@/components/ui/button'
 import { Status } from '@/components/ui/status'
+import { useConfigz } from '@/features/auth/hooks'
 import { approveAgentEnrollment, getAgentEnrollment } from '@/lib/api/account'
 
 export function AgentIdentityApproval() {
+  const { data: config } = useConfigz()
   const intentId = useMemo(() => new URLSearchParams(window.location.search).get('intent_id') ?? '', [])
   const [intent, setIntent] = useState<AgentEnrollment | null>(null)
   const [agent, setAgent] = useState<Agent | null>(null)
@@ -44,51 +48,78 @@ export function AgentIdentityApproval() {
   }
 
   const canApprove = Boolean(intent && intent.status === 'pending' && !agent)
+  const isAdditionalHost = intent?.kind === 'additional_host'
+
+  if (!loading && !intent && !agent) {
+    return (
+      <AuthLayout
+        config={config}
+        description="Start again from the requesting Agent client."
+        eyebrow="Agent enrollment"
+        icon={<CircleAlert aria-hidden="true" />}
+        layout="focused"
+        title="Agent enrollment unavailable."
+        variant="message"
+      >
+        <Status tone={error ? 'error' : 'warning'}>{error ?? 'This Agent enrollment request is incomplete.'}</Status>
+      </AuthLayout>
+    )
+  }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col justify-center px-6 py-12">
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">Stable Agent identity</p>
-          <h1 className="text-2xl font-semibold tracking-normal text-foreground">Approve Agent identity</h1>
-          <p className="text-sm text-muted-foreground">
-            This binds an approved AgentAuth registration to a durable issuer and subject.
-          </p>
-        </div>
-
-        {loading ? <Status>Loading Agent enrollment...</Status> : null}
-        {!intentId ? <Status tone="error">Missing enrollment intent.</Status> : null}
+    <AuthLayout
+      config={config}
+      description={
+        agent
+          ? 'The Agent can now continue. You can close this page.'
+          : isAdditionalHost
+            ? 'Review the Agent before trusting this new host.'
+            : 'Review the request before creating this Agent identity.'
+      }
+      eyebrow="Agent enrollment"
+      layout={agent ? 'focused' : 'decision'}
+      title={agent ? 'Agent enrollment approved.' : isAdditionalHost ? 'Add trusted host' : 'Approve Agent identity'}
+    >
+      <div className="decisionStack">
+        {loading ? <Status>Loading Agent enrollment…</Status> : null}
+        {!intentId ? (
+          <Status tone="warning">
+            This Agent enrollment request is incomplete. Start again from the Agent client.
+          </Status>
+        ) : null}
         {error ? <Status tone="error">{error}</Status> : null}
 
         {intent ? (
-          <dl className="grid gap-3 rounded-md border border-border bg-card p-4 text-sm sm:grid-cols-2">
-            <div className="grid gap-1">
-              <dt className="font-medium text-muted-foreground">Agent</dt>
-              <dd className="break-all text-foreground">{intent.requestedName}</dd>
+          <dl className="decisionFacts">
+            <div>
+              <dt>Agent</dt>
+              <dd>{intent.name}</dd>
             </div>
-            <div className="grid gap-1">
-              <dt className="font-medium text-muted-foreground">Home space</dt>
-              <dd className="break-all text-foreground">{formatHomeSpace(intent)}</dd>
+            <div>
+              <dt>Request</dt>
+              <dd>{isAdditionalHost ? 'Add a trusted host' : 'Create a stable identity'}</dd>
+            </div>
+            <div>
+              <dt>Owner</dt>
+              <dd>{formatHomeSpace(intent)}</dd>
             </div>
           </dl>
         ) : null}
 
-        {agent ? (
-          <Status tone="success">
-            Agent identity approved: {agent.issuer} · {agent.subject}
-          </Status>
-        ) : null}
+        {agent ? <Status tone="success">{agent.name} is ready on this host.</Status> : null}
 
-        <Button disabled={!canApprove || submitting} onClick={() => void approve()} type="button">
-          {submitting ? 'Approving...' : 'Approve stable identity'}
-        </Button>
+        {!agent ? (
+          <div className="decisionActions decisionActions-single">
+            <Button disabled={!canApprove || submitting} onClick={() => void approve()} type="button">
+              {submitting ? 'Approving…' : isAdditionalHost ? 'Add trusted host' : 'Approve Agent identity'}
+            </Button>
+          </div>
+        ) : null}
       </div>
-    </main>
+    </AuthLayout>
   )
 }
 
 function formatHomeSpace(intent: AgentEnrollment) {
-  return intent.homeSpace.type === 'personal'
-    ? `Personal · ${intent.homeSpace.userId}`
-    : `Organization · ${intent.homeSpace.organizationId}`
+  return intent.homeSpace.type === 'personal' ? 'Personal account' : 'Organization'
 }

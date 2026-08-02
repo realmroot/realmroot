@@ -10,4 +10,4 @@ export const defaultAccountCenterSettings = {
   dangerZoneEnabled: false,
 }
 
-export type AccountCenterSection = 'profile' | 'security' | 'connections'
+export type AccountCenterSection = 'overview' | 'profile' | 'security' | 'applications' | 'agents' | 'organizations'

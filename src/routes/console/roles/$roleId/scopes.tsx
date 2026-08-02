@@ -1,11 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { RoleDetailPage } from '@/features/console/extracted/roles'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/roles/$roleId/scopes')({
-  component: RoleScopesRoute,
+  beforeLoad: ({ params }) => {
+    throw redirect({ href: `/console/roles/${params.roleId}/permissions` })
+  },
 })
-
-function RoleScopesRoute() {
-  const { roleId } = Route.useParams()
-  return <RoleDetailPage roleId={roleId} section="scopes" />
-}

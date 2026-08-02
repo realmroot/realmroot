@@ -72,10 +72,10 @@ describe('admin console application federated credentials', () => {
     })
   })
 
-  it('routes the federated credential detail section', () => {
+  it('routes federated credentials into the OAuth detail section', async () => {
     renderWithQuery(<ApplicationFederatedCredentialsPage applicationId="app-1" />)
 
-    expect(screen.getByText('app-1:federated-credentials')).toBeTruthy()
+    expect(await screen.findByText('app-1:oauth')).toBeTruthy()
   })
 
   it('lists, creates, disables, and deletes federated credentials', async () => {
@@ -158,12 +158,9 @@ describe('admin console application federated credentials', () => {
     renderWithQuery(<ApplicationFederatedCredentialsPanel applicationId="app-1" />)
 
     expect(await screen.findByText('Worker credential')).toBeTruthy()
-    expect(
-      screen.getByText(
-        (_, element) => element?.tagName === 'P' && (element.textContent?.includes('1 public key(s)') ?? false),
-      ),
-    ).toBeTruthy()
+    expect(screen.getByText('1 public key(s)')).toBeTruthy()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Add credential' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'JWKS credential' } })
     fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'https://issuer.example.com' } })
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'workload-1' } })
@@ -171,7 +168,16 @@ describe('admin console application federated credentials', () => {
     fireEvent.change(screen.getByLabelText('JWKS URL'), {
       target: { value: 'https://issuer.example.com/.well-known/jwks.json' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Add credential' }))
+    fireEvent.change(screen.getByLabelText('Public keys'), {
+      target: { value: '{"kty":"RSA","kid":"conflicting-key"}' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add credential' }).at(-1) as HTMLButtonElement)
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Provide either a JWKS URL or inline public keys, not both.',
+    )
+    expect(requests).toHaveLength(0)
+    fireEvent.change(screen.getByLabelText('Public keys'), { target: { value: '' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add credential' }).at(-1) as HTMLButtonElement)
 
     await waitFor(() => {
       expect(requests).toContainEqual({
@@ -188,7 +194,11 @@ describe('admin console application federated credentials', () => {
     })
     expect(await screen.findByText('JWKS credential')).toBeTruthy()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Disable' })[0])
+    fireEvent.pointerDown(screen.getAllByRole('button', { name: 'Credential actions' })[0]!, {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByText('Disable'))
     await waitFor(() => {
       expect(requests).toContainEqual({
         method: 'PATCH',
@@ -197,7 +207,12 @@ describe('admin console application federated credentials', () => {
       })
     })
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0])
+    fireEvent.pointerDown(screen.getAllByRole('button', { name: 'Credential actions' })[0]!, {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete credential' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
         method: 'DELETE',
@@ -205,6 +220,7 @@ describe('admin console application federated credentials', () => {
         body: null,
       })
     })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete federated credential?' })).toBeNull())
   })
 
   it('shows fallback row values for disabled credentials', async () => {
@@ -243,12 +259,9 @@ describe('admin console application federated credentials', () => {
     renderWithQuery(<ApplicationFederatedCredentialsPanel applicationId="app-1" />)
 
     expect(await screen.findByText('Disabled credential')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Enable' })).toBeTruthy()
-    expect(
-      screen.getByText(
-        (_, element) =>
-          element?.tagName === 'P' && (element.textContent?.includes('missing-resource · 0 public key(s)') ?? false),
-      ),
-    ).toBeTruthy()
+    expect(screen.getByText('missing-resource')).toBeTruthy()
+    expect(screen.getByText('0 public key(s)')).toBeTruthy()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Credential actions' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByText('Enable')).toBeTruthy()
   })
 })

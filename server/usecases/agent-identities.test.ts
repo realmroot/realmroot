@@ -10,6 +10,7 @@ import {
   getAgentIdentityByProtocolAgent,
   getAgentInfo,
   getPersonalAgent,
+  getProtocolAgentEnrollment,
   getPublicAgentEnrollment,
   listAllAgentIdentities,
   listAllAgents,
@@ -56,7 +57,7 @@ describe('Agent login identity', () => {
     })
   })
 
-  it('creates and binds one personal stable identity after controller approval', async () => {
+  it('creates, binds, and audits one personal stable identity after controller approval [spec: agent-identity/agent-governance-audit]', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.agentIdentities.findProtocolAgent).mockResolvedValue({
       id: 'protocol-agent-1',
@@ -83,6 +84,19 @@ describe('Agent login identity', () => {
       bindings: [{ protocolAgentId: 'protocol-agent-1', hostId: 'host-1', status: 'active' }],
     })
     expect(identity.subject).toMatch(/^agt_/)
+    expect(deps.agentAudit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'agent.identity_enrolled',
+        result: 'allowed',
+        controllerUserId: 'user-1',
+        agentIdentityId: identity.id,
+        hostId: 'host-1',
+        scopes: null,
+      }),
+    )
+    expect(deps.agentAudit.append).not.toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ credential: expect.anything() }) }),
+    )
   })
 
   it('returns the existing identity when login is retried', async () => {
@@ -187,27 +201,44 @@ describe('Agent identity lifecycle', () => {
     await expect(getPublicAgentEnrollment(deps, 'intent-1', 'user-1')).resolves.toMatchObject({
       id: 'intent-1',
       agentId: null,
+      name: 'Build Agent',
+      kind: 'new_identity',
       status: 'pending',
       decidedAt: null,
     })
 
-    const approved = toAgentEnrollment({
-      id: 'intent-2',
-      agentIdentityId: 'identity-1',
-      protocolAgentId: 'protocol-agent-1',
-      requestedName: null,
-      homeSpace: { type: 'personal', userId: 'user-1' },
-      status: 'approved',
-      expiresAt: '2026-08-01T01:00:00.000Z',
-      approvedAt: '2026-08-01T00:30:00.000Z',
-      createdAt: '2026-08-01T00:00:00.000Z',
-      updatedAt: '2026-08-01T00:30:00.000Z',
-    })
+    const approved = toAgentEnrollment(
+      {
+        id: 'intent-2',
+        agentIdentityId: 'identity-1',
+        protocolAgentId: 'protocol-agent-1',
+        requestedName: null,
+        homeSpace: { type: 'personal', userId: 'user-1' },
+        status: 'approved',
+        expiresAt: '2026-08-01T01:00:00.000Z',
+        approvedAt: '2026-08-01T00:30:00.000Z',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        updatedAt: '2026-08-01T00:30:00.000Z',
+      },
+      'Build Agent',
+    )
     expect(approved).toMatchObject({
       agentId: 'identity-1',
+      name: 'Build Agent',
+      kind: 'additional_host',
       status: 'approved',
       decidedAt: '2026-08-01T00:30:00.000Z',
     })
+
+    vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(
+      intent({ agentIdentityId: 'identity-1', requestedName: null }),
+    )
+    await expect(getProtocolAgentEnrollment(deps, 'intent-1', 'protocol-agent-1')).resolves.toMatchObject({
+      id: 'intent-1',
+      name: 'Build Agent',
+      kind: 'additional_host',
+    })
+    await expect(getProtocolAgentEnrollment(deps, 'intent-1', 'another-agent')).rejects.toMatchObject({ status: 403 })
   })
 
   it('gets only active protocol-bound identities', async () => {
@@ -374,7 +405,7 @@ describe('Agent identity lifecycle', () => {
     await expect(revokeAgentIdentityHost(deps, 'identity-1', 'protocol-agent-1', 'user-1')).resolves.toBeUndefined()
     await expect(recoverAgentIdentity(deps, 'identity-1', 'user-1')).resolves.toBeUndefined()
     await expect(retireAgentIdentity(deps, 'identity-1', 'user-1')).resolves.toBeUndefined()
-    await expect(emergencyRetireAgentIdentity(deps, 'identity-1')).resolves.toBeUndefined()
+    await expect(emergencyRetireAgentIdentity(deps, 'identity-1', 'admin-1')).resolves.toBeUndefined()
 
     vi.mocked(deps.agentIdentities.revokeBinding).mockResolvedValue(false)
     await expect(revokeAgentIdentityHost(deps, 'identity-1', 'protocol-agent-1', 'user-1')).rejects.toMatchObject({
@@ -384,7 +415,7 @@ describe('Agent identity lifecycle', () => {
     await expect(recoverAgentIdentity(deps, 'identity-1', 'user-1')).rejects.toMatchObject({ status: 400 })
     vi.mocked(deps.agentIdentities.retireIdentity).mockResolvedValue(false)
     await expect(retireAgentIdentity(deps, 'identity-1', 'user-1')).rejects.toMatchObject({ status: 400 })
-    await expect(emergencyRetireAgentIdentity(deps, 'identity-1')).rejects.toMatchObject({ status: 400 })
+    await expect(emergencyRetireAgentIdentity(deps, 'identity-1', 'admin-1')).rejects.toMatchObject({ status: 400 })
 
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate({ status: 'retired' }))
     await expect(revokeAgentIdentityHost(deps, 'identity-1', 'protocol-agent-1', 'user-1')).rejects.toMatchObject({
@@ -419,6 +450,20 @@ function identityDeps() {
   return createTestDeps({
     authorization: {
       findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
+      countEffectiveAgentRoles: vi
+        .fn()
+        .mockImplementation((agents: Array<{ agentIdentityId: string }>) =>
+          Promise.resolve(new Map(agents.map((agent) => [agent.agentIdentityId, 0]))),
+        ),
+    },
+    externalResources: {
+      summarizeAgentAccess: vi
+        .fn()
+        .mockImplementation((agentIds: string[]) =>
+          Promise.resolve(
+            new Map(agentIds.map((agentId) => [agentId, { pendingRequestCount: 0, activeGrantCount: 0 }])),
+          ),
+        ),
     },
   })
 }

@@ -169,6 +169,28 @@ export function formatRole(role: ManagementUserResponse['role']) {
   if (Array.isArray(role)) return role.join(', ')
   return role ?? 'user'
 }
+export function hasRealmAdminAccess(role: ManagementUserResponse['role']) {
+  return roleValues(role).includes('admin')
+}
+export function formatRealmAccess(role: ManagementUserResponse['role']) {
+  return hasRealmAdminAccess(role) ? tt('Realm administrator') : tt('User')
+}
+export function setRealmAdminAccess(role: ManagementUserResponse['role'], enabled: boolean) {
+  const current = roleValues(role)
+  const next = enabled ? [...new Set([...current, 'admin'])] : current.filter((value) => value !== 'admin')
+  if (next.length === 0) return 'user'
+  return next.length === 1 ? next[0] : next
+}
 export function userDisplayName(user: ManagementUserResponse) {
   return user.displayName ?? user.name ?? user.email ?? user.id
+}
+
+function roleValues(role: ManagementUserResponse['role']) {
+  if (Array.isArray(role)) return role
+  return (
+    role
+      ?.split(',')
+      .map((value) => value.trim())
+      .filter(Boolean) ?? []
+  )
 }

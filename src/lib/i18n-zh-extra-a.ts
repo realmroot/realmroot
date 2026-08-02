@@ -122,7 +122,6 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
   'Create a signed HTTPS endpoint for selected events.': '为选定事件创建签名 HTTPS 端点。',
   'Create a user to verify sign-in and account-center behavior.': '创建用户以验证登录和账户中心行为。',
   'Create an HTTPS endpoint to receive signed events.': '创建 HTTPS 端点以接收签名事件。',
-  'Create and search organization role definitions through the roles API.': '通过角色 API 创建并搜索组织角色定义。',
   'Create organizations when authorization needs tenant-owned groups.': '当授权需要租户拥有的群组时创建组织。',
   'Create resource permissions, then attach them to organization-scoped roles from the role detail page.':
     '创建资源权限，然后从角色详情页将其附加到组织范围角色。',
@@ -145,7 +144,7 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
   'Daily active users': '日活用户',
   'Daily active users trend': '日活用户趋势',
   'Define application, organization, resource, and global roles.': '定义应用、组织、资源和全局角色。',
-  'Deleting...': '正在删除...',
+  'Deleting…': '正在删除…',
   Delivered: '已送达',
   'Deployment-managed OIDC signing material exposed through JWKS.': '部署管理的 OIDC 签名材料通过 JWKS 暴露。',
   Desktop: '桌面端',
@@ -264,9 +263,7 @@ export const zhFlatTranslationsExtraA: Record<string, string> = {
   'Organization detail sections': '组织详情分区',
   'Organization member': '组织成员',
   'Organization permissions': '组织权限',
-  'Organization roles': '组织角色',
   'Organization summary': '组织摘要',
-  'Organization template': '组织模板',
   Originator: '发起方',
   'Overview only; no secret material is exposed.': '仅概览；不会暴露密钥材料。',
 }

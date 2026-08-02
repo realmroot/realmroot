@@ -35,6 +35,8 @@ describe('management API client', () => {
     await management.replaceApplicationRedirectUris('app-1', { redirectUris: ['https://app.example.com/callback'] })
     await management.listApplicationClientSecrets('app-1', { limit: 5 })
     await management.rotateApplicationClientSecret('app-1')
+    await management.listApplicationAuthorizations('app-1', { limit: 25, offset: 50 })
+    await management.revokeApplicationAuthorization('app-1', 'authorization-1')
     await management.uploadApplicationLogo('app-1', new File(['logo'], 'logo.png'))
     await management.listUsers({ search: 'jane', limit: 50, offset: undefined })
     await management.createUser({ email: 'jane@example.com', displayName: 'Jane Doe' })
@@ -86,11 +88,11 @@ describe('management API client', () => {
     await management.createRole({ key: 'admin', name: 'Admin' })
     await management.updateRole('role-1', { description: 'Tenant admin' })
     await management.deleteRole('role-1')
-    await management.listRoleScopes('role-1')
-    await management.replaceRoleScopes('role-1', ['orders.read'])
-    await management.assignUserRole({ roleId: 'role-1', subjectId: 'user-1' })
-    await management.assignApplicationRole({ roleId: 'role-1', subjectId: 'app-1' })
-    await management.assignMemberRole({ roleId: 'role-1', subjectId: 'member-1' })
+    await management.listRolePermissions('role-1')
+    await management.replaceRolePermissions('role-1', [{ resourceId: 'resource-1', scope: 'orders.read' }])
+    await management.listRoleAssignments({ roleId: 'role-1', status: 'active' })
+    await management.createRoleAssignment({ roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' })
+    await management.revokeRoleAssignment('assignment-1')
     await management.listApiResources()
     await management.getApiResource('resource-1')
     await management.createApiResource({
@@ -105,6 +107,7 @@ describe('management API client', () => {
       url: 'https://app.example.com/webhooks/auth',
       events: ['user.created'],
       enabled: true,
+      organizationId: null,
     })
     await management.updateWebhookEndpoint('wh_1', { enabled: false })
     await management.deleteWebhookEndpoint('wh_1')
@@ -155,6 +158,8 @@ describe('management API client', () => {
       ['redirectUris.put', { param: { id: 'app-1' }, json: { redirectUris: ['https://app.example.com/callback'] } }],
       ['clientSecrets.get', { param: { id: 'app-1' }, query: { limit: '5' } }],
       ['clientSecrets.post', { param: { id: 'app-1' } }],
+      ['applicationAuthorizations.get', { param: { applicationId: 'app-1' }, query: { limit: '25', offset: '50' } }],
+      ['applicationAuthorization.delete', { param: { applicationId: 'app-1', authorizationId: 'authorization-1' } }],
       ['upload', '/api/applications/app-1/logo', expect.any(File)],
       ['users.get', { query: { search: 'jane', limit: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
@@ -211,11 +216,14 @@ describe('management API client', () => {
       ['roles.post', { json: { key: 'admin', name: 'Admin' } }],
       ['roles.patch', { param: { id: 'role-1' }, json: { description: 'Tenant admin' } }],
       ['roles.delete', { param: { id: 'role-1' } }],
-      ['roleScopes.get', { param: { id: 'role-1' } }],
-      ['roleScopes.put', { param: { id: 'role-1' }, json: { scopes: ['orders.read'] } }],
-      ['userRoleAssignments.post', { json: { roleId: 'role-1', subjectId: 'user-1' } }],
-      ['applicationRoleAssignments.post', { json: { roleId: 'role-1', subjectId: 'app-1' } }],
-      ['memberRoleAssignments.post', { json: { roleId: 'role-1', subjectId: 'member-1' } }],
+      ['rolePermissions.get', { param: { id: 'role-1' } }],
+      [
+        'rolePermissions.put',
+        { param: { id: 'role-1' }, json: { permissions: [{ resourceId: 'resource-1', scope: 'orders.read' }] } },
+      ],
+      ['roleAssignments.get', { query: { roleId: 'role-1', status: 'active' } }],
+      ['roleAssignments.post', { json: { roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' } }],
+      ['roleAssignment.delete', { param: { id: 'assignment-1' } }],
       ['apiResources.get'],
       ['apiResource.get', { param: { id: 'resource-1' } }],
       [
@@ -238,6 +246,7 @@ describe('management API client', () => {
             url: 'https://app.example.com/webhooks/auth',
             events: ['user.created'],
             enabled: true,
+            organizationId: null,
           },
         },
       ],
@@ -298,6 +307,10 @@ async function loadManagementApi() {
             },
           },
           ':applicationId': {
+            authorizations: {
+              $get: endpoint('applicationAuthorizations.get'),
+              ':authorizationId': { $delete: endpoint('applicationAuthorization.delete') },
+            },
             'federated-credentials': {
               $get: endpoint('federatedCredentials.get'),
               $post: endpoint('federatedCredentials.post'),
@@ -367,16 +380,16 @@ async function loadManagementApi() {
             $get: endpoint('role.get'),
             $patch: endpoint('roles.patch'),
             $delete: endpoint('roles.delete'),
-            scopes: {
-              $get: endpoint('roleScopes.get'),
-              $put: endpoint('roleScopes.put'),
+            permissions: {
+              $get: endpoint('rolePermissions.get'),
+              $put: endpoint('rolePermissions.put'),
             },
           },
-          assignments: {
-            users: { $post: endpoint('userRoleAssignments.post') },
-            applications: { $post: endpoint('applicationRoleAssignments.post') },
-            members: { $post: endpoint('memberRoleAssignments.post') },
-          },
+        },
+        'role-assignments': {
+          $get: endpoint('roleAssignments.get'),
+          $post: endpoint('roleAssignments.post'),
+          ':id': { $delete: endpoint('roleAssignment.delete') },
         },
         'api-resources': {
           $get: endpoint('apiResources.get'),

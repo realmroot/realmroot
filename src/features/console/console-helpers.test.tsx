@@ -69,14 +69,33 @@ describe('admin console helpers', () => {
     const navigate = vi.fn()
     window.history.pushState(null, '', '/console/users/user-1')
     navigateConsoleTab(navigate, '/console/users/user-1/security')
-    expect(navigate).toHaveBeenCalledWith({ to: '/console/users/user-1/security' })
+    expect(navigate).toHaveBeenCalledWith({ search: {}, to: '/console/users/user-1/security' })
     window.history.pushState(null, '', '/profile')
     navigateConsoleTab(navigate, '/console/users/user-1/security')
     expect(navigate).toHaveBeenCalledTimes(1)
-    expect(userDetailTabs().map((tab) => tab.value)).toContain('linked-accounts')
-    expect(organizationDetailTabs().map((tab) => tab.value)).toEqual(['settings', 'authorization'])
-    expect(roleDetailTabs().map((tab) => tab.value)).toContain('scopes')
-    expect(apiResourceDetailTabs().map((tab) => tab.value)).toEqual(['settings'])
+    expect(userDetailTabs().map((tab) => tab.value)).toEqual([
+      'overview',
+      'authentication',
+      'sessions',
+      'agents',
+      'authorized-apps',
+      'settings',
+    ])
+    expect(organizationDetailTabs().map((tab) => tab.value)).toEqual([
+      'overview',
+      'members',
+      'agents',
+      'activity',
+      'settings',
+    ])
+    expect(roleDetailTabs().map((tab) => tab.value)).toEqual([
+      'overview',
+      'permissions',
+      'assignments',
+      'activity',
+      'settings',
+    ])
+    expect(apiResourceDetailTabs().map((tab) => tab.value)).toEqual(['overview', 'resources', 'authority', 'settings'])
     expect(formatDashboardDate(new Date('2026-05-01T12:00:00.000Z'))).toBe('2026-05-01')
     expect(dashboardChartLabels(new Date('2026-05-29T00:00:00.000Z'))).toHaveLength(8)
     expect(listItems(['a', 'b'])).toEqual(['a', 'b'])

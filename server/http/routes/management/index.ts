@@ -7,6 +7,7 @@ import { managementApplicationsRoute } from './applications'
 import { createManagementConnectorRoutes } from './connectors'
 import { managementOrganizationsRoute } from './organizations'
 import { createManagementReadinessRoute } from './readiness'
+import { managementRoleAssignmentsRoute } from './role-assignments'
 import { managementRolesRoute } from './roles'
 import { managementSecurityRoutes } from './security'
 import { createManagementSettingsRoutes } from './settings'
@@ -27,6 +28,7 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)
+  app.route('/role-assignments', managementRoleAssignmentsRoute)
   app.route('/users', managementUserRoutes(options.authApi, { normalizeListResponse: true }))
   app.route('/security', managementSecurityRoutes())
 

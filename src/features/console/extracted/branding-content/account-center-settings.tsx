@@ -165,7 +165,9 @@ export function AccountCenterSettingsPage() {
               description={tt('Save account center visibility and field permissions.')}
               error={
                 updateMutation.errorMessage ? (
-                  <div className="text-sm text-destructive">{updateMutation.errorMessage}</div>
+                  <div className="text-sm text-destructive" role="alert">
+                    {updateMutation.errorMessage}
+                  </div>
                 ) : null
               }
               onDiscard={() => {

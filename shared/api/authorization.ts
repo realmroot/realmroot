@@ -77,6 +77,22 @@ export const createInvitationRequestSchema = z.object({
   expiresAt: z.iso.datetime().optional(),
 })
 
+export const apiResourceEligibilityModeSchema = z.enum(['owner_organization', 'organizations', 'realm'])
+export const apiResourceEligibilitySchema = z
+  .object({
+    mode: apiResourceEligibilityModeSchema,
+    organizationIds: z.array(nonEmptyString).default([]),
+  })
+  .superRefine((eligibility, context) => {
+    if (eligibility.mode === 'organizations' && eligibility.organizationIds.length === 0) {
+      context.addIssue({ code: 'custom', path: ['organizationIds'], message: 'Select at least one Organization.' })
+    }
+  })
+  .transform((eligibility) => ({
+    mode: eligibility.mode,
+    organizationIds: eligibility.mode === 'organizations' ? [...new Set(eligibility.organizationIds)].sort() : [],
+  }))
+
 export const apiResourceResponseSchema = z.object({
   id: z.string(),
   identifier: z.string(),
@@ -85,6 +101,9 @@ export const apiResourceResponseSchema = z.object({
   connectorId: z.string().nullable(),
   description: z.string().nullable(),
   enabled: z.boolean(),
+  ownerOrganizationId: z.string(),
+  accessEligibility: apiResourceEligibilitySchema,
+  availableToAgents: z.boolean(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -97,6 +116,9 @@ export const createApiResourceRequestSchema = z.object({
   connectorId: nonEmptyString.optional(),
   description: optionalText,
   enabled: z.boolean().optional(),
+  ownerOrganizationId: nonEmptyString.optional(),
+  accessEligibility: apiResourceEligibilitySchema.optional(),
+  availableToAgents: z.boolean().optional(),
 })
 
 export const updateApiResourceRequestSchema = z.object({
@@ -106,6 +128,9 @@ export const updateApiResourceRequestSchema = z.object({
   connectorId: nonEmptyString.nullable().optional(),
   description: optionalText,
   enabled: z.boolean().optional(),
+  ownerOrganizationId: nonEmptyString.optional(),
+  accessEligibility: apiResourceEligibilitySchema.optional(),
+  availableToAgents: z.boolean().optional(),
 })
 
 export const roleResponseSchema = z.object({
@@ -113,9 +138,6 @@ export const roleResponseSchema = z.object({
   key: z.string(),
   name: z.string(),
   description: z.string().nullable(),
-  resourceId: z.string().nullable(),
-  organizationId: z.string().nullable(),
-  applicationId: z.string().nullable(),
   system: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -125,13 +147,10 @@ export const createRoleRequestSchema = z.object({
   key: nonEmptyString,
   name: nonEmptyString,
   description: optionalText,
-  resourceId: z.string().nullable().optional(),
-  organizationId: z.string().nullable().optional(),
-  applicationId: z.string().nullable().optional(),
   system: z.boolean().optional(),
 })
 
-export const updateRoleRequestSchema = createRoleRequestSchema.partial()
+export const updateRoleRequestSchema = createRoleRequestSchema.omit({ key: true, system: true }).partial().strict()
 
 export const assignRoleRequestSchema = z.object({
   roleId: nonEmptyString,
@@ -139,8 +158,62 @@ export const assignRoleRequestSchema = z.object({
   expiresAt: z.iso.datetime().nullable().optional(),
 })
 
-export const replaceRoleScopesRequestSchema = z.object({
-  scopes: z.array(nonEmptyString).transform((values) => [...new Set(values)].sort()),
+export const rolePermissionSchema = z.object({
+  resourceId: nonEmptyString,
+  scope: nonEmptyString,
+})
+
+export const rolePermissionsResponseSchema = z.object({
+  permissions: z.array(rolePermissionSchema),
+})
+
+export const replaceRolePermissionsRequestSchema = z.object({
+  permissions: z
+    .array(rolePermissionSchema)
+    .transform((values) =>
+      [
+        ...new Map(
+          values.map((permission) => [`${permission.resourceId}\u0000${permission.scope}`, permission]),
+        ).values(),
+      ].sort((left, right) => left.resourceId.localeCompare(right.resourceId) || left.scope.localeCompare(right.scope)),
+    ),
+})
+
+export const roleAssignmentSubjectTypeSchema = z.enum(['user', 'agent', 'workload'])
+
+export const createRoleAssignmentRequestSchema = z.object({
+  roleId: nonEmptyString,
+  subjectType: roleAssignmentSubjectTypeSchema,
+  subjectId: nonEmptyString,
+  organizationId: nonEmptyString.nullable().optional(),
+  expiresAt: z.iso.datetime().nullable().optional(),
+})
+
+export const roleAssignmentResponseSchema = z.object({
+  id: z.string(),
+  roleId: z.string(),
+  subjectType: roleAssignmentSubjectTypeSchema,
+  subjectId: z.string(),
+  organizationId: z.string().nullable(),
+  assignedByUserId: z.string().nullable(),
+  expiresAt: z.string().nullable(),
+  revokedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const listRoleAssignmentsQuerySchema = paginationQuerySchema.extend({
+  roleId: z.string().optional(),
+  subjectType: roleAssignmentSubjectTypeSchema.optional(),
+  subjectId: z.string().optional(),
+  organizationId: z.string().optional(),
+  context: z.enum(['realm', 'organization']).optional(),
+  status: z.enum(['active', 'expired', 'revoked']).optional(),
+})
+
+export const listRoleAssignmentsResponseSchema = z.object({
+  assignments: z.array(roleAssignmentResponseSchema),
+  pagination: paginationMetadataSchema,
 })
 
 export const listOrganizationsResponseSchema = z.object({
@@ -163,13 +236,34 @@ export const listApiResourcesResponseSchema = z.object({
   pagination: paginationMetadataSchema,
 })
 
+export const listApiResourcesQuerySchema = paginationQuerySchema.extend({
+  ownerOrganizationId: nonEmptyString.optional(),
+})
+
+export const apiResourceContractResponseSchema = z.object({
+  resourceId: z.string(),
+  sourceUrl: z.url(),
+  scopes: z.array(
+    z.object({
+      value: z.string(),
+      description: z.string().nullable(),
+    }),
+  ),
+  operations: z.array(
+    z.object({
+      method: z.string(),
+      path: z.string(),
+      operationId: z.string().nullable(),
+      summary: z.string().nullable(),
+      description: z.string().nullable(),
+      requiredScopeSets: z.array(z.array(z.string())),
+    }),
+  ),
+})
+
 export const listRolesResponseSchema = z.object({
   roles: z.array(roleResponseSchema),
   pagination: paginationMetadataSchema,
-})
-
-export const roleScopesResponseSchema = z.object({
-  scopes: z.array(z.string()),
 })
 
 export { paginationQuerySchema }
@@ -183,15 +277,26 @@ export type AddMemberRequest = z.infer<typeof addMemberRequestSchema>
 export type UpdateMemberRequest = z.infer<typeof updateMemberRequestSchema>
 export type InvitationResponse = z.infer<typeof invitationResponseSchema>
 export type CreateInvitationRequest = z.infer<typeof createInvitationRequestSchema>
+export type ListMembersResponse = z.infer<typeof listMembersResponseSchema>
+export type ListInvitationsResponse = z.infer<typeof listInvitationsResponseSchema>
 export type ApiResourceResponse = z.infer<typeof apiResourceResponseSchema>
+export type ApiResourceEligibility = z.infer<typeof apiResourceEligibilitySchema>
+export type ApiResourceEligibilityMode = z.infer<typeof apiResourceEligibilityModeSchema>
 export type ListApiResourcesResponse = z.infer<typeof listApiResourcesResponseSchema>
+export type ListApiResourcesQuery = z.infer<typeof listApiResourcesQuerySchema>
+export type ApiResourceContractResponse = z.infer<typeof apiResourceContractResponseSchema>
 export type ListOrganizationsResponse = z.infer<typeof listOrganizationsResponseSchema>
 export type ListRolesResponse = z.infer<typeof listRolesResponseSchema>
-export type RoleScopesResponse = z.infer<typeof roleScopesResponseSchema>
+export type RolePermission = z.infer<typeof rolePermissionSchema>
+export type RolePermissionsResponse = z.infer<typeof rolePermissionsResponseSchema>
+export type ReplaceRolePermissionsRequest = z.infer<typeof replaceRolePermissionsRequestSchema>
+export type RoleAssignmentResponse = z.infer<typeof roleAssignmentResponseSchema>
+export type CreateRoleAssignmentRequest = z.infer<typeof createRoleAssignmentRequestSchema>
+export type ListRoleAssignmentsQuery = z.infer<typeof listRoleAssignmentsQuerySchema>
+export type ListRoleAssignmentsResponse = z.infer<typeof listRoleAssignmentsResponseSchema>
 export type CreateApiResourceRequest = z.input<typeof createApiResourceRequestSchema>
 export type UpdateApiResourceRequest = z.infer<typeof updateApiResourceRequestSchema>
 export type RoleResponse = z.infer<typeof roleResponseSchema>
 export type CreateRoleRequest = z.infer<typeof createRoleRequestSchema>
 export type UpdateRoleRequest = z.infer<typeof updateRoleRequestSchema>
 export type AssignRoleRequest = z.infer<typeof assignRoleRequestSchema>
-export type ReplaceRoleScopesRequest = z.infer<typeof replaceRoleScopesRequestSchema>

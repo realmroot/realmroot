@@ -1,10 +1,10 @@
 import { badRequest, forbidden } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
+import { getAccountOrganizationAuthority, listAccountOrganizationAgents } from '@server/usecases/account-organizations'
 import {
   approveAgentEnrollment,
   getPersonalAgent,
   getPublicAgentEnrollment,
-  listOrganizationAgentIdentities,
   listPersonalAgents,
   recoverAgentIdentity,
   retireAgentIdentity,
@@ -13,6 +13,7 @@ import {
 import { decideAgentApproval } from '@server/usecases/agents'
 import { revokeConsent } from '@server/usecases/applications'
 import { getConfig } from '@server/usecases/configz'
+import { resolveDeveloperAccess } from '@server/usecases/developer-access'
 import {
   createAccountConnection,
   decideAccessRequest,
@@ -35,8 +36,8 @@ import {
   accountWalletAddressLinkSchema,
 } from '@shared/api/account'
 import {
+  accessRequestApprovalsResponseSchema,
   accessRequestSchema,
-  accessRequestsResponseSchema,
   accountConnectionSchema,
   accountConnectionsResponseSchema,
   agentEnrollmentSchema,
@@ -70,12 +71,13 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
 
   app.use('*', authenticatedUser())
 
-  app.get('/profile', async (c) => c.json({ user: await getDeps(c).users.getUser(getPrincipal(c).user!.id) }))
+  app.get('/profile', async (c) => c.json(await accountProfile(c)))
 
   app.patch('/profile', async (c) => {
     const body = await readJson(c, accountProfileUpdateSchema)
     await assertProfileUpdateAllowed(c, body, securityPolicy)
-    return c.json({ user: await getDeps(c).users.updateProfile(getPrincipal(c).user!.id, body) })
+    await getDeps(c).users.updateProfile(getPrincipal(c).user!.id, body)
+    return c.json(await accountProfile(c))
   })
 
   app.post('/email/change', async (c) => {
@@ -163,16 +165,15 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     })
 
     try {
-      return c.json(
-        await authApi.changePassword({
-          body: {
-            currentPassword: body.currentPassword,
-            newPassword: body.newPassword,
-            revokeOtherSessions: body.revokeOtherSessions,
-          },
-          headers: c.req.raw.headers,
-        }),
-      )
+      return await authApi.changePassword({
+        asResponse: true,
+        body: {
+          currentPassword: body.currentPassword,
+          newPassword: body.newPassword,
+          revokeOtherSessions: body.revokeOtherSessions,
+        },
+        headers: c.req.raw.headers,
+      })
     } catch (error) {
       throw toBoundaryError(error)
     }
@@ -381,13 +382,19 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   })
 
   app.get('/organizations/:organizationId/agents', async (c) => {
-    const result = await listOrganizationAgentIdentities(
-      getDeps(c),
-      c.req.param('organizationId'),
-      getPrincipal(c).user!.id,
+    return c.json(
+      await listAccountOrganizationAgents(
+        getDeps(c),
+        c.req.param('organizationId'),
+        getPrincipal(c).user!.id,
+        readQuery(c, paginationQuerySchema),
+      ),
     )
-    return c.json({ items: result.identities.map(toAgent) })
   })
+
+  app.get('/organizations/:organizationId/authority', async (c) =>
+    c.json(await getAccountOrganizationAuthority(getDeps(c), c.req.param('organizationId'), getPrincipal(c).user!.id)),
+  )
 
   app.get('/agent-enrollments/:enrollmentId', async (c) => {
     return c.json(
@@ -478,14 +485,14 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     if (query.approvalToken) {
       const request = await getAccountAccessRequestByToken(getDeps(c), query.approvalToken, getPrincipal(c).user!.id)
       return c.json(
-        accessRequestsResponseSchema.parse({
+        accessRequestApprovalsResponseSchema.parse({
           items: [request],
           pagination: { limit: query.limit, offset: 0, total: 1, hasMore: false, nextOffset: null },
         }),
       )
     }
     return c.json(
-      accessRequestsResponseSchema.parse(
+      accessRequestApprovalsResponseSchema.parse(
         await listAccountAccessRequests(getDeps(c), getPrincipal(c).user!.id, {
           limit: query.limit,
           offset: query.offset,
@@ -528,6 +535,16 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   )
 
   return app
+}
+
+async function accountProfile(c: Context) {
+  const deps = getDeps(c)
+  const user = await deps.users.getUser(getPrincipal(c).user!.id)
+  return {
+    activeOrganizationId: getPrincipal(c).session?.session.activeOrganizationId ?? null,
+    user,
+    access: await resolveDeveloperAccess(deps, user),
+  }
 }
 
 async function accountCenterSettings(c: Context, securityPolicy?: SecurityPolicy): Promise<ConfigzAccountCenter> {

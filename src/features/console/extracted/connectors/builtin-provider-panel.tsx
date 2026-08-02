@@ -3,10 +3,10 @@ import {
   type ManagementSignInSettingsResponse,
   type SecurityPolicy,
   SelectInput,
-  SettingRow,
   type SmsProviderId,
   Switch,
   smsProviderOptions,
+  TextArea,
   TextInput,
   tt,
   type updateManagementSignInSettingsRequestSchema,
@@ -22,7 +22,7 @@ import {
   defaultOneTapProviderSettings,
   defaultPhoneProviderSettings,
   defaultWeb3ProviderSettings,
-  NumberField,
+  NumberSelectField,
   ProviderRuntime,
   SelectField,
   SmsProviderFields,
@@ -33,6 +33,21 @@ import {
 type BuiltinProvider = {
   providerId: string
 }
+
+const otpLengthOptions = [4, 6, 8].map((value) => ({ label: `${value} digits`, value }))
+const codeExpiryOptions = [
+  { label: '3 minutes', value: 180 },
+  { label: '5 minutes', value: 300 },
+  { label: '10 minutes', value: 600 },
+  { label: '15 minutes', value: 900 },
+]
+const promptDelayOptions = [
+  { label: '0.5 seconds', value: 500 },
+  { label: '1 second', value: 1000 },
+  { label: '2 seconds', value: 2000 },
+  { label: '3 seconds', value: 3000 },
+]
+const promptAttemptOptions = [1, 3, 5, 10].map((value) => ({ label: String(value), value }))
 
 export function BuiltinProviderPanel({
   builtInProviders,
@@ -45,19 +60,26 @@ export function BuiltinProviderPanel({
 }: {
   builtInProviders: ManagementSignInSettingsResponse['builtInProviders'] | null
   error: string | null
-  onUpdatePasskey: (enabled: boolean) => void
+  onUpdatePasskey: (input: SecurityPolicy['passkeys']) => void
   onUpdateSignIn: (input: z.infer<typeof updateManagementSignInSettingsRequestSchema>) => void
   pending: boolean
   provider: BuiltinProvider
   security: SecurityPolicy | null
 }) {
   const [emailForm, setEmailForm] = useState(defaultEmailProviderSettings())
-  const [passkeyEnabled, setPasskeyEnabled] = useState(false)
+  const [passkeyForm, setPasskeyForm] = useState({ enabled: false, origins: '', rpId: '', rpName: '' })
   const [passkeyAllowSignUp, setPasskeyAllowSignUp] = useState(true)
   const [phoneForm, setPhoneForm] = useState(defaultPhoneProviderSettings())
   const [web3Form, setWeb3Form] = useState(defaultWeb3ProviderSettings())
   const [oneTapForm, setOneTapForm] = useState(defaultOneTapProviderSettings())
-  useEffect(() => setPasskeyEnabled(security?.passkeys.enabled ?? false), [security])
+  useEffect(() => {
+    setPasskeyForm({
+      enabled: security?.passkeys.enabled ?? false,
+      origins: security?.passkeys.origins.join('\n') ?? '',
+      rpId: security?.passkeys.rpId ?? '',
+      rpName: security?.passkeys.rpName ?? '',
+    })
+  }, [security])
   useEffect(() => {
     setEmailForm({ ...defaultEmailProviderSettings(), ...(builtInProviders?.email ?? {}) })
     setPhoneForm({ ...defaultPhoneProviderSettings(), ...(builtInProviders?.phone ?? {}) })
@@ -81,14 +103,16 @@ export function BuiltinProviderPanel({
           label={tt('Enabled')}
           onCheckedChange={(enabled) => setEmailForm((current) => ({ ...current, enabled }))}
         />
-        <NumberField
+        <NumberSelectField
           label="OTP length"
           onChange={(otpLength) => setEmailForm((current) => ({ ...current, otpLength }))}
+          options={otpLengthOptions}
           value={emailForm.otpLength}
         />
-        <NumberField
-          label="Code expiry seconds"
+        <NumberSelectField
+          label="Code expiry"
           onChange={(expiresInSeconds) => setEmailForm((current) => ({ ...current, expiresInSeconds }))}
+          options={codeExpiryOptions}
           value={emailForm.expiresInSeconds}
         />
       </BuiltinProviderForm>
@@ -97,15 +121,31 @@ export function BuiltinProviderPanel({
 
   if (provider.providerId === 'passkey') {
     const loadedAllowSignUp = builtInProviders?.passkey.allowSignUp ?? true
-    const hasPasskeyEnabledChanges = passkeyEnabled !== Boolean(security?.passkeys.enabled)
-    const hasChanges = hasPasskeyEnabledChanges || passkeyAllowSignUp !== loadedAllowSignUp
+    const loadedPasskey = {
+      enabled: security?.passkeys.enabled ?? false,
+      origins: security?.passkeys.origins.join('\n') ?? '',
+      rpId: security?.passkeys.rpId ?? '',
+      rpName: security?.passkeys.rpName ?? '',
+    }
+    const hasPasskeyChanges = !shallowEqual(passkeyForm, loadedPasskey)
+    const hasChanges = hasPasskeyChanges || passkeyAllowSignUp !== loadedAllowSignUp
     return (
       <BuiltinProviderForm
         error={error}
         hasChanges={hasChanges}
         onSubmit={(event) =>
           submitBuiltIn(event, () => {
-            if (hasPasskeyEnabledChanges) onUpdatePasskey(passkeyEnabled)
+            if (hasPasskeyChanges) {
+              onUpdatePasskey({
+                enabled: passkeyForm.enabled,
+                origins: passkeyForm.origins
+                  .split(/\r?\n/)
+                  .map((value) => value.trim())
+                  .filter(Boolean),
+                rpId: passkeyForm.rpId.trim(),
+                rpName: passkeyForm.rpName.trim(),
+              })
+            }
             if (passkeyAllowSignUp !== loadedAllowSignUp) {
               onUpdateSignIn({ builtInProviders: { passkey: { allowSignUp: passkeyAllowSignUp } } })
             }
@@ -114,10 +154,10 @@ export function BuiltinProviderPanel({
         pending={pending}
       >
         <BuiltInProviderSwitch
-          checked={passkeyEnabled}
-          description={`Use WebAuthn passkeys for this tenant (${security?.passkeys.rpName ?? 'tenant'}).`}
+          checked={passkeyForm.enabled}
+          description={tt('Use WebAuthn passkeys for this Realm.')}
           label={tt('Enabled')}
-          onCheckedChange={setPasskeyEnabled}
+          onCheckedChange={(enabled) => setPasskeyForm((current) => ({ ...current, enabled }))}
         />
         <BuiltInProviderSwitch
           checked={passkeyAllowSignUp}
@@ -127,7 +167,31 @@ export function BuiltinProviderPanel({
           label={tt('Allow for sign-up')}
           onCheckedChange={setPasskeyAllowSignUp}
         />
-        <SettingRow label={tt('Relying party')} value={security?.passkeys.rpName ?? 'Not loaded'} />
+        <Field label={tt('Relying party name')}>
+          <TextInput
+            onChange={(event) => setPasskeyForm((current) => ({ ...current, rpName: event.target.value }))}
+            required
+            value={passkeyForm.rpName}
+          />
+        </Field>
+        <Field
+          help={tt('Use the registrable domain shared by the hosted authentication pages.')}
+          label={tt('Relying party ID')}
+        >
+          <TextInput
+            onChange={(event) => setPasskeyForm((current) => ({ ...current, rpId: event.target.value }))}
+            required
+            value={passkeyForm.rpId}
+          />
+        </Field>
+        <Field help={tt('One origin per line. Use HTTPS outside local development.')} label={tt('Allowed origins')}>
+          <TextArea
+            onChange={(event) => setPasskeyForm((current) => ({ ...current, origins: event.target.value }))}
+            required
+            rows={4}
+            value={passkeyForm.origins}
+          />
+        </Field>
       </BuiltinProviderForm>
     )
   }
@@ -162,14 +226,16 @@ export function BuiltinProviderPanel({
           </SelectInput>
         </Field>
         <SmsProviderFields form={phoneForm} setForm={setPhoneForm} />
-        <NumberField
+        <NumberSelectField
           label="OTP length"
           onChange={(otpLength) => setPhoneForm((current) => ({ ...current, otpLength }))}
+          options={otpLengthOptions}
           value={phoneForm.otpLength}
         />
-        <NumberField
-          label="Code expiry seconds"
+        <NumberSelectField
+          label="Code expiry"
           onChange={(expiresInSeconds) => setPhoneForm((current) => ({ ...current, expiresInSeconds }))}
+          options={codeExpiryOptions}
           value={phoneForm.expiresInSeconds}
         />
         <BuiltInProviderSwitch
@@ -284,14 +350,16 @@ export function BuiltinProviderPanel({
           label={tt('Cancel on outside tap')}
           onCheckedChange={(cancelOnTapOutside) => setOneTapForm((current) => ({ ...current, cancelOnTapOutside }))}
         />
-        <NumberField
+        <NumberSelectField
           label="Prompt base delay"
           onChange={(promptBaseDelayMs) => setOneTapForm((current) => ({ ...current, promptBaseDelayMs }))}
+          options={promptDelayOptions}
           value={oneTapForm.promptBaseDelayMs}
         />
-        <NumberField
+        <NumberSelectField
           label="Prompt max attempts"
           onChange={(promptMaxAttempts) => setOneTapForm((current) => ({ ...current, promptMaxAttempts }))}
+          options={promptAttemptOptions}
           value={oneTapForm.promptMaxAttempts}
         />
       </BuiltinProviderForm>

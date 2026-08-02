@@ -2,8 +2,12 @@ import type { ConfigzOptions } from '@server/usecases/configz'
 import {
   defaultAccountCenterSettings,
   getConfig,
+  getManagementEmailSettings,
+  getManagementGeneralSettings,
   updateManagementAccountCenterSettings,
   updateManagementBrandingSettings,
+  updateManagementEmailSettings,
+  updateManagementGeneralSettings,
   updateManagementSignInSettings,
 } from '@server/usecases/configz'
 import type { Deps } from '@server/usecases/deps'
@@ -293,7 +297,7 @@ describe('ConfigzService', () => {
     )
 
     const response = await updateManagementSignInSettings(deps, defaultOptions(), {
-      signIn: { passwordEnabled: false, identifierFirst: true },
+      signIn: { passwordEnabled: false, usernameEnabled: false, identifierFirst: true },
       links: { supportEmail: 'support@example.com' },
       copy: { productName: 'Acme ID' },
     })
@@ -301,6 +305,7 @@ describe('ConfigzService', () => {
     expect(updates).toEqual([
       {
         passwordEnabled: false,
+        usernameEnabled: false,
         identifierFirst: true,
         termsUri: undefined,
         privacyUri: undefined,
@@ -315,6 +320,20 @@ describe('ConfigzService', () => {
         headline: 'Existing headline',
         description: 'Existing description.',
       },
+    })
+  })
+
+  it('uses the managed username sign-in setting before the deployment default', async () => {
+    const deps = createDeps(
+      createRepository({
+        settings: { ...defaultSettings(), metadata: { usernameEnabled: false, emailOtpEnabled: false } },
+      }),
+      { onboardingHasUsers: true },
+    )
+
+    await expect(getConfig(deps, { ...defaultOptions(), usernameEnabled: true })).resolves.toMatchObject({
+      signIn: { usernameEnabled: false, emailOtpEnabled: false },
+      builtInProviders: { email: { enabled: false } },
     })
   })
 
@@ -440,6 +459,81 @@ describe('ConfigzService', () => {
       },
     })
   })
+
+  it('[spec: admin-console/admin-general-settings] persists the Realm name and derives protocol endpoints', async () => {
+    let updated: Parameters<ConfigzRepository['updateSettings']>[0] | null = null
+    const repository = createRepository({
+      settings: { ...defaultSettings(), metadata: { copy: { productName: 'Acme Realm' } } },
+      updateSettings: async (input) => {
+        updated = input
+      },
+    })
+    const deps = createDeps(repository, { onboardingHasUsers: true })
+
+    await expect(getManagementGeneralSettings(deps, defaultOptions())).resolves.toEqual({
+      realmName: 'Acme Realm',
+      issuer: 'https://auth.example.com/api/auth',
+      oidcDiscoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+      jwksUrl: 'https://auth.example.com/api/auth/jwks',
+      managementApiUrl: 'https://auth.example.com/api/openapi.json',
+    })
+    await updateManagementGeneralSettings(deps, defaultOptions(), { realmName: 'New Realm' })
+    expect(updated).toEqual({ copy: { productName: 'New Realm' } })
+  })
+
+  it('[spec: admin-console/admin-email-delivery-settings] persists email delivery separately from its binding', async () => {
+    let stored: Awaited<ReturnType<ConfigzRepository['getEmailSettings']>> = null
+    const repository = createRepository({
+      getEmailSettings: async () => stored,
+      updateEmailSettings: async (input) => {
+        stored = input
+      },
+    })
+    const deps = createDeps(repository, { onboardingHasUsers: true })
+    const options = {
+      ...defaultOptions(),
+      emailDelivery: {
+        bindingAvailable: true,
+        fromEmail: 'fallback@example.com',
+        fromName: 'Fallback',
+      },
+    }
+
+    await expect(getManagementEmailSettings(deps, options)).resolves.toMatchObject({
+      enabled: true,
+      fromEmail: 'fallback@example.com',
+      bindingAvailable: true,
+      source: 'environment',
+    })
+    await expect(
+      updateManagementEmailSettings(deps, options, {
+        provider: 'cloudflare_email',
+        enabled: true,
+        fromEmail: 'auth@example.com',
+        fromName: 'Acme Realm',
+        replyToEmail: 'support@example.com',
+      }),
+    ).resolves.toMatchObject({
+      enabled: true,
+      fromEmail: 'auth@example.com',
+      fromName: 'Acme Realm',
+      replyToEmail: 'support@example.com',
+      source: 'database',
+    })
+    await expect(
+      updateManagementEmailSettings(
+        deps,
+        { ...defaultOptions(), emailDelivery: { bindingAvailable: false } },
+        {
+          provider: 'cloudflare_email',
+          enabled: true,
+          fromEmail: 'auth@example.com',
+          fromName: null,
+          replyToEmail: null,
+        },
+      ),
+    ).rejects.toThrow('Cloudflare Email binding is not available')
+  })
 })
 
 function defaultOptions(): ConfigzOptions {
@@ -510,10 +604,22 @@ function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository 
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => overrides.branding ?? null,
     getAccountCenterSettings: overrides.getAccountCenterSettings ?? (async () => overrides.accountCenter ?? null),
+    getDeveloperSettings:
+      overrides.getDeveloperSettings ??
+      (async () => ({
+        organizationCreation: 'admins_only',
+        approvedUserIds: [],
+        consoleAccess: 'realm_operators',
+        eligibleAccessLevels: ['owner', 'admin'],
+        selectedOrganizationIds: [],
+      })),
+    getEmailSettings: overrides.getEmailSettings ?? (async () => null),
     listEnabledIdentityProviders: async () => overrides.identityProviders ?? [],
     updateSettings: overrides.updateSettings ?? (async () => undefined),
     updateBranding: overrides.updateBranding ?? (async () => undefined),
     updateAccountCenterSettings: overrides.updateAccountCenterSettings ?? (async () => undefined),
+    updateDeveloperSettings: overrides.updateDeveloperSettings ?? (async () => undefined),
+    updateEmailSettings: overrides.updateEmailSettings ?? (async () => undefined),
   }
 }
 
@@ -523,7 +629,11 @@ type MockData = {
   identityProviders: Awaited<ReturnType<ConfigzRepository['listEnabledIdentityProviders']>>
   accountCenter: NonNullable<Awaited<ReturnType<ConfigzRepository['getAccountCenterSettings']>>>
   getAccountCenterSettings: ConfigzRepository['getAccountCenterSettings']
+  getDeveloperSettings: ConfigzRepository['getDeveloperSettings']
+  getEmailSettings: ConfigzRepository['getEmailSettings']
   updateSettings: ConfigzRepository['updateSettings']
   updateBranding: ConfigzRepository['updateBranding']
   updateAccountCenterSettings: ConfigzRepository['updateAccountCenterSettings']
+  updateDeveloperSettings: ConfigzRepository['updateDeveloperSettings']
+  updateEmailSettings: ConfigzRepository['updateEmailSettings']
 }

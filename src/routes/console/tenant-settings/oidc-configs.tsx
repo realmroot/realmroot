@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { DeploymentSettingsPage } from '@/features/console/extracted/deployment-misc/deployment'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/tenant-settings/oidc-configs')({
-  component: DeploymentSettingsPage,
+  beforeLoad: () => {
+    throw redirect({ href: '/console/tenant-settings/deployment' })
+  },
 })

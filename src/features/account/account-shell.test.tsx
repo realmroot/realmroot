@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccountPageShell } from '@/features/account/account-shell'
 import { defaultAccountCenterSettings } from '@/features/account/settings'
 import type { UserProfile } from '@/features/account/types'
+import { i18n } from '@/lib/i18n'
 
 const navigate = vi.fn().mockResolvedValue(undefined)
 const signOut = vi.fn().mockResolvedValue({})
@@ -26,6 +27,7 @@ afterEach(() => {
   navigate.mockClear()
   signOut.mockClear()
   window.history.pushState(null, '', '/')
+  void i18n.changeLanguage('en')
 })
 
 function profile(overrides: Partial<UserProfile> = {}): UserProfile {
@@ -43,8 +45,15 @@ function profile(overrides: Partial<UserProfile> = {}): UserProfile {
 }
 
 function renderShell(profileValue: UserProfile | null) {
+  const realmOperator = profileValue?.role === 'admin'
   render(
     <AccountPageShell
+      access={{
+        canCreateOrganization: realmOperator,
+        showOrganizations: realmOperator,
+        realmOperator,
+        consoleOrganizations: [],
+      }}
       accountCenter={defaultAccountCenterSettings}
       config={null}
       profile={profileValue}
@@ -55,11 +64,24 @@ function renderShell(profileValue: UserProfile | null) {
   )
 }
 
+function openAccountMenu() {
+  fireEvent.pointerDown(screen.getByRole('button', { name: /Account menu|账户/ }), {
+    button: 0,
+    ctrlKey: false,
+  })
+}
+
+async function openPreferenceSubmenu(name: RegExp) {
+  const trigger = await screen.findByRole('menuitem', { name })
+  trigger.focus()
+  fireEvent.keyDown(trigger, { key: 'ArrowRight' })
+}
+
 describe('AccountPageShell', () => {
   it('includes a Console entry in the avatar menu for admins [spec: account-center/account-admin-console-entry]', async () => {
     renderShell(profile({ role: 'admin' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    openAccountMenu()
 
     const consoleLink = await screen.findByRole('link', { name: 'Console' })
     expect(consoleLink.getAttribute('href')).toBe('/console')
@@ -68,7 +90,7 @@ describe('AccountPageShell', () => {
   it('hides the Console entry from the avatar menu for non-admins', async () => {
     renderShell(profile({ role: 'user' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    openAccountMenu()
 
     await screen.findByText('jane@example.com')
     expect(screen.queryByRole('link', { name: 'Console' })).toBeNull()
@@ -77,7 +99,7 @@ describe('AccountPageShell', () => {
   it('signs out and redirects to hosted sign-in [spec: account-center/sign-out]', async () => {
     renderShell(profile())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    openAccountMenu()
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }))
 
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
@@ -88,17 +110,34 @@ describe('AccountPageShell', () => {
     signOut.mockRejectedValueOnce(new Error('Sign out failed.'))
     renderShell(profile())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    openAccountMenu()
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Sign out' }))
 
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('renders the avatar image when the profile has one', () => {
+  it('renders the avatar image when the profile has one', async () => {
+    const OriginalImage = window.Image
+    class LoadedImage {
+      private listeners = new Map<string, EventListener>()
+      addEventListener(type: string, listener: EventListener) {
+        this.listeners.set(type, listener)
+      }
+      removeEventListener(type: string) {
+        this.listeners.delete(type)
+      }
+      set src(_value: string) {
+        queueMicrotask(() => this.listeners.get('load')?.(new Event('load')))
+      }
+    }
+    Object.defineProperty(window, 'Image', { configurable: true, value: LoadedImage })
     renderShell(profile({ image: 'https://cdn.example.com/avatar.png' }))
     const trigger = screen.getByRole('button', { name: 'Account menu' })
-    expect(trigger.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.com/avatar.png')
+    await waitFor(() =>
+      expect(trigger.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.com/avatar.png'),
+    )
+    Object.defineProperty(window, 'Image', { configurable: true, value: OriginalImage })
   })
 
   it('omits the account menu when there is no profile', () => {
@@ -106,15 +145,36 @@ describe('AccountPageShell', () => {
     expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
   })
 
+  it('returns focus to the Account Center navigation trigger after Escape', async () => {
+    renderShell(profile())
+    const trigger = screen.getByRole('button', { name: 'Open Account Center navigation' })
+
+    fireEvent.click(trigger)
+    expect(screen.getByRole('dialog', { name: 'Account Center' })).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Account Center' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+  })
+
   it('switches language and theme from the avatar submenus', async () => {
     renderShell(profile())
-    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    openAccountMenu()
+    await openPreferenceSubmenu(/^Theme$/)
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Dark' }))
 
+    openAccountMenu()
+    await openPreferenceSubmenu(/^Theme$/)
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Light' }))
+
+    openAccountMenu()
+    await openPreferenceSubmenu(/^Language$/)
     fireEvent.click(await screen.findByRole('menuitemradio', { name: '简体中文' }))
-    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }))
-    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Light' }))
-    fireEvent.click(screen.getByRole('menuitemradio', { name: 'English' }))
+    await waitFor(() => expect(i18n.language).toBe('zh'))
 
-    expect(screen.getAllByRole('menuitemradio').length).toBeGreaterThan(0)
+    openAccountMenu()
+    await openPreferenceSubmenu(/Language|语言/)
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'English' }))
+    await waitFor(() => expect(i18n.language).toBe('en'))
   })
 })

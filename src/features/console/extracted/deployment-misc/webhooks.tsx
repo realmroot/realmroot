@@ -1,157 +1,147 @@
 import {
+  createWebhookEndpointRequestSchema,
+  type WebhookEndpoint,
+  type WebhookEvent,
+  type WebhookRequest,
+  webhookEvents,
+} from '@shared/api/webhooks'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Ellipsis, Plus, RefreshCw } from 'lucide-react'
+import { type FormEvent, useId, useMemo, useState } from 'react'
+import { Field, SelectInput, TextInput } from '@/components/product-form'
+import { TableEmptyRow } from '@/components/table-empty-row'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
   consoleQueryKeys,
   createWebhookEndpoint,
   deleteWebhookEndpoint,
+  listOrganizations,
   listWebhookEndpoints,
   listWebhookRequests,
   retryWebhookRequest,
   rotateWebhookEndpointSecret,
   updateWebhookEndpoint,
 } from '@/lib/api/management'
-import {
-  Button,
-  createWebhookEndpointRequestSchema,
-  Field,
-  type FormEvent,
-  Plus,
-  RefreshCw,
-  SelectInput,
-  Table,
-  TableBody,
-  TableCell,
-  TableEmptyRow,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TextInput,
-  tt,
-  useQuery,
-  useQueryClient,
-  useState,
-  type WebhookEvent,
-  type WebhookRequest,
-  type WebhooksSection,
-  webhookEvents,
-} from '../../console-shared'
-import { StatusBadge, SwitchRow } from '../../helpers/helpers-dialogs'
-import {
-  SettingsSection,
-  SettingsSections,
-  WebhookEndpointRow,
-  WebhookRequestDialog,
-  WebhookSecretDisclosureDialog,
-} from '../../helpers/helpers-preview'
+import { useConsoleScope } from '@/lib/console-context'
+import { tt } from '@/lib/i18n'
+import type { WebhooksSection } from '../../console-shared'
+import { DangerConfirmDialog, StatusBadge } from '../../helpers/helpers-dialogs'
+import { WebhookRequestDialog, WebhookSecretDisclosureDialog } from '../../helpers/helpers-preview'
 import { ListToolbar, ResourcePage, RoutedSettingsTabs } from '../../helpers/helpers-resource'
 import { formatDate, useAdminMutation } from '../../helpers/helpers-utils'
 
 export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSection }) {
-  const selectedTab = section
+  const queryClient = useQueryClient()
+  const { organizationId, realmOperator } = useConsoleScope()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
-  const [endpointUrl, setEndpointUrl] = useState('')
-  const [selectedEvents, setSelectedEvents] = useState<WebhookEvent[]>(['user.created'])
-  const [secretDisclosure, setSecretDisclosure] = useState<string | null>(null)
-  const [selectedRequest, setSelectedRequest] = useState<WebhookRequest | null>(null)
-  const endpointsQuery = useQuery({
-    queryKey: [...consoleQueryKeys.webhookEndpoints, search, status],
+  const [organizationFilter, setOrganizationFilter] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editEndpoint, setEditEndpoint] = useState<WebhookEndpoint | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [secret, setSecret] = useState<string | null>(null)
+  const [request, setRequest] = useState<WebhookRequest | null>(null)
+  const organizations = useQuery({ queryKey: consoleQueryKeys.organizations, queryFn: listOrganizations })
+  const effectiveOrganizationFilter = organizationId ?? organizationFilter
+  const organizationNames = useMemo(
+    () =>
+      new Map(
+        (organizations.data?.organizations ?? []).map((organization) => [
+          organization.id,
+          organization.displayName ?? organization.name,
+        ]),
+      ),
+    [organizations.data?.organizations],
+  )
+  const endpoints = useQuery({
+    queryKey: [...consoleQueryKeys.webhookEndpoints, search, status, effectiveOrganizationFilter],
     queryFn: () =>
       listWebhookEndpoints({
         search: search || undefined,
         status: status === 'enabled' || status === 'disabled' ? status : undefined,
+        organizationId: effectiveOrganizationFilter || undefined,
       }),
-    enabled: selectedTab === 'endpoints',
+    enabled: section === 'endpoints',
   })
-  const requestsQuery = useQuery({
-    queryKey: [...consoleQueryKeys.webhookRequests, search, status],
+  const requests = useQuery({
+    queryKey: [...consoleQueryKeys.webhookRequests, search, status, effectiveOrganizationFilter],
     queryFn: () =>
       listWebhookRequests({
         search: search || undefined,
         status: status === 'pending' || status === 'delivered' || status === 'failed' ? status : undefined,
+        organizationId: effectiveOrganizationFilter || undefined,
       }),
-    enabled: selectedTab === 'requests',
+    enabled: section === 'requests',
   })
-  const queryClient = useQueryClient()
-  const createMutation = useAdminMutation({
+  const create = useAdminMutation({
     mutationFn: createWebhookEndpoint,
-    onSuccess: async (response) => {
-      setEndpointUrl('')
-      setSelectedEvents(['user.created'])
-      setSecretDisclosure(response.signingSecret)
-      await queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.webhookEndpoints,
-      })
+    onSuccess: async (result) => {
+      setCreateOpen(false)
+      setSecret(result.signingSecret)
+      await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.webhookEndpoints })
     },
   })
-  const updateMutation = useAdminMutation({
-    mutationFn: ({
-      id,
-      input,
-    }: {
-      id: string
-      input: {
-        enabled?: boolean
-      }
-    }) => updateWebhookEndpoint(id, input),
-    onSuccess: async () =>
-      queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.webhookEndpoints,
-      }),
+  const update = useAdminMutation({
+    mutationFn: ({ id, input }: { id: string; input: Parameters<typeof updateWebhookEndpoint>[1] }) =>
+      updateWebhookEndpoint(id, input),
+    onSuccess: async () => {
+      setEditEndpoint(null)
+      await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.webhookEndpoints })
+    },
   })
-  const deleteMutation = useAdminMutation({
+  const remove = useAdminMutation({
     mutationFn: deleteWebhookEndpoint,
-    onSuccess: async () =>
-      queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.webhookEndpoints,
-      }),
-  })
-  const rotateMutation = useAdminMutation({
-    mutationFn: rotateWebhookEndpointSecret,
-    onSuccess: async (response) => {
-      setSecretDisclosure(response.signingSecret)
-      await queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.webhookEndpoints,
-      })
+    onSuccess: async () => {
+      setDeleteId(null)
+      await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.webhookEndpoints })
     },
   })
-  const retryMutation = useAdminMutation({
-    mutationFn: retryWebhookRequest,
-    onSuccess: async () =>
-      queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.webhookRequests,
-      }),
+  const rotate = useAdminMutation({
+    mutationFn: rotateWebhookEndpointSecret,
+    onSuccess: async (result) => {
+      setSecret(result.signingSecret)
+      await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.webhookEndpoints })
+    },
   })
-  function toggleEvent(event: WebhookEvent, checked: boolean) {
-    setSelectedEvents((events) => (checked ? [...events, event] : events.filter((value) => value !== event)))
-  }
-  function createEndpoint(event: FormEvent) {
-    event.preventDefault()
-    const parsed = createWebhookEndpointRequestSchema.safeParse({
-      url: endpointUrl,
-      events: selectedEvents,
-      enabled: true,
-    })
-    if (!parsed.success) return
-    createMutation.mutate(parsed.data)
-  }
+  const retry = useAdminMutation({
+    mutationFn: retryWebhookRequest,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.webhookRequests }),
+  })
+  const error = organizations.error ?? (section === 'endpoints' ? endpoints.error : requests.error)
+  const loading = organizations.isLoading || (section === 'endpoints' ? endpoints.isLoading : requests.isLoading)
   return (
     <ResourcePage
       title={tt('Webhooks')}
-      description={tt('Configure signed event endpoints and inspect persisted delivery requests.')}
+      description={tt(
+        'Send signed Realm or Organization events to downstream systems and inspect every delivery attempt.',
+      )}
       framed={false}
       action={
-        selectedTab === 'endpoints' ? (
-          <Button form="webhook-create-form" type="submit">
-            <Plus data-icon="inline-start" /> {tt('Create endpoint')}{' '}
+        section === 'endpoints' ? (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus />
+            {tt('Create endpoint')}
           </Button>
-        ) : (
-          <a className="uiButton uiButton-primary" href="/console/webhooks/endpoints">
-            <Plus data-icon="inline-start" /> {tt('Create endpoint')}{' '}
-          </a>
-        )
+        ) : null
       }
+      error={error}
+      loading={loading}
+      onRetry={() => (section === 'endpoints' ? endpoints.refetch() : requests.refetch())}
       toolbar={
         <RoutedSettingsTabs
-          active={selectedTab}
+          active={section}
           ariaLabel="Webhook sections"
           tabs={[
             ['endpoints', 'Endpoints', '/console/webhooks/endpoints'],
@@ -160,12 +150,12 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
         />
       }
     >
-      <div className="consoleDetailStack">
+      <div className="grid gap-4">
         <ListToolbar>
           <TextInput
             aria-label={tt('Search webhooks')}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={tt('Search endpoints or events')}
+            placeholder={section === 'endpoints' ? tt('Search endpoints or events') : tt('Search requests or events')}
             value={search}
           />
           <SelectInput
@@ -174,7 +164,7 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
             value={status}
           >
             <option value="">{tt('Any status')}</option>
-            {selectedTab === 'endpoints' ? (
+            {section === 'endpoints' ? (
               <>
                 <option value="enabled">{tt('Enabled')}</option>
                 <option value="disabled">{tt('Disabled')}</option>
@@ -187,153 +177,335 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
               </>
             )}
           </SelectInput>
+          {realmOperator ? (
+            <SelectInput
+              aria-label={tt('Filter webhook scope')}
+              onChange={(event) => setOrganizationFilter(event.target.value)}
+              value={organizationFilter}
+            >
+              <option value="">{tt('Any scope')}</option>
+              {organizations.data?.organizations.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.displayName ?? item.name}
+                </option>
+              ))}
+            </SelectInput>
+          ) : null}
         </ListToolbar>
-        {selectedTab === 'endpoints' ? (
-          <SettingsSections>
-            <SettingsSection
-              title={tt('Create endpoint')}
-              description={tt('Create a signed HTTPS endpoint for selected events.')}
-            >
-              <form className="formStack" id="webhook-create-form" onSubmit={createEndpoint}>
-                <Field label={tt('Endpoint URL')}>
-                  <TextInput
-                    onChange={(event) => setEndpointUrl(event.target.value)}
-                    placeholder="https://example.com/webhooks/auth"
-                    required
-                    type="url"
-                    value={endpointUrl}
+        {section === 'endpoints' ? (
+          <div className="overflow-x-auto rounded-xl border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{tt('Endpoint')}</TableHead>
+                  <TableHead>{tt('Events')}</TableHead>
+                  <TableHead>{tt('Scope')}</TableHead>
+                  <TableHead>{tt('Status')}</TableHead>
+                  <TableHead>{tt('Signing secret')}</TableHead>
+                  <TableHead>{tt('Updated')}</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {endpoints.data?.endpoints.length ? (
+                  endpoints.data.endpoints.map((endpoint) => (
+                    <TableRow key={endpoint.id}>
+                      <TableCell className="max-w-80">
+                        <span className="block truncate font-medium" title={endpoint.url}>
+                          {endpoint.url}
+                        </span>
+                        <span className="block truncate font-mono text-xs text-muted-foreground">{endpoint.id}</span>
+                      </TableCell>
+                      <TableCell className="max-w-72 truncate">{endpoint.events.join(', ')}</TableCell>
+                      <TableCell>
+                        {endpoint.organizationId
+                          ? (organizationNames.get(endpoint.organizationId) ?? endpoint.organizationId)
+                          : tt('Realm-wide')}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge active={endpoint.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                      </TableCell>
+                      <TableCell>
+                        <code>{endpoint.secretPrefix}••••</code>
+                      </TableCell>
+                      <TableCell>{formatDate(endpoint.updatedAt)}</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              aria-label={tt('Actions for {{endpoint}}', { endpoint: endpoint.url })}
+                              size="icon"
+                              variant="ghost"
+                            >
+                              <Ellipsis />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => setEditEndpoint(endpoint)}>
+                              {tt('Edit endpoint')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => update.mutate({ id: endpoint.id, input: { enabled: !endpoint.enabled } })}
+                            >
+                              {endpoint.enabled ? tt('Disable') : tt('Enable')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => rotate.mutate(endpoint.id)}>
+                              <RefreshCw />
+                              {tt('Rotate secret')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setDeleteId(endpoint.id)} variant="destructive">
+                              {tt('Delete endpoint')}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableEmptyRow
+                    colSpan={7}
+                    description={tt('Create an HTTPS endpoint to receive signed Realm events.')}
+                    title={tt('No webhook endpoints')}
                   />
-                </Field>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {webhookEvents.map((event) => (
-                    <SwitchRow
-                      checked={selectedEvents.includes(event)}
-                      key={event}
-                      label={event}
-                      onCheckedChange={(checked) => toggleEvent(event, checked)}
-                    />
-                  ))}
-                </div>
-                {createMutation.errorMessage ? (
-                  <StatusBadge active={false} activeLabel="" inactiveLabel={createMutation.errorMessage} />
-                ) : null}
-                <Button
-                  disabled={createMutation.isPending || selectedEvents.length === 0}
-                  type="submit"
-                  variant="secondary"
-                >
-                  <Plus data-icon="inline-start" /> {tt('Create endpoint')}{' '}
-                </Button>
-              </form>
-            </SettingsSection>
-            <SettingsSection
-              title={tt('Endpoints')}
-              description={tt('Manage enabled state, signing secret rotation, and endpoint deletion.')}
-            >
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{tt('Endpoint')}</TableHead>
-                    <TableHead>{tt('Events')}</TableHead>
-                    <TableHead>{tt('Status')}</TableHead>
-                    <TableHead>{tt('Secret')}</TableHead>
-                    <TableHead>{tt('Actions')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {endpointsQuery.data?.endpoints?.map((endpoint) => (
-                    <WebhookEndpointRow
-                      endpoint={endpoint}
-                      key={endpoint.id}
-                      onDelete={(id) => deleteMutation.mutate(id)}
-                      onRotate={(id) => rotateMutation.mutate(id)}
-                      onToggle={(id, enabled) =>
-                        updateMutation.mutate({
-                          id,
-                          input: {
-                            enabled,
-                          },
-                        })
-                      }
-                    />
-                  ))}
-                  {endpointsQuery.data?.endpoints?.length === 0 ? (
-                    <TableEmptyRow
-                      colSpan={5}
-                      description={tt('Create an HTTPS endpoint to receive signed events.')}
-                      title={tt('No webhook endpoints')}
-                    />
-                  ) : null}
-                </TableBody>
-              </Table>
-            </SettingsSection>
-          </SettingsSections>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         ) : null}
-        {selectedTab === 'requests' ? (
-          <SettingsSections>
-            <SettingsSection
-              title={tt('Recent requests')}
-              description={tt('Inspect persisted delivery attempts and retry failed requests.')}
-            >
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{tt('Request')}</TableHead>
-                    <TableHead>{tt('Endpoint')}</TableHead>
-                    <TableHead>{tt('Status')}</TableHead>
-                    <TableHead>{tt('Created')}</TableHead>
-                    <TableHead>{tt('Actions')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {requestsQuery.data?.requests?.map((request) => (
-                    <TableRow key={request.id}>
+        {section === 'requests' ? (
+          <div className="overflow-hidden rounded-xl border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{tt('Request')}</TableHead>
+                  <TableHead>{tt('Endpoint')}</TableHead>
+                  <TableHead>{tt('Scope')}</TableHead>
+                  <TableHead>{tt('HTTP')}</TableHead>
+                  <TableHead>{tt('Status')}</TableHead>
+                  <TableHead>{tt('Created')}</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {requests.data?.requests.length ? (
+                  requests.data.requests.map((item) => (
+                    <TableRow key={item.id}>
                       <TableCell>
-                        <button
-                          className="font-medium hover:underline"
-                          onClick={() => setSelectedRequest(request)}
-                          type="button"
-                        >
-                          {request.event}
+                        <button className="font-medium hover:underline" onClick={() => setRequest(item)} type="button">
+                          {item.event}
                         </button>
-                        <div className="text-xs text-muted-foreground">{request.id}</div>
+                        <span className="block font-mono text-xs text-muted-foreground">{item.id}</span>
                       </TableCell>
-                      <TableCell>{request.endpointUrl}</TableCell>
+                      <TableCell className="max-w-72 truncate">{item.endpointUrl}</TableCell>
                       <TableCell>
-                        <StatusBadge
-                          active={request.status === 'delivered'}
-                          activeLabel="Delivered"
-                          inactiveLabel={request.status === 'pending' ? 'Pending' : 'Failed'}
-                        />
+                        {item.organizationId
+                          ? (organizationNames.get(item.organizationId) ?? item.organizationId)
+                          : tt('Realm-wide')}
                       </TableCell>
-                      <TableCell>{formatDate(request.createdAt)}</TableCell>
+                      <TableCell>{item.httpStatus ?? '—'}</TableCell>
                       <TableCell>
+                        <Badge variant={item.status === 'delivered' ? 'secondary' : 'outline'}>{item.status}</Badge>
+                      </TableCell>
+                      <TableCell>{formatDate(item.createdAt)}</TableCell>
+                      <TableCell className="text-right">
                         <Button
-                          disabled={request.status === 'delivered' || retryMutation.isPending}
-                          onClick={() => retryMutation.mutate(request.id)}
-                          type="button"
-                          variant="secondary"
+                          disabled={item.status === 'delivered' || retry.isPending}
+                          onClick={() => retry.mutate(item.id)}
+                          size="sm"
+                          variant="ghost"
                         >
-                          <RefreshCw data-icon="inline-start" /> {tt('Retry')}{' '}
+                          <RefreshCw />
+                          {tt('Retry')}
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))}
-                  {requestsQuery.data?.requests?.length === 0 ? (
-                    <TableEmptyRow
-                      colSpan={5}
-                      description={tt('Signed delivery attempts are recorded here when webhook events are dispatched.')}
-                      title={tt('No webhook requests')}
-                    />
-                  ) : null}
-                </TableBody>
-              </Table>
-            </SettingsSection>
-          </SettingsSections>
+                  ))
+                ) : (
+                  <TableEmptyRow
+                    colSpan={7}
+                    description={tt('Delivery attempts appear here after Realm events are dispatched.')}
+                    title={tt('No webhook requests')}
+                  />
+                )}
+              </TableBody>
+            </Table>
+          </div>
         ) : null}
       </div>
-      <WebhookSecretDisclosureDialog secret={secretDisclosure} onClose={() => setSecretDisclosure(null)} />
-      <WebhookRequestDialog request={selectedRequest} onClose={() => setSelectedRequest(null)} />
+      {createOpen ? (
+        <EndpointDialog
+          error={create.errorMessage}
+          fixedOrganizationId={organizationId}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={(input) => create.mutate({ ...input, enabled: true })}
+          organizations={organizations.data?.organizations ?? []}
+          pending={create.isPending}
+        />
+      ) : null}
+      {editEndpoint ? (
+        <EndpointDialog
+          endpoint={editEndpoint}
+          error={update.errorMessage}
+          fixedOrganizationId={organizationId}
+          onClose={() => setEditEndpoint(null)}
+          onSubmit={(input) => update.mutate({ id: editEndpoint.id, input })}
+          organizations={organizations.data?.organizations ?? []}
+          pending={update.isPending}
+        />
+      ) : null}
+      <DangerConfirmDialog
+        actionLabel={tt('Delete endpoint')}
+        description={tt(
+          'Realmroot stops delivering events to this endpoint immediately. Delivery history remains available.',
+        )}
+        error={remove.error}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => {
+          if (deleteId) remove.mutate(deleteId)
+        }}
+        open={deleteId !== null}
+        pending={remove.isPending}
+        title={tt('Delete webhook endpoint?')}
+      />
+      <WebhookSecretDisclosureDialog onClose={() => setSecret(null)} secret={secret} />
+      <WebhookRequestDialog onClose={() => setRequest(null)} request={request} />
     </ResourcePage>
+  )
+}
+
+function EndpointDialog({
+  endpoint,
+  error,
+  fixedOrganizationId,
+  onClose,
+  onSubmit,
+  organizations,
+  pending,
+}: {
+  endpoint?: WebhookEndpoint
+  error?: string | null
+  fixedOrganizationId?: string
+  onClose: () => void
+  onSubmit: (input: Pick<Parameters<typeof createWebhookEndpoint>[0], 'url' | 'events' | 'organizationId'>) => void
+  organizations: Awaited<ReturnType<typeof listOrganizations>>['organizations']
+  pending: boolean
+}) {
+  const [events, setEvents] = useState<WebhookEvent[]>(endpoint?.events ?? ['user.created'])
+  const [scope, setScope] = useState(endpoint?.organizationId ?? fixedOrganizationId ?? '')
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const eventsId = useId()
+  const close = () => {
+    setValidationError(null)
+    onClose()
+  }
+  return (
+    <Dialog
+      onOpenChange={(next) => {
+        if (!next) close()
+      }}
+      open
+    >
+      <DialogContent>
+        <form
+          onSubmit={(event: FormEvent<HTMLFormElement>) => {
+            event.preventDefault()
+            const form = new FormData(event.currentTarget)
+            const result = createWebhookEndpointRequestSchema.safeParse({
+              url: form.get('url'),
+              events,
+              enabled: true,
+              organizationId: scope || null,
+            })
+            if (!result.success) {
+              setValidationError(tt(result.error.issues[0]?.message ?? 'Invalid form input.'))
+              return
+            }
+            setValidationError(null)
+            onSubmit({
+              url: result.data.url,
+              events: result.data.events,
+              organizationId: result.data.organizationId,
+            })
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{tt(endpoint ? 'Edit webhook endpoint' : 'Create webhook endpoint')}</DialogTitle>
+            <DialogDescription>
+              {tt(
+                endpoint
+                  ? 'Update the HTTPS destination and subscribed Realm events.'
+                  : 'Realmroot signs every selected event before delivering it to this HTTPS endpoint.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-5 py-5">
+            <Field label={tt('Endpoint URL')}>
+              <TextInput
+                defaultValue={endpoint?.url}
+                name="url"
+                placeholder="https://example.com/webhooks/realmroot"
+                required
+                type="url"
+              />
+            </Field>
+            <Field
+              help={tt(
+                'Realm-wide endpoints receive every matching event. Organization endpoints receive only events applicable to that Organization.',
+              )}
+              label={tt('Event scope')}
+            >
+              {fixedOrganizationId ? (
+                <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                  {organizations.find((item) => item.id === fixedOrganizationId)?.displayName ??
+                    organizations.find((item) => item.id === fixedOrganizationId)?.name ??
+                    fixedOrganizationId}
+                </div>
+              ) : (
+                <SelectInput name="organizationId" onChange={(event) => setScope(event.target.value)} value={scope}>
+                  <option value="">{tt('Realm-wide')}</option>
+                  {organizations.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.displayName ?? item.name}
+                    </option>
+                  ))}
+                </SelectInput>
+              )}
+            </Field>
+            <div className="grid gap-3">
+              <strong className="text-sm">{tt('Events')}</strong>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {webhookEvents.map((item) => (
+                  <label className="flex items-center gap-2 text-sm" htmlFor={`${eventsId}-${item}`} key={item}>
+                    <Checkbox
+                      checked={events.includes(item)}
+                      id={`${eventsId}-${item}`}
+                      onCheckedChange={(checked) =>
+                        setEvents((current) =>
+                          checked ? [...current, item] : current.filter((value) => value !== item),
+                        )
+                      }
+                    />
+                    {item}
+                  </label>
+                ))}
+              </div>
+            </div>
+            {validationError || error ? (
+              <p className="text-sm text-destructive" role="alert">
+                {validationError ?? error}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button onClick={close} type="button" variant="outline">
+              {tt('Cancel')}
+            </Button>
+            <Button disabled={pending || !events.length} type="submit">
+              {pending ? tt(endpoint ? 'Saving…' : 'Creating…') : tt(endpoint ? 'Save changes' : 'Create endpoint')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

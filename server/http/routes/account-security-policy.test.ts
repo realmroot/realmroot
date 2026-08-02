@@ -107,7 +107,9 @@ describe('account security policy routes', () => {
       securityPolicy: policy,
     })
 
-    const protectedResponse = await app.request('/api/account/profile', { headers: userHeaders() })
+    const profileResponse = await app.request('/api/account/profile', { headers: userHeaders() })
+    const configResponse = await app.request('/api/configz', { headers: userHeaders() })
+    const protectedResponse = await app.request('/api/account/applications', { headers: userHeaders() })
     const assetResponse = await app.request('/api/assets/asset-1', { headers: userHeaders() })
     const enrollmentResponse = await app.request('/api/account/security/mfa/totp-enrollment', {
       method: 'POST',
@@ -115,6 +117,8 @@ describe('account security policy routes', () => {
       body: JSON.stringify({ password: 'password-1' }),
     })
 
+    expect(profileResponse.status).toBe(200)
+    expect(configResponse.status).toBe(200)
     expect(protectedResponse.status).toBe(403)
     await expect(protectedResponse.json()).resolves.toMatchObject({
       error: {
@@ -246,8 +250,8 @@ function createAuthMock() {
         }
       }),
       enableTwoFactor: vi.fn().mockResolvedValue({ totpURI: 'otpauth://totp/Realmroot', backupCodes: [] }),
-      disableTwoFactor: vi.fn().mockResolvedValue({ status: true }),
-      verifyTOTP: vi.fn().mockResolvedValue({ status: true }),
+      disableTwoFactor: vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: true }))),
+      verifyTOTP: vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: true }))),
       generateBackupCodes: vi.fn().mockResolvedValue({ status: true, backupCodes: [] }),
       listPasskeys: vi.fn().mockResolvedValue([]),
       deletePasskey: vi.fn().mockResolvedValue({ status: true }),
@@ -258,7 +262,7 @@ function createAuthMock() {
       revokeUserSession: vi.fn().mockResolvedValue({ success: true }),
       revokeUserSessions: vi.fn().mockResolvedValue({ success: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
-      changePassword: vi.fn().mockResolvedValue({ status: true }),
+      changePassword: vi.fn().mockResolvedValue(Response.json({ status: true })),
     },
     handler: async () => new Response(null, { status: 204 }),
   }
@@ -382,7 +386,8 @@ function securityPolicy(overrides: Partial<SecurityPolicy> = {}): SecurityPolicy
       enabled: false,
       provider: 'turnstile',
       siteKey: '',
-      secretBinding: '',
+      projectId: null,
+      secretKey: '',
       ...overrides.captcha,
     },
     blocklist: {
@@ -408,7 +413,8 @@ function updatedSecurityPolicy(): SecurityPolicy {
       enabled: true,
       provider: 'turnstile',
       siteKey: 'site-key-1',
-      secretBinding: 'TURNSTILE_SECRET',
+      projectId: null,
+      secretKey: 'secret-1',
     },
     blocklist: {
       blockSubaddressing: true,

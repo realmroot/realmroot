@@ -13,6 +13,7 @@
       "scripts/**/*.mjs",
       "src/**/*.ts",
       "src/**/*.tsx",
+      "!src/components/ui",
       "e2e/**/*.ts"
     ],
     "ignoreUnknown": true

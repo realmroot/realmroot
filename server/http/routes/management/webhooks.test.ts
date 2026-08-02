@@ -16,6 +16,7 @@ describe('createManagementWebhookRoutes', () => {
           url: 'https://app.example.com/webhooks/auth',
           events: ['user.created'],
           enabled: true,
+          organizationId: null,
           secretPrefix: 'whsec_sec',
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',

@@ -45,7 +45,4 @@ jobs:
           REALMROOT_WORKER_NAME: ${{ vars.REALMROOT_WORKER_NAME }}
           REALMROOT_D1_DATABASE: ${{ vars.REALMROOT_D1_DATABASE }}
           REALMROOT_R2_BUCKET: ${{ vars.REALMROOT_R2_BUCKET }}
-          REALMROOT_EMAIL_QUEUE: ${{ vars.REALMROOT_EMAIL_QUEUE }}
-          REALMROOT_EMAIL_FROM: ${{ vars.REALMROOT_EMAIL_FROM }}
-          REALMROOT_EMAIL_FROM_NAME: ${{ vars.REALMROOT_EMAIL_FROM_NAME }}
         run: pnpm run deploy:fork

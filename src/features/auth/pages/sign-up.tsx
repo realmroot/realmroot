@@ -1,4 +1,5 @@
 import {
+  AuthMethodDivider,
   authPageHref,
   authRequestContext,
   CaptchaTokenField,
@@ -50,7 +51,7 @@ export function SignUpPage() {
           callbackURL: callback,
           captchaToken: config?.captcha?.enabled ? captchaToken : undefined,
         })
-        return 'Account created. Check your email if verification is required.'
+        return 'Account created.'
       } finally {
         resetCaptcha()
       }
@@ -66,6 +67,7 @@ export function SignUpPage() {
       {signupEnabled ? (
         <SignUpCardBody
           created={created}
+          email={email}
           form={
             <SignUpForm
               captchaConfig={config}
@@ -85,8 +87,10 @@ export function SignUpPage() {
             />
           }
           signInAction={<a href={authPageHref('/auth/sign-in')}>{tt('Already have an account?')}</a>}
-          socialButtons={<SocialButtons callback={callback} providers={socialProviders} />}
-          status={<SubmitStatus state={submit} />}
+          socialButtons={
+            socialProviders.length > 0 ? <SocialButtons callback={callback} providers={socialProviders} /> : undefined
+          }
+          status={created ? undefined : <SubmitStatus state={submit} />}
         />
       ) : (
         <SignUpDisabled signInAction={<a href={authPageHref('/auth/sign-in')}>{tt('Back to sign in')}</a>} />
@@ -107,12 +111,14 @@ function SignUpDisabled({ signInAction }: { signInAction: ReactNode }) {
 }
 export function SignUpCardBody({
   created,
+  email,
   form,
   signInAction,
   socialButtons,
   status,
 }: {
   created: boolean
+  email: string
   form: ReactNode
   signInAction: ReactNode
   socialButtons?: ReactNode
@@ -123,12 +129,17 @@ export function SignUpCardBody({
       {created ? (
         <div className="authCardHeader">
           <h2>{tt('Check your inbox')}</h2>
-          <p>{tt('Use the verification message if this deployment requires confirmed email before continuing.')}</p>
+          <p>{tt('We sent a verification message to {{email}}. Verify your address, then sign in.', { email })}</p>
         </div>
       ) : (
         form
       )}
-      {created ? null : socialButtons}
+      {!created && socialButtons ? (
+        <>
+          <AuthMethodDivider />
+          {socialButtons}
+        </>
+      ) : null}
       {status}
       <div className="authLinks">{signInAction}</div>
     </>
@@ -146,6 +157,7 @@ export function SignUpForm({
   onSubmit,
   onUsernameChange,
   password,
+  renderAsForm = true,
   submitLoading = false,
   username,
   usernameEnabled,
@@ -161,18 +173,26 @@ export function SignUpForm({
   onSubmit: (event: FormEvent) => void
   onUsernameChange: (value: string) => void
   password: string
+  renderAsForm?: boolean
   submitLoading?: boolean
   username: string
   usernameEnabled?: boolean
 }) {
-  return (
-    <form className="formStack" onSubmit={onSubmit}>
+  const fields = (
+    <>
       <Field label={tt('Name')}>
-        <TextInput autoComplete="name" onChange={(event) => onNameChange(event.target.value)} required value={name} />
+        <TextInput
+          autoComplete="name"
+          name="name"
+          onChange={(event) => onNameChange(event.target.value)}
+          required
+          value={name}
+        />
       </Field>
       <Field label={tt('Email')}>
         <TextInput
           autoComplete={usernameEnabled ? 'email' : 'username'}
+          name="email"
           onChange={(event) => onEmailChange(event.target.value)}
           required
           type="email"
@@ -183,6 +203,7 @@ export function SignUpForm({
         <Field label={tt('Username')}>
           <TextInput
             autoComplete="username"
+            name="username"
             onChange={(event) => onUsernameChange(event.target.value)}
             value={username}
           />
@@ -191,6 +212,7 @@ export function SignUpForm({
       <Field label={tt('Password')}>
         <PasswordInput
           autoComplete="new-password"
+          name="password"
           onChange={(event) => onPasswordChange(event.target.value)}
           required
           value={password}
@@ -203,6 +225,12 @@ export function SignUpForm({
         {' '}
         {tt('Create account')}{' '}
       </Button>
+    </>
+  )
+  if (!renderAsForm) return <div className="formStack">{fields}</div>
+  return (
+    <form className="formStack" onSubmit={onSubmit}>
+      {fields}
     </form>
   )
 }

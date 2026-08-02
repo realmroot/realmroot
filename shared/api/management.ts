@@ -1,7 +1,9 @@
 import { z } from 'zod'
 import type { AgentProtocolInventoryResponse } from './agents'
 import { applicationResponseSchema, listApplicationsResponseSchema, paginationMetadataSchema } from './applications'
+import { managedAssetPathSchema } from './assets'
 import {
+  apiResourceContractResponseSchema,
   apiResourceResponseSchema,
   listApiResourcesResponseSchema,
   listOrganizationsResponseSchema,
@@ -9,7 +11,6 @@ import {
   organizationResponseSchema,
   paginationQuerySchema,
   roleResponseSchema,
-  roleScopesResponseSchema,
 } from './authorization'
 import {
   configzAccountCenterSchema,
@@ -117,6 +118,17 @@ const nullableHttpsUrlSchema = z
   .refine((value) => value.startsWith('https://'), 'URL must use https.')
   .nullable()
 
+const nullableBrandingAssetUrlSchema = z
+  .union([
+    managedAssetPathSchema,
+    z
+      .string()
+      .trim()
+      .url()
+      .refine((value) => value.startsWith('https://'), 'URL must use https.'),
+  ])
+  .nullable()
+
 const nullableEmailSchema = z.email().nullable()
 
 export const updateManagementSignInSettingsRequestSchema = z.object({
@@ -125,6 +137,7 @@ export const updateManagementSignInSettingsRequestSchema = z.object({
       passwordEnabled: true,
       signupEnabled: true,
       socialLoginEnabled: true,
+      usernameEnabled: true,
       identifierFirst: true,
       emailOtpEnabled: true,
     })
@@ -166,8 +179,8 @@ export const managementBrandingSettingsResponseSchema = z.object({
 export const updateManagementBrandingSettingsRequestSchema = z.object({
   branding: z
     .object({
-      logoUrl: nullableHttpsUrlSchema,
-      faviconUrl: nullableHttpsUrlSchema,
+      logoUrl: nullableBrandingAssetUrlSchema,
+      faviconUrl: nullableBrandingAssetUrlSchema,
       primaryColor: z
         .string()
         .regex(/^#[0-9a-fA-F]{6}$/)
@@ -190,6 +203,61 @@ export const managementAccountCenterSettingsResponseSchema = z.object({
 export const updateManagementAccountCenterSettingsRequestSchema = z.object({
   accountCenter: configzAccountCenterSchema.partial(),
 })
+
+export const organizationCreationPolicySchema = z.enum(['admins_only', 'approved_users', 'verified_users'])
+export const developerConsoleAccessPolicySchema = z.enum([
+  'realm_operators',
+  'selected_organizations',
+  'all_organizations',
+])
+export const developerConsoleAccessLevelSchema = z.enum(['owner', 'admin', 'developer'])
+
+export const managementDeveloperSettingsResponseSchema = z.object({
+  organizationCreation: organizationCreationPolicySchema,
+  approvedUserIds: z
+    .array(z.string())
+    .default([])
+    .transform((ids) => [...new Set(ids)].sort()),
+  consoleAccess: developerConsoleAccessPolicySchema,
+  eligibleAccessLevels: z.array(developerConsoleAccessLevelSchema).min(1),
+  selectedOrganizationIds: z.array(z.string()),
+})
+
+export const updateManagementDeveloperSettingsRequestSchema = managementDeveloperSettingsResponseSchema
+
+export const managementGeneralSettingsResponseSchema = z.object({
+  realmName: z.string().trim().min(1).max(80),
+  issuer: z.url(),
+  oidcDiscoveryUrl: z.url(),
+  jwksUrl: z.url(),
+  managementApiUrl: z.url(),
+})
+
+export const updateManagementGeneralSettingsRequestSchema = z.object({
+  realmName: z.string().trim().min(1).max(80),
+})
+
+export const emailDeliveryProviderSchema = z.literal('cloudflare_email')
+
+export const emailServiceSettingsSchema = z.object({
+  provider: emailDeliveryProviderSchema,
+  enabled: z.boolean(),
+  fromEmail: z.email(),
+  fromName: z.string().trim().min(1).max(80).nullable(),
+  replyToEmail: z.email().nullable(),
+})
+
+export const managementEmailSettingsResponseSchema = z.object({
+  provider: emailDeliveryProviderSchema,
+  enabled: z.boolean(),
+  fromEmail: z.email().nullable(),
+  fromName: z.string().nullable(),
+  replyToEmail: z.email().nullable(),
+  bindingAvailable: z.boolean(),
+  source: z.enum(['database', 'environment', 'unconfigured']),
+})
+
+export const updateManagementEmailSettingsRequestSchema = emailServiceSettingsSchema
 
 export const managementReadinessItemIdSchema = z.enum([
   'oidc_application',
@@ -394,7 +462,7 @@ export const managementResourceSchemas = {
   applications: applicationResponseSchema,
   organizations: organizationResponseSchema,
   apiResources: apiResourceResponseSchema,
-  roleScopes: roleScopesResponseSchema,
+  apiResourceContract: apiResourceContractResponseSchema,
   roles: roleResponseSchema,
   signInSettings: managementSignInSettingsResponseSchema,
   brandingSettings: managementBrandingSettingsResponseSchema,
@@ -450,6 +518,13 @@ export type ManagementAccountCenterSettingsResponse = z.infer<typeof managementA
 export type UpdateManagementAccountCenterSettingsRequest = z.infer<
   typeof updateManagementAccountCenterSettingsRequestSchema
 >
+export type ManagementDeveloperSettingsResponse = z.infer<typeof managementDeveloperSettingsResponseSchema>
+export type UpdateManagementDeveloperSettingsRequest = z.infer<typeof updateManagementDeveloperSettingsRequestSchema>
+export type ManagementGeneralSettingsResponse = z.infer<typeof managementGeneralSettingsResponseSchema>
+export type UpdateManagementGeneralSettingsRequest = z.infer<typeof updateManagementGeneralSettingsRequestSchema>
+export type EmailServiceSettings = z.infer<typeof emailServiceSettingsSchema>
+export type ManagementEmailSettingsResponse = z.infer<typeof managementEmailSettingsResponseSchema>
+export type UpdateManagementEmailSettingsRequest = z.infer<typeof updateManagementEmailSettingsRequestSchema>
 export type ManagementReadinessItem = z.infer<typeof managementReadinessItemSchema>
 export type ManagementReadinessResponse = z.infer<typeof managementReadinessResponseSchema>
 export type ManagementConnectorResponse = z.infer<typeof managementConnectorResponseSchema>

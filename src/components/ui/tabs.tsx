@@ -1,99 +1,74 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react'
-import { createContext, useContext, useId } from 'react'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { Tabs as TabsPrimitive } from 'radix-ui'
+import type * as React from 'react'
+
 import { cn } from '@/lib/utils'
 
-type TabsContextValue = {
-  idBase: string
-  value: string
-  setValue: (value: string) => void
-}
-
-const TabsContext = createContext<TabsContextValue | null>(null)
-
-type TabsProps = HTMLAttributes<HTMLDivElement> & Omit<TabsContextValue, 'idBase'>
-
-export function Tabs({ value, setValue, ...props }: TabsProps) {
-  const generatedId = useId()
+function Tabs({ className, orientation = 'horizontal', ...props }: React.ComponentProps<typeof TabsPrimitive.Root>) {
   return (
-    <TabsContext.Provider value={{ idBase: generatedId, value, setValue }}>
-      <div {...props} />
-    </TabsContext.Provider>
+    <TabsPrimitive.Root
+      data-slot="tabs"
+      data-orientation={orientation}
+      className={cn('group/tabs flex gap-2 data-horizontal:flex-col', className)}
+      {...props}
+    />
   )
 }
 
-export function TabsList({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('inline-flex h-9 rounded-lg bg-transparent', className)} role="tablist" {...props} />
-}
+const tabsListVariants = cva(
+  'group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none',
+  {
+    variants: {
+      variant: {
+        default: 'bg-muted',
+        line: 'gap-1 bg-transparent',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+)
 
-type TabsTriggerProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  value: string
-}
-
-export function TabsTrigger({ className, value, ...props }: TabsTriggerProps) {
-  const tabs = useTabs()
-  const active = tabs.value === value
-  const triggerId = `${tabs.idBase}-tab-${value}`
-  const panelId = `${tabs.idBase}-panel-${value}`
+function TabsList({
+  className,
+  variant = 'default',
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.List> & VariantProps<typeof tabsListVariants>) {
   return (
-    <button
-      aria-controls={panelId}
-      aria-selected={active}
+    <TabsPrimitive.List
+      data-slot="tabs-list"
+      data-variant={variant}
+      className={cn(tabsListVariants({ variant }), className)}
+      {...props}
+    />
+  )
+}
+
+function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+  return (
+    <TabsPrimitive.Trigger
+      data-slot="tabs-trigger"
       className={cn(
-        'inline-flex h-9 items-center justify-center border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground',
-        active && 'border-primary text-primary',
+        "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-foreground/60 transition-all group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 dark:text-muted-foreground dark:hover:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-sm group-data-[variant=line]/tabs-list:data-active:shadow-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        'group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent',
+        'data-active:bg-background data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground',
+        'after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100',
         className,
       )}
-      id={triggerId}
-      onKeyDown={(event) => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-        const tablist = event.currentTarget.closest('[role="tablist"]')
-        const triggers = Array.from(tablist?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []).filter(
-          (trigger) => !trigger.disabled,
-        )
-        const currentIndex = triggers.indexOf(event.currentTarget)
-        const nextIndex =
-          event.key === 'Home'
-            ? 0
-            : event.key === 'End'
-              ? triggers.length - 1
-              : event.key === 'ArrowRight'
-                ? (currentIndex + 1) % triggers.length
-                : (currentIndex - 1 + triggers.length) % triggers.length
-        const nextTrigger = triggers[nextIndex]
-        if (!nextTrigger) return
-        event.preventDefault()
-        nextTrigger.focus()
-        nextTrigger.click()
-      }}
-      onClick={() => tabs.setValue(value)}
-      role="tab"
-      tabIndex={active ? 0 : -1}
-      type="button"
       {...props}
     />
   )
 }
 
-type TabsContentProps = HTMLAttributes<HTMLDivElement> & {
-  value: string
-  children: ReactNode
-}
-
-export function TabsContent({ value, ...props }: TabsContentProps) {
-  const tabs = useTabs()
-  if (tabs.value !== value) return null
+function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
-    <div
-      aria-labelledby={`${tabs.idBase}-tab-${value}`}
-      id={`${tabs.idBase}-panel-${value}`}
-      role="tabpanel"
+    <TabsPrimitive.Content
+      data-slot="tabs-content"
+      className={cn('flex-1 text-sm outline-none', className)}
       {...props}
     />
   )
 }
 
-function useTabs() {
-  const tabs = useContext(TabsContext)
-  if (!tabs) throw new Error('Tabs components must be rendered inside Tabs.')
-  return tabs
-}
+export { Tabs, TabsContent, TabsList, TabsTrigger, tabsListVariants }

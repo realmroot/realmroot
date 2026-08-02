@@ -155,7 +155,7 @@ describe('management routes 1', () => {
     ])
   })
 
-  it('documents application setup fields and role scope replacement request bodies', () => {
+  it('documents application setup fields and role permission replacement request bodies', () => {
     const createApplication = openApiOperationObjects().find((operation) => operation.key === 'POST /applications')
     const createApplicationSchema = openApiSchemaObject(requestBodyContent(createApplication?.requestBody).schema)
     const createApplicationProperties = openApiRecord(createApplicationSchema.properties)
@@ -165,15 +165,17 @@ describe('management routes 1', () => {
     expect(createApplicationProperties).not.toHaveProperty('clientId')
     expect(createApplicationProperties).not.toHaveProperty('clientSecret')
 
-    const replaceRoleScopes = openApiOperationObjects().find(
-      (operation) => operation.key === 'PUT /roles/{param}/scopes',
+    const replaceRolePermissions = openApiOperationObjects().find(
+      (operation) => operation.key === 'PUT /roles/{param}/permissions',
     )
-    const replaceRoleScopesSchema = openApiSchemaObject(requestBodyContent(replaceRoleScopes?.requestBody).schema)
-    const replaceRoleScopesProperties = openApiRecord(replaceRoleScopesSchema.properties)
+    const replaceRolePermissionsSchema = openApiSchemaObject(
+      requestBodyContent(replaceRolePermissions?.requestBody).schema,
+    )
+    const replaceRolePermissionsProperties = openApiRecord(replaceRolePermissionsSchema.properties)
 
-    expect(replaceRoleScopesProperties).toHaveProperty('scopes')
-    expect(replaceRoleScopes?.responses).toHaveProperty('204')
-    expect(replaceRoleScopes?.responses).not.toHaveProperty('200')
+    expect(replaceRolePermissionsProperties).toHaveProperty('permissions')
+    expect(replaceRolePermissions?.responses).toHaveProperty('204')
+    expect(replaceRolePermissions?.responses).not.toHaveProperty('200')
 
     const deleteApiResource = openApiOperationObjects().find(
       (operation) => operation.key === 'DELETE /api-resources/{param}',

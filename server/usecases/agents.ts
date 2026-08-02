@@ -1,4 +1,5 @@
 import { badRequest } from '@server/domain/errors'
+import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import type { AgentRepository } from '@server/usecases/ports'
 import type { AccountAgent, AccountAgentsResponse } from '@shared/api/agents'
@@ -115,15 +116,34 @@ export async function decideAgentApproval(
   },
   userId: string,
 ) {
+  const pendingCapabilities = (await deps.agents.listCapabilityGrantsForAgent(input.agentId))
+    .filter((grant) => grant.status === 'pending')
+    .map((grant) => grant.capability)
+  const capabilities = input.action === 'deny' ? pendingCapabilities : (input.capabilities ?? pendingCapabilities)
+  const status = await deps.agents.decideApproval({
+    agentId: input.agentId,
+    userCodeHash: await hashAgentUserCode(input.userCode),
+    action: input.action,
+    capabilities: input.capabilities,
+    userId,
+    now: new Date(),
+  })
+  const [identity, protocolAgent] = await Promise.all([
+    deps.agentIdentities.findActiveByProtocolAgent(input.agentId),
+    deps.agentIdentities.findProtocolAgent(input.agentId),
+  ])
+  await appendAgentGovernanceAudit(deps, {
+    action: 'agent.capability_decided',
+    result: status === 'approved' ? 'allowed' : 'denied',
+    controllerUserId: userId,
+    issuer: identity?.identity.issuer,
+    subject: identity?.identity.subject,
+    agentIdentityId: identity?.identity.id,
+    hostId: protocolAgent?.hostId,
+    capabilities,
+  })
   return {
-    status: await deps.agents.decideApproval({
-      agentId: input.agentId,
-      userCodeHash: await hashAgentUserCode(input.userCode),
-      action: input.action,
-      capabilities: input.capabilities,
-      userId,
-      now: new Date(),
-    }),
+    status,
   }
 }
 

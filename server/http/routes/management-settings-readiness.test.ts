@@ -1,7 +1,7 @@
 import { createApp } from '@server/http/app'
 import * as applications from '@server/usecases/applications'
 import * as configz from '@server/usecases/configz'
-import { managementReadinessResponseSchema } from '@shared/api/management'
+import { type ManagementDeveloperSettingsResponse, managementReadinessResponseSchema } from '@shared/api/management'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createTestDeps } from '../test-deps'
@@ -10,6 +10,8 @@ import { adminHeaders, applicationFixture, builtInProvidersFixture, createAuthMo
 type SignInSettings = Awaited<ReturnType<typeof configz.getManagementSignInSettings>>
 type BrandingSettings = Awaited<ReturnType<typeof configz.getManagementBrandingSettings>>
 type AccountCenterSettings = Awaited<ReturnType<typeof configz.getManagementAccountCenterSettings>>
+type GeneralSettings = Awaited<ReturnType<typeof configz.getManagementGeneralSettings>>
+type EmailSettings = Awaited<ReturnType<typeof configz.getManagementEmailSettings>>
 type ConfigzConfig = Awaited<ReturnType<typeof configz.getConfig>>
 type ListApplicationsResponse = Awaited<ReturnType<typeof applications.listApplications>>
 
@@ -132,6 +134,65 @@ describe('management routes 3', () => {
     })
   })
 
+  it('persists General and Email settings through dedicated management resources', async () => {
+    const general: GeneralSettings = {
+      realmName: 'Acme Realm',
+      issuer: 'https://auth.example.com/api/auth',
+      oidcDiscoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+      jwksUrl: 'https://auth.example.com/api/auth/jwks',
+      managementApiUrl: 'https://auth.example.com/api/openapi.json',
+    }
+    const email: EmailSettings = {
+      provider: 'cloudflare_email',
+      enabled: true,
+      fromEmail: 'auth@example.com',
+      fromName: 'Acme Realm',
+      replyToEmail: 'support@example.com',
+      bindingAvailable: true,
+      source: 'database',
+    }
+    vi.spyOn(configz, 'getManagementGeneralSettings').mockResolvedValue(general)
+    vi.spyOn(configz, 'getManagementEmailSettings').mockResolvedValue(email)
+    const updateGeneral = vi.spyOn(configz, 'updateManagementGeneralSettings').mockResolvedValue(general)
+    const updateEmail = vi.spyOn(configz, 'updateManagementEmailSettings').mockResolvedValue(email)
+    const app = createApp(createAuthMock(), createTestDeps())
+    const headers = adminHeaders()
+
+    const generalRead = await app.request('/api/general-settings', { headers })
+    const generalWrite = await app.request('/api/general-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ realmName: 'Acme Realm' }),
+    })
+    const emailRead = await app.request('/api/email-settings', { headers })
+    const emailWrite = await app.request('/api/email-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        provider: 'cloudflare_email',
+        enabled: true,
+        fromEmail: 'auth@example.com',
+        fromName: 'Acme Realm',
+        replyToEmail: 'support@example.com',
+      }),
+    })
+
+    expect(generalRead.status).toBe(200)
+    expect(generalWrite.status).toBe(200)
+    expect(emailRead.status).toBe(200)
+    expect(emailWrite.status).toBe(200)
+    await expect(generalRead.json()).resolves.toEqual(general)
+    await expect(emailRead.json()).resolves.toEqual(email)
+    expect(updateGeneral).toHaveBeenCalledWith(expect.anything(), expect.anything(), { realmName: 'Acme Realm' })
+    expect(updateEmail).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
+      provider: 'cloudflare_email',
+      enabled: true,
+      fromEmail: 'auth@example.com',
+      fromName: 'Acme Realm',
+      replyToEmail: 'support@example.com',
+    })
+  })
+
   it('updates managed sign-in, branding, and account center settings with validated input', async () => {
     const updateSignIn = vi.spyOn(configz, 'updateManagementSignInSettings').mockResolvedValue(signInSettings())
     const updateBranding = vi.spyOn(configz, 'updateManagementBrandingSettings').mockResolvedValue(brandingSettings())
@@ -218,6 +279,34 @@ describe('management routes 3', () => {
         description: 'Continue.',
       },
     })
+  })
+
+  it('persists independent Organization creation and Console access policies [spec: admin-console/admin-developer-access-policy]', async () => {
+    const settings: ManagementDeveloperSettingsResponse = {
+      organizationCreation: 'verified_users',
+      approvedUserIds: [],
+      consoleAccess: 'selected_organizations',
+      eligibleAccessLevels: ['owner', 'admin', 'developer'],
+      selectedOrganizationIds: ['org-1'],
+    }
+    const get = vi.spyOn(configz, 'getManagementDeveloperSettings').mockResolvedValue(settings)
+    const update = vi.spyOn(configz, 'updateManagementDeveloperSettings').mockResolvedValue(settings)
+    const app = createApp(createAuthMock(), createTestDeps())
+    const headers = adminHeaders()
+
+    const readResponse = await app.request('/api/developer-settings', { headers })
+    const updateResponse = await app.request('/api/developer-settings', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(settings),
+    })
+
+    expect(readResponse.status).toBe(200)
+    expect(updateResponse.status).toBe(200)
+    await expect(readResponse.json()).resolves.toEqual(settings)
+    await expect(updateResponse.json()).resolves.toEqual(settings)
+    expect(get).toHaveBeenCalledWith(expect.anything())
+    expect(update).toHaveBeenCalledWith(expect.anything(), settings)
   })
 
   it('uses management-specific configz readers when available', async () => {
@@ -315,7 +404,7 @@ describe('management routes 3', () => {
           label: 'Enable a sign-in method',
           description: 'Keep at least one hosted sign-in method available for users.',
           status: 'complete',
-          href: '/console/sign-in-experience/sign-up-and-sign-in',
+          href: '/console/sign-in-experience/sign-in',
           action: 'Review methods',
         },
       ],

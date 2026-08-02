@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRouter, queryClient } from '@/router'
 
@@ -18,6 +19,7 @@ afterEach(() => {
 
 import {
   configz,
+  consoleAccountAccess,
   consoleAccountProfile,
   consolePasskey,
   consoleSecurity,
@@ -32,17 +34,23 @@ import {
 
 describe('admin console users-detail-a', () => {
   it('supports unbanning and confirmed deletion from user detail', async () => {
+    const ui = userEvent.setup()
     const requests: Array<{ method: string; url: string; body: unknown }> = []
+    let deleted = false
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
       if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
+      }
+      if (deleted && url.startsWith('/api/users/user-1')) {
+        throw new Error(`Removed user detail was refetched: ${method} ${url}`)
       }
       if (url === '/api/users/user-1' && method === 'GET') {
         return Promise.resolve(
@@ -63,6 +71,7 @@ describe('admin console users-detail-a', () => {
       }
       if (url === '/api/users/user-1' && method === 'DELETE') {
         requests.push({ method, url, body: null })
+        deleted = true
         return Promise.resolve(jsonResponse({ success: true }))
       }
       if (url.startsWith('/api/users/user-1/sessions')) {
@@ -90,8 +99,8 @@ describe('admin console users-detail-a', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
-    expect(screen.getByText('abuse')).toBeTruthy()
+    await ui.click(screen.getByRole('tab', { name: 'Settings' }))
+    expect(screen.getByText(/Banned · abuse/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Unban user' }))
     await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', url: '/api/users/user-1/ban', body: null }))
 
@@ -104,6 +113,7 @@ describe('admin console users-detail-a', () => {
   })
 
   it('retries user detail loading and cancels destructive dialogs', async () => {
+    const ui = userEvent.setup()
     const requests: Array<{ method: string; url: string }> = []
     let detailAttempts = 0
     queryClient.setDefaultOptions({ queries: { retry: false } })
@@ -112,7 +122,8 @@ describe('admin console users-detail-a', () => {
       const method = init?.method ?? 'GET'
       requests.push({ method, url })
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
       if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/readiness') {
         return Promise.resolve(
@@ -149,31 +160,33 @@ describe('admin console users-detail-a', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
+    await ui.click(screen.getByRole('tab', { name: 'Settings' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
-    expect(await screen.findByText('Chrome')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke all' }))
+    await ui.click(screen.getByRole('tab', { name: 'Sessions' }))
+    expect(await screen.findByText('Browser')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke all sessions' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    fireEvent.click(screen.getByRole('button', { name: /^Revoke$/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke Browser' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    fireEvent.click(screen.getByRole('tab', { name: 'Security' }))
+    await ui.click(screen.getByRole('tab', { name: 'Authentication' }))
     expect(await screen.findByText('MacBook Touch ID')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete MacBook Touch ID' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(requests.filter((request) => request.method !== 'GET')).toEqual([])
   })
 
   it('renders user detail fallback states and submits no-reason bans', async () => {
+    const ui = userEvent.setup()
     const requests: Array<{ method: string; url: string; body: unknown }> = []
     queryClient.setDefaultOptions({ queries: { retry: false } })
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
       if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/readiness') {
         return Promise.resolve(
@@ -237,17 +250,16 @@ describe('admin console users-detail-a', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'user-1' })).toBeTruthy()
-    expect(screen.getByText('Multiple roles: admin, support')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Save profile' }).closest('form')?.noValidate).toBe(true)
-    fireEvent.click(screen.getByRole('tab', { name: 'Security' }))
+    expect(screen.getByText('Realm administrator')).toBeTruthy()
+    await ui.click(screen.getByRole('tab', { name: 'Authentication' }))
     expect(await screen.findByText('sms')).toBeTruthy()
-    expect(screen.getAllByText('Disabled')).toHaveLength(2)
+    expect(screen.getByText('Not enabled')).toBeTruthy()
     expect(await screen.findByText('passkey-1')).toBeTruthy()
-    expect(screen.getByText(/not backed up/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
-    expect(await screen.findByText(/Unknown IP/)).toBeTruthy()
+    expect(screen.getByText('Device only')).toBeTruthy()
+    await ui.click(screen.getByRole('tab', { name: 'Sessions' }))
+    expect(await screen.findByText('Unknown browser')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Operations' }))
+    await ui.click(screen.getByRole('tab', { name: 'Settings' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' }).at(-1)!)
     await waitFor(() => {
@@ -255,13 +267,14 @@ describe('admin console users-detail-a', () => {
     })
   })
 
-  it('preserves multi-role users when saving detail profile fields', async () => {
+  it('updates profile fields while preserving non-admin roles [spec: admin-console/admin-user-detail]', async () => {
     const requests: Array<{ method: string; url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
       if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/readiness') {
         return Promise.resolve(
@@ -296,12 +309,13 @@ describe('admin console users-detail-a', () => {
     window.history.pushState(null, '', '/console/users/user-1')
     render(<AppRouter />)
 
-    expect(await screen.findByLabelText('Role')).toHaveProperty('disabled', true)
-    expect(screen.getByText('Multiple roles: admin, viewer')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'roles@example.com' } })
+    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit user' }))
+    expect(screen.getByLabelText('Realm access')).toHaveProperty('value', 'admin')
+    fireEvent.change(screen.getByLabelText('Primary email'), { target: { value: 'roles@example.com' } })
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Jane Roles' } })
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'janeroles' } })
-    fireEvent.submit(screen.getByRole('button', { name: 'Save profile' }).closest('form')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(requests).toEqual([
@@ -312,7 +326,7 @@ describe('admin console users-detail-a', () => {
             email: 'roles@example.com',
             displayName: 'Jane Roles',
             username: 'janeroles',
-            emailVerified: true,
+            role: ['admin', 'viewer'],
           },
         },
       ])

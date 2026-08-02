@@ -9,7 +9,6 @@ export {
 
 import {
   Button,
-  Copy,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -28,7 +27,7 @@ import {
   type WebhookEndpoint,
   type WebhookRequest,
 } from '../console-shared'
-import { SwitchRow } from './helpers-dialogs'
+import { CopyButton, SwitchRow } from './helpers-dialogs'
 import { ResourcePage, RoutedSettingsTabs } from './helpers-resource'
 
 export function WebhookEndpointRow({
@@ -56,13 +55,13 @@ export function WebhookEndpointRow({
           onCheckedChange={(checked) => onToggle(endpoint.id, checked)}
         />
       </TableCell>
-      <TableCell>{endpoint.secretPrefix}...</TableCell>
+      <TableCell>{endpoint.secretPrefix}…</TableCell>
       <TableCell>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => onRotate(endpoint.id)} type="button" variant="secondary">
             <RefreshCw data-icon="inline-start" /> {tt('Rotate secret')}{' '}
           </Button>
-          <Button onClick={() => onDelete(endpoint.id)} type="button" variant="danger">
+          <Button onClick={() => onDelete(endpoint.id)} type="button" variant="destructive">
             <Trash2 data-icon="inline-start" /> {tt('Delete')}{' '}
           </Button>
         </div>
@@ -81,9 +80,7 @@ export function WebhookSecretDisclosureDialog({ onClose, secret }: { onClose: ()
         {secret ? (
           <div className="grid gap-3 p-4">
             <code className="break-all rounded-md border border-border bg-muted p-3 text-sm">{secret}</code>
-            <Button onClick={() => navigator.clipboard.writeText(secret)} type="button" variant="secondary">
-              <Copy data-icon="inline-start" /> {tt('Copy secret')}{' '}
-            </Button>
+            <CopyButton label={tt('Copy secret')} value={secret} />
           </div>
         ) : null}
         <DialogFooter className="m-0">
@@ -98,25 +95,35 @@ export function WebhookSecretDisclosureDialog({ onClose, secret }: { onClose: ()
 }
 export function WebhookRequestDialog({ onClose, request }: { onClose: () => void; request: WebhookRequest | null }) {
   return (
-    <Dialog open={Boolean(request)}>
-      <DialogContent>
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+      open={Boolean(request)}
+    >
+      <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{tt('Webhook request')}</DialogTitle>
           <DialogDescription>{request?.id}</DialogDescription>
         </DialogHeader>
         {request ? (
-          <div className="grid gap-3 p-4">
-            <SettingRow label={tt('Endpoint')} value={request.endpointUrl} />
-            <SettingRow label={tt('Event')} value={request.event} />
-            <SettingRow label={tt('Status')} value={request.status} />
-            <SettingRow label={tt('Attempts')} value={String(request.attemptCount)} />
-            <SettingRow label={tt('HTTP status')} value={request.httpStatus ? String(request.httpStatus) : 'Pending'} />
-            {request.error ? <SettingRow label={tt('Error')} value={request.error} /> : null}
-            {request.requestBody ? <PayloadBlock label={tt('Request body')} value={request.requestBody} /> : null}
-            {request.responseBody ? <PayloadBlock label={tt('Response body')} value={request.responseBody} /> : null}
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="grid gap-3">
+              <SettingRow label={tt('Endpoint')} value={request.endpointUrl} />
+              <SettingRow label={tt('Event')} value={request.event} />
+              <SettingRow label={tt('Status')} value={request.status} />
+              <SettingRow label={tt('Attempts')} value={String(request.attemptCount)} />
+              <SettingRow
+                label={tt('HTTP status')}
+                value={request.httpStatus ? String(request.httpStatus) : 'Pending'}
+              />
+              {request.error ? <SettingRow label={tt('Error')} value={request.error} /> : null}
+              {request.requestBody ? <PayloadBlock label={tt('Request body')} value={request.requestBody} /> : null}
+              {request.responseBody ? <PayloadBlock label={tt('Response body')} value={request.responseBody} /> : null}
+            </div>
           </div>
         ) : null}
-        <DialogFooter className="m-0">
+        <DialogFooter className="m-0 shrink-0">
           <Button onClick={onClose} type="button">
             {' '}
             {tt('Close')}{' '}

@@ -1,5 +1,12 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
-import { createAgentLoginIdentity, getAgentIdentityByProtocolAgent, toAgent } from '@server/usecases/agent-identities'
+import {
+  createAdditionalAgentEnrollmentIntent,
+  createAgentLoginIdentity,
+  getAgentIdentityByProtocolAgent,
+  getProtocolAgentEnrollment,
+  getPublicAgentEnrollment,
+  toAgent,
+} from '@server/usecases/agent-identities'
 import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import {
@@ -15,6 +22,8 @@ import {
   accessGrantsResponseSchema,
   accessRequestSchema,
   agentApiResourcesResponseSchema,
+  agentEnrollmentResponseSchema,
+  agentEnrollmentSchema,
   agentResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
@@ -49,6 +58,24 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
       throw forbidden('A controller-approved delegated Agent session is required.')
     }
     const body = await readJson(c, createAgentEnrollmentSchema)
+    if (body.agentId) {
+      const intent = await createAdditionalAgentEnrollmentIntent(
+        getDeps(c),
+        body.agentId,
+        session.agent.id,
+        session.host.userId,
+      )
+      const verificationUri = hostedEnrollmentUrl(intent.id)
+      c.header('Location', `/api/agent/enrollments/${encodeURIComponent(intent.id)}`)
+      return c.json(
+        agentEnrollmentResponseSchema.parse({
+          enrollment: await getPublicAgentEnrollment(getDeps(c), intent.id, session.host.userId),
+          verificationUri,
+        }),
+        201,
+      )
+    }
+    if (!body.name) throw new Error('New Agent enrollment input was not narrowed after validation.')
     const identity = await createAgentLoginIdentity(
       getDeps(c),
       { protocolAgentId: session.agent.id, name: body.name },
@@ -57,6 +84,15 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
     c.header('Location', '/api/agent')
     return c.json(agentResponseSchema.parse({ agent: toAgent(identity) }), 201)
+  })
+
+  app.get('/enrollments/:enrollmentId', async (c) => {
+    const session = await requireAgentSession(authApi, c.req.raw.headers)
+    return c.json(
+      agentEnrollmentSchema.parse(
+        await getProtocolAgentEnrollment(getDeps(c), c.req.param('enrollmentId'), session.agent.id),
+      ),
+    )
   })
 
   app.get('/api-resources', async (c) => {
@@ -126,6 +162,12 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   function requireOidcIssuer() {
     if (!oidcIssuer) throw new Error('Agent operations require the configured OIDC issuer.')
     return oidcIssuer
+  }
+
+  function hostedEnrollmentUrl(intentId: string) {
+    const url = new URL('/agent/enrollments/approve', new URL(requireOidcIssuer()).origin)
+    url.searchParams.set('intent_id', intentId)
+    return url.toString()
   }
 }
 

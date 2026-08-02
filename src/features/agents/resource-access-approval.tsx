@@ -1,8 +1,12 @@
-import type { AccessRequest, AccountConnection, DecideAccessRequest } from '@shared/api/agent-api'
-import { CheckCircle2, Link2, XCircle } from 'lucide-react'
+import type { AccessRequestApproval, AccountConnection, DecideAccessRequest } from '@shared/api/agent-api'
+import { CheckCircle2, CircleAlert, Link2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { AuthLayout } from '@/components/layout/auth-layout'
+import { Field, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Status } from '@/components/ui/status'
+import { useConfigz } from '@/features/auth/hooks'
 import {
   createAccountConnection,
   decideAgentResourceApproval,
@@ -10,11 +14,13 @@ import {
   listApprovalAccountConnections,
   listExternalApiResources,
 } from '@/lib/api/account'
+import { toLocalDateTimeValue } from '@/lib/date-time'
 
 type ApprovalMode = NonNullable<DecideAccessRequest['mode']>
 const approvalTokenStorageKey = 'realmroot.resource-access-approval-token'
 
 export function ResourceAccessApproval() {
+  const { data: config } = useConfigz()
   const token = useMemo(() => {
     const hashToken = new URLSearchParams(window.location.hash.slice(1)).get('token')
     if (hashToken) {
@@ -23,9 +29,11 @@ export function ResourceAccessApproval() {
     }
     return window.sessionStorage.getItem(approvalTokenStorageKey) ?? ''
   }, [])
-  const [request, setRequest] = useState<AccessRequest | null>(null)
+  const [request, setRequest] = useState<AccessRequestApproval | null>(null)
   const [connection, setConnection] = useState<AccountConnection | null>(null)
-  const [externalResourceName, setExternalResourceName] = useState<string | null>(null)
+  const [agentName, setAgentName] = useState<string | null>(null)
+  const [resourceName, setResourceName] = useState<string | null>(null)
+  const [requiresAccountConnection, setRequiresAccountConnection] = useState(false)
   const [mode, setMode] = useState<ApprovalMode>('once')
   const [expiresAt, setExpiresAt] = useState('')
   const [decision, setDecision] = useState<'approved' | 'denied' | null>(null)
@@ -34,26 +42,23 @@ export function ResourceAccessApproval() {
 
   useEffect(() => {
     if (!token) {
-      setError('Approval token is missing.')
+      setError('This resource access request is incomplete. Start again from the requesting Agent.')
       return
     }
-    void Promise.all([
-      getAgentResourceApproval(token),
-      listApprovalAccountConnections(token),
-      listExternalApiResources(),
-    ])
-      .then(([accessRequest, availableConnections, resources]) => {
+    void getAgentResourceApproval(token)
+      .then(async (accessRequest) => {
+        const [availableConnections, resources] = await Promise.all([
+          listApprovalAccountConnections(token),
+          listExternalApiResources(),
+        ])
         if (availableConnections.items.length > 1) {
           throw new Error('This resource has more than one connected account.')
         }
-        const target = accessRequest.target
         setRequest(accessRequest)
         setConnection(availableConnections.items[0] ?? null)
-        setExternalResourceName(
-          target.type === 'api-resource'
-            ? (resources.items.find((resource) => resource.id === target.apiResourceId)?.name ?? null)
-            : null,
-        )
+        setAgentName(accessRequest.agent.name)
+        setResourceName(accessRequest.resource.name)
+        setRequiresAccountConnection(resources.items.some((resource) => resource.id === accessRequest.resource.id))
       })
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : 'Unable to load the Agent resource request.')
@@ -62,6 +67,10 @@ export function ResourceAccessApproval() {
   }, [token])
 
   async function submit(nextDecision: 'approve' | 'deny') {
+    if (nextDecision === 'approve' && mode === 'until' && !isFutureExpiry(expiresAt)) {
+      setError('Choose a future expiry date and time.')
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
@@ -103,142 +112,201 @@ export function ResourceAccessApproval() {
 
   const connectionCoversRequest =
     request !== null && connection !== null && request.scopes.every((scope) => connection.scopes.includes(scope))
+  const expiryIsValid = mode !== 'until' || isFutureExpiry(expiresAt)
 
   if (decision) {
     const approved = decision === 'approved'
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-xl items-center px-6 py-12">
-        <section
-          className="w-full rounded-xl border border-border bg-card px-6 py-10 text-center shadow-sm"
-          role="status"
-        >
-          {approved ? <CheckCircle2 className="mx-auto size-12" /> : <XCircle className="mx-auto size-12" />}
-          <h1 className="mt-5 text-2xl font-semibold">
-            {approved ? 'Resource access approved' : 'Resource access denied'}
-          </h1>
-          <p className="mt-3 text-sm text-muted-foreground">
-            The Agent can now continue polling. You can close this page.
-          </p>
-        </section>
-      </main>
+      <AuthLayout
+        config={config}
+        description={
+          approved
+            ? 'The Agent can continue with the approved authority.'
+            : 'The Agent was not granted resource access.'
+        }
+        eyebrow="API authorization"
+        icon={approved ? <CheckCircle2 /> : <XCircle />}
+        layout="focused"
+        title={approved ? 'Resource access approved' : 'Resource access denied'}
+        variant="message"
+      >
+        <Status tone={approved ? 'success' : 'warning'}>You can safely close this page.</Status>
+      </AuthLayout>
+    )
+  }
+
+  if (error && !request) {
+    return (
+      <AuthLayout
+        config={config}
+        description="Start again from the requesting Agent."
+        eyebrow="API authorization"
+        icon={<CircleAlert aria-hidden="true" />}
+        layout="focused"
+        title="Resource access unavailable."
+        variant="message"
+      >
+        <Status tone="error">{error}</Status>
+      </AuthLayout>
     )
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col justify-center px-6 py-12">
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">API authorization</p>
-          <h1 className="text-2xl font-semibold">Approve Agent resource access</h1>
-          <p className="text-sm text-muted-foreground">
-            Confirm the exact resource, scopes, Agent, and host before granting access.
-          </p>
-        </div>
+    <AuthLayout
+      config={config}
+      description="Confirm the Agent, target resource, exact permissions, account, and lifetime before granting access."
+      eyebrow="API authorization"
+      layout="decision"
+      title="Approve Agent resource access"
+    >
+      <div className="decisionStack">
         {request?.target.type === 'api-resource' ? (
-          <dl className="grid gap-3 rounded-md border border-border bg-card p-4 text-sm sm:grid-cols-2">
-            <RequestField label="Agent" value={request.agentId} />
-            <RequestField label="Resource" value={request.target.apiResourceId} />
-            <RequestField label="Exact scopes" value={request.scopes.join(' ')} wide />
-            {request.reason ? <RequestField label="Reason" value={request.reason} wide /> : null}
+          <dl className="decisionFacts">
+            <RequestField id={request.agentId} label="Agent" name={agentName ?? request.agentId} />
+            <RequestField
+              id={request.target.apiResourceId}
+              label="Resource"
+              name={resourceName ?? request.target.apiResourceId}
+            />
+            {request.reason ? <RequestField label="Reason" value={request.reason} /> : null}
           </dl>
         ) : null}
-        {request?.target.type === 'api-resource' && externalResourceName ? (
-          <section className="space-y-3 rounded-md border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold">{externalResourceName} account</h2>
-            {connection ? (
-              <>
-                <div className="text-sm">
-                  <p className="font-medium">{connection.displayName}</p>
-                  <p className="text-xs text-muted-foreground">{connection.scopes.join(' ')}</p>
-                </div>
-                {!connectionCoversRequest ? (
-                  <>
-                    <p className="text-sm text-muted-foreground">
-                      This account needs expanded authorization before it can cover every requested scope.
-                    </p>
-                    <Button disabled={submitting} onClick={() => void connectAccount()} type="button" variant="outline">
-                      <Link2 data-icon="inline-start" />
-                      Expand {externalResourceName} account access
-                    </Button>
-                    <p className="text-xs text-muted-foreground">
-                      After OAuth, you will return here to approve the Agent’s exact scopes and lifetime separately.
-                    </p>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Connect your {externalResourceName} account before deciding this Agent request.
-                </p>
-                <Button disabled={submitting} onClick={() => void connectAccount()} type="button" variant="outline">
-                  <Link2 data-icon="inline-start" />
-                  Connect {externalResourceName} account
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  The connection receives the resource’s current scope catalog. After OAuth, you will return here to
-                  approve the Agent’s exact scopes and lifetime separately.
-                </p>
-              </>
-            )}
+        {request?.target.type === 'api-resource' ? (
+          <section className="decisionPermissions" aria-label="Requested permissions">
+            <h2>Requested permissions</h2>
+            <ul>
+              {request.scopes.map((scope) => (
+                <li key={scope}>
+                  <code>{scope}</code>
+                </li>
+              ))}
+            </ul>
           </section>
         ) : null}
-        <fieldset className="space-y-3 rounded-md border border-border bg-card p-4" disabled={!request || submitting}>
-          <legend className="px-1 text-sm font-semibold">Grant lifetime</legend>
-          {(['once', 'until', 'persistent'] as const).map((value) => (
-            <label className="flex items-center gap-2 text-sm" key={value}>
-              <input checked={mode === value} name="mode" onChange={() => setMode(value)} type="radio" />
-              {value === 'once'
-                ? 'One target token'
-                : value === 'until'
-                  ? 'Until a date and time'
-                  : 'Persistent until revoked'}
-            </label>
-          ))}
+        {request?.target.type === 'api-resource' && resourceName && requiresAccountConnection && connection ? (
+          <section className="decisionSection">
+            <h2>{resourceName} account</h2>
+            <div>
+              <p className="font-medium">{connection.displayName}</p>
+              <p className="text-xs text-muted-foreground">
+                <code>{connection.scopes.join(' ')}</code>
+              </p>
+            </div>
+            {!connectionCoversRequest ? (
+              <>
+                <p>This account needs expanded authorization before it can cover every requested scope.</p>
+                <Button disabled={submitting} onClick={() => void connectAccount()} type="button" variant="outline">
+                  <Link2 data-icon="inline-start" />
+                  Expand {resourceName} account access
+                </Button>
+                <p>After OAuth, you will return here to approve the Agent’s exact scopes and lifetime separately.</p>
+              </>
+            ) : null}
+          </section>
+        ) : null}
+        {request?.target.type === 'api-resource' && resourceName && requiresAccountConnection && !connection ? (
+          <section className="decisionSection">
+            <h2>{resourceName} account</h2>
+            <p>Connect your {resourceName} account before deciding this Agent request.</p>
+            <Button disabled={submitting} onClick={() => void connectAccount()} type="button" variant="outline">
+              <Link2 data-icon="inline-start" />
+              Connect {resourceName} account
+            </Button>
+            <p>
+              The connection receives the resource’s current scope catalog. After OAuth, you will return here to approve
+              the Agent’s exact scopes and lifetime separately.
+            </p>
+          </section>
+        ) : null}
+        <section className="decisionSection" aria-label="Grant lifetime">
+          <h2>Grant lifetime</h2>
+          <RadioGroup
+            disabled={!request || submitting}
+            onValueChange={(value) => setMode(value as ApprovalMode)}
+            value={mode}
+          >
+            {(['once', 'until', 'persistent'] as const).map((value) => (
+              <label className="decisionRadio" htmlFor={`grant-lifetime-${value}`} key={value}>
+                <RadioGroupItem
+                  aria-label={
+                    value === 'once'
+                      ? 'One target token'
+                      : value === 'until'
+                        ? 'Until a date and time'
+                        : 'Persistent until revoked'
+                  }
+                  id={`grant-lifetime-${value}`}
+                  value={value}
+                />
+                <span>
+                  <strong>
+                    {value === 'once'
+                      ? 'One target token'
+                      : value === 'until'
+                        ? 'Until a date and time'
+                        : 'Persistent until revoked'}
+                  </strong>
+                  <small>
+                    {value === 'once'
+                      ? 'Issue one target token for this approved operation.'
+                      : value === 'until'
+                        ? 'Permit access until the exact date and time below.'
+                        : 'Keep access active until you explicitly revoke it.'}
+                  </small>
+                </span>
+              </label>
+            ))}
+          </RadioGroup>
           {mode === 'until' ? (
-            <input
-              aria-label="Grant expiry"
-              className="uiInput"
-              min={new Date().toISOString().slice(0, 16)}
-              onChange={(event) => setExpiresAt(event.target.value)}
-              required
-              type="datetime-local"
-              value={expiresAt}
-            />
+            <Field label="Expiry date and time">
+              <TextInput
+                aria-label="Grant expiry"
+                aria-invalid={expiresAt.length > 0 && !expiryIsValid}
+                min={toLocalDateTimeValue()}
+                onChange={(event) => setExpiresAt(event.target.value)}
+                required
+                type="datetime-local"
+                value={expiresAt}
+              />
+            </Field>
           ) : null}
-        </fieldset>
+        </section>
         {!request && !error ? <Status>Loading resource access request…</Status> : null}
         {error ? <Status tone="error">{error}</Status> : null}
-        <div className="flex gap-3">
+        <div className="decisionActions">
+          <Button disabled={!request || submitting} onClick={() => void submit('deny')} variant="outline">
+            Deny
+          </Button>
           <Button
             disabled={
-              !request ||
-              submitting ||
-              (externalResourceName !== null && !connectionCoversRequest) ||
-              (mode === 'until' && !expiresAt)
+              !request || submitting || (requiresAccountConnection && !connectionCoversRequest) || !expiryIsValid
             }
             onClick={() => void submit('approve')}
           >
             {submitting ? 'Updating…' : 'Approve exact access'}
           </Button>
-          <Button disabled={!request || submitting} onClick={() => void submit('deny')} variant="danger">
-            Deny
-          </Button>
         </div>
       </div>
-    </main>
+    </AuthLayout>
   )
+}
+
+function isFutureExpiry(value: string) {
+  return value.length > 0 && new Date(value).getTime() > Date.now()
 }
 
 function clearStoredApproval() {
   window.sessionStorage.removeItem(approvalTokenStorageKey)
 }
 
-function RequestField({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
+function RequestField({ label, value, name, id }: { label: string; value?: string; name?: string; id?: string }) {
   return (
-    <div className={`grid gap-1 ${wide ? 'sm:col-span-2' : ''}`}>
-      <dt className="font-medium text-muted-foreground">{label}</dt>
-      <dd className="break-all font-mono text-xs text-foreground">{value}</dd>
+    <div>
+      <dt>{label}</dt>
+      <dd>
+        {name ? <span>{name}</span> : value}
+        {id && id !== name ? <code>{id}</code> : null}
+      </dd>
     </div>
   )
 }

@@ -1,11 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { ApplicationBrandingPage } from '@/features/console/extracted/applications/application-detail-pages'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/applications/$applicationId/branding')({
-  component: ApplicationBrandingRoute,
+  beforeLoad: ({ params }) => {
+    throw redirect({ href: `/console/applications/${params.applicationId}/settings` })
+  },
 })
-
-function ApplicationBrandingRoute() {
-  const { applicationId } = Route.useParams()
-  return <ApplicationBrandingPage applicationId={applicationId} />
-}

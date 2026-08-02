@@ -171,7 +171,7 @@ describe('auth.test 1', () => {
       template: {
         type: 'invitation',
         inviterName: 'User',
-        url: 'https://auth.example.com/organization/accept-invitation?id=invitation-1',
+        url: 'https://auth.example.com/account/organizations?invitation=invitation-1',
       },
     })
   })
@@ -296,7 +296,8 @@ function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {
       enabled: false,
       provider: 'turnstile',
       siteKey: '',
-      secretBinding: '',
+      projectId: null,
+      secretKey: '',
       ...overrides.captcha,
     },
     blocklist: {
@@ -389,7 +390,8 @@ interface SecurityPolicyInput {
     enabled: boolean
     provider: 'turnstile'
     siteKey: string
-    secretBinding: string
+    projectId: string | null
+    secretKey: string
   }
   blocklist: {
     blockSubaddressing: boolean

@@ -124,4 +124,35 @@ describe('asset upload + read over real D1 and an in-memory bucket', () => {
     })
     expect(favicon.status, await favicon.clone().text()).toBe(201)
   })
+
+  it('detaches managed brand assets when Console clears them [spec: admin-console/admin-branding-settings]', async () => {
+    const cookie = await signInAdmin(harness)
+    for (const path of ['/api/branding/logo', '/api/branding/favicon']) {
+      const upload = await harness.request(path, {
+        method: 'POST',
+        headers: { cookie, origin: 'http://localhost' },
+        body: pngForm(),
+      })
+      expect(upload.status, await upload.clone().text()).toBe(201)
+    }
+
+    const before = await harness.request('/api/branding-settings', { headers: { cookie } })
+    expect(before.status).toBe(200)
+    await expect(before.json()).resolves.toMatchObject({
+      branding: {
+        logoUrl: expect.stringMatching(/^\/api\/assets\//),
+        faviconUrl: expect.stringMatching(/^\/api\/assets\//),
+      },
+    })
+
+    const cleared = await harness.request('/api/branding-settings', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ branding: { logoUrl: null, faviconUrl: null } }),
+    })
+    expect(cleared.status, await cleared.clone().text()).toBe(200)
+    await expect(cleared.json()).resolves.toMatchObject({
+      branding: { logoUrl: null, faviconUrl: null },
+    })
+  })
 })

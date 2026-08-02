@@ -10,8 +10,6 @@ BETTER_AUTH_URL = "https://id.realmroot.dev"
 TRUSTED_ORIGINS = "https://id.realmroot.dev"
 WEBAUTHN_RP_ID = "id.realmroot.dev"
 WEBAUTHN_ORIGINS = "https://id.realmroot.dev"
-EMAIL_FROM = "noreply@realmroot.dev"
-EMAIL_FROM_NAME = "Realmroot"
 
 [assets]
 binding = "ASSETS"
@@ -21,7 +19,6 @@ run_worker_first = ["/api/*", "/.well-known/*"]
 
 [[send_email]]
 name = "EMAIL"
-allowed_sender_addresses = ["noreply@realmroot.dev"]
 
 [[r2_buckets]]
 binding = "ASSET_BUCKET"
@@ -32,10 +29,6 @@ binding = "DB"
 database_name = "realmroot-db"
 database_id = "b038d1d4-9f08-4011-b0dc-70f125747b62"
 migrations_dir = "./migrations"
-
-[[queues.producers]]
-binding = "EMAIL_QUEUE"
-queue = "realmroot-email"
 
 [triggers]
 crons = ["*/15 * * * *"]

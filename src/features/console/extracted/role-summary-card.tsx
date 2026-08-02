@@ -10,9 +10,6 @@ export function RoleSummaryCard({
     key: string
     name: string
     system: boolean
-    applicationId: string | null
-    organizationId: string | null
-    resourceId: string | null
   }
 }) {
   return (
@@ -25,19 +22,9 @@ export function RoleSummaryCard({
         <SettingRow label={tt('Role ID')} value={role.id} />
         <SettingRow label={tt('Key')} value={role.key} />
         <SettingRow label={tt('Type')} value={role.system ? 'System role' : 'Custom role'} />
-        <SettingRow label={tt('Scope')} value={roleScopeLabel(role)} />
+        <SettingRow label={tt('Availability')} value={tt('Realm-wide')} />
         <SettingRow label={tt('Referenced scopes')} value={String(scopeCount)} />
       </CardContent>
     </Card>
   )
-}
-function roleScopeLabel(role: {
-  applicationId: string | null
-  organizationId: string | null
-  resourceId: string | null
-}) {
-  if (role.resourceId) return `API resource ${role.resourceId}`
-  if (role.organizationId) return `Organization ${role.organizationId}`
-  if (role.applicationId) return `Application ${role.applicationId}`
-  return 'Tenant'
 }

@@ -58,6 +58,8 @@ describe('application API pagination contracts', () => {
       postLogoutRedirectUris: ['https://app.example.com/signed-out'],
       corsOrigins: ['https://app.example.com'],
       customData: { tier: 'gold' },
+      ownerOrganizationId: 'org_platform',
+      audience: { mode: 'realm', organizationIds: [], userIds: [] },
       allowedGrantTypes: ['authorization_code'],
       allowedScopes: ['openid', 'profile'],
       requirePkce: false,

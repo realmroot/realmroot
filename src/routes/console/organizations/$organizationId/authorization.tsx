@@ -1,11 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { OrganizationDetailPage } from '@/features/console/extracted/organizations'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/organizations/$organizationId/authorization')({
-  component: OrganizationAuthorizationRoute,
+  beforeLoad: ({ params }) => {
+    throw redirect({ href: `/console/organizations/${params.organizationId}/overview` })
+  },
 })
-
-function OrganizationAuthorizationRoute() {
-  const { organizationId } = Route.useParams()
-  return <OrganizationDetailPage organizationId={organizationId} section="authorization" />
-}

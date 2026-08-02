@@ -1,6 +1,8 @@
 import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
+  AccountOrganizationAgentsResponse,
+  AccountOrganizationAuthorityResponse,
   AccountPasswordChangeInput,
   AccountProfileResponse,
   AccountProfileUpdateInput,
@@ -10,7 +12,19 @@ import type {
   ConsentedApplicationsResponse,
   LinkedAccountsResponse,
 } from '@shared/api/account'
-import type { Agent, ApiResource, createApiResourceSchema, updateApiResourceSchema } from '@shared/api/agent-api'
+import type {
+  Agent,
+  ApiResource,
+  createApiResourceSchema,
+  ListAgentAuditEventsQuery,
+  ListAgentsQuery,
+  ManagementAgent,
+  ManagementAgentAccessGrant,
+  ManagementAgentAccessRequest,
+  ManagementAgentHost,
+  ManagementAgentRole,
+  updateApiResourceSchema,
+} from '@shared/api/agent-api'
 import type { AgentAuditEvent } from '@shared/api/agents'
 import type {
   ApplicationResponse,
@@ -19,6 +33,8 @@ import type {
   CreateApplicationRequest,
   CreateApplicationResponse,
   HostedConsentApprovalRequest,
+  ListApplicationAuthorizationsResponse,
+  ListApplicationsQuery,
   ListApplicationsResponse,
   ListClientSecretsResponse,
   ListRedirectUrisResponse,
@@ -29,14 +45,19 @@ import type {
 } from '@shared/api/applications'
 import type { UploadedAssetResponse } from '@shared/api/assets'
 import type {
-  AssignRoleRequest,
+  ApiResourceContractResponse,
   CreateOrganizationRequest,
+  CreateRoleAssignmentRequest,
   CreateRoleRequest,
+  ListApiResourcesQuery,
   ListOrganizationsResponse,
+  ListRoleAssignmentsQuery,
+  ListRoleAssignmentsResponse,
   ListRolesResponse,
   OrganizationResponse,
+  RoleAssignmentResponse,
+  RolePermissionsResponse,
   RoleResponse,
-  RoleScopesResponse,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '@shared/api/authorization'
@@ -62,6 +83,9 @@ import type {
   ManagementBrandingSettingsResponse,
   ManagementConnectorResponse,
   ManagementCreateUserRequest,
+  ManagementDeveloperSettingsResponse,
+  ManagementEmailSettingsResponse,
+  ManagementGeneralSettingsResponse,
   ManagementReadinessResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
@@ -72,14 +96,17 @@ import type {
   UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
+  UpdateManagementDeveloperSettingsRequest,
+  UpdateManagementEmailSettingsRequest,
   UpdateManagementFederatedCredentialRequest,
+  UpdateManagementGeneralSettingsRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import type { PaginationMetadata } from '@shared/api/pagination'
 import type {
   PasskeysResponse,
-  SecurityPolicy,
+  SecurityPolicyResponse,
   SecurityTotpDisableInput,
   SecurityTotpEnrollmentInput,
   SecurityTotpVerificationInput,
@@ -181,6 +208,15 @@ export type RpcSchema = {
     $get: RpcEndpoint<{ param: { agentId: string } }, { agent: Agent }>
     $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
   }
+  '/api/account/organizations/:organizationId/agents': {
+    $get: RpcEndpoint<
+      { param: { organizationId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      AccountOrganizationAgentsResponse
+    >
+  }
+  '/api/account/organizations/:organizationId/authority': {
+    $get: RpcEndpoint<{ param: { organizationId: string } }, AccountOrganizationAuthorityResponse>
+  }
   '/api/account/security': {
     $get: RpcEndpoint<RpcNoInput, AccountSecurityResponse>
   }
@@ -206,7 +242,7 @@ export type RpcSchema = {
     $delete: RpcEndpoint<{ param: { sessionId: string } }, EmptyResponse>
   }
   '/api/applications': {
-    $get: RpcEndpoint<RpcNoInput, ListApplicationsResponse>
+    $get: RpcEndpoint<{ query?: Partial<Record<keyof ListApplicationsQuery, string>> }, ListApplicationsResponse>
     $post: RpcEndpoint<{ json: CreateApplicationRequest }, CreateApplicationResponse, 201>
   }
   '/api/applications/:id': {
@@ -227,6 +263,15 @@ export type RpcSchema = {
       ListClientSecretsResponse
     >
     $post: RpcEndpoint<{ param: { id: string } }, RotateClientSecretResponse, 201>
+  }
+  '/api/applications/:applicationId/authorizations': {
+    $get: RpcEndpoint<
+      { param: { applicationId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListApplicationAuthorizationsResponse
+    >
+  }
+  '/api/applications/:applicationId/authorizations/:authorizationId': {
+    $delete: RpcEndpoint<{ param: { applicationId: string; authorizationId: string } }, EmptyResponse, 204>
   }
   '/api/applications/:applicationId/logo': {
     $post: RpcEndpoint<{ param: { applicationId: string } } & RpcFileUploadInput, UploadedAssetResponse, 201>
@@ -356,28 +401,64 @@ export type RpcSchema = {
     $get: RpcEndpoint<RpcNoInput, ManagementAccountCenterSettingsResponse>
     $patch: RpcEndpoint<{ json: UpdateManagementAccountCenterSettingsRequest }, ManagementAccountCenterSettingsResponse>
   }
+  '/api/developer-settings': {
+    $get: RpcEndpoint<RpcNoInput, ManagementDeveloperSettingsResponse>
+    $patch: RpcEndpoint<{ json: UpdateManagementDeveloperSettingsRequest }, ManagementDeveloperSettingsResponse>
+  }
+  '/api/general-settings': {
+    $get: RpcEndpoint<RpcNoInput, ManagementGeneralSettingsResponse>
+    $patch: RpcEndpoint<{ json: UpdateManagementGeneralSettingsRequest }, ManagementGeneralSettingsResponse>
+  }
+  '/api/email-settings': {
+    $get: RpcEndpoint<RpcNoInput, ManagementEmailSettingsResponse>
+    $patch: RpcEndpoint<{ json: UpdateManagementEmailSettingsRequest }, ManagementEmailSettingsResponse>
+  }
   '/api/readiness': {
     $get: RpcEndpoint<RpcNoInput, ManagementReadinessResponse>
   }
   '/api/agents': {
     $get: RpcEndpoint<
-      { query?: Partial<Record<keyof PaginationQuery, string>> },
-      { items: Agent[]; pagination: PaginationMetadata }
+      { query?: Partial<Record<keyof ListAgentsQuery, string>> },
+      { items: ManagementAgent[]; pagination: PaginationMetadata }
     >
   }
   '/api/agents/:agentId': {
-    $get: RpcEndpoint<{ param: { agentId: string } }, { agent: Agent }>
+    $get: RpcEndpoint<{ param: { agentId: string } }, { agent: ManagementAgent }>
     $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
+  }
+  '/api/agents/:agentId/hosts': {
+    $get: RpcEndpoint<
+      { param: { agentId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      { items: ManagementAgentHost[]; pagination: PaginationMetadata }
+    >
+  }
+  '/api/agents/:agentId/roles': {
+    $get: RpcEndpoint<
+      { param: { agentId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      { items: ManagementAgentRole[]; pagination: PaginationMetadata }
+    >
+  }
+  '/api/agents/:agentId/access-requests': {
+    $get: RpcEndpoint<
+      { param: { agentId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      { items: ManagementAgentAccessRequest[]; pagination: PaginationMetadata }
+    >
+  }
+  '/api/agents/:agentId/access-grants': {
+    $get: RpcEndpoint<
+      { param: { agentId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      { items: ManagementAgentAccessGrant[]; pagination: PaginationMetadata }
+    >
   }
   '/api/audit-events': {
     $get: RpcEndpoint<
-      { query?: Partial<Record<keyof PaginationQuery, string>> },
+      { query?: Partial<Record<keyof ListAgentAuditEventsQuery, string>> },
       { items: AgentAuditEvent[]; pagination: PaginationMetadata }
     >
   }
   '/api/security/policy': {
-    $get: RpcEndpoint<RpcNoInput, { policy: SecurityPolicy }>
-    $patch: RpcEndpoint<{ json: UpdateSecurityPolicyInput }, { policy: SecurityPolicy }>
+    $get: RpcEndpoint<RpcNoInput, { policy: SecurityPolicyResponse }>
+    $patch: RpcEndpoint<{ json: UpdateSecurityPolicyInput }, { policy: SecurityPolicyResponse }>
   }
   '/api/organizations': {
     $get: RpcEndpoint<RpcNoInput, ListOrganizationsResponse>
@@ -399,30 +480,35 @@ export type RpcSchema = {
     $patch: RpcEndpoint<{ param: { id: string }; json: UpdateRoleRequest }, RoleResponse>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
   }
-  '/api/roles/:id/scopes': {
-    $get: RpcEndpoint<{ param: { id: string } }, RoleScopesResponse>
-    $put: RpcEndpoint<{ param: { id: string }; json: { scopes: string[] } }, EmptyResponse, 204>
+  '/api/roles/:id/permissions': {
+    $get: RpcEndpoint<{ param: { id: string } }, RolePermissionsResponse>
+    $put: RpcEndpoint<
+      { param: { id: string }; json: { permissions: Array<{ resourceId: string; scope: string }> } },
+      EmptyResponse,
+      204
+    >
   }
-  '/api/roles/assignments/users': {
-    $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
+  '/api/role-assignments': {
+    $get: RpcEndpoint<{ query?: Partial<Record<keyof ListRoleAssignmentsQuery, string>> }, ListRoleAssignmentsResponse>
+    $post: RpcEndpoint<{ json: CreateRoleAssignmentRequest }, RoleAssignmentResponse, 201>
   }
-  '/api/roles/assignments/applications': {
-    $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
-  }
-  '/api/roles/assignments/members': {
-    $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
-  }
-  '/api/roles/assignments/agents': {
-    $post: RpcEndpoint<{ json: AssignRoleRequest }, EmptyResponse, 204>
+  '/api/role-assignments/:id': {
+    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
   }
   '/api/api-resources': {
-    $get: RpcEndpoint<RpcNoInput, { items: ApiResource[]; pagination: PaginationMetadata }>
+    $get: RpcEndpoint<
+      { query?: Partial<Record<keyof ListApiResourcesQuery, string>> },
+      { items: ApiResource[]; pagination: PaginationMetadata }
+    >
     $post: RpcEndpoint<{ json: z.input<typeof createApiResourceSchema> }, ApiResource, 201>
   }
   '/api/api-resources/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, ApiResource>
     $patch: RpcEndpoint<{ param: { id: string }; json: z.infer<typeof updateApiResourceSchema> }, ApiResource>
     $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
+  }
+  '/api/api-resources/:id/contract': {
+    $get: RpcEndpoint<{ param: { id: string } }, ApiResourceContractResponse>
   }
   '/api/api-resources/:id/archival': {
     $put: RpcEndpoint<{ param: { id: string } }, ApiResource>

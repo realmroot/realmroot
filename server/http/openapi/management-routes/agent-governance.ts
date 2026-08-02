@@ -1,8 +1,18 @@
-import { agentResponseSchema, agentsResponseSchema, auditEventsResponseSchema } from '@shared/api/agent-api'
+import {
+  auditEventsResponseSchema,
+  listAgentAuditEventsQuerySchema,
+  listAgentsQuerySchema,
+  managementAgentAccessGrantsResponseSchema,
+  managementAgentAccessRequestsResponseSchema,
+  managementAgentHostsResponseSchema,
+  managementAgentResponseSchema,
+  managementAgentRolesResponseSchema,
+  managementAgentsResponseSchema,
+} from '@shared/api/agent-api'
+import { paginationQuerySchema } from '@shared/api/pagination'
 import {
   jsonBody,
   type ManagementRouteConfig,
-  paginationQuerySchema,
   requestAgentCapabilitiesResponseSchema,
   requestAgentCapabilitiesSchema,
   z,
@@ -24,8 +34,8 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     path: '/agents',
     operationId: 'listAgents',
     summary: 'List stable Agents',
-    request: { query: paginationQuerySchema },
-    response: agentsResponseSchema,
+    request: { query: listAgentsQuerySchema },
+    response: managementAgentsResponseSchema,
   },
   {
     method: 'get',
@@ -33,7 +43,39 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     operationId: 'getAgent',
     summary: 'Get a stable Agent',
     request: { params: z.object({ agentId: z.string() }) },
-    response: agentResponseSchema,
+    response: managementAgentResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/agents/{agentId}/hosts',
+    operationId: 'listAgentHosts',
+    summary: 'List Hosts bound to a stable Agent',
+    request: { params: z.object({ agentId: z.string() }), query: paginationQuerySchema },
+    response: managementAgentHostsResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/agents/{agentId}/roles',
+    operationId: 'listAgentRoles',
+    summary: 'List effective Roles for a stable Agent',
+    request: { params: z.object({ agentId: z.string() }), query: paginationQuerySchema },
+    response: managementAgentRolesResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/agents/{agentId}/access-requests',
+    operationId: 'listAgentAccessRequests',
+    summary: 'List access requests made by a stable Agent',
+    request: { params: z.object({ agentId: z.string() }), query: paginationQuerySchema },
+    response: managementAgentAccessRequestsResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/agents/{agentId}/access-grants',
+    operationId: 'listManagedAgentAccessGrants',
+    summary: 'List active resource grants for a stable Agent',
+    request: { params: z.object({ agentId: z.string() }), query: paginationQuerySchema },
+    response: managementAgentAccessGrantsResponseSchema,
   },
   {
     method: 'delete',
@@ -48,7 +90,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     path: '/audit-events',
     operationId: 'listAgentAuditEvents',
     summary: 'List Agent audit events',
-    request: { query: paginationQuerySchema },
+    request: { query: listAgentAuditEventsQuerySchema },
     response: auditEventsResponseSchema,
   },
 ]

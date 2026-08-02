@@ -29,6 +29,8 @@ const request = {
   decidedAt: null,
   createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-01T00:00:00.000Z',
+  agent: { id: 'agent-1', name: 'Release helper' },
+  resource: { id: 'resource-1', name: 'ZPan' },
 }
 
 const connection = {
@@ -85,7 +87,10 @@ describe('Agent resource access approval', () => {
   it('approves exact one-token access', async () => {
     render(<ResourceAccessApproval />)
 
-    expect(await screen.findByText('agent-1')).toBeTruthy()
+    expect(await screen.findByText('Release helper')).toBeTruthy()
+    expect(screen.getByText('agent-1')).toBeTruthy()
+    expect(screen.getByText('ZPan')).toBeTruthy()
+    expect(screen.getByText('resource-1')).toBeTruthy()
     expect(screen.queryByText('connection-1')).toBeNull()
     expect(screen.getByText('ZPan Demo')).toBeTruthy()
     expect(screen.queryByRole('radio', { name: 'ZPan Demo' })).toBeNull()
@@ -101,6 +106,28 @@ describe('Agent resource access approval', () => {
       }),
     )
     expect(await screen.findByText('Resource access approved')).toBeTruthy()
+  })
+
+  it('shows a native resource name without requiring an account connection', async () => {
+    api.getAgentResourceApproval.mockResolvedValue({
+      ...request,
+      target: { type: 'api-resource', apiResourceId: 'resource-1' },
+      resource: { id: 'resource-1', name: 'Billing API' },
+    })
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [],
+      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+    })
+    api.listExternalApiResources.mockResolvedValue({
+      items: [],
+      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+    })
+
+    render(<ResourceAccessApproval />)
+
+    expect(await screen.findByText('Billing API')).toBeTruthy()
+    expect(screen.queryByText(/Connect your Billing API account/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(false)
   })
 
   it('[spec: agent-identity/external-resource-first-access] connects an account before allowing a separate approval', async () => {
@@ -231,7 +258,12 @@ describe('Agent resource access approval', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Until a date and time' }))
     const approve = screen.getByRole('button', { name: 'Approve exact access' })
     expect(approve.hasAttribute('disabled')).toBe(true)
-    fireEvent.change(screen.getByLabelText('Grant expiry'), { target: { value: '2026-08-01T00:30' } })
+    const expiry = screen.getByLabelText('Grant expiry')
+    fireEvent.change(expiry, { target: { value: '2020-08-01T00:30' } })
+    expect(approve.hasAttribute('disabled')).toBe(true)
+    expect(expiry.getAttribute('aria-invalid')).toBe('true')
+    fireEvent.change(expiry, { target: { value: '2099-08-01T00:30' } })
+    expect(approve.hasAttribute('disabled')).toBe(false)
     fireEvent.click(approve)
     await waitFor(() =>
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith(
@@ -240,7 +272,7 @@ describe('Agent resource access approval', () => {
         expect.objectContaining({
           decision: 'approve',
           mode: 'until',
-          expiresAt: new Date('2026-08-01T00:30').toISOString(),
+          expiresAt: new Date('2099-08-01T00:30').toISOString(),
         }),
       ),
     )
@@ -257,7 +289,9 @@ describe('Agent resource access approval', () => {
     window.location.hash = ''
     window.sessionStorage.clear()
     render(<ResourceAccessApproval />)
-    expect(screen.getByText('Approval token is missing.')).toBeTruthy()
+    expect(
+      screen.getByText('This resource access request is incomplete. Start again from the requesting Agent.'),
+    ).toBeTruthy()
     cleanup()
 
     window.location.hash = 'token=token'

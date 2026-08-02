@@ -213,11 +213,11 @@ describe('hosted auth pages 1', () => {
     expect(screen.getByRole('main', { name: 'Hosted authentication' })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Sign in to Acme.' })).toBeTruthy()
     expect(document.querySelector('.authPanel')).toBeTruthy()
-    expect(document.querySelector('.authBrandPanel .brandMark')?.textContent).toBe('A')
+    expect(document.querySelector('.authBrandPanel .realmrootMark.brandMark')).toBeTruthy()
     expect(document.querySelector('.segmented')).toBeNull()
     expect(screen.queryByText('Choose how to continue')).toBeNull()
     expect(screen.queryByText('Choose an enabled method to access this application.')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Sign in' }).className).toContain('uiButton-primary')
+    expect(screen.getByRole('button', { name: 'Sign in' }).className).toContain('bg-primary')
     expect(screen.getByRole('link', { name: 'Forgot password?' }).closest('form')).toBe(
       screen.getByRole('button', { name: 'Sign in' }).closest('form'),
     )
@@ -229,9 +229,11 @@ describe('hosted auth pages 1', () => {
     expect(document.querySelector('.authMethodDivider')?.textContent).toBe('or')
     await user.click(screen.getByRole('button', { name: 'Continue with Email' }))
     expect(await screen.findByRole('button', { name: 'Send code' })).toBeTruthy()
+    expect(screen.queryByRole('group', { name: 'Available sign-in methods' })).toBeNull()
+    expect(document.querySelector('.authMethodDivider')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Back to sign in' }))
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
-    expect(screen.getByText('Powered by Acme ID')).toBeTruthy()
+    expect(screen.getByText('Secured by Realmroot')).toBeTruthy()
     expect(screen.queryByText('Authenticator verification')).toBeNull()
   })
 

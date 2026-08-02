@@ -1,7 +1,7 @@
 # Cloudflare Deployment
 
-Realmroot runs as a Cloudflare Worker with Assets, D1, R2, Email Routing,
-Queue, and Cron bindings.
+Realmroot runs as a Cloudflare Worker with Assets, D1, R2, Email Routing, and
+Cron bindings.
 
 ## Repository Model
 
@@ -16,7 +16,7 @@ Keep two clear repository roles:
 
 The canonical deployment uses the committed `wrangler.toml`. A fork uses that
 file only as a template and generates an ignored `wrangler.deployment.toml`
-whose Worker, D1, R2, Queue, sender, and secrets belong to that fork. The build
+whose Worker, D1, R2, and secrets belong to that fork. The build
 and deploy steps use the same selected configuration in both repository roles.
 
 Do not develop product code in the deployment fork during normal operation.
@@ -38,23 +38,17 @@ the explicit deployment version boundary.
    - optional `BETTER_AUTH_SECRET`
    - optional `CREDENTIAL_ENCRYPTION_KEY`
 
-4. Add the required repository variable:
+4. Optionally add:
 
-   - `REALMROOT_EMAIL_FROM`, for example `noreply@example.com`
-
-5. Optionally add:
-
-   - `REALMROOT_EMAIL_FROM_NAME`, default `Realmroot`
    - `REALMROOT_WORKER_NAME`
    - `REALMROOT_D1_DATABASE`
    - `REALMROOT_R2_BUCKET`
-   - `REALMROOT_EMAIL_QUEUE`
 
-6. Open **Actions > Deploy Realmroot Fork > Run workflow**.
+5. Open **Actions > Deploy Realmroot Fork > Run workflow**.
 
 The default resource names derive from the fork repository. A fork named
 `realmroot-example` deploys Worker and D1 names as `realmroot-example`, R2 as
-`realmroot-assets-example`, and Queue as `realmroot-email-example`.
+`realmroot-assets-example`.
 
 The fork workflow checks out its own triggering commit and runs
 `pnpm run deploy:fork`. The upstream-maintained script is idempotent: it reuses
@@ -63,7 +57,7 @@ deployment-only Wrangler config, applies D1 migrations, builds, and deploys.
 Existing Worker secrets are preserved.
 
 The Cloudflare API token must be scoped to the intended account and allow
-Workers Scripts, D1, R2, Queues, and the bindings used by the deployment. Do not
+Workers Scripts, D1, R2, and the bindings used by the deployment. Do not
 commit the token or put it in a repository variable.
 
 ## Auth Realm Boundary
@@ -115,10 +109,15 @@ Cloudflare Email Routing must be active for the sending domain:
 1. Add the domain to Cloudflare.
 2. Enable Email Routing for the zone.
 3. Complete the required MX and TXT/SPF records.
-4. Verify the address used by `REALMROOT_EMAIL_FROM`.
+4. Verify every sender address that administrators may select.
 
-The workflow uses the same address for the `EMAIL_FROM` variable and the
-`EMAIL` binding allowlist, avoiding mismatched sender configuration.
+The deployment provides the `EMAIL` binding. Administrators enable delivery and
+store the sender name, sender address, and optional reply-to address from
+**Console > Settings > Email delivery**. The committed binding does not pin an
+address allowlist, so a verified sender can be changed without redeploying the
+Worker. Existing deployments may keep `EMAIL_FROM` and `EMAIL_FROM_NAME` as a
+temporary bootstrap fallback; saving Email delivery settings moves the effective
+configuration into D1.
 
 ## Storage
 

@@ -34,7 +34,9 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   delete window.turnstile
-  for (const script of document.querySelectorAll('script[data-turnstile-script="true"]')) script.remove()
+  delete window.hcaptcha
+  delete window.grecaptcha
+  for (const script of document.querySelectorAll('script[data-captcha-provider]')) script.remove()
   window.history.pushState(null, '', '/')
 })
 
@@ -138,8 +140,54 @@ describe('CaptchaTokenField', () => {
     expect(onChange).toHaveBeenCalledWith('')
   })
 
-  // Runs last: the module-level script promise singleton is rejected here, so no
-  // later test in this file should depend on a fresh turnstile script load.
+  it('renders and disposes an hCaptcha widget', async () => {
+    const onChange = vi.fn()
+    window.hcaptcha = {
+      render: vi.fn((_element, options) => {
+        options.callback('hcaptcha-token')
+        return 7
+      }),
+      remove: vi.fn(),
+    }
+    const { unmount } = render(
+      <CaptchaTokenField
+        config={{ captcha: { enabled: true, provider: 'hcaptcha', siteKey: 'site-key-1' } } as typeof captchaConfig}
+        onChange={onChange}
+      />,
+    )
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('hcaptcha-token'))
+    unmount()
+    expect(window.hcaptcha.remove).toHaveBeenCalledWith(7)
+  })
+
+  it('renders and resets a reCAPTCHA Enterprise widget', async () => {
+    const onChange = vi.fn()
+    window.grecaptcha = {
+      enterprise: {
+        render: vi.fn((_element, options) => {
+          options.callback('recaptcha-token')
+          return 9
+        }),
+        reset: vi.fn(),
+      },
+    }
+    const { unmount } = render(
+      <CaptchaTokenField
+        config={
+          {
+            captcha: { enabled: true, provider: 'recaptcha-enterprise', siteKey: 'site-key-1' },
+          } as typeof captchaConfig
+        }
+        onChange={onChange}
+      />,
+    )
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('recaptcha-token'))
+    unmount()
+    expect(window.grecaptcha.enterprise.reset).toHaveBeenCalledWith(9)
+  })
+
   it('clears the token when the turnstile script fails to load', async () => {
     const onChange = vi.fn()
     render(<CaptchaTokenField config={captchaConfig} onChange={onChange} />)

@@ -35,6 +35,22 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
       return aggregates(db, identities)
     },
 
+    async listOwnedByOrganizations(organizationIds, page) {
+      if (organizationIds.length === 0) return { items: [], total: 0, ...page }
+      const ownerCondition = inArray(agentIdentity.ownerOrganizationId, organizationIds)
+      const [identities, totals] = await Promise.all([
+        db
+          .select()
+          .from(agentIdentity)
+          .where(ownerCondition)
+          .orderBy(desc(agentIdentity.createdAt))
+          .limit(page.limit)
+          .offset(page.offset),
+        db.select({ value: count() }).from(agentIdentity).where(ownerCondition),
+      ])
+      return { items: await aggregates(db, identities), total: totals[0]?.value ?? 0, ...page }
+    },
+
     async listAll(page) {
       const [identities, totals] = await Promise.all([
         db.select().from(agentIdentity).orderBy(desc(agentIdentity.createdAt)).limit(page.limit).offset(page.offset),

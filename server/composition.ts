@@ -5,7 +5,7 @@
  * so the http layer reads `deps` from request context instead of per-request
  * service factories.
  */
-import { createEmailSender } from '@server/adapters/gateways/email/sender'
+import { createConfiguredEmailSender } from '@server/adapters/gateways/email/sender'
 import { createJwksGateway } from '@server/adapters/gateways/jwks'
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import { createAgentAuditRepository } from '@server/adapters/repos/agent-audit'
@@ -35,6 +35,7 @@ import { createDb } from './db/client'
 export function createDeps(env: Env, config: RuntimeConfig): Deps {
   const db = createDb(env.DB)
   const secrets = createSecretCipher(config.credentialEncryptionKey)
+  const configz = createDrizzleConfigzRepository(db)
   return {
     agents: createDrizzleAgentRepository(db),
     agentAudit: createAgentAuditRepository(db),
@@ -44,7 +45,7 @@ export function createDeps(env: Env, config: RuntimeConfig): Deps {
     assets: createDrizzleAssetRepository(db),
     assetStorage: env.ASSET_BUCKET,
     authorization: createDrizzleAuthorizationRepository(db),
-    configz: createDrizzleConfigzRepository(db),
+    configz,
     connectors: createConnectorRepository(db, secrets),
     externalResources: createExternalResourceRepository(db),
     externalHttp: { fetch: (request) => (env.EXTERNAL_HTTP ? env.EXTERNAL_HTTP.fetch(request) : fetch(request)) },
@@ -55,7 +56,13 @@ export function createDeps(env: Env, config: RuntimeConfig): Deps {
     users: createUserRepository(db),
     wallets: createWalletRepository(db),
     webhooks: createWebhookRepository(db),
-    email: createEmailSender(env.EMAIL, { from: config.emailFrom, fromName: config.emailFromName }),
+    email: createConfiguredEmailSender(
+      env.EMAIL,
+      () => configz.getEmailSettings(),
+      config.emailFrom
+        ? { from: config.emailFrom, ...(config.emailFromName ? { fromName: config.emailFromName } : {}) }
+        : undefined,
+    ),
     jwks: createJwksGateway(),
   }
 }

@@ -37,7 +37,7 @@ export function createAuthMock() {
       requestPasswordReset: vi.fn().mockResolvedValue({ status: true }),
       sendVerificationEmail: vi.fn().mockResolvedValue({ status: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
-      changePassword: vi.fn().mockResolvedValue({ status: true }),
+      changePassword: vi.fn().mockResolvedValue(Response.json({ status: true })),
     },
     handler: vi.fn(),
   }
@@ -160,6 +160,7 @@ export function toManagementOperationKey(route: HonoRoute) {
   if (
     route.path === '/api/agent' ||
     route.path === '/api/agent/enrollments' ||
+    route.path.startsWith('/api/agent/enrollments/:') ||
     route.path === '/api/agent/api-resources' ||
     route.path === '/api/agent/access-grants' ||
     route.path.startsWith('/api/agent/access-grants/:') ||
@@ -176,10 +177,14 @@ export function toManagementOperationKey(route: HonoRoute) {
     '/api/audit-events',
     '/api/organizations',
     '/api/roles',
+    '/api/role-assignments',
     '/api/users',
     '/api/security',
     '/api/sign-in-settings',
     '/api/branding-settings',
+    '/api/developer-settings',
+    '/api/general-settings',
+    '/api/email-settings',
     '/api/account-center-settings',
     '/api/branding',
     '/api/readiness',

@@ -3,7 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppRouter, queryClient } from '@/router'
 
 vi.mock('@/features/account/account-center', () => ({
+  AccountAgentsPage: () => <h1>Agents route</h1>,
+  AccountApplicationsPage: () => <h1>Applications route</h1>,
   AccountConnectionsPage: () => <h1>Profile route</h1>,
+  AccountOrganizationDetailPage: () => <h1>Organization route</h1>,
+  AccountOrganizationsPage: () => <h1>Organizations route</h1>,
+  AccountOverviewPage: () => <h1>Account overview route</h1>,
   AccountProfilePage: () => <h1>Profile route</h1>,
   AccountSecurityPage: () => <h1>Profile route</h1>,
 }))
@@ -43,7 +48,7 @@ afterEach(() => {
 
 describe('root route', () => {
   it('redirects signed-in root visits to the profile entry point', async () => {
-    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse({ user })))
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(accountRouteResponse)
 
     render(<AppRouter />)
 
@@ -57,7 +62,7 @@ describe('root route', () => {
   })
 
   it('authenticates profile routes before rendering them', async () => {
-    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse({ user })))
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(accountRouteResponse)
     window.history.pushState(null, '', '/profile')
 
     render(<AppRouter />)
@@ -72,7 +77,7 @@ describe('root route', () => {
   })
 
   it('authenticates AgentAuth approval before rendering it', async () => {
-    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse({ user })))
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(accountRouteResponse)
     window.history.pushState(null, '', '/agent/approve?agent_id=agent-1&code=ABCD-1234')
 
     render(<AppRouter />)
@@ -86,7 +91,11 @@ describe('root route', () => {
   })
 
   it('authenticates device approval before rendering it', async () => {
-    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() => Promise.resolve(jsonResponse({ user })))
+    const fetchSpy = vi
+      .spyOn(window, 'fetch')
+      .mockImplementation((input) =>
+        String(input) === '/api/configz' ? Promise.resolve(jsonResponse(configz)) : accountRouteResponse(input),
+      )
     window.history.pushState(null, '', '/device/approve?user_code=ABCD-1234')
 
     render(<AppRouter />)
@@ -110,7 +119,7 @@ describe('root route', () => {
     render(<AppRouter />)
 
     expect(await screen.findByRole('heading', { name: 'Device approval route' })).toBeTruthy()
-    expect(fetchSpy.mock.calls.map(([input]) => String(input))).toEqual(['/api/configz'])
+    expect(fetchSpy.mock.calls.map(([input]) => String(input)).every((input) => input === '/api/configz')).toBe(true)
   })
 
   it('preserves device approval return path when signed out', async () => {
@@ -147,8 +156,58 @@ const user = {
   role: 'user',
 }
 
+function accountRouteResponse(input: RequestInfo | URL) {
+  if (String(input) === '/api/account/security') {
+    return Promise.resolve(
+      jsonResponse({
+        security: {
+          mfa: { enabled: false, factors: [] },
+          passkeys: { enabled: true, count: 0 },
+          policy: { mfa: { mode: 'optional' } },
+        },
+      }),
+    )
+  }
+  return Promise.resolve(
+    jsonResponse({
+      activeOrganizationId: null,
+      user,
+      access: {
+        canCreateOrganization: false,
+        showOrganizations: false,
+        realmOperator: false,
+        consoleOrganizations: [],
+      },
+    }),
+  )
+}
+
 const configz = {
-  branding: { logoUrl: null, faviconUrl: null, primaryColor: null, backgroundColor: null, customCss: null },
+  onboarding: { required: false, href: '/onboarding' },
+  signIn: {
+    passwordEnabled: true,
+    signupEnabled: true,
+    socialLoginEnabled: false,
+    emailOtpEnabled: false,
+    usernameEnabled: false,
+    identifierFirst: false,
+  },
+  builtInProviders: {
+    email: { enabled: true },
+    phone: { enabled: false },
+    web3Wallet: { enabled: false, chains: [1], allowSignUp: false },
+    passkey: { allowSignUp: false },
+    oneTap: { enabled: false },
+  },
+  branding: {
+    logoUrl: null,
+    faviconUrl: null,
+    primaryColor: '#007b83',
+    backgroundColor: '#ffffff',
+    customCss: null,
+  },
+  identityProviders: [],
+  links: { termsUri: null, privacyUri: null, supportEmail: null },
   copy: { productName: 'Realmroot' },
 }
 

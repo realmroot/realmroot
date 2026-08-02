@@ -12,7 +12,7 @@ export const resourceAccess = {
     capabilities: { read: 'organizations:read', write: 'organizations:write' },
   },
   roles: {
-    routePrefixes: ['roles'],
+    routePrefixes: ['roles', 'role-assignments'],
     capabilities: { read: 'roles:read', write: 'roles:write' },
   },
   apiResources: {
@@ -24,7 +24,13 @@ export const resourceAccess = {
     capabilities: { read: 'connectors:read', write: 'connectors:write' },
   },
   settings: {
-    routePrefixes: ['sign-in-settings', 'branding-settings', 'account-center-settings', 'branding'],
+    routePrefixes: [
+      'sign-in-settings',
+      'branding-settings',
+      'account-center-settings',
+      'developer-settings',
+      'branding',
+    ],
     capabilities: { read: 'settings:read', write: 'settings:write' },
   },
   security: {

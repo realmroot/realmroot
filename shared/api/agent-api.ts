@@ -10,7 +10,7 @@ import {
   agentAccessRequestStatusSchema,
   externalResourceAuthorizationSchema,
 } from './external-resources'
-import { paginationMetadataSchema } from './pagination'
+import { paginationMetadataSchema, paginationQuerySchema } from './pagination'
 
 const nonEmptyString = z.string().trim().min(1)
 const scopeListSchema = z
@@ -31,10 +31,30 @@ export const agentSchema = z.object({
 })
 
 export const agentResponseSchema = z.object({ agent: agentSchema })
+export const managementAgentSchema = agentSchema.extend({
+  owner: z.object({
+    id: z.string(),
+    type: z.enum(['user', 'organization']),
+    displayName: z.string(),
+  }),
+  hostCount: z.number().int().nonnegative(),
+  roleCount: z.number().int().nonnegative(),
+  pendingRequestCount: z.number().int().nonnegative(),
+  activeGrantCount: z.number().int().nonnegative(),
+})
+export const managementAgentResponseSchema = z.object({ agent: managementAgentSchema })
 export const agentsResponseSchema = z.object({
   items: z.array(agentSchema),
   pagination: paginationMetadataSchema,
 })
+export const managementAgentsResponseSchema = z.object({
+  items: z.array(managementAgentSchema),
+  pagination: paginationMetadataSchema,
+})
+export const listAgentsQuerySchema = paginationQuerySchema.extend({
+  organizationId: nonEmptyString.optional(),
+})
+export type ListAgentsQuery = z.infer<typeof listAgentsQuerySchema>
 export const agentInfoQuerySchema = z.object({
   sub: nonEmptyString,
 })
@@ -50,12 +70,77 @@ export const auditEventsResponseSchema = z.object({
   items: z.array(agentAuditEventSchema),
   pagination: paginationMetadataSchema,
 })
+export const listAgentAuditEventsQuerySchema = paginationQuerySchema.extend({
+  organizationId: nonEmptyString.optional(),
+  agentId: nonEmptyString.optional(),
+})
+export type ListAgentAuditEventsQuery = z.infer<typeof listAgentAuditEventsQuerySchema>
+
+export const managementAgentHostSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.string(),
+  bindingStatus: z.string(),
+  credentialType: z.enum(['public_key', 'remote_jwks']),
+  boundAt: z.iso.datetime(),
+  lastSeenAt: z.iso.datetime().nullable(),
+})
+export const managementAgentHostsResponseSchema = z.object({
+  items: z.array(managementAgentHostSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const managementAgentRoleSchema = z.object({
+  id: z.string(),
+  key: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+})
+export const managementAgentRolesResponseSchema = z.object({
+  items: z.array(managementAgentRoleSchema),
+  pagination: paginationMetadataSchema,
+})
+
+const managementAgentResourceSchema = z.object({
+  id: z.string(),
+  identifier: z.string(),
+  name: z.string(),
+})
+export const managementAgentAccessRequestSchema = z.object({
+  id: z.string(),
+  resource: managementAgentResourceSchema,
+  scopes: z.array(z.string()),
+  reason: z.string().nullable(),
+  status: agentAccessRequestStatusSchema,
+  expiresAt: z.iso.datetime(),
+  decidedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+})
+export const managementAgentAccessRequestsResponseSchema = z.object({
+  items: z.array(managementAgentAccessRequestSchema),
+  pagination: paginationMetadataSchema,
+})
+
+export const managementAgentAccessGrantSchema = z.object({
+  id: z.string(),
+  resource: managementAgentResourceSchema,
+  scopes: z.array(z.string()),
+  mode: agentAccessGrantModeSchema,
+  status: z.enum(['active', 'revoked', 'consumed', 'expired']),
+  expiresAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+})
+export const managementAgentAccessGrantsResponseSchema = z.object({
+  items: z.array(managementAgentAccessGrantSchema),
+  pagination: paginationMetadataSchema,
+})
 
 export const agentEnrollmentStatusSchema = z.enum(['pending', 'approved', 'denied', 'expired', 'cancelled'])
 export const agentEnrollmentSchema = z.object({
   id: z.string(),
   agentId: z.string().nullable(),
-  requestedName: z.string().nullable(),
+  name: z.string(),
+  kind: z.enum(['new_identity', 'additional_host']),
   homeSpace: agentHomeSpaceSchema,
   status: agentEnrollmentStatusSchema,
   expiresAt: z.iso.datetime(),
@@ -64,10 +149,19 @@ export const agentEnrollmentSchema = z.object({
   updatedAt: z.iso.datetime(),
 })
 
-export const createAgentEnrollmentSchema = z.object({
-  name: z.string().trim().min(1).max(100),
-  organizationId: nonEmptyString.optional(),
-})
+export const createAgentEnrollmentSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+    organizationId: nonEmptyString.optional(),
+    agentId: nonEmptyString.optional(),
+  })
+  .refine((input) => Boolean(input.name) !== Boolean(input.agentId), {
+    message: 'Provide either name for a new Agent or agentId for an additional host.',
+  })
+  .refine((input) => !(input.agentId && input.organizationId), {
+    message: 'An additional host inherits the existing Agent owner.',
+    path: ['organizationId'],
+  })
 
 export const agentEnrollmentResponseSchema = z.object({
   enrollment: agentEnrollmentSchema,
@@ -226,6 +320,16 @@ export const accessRequestsResponseSchema = z.object({
   pagination: paginationMetadataSchema,
 })
 
+export const accessRequestApprovalSchema = accessRequestSchema.extend({
+  agent: z.object({ id: z.string(), name: z.string() }),
+  resource: z.object({ id: z.string(), name: z.string() }),
+})
+
+export const accessRequestApprovalsResponseSchema = z.object({
+  items: z.array(accessRequestApprovalSchema),
+  pagination: paginationMetadataSchema,
+})
+
 export const decideAccessRequestSchema = z
   .object({
     decision: z.enum(['approve', 'deny']),
@@ -275,6 +379,11 @@ export const targetTokenSchema = z.object({
 })
 
 export type Agent = z.infer<typeof agentSchema>
+export type ManagementAgent = z.infer<typeof managementAgentSchema>
+export type ManagementAgentHost = z.infer<typeof managementAgentHostSchema>
+export type ManagementAgentRole = z.infer<typeof managementAgentRoleSchema>
+export type ManagementAgentAccessRequest = z.infer<typeof managementAgentAccessRequestSchema>
+export type ManagementAgentAccessGrant = z.infer<typeof managementAgentAccessGrantSchema>
 export type AgentInfo = z.infer<typeof agentInfoSchema>
 export type AgentEnrollment = z.infer<typeof agentEnrollmentSchema>
 export type ApiResource = z.infer<typeof apiResourceSchema>
@@ -283,5 +392,6 @@ export type AccountConnection = z.infer<typeof accountConnectionSchema>
 export type CreateAccountConnection = z.infer<typeof createAccountConnectionSchema>
 export type CreateAccessRequest = z.infer<typeof createAccessRequestSchema>
 export type AccessRequest = z.infer<typeof accessRequestSchema>
+export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>
 export type DecideAccessRequest = z.infer<typeof decideAccessRequestSchema>
 export type AccessGrant = z.infer<typeof accessGrantSchema>

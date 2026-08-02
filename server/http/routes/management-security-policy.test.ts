@@ -9,6 +9,29 @@ describe('management security policy routes', () => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined)
   })
 
+  it('rejects required MFA when the current operator has not enrolled [spec: admin-console/admin-require-mfa-safely]', async () => {
+    const policy = securityPolicy()
+    const security = createSecurityRepositoryMock(policy, { mfaEnabled: false })
+    const app = createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock(), security }), {
+      securityPolicy: policy,
+    })
+
+    const response = await app.request('/api/security/policy', {
+      method: 'PATCH',
+      headers: _adminHeaders(),
+      body: JSON.stringify({ policy: { mfa: { mode: 'required' } } }),
+    })
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: 'conflict',
+        message: 'Enroll MFA for your operator account before requiring it for the Realm.',
+      },
+    })
+    expect(security.updatePolicy).not.toHaveBeenCalled()
+  })
+
   it('verifies CAPTCHA tokens for hosted auth requests when enabled', async () => {
     const verify = vi.spyOn(globalThis, 'fetch').mockImplementation(
       async () =>
@@ -22,7 +45,8 @@ describe('management security policy routes', () => {
         enabled: true,
         provider: 'turnstile',
         siteKey: 'site-key-1',
-        secretBinding: 'TURNSTILE_SECRET',
+        projectId: null,
+        secretKey: 'secret-1',
       },
     })
     const app = createApp(
@@ -39,25 +63,26 @@ describe('management security policy routes', () => {
       body: JSON.stringify({ email: 'user@example.com', password: 'password-1' }),
       headers: { 'content-type': 'application/json' },
     })
-    const verified = await app.request(
-      '/api/auth/sign-in/email',
-      {
-        method: 'POST',
-        body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'captcha-token-1' }),
-        headers: { 'content-type': 'application/json' },
-      },
-      { TURNSTILE_SECRET: 'secret-1' },
+    const verified = await app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'captcha-token-1' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const verifiedOtpRequest = await app.request('/api/auth/email-otp/send-verification-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user@example.com', type: 'sign-in', captchaToken: 'captcha-token-2' }),
+      headers: { 'content-type': 'application/json' },
+    })
+    const missingSecretPolicy = securityPolicy({ captcha: { ...policy.captcha, secretKey: '' } })
+    const missingSecretApp = createApp(
+      createAuthMock(),
+      createTestDeps({
+        users: createUserRepositoryMock(),
+        security: createSecurityRepositoryMock(missingSecretPolicy),
+      }),
+      { securityPolicy: missingSecretPolicy },
     )
-    const verifiedOtpRequest = await app.request(
-      '/api/auth/email-otp/send-verification-otp',
-      {
-        method: 'POST',
-        body: JSON.stringify({ email: 'user@example.com', type: 'sign-in', captchaToken: 'captcha-token-2' }),
-        headers: { 'content-type': 'application/json' },
-      },
-      { TURNSTILE_SECRET: 'secret-1' },
-    )
-    const missingSecret = await app.request('/api/auth/sign-in/email', {
+    const missingSecret = await missingSecretApp.request('/api/auth/sign-in/email', {
       method: 'POST',
       body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'captcha-token-3' }),
       headers: { 'content-type': 'application/json' },
@@ -68,15 +93,11 @@ describe('management security policy routes', () => {
         headers: { 'content-type': 'application/json' },
       }),
     )
-    const failedVerification = await app.request(
-      '/api/auth/sign-in/email',
-      {
-        method: 'POST',
-        body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'captcha-token-4' }),
-        headers: { 'content-type': 'application/json' },
-      },
-      { TURNSTILE_SECRET: 'secret-1' },
-    )
+    const failedVerification = await app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'captcha-token-4' }),
+      headers: { 'content-type': 'application/json' },
+    })
     const malformed = await app.request('/api/auth/sign-in/email', {
       method: 'POST',
       body: '{',
@@ -89,7 +110,7 @@ describe('management security policy routes', () => {
     expect(verifiedOtpRequest.status).toBe(204)
     expect(missingSecret.status).toBe(400)
     await expect(missingSecret.json()).resolves.toMatchObject({
-      error: { message: 'CAPTCHA secret binding is not configured.' },
+      error: { message: 'CAPTCHA secret key is not configured.' },
     })
     expect(failedVerification.status).toBe(400)
     await expect(failedVerification.json()).resolves.toMatchObject({
@@ -102,6 +123,106 @@ describe('management security policy routes', () => {
       expect.objectContaining({ method: 'POST' }),
     )
     verify.mockRestore()
+  })
+
+  it('verifies hCaptcha and reCAPTCHA Enterprise tokens with their provider protocols', async () => {
+    const verify = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ tokenProperties: { valid: true } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+    const hcaptchaPolicy = securityPolicy({
+      captcha: {
+        enabled: true,
+        provider: 'hcaptcha',
+        siteKey: 'hcaptcha-site',
+        projectId: null,
+        secretKey: 'hcaptcha-secret',
+      },
+    })
+    const recaptchaPolicy = securityPolicy({
+      captcha: {
+        enabled: true,
+        provider: 'recaptcha-enterprise',
+        siteKey: 'recaptcha-site',
+        projectId: 'project-1',
+        secretKey: 'google-api-key',
+      },
+    })
+    const createPolicyApp = (policy: SecurityPolicy) =>
+      createApp(
+        createAuthMock(),
+        createTestDeps({ users: createUserRepositoryMock(), security: createSecurityRepositoryMock(policy) }),
+        { securityPolicy: policy },
+      )
+
+    const hcaptcha = await createPolicyApp(hcaptchaPolicy).request('/api/auth/sign-in/email', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'h-token' }),
+      headers: { 'content-type': 'application/json', 'CF-Connecting-IP': '203.0.113.4' },
+    })
+    const recaptcha = await createPolicyApp(recaptchaPolicy).request('/api/auth/sign-in/email', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'user@example.com', password: 'password-1', captchaToken: 'g-token' }),
+      headers: { 'content-type': 'application/json', 'User-Agent': 'Realmroot test' },
+    })
+
+    expect(hcaptcha.status).toBe(204)
+    expect(recaptcha.status).toBe(204)
+    expect(verify.mock.calls[0]?.[0]).toBe('https://api.hcaptcha.com/siteverify')
+    expect(String((verify.mock.calls[0]?.[1] as RequestInit).body)).toContain('sitekey=hcaptcha-site')
+    expect(verify.mock.calls[1]?.[0]).toBe(
+      'https://recaptchaenterprise.googleapis.com/v1/projects/project-1/assessments?key=google-api-key',
+    )
+    expect(JSON.parse(String((verify.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
+      event: { token: 'g-token', siteKey: 'recaptcha-site', userAgent: 'Realmroot test' },
+    })
+  })
+
+  it('accepts managed CAPTCHA secrets without returning them from Console APIs', async () => {
+    const policy = updatedSecurityPolicy()
+    const security = createSecurityRepositoryMock(policy)
+    const app = createApp(createAuthMock(), createTestDeps({ users: createUserRepositoryMock(), security }), {
+      securityPolicy: policy,
+    })
+
+    const read = await app.request('/api/security/policy', { headers: _adminHeaders() })
+    const updated = await app.request('/api/security/policy', {
+      method: 'PATCH',
+      headers: _adminHeaders(),
+      body: JSON.stringify({
+        policy: {
+          captcha: {
+            enabled: true,
+            provider: 'hcaptcha',
+            siteKey: 'hcaptcha-site',
+            projectId: null,
+            secretKey: 'rotated-secret',
+          },
+        },
+      }),
+    })
+
+    expect(read.status).toBe(200)
+    const readBody = (await read.json()) as Record<string, unknown>
+    const updatedBody = (await updated.json()) as Record<string, unknown>
+    expect(readBody).toMatchObject({
+      policy: { captcha: { provider: 'turnstile', secretConfigured: true } },
+    })
+    expect(JSON.stringify(readBody)).not.toContain('secretKey')
+    expect(JSON.stringify(updatedBody)).not.toContain('secretKey')
+    expect(security.updatePolicy).toHaveBeenCalledWith(
+      expect.objectContaining({ policy: { captcha: expect.objectContaining({ secretKey: 'rotated-secret' }) } }),
+    )
   })
 })
 
@@ -127,8 +248,8 @@ function createAuthMock() {
         }
       }),
       enableTwoFactor: vi.fn().mockResolvedValue({ totpURI: 'otpauth://totp/Realmroot', backupCodes: [] }),
-      disableTwoFactor: vi.fn().mockResolvedValue({ status: true }),
-      verifyTOTP: vi.fn().mockResolvedValue({ status: true }),
+      disableTwoFactor: vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: true }))),
+      verifyTOTP: vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: true }))),
       generateBackupCodes: vi.fn().mockResolvedValue({ status: true, backupCodes: [] }),
       listPasskeys: vi.fn().mockResolvedValue([]),
       deletePasskey: vi.fn().mockResolvedValue({ status: true }),
@@ -139,7 +260,7 @@ function createAuthMock() {
       revokeUserSession: vi.fn().mockResolvedValue({ success: true }),
       revokeUserSessions: vi.fn().mockResolvedValue({ success: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
-      changePassword: vi.fn().mockResolvedValue({ status: true }),
+      changePassword: vi.fn().mockResolvedValue(Response.json({ status: true })),
     },
     handler: async () => new Response(null, { status: 204 }),
   }
@@ -263,7 +384,8 @@ function securityPolicy(overrides: Partial<SecurityPolicy> = {}): SecurityPolicy
       enabled: false,
       provider: 'turnstile',
       siteKey: '',
-      secretBinding: '',
+      projectId: null,
+      secretKey: '',
       ...overrides.captcha,
     },
     blocklist: {
@@ -289,7 +411,8 @@ function updatedSecurityPolicy(): SecurityPolicy {
       enabled: true,
       provider: 'turnstile',
       siteKey: 'site-key-1',
-      secretBinding: 'TURNSTILE_SECRET',
+      projectId: null,
+      secretKey: 'secret-1',
     },
     blocklist: {
       blockSubaddressing: true,

@@ -15,8 +15,6 @@ export const zhFlatTranslationsExtraB: Record<string, string> = {
   'Permission assignment': '权限分配',
   'Permission templates use API resources': '权限模板使用 API 资源',
   'Permissions are assigned to roles and emitted through authorization claims.': '权限会分配给角色并通过授权声明发出。',
-  'Permissions are managed on API resources and attached to organization roles.':
-    '权限在 API 资源上管理，并附加到组织角色。',
   'Persist blocked email and domain rules.': '持久化被阻止的邮箱和域名规则。',
   'Persisted mode': '持久化模式',
   'Phone login': '手机号登录',
@@ -128,7 +126,6 @@ export const zhFlatTranslationsExtraB: Record<string, string> = {
   'Search API resources': '搜索 API 资源',
   'Search applications': '搜索应用',
   'Search endpoints or events': '搜索端点或事件',
-  'Search organization roles': '搜索组织角色',
   'Search organizations': '搜索组织',
   'Search roles': '搜索角色',
   'Search users': '搜索用户',

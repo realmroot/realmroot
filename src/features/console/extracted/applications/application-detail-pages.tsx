@@ -5,9 +5,9 @@ export function ApplicationSettingsPage({ applicationId }: { applicationId: stri
 }
 
 export function ApplicationBrandingPage({ applicationId }: { applicationId: string }) {
-  return <ApplicationDetailPage applicationId={applicationId} section="branding" />
+  return <ApplicationDetailPage applicationId={applicationId} section="settings" />
 }
 
 export function ApplicationFederatedCredentialsPage({ applicationId }: { applicationId: string }) {
-  return <ApplicationDetailPage applicationId={applicationId} section="federated-credentials" />
+  return <ApplicationDetailPage applicationId={applicationId} section="oauth" />
 }

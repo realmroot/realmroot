@@ -38,9 +38,6 @@ describe('Cloudflare deployment configuration', () => {
           REALMROOT_D1_DATABASE: 'realmroot-example',
           REALMROOT_D1_DATABASE_ID: '00000000-0000-4000-8000-000000000001',
           REALMROOT_R2_BUCKET: 'realmroot-assets-example',
-          REALMROOT_EMAIL_QUEUE: 'realmroot-email-example',
-          REALMROOT_EMAIL_FROM: 'noreply@example.com',
-          REALMROOT_EMAIL_FROM_NAME: 'Example Realmroot',
         },
       })
 
@@ -49,7 +46,7 @@ describe('Cloudflare deployment configuration', () => {
       expect(deploymentConfig).toContain('name = "realmroot-example"')
       expect(deploymentConfig).toContain('database_name = "realmroot-example"')
       expect(deploymentConfig).toContain('bucket_name = "realmroot-assets-example"')
-      expect(deploymentConfig).toContain('queue = "realmroot-email-example"')
+      expect(deploymentConfig).not.toContain('EMAIL_FROM')
       expect(deploymentConfig).toContain('keep_vars = true')
       expect(deploymentConfig).not.toContain('id.realmroot.dev')
     } finally {

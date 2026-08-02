@@ -1,9 +1,8 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationDetailPage } from '@/features/console/extracted/applications/application-detail'
 import { BrandingPage } from '@/features/console/extracted/branding-content/branding'
 import { ConsoleOnboardingPage } from '@/features/console/extracted/onboarding'
-import { OrganizationsPage } from '@/features/console/extracted/organizations'
 import { queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -24,26 +23,47 @@ import {
   application,
   brandingSettings,
   configz,
+  consoleAccountAccess,
+  consoleAccountProfile,
   consoleSharedFetch,
   jsonResponse,
-  organization,
-  pagination,
   readinessIncomplete,
   renderWithQuery,
   uploadedAsset,
-  user,
 } from './console.test-utils'
 
 const deviceCodeGrantType = 'urn:ietf:params:oauth:grant-type:device_code'
 
 describe('console onboarding', () => {
-  it('uploads application, organization, branding, and favicon assets', async () => {
+  it('returns completed setup to the dashboard [spec: admin-console/admin-onboarding-complete]', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.includes('/api/readiness')) {
+        return Promise.resolve(
+          jsonResponse({
+            required: [],
+            recommended: [],
+            admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] },
+          }),
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    const { router } = renderWithQuery(<ConsoleOnboardingPage />)
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/console'))
+    expect(screen.queryByText('First OIDC application')).toBeNull()
+  })
+
+  it('uploads Realm branding and favicon assets', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/onboarding/status') return Promise.resolve(jsonResponse({ required: false }))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
+      if (url === '/api/account/profile')
+        return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
       if (url === '/api/readiness') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
@@ -57,39 +77,13 @@ describe('console onboarding', () => {
         })
         return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
       }
-      if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
-      }
-      if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
       if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
-      }
       return consoleSharedFetch(input, init)
     })
 
-    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="branding" />)
-    fireEvent.change(await screen.findByLabelText('Upload logo for Customer portal'), {
-      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
-    })
-
-    await waitFor(() => {
-      expect(requests).toContainEqual({
-        url: '/api/applications/app-1/logo',
-        method: 'POST',
-        body: '[form-data]',
-      })
-    })
-
-    cleanup()
-    renderWithQuery(<OrganizationsPage />)
-    fireEvent.change(await screen.findByLabelText('Upload logo for Acme'), {
-      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
-    })
-
-    cleanup()
     renderWithQuery(<BrandingPage />)
-    fireEvent.change(await screen.findByLabelText('Upload branding logo'), {
+    await userEvent.click(await screen.findByRole('tab', { name: 'Brand assets' }))
+    fireEvent.change(await screen.findByLabelText('Upload logo'), {
       target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
     })
     fireEvent.change(screen.getByLabelText('Upload favicon'), {
@@ -99,7 +93,6 @@ describe('console onboarding', () => {
     await waitFor(() => {
       expect(requests).toEqual(
         expect.arrayContaining([
-          { url: '/api/organizations/org-1/logo', method: 'POST', body: '[form-data]' },
           { url: '/api/branding/logo', method: 'POST', body: '[form-data]' },
           { url: '/api/branding/favicon', method: 'POST', body: '[form-data]' },
         ]),
