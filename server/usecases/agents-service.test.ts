@@ -254,6 +254,12 @@ describe('AgentService', () => {
         scopes: ['applications:read'],
       }),
     )
+
+    repository.decideApproval.mockResolvedValue('approved')
+    await expect(
+      decideAgentApproval(deps, { agentId: 'agent-1', userCode: 'abcd1234', action: 'approve' }, 'user-1'),
+    ).resolves.toEqual({ status: 'approved' })
+    expect(agentAudit.append).toHaveBeenLastCalledWith(expect.objectContaining({ scopes: ['applications:read'] }))
   })
 
   it('preserves a nonstandard Agent approval code shape and returns denial', async () => {

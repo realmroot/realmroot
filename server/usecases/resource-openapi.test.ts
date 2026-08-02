@@ -356,4 +356,24 @@ paths:
       }),
     ).toEqual([])
   })
+
+  it('requires protected-operation documents to use OpenAPI 3.x', () => {
+    expect(() => extractProtectedOperations({})).toThrow('must publish an OpenAPI 3.x document')
+    expect(() => extractProtectedOperations({ openapi: '2.0', paths: {} })).toThrow(
+      'must publish an OpenAPI 3.x document',
+    )
+  })
+
+  it('ignores non-scope security requirements while retaining empty OAuth requirements', () => {
+    expect(
+      extractProtectedOperations({
+        openapi: '3.1.0',
+        components: { securitySchemes: { oauth: { type: 'oauth2' } } },
+        security: [{ unknown: [] }, { oauth: 'invalid' }, { oauth: [] }],
+        paths: { '/items': { get: { responses: {} } } },
+      }),
+    ).toEqual([
+      { method: 'GET', path: '/items', operationId: null, summary: null, description: null, requiredScopeSets: [[]] },
+    ])
+  })
 })

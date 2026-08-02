@@ -16,9 +16,33 @@ import type {
   ConsentRecord,
 } from '@server/usecases/ports'
 import { type ApplicationResponse, deviceCodeGrantType } from '@shared/api/applications'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 1', () => {
+  it('requires an explicitly selected owner Organization to be active', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const findOrganization = vi.fn().mockResolvedValue(null)
+    const deps = { applications: repository, authorization: { findOrganization } } as unknown as Deps
+    const input = {
+      name: 'Organization App',
+      clientType: 'public_spa' as const,
+      redirectUris: ['https://spa.example.com/callback'],
+      ownerOrganizationId: 'org-1',
+    }
+
+    await expect(createApplication(deps, 'https://auth.example.com', input, 'admin-1')).rejects.toMatchObject({
+      status: 404,
+    })
+    findOrganization.mockResolvedValue({ id: 'org-1', disabled: true })
+    await expect(createApplication(deps, 'https://auth.example.com', input, 'admin-1')).rejects.toMatchObject({
+      status: 400,
+    })
+    findOrganization.mockResolvedValue({ id: 'org-1', disabled: false })
+    const created = await createApplication(deps, 'https://auth.example.com', input, 'admin-1')
+    await expect(
+      updateApplication(deps, 'https://auth.example.com', created.id, { ownerOrganizationId: 'org-1' }),
+    ).resolves.toMatchObject({ ownerOrganizationId: 'org-1' })
+  })
   it('creates, lists, updates, inspects, and deletes confidential clients with one-time secrets', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { applications: repository } as unknown as Deps

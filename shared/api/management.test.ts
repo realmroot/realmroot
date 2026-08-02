@@ -4,6 +4,7 @@ import {
   listManagementFederatedCredentialsResponseSchema,
   updateManagementBrandingSettingsRequestSchema,
   updateManagementFederatedCredentialRequestSchema,
+  updateManagementSignInSettingsRequestSchema,
 } from '@shared/api/management'
 import { describe, expect, it } from 'vitest'
 
@@ -107,5 +108,20 @@ describe('management branding contracts', () => {
         branding: { logoUrl: '/uploads/logo.png' },
       }),
     ).toThrow()
+  })
+})
+
+describe('management sign-in contracts', () => {
+  it('accepts nullable or HTTPS legal links and rejects insecure URLs', () => {
+    expect(
+      updateManagementSignInSettingsRequestSchema.parse({
+        links: { termsUri: null, privacyUri: 'https://realm.example.com/privacy', supportEmail: null },
+      }),
+    ).toEqual({
+      links: { termsUri: null, privacyUri: 'https://realm.example.com/privacy', supportEmail: null },
+    })
+    expect(() =>
+      updateManagementSignInSettingsRequestSchema.parse({ links: { termsUri: 'http://realm.example.com/terms' } }),
+    ).toThrow('URL must use https.')
   })
 })

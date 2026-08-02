@@ -82,6 +82,27 @@ describe('createEmailSender', () => {
       'Email delivery is disabled.',
     )
   })
+
+  it('uses deployment fallback settings and surfaces missing deployment boundaries', async () => {
+    const send = vi.fn().mockResolvedValue({ messageId: 'email-4' })
+    const email = { to: 'user@example.com', template: { type: 'otp' as const, otp: '123456' } }
+
+    await expect(
+      createConfiguredEmailSender({ send }, async () => null, { from: 'fallback@example.com' }).send(email),
+    ).resolves.toEqual({ messageId: 'email-4' })
+    await expect(createConfiguredEmailSender({ send }, async () => null).send(email)).rejects.toThrow(
+      'Email sender settings are not configured.',
+    )
+    await expect(
+      createConfiguredEmailSender(undefined, async () => ({
+        provider: 'cloudflare_email',
+        enabled: true,
+        fromEmail: 'auth@example.com',
+        fromName: null,
+        replyToEmail: null,
+      })).send(email),
+    ).rejects.toThrow('Cloudflare Email binding is not configured for this deployment.')
+  })
 })
 
 describe('renderEmailTemplate', () => {

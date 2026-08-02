@@ -11,6 +11,8 @@ import {
   createWebhookDeliveryAttempt,
   createWebhookEndpoint,
   deleteWebhookEndpoint,
+  deliverWebhookRequest,
+  getWebhookDeliveryAttempt,
   getWebhookEndpoint,
   getWebhookRequest,
   listWebhookDeliveryAttempts,
@@ -99,6 +101,8 @@ describe('WebhookService', () => {
       attempts: [{ requestId: request.id, sequence: 2 }],
       pagination: { total: 1 },
     })
+    const [attempt] = (await listWebhookDeliveryAttempts(deps, request.id, { limit: 50, offset: 0 })).attempts
+    await expect(getWebhookDeliveryAttempt(deps, request.id, attempt!.id)).resolves.toEqual(attempt)
     await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-1')).resolves.toMatchObject({
       attempt: { requestId: request.id, sequence: 2, status: 'delivered' },
       replayed: true,
@@ -160,6 +164,7 @@ describe('WebhookService', () => {
     await expect(rotateWebhookSecret(deps, 'missing')).rejects.toMatchObject({ status: 404 })
     await expect(getWebhookRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
     await expect(createWebhookDeliveryAttempt(deps, 'missing', 'retry-missing')).rejects.toMatchObject({ status: 404 })
+    await expect(getWebhookDeliveryAttempt(deps, 'missing', 'attempt-1')).rejects.toMatchObject({ status: 404 })
 
     const created = await createWebhookEndpoint(
       deps,
@@ -192,6 +197,8 @@ describe('WebhookService', () => {
     await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-disappeared')).rejects.toMatchObject({
       status: 404,
     })
+    repository.missingRequestUpdateIds.clear()
+    await expect(getWebhookDeliveryAttempt(deps, request.id, 'missing-attempt')).rejects.toMatchObject({ status: 404 })
   })
 
   it('publishes a stable signed event and records failed attempts before a real retry', async () => {
@@ -266,6 +273,157 @@ describe('WebhookService', () => {
     expect(deliveries).toHaveLength(2)
     expect(outbound.sort()).toEqual(['https://acme.example.com/webhooks', 'https://realm.example.com/webhooks'])
   })
+
+  it('handles durable delivery replay, legacy secrets, bounded responses, and delivery failures', async () => {
+    const repository = new InMemoryWebhookRepository()
+    const outbound: Request[] = []
+    const deps = depsWith(repository, async (request) => {
+      outbound.push(request)
+      return new Response('x'.repeat(9_000), { status: 500 })
+    })
+    const created = await createWebhookEndpoint(
+      deps,
+      { url: 'https://app.example.com/webhooks/auth', events: ['user.created'], enabled: true, organizationId: null },
+      'admin-1',
+    )
+    repository.rawEndpoint(created.endpoint.id)!.signingSecret = 'legacy-plaintext-secret'
+    const requestInput: WebhookRequestInsert = {
+      id: 'whr_edge',
+      endpointId: created.endpoint.id,
+      event: 'user.created',
+      status: 'pending',
+      attemptCount: 0,
+      httpStatus: null,
+      error: null,
+      requestBody: '{"id":"evt_edge"}',
+      responseBody: null,
+      nextAttemptAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    const request = await repository.createRequest(requestInput)
+
+    const failed = await deliverWebhookRequest(deps, request.id, 'edge-attempt')
+    expect(failed).toMatchObject({
+      status: 'failed',
+      httpStatus: 500,
+      responseBody: expect.stringContaining('[response truncated]'),
+    })
+    expect(repository.rawEndpoint(created.endpoint.id)!.signingSecret).toMatch(/^v1\./)
+    await expect(deliverWebhookRequest(deps, request.id, 'edge-attempt')).resolves.toMatchObject({ id: request.id })
+    expect(outbound).toHaveLength(1)
+
+    const noPayload = await repository.createRequest({ ...requestInput, id: 'whr_no_payload' })
+    noPayload.requestBody = null
+    await expect(deliverWebhookRequest(deps, noPayload.id, 'no-payload')).rejects.toMatchObject({ status: 400 })
+
+    const invalidPayload = await repository.createRequest({
+      ...requestInput,
+      id: 'whr_invalid_payload',
+      requestBody: '{"id":"wrong"}',
+    })
+    await expect(deliverWebhookRequest(deps, invalidPayload.id, 'invalid-payload')).resolves.toMatchObject({
+      status: 'failed',
+      error: 'Webhook request contains an invalid event payload.',
+    })
+
+    const thrown = depsWith(repository, async () => {
+      throw new Error('network unavailable')
+    })
+    const networkRequest = await repository.createRequest({ ...requestInput, id: 'whr_network', attemptCount: 0 })
+    await expect(deliverWebhookRequest(thrown, networkRequest.id, 'network')).resolves.toMatchObject({
+      status: 'failed',
+      error: 'network unavailable',
+    })
+
+    const nonError = depsWith(repository, async () => {
+      throw 'network unavailable'
+    })
+    const unknownRequest = await repository.createRequest({ ...requestInput, id: 'whr_unknown', attemptCount: 0 })
+    await expect(deliverWebhookRequest(nonError, unknownRequest.id, 'unknown')).resolves.toMatchObject({
+      status: 'failed',
+      error: 'Webhook delivery failed.',
+    })
+  })
+
+  it('surfaces missing delivery resources and failed persistence boundaries', async () => {
+    const repository = new InMemoryWebhookRepository()
+    const deps = depsWith(repository)
+    await expect(deliverWebhookRequest(deps, 'missing', 'attempt')).rejects.toMatchObject({ status: 404 })
+
+    const created = await createWebhookEndpoint(
+      deps,
+      { url: 'https://app.example.com/webhooks', events: ['user.created'], enabled: true, organizationId: null },
+      'admin-1',
+    )
+    const input: WebhookRequestInsert = {
+      id: 'whr_missing_endpoint',
+      endpointId: created.endpoint.id,
+      event: 'user.created',
+      status: 'pending',
+      attemptCount: 0,
+      httpStatus: null,
+      error: null,
+      requestBody: '{"id":"evt_missing_endpoint"}',
+      responseBody: null,
+      nextAttemptAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    const missingEndpointRequest = await repository.createRequest(input)
+    await repository.deleteEndpoint(created.endpoint.id)
+    repository.restoreRequest(missingEndpointRequest)
+    await expect(deliverWebhookRequest(deps, input.id, 'attempt')).rejects.toMatchObject({ status: 404 })
+
+    const recreated = await createWebhookEndpoint(
+      deps,
+      { url: 'https://app.example.com/webhooks', events: ['user.created'], enabled: true, organizationId: null },
+      'admin-1',
+    )
+    const missingUpdate = await repository.createRequest({
+      ...input,
+      id: 'whr_missing_update',
+      endpointId: recreated.endpoint.id,
+      requestBody: '{"id":"evt_missing_update"}',
+    })
+    repository.missingRequestUpdateIds.add(missingUpdate.id)
+    await expect(deliverWebhookRequest(deps, missingUpdate.id, 'attempt')).rejects.toMatchObject({ status: 404 })
+
+    repository.rawEndpoint(recreated.endpoint.id)!.signingSecret = 'legacy-secret'
+    repository.missingEndpointUpdateIds.add(recreated.endpoint.id)
+    const missingMigration = await repository.createRequest({
+      ...input,
+      id: 'whr_missing_migration',
+      endpointId: recreated.endpoint.id,
+      requestBody: '{"id":"evt_missing_migration"}',
+    })
+    await expect(deliverWebhookRequest(deps, missingMigration.id, 'attempt')).resolves.toMatchObject({
+      status: 'failed',
+      error: 'Webhook endpoint not found.',
+    })
+  })
+
+  it('returns no requests without subscribers and resolves user Organization audiences', async () => {
+    const repository = new InMemoryWebhookRepository()
+    const deps = depsWith(repository)
+    await expect(publishWebhookEvent(deps, 'session.created', { session: { userId: 'user-1' } })).resolves.toEqual([])
+
+    await createWebhookEndpoint(
+      deps,
+      {
+        url: 'https://acme.example.com/webhooks',
+        events: ['session.created'],
+        enabled: true,
+        organizationId: 'org-acme',
+      },
+      'admin-1',
+    )
+    deps.authorization.listUserMemberships = async () =>
+      [{ organizationId: 'org-other' }, { organizationId: 'org-acme' }, { organizationId: 'org-acme' }] as never
+    await expect(publishWebhookEvent(deps, 'session.created', { session: { userId: 'user-1' } })).resolves.toHaveLength(
+      1,
+    )
+  })
 })
 
 class InMemoryWebhookRepository implements WebhookRepository {
@@ -301,6 +459,10 @@ class InMemoryWebhookRepository implements WebhookRepository {
 
   rawEndpoint(id: string) {
     return this.endpoints.find((endpoint) => endpoint.id === id)
+  }
+
+  restoreRequest(request: WebhookRequestRow) {
+    this.requests.push(request)
   }
 
   async createEndpoint(input: WebhookEndpointInsert) {

@@ -2,9 +2,13 @@ import type { ConfigzOptions } from '@server/usecases/configz'
 import {
   defaultAccountCenterSettings,
   getConfig,
+  getDeveloperConsoleAccessPolicy,
   getEmailDeliveryConfiguration,
   getManagementRealm,
+  getOrganizationCreationPolicy,
+  replaceDeveloperConsoleAccessPolicy,
   replaceEmailDeliveryConfiguration,
+  replaceOrganizationCreationPolicy,
   updateManagementAccountCenterSettings,
   updateManagementBrandingSettings,
   updateManagementRealm,
@@ -12,7 +16,7 @@ import {
 } from '@server/usecases/configz'
 import type { Deps } from '@server/usecases/deps'
 import type { ConfigzRepository, ConnectorRecord } from '@server/usecases/ports'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 describe('ConfigzService', () => {
   it('composes hosted auth config without leaking connector secrets', async () => {
@@ -534,6 +538,67 @@ describe('ConfigzService', () => {
         },
       ),
     ).rejects.toThrow('Cloudflare Email binding is not available')
+  })
+
+  it('[spec: admin-console/admin-organization-creation-policy] validates policy references before replacement', async () => {
+    let organizationPolicy = { mode: 'admins_only' as const, approvedUserIds: [] as string[] }
+    let developerPolicy = {
+      mode: 'realm_operators' as const,
+      eligibleAccessLevels: ['owner' as const],
+      selectedOrganizationIds: [] as string[],
+    }
+    const repository = createRepository({
+      getOrganizationCreationPolicy: async () => organizationPolicy,
+      updateOrganizationCreationPolicy: async (input) => {
+        organizationPolicy = input as typeof organizationPolicy
+      },
+      getDeveloperConsoleAccessPolicy: async () => developerPolicy,
+      updateDeveloperConsoleAccessPolicy: async (input) => {
+        developerPolicy = input as typeof developerPolicy
+      },
+    })
+    const getUser = vi.fn().mockResolvedValue({ id: 'user-1' })
+    const findOrganization = vi
+      .fn()
+      .mockImplementation(async (id: string) => (id === 'org-1' ? { id: 'org-1', disabled: false } : null))
+    const deps = {
+      ...createDeps(repository, { onboardingHasUsers: true }),
+      users: { getUser },
+      authorization: { findOrganization },
+    } as unknown as Deps
+
+    await expect(getOrganizationCreationPolicy(deps)).resolves.toEqual(organizationPolicy)
+    await expect(
+      replaceOrganizationCreationPolicy(deps, { mode: 'approved_users', approvedUserIds: ['user-1'] }),
+    ).resolves.toEqual({ mode: 'approved_users', approvedUserIds: ['user-1'] })
+    expect(getUser).toHaveBeenCalledWith('user-1')
+
+    await expect(getDeveloperConsoleAccessPolicy(deps)).resolves.toEqual(developerPolicy)
+    await expect(
+      replaceDeveloperConsoleAccessPolicy(deps, {
+        mode: 'selected_organizations',
+        eligibleAccessLevels: ['owner'],
+        selectedOrganizationIds: ['org-1'],
+      }),
+    ).resolves.toEqual({
+      mode: 'selected_organizations',
+      eligibleAccessLevels: ['owner'],
+      selectedOrganizationIds: ['org-1'],
+    })
+    await expect(
+      replaceDeveloperConsoleAccessPolicy(deps, {
+        mode: 'selected_organizations',
+        eligibleAccessLevels: ['owner'],
+        selectedOrganizationIds: ['org-missing'],
+      }),
+    ).rejects.toMatchObject({ status: 404 })
+
+    await replaceOrganizationCreationPolicy(deps, { mode: 'admins_only', approvedUserIds: [] })
+    await replaceDeveloperConsoleAccessPolicy(deps, {
+      mode: 'all_organizations',
+      eligibleAccessLevels: ['owner'],
+      selectedOrganizationIds: [],
+    })
   })
 })
 

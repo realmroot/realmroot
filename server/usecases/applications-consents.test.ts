@@ -75,6 +75,77 @@ describe('service.test 3', () => {
       id: consent.id,
       status: 'revoked',
     })
+
+    repository.failAuthorizationRevocation = true
+    const secondConsent = await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-2')
+    await expect(putApplicationAuthorizationRevocation(deps, secondConsent.id)).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('rejects a public audience when external registration is disabled', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const deps = {
+      applications: repository,
+      configz: { getSettings: async () => ({ signupEnabled: false }) },
+    } as unknown as Deps
+    const issuer = 'https://auth.example.com'
+    const created = await createApplication(
+      deps,
+      issuer,
+      {
+        name: 'Realm App',
+        clientType: 'public_spa',
+        redirectUris: ['https://spa.example.com/callback'],
+      },
+      'admin-1',
+    )
+
+    await expect(
+      updateApplication(deps, issuer, created.id, {
+        audience: { mode: 'public', organizationIds: [], userIds: [] },
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Public application audience requires external registration to be enabled.',
+    })
+  })
+
+  it('projects scoped and expired authorization resources and enforces revocation invariants', async () => {
+    const expiredAt = new Date('2020-01-01T00:00:00.000Z')
+    const authorization = {
+      id: 'authorization-1',
+      applicationId: 'app-1',
+      userId: 'user-1',
+      userDisplayName: 'Test user',
+      userEmail: 'user@example.com',
+      organizationId: 'org-1',
+      organizationName: 'Acme',
+      scopes: ['openid'],
+      permissions: ['projects:read'],
+      grantedAt: new Date('2026-08-01T00:00:00.000Z'),
+      expiresAt: expiredAt,
+      revokedAt: null,
+    }
+    const applications = {
+      listAuthorizations: async () => ({
+        items: [authorization],
+        pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      }),
+      findAuthorization: async (id: string) => (id === authorization.id ? authorization : null),
+      revokeAuthorization: async () => true,
+    }
+    const deps = { applications } as unknown as Deps
+
+    await expect(listApplicationAuthorizations(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
+      authorizations: [
+        {
+          organization: { id: 'org-1', name: 'Acme' },
+          status: 'expired',
+          expiresAt: expiredAt.toISOString(),
+        },
+      ],
+    })
+    await expect(getApplicationAuthorization(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+    await expect(putApplicationAuthorizationRevocation(deps, authorization.id)).rejects.toThrow('was not revoked')
   })
 
   it('handles OAuth consent defaults and rejects disabled or missing clients', async () => {
@@ -193,6 +264,7 @@ class InMemoryApplicationRepository implements ApplicationRepository {
   private secrets = new Map<string, ClientSecretRecord[]>()
   private consents = new Map<string, ConsentRecord>()
   private authorizationRevocations = new Map<string, Date>()
+  failAuthorizationRevocation = false
 
   async create(input: {
     application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
@@ -321,6 +393,7 @@ class InMemoryApplicationRepository implements ApplicationRepository {
   }
 
   async revokeAuthorization(authorizationId: string) {
+    if (this.failAuthorizationRevocation) return false
     const entry = [...this.consents.entries()].find(([, consent]) => consent.id === authorizationId)
     if (!entry) return false
     this.authorizationRevocations.set(authorizationId, new Date('2026-05-18T16:00:00.000Z'))

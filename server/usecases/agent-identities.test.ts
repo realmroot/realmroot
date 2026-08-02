@@ -9,11 +9,17 @@ import {
   getAgentEnrollmentIntent,
   getAgentIdentityByProtocolAgent,
   getAgentInfo,
+  getManagementAgent,
+  getManagementAgentAccessGrant,
+  getManagementAgentAccessRequest,
   getPersonalAgent,
   getProtocolAgentEnrollment,
   getPublicAgentEnrollment,
   listAllAgentIdentities,
   listAllAgents,
+  listManagementAgentAccessGrants,
+  listManagementAgentAccessRequests,
+  listManagementAgentInstallations,
   listOrganizationAgentIdentities,
   listPersonalAgentIdentities,
   listPersonalAgents,
@@ -241,6 +247,258 @@ describe('Agent identity lifecycle', () => {
     await expect(getProtocolAgentEnrollment(deps, 'intent-1', 'another-agent')).rejects.toMatchObject({ status: 403 })
   })
 
+  it('maps management summaries, installations, access requests, and access grants', async () => {
+    const deps = managementDeps()
+    const stored = aggregate()
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(stored)
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({
+      id: 'resource-1',
+      identifier: 'projects',
+      name: 'Projects API',
+    } as never)
+
+    await expect(getManagementAgent(deps, 'identity-1')).resolves.toMatchObject({
+      agent: {
+        id: 'identity-1',
+        owner: { id: 'user-1', type: 'user', displayName: 'user-1@example.com' },
+        installationCount: 1,
+        roleCount: 0,
+        pendingRequestCount: 0,
+        activeGrantCount: 0,
+      },
+    })
+
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValue([
+      {
+        id: 'host-1',
+        name: 'MacBook',
+        jwksUrl: null,
+        publicKey: { kty: 'OKP' },
+        lastUsedAt: new Date('2026-08-02T01:00:00.000Z'),
+      },
+    ] as never)
+    await expect(listManagementAgentInstallations(deps, 'identity-1', { limit: 20, offset: 0 })).resolves.toEqual({
+      items: [
+        {
+          id: 'binding-1',
+          name: 'MacBook',
+          status: 'active',
+          credentialType: 'public_key',
+          boundAt: '2026-08-01T00:00:00.000Z',
+          lastSeenAt: '2026-08-02T01:00:00.000Z',
+        },
+      ],
+      pagination: { limit: 20, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+
+    const request = {
+      id: 'request-1',
+      agentIdentityId: 'identity-1',
+      resourceId: 'resource-1',
+      scopes: ['projects:read'],
+      reason: null,
+      status: 'pending',
+      expiresAt: new Date('2020-01-01T00:00:00.000Z'),
+      decidedAt: null,
+      createdAt: new Date('2026-08-01T00:00:00.000Z'),
+    }
+    vi.mocked(deps.externalResources.listAccessRequests).mockResolvedValue({
+      items: [request],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    } as never)
+    await expect(
+      listManagementAgentAccessRequests(deps, { limit: 20, offset: 0 }, { ownerOrganizationIds: ['org-1'] }),
+    ).resolves.toMatchObject({
+      items: [{ id: 'request-1', status: 'expired', resource: { id: 'resource-1' }, decidedAt: null }],
+      pagination: { total: 1 },
+    })
+    expect(deps.externalResources.listAccessRequests).toHaveBeenCalledWith(
+      { limit: 20, offset: 0 },
+      { ownerOrganizationIds: ['org-1'] },
+    )
+
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...request,
+      status: 'approved',
+      decidedAt: new Date('2026-08-02T00:00:00.000Z'),
+    } as never)
+    await expect(getManagementAgentAccessRequest(deps, 'request-1')).resolves.toMatchObject({
+      status: 'approved',
+      decidedAt: '2026-08-02T00:00:00.000Z',
+    })
+
+    const grants = [
+      {
+        id: 'grant-expired',
+        agentIdentityId: 'identity-1',
+        resourceId: 'resource-1',
+        scopes: ['projects:read'],
+        mode: 'native',
+        status: 'active',
+        expiresAt: new Date('2020-01-01T00:00:00.000Z'),
+        createdAt: new Date('2026-08-01T00:00:00.000Z'),
+      },
+      {
+        id: 'grant-active',
+        agentIdentityId: 'identity-1',
+        resourceId: 'resource-1',
+        scopes: ['projects:write'],
+        mode: 'external',
+        status: 'active',
+        expiresAt: null,
+        createdAt: new Date('2026-08-01T00:00:00.000Z'),
+      },
+    ]
+    vi.mocked(deps.externalResources.listGrants).mockResolvedValue({
+      items: grants,
+      total: 2,
+      limit: 20,
+      offset: 0,
+    } as never)
+    await expect(listManagementAgentAccessGrants(deps, { limit: 20, offset: 0 })).resolves.toMatchObject({
+      items: [
+        { id: 'grant-expired', status: 'expired', expiresAt: '2020-01-01T00:00:00.000Z' },
+        { id: 'grant-active', status: 'active', expiresAt: null },
+      ],
+      pagination: { total: 2 },
+    })
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grants[1] as never)
+    await expect(getManagementAgentAccessGrant(deps, 'grant-active')).resolves.toMatchObject({
+      id: 'grant-active',
+      status: 'active',
+      expiresAt: null,
+    })
+
+    vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grants[0] as never)
+    await expect(getManagementAgentAccessGrant(deps, 'grant-expired')).resolves.toMatchObject({
+      status: 'expired',
+      expiresAt: '2020-01-01T00:00:00.000Z',
+    })
+  })
+
+  it('projects remote JWKS installations with stable pagination and host fallbacks', async () => {
+    const deps = managementDeps()
+    const stored = aggregate()
+    stored.bindings.push({
+      ...stored.bindings[0]!,
+      id: 'binding-2',
+      protocolAgentId: 'protocol-agent-2',
+      hostId: 'host-2',
+    })
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(stored)
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValue([
+      { id: 'host-1', name: null, jwksUrl: 'https://agent.example.com/jwks', publicKey: null, lastUsedAt: null },
+      {
+        id: 'host-2',
+        name: 'Second host',
+        jwksUrl: 'https://agent-2.example.com/jwks',
+        publicKey: null,
+        lastUsedAt: null,
+      },
+    ] as never)
+
+    await expect(listManagementAgentInstallations(deps, 'identity-1', { limit: 1, offset: 0 })).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          id: 'binding-2',
+          name: 'Second host',
+          credentialType: 'remote_jwks',
+          lastSeenAt: null,
+        }),
+      ],
+      pagination: { limit: 1, offset: 0, total: 2, hasMore: true, nextOffset: 1 },
+    })
+
+    await expect(listManagementAgentInstallations(deps, 'identity-1', { limit: 1, offset: 1 })).resolves.toEqual({
+      items: [expect.objectContaining({ id: 'binding-1', name: 'host-1', credentialType: 'remote_jwks' })],
+      pagination: { limit: 1, offset: 1, total: 2, hasMore: false, nextOffset: null },
+    })
+  })
+
+  it('surfaces corrupt management Agent projections and missing governance records', async () => {
+    const deps = managementDeps()
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate())
+
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValue([])
+    await expect(listManagementAgentInstallations(deps, 'identity-1', { limit: 20, offset: 0 })).rejects.toThrow(
+      'was not found',
+    )
+    vi.mocked(deps.agents.listHostsForAgents).mockResolvedValue([
+      { id: 'host-1', name: null, jwksUrl: null, publicKey: null, lastUsedAt: null },
+    ] as never)
+    await expect(listManagementAgentInstallations(deps, 'identity-1', { limit: 20, offset: 0 })).rejects.toThrow(
+      'has no authentication credential',
+    )
+
+    await expect(getManagementAgentAccessRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+    await expect(getManagementAgentAccessGrant(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+
+    vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(null)
+    await expect(getProtocolAgentEnrollment(deps, 'missing', 'protocol-agent-1')).rejects.toMatchObject({ status: 404 })
+
+    vi.mocked(deps.externalResources.listAccessRequests).mockResolvedValue({
+      items: [
+        {
+          resourceId: 'missing-resource',
+          agentIdentityId: 'identity-1',
+          scopes: [],
+          reason: null,
+          status: 'pending',
+          expiresAt: new Date(),
+          decidedAt: null,
+          createdAt: new Date(),
+        },
+      ],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    } as never)
+    await expect(listManagementAgentAccessRequests(deps, { limit: 20, offset: 0 })).rejects.toThrow(
+      'referenced by Agent governance was not found',
+    )
+  })
+
+  it('maps Organization-owned management Agents and validates summary invariants', async () => {
+    const deps = managementDeps()
+    const organizationOwned = aggregate({ ownerUserId: null, ownerOrganizationId: 'org-1' })
+    vi.mocked(deps.agentIdentities.listOwnedByOrganizations).mockResolvedValue({
+      items: [organizationOwned],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    })
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue({
+      id: 'org-1',
+      name: 'acme',
+      displayName: null,
+    } as never)
+
+    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, ['org-1'])).resolves.toMatchObject({
+      items: [{ owner: { id: 'org-1', type: 'organization', displayName: 'acme' } }],
+    })
+
+    vi.mocked(deps.authorization.findOrganization).mockResolvedValue(null)
+    await expect(listAllAgents(deps, { limit: 20, offset: 0 }, ['org-1'])).rejects.toThrow(
+      'owner Organization org-1 was not found',
+    )
+
+    vi.mocked(deps.agentIdentities.listAll).mockResolvedValue({
+      items: [aggregate()],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    })
+    vi.mocked(deps.externalResources.summarizeAgentAccess).mockResolvedValue(new Map())
+    await expect(listAllAgents(deps, { limit: 20, offset: 0 })).rejects.toThrow('access summary was not resolved')
+    vi.mocked(deps.externalResources.summarizeAgentAccess).mockResolvedValue(
+      new Map([['identity-1', { pendingRequestCount: 0, activeGrantCount: 0 }]]),
+    )
+    vi.mocked(deps.authorization.countEffectiveAgentRoles).mockResolvedValue(new Map())
+    await expect(listAllAgents(deps, { limit: 20, offset: 0 })).rejects.toThrow('Role summary was not resolved')
+  })
+
   it('gets only active protocol-bound identities', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue(aggregate())
@@ -341,6 +599,18 @@ describe('Agent identity lifecycle', () => {
       createAdditionalAgentEnrollmentIntent(deps, 'other-identity', 'protocol-agent-1', 'user-1', 'enrollment-key-1'),
     ).rejects.toMatchObject({ status: 409 })
 
+    vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
+      intent({
+        agentIdentityId: 'identity-1',
+        requestedName: null,
+        idempotencyKey: 'enrollment-key-1',
+        createdByUserId: 'other-user',
+      }),
+    )
+    await expect(
+      createAdditionalAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1', 'enrollment-key-1'),
+    ).rejects.toMatchObject({ status: 403 })
+
     vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(null)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate({ status: 'retired' }))
     await expect(
@@ -440,6 +710,38 @@ describe('Agent identity lifecycle', () => {
     })
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate({ ownerUserId: 'other-user' }))
     await expect(retireAgentIdentity(deps, 'identity-1', 'user-1')).rejects.toMatchObject({ status: 403 })
+
+    const withoutMatchingBinding = aggregate()
+    withoutMatchingBinding.bindings[0] = {
+      ...withoutMatchingBinding.bindings[0]!,
+      protocolAgentId: 'another-protocol-agent',
+    }
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(withoutMatchingBinding)
+    vi.mocked(deps.agentIdentities.revokeBinding).mockResolvedValue(true)
+    await expect(revokeAgentIdentityHost(deps, 'identity-1', 'protocol-agent-1', 'user-1')).resolves.toBeUndefined()
+  })
+
+  it('rejects enrollment projections that cannot resolve a display name', async () => {
+    expect(() =>
+      toAgentEnrollment({
+        id: 'intent-without-name',
+        agentIdentityId: null,
+        protocolAgentId: 'protocol-agent-1',
+        requestedName: null,
+        homeSpace: { type: 'personal', userId: 'user-1' },
+        status: 'pending',
+        expiresAt: new Date(),
+        approvedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    ).toThrow('does not resolve to an Agent name')
+
+    const deps = enrollmentDeps()
+    vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(intent({ requestedName: null, agentIdentityId: null }))
+    await expect(getPublicAgentEnrollment(deps, 'intent-1', 'user-1')).rejects.toThrow(
+      'has no requested or existing identity',
+    )
   })
 
   it('surfaces the owner invariant when persisted identity data is invalid', async () => {
@@ -483,6 +785,17 @@ function identityDeps() {
         ),
     },
   })
+}
+
+function managementDeps() {
+  const deps = createTestDeps()
+  vi.mocked(deps.authorization.countEffectiveAgentRoles).mockImplementation((agents) =>
+    Promise.resolve(new Map(agents.map((agent) => [agent.agentIdentityId, 0]))),
+  )
+  vi.mocked(deps.externalResources.summarizeAgentAccess).mockImplementation((agentIds) =>
+    Promise.resolve(new Map(agentIds.map((agentId) => [agentId, { pendingRequestCount: 0, activeGrantCount: 0 }]))),
+  )
+  return deps
 }
 
 function member(role: string) {
