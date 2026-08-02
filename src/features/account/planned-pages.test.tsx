@@ -705,7 +705,7 @@ function accessRequest(): AccessRequestApproval {
     agentId: 'agent-active',
     agent: { id: 'agent-active', name: 'Build Agent' },
     target: { type: 'api-resource', apiResourceId: 'resource-1' },
-    resource: { id: 'resource-1', name: 'Projects API' },
+    resource: { id: 'resource-1', name: 'Projects API', authorizationDetailTemplates: [] },
     scopes: ['projects:read'],
     authorizationDetails: [],
     reason: 'Read projects',
