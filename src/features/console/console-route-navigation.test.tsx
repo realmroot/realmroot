@@ -187,8 +187,12 @@ describe('console route navigation', () => {
       if (url === '/api/roles/role-1') {
         return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
       }
-      if (url === '/api/roles/role-1/scopes') {
-        return Promise.resolve(jsonResponse({ scopes: ['orders.read'] }))
+      if (url === '/api/roles/role-1/permissions') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ permissions: [{ resourceId: 'resource-1', scope: 'orders.read' }] }), {
+            headers: { 'content-type': 'application/json', etag: '"permissions-v1"' },
+          }),
+        )
       }
       if (url.startsWith('/api/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/api-resources') {
@@ -217,7 +221,7 @@ describe('console route navigation', () => {
               owner: { id: 'org-1', type: 'organization', displayName: 'Acme' },
               status: 'active',
               retiredAt: null,
-              hostCount: 1,
+              installationCount: 1,
               roleCount: 1,
               pendingRequestCount: 0,
               activeGrantCount: 1,
@@ -228,12 +232,17 @@ describe('console route navigation', () => {
         )
       }
       if (
-        url.startsWith('/api/agents/agent-1/hosts') ||
-        url.startsWith('/api/agents/agent-1/roles') ||
-        url.startsWith('/api/agents/agent-1/access-requests') ||
-        url.startsWith('/api/agents/agent-1/access-grants')
+        url.startsWith('/api/agents/agent-1/installations') ||
+        url.startsWith('/api/agent-access-requests?agentId=agent-1') ||
+        url.startsWith('/api/agent-access-grants?agentId=agent-1')
       ) {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+      }
+      if (url.startsWith('/api/role-assignments?') && url.includes('subjectId=agent-1')) {
+        return Promise.resolve(jsonResponse({ assignments: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/roles') {
+        return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/audit-events?')) {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))

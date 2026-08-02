@@ -3,6 +3,41 @@
 Use this reference while creating or reviewing the resource model and HTTP
 contract.
 
+## Resource-Abstraction Gate
+
+API design starts only after resource design. Never derive the API surface from
+the navigation, screens, tabs, cards, forms, buttons, user stories, or named
+product features. Those describe desired behavior, not resource boundaries.
+
+Reject a candidate resource unless all of these questions have convincing
+answers:
+
+1. What domain concept does it represent without referring to a UI surface?
+2. What gives one instance a stable identity?
+3. Who owns it, and within what authorization boundary does it exist?
+4. What state does its representation expose?
+5. What creates it, changes it, and ends or deletes it?
+6. What is its single canonical URI?
+7. Why is it not an existing resource, a projection of existing resources, or
+   client-side composition?
+
+Do not rescue a product-shaped endpoint by inventing a noun for its path. A
+noun is not necessarily a resource. Names such as `overview`, `authority`,
+`configuration`, `management`, `action`, and `retry` often hide a page-shaped
+aggregate or procedure and require another modeling pass.
+
+A resource may be persisted across several tables or computed from other
+state. Persistence is not the test. The test is whether it is a stable,
+coherent domain abstraction that clients can address and understand across
+product surfaces. A screen-specific bundle of unrelated data fails this test.
+
+Use product capabilities only after the resource model exists: map each
+capability to reads and state transitions on those resources. Prefer composing
+multiple resource requests over creating an endpoint whose sole purpose is to
+serve one workflow. Introduce an aggregate or derived resource only when that
+aggregate itself has durable domain semantics, a canonical representation, and
+a clear freshness and authorization contract.
+
 ## Resource Model
 
 - Name URIs after resources, not controller methods or commands.
@@ -16,6 +51,8 @@ contract.
   Put principal-specific authority in OpenAPI security requirements.
 - Keep implementation records private when callers act on a more stable product
   aggregate.
+- Make one collection create one resource type. A `POST` to the same collection
+  must not sometimes create and return a different kind of resource.
 
 Before accepting an action-shaped requirement, ask what is created, replaced,
 updated, or deleted:
@@ -98,6 +135,13 @@ successful representation containing an error flag.
 
 Reject the design until:
 
+- every operation is justified by a resource abstraction, not by a product
+  surface or business action;
+- every candidate resource has stable domain meaning, identity, ownership,
+  representation, and lifecycle;
+- every product capability is explicitly composed from the resource model;
+- no screen-specific aggregate or renamed RPC procedure is presented as a
+  resource;
 - every capability maps to a resource transition;
 - every resource has one canonical URI;
 - methods retain their standard safety and idempotency semantics;

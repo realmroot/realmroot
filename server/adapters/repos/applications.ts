@@ -1,5 +1,5 @@
 import type { ApplicationRepository } from '@server/usecases/ports'
-import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Database } from '../../db/client'
 import {
@@ -93,7 +93,7 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
         .from(application)
         .innerJoin(oauthClient, eq(application.oauthClientId, oauthClient.clientId))
         .where(ownerCondition)
-        .orderBy(desc(application.createdAt))
+        .orderBy(desc(application.createdAt), desc(application.id))
         .limit(pagination.limit)
         .offset(pagination.offset)
       const totalRows = await db.select({ total: count() }).from(application).where(ownerCondition)
@@ -283,11 +283,31 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
       }
     },
 
-    async listAuthorizations(applicationId, pagination) {
-      const where = and(eq(applicationConsent.applicationId, applicationId), isNull(applicationConsent.revokedAt))
+    async listAuthorizations(query, ownerOrganizationIds) {
+      if (ownerOrganizationIds?.length === 0) {
+        return { items: [], pagination: toPaginationMetadata(query, 0) }
+      }
+      const now = new Date()
+      const statusCondition =
+        query.status === 'revoked'
+          ? isNotNull(applicationConsent.revokedAt)
+          : query.status === 'expired'
+            ? and(isNull(applicationConsent.revokedAt), lte(applicationConsent.expiresAt, now))
+            : query.status === 'active'
+              ? and(
+                  isNull(applicationConsent.revokedAt),
+                  or(isNull(applicationConsent.expiresAt), gt(applicationConsent.expiresAt, now)),
+                )
+              : undefined
+      const where = and(
+        query.applicationId ? eq(applicationConsent.applicationId, query.applicationId) : undefined,
+        ownerOrganizationIds ? inArray(application.ownerOrganizationId, ownerOrganizationIds) : undefined,
+        statusCondition,
+      )
       const rows = await db
         .select({
           id: applicationConsent.id,
+          applicationId: applicationConsent.applicationId,
           userId: user.id,
           userDisplayName: user.name,
           userEmail: user.email,
@@ -297,15 +317,21 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           permissions: applicationConsent.permissions,
           grantedAt: applicationConsent.grantedAt,
           expiresAt: applicationConsent.expiresAt,
+          revokedAt: applicationConsent.revokedAt,
         })
         .from(applicationConsent)
+        .innerJoin(application, eq(applicationConsent.applicationId, application.id))
         .innerJoin(user, eq(applicationConsent.userId, user.id))
         .leftJoin(organization, eq(applicationConsent.organizationId, organization.id))
         .where(where)
-        .orderBy(desc(applicationConsent.grantedAt))
-        .limit(pagination.limit)
-        .offset(pagination.offset)
-      const totalRows = await db.select({ total: count() }).from(applicationConsent).where(where)
+        .orderBy(desc(applicationConsent.grantedAt), desc(applicationConsent.id))
+        .limit(query.limit)
+        .offset(query.offset)
+      const totalRows = await db
+        .select({ total: count() })
+        .from(applicationConsent)
+        .innerJoin(application, eq(applicationConsent.applicationId, application.id))
+        .where(where)
 
       return {
         items: rows.map((row) => ({
@@ -313,15 +339,36 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
           scopes: row.scopes.filter(isScope),
           permissions: row.permissions ?? [],
         })),
-        pagination: toPaginationMetadata(pagination, totalRows[0]?.total ?? 0),
+        pagination: toPaginationMetadata(query, totalRows[0]?.total ?? 0),
       }
     },
 
-    async revokeAuthorization(applicationId, authorizationId) {
-      const row = await findAuthorizationGrant(db, {
-        applicationId,
-        authorizationId,
-      })
+    async findAuthorization(authorizationId) {
+      const [row] = await db
+        .select({
+          id: applicationConsent.id,
+          applicationId: applicationConsent.applicationId,
+          userId: user.id,
+          userDisplayName: user.name,
+          userEmail: user.email,
+          organizationId: organization.id,
+          organizationName: organization.name,
+          scopes: applicationConsent.scopes,
+          permissions: applicationConsent.permissions,
+          grantedAt: applicationConsent.grantedAt,
+          expiresAt: applicationConsent.expiresAt,
+          revokedAt: applicationConsent.revokedAt,
+        })
+        .from(applicationConsent)
+        .innerJoin(user, eq(applicationConsent.userId, user.id))
+        .leftJoin(organization, eq(applicationConsent.organizationId, organization.id))
+        .where(eq(applicationConsent.id, authorizationId))
+        .limit(1)
+      return row ? { ...row, scopes: row.scopes.filter(isScope), permissions: row.permissions ?? [] } : null
+    },
+
+    async revokeAuthorization(authorizationId) {
+      const row = await findAuthorizationGrant(db, { authorizationId })
       if (!row) return false
       await revokeAuthorizationGrant(db, row)
       return true
@@ -424,12 +471,17 @@ export function createDrizzleApplicationRepository(db: Database): ApplicationRep
 
 async function findAuthorizationGrant(
   db: Database,
-  selector: { applicationId: string; authorizationId: string } | { authorizationId: string; userId: string },
+  selector:
+    | { applicationId: string; authorizationId: string }
+    | { authorizationId: string; userId: string }
+    | { authorizationId: string },
 ) {
   const ownershipCondition =
     'applicationId' in selector
       ? eq(applicationConsent.applicationId, selector.applicationId)
-      : eq(applicationConsent.userId, selector.userId)
+      : 'userId' in selector
+        ? eq(applicationConsent.userId, selector.userId)
+        : undefined
   const [row] = await db
     .select({
       applicationId: applicationConsent.applicationId,

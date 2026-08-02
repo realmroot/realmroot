@@ -170,12 +170,10 @@ type Handlers = Parameters<typeof setupServer>
 export function accountHandlers(store: AccountStore, config: ReturnType<typeof configz> = configz()): Handlers {
   return [
     http.get(`${base}/api/configz`, () => HttpResponse.json(config)),
-    http.get(`${base}/api/account/profile`, () =>
-      HttpResponse.json({
-        activeOrganizationId: store.activeOrganizationId,
-        user: store.profile,
-        access: store.access,
-      }),
+    http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: store.profile })),
+    http.get(`${base}/api/account/developer-console-access`, () => HttpResponse.json(store.access)),
+    http.get(`${base}/api/account/organization-context`, () =>
+      HttpResponse.json({ activeOrganizationId: store.activeOrganizationId }),
     ),
     http.get(`${base}/api/auth/organization/list`, () => HttpResponse.json([])),
     http.get(`${base}/api/auth/organization/list-user-invitations`, () => HttpResponse.json([])),

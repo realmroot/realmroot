@@ -30,7 +30,13 @@ import { AccountPageHeader, AccountRow, AccountRows, AccountTabContent, AccountT
 import { AccountPageError, AccountPageLoading, AccountPageShell } from './account-shell'
 import { SettingsAction, UnavailableSection } from './primitives'
 import { ProfileDialogs } from './profile-dialogs'
-import { accountQueryKeys, useAccountConfig, useAccountMutation, useAccountProfile } from './queries'
+import {
+  accountQueryKeys,
+  useAccountConfig,
+  useAccountMutation,
+  useAccountProfile,
+  useDeveloperConsoleAccess,
+} from './queries'
 import { defaultAccountCenterSettings } from './settings'
 import type { MutationHandler, UserProfile } from './types'
 import { accountTimeZones, readAccountTimeZone, saveAccountTimeZone } from './utils'
@@ -38,6 +44,7 @@ import { accountTimeZones, readAccountTimeZone, saveAccountTimeZone } from './ut
 export function AccountProfilePage() {
   const configQuery = useAccountConfig()
   const profileQuery = useAccountProfile()
+  const accessQuery = useDeveloperConsoleAccess()
   const mutate = useAccountMutation()
   const [tab, setTab] = useState('details')
   const [action, setAction] = useState<'language' | 'timezone' | null>(null)
@@ -45,12 +52,13 @@ export function AccountProfilePage() {
   const [timezone, setTimezone] = useState(readAccountTimeZone)
   const config = configQuery.data ?? null
   const accountCenter = config?.accountCenter ?? defaultAccountCenterSettings
-  const error = configQuery.error ?? profileQuery.error
-  if (configQuery.isLoading || profileQuery.isLoading) return <AccountPageLoading config={config} />
+  const error = configQuery.error ?? profileQuery.error ?? accessQuery.error
+  if (configQuery.isLoading || profileQuery.isLoading || accessQuery.isLoading)
+    return <AccountPageLoading config={config} />
   if (error)
     return <AccountPageError config={config} message={error instanceof Error ? error.message : tt('Unable to load.')} />
   const profile = profileQuery.data?.user ?? null
-  const access = profileQuery.data?.access
+  const access = accessQuery.data
   if (!access) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
   return (
     <AccountPageShell access={access} accountCenter={accountCenter} config={config} profile={profile} section="profile">

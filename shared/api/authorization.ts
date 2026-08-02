@@ -202,6 +202,11 @@ export const roleAssignmentResponseSchema = z.object({
   updatedAt: z.string(),
 })
 
+export const roleAssignmentRevocationSchema = z.object({
+  roleAssignmentId: z.string(),
+  revokedAt: z.string(),
+})
+
 export const listRoleAssignmentsQuerySchema = paginationQuerySchema.extend({
   roleId: z.string().optional(),
   subjectType: roleAssignmentSubjectTypeSchema.optional(),
@@ -291,6 +296,7 @@ export type RolePermission = z.infer<typeof rolePermissionSchema>
 export type RolePermissionsResponse = z.infer<typeof rolePermissionsResponseSchema>
 export type ReplaceRolePermissionsRequest = z.infer<typeof replaceRolePermissionsRequestSchema>
 export type RoleAssignmentResponse = z.infer<typeof roleAssignmentResponseSchema>
+export type RoleAssignmentRevocation = z.infer<typeof roleAssignmentRevocationSchema>
 export type CreateRoleAssignmentRequest = z.infer<typeof createRoleAssignmentRequestSchema>
 export type ListRoleAssignmentsQuery = z.infer<typeof listRoleAssignmentsQuerySchema>
 export type ListRoleAssignmentsResponse = z.infer<typeof listRoleAssignmentsResponseSchema>

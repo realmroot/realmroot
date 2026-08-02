@@ -41,6 +41,8 @@ export const managementErrorResponseSchema = z.object({
       'not_found',
       'conflict',
       'resource_in_use',
+      'precondition_failed',
+      'precondition_required',
       'bad_gateway',
       'internal_error',
     ]),
@@ -212,29 +214,35 @@ export const developerConsoleAccessPolicySchema = z.enum([
 ])
 export const developerConsoleAccessLevelSchema = z.enum(['owner', 'admin', 'developer'])
 
-export const managementDeveloperSettingsResponseSchema = z.object({
-  organizationCreation: organizationCreationPolicySchema,
+export const organizationCreationPolicyResponseSchema = z.object({
+  mode: organizationCreationPolicySchema,
   approvedUserIds: z
     .array(z.string())
     .default([])
     .transform((ids) => [...new Set(ids)].sort()),
-  consoleAccess: developerConsoleAccessPolicySchema,
+})
+
+export const replaceOrganizationCreationPolicyRequestSchema = organizationCreationPolicyResponseSchema
+
+export const developerConsoleAccessPolicyResponseSchema = z.object({
+  mode: developerConsoleAccessPolicySchema,
   eligibleAccessLevels: z.array(developerConsoleAccessLevelSchema).min(1),
   selectedOrganizationIds: z.array(z.string()),
 })
 
-export const updateManagementDeveloperSettingsRequestSchema = managementDeveloperSettingsResponseSchema
+export const replaceDeveloperConsoleAccessPolicyRequestSchema = developerConsoleAccessPolicyResponseSchema
 
-export const managementGeneralSettingsResponseSchema = z.object({
-  realmName: z.string().trim().min(1).max(80),
+export const managementRealmResponseSchema = z.object({
+  id: z.literal('realm'),
+  name: z.string().trim().min(1).max(80),
   issuer: z.url(),
   oidcDiscoveryUrl: z.url(),
   jwksUrl: z.url(),
   managementApiUrl: z.url(),
 })
 
-export const updateManagementGeneralSettingsRequestSchema = z.object({
-  realmName: z.string().trim().min(1).max(80),
+export const updateManagementRealmRequestSchema = z.object({
+  name: z.string().trim().min(1).max(80),
 })
 
 export const emailDeliveryProviderSchema = z.literal('cloudflare_email')
@@ -247,7 +255,7 @@ export const emailServiceSettingsSchema = z.object({
   replyToEmail: z.email().nullable(),
 })
 
-export const managementEmailSettingsResponseSchema = z.object({
+export const emailDeliveryConfigurationResponseSchema = z.object({
   provider: emailDeliveryProviderSchema,
   enabled: z.boolean(),
   fromEmail: z.email().nullable(),
@@ -257,7 +265,7 @@ export const managementEmailSettingsResponseSchema = z.object({
   source: z.enum(['database', 'environment', 'unconfigured']),
 })
 
-export const updateManagementEmailSettingsRequestSchema = emailServiceSettingsSchema
+export const replaceEmailDeliveryConfigurationRequestSchema = emailServiceSettingsSchema
 
 export const managementReadinessItemIdSchema = z.enum([
   'oidc_application',
@@ -487,11 +495,16 @@ export const managementPasswordResetRequestSchema = adminPasswordResetSchema
 
 export const protectedResourceCollectionRoutes = [
   '/applications',
+  '/application-authorizations',
   '/users',
   '/organizations',
   '/roles',
+  '/role-assignments',
   '/api-resources',
   '/connectors',
+  '/agents',
+  '/agent-access-requests',
+  '/agent-access-grants',
 ] as const
 
 export { paginationQuerySchema }
@@ -518,13 +531,17 @@ export type ManagementAccountCenterSettingsResponse = z.infer<typeof managementA
 export type UpdateManagementAccountCenterSettingsRequest = z.infer<
   typeof updateManagementAccountCenterSettingsRequestSchema
 >
-export type ManagementDeveloperSettingsResponse = z.infer<typeof managementDeveloperSettingsResponseSchema>
-export type UpdateManagementDeveloperSettingsRequest = z.infer<typeof updateManagementDeveloperSettingsRequestSchema>
-export type ManagementGeneralSettingsResponse = z.infer<typeof managementGeneralSettingsResponseSchema>
-export type UpdateManagementGeneralSettingsRequest = z.infer<typeof updateManagementGeneralSettingsRequestSchema>
+export type OrganizationCreationPolicyResponse = z.infer<typeof organizationCreationPolicyResponseSchema>
+export type ReplaceOrganizationCreationPolicyRequest = z.infer<typeof replaceOrganizationCreationPolicyRequestSchema>
+export type DeveloperConsoleAccessPolicyResponse = z.infer<typeof developerConsoleAccessPolicyResponseSchema>
+export type ReplaceDeveloperConsoleAccessPolicyRequest = z.infer<
+  typeof replaceDeveloperConsoleAccessPolicyRequestSchema
+>
+export type ManagementRealmResponse = z.infer<typeof managementRealmResponseSchema>
+export type UpdateManagementRealmRequest = z.infer<typeof updateManagementRealmRequestSchema>
 export type EmailServiceSettings = z.infer<typeof emailServiceSettingsSchema>
-export type ManagementEmailSettingsResponse = z.infer<typeof managementEmailSettingsResponseSchema>
-export type UpdateManagementEmailSettingsRequest = z.infer<typeof updateManagementEmailSettingsRequestSchema>
+export type EmailDeliveryConfigurationResponse = z.infer<typeof emailDeliveryConfigurationResponseSchema>
+export type ReplaceEmailDeliveryConfigurationRequest = z.infer<typeof replaceEmailDeliveryConfigurationRequestSchema>
 export type ManagementReadinessItem = z.infer<typeof managementReadinessItemSchema>
 export type ManagementReadinessResponse = z.infer<typeof managementReadinessResponseSchema>
 export type ManagementConnectorResponse = z.infer<typeof managementConnectorResponseSchema>

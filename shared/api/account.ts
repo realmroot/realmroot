@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Agent } from './agent-api'
-import type { RolePermission, RoleResponse } from './authorization'
+import type { RoleAssignmentResponse, RolePermission, RoleResponse } from './authorization'
 import type { PaginationMetadata } from './pagination'
 import { usernameSchema } from './users'
 
@@ -43,7 +43,6 @@ export type AccountPasswordChangeInput = z.infer<typeof accountPasswordChangeSch
 export type AccountWalletAddressLinkInput = z.infer<typeof accountWalletAddressLinkSchema>
 
 export type AccountProfileResponse = {
-  activeOrganizationId: string | null
   user: {
     id: string
     email: string
@@ -55,15 +54,20 @@ export type AccountProfileResponse = {
     image: string | null
     role: string | null
   }
-  access: {
-    canCreateOrganization: boolean
-    showOrganizations: boolean
-    realmOperator: boolean
-    consoleOrganizations: Array<{
-      organizationId: string
-      accessLevel: 'owner' | 'admin' | 'developer'
-    }>
-  }
+}
+
+export type DeveloperConsoleAccessResponse = {
+  canCreateOrganization: boolean
+  showOrganizations: boolean
+  realmOperator: boolean
+  consoleOrganizations: Array<{
+    organizationId: string
+    accessLevel: 'owner' | 'admin' | 'developer'
+  }>
+}
+
+export type AccountOrganizationContextResponse = {
+  activeOrganizationId: string | null
 }
 
 export type AccountOrganizationAgentsResponse = {
@@ -71,12 +75,17 @@ export type AccountOrganizationAgentsResponse = {
   pagination: PaginationMetadata
 }
 
-export type AccountOrganizationAuthorityResponse = {
-  roles: Array<{
+export type AccountOrganizationRoleAssignmentsResponse = {
+  assignments: Array<{
+    assignment: RoleAssignmentResponse
     role: RoleResponse
     permissions: RolePermission[]
   }>
-  agentGrants: Array<{
+  pagination: PaginationMetadata
+}
+
+export type AccountOrganizationAgentAccessGrantsResponse = {
+  grants: Array<{
     id: string
     agentId: string
     agentName: string
@@ -86,6 +95,7 @@ export type AccountOrganizationAuthorityResponse = {
     expiresAt: string | null
     createdAt: string
   }>
+  pagination: PaginationMetadata
 }
 
 export type LinkedAccountsResponse = {

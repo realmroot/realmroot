@@ -7,7 +7,11 @@ import type {
   UpdateConfigzBrandingInput,
   UpdateConfigzSettingsInput,
 } from '@server/usecases/ports'
-import { emailServiceSettingsSchema, managementDeveloperSettingsResponseSchema } from '@shared/api/management'
+import {
+  developerConsoleAccessPolicyResponseSchema,
+  emailServiceSettingsSchema,
+  organizationCreationPolicyResponseSchema,
+} from '@shared/api/management'
 import type { SQL } from 'drizzle-orm'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '../../db/client'
@@ -70,14 +74,21 @@ export function createDrizzleConfigzRepository(db: Database): ConfigzRepository 
       return rows[0] ? toAccountCenterSettings(rows[0]) : null
     },
 
-    async getDeveloperSettings() {
+    async getOrganizationCreationPolicy() {
+      const settings = await this.getSettings()
+      const configured = readObjectMetadata(settings?.metadata ?? null, 'developerPolicy')
+      return organizationCreationPolicyResponseSchema.parse({
+        mode: configured.organizationCreation ?? 'admins_only',
+        approvedUserIds: configured.approvedUserIds ?? [],
+      })
+    },
+
+    async getDeveloperConsoleAccessPolicy() {
       const settings = await this.getSettings()
       const configured = readObjectMetadata(settings?.metadata ?? null, 'developerPolicy')
       const rows = await db.select({ id: organization.id, metadata: organization.metadata }).from(organization)
-      return managementDeveloperSettingsResponseSchema.parse({
-        organizationCreation: configured.organizationCreation ?? 'admins_only',
-        approvedUserIds: configured.approvedUserIds ?? [],
-        consoleAccess: configured.consoleAccess ?? 'realm_operators',
+      return developerConsoleAccessPolicyResponseSchema.parse({
+        mode: configured.consoleAccess ?? 'realm_operators',
         eligibleAccessLevels: configured.eligibleAccessLevels ?? ['owner', 'admin'],
         selectedOrganizationIds: rows
           .filter((row) => organizationConsoleEnabled(row.metadata))
@@ -123,16 +134,36 @@ export function createDrizzleConfigzRepository(db: Database): ConfigzRepository 
         })
     },
 
-    async updateDeveloperSettings(input) {
+    async updateOrganizationCreationPolicy(input) {
       const current = await this.getSettings()
-      const rows = await db.select({ id: organization.id, metadata: organization.metadata }).from(organization)
-      const selected = new Set(input.consoleAccess === 'selected_organizations' ? input.selectedOrganizationIds : [])
+      const configured = readObjectMetadata(current?.metadata ?? null, 'developerPolicy')
       const metadata = {
         ...(current?.metadata ?? {}),
         developerPolicy: {
-          organizationCreation: input.organizationCreation,
-          approvedUserIds: input.organizationCreation === 'approved_users' ? input.approvedUserIds : [],
-          consoleAccess: input.consoleAccess,
+          ...configured,
+          organizationCreation: input.mode,
+          approvedUserIds: input.mode === 'approved_users' ? input.approvedUserIds : [],
+        },
+      }
+      await db
+        .insert(signInExperience)
+        .values({ ...settingsInsertDefaults(current), id: settingsId, metadata, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: signInExperience.id,
+          set: { metadata, updatedAt: new Date() },
+        })
+    },
+
+    async updateDeveloperConsoleAccessPolicy(input) {
+      const current = await this.getSettings()
+      const configured = readObjectMetadata(current?.metadata ?? null, 'developerPolicy')
+      const rows = await db.select({ id: organization.id, metadata: organization.metadata }).from(organization)
+      const selected = new Set(input.mode === 'selected_organizations' ? input.selectedOrganizationIds : [])
+      const metadata = {
+        ...(current?.metadata ?? {}),
+        developerPolicy: {
+          ...configured,
+          consoleAccess: input.mode,
           eligibleAccessLevels: input.eligibleAccessLevels,
         },
       }

@@ -331,8 +331,12 @@ export async function replaceRolePermissions(deps: Deps, roleId: string, permiss
   await deps.authorization.replaceRolePermissions(roleId, permissions)
 }
 
-export function listRoleAssignments(deps: Deps, query: ListRoleAssignmentsQuery, organizationIds?: string[]) {
-  return deps.authorization.listRoleAssignments({ ...query, organizationIds }).then((page) => ({
+export function listRoleAssignments(
+  deps: Deps,
+  query: ListRoleAssignmentsQuery,
+  visibility?: { organizationIds: string[]; includeRealmAssignments?: boolean },
+) {
+  return deps.authorization.listRoleAssignments({ ...query, ...visibility }).then((page) => ({
     assignments: page.items,
     pagination: page.pagination,
   }))
@@ -360,10 +364,12 @@ export async function createRoleAssignment(deps: Deps, input: CreateRoleAssignme
   })
 }
 
-export async function revokeRoleAssignment(deps: Deps, id: string) {
-  if (!(await deps.authorization.revokeRoleAssignment(id, new Date()))) {
-    throw notFound('Active Role assignment was not found.')
-  }
+export async function putRoleAssignmentRevocation(deps: Deps, id: string) {
+  const assignment = await getRoleAssignment(deps, id)
+  if (assignment.revokedAt) return { roleAssignmentId: id, revokedAt: assignment.revokedAt }
+  const revokedAt = new Date()
+  if (!(await deps.authorization.revokeRoleAssignment(id, revokedAt))) throw notFound('Role assignment was not found.')
+  return { roleAssignmentId: id, revokedAt: revokedAt.toISOString() }
 }
 
 async function validateRoleAssignmentSubject(

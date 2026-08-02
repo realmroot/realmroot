@@ -237,14 +237,21 @@ describe('console dashboard guards', () => {
         return Promise.resolve(
           jsonResponse({
             user: { ...consoleAccountProfile, role: 'user' },
-            access: {
-              canCreateOrganization: true,
-              showOrganizations: false,
-              realmOperator: false,
-              consoleOrganizations: [],
-            },
           }),
         )
+      if (url === '/api/account/developer-console-access') {
+        return Promise.resolve(
+          jsonResponse({
+            canCreateOrganization: true,
+            showOrganizations: false,
+            realmOperator: false,
+            consoleOrganizations: [],
+          }),
+        )
+      }
+      if (url === '/api/account/organization-context') {
+        return Promise.resolve(jsonResponse({ activeOrganizationId: null }))
+      }
       return consoleSharedFetch(input, init)
     })
     window.history.pushState(null, '', '/console/dashboard')

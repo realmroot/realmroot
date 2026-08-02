@@ -419,7 +419,7 @@ export function createAuth(
       }),
       organization({
         allowUserToCreateOrganization: async (user) =>
-          mayCreateOrganization(await configz.getDeveloperSettings(), {
+          mayCreateOrganization(await configz.getOrganizationCreationPolicy(), {
             id: user.id,
             emailVerified: user.emailVerified,
             role: typeof user.role === 'string' ? user.role : null,

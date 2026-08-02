@@ -59,7 +59,9 @@ describe('account pages', () => {
     renderWithClient(<AccountProfilePage />)
 
     expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
-    await waitFor(() => expect(requests).toEqual(['/api/configz', '/api/account/profile']))
+    await waitFor(() =>
+      expect(requests).toEqual(['/api/configz', '/api/account/profile', '/api/account/developer-console-access']),
+    )
   })
 
   it('security page loads security-owned account data', async () => {
@@ -71,6 +73,7 @@ describe('account pages', () => {
       expect(requests).toEqual([
         '/api/configz',
         '/api/account/profile',
+        '/api/account/developer-console-access',
         '/api/account/security',
         '/api/account/security/passkeys',
         '/api/account/sessions',
@@ -88,6 +91,7 @@ describe('account pages', () => {
       expect(requests).toEqual([
         '/api/configz',
         '/api/account/profile',
+        '/api/account/developer-console-access',
         '/api/account/linked-accounts',
         '/api/account/applications',
         '/api/account/agents',
@@ -113,12 +117,16 @@ function mockAccountFetch() {
       return Promise.resolve(
         jsonResponse({
           user: profile(),
-          access: {
-            canCreateOrganization: true,
-            showOrganizations: false,
-            realmOperator: false,
-            consoleOrganizations: [],
-          },
+        }),
+      )
+    }
+    if (path === '/api/account/developer-console-access') {
+      return Promise.resolve(
+        jsonResponse({
+          canCreateOrganization: true,
+          showOrganizations: false,
+          realmOperator: false,
+          consoleOrganizations: [],
         }),
       )
     }

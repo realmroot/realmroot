@@ -10,6 +10,37 @@ routine operations with standard HTTP methods and generic Restish commands.
 Reserve dedicated commands for workflows that require client-side orchestration
 beyond one ordinary resource request.
 
+## Non-Negotiable Principle: Resources Before APIs
+
+Never translate a product requirement, page, tab, button, form, or business
+action directly into an endpoint. Product behavior is evidence for discovering
+the domain model; it is not the API model.
+
+Use this decision order without skipping a step:
+
+```text
+product capability
+  -> domain concepts
+  -> resource boundaries
+  -> identity, ownership, state, and lifecycle
+  -> canonical URI and representation
+  -> HTTP methods and contract
+  -> product composition
+```
+
+Before adding an operation, first identify the resource or collection it acts
+on and prove that the resource has stable domain meaning independent of the
+current UI or workflow. Define its identity, ownership, representation,
+lifecycle, and state transitions. If those cannot be defined, do not add the
+API. Revisit the domain model or compose the product behavior from existing
+resources instead.
+
+A resource does not need to map one-to-one to a database table. It does need to
+be a coherent backend abstraction. Derived, aggregate, policy, request, job,
+attempt, and result resources are valid only when clients can recognize them as
+stable domain concepts with their own contract. A response assembled solely to
+populate one screen is not a resource.
+
 ## Step 1: Establish The Boundary
 
 Read the repository instructions, existing routes, schemas, specifications, and
@@ -25,20 +56,38 @@ operation are accounted for.
 
 ## Step 2: Model Resources
 
-Translate requested capabilities into resources, collections, singleton
-resources, child resources, jobs, requests, attempts, results, policies, or
-other durable concepts. Give every resource one canonical URI within a caller
-boundary. Represent a business transition as creating, replacing, updating, or
-deleting a resource rather than placing an action verb in the URI.
+Treat requested capabilities as use cases to analyze, not endpoints to
+implement. Identify resources, collections, singleton resources, child
+resources, jobs, requests, attempts, results, policies, or other stable domain
+concepts that exist independently of the product surface. Give every resource
+one canonical URI within a caller boundary. Represent a business transition as
+creating, replacing, updating, or deleting a resource rather than placing an
+action verb in the URI.
+
+For every candidate resource, record:
+
+- its domain meaning and why it exists independently of a page or feature;
+- its stable identity and canonical URI;
+- its owner and authorization boundary;
+- its representation and server-managed fields;
+- its creation, update, transition, retention, and deletion lifecycle;
+- its relationship to existing resources and whether one already represents
+  the same concept.
+
+Do not design paths, methods, schemas, or operation IDs until this inventory is
+coherent. A product capability may require several ordinary resource
+operations; several product capabilities may use the same resource. Do not
+force a one-to-one mapping in either direction.
 
 Read [references/resource-design.md](references/resource-design.md) while
 building or reviewing the resource model. Read
 [references/dataset-export-example.md](references/dataset-export-example.md)
 when an independent end-to-end example would clarify the design.
 
-This step is complete when every requested capability maps to a resource
-representation or state transition, every resource has one canonical URI, and
-no RPC-style endpoint remains.
+This step is complete when every requested capability is composed from
+resource representations or state transitions, every resource passes the
+abstraction test above and has one canonical URI, duplicate concepts have been
+removed, and no UI-shaped or RPC-style endpoint remains.
 
 ## Step 3: Define The HTTP Contract
 
@@ -103,7 +152,8 @@ operations exist.
 
 Report:
 
-- the resource inventory and canonical URIs;
+- the resource inventory, abstraction rationale, and canonical URIs;
+- how each product capability composes those resources;
 - the method, path, and status contract;
 - the OpenAPI artifact;
 - the exceptional-command whitelist with reasons;

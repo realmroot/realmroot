@@ -1,8 +1,9 @@
 import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
+  AccountOrganizationAgentAccessGrantsResponse,
   AccountOrganizationAgentsResponse,
-  AccountOrganizationAuthorityResponse,
+  AccountOrganizationRoleAssignmentsResponse,
   AccountPasswordChangeInput,
   AccountProfileUpdateInput,
   AccountWalletAddressLinkInput,
@@ -25,10 +26,19 @@ import type {
 } from '@shared/api/security'
 import type { OrganizationAccessLevel } from '@shared/organization-access'
 import { ApiRequestError, apiClient, readJsonResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
+import { getRole, listAgentAccessGrants, listRoleAssignments, listRolePermissions } from '@/lib/api/management'
 import { authClient, nativeAuth } from '@/lib/auth-client'
 
 export function getAccountProfile() {
   return readRpcResponse(apiClient.api.account.profile.$get())
+}
+
+export function getDeveloperConsoleAccess() {
+  return readRpcResponse(apiClient.api.account['developer-console-access'].$get())
+}
+
+export function getAccountOrganizationContext() {
+  return readRpcResponse(apiClient.api.account['organization-context'].$get())
 }
 
 export async function listAccountOrganizations() {
@@ -184,10 +194,68 @@ export function listAccountOrganizationAgents(organizationId: string): Promise<A
   )
 }
 
-export function getAccountOrganizationAuthority(organizationId: string): Promise<AccountOrganizationAuthorityResponse> {
-  return readRpcResponse(
-    apiClient.api.account.organizations[':organizationId'].authority.$get({ param: { organizationId } }),
-  )
+export async function listAccountOrganizationRoleAssignments(
+  organizationId: string,
+): Promise<AccountOrganizationRoleAssignmentsResponse> {
+  const profile = await getAccountProfile()
+  const [organizationAssignments, realmAssignments] = await Promise.all([
+    listRoleAssignments({
+      organizationId,
+      subjectType: 'user',
+      subjectId: profile.user.id,
+      status: 'active',
+      limit: 100,
+    }),
+    listRoleAssignments({
+      context: 'realm',
+      subjectType: 'user',
+      subjectId: profile.user.id,
+      status: 'active',
+      limit: 100,
+    }),
+  ])
+  const assignments = [...organizationAssignments.assignments, ...realmAssignments.assignments]
+  return {
+    assignments: await Promise.all(
+      assignments.map(async (assignment) => {
+        const [role, permissions] = await Promise.all([
+          getRole(assignment.roleId),
+          listRolePermissions(assignment.roleId),
+        ])
+        return { assignment, role, permissions: permissions.permissions }
+      }),
+    ),
+    pagination: {
+      limit: 100,
+      offset: 0,
+      total: organizationAssignments.pagination.total + realmAssignments.pagination.total,
+      hasMore: organizationAssignments.pagination.hasMore || realmAssignments.pagination.hasMore,
+      nextOffset: null,
+    },
+  }
+}
+
+export async function listAccountOrganizationAgentAccessGrants(
+  organizationId: string,
+): Promise<AccountOrganizationAgentAccessGrantsResponse> {
+  const [result, agents] = await Promise.all([
+    listAgentAccessGrants({ organizationId, status: 'active', limit: 100 }),
+    listAccountOrganizationAgents(organizationId),
+  ])
+  const names = new Map(agents.items.map((agent) => [agent.id, agent.name]))
+  return {
+    grants: result.items.map((grant) => ({
+      id: grant.id,
+      agentId: grant.agentId,
+      agentName: names.get(grant.agentId) ?? grant.agentId,
+      resourceId: grant.resource.id,
+      scopes: grant.scopes,
+      mode: grant.mode,
+      expiresAt: grant.expiresAt,
+      createdAt: grant.createdAt,
+    })),
+    pagination: result.pagination,
+  }
 }
 
 export function getAgentEnrollment(enrollmentId: string): Promise<AgentEnrollment> {

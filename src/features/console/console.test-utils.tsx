@@ -29,10 +29,10 @@ export function summaryCard(title: string) {
   return within(card as HTMLElement)
 }
 
-export function jsonResponse(body: unknown, status = 200) {
+export function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   })
 }
 
@@ -50,14 +50,44 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
 
   if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
   if (url === '/api/account/profile') {
-    return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
+    return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
+  }
+  if (url === '/api/account/developer-console-access') return Promise.resolve(jsonResponse(consoleAccountAccess))
+  if (url === '/api/account/organization-context') {
+    return Promise.resolve(jsonResponse({ activeOrganizationId: null }))
   }
   if (url === '/api/account/security') return Promise.resolve(jsonResponse({ security: accountSecurity }))
   if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
   if (url === '/api/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
-  if (url === '/api/developer-settings') return Promise.resolve(jsonResponse(developerSettings))
-  if (url === '/api/general-settings') return Promise.resolve(jsonResponse(generalSettings))
-  if (url === '/api/email-settings') return Promise.resolve(jsonResponse(emailSettings))
+  if (url === '/api/organization-creation-policy') {
+    return Promise.resolve(
+      jsonResponse(
+        {
+          mode: developerSettings.organizationCreation,
+          approvedUserIds: developerSettings.approvedUserIds,
+        },
+        200,
+        { ETag: '"organization-creation-v1"' },
+      ),
+    )
+  }
+  if (url === '/api/developer-console-access-policy') {
+    return Promise.resolve(
+      jsonResponse(
+        {
+          mode: developerSettings.consoleAccess,
+          eligibleAccessLevels: developerSettings.eligibleAccessLevels,
+          selectedOrganizationIds: developerSettings.selectedOrganizationIds,
+        },
+        200,
+        { ETag: '"developer-console-v1"' },
+      ),
+    )
+  }
+  if (url === '/api/realm') return Promise.resolve(jsonResponse(generalSettings, 200, { ETag: '"realm-v1"' }))
+  if (url === '/api/email-delivery-configuration') {
+    return Promise.resolve(jsonResponse(emailSettings, 200, { ETag: '"email-delivery-v1"' }))
+  }
   if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
   if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
   if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))

@@ -1,12 +1,13 @@
-import { badRequest, notFound } from '@server/domain/errors'
+import { badRequest, conflict, notFound } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
-import type { WebhookEndpointRecord, WebhookRequestRecord } from '@server/usecases/ports'
-import { paginationMetadata } from '@shared/api/pagination'
+import type { WebhookDeliveryAttemptRecord, WebhookEndpointRecord, WebhookRequestRecord } from '@server/usecases/ports'
+import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import type {
   CreateWebhookEndpointRequest,
   ListWebhookEndpointsQuery,
   ListWebhookRequestsQuery,
   UpdateWebhookEndpointRequest,
+  WebhookDeliveryAttempt,
   WebhookEndpoint,
   WebhookEndpointSecretResponse,
   WebhookEvent,
@@ -97,11 +98,30 @@ export async function getWebhookRequest(deps: Deps, id: string) {
   return toRequestResponse(request)
 }
 
-export async function retryWebhookRequest(deps: Deps, id: string) {
+export async function listWebhookDeliveryAttempts(deps: Deps, requestId: string, page: PaginationInput) {
+  await getWebhookRequest(deps, requestId)
+  const result = await deps.webhooks.listAttempts(requestId, page)
+  return {
+    attempts: result.items.map(toDeliveryAttemptResponse),
+    pagination: paginationMetadata(result),
+  }
+}
+
+export async function getWebhookDeliveryAttempt(deps: Deps, requestId: string, attemptId: string) {
+  await getWebhookRequest(deps, requestId)
+  const attempt = await deps.webhooks.findAttempt(attemptId)
+  if (!attempt || attempt.requestId !== requestId) throw notFound('Webhook delivery attempt not found.')
+  return toDeliveryAttemptResponse(attempt)
+}
+
+export async function createWebhookDeliveryAttempt(deps: Deps, id: string, idempotencyKey: string) {
   const current = await deps.webhooks.findRequest(id)
   if (!current) throw notFound('Webhook request not found.')
-  if (current.status === 'delivered') throw badRequest('Delivered webhook requests cannot be retried.')
-  return deliverWebhookRequest(deps, id)
+  const existing = await deps.webhooks.findAttemptByIdempotencyKey(id, idempotencyKey)
+  if (existing) return { attempt: toDeliveryAttemptResponse(existing), replayed: true }
+  if (current.status === 'delivered') throw conflict('Delivered webhook requests cannot create another attempt.')
+  const result = await deliverWebhookRequestWithAttempt(deps, id, idempotencyKey)
+  return { attempt: result.attempt, replayed: !result.created }
 }
 
 export async function publishWebhookEvent(
@@ -141,21 +161,48 @@ export async function publishWebhookEvent(
     ),
   )
 
-  return Promise.all(requests.map((request) => deliverWebhookRequest(deps, request.id)))
+  return Promise.all(requests.map((request) => deliverWebhookRequest(deps, request.id, `initial:${request.id}`)))
 }
 
-export async function deliverWebhookRequest(deps: Deps, id: string): Promise<WebhookRequest> {
+export async function deliverWebhookRequest(deps: Deps, id: string, idempotencyKey: string): Promise<WebhookRequest> {
+  return (await deliverWebhookRequestWithAttempt(deps, id, idempotencyKey)).request
+}
+
+async function deliverWebhookRequestWithAttempt(
+  deps: Deps,
+  id: string,
+  idempotencyKey: string,
+): Promise<{ request: WebhookRequest; attempt: WebhookDeliveryAttempt; created: boolean }> {
   const current = await deps.webhooks.findRequest(id)
   if (!current) throw notFound('Webhook request not found.')
   const endpoint = await deps.webhooks.findEndpoint(current.endpointId)
   if (!endpoint) throw notFound('Webhook endpoint not found.')
   if (!current.requestBody) throw badRequest('Webhook request has no event payload.')
 
-  const attemptCount = current.attemptCount + 1
   const attemptedAt = new Date()
+  const reservation = await deps.webhooks.reserveAttempt({
+    id: `wha_${crypto.randomUUID().replaceAll('-', '')}`,
+    requestId: id,
+    idempotencyKey,
+    previousAttemptCount: current.attemptCount,
+    status: 'pending',
+    httpStatus: null,
+    error: null,
+    responseBody: null,
+    createdAt: attemptedAt,
+    completedAt: null,
+  })
+  const attempt = reservation.attempt
+  if (!reservation.created) {
+    return {
+      request: toRequestResponse(current),
+      attempt: toDeliveryAttemptResponse(attempt),
+      created: false,
+    }
+  }
   await updateDelivery(deps, id, {
     status: 'pending',
-    attemptCount,
+    attemptCount: attempt.sequence,
     httpStatus: null,
     error: null,
     responseBody: null,
@@ -163,6 +210,12 @@ export async function deliverWebhookRequest(deps: Deps, id: string): Promise<Web
     updatedAt: attemptedAt,
   })
 
+  let outcome: {
+    status: 'delivered' | 'failed'
+    httpStatus: number | null
+    error: string | null
+    responseBody: string | null
+  }
   try {
     const timestamp = Math.floor(attemptedAt.getTime() / 1000).toString()
     const signingSecret = await readSigningSecret(deps, endpoint)
@@ -182,24 +235,24 @@ export async function deliverWebhookRequest(deps: Deps, id: string): Promise<Web
     )
     const responseBody = await readBoundedResponse(response)
     const delivered = response.status >= 200 && response.status < 300
-    const updated = await updateDelivery(deps, id, {
+    outcome = {
       status: delivered ? 'delivered' : 'failed',
       httpStatus: response.status,
       error: delivered ? null : `Endpoint returned HTTP ${response.status}.`,
       responseBody,
-      updatedAt: new Date(),
-    })
-    return toRequestResponse(updated)
+    }
   } catch (error) {
-    const updated = await updateDelivery(deps, id, {
+    outcome = {
       status: 'failed',
       httpStatus: null,
       error: error instanceof Error ? error.message.slice(0, 1_000) : 'Webhook delivery failed.',
       responseBody: null,
-      updatedAt: new Date(),
-    })
-    return toRequestResponse(updated)
+    }
   }
+  const completedAt = new Date()
+  const updatedAttempt = await updateDeliveryAttempt(deps, attempt.id, { ...outcome, completedAt })
+  const updated = await updateDelivery(deps, id, { ...outcome, updatedAt: completedAt })
+  return { request: toRequestResponse(updated), attempt: toDeliveryAttemptResponse(updatedAttempt), created: true }
 }
 
 function assertEvents(events: WebhookEvent[]) {
@@ -235,6 +288,20 @@ function toRequestResponse(row: WebhookRequestRecord): WebhookRequest {
     nextAttemptAt: row.nextAttemptAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  }
+}
+
+function toDeliveryAttemptResponse(row: WebhookDeliveryAttemptRecord): WebhookDeliveryAttempt {
+  return {
+    id: row.id,
+    requestId: row.requestId,
+    sequence: row.sequence,
+    status: row.status as WebhookDeliveryAttempt['status'],
+    httpStatus: row.httpStatus,
+    error: row.error,
+    responseBody: row.responseBody,
+    createdAt: row.createdAt,
+    completedAt: row.completedAt,
   }
 }
 
@@ -339,6 +406,16 @@ async function readBoundedResponse(response: Response) {
 async function updateDelivery(deps: Deps, id: string, input: Partial<import('./ports').WebhookRequestInsert>) {
   const updated = await deps.webhooks.updateRequest(id, input)
   if (!updated) throw notFound('Webhook request not found.')
+  return updated
+}
+
+async function updateDeliveryAttempt(
+  deps: Deps,
+  id: string,
+  input: Partial<import('./ports').WebhookDeliveryAttemptInsert>,
+) {
+  const updated = await deps.webhooks.updateAttempt(id, input)
+  if (!updated) throw notFound('Webhook delivery attempt not found.')
   return updated
 }
 

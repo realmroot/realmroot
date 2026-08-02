@@ -1,4 +1,4 @@
-import type { AccountProfileResponse } from '@shared/api/account'
+import type { DeveloperConsoleAccessResponse } from '@shared/api/account'
 import type { OrganizationResponse } from '@shared/api/authorization'
 import { Link, useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
 import {
@@ -169,7 +169,7 @@ export function ConsoleShell({
   organizations,
   profile,
 }: {
-  access: AccountProfileResponse['access']
+  access: DeveloperConsoleAccessResponse
   children: ReactNode
   organizations: OrganizationResponse[]
   profile: UserProfile

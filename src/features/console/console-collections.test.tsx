@@ -404,14 +404,14 @@ describe('console collections', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = input instanceof Request ? input : null
       const url = new URL(request?.url ?? String(input), window.location.origin).pathname
-      if (url === '/api/general-settings') {
+      if (url === '/api/realm') {
         if ((request?.method ?? init?.method) === 'PATCH') {
           const body = (request ? await request.clone().json() : JSON.parse(String(init?.body))) as {
-            realmName: string
+            name: string
           }
-          stored = { ...stored, realmName: body.realmName }
+          stored = { ...stored, name: body.name }
         }
-        return jsonResponse(stored)
+        return jsonResponse(stored, 200, { ETag: '"realm-v1"' })
       }
       return consoleSharedFetch(input, init)
     })
@@ -423,7 +423,7 @@ describe('console collections', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByText('Acme Identity')).toBeTruthy()
-    expect(stored.realmName).toBe('Acme Identity')
+    expect(stored.name).toBe('Acme Identity')
   })
 
   it('persists the Cloudflare sender and reply-to identity [spec: admin-console/admin-email-delivery-settings]', async () => {
@@ -431,12 +431,12 @@ describe('console collections', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = input instanceof Request ? input : null
       const url = new URL(request?.url ?? String(input), window.location.origin).pathname
-      if (url === '/api/email-settings') {
-        if ((request?.method ?? init?.method) === 'PATCH') {
+      if (url === '/api/email-delivery-configuration') {
+        if ((request?.method ?? init?.method) === 'PUT') {
           const body = (request ? await request.clone().json() : JSON.parse(String(init?.body))) as typeof emailSettings
           stored = { ...stored, ...body, source: 'database' }
         }
-        return jsonResponse(stored)
+        return jsonResponse(stored, 200, { ETag: '"email-delivery-v1"' })
       }
       return consoleSharedFetch(input, init)
     })

@@ -2,11 +2,12 @@ import {
   createApplication,
   deleteApplication,
   getApplication,
+  getApplicationAuthorization,
   listApplicationAuthorizations,
   listApplicationSecrets,
   listApplications,
+  putApplicationAuthorizationRevocation,
   replaceRedirectUris,
-  revokeApplicationAuthorization,
   rotateApplicationSecret,
   updateApplication,
 } from '@server/usecases/applications'
@@ -20,7 +21,11 @@ import {
 import { publishWebhookEvent } from '@server/usecases/webhooks'
 import {
   type ApplicationResponse,
+  applicationAuthorizationRevocationSchema,
+  applicationAuthorizationSchema,
   createApplicationRequestSchema,
+  listApplicationAuthorizationsQuerySchema,
+  listApplicationAuthorizationsResponseSchema,
   listApplicationsQuerySchema,
   paginationQuerySchema,
   replaceRedirectUrisRequestSchema,
@@ -36,6 +41,7 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { getActorUserId } from '../../middleware/authn'
 import {
+  getConsoleOrganizationScope,
   requireConsoleOrganizationAccess,
   requireConsoleOwnedOrganization,
   resolveOrganizationInventoryScope,
@@ -44,6 +50,32 @@ import { getDeps } from '../../middleware/deps'
 import { readJson, readQuery } from '../validation'
 
 export const managementApplicationsRoute = new Hono()
+export const managementApplicationAuthorizationsRoute = new Hono()
+
+managementApplicationAuthorizationsRoute.get('/', async (c) => {
+  const query = readQuery(c, listApplicationAuthorizationsQuerySchema)
+  return c.json(
+    listApplicationAuthorizationsResponseSchema.parse(
+      await listApplicationAuthorizations(getDeps(c), query, getConsoleOrganizationScope(c) ?? undefined),
+    ),
+  )
+})
+
+managementApplicationAuthorizationsRoute.get('/:authorizationId', async (c) => {
+  const authorization = await getApplicationAuthorization(getDeps(c), c.req.param('authorizationId'))
+  await requireApplicationAccess(c, authorization.applicationId)
+  return c.json(applicationAuthorizationSchema.parse(authorization))
+})
+
+managementApplicationAuthorizationsRoute.put('/:authorizationId/revocation', async (c) => {
+  const authorization = await getApplicationAuthorization(getDeps(c), c.req.param('authorizationId'))
+  await requireApplicationAccess(c, authorization.applicationId)
+  return c.json(
+    applicationAuthorizationRevocationSchema.parse(
+      await putApplicationAuthorizationRevocation(getDeps(c), c.req.param('authorizationId')),
+    ),
+  )
+})
 
 managementApplicationsRoute.get('/', async (c) => {
   const query = readQuery(c, listApplicationsQuerySchema)
@@ -62,6 +94,7 @@ managementApplicationsRoute.post('/', async (c) => {
   requireConsoleOwnedOrganization(c, body.ownerOrganizationId)
   const application = await createApplication(getDeps(c), issuerFor(c), body, getActorUserId(c))
   await publishWebhookEvent(getDeps(c), 'application.created', { application: applicationWebhookData(application) })
+  c.header('Location', `/api/applications/${encodeURIComponent(application.id)}`)
   return c.json(application, 201)
 })
 
@@ -145,18 +178,6 @@ managementApplicationsRoute.post('/:applicationId/client-secrets', async (c) => 
   return c.json(secret, 201)
 })
 
-managementApplicationsRoute.get('/:applicationId/authorizations', async (c) => {
-  await requireApplicationAccess(c)
-  const query = readQuery(c, paginationQuerySchema)
-  return c.json(await listApplicationAuthorizations(getDeps(c), c.req.param('applicationId'), query))
-})
-
-managementApplicationsRoute.delete('/:applicationId/authorizations/:authorizationId', async (c) => {
-  await requireApplicationAccess(c)
-  await revokeApplicationAuthorization(getDeps(c), c.req.param('applicationId'), c.req.param('authorizationId'))
-  return c.body(null, 204)
-})
-
 // Workload identity federation credentials are children of an application.
 managementApplicationsRoute.get('/:applicationId/federated-credentials', async (c) => {
   await requireApplicationAccess(c)
@@ -220,8 +241,8 @@ function issuerFor(c: Context) {
   return `${url.protocol}//${url.host}`
 }
 
-async function requireApplicationAccess(c: Context) {
-  const application = await getApplication(getDeps(c), issuerFor(c), c.req.param('applicationId')!)
+async function requireApplicationAccess(c: Context, applicationId = c.req.param('applicationId')!) {
+  const application = await getApplication(getDeps(c), issuerFor(c), applicationId)
   requireConsoleOrganizationAccess(c, application.ownerOrganizationId)
   return application
 }

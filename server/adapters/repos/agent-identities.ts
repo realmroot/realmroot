@@ -22,7 +22,7 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
         .select()
         .from(agentIdentity)
         .where(eq(agentIdentity.ownerUserId, userId))
-        .orderBy(agentIdentity.createdAt)
+        .orderBy(agentIdentity.createdAt, agentIdentity.id)
       return aggregates(db, identities)
     },
 
@@ -31,7 +31,7 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
         .select()
         .from(agentIdentity)
         .where(eq(agentIdentity.ownerOrganizationId, organizationId))
-        .orderBy(agentIdentity.createdAt)
+        .orderBy(agentIdentity.createdAt, agentIdentity.id)
       return aggregates(db, identities)
     },
 
@@ -43,7 +43,7 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
           .select()
           .from(agentIdentity)
           .where(ownerCondition)
-          .orderBy(desc(agentIdentity.createdAt))
+          .orderBy(desc(agentIdentity.createdAt), desc(agentIdentity.id))
           .limit(page.limit)
           .offset(page.offset),
         db.select({ value: count() }).from(agentIdentity).where(ownerCondition),
@@ -53,7 +53,12 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
 
     async listAll(page) {
       const [identities, totals] = await Promise.all([
-        db.select().from(agentIdentity).orderBy(desc(agentIdentity.createdAt)).limit(page.limit).offset(page.offset),
+        db
+          .select()
+          .from(agentIdentity)
+          .orderBy(desc(agentIdentity.createdAt), desc(agentIdentity.id))
+          .limit(page.limit)
+          .offset(page.offset),
         db.select({ value: count() }).from(agentIdentity),
       ])
       return {
@@ -81,6 +86,20 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
 
     async findIntent(id) {
       const [intent] = await db.select().from(agentEnrollmentIntent).where(eq(agentEnrollmentIntent.id, id)).limit(1)
+      return intent ?? null
+    },
+
+    async findIntentByIdempotencyKey(protocolAgentId, idempotencyKey) {
+      const [intent] = await db
+        .select()
+        .from(agentEnrollmentIntent)
+        .where(
+          and(
+            eq(agentEnrollmentIntent.protocolAgentId, protocolAgentId),
+            eq(agentEnrollmentIntent.idempotencyKey, idempotencyKey),
+          ),
+        )
+        .limit(1)
       return intent ?? null
     },
 
@@ -123,6 +142,14 @@ export function createDrizzleAgentIdentityRepository(db: Database): AgentIdentit
     async createIntent(input) {
       const [created] = await db.insert(agentEnrollmentIntent).values(input).returning()
       return created
+    },
+
+    async createIntentIdempotently(input) {
+      const [created] = await db.insert(agentEnrollmentIntent).values(input).onConflictDoNothing().returning()
+      if (created) return { intent: created, created: true }
+      const existing = await this.findIntentByIdempotencyKey(input.protocolAgentId, input.idempotencyKey)
+      if (!existing) throw new Error('Agent installation enrollment reservation did not return its durable resource.')
+      return { intent: existing, created: false }
     },
 
     async approveIntent(input) {

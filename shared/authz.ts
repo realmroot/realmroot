@@ -1,6 +1,6 @@
 export const resourceAccess = {
   applications: {
-    routePrefixes: ['applications'],
+    routePrefixes: ['applications', 'application-authorizations'],
     capabilities: { read: 'applications:read', write: 'applications:write' },
   },
   users: {
@@ -28,7 +28,10 @@ export const resourceAccess = {
       'sign-in-settings',
       'branding-settings',
       'account-center-settings',
-      'developer-settings',
+      'organization-creation-policy',
+      'developer-console-access-policy',
+      'email-delivery-configuration',
+      'realm',
       'branding',
     ],
     capabilities: { read: 'settings:read', write: 'settings:write' },
@@ -42,7 +45,7 @@ export const resourceAccess = {
     capabilities: { read: 'webhooks:read', write: 'webhooks:write' },
   },
   agents: {
-    routePrefixes: ['agents'],
+    routePrefixes: ['agents', 'agent-access-requests', 'agent-access-grants'],
     capabilities: { read: 'agents:read', write: 'agents:write' },
   },
   auditEvents: {

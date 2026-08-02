@@ -15,7 +15,7 @@ import {
   getAgentAuditEvents,
   listAgentAccessGrants,
   listAgentAccessRequests,
-  listAgentHosts,
+  listAgentInstallations,
   listAgentRoles,
 } from '@/lib/api/management'
 import { useConsoleScope } from '@/lib/console-context'
@@ -34,7 +34,7 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
   const agentQuery = useQuery({ queryKey: [...consoleQueryKeys.agents, agentId], queryFn: () => getAgent(agentId) })
   const hosts = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'hosts'],
-    queryFn: () => listAgentHosts(agentId, { limit: 100 }),
+    queryFn: () => listAgentInstallations(agentId, { limit: 100 }),
   })
   const roles = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'roles'],
@@ -42,11 +42,11 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
   })
   const requests = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'requests'],
-    queryFn: () => listAgentAccessRequests(agentId, { limit: 100 }),
+    queryFn: () => listAgentAccessRequests({ agentId, limit: 100 }),
   })
   const grants = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'grants'],
-    queryFn: () => listAgentAccessGrants(agentId, { limit: 100 }),
+    queryFn: () => listAgentAccessGrants({ agentId, limit: 100 }),
   })
   const audit = useQuery({
     queryKey: [...consoleQueryKeys.agents, agentId, 'audit', { organizationId: context }],
@@ -125,7 +125,7 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
                 ['Owner', owner],
                 ['Stable subject', agent.subject],
                 ['Issuer', agent.issuer],
-                ['Hosts', agent.hostCount.toLocaleString()],
+                ['Installations', agent.installationCount.toLocaleString()],
                 ['Effective Roles', agent.roleCount.toLocaleString()],
                 ['Pending access requests', agent.pendingRequestCount.toLocaleString()],
                 ['Active access grants', agent.activeGrantCount.toLocaleString()],
@@ -135,7 +135,7 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
             />
           </TabsContent>
           <TabsContent className="mt-5" value="hosts">
-            <AgentHostsTable items={hosts.data?.items ?? []} />
+            <AgentInstallationsTable items={hosts.data?.items ?? []} />
           </TabsContent>
           <TabsContent className="mt-5" value="roles">
             <AgentRolesTable items={roles.data?.items ?? []} />
@@ -155,7 +155,9 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
                 <div className="detailFlatRow">
                   <div>
                     <strong>{tt('Retire Agent')}</strong>
-                    <span>{tt('Permanently ends active Hosts and grants while preserving audit history.')}</span>
+                    <span>
+                      {tt('Permanently ends active installations and grants while preserving audit history.')}
+                    </span>
                   </div>
                   <span>{agent.status === 'retired' ? tt('Already retired') : tt('Active')}</span>
                   <Button
@@ -175,7 +177,7 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
       <DestructiveConfirmation
         confirmLabel={retire.isPending ? tt('Retiring…') : tt('Retire Agent')}
         description={tt(
-          'Hosts, active grants, and pending requests stop working immediately. The stable subject remains reserved.',
+          'Installations, active grants, and pending requests stop working immediately. The stable subject remains reserved.',
         )}
         error={<MutationError error={retire.error} />}
         onClose={() => setRetireOpen(false)}
@@ -193,7 +195,7 @@ function agentTabLabel(value: string) {
     (
       {
         overview: 'Overview',
-        hosts: 'Hosts',
+        hosts: 'Installations',
         roles: 'Roles',
         requests: 'Access requests',
         grants: 'Access grants',
@@ -220,10 +222,10 @@ function DetailRows({ rows }: { rows: Array<[string, string]> }) {
   )
 }
 
-function AgentHostsTable({ items }: { items: Awaited<ReturnType<typeof listAgentHosts>>['items'] }) {
+function AgentInstallationsTable({ items }: { items: Awaited<ReturnType<typeof listAgentInstallations>>['items'] }) {
   return (
     <DetailTable
-      headers={['Host', 'Credential', 'Status', 'Last seen']}
+      headers={['Installation', 'Credential', 'Status', 'Last seen']}
       rows={items.map((host) => ({
         id: host.id,
         cells: [
@@ -232,17 +234,14 @@ function AgentHostsTable({ items }: { items: Awaited<ReturnType<typeof listAgent
             <span className="block font-mono text-xs text-muted-foreground">{host.id}</span>
           </div>,
           host.credentialType === 'remote_jwks' ? tt('Remote JWKS') : tt('Public key'),
-          <Badge
-            key="status"
-            variant={host.status === 'active' && host.bindingStatus === 'active' ? 'secondary' : 'outline'}
-          >
-            {host.bindingStatus === 'active' ? host.status : host.bindingStatus}
+          <Badge key="status" variant={host.status === 'active' ? 'secondary' : 'outline'}>
+            {host.status}
           </Badge>,
           host.lastSeenAt ? new Date(host.lastSeenAt).toLocaleString() : tt('Never'),
         ],
       }))}
-      emptyDescription="No Hosts have been bound to this Agent yet."
-      emptyTitle="No Hosts"
+      emptyDescription="No installations have been authorized for this Agent yet."
+      emptyTitle="No installations"
     />
   )
 }

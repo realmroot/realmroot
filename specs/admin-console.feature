@@ -62,7 +62,8 @@ Feature: Admin Console
     Given an application exists
     When I open its detail page
     Then settings, branding, redirect URIs, integration details, and secret rotation are available
-    And active user authorizations can be inspected and revoked from the application
+    And active user authorizations are read from the canonical Application authorization collection
+    And revoking one creates its durable revocation state without deleting its authorization history
     And rotating a client secret requires confirmation because the current secret stops working
     And enabling refresh tokens keeps the required offline access scope selected
     And deleting it returns to inventory without refetching the removed client
@@ -199,7 +200,8 @@ Feature: Admin Console
     When I open the authorization pages
     Then organizations, roles, and Resource servers are listed
     And Role assignments identify their subject and optional Organization context
-    And Role assignments remain a Realm-wide inventory that can be filtered and revoked
+    And Role assignments remain a Realm-wide canonical inventory that can be filtered
+    And revoking an assignment creates its durable idempotent revocation state without deleting its history
     And switching Console context preserves the current authorization page
     And each native Resource server lists Roles using its permissions and their active assignment counts
 
@@ -227,9 +229,9 @@ Feature: Admin Console
     Then Realmroot posts a stable JSON event envelope to the endpoint
     And an Organization-scoped endpoint receives only events applicable to that Organization
     And the request includes an event id, timestamp, event type, and HMAC signature
-    And the delivery attempt and bounded response are recorded as delivered or failed
+    And every delivery attempt and bounded response is recorded as an independently addressable resource
     And large request or response bodies remain scrollable without hiding request actions
-    And retrying a failed delivery performs a new signed HTTP attempt
+    And retrying a failed delivery creates a new signed delivery attempt under the original request
 
   @entrypoint:product-ui @journey:admin-deployment-settings
   Scenario: Deployment page shows Cloudflare runtime settings
@@ -239,7 +241,7 @@ Feature: Admin Console
   @entrypoint:product-ui @journey:admin-general-settings
   Scenario: General Realm settings persist through the management plane
     When I update the Realm name in General settings
-    Then the management API persists it
+    Then the management API persists it on the canonical Realm resource
     And hosted product surfaces use the saved Realm name
     And protocol endpoints remain derived from the canonical Realm origin
 
@@ -247,15 +249,16 @@ Feature: Admin Console
   Scenario: Email delivery settings persist independently from deployment variables
     Given the deployment exposes a Cloudflare Email binding
     When I configure the sender identity in Email delivery settings
-    Then the management API persists the enabled provider and sender identity
+    Then the management API replaces the Email delivery configuration resource
     And authentication messages use the stored sender configuration
     And Console reports the binding and configuration state separately
 
   @entrypoint:product-ui @journey:admin-developer-access-policy
   Scenario: Organization creation and Console developer access are independent
-    When I configure Realm developer settings
+    When I configure Realm developer access
     Then I can choose an Organization creation policy without changing Console access
     And I can choose a Console access policy and eligible Organization access levels independently
+    And each policy is replaced through its own canonical resource
     And changing an Organization access level never grants business API scopes
 
   @entrypoint:product-ui @journey:organization-console-resource-boundary
@@ -273,7 +276,8 @@ Feature: Admin Console
     Given a stable Agent identity has bound Hosts, Role assignments, access requests, and access grants
     When I open the Agent detail in Console
     Then its inventory summary uses real active Role and access-grant counts
-    And separate tabs show bound Hosts, effective Roles, access requests, access grants, and audit activity
+    And separate tabs show Agent installations, effective Roles, access requests, access grants, and audit activity
+    And those tabs compose canonical Role assignment, Agent access request, Agent access grant, and audit collections
     And protocol Agent implementation records and credential material are not exposed
 
   @entrypoint:product-ui @journey:admin-application-oidc-claims

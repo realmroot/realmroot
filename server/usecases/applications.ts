@@ -14,13 +14,14 @@ import {
   toSecretMetadata,
 } from '@server/usecases/applications-utils'
 import type { Deps } from '@server/usecases/deps'
-import type { ApplicationAggregate, ClientSecretRecord } from '@server/usecases/ports'
+import type { ApplicationAggregate, ApplicationAuthorizationRecord, ClientSecretRecord } from '@server/usecases/ports'
 import {
   type ApplicationResponse,
   type CreateApplicationRequest,
   type CreateApplicationResponse,
   type CreateConsentRequest,
   defaultApplicationOidcClaims,
+  type ListApplicationAuthorizationsQuery,
   type ListApplicationAuthorizationsResponse,
   type ListApplicationsResponse,
   type ListClientSecretsResponse,
@@ -213,36 +214,59 @@ export async function listApplicationSecrets(
 
 export async function listApplicationAuthorizations(
   deps: Deps,
-  id: string,
-  pagination: PaginationQuery,
+  query: ListApplicationAuthorizationsQuery,
+  ownerOrganizationIds?: string[],
 ): Promise<ListApplicationAuthorizationsResponse> {
-  await requireApplication(deps, id)
-  const result = await deps.applications.listAuthorizations(id, pagination)
+  const result = await deps.applications.listAuthorizations(query, ownerOrganizationIds)
   return {
-    authorizations: result.items.map((authorization) => ({
-      id: authorization.id,
-      user: {
-        id: authorization.userId,
-        displayName: authorization.userDisplayName,
-        email: authorization.userEmail,
-      },
-      organization:
-        authorization.organizationId && authorization.organizationName
-          ? { id: authorization.organizationId, name: authorization.organizationName }
-          : null,
-      scopes: authorization.scopes,
-      permissions: authorization.permissions,
-      grantedAt: authorization.grantedAt.toISOString(),
-      expiresAt: authorization.expiresAt?.toISOString() ?? null,
-    })),
+    authorizations: result.items.map(toApplicationAuthorization),
     pagination: result.pagination,
   }
 }
 
-export async function revokeApplicationAuthorization(deps: Deps, applicationId: string, authorizationId: string) {
-  await requireApplication(deps, applicationId)
-  if (!(await deps.applications.revokeAuthorization(applicationId, authorizationId))) {
+export async function getApplicationAuthorization(deps: Deps, authorizationId: string) {
+  const authorization = await deps.applications.findAuthorization(authorizationId)
+  if (!authorization) throw notFound('Application authorization was not found.')
+  return toApplicationAuthorization(authorization)
+}
+
+export async function putApplicationAuthorizationRevocation(deps: Deps, authorizationId: string) {
+  const authorization = await getApplicationAuthorization(deps, authorizationId)
+  if (authorization.revokedAt) {
+    return { applicationAuthorizationId: authorizationId, revokedAt: authorization.revokedAt }
+  }
+  if (!(await deps.applications.revokeAuthorization(authorizationId))) {
     throw notFound('Application authorization was not found.')
+  }
+  const revoked = await getApplicationAuthorization(deps, authorizationId)
+  if (!revoked.revokedAt) throw new Error(`Application authorization ${authorizationId} was not revoked.`)
+  return { applicationAuthorizationId: authorizationId, revokedAt: revoked.revokedAt }
+}
+
+function toApplicationAuthorization(authorization: ApplicationAuthorizationRecord) {
+  const now = Date.now()
+  return {
+    id: authorization.id,
+    applicationId: authorization.applicationId,
+    user: {
+      id: authorization.userId,
+      displayName: authorization.userDisplayName,
+      email: authorization.userEmail,
+    },
+    organization:
+      authorization.organizationId && authorization.organizationName
+        ? { id: authorization.organizationId, name: authorization.organizationName }
+        : null,
+    scopes: authorization.scopes,
+    permissions: authorization.permissions,
+    grantedAt: authorization.grantedAt.toISOString(),
+    expiresAt: authorization.expiresAt?.toISOString() ?? null,
+    revokedAt: authorization.revokedAt?.toISOString() ?? null,
+    status: authorization.revokedAt
+      ? ('revoked' as const)
+      : authorization.expiresAt && authorization.expiresAt.getTime() <= now
+        ? ('expired' as const)
+        : ('active' as const),
   }
 }
 

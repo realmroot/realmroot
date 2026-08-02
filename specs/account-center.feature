@@ -127,7 +127,7 @@ Feature: Account Center
     When I create an Organization from Account Center
     Then I become its Owner
     And I can open the Organization detail with its members and pending invitations
-    And its Agent identities, my effective contextual Roles, and active Agent access grants come from Account APIs
+    And its Agent identities, my contextual Role assignments, and active Agent access grants come from canonical resource collections shared with Console
     And I can switch the active Organization without changing Developer Console eligibility
     When I update its profile or invite a member with an access level
     Then the Organization detail reflects the change

@@ -388,10 +388,10 @@ function ApplicationAuthorizations({ applicationId }: { applicationId: string })
   const queryKey = [...consoleQueryKeys.applications, applicationId, 'authorizations', { limit: pageSize, offset }]
   const query = useQuery({
     queryKey,
-    queryFn: () => listApplicationAuthorizations(applicationId, { limit: pageSize, offset }),
+    queryFn: () => listApplicationAuthorizations({ applicationId, limit: pageSize, offset }),
   })
   const revokeMutation = useMutation({
-    mutationFn: (authorizationId: string) => revokeApplicationAuthorization(applicationId, authorizationId),
+    mutationFn: (authorizationId: string) => revokeApplicationAuthorization(authorizationId),
     onSuccess: async () => {
       setRevokeTarget(null)
       if (query.data?.authorizations.length === 1 && offset > 0) {

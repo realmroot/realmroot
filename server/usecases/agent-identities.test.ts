@@ -319,19 +319,36 @@ describe('Agent identity lifecycle', () => {
   it('creates an additional host intent only for an active controlled identity', async () => {
     const deps = enrollmentDeps()
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate())
-    vi.mocked(deps.agentIdentities.createIntent).mockImplementation(async (record) => record)
+    vi.mocked(deps.agentIdentities.createIntentIdempotently).mockImplementation(async (record) => ({
+      intent: record,
+      created: true,
+    }))
 
     await expect(
-      createAdditionalAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1'),
-    ).resolves.toMatchObject({ agentIdentityId: 'identity-1', requestedName: null })
+      createAdditionalAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1', 'enrollment-key-1'),
+    ).resolves.toMatchObject({
+      intent: { agentIdentityId: 'identity-1', requestedName: null },
+      replayed: false,
+    })
 
+    vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
+      intent({ agentIdentityId: 'identity-1', requestedName: null, idempotencyKey: 'enrollment-key-1' }),
+    )
+    await expect(
+      createAdditionalAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1', 'enrollment-key-1'),
+    ).resolves.toMatchObject({ intent: { id: 'intent-1' }, replayed: true })
+    await expect(
+      createAdditionalAgentEnrollmentIntent(deps, 'other-identity', 'protocol-agent-1', 'user-1', 'enrollment-key-1'),
+    ).rejects.toMatchObject({ status: 409 })
+
+    vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(null)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate({ status: 'retired' }))
     await expect(
-      createAdditionalAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1'),
+      createAdditionalAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1', 'enrollment-key-2'),
     ).rejects.toMatchObject({ status: 400 })
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(null)
     await expect(
-      createAdditionalAgentEnrollmentIntent(deps, 'missing', 'protocol-agent-1', 'user-1'),
+      createAdditionalAgentEnrollmentIntent(deps, 'missing', 'protocol-agent-1', 'user-1', 'enrollment-key-3'),
     ).rejects.toMatchObject({ status: 404 })
   })
 
@@ -531,6 +548,7 @@ function intent(overrides: Partial<AgentEnrollmentIntentRecord> = {}): AgentEnro
     ownerUserId: 'user-1',
     ownerOrganizationId: null,
     protocolAgentId: 'protocol-agent-1',
+    idempotencyKey: null,
     status: 'pending',
     createdByUserId: 'user-1',
     approvedByUserId: null,

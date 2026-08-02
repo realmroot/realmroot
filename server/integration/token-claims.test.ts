@@ -109,16 +109,15 @@ describe('OAuth token claim building over real D1', () => {
     const memberRole = await roleId('contacts-member-role', 'Contacts Member')
 
     for (const roleId of [userRole, appRole, memberRole]) {
-      await postJson(
-        harness,
-        cookie,
-        `/api/roles/${roleId}/permissions`,
-        {
-          permissions: [{ resourceId: resource.id, scope: 'contacts:read' }],
-        },
-        204,
-        'PUT',
-      )
+      const current = await harness.request(`/api/roles/${roleId}/permissions`, { headers: { cookie } })
+      const etag = current.headers.get('etag')
+      expect(etag).toBeTruthy()
+      const replaced = await harness.request(`/api/roles/${roleId}/permissions`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', cookie, 'if-match': etag! },
+        body: JSON.stringify({ permissions: [{ resourceId: resource.id, scope: 'contacts:read' }] }),
+      })
+      expect(replaced.status, await replaced.clone().text()).toBe(200)
     }
     await postJson(harness, cookie, '/api/role-assignments', {
       roleId: userRole,

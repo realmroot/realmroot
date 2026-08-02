@@ -1,6 +1,6 @@
 import type { Deps } from '@server/usecases/deps'
-import type { AccountProfileResponse } from '@shared/api/account'
-import type { ManagementDeveloperSettingsResponse } from '@shared/api/management'
+import type { DeveloperConsoleAccessResponse } from '@shared/api/account'
+import type { OrganizationCreationPolicyResponse } from '@shared/api/management'
 
 type DeveloperAccessUser = {
   id: string
@@ -12,8 +12,11 @@ type DeveloperAccessUser = {
 export async function resolveDeveloperAccess(
   deps: Pick<Deps, 'authorization' | 'configz'>,
   user: DeveloperAccessUser,
-): Promise<AccountProfileResponse['access']> {
-  const settings = await deps.configz.getDeveloperSettings()
+): Promise<DeveloperConsoleAccessResponse> {
+  const [organizationCreationPolicy, consoleAccessPolicy] = await Promise.all([
+    deps.configz.getOrganizationCreationPolicy(),
+    deps.configz.getDeveloperConsoleAccessPolicy(),
+  ])
   const memberships = await deps.authorization.listUserMemberships(user.id)
   const realmOperator = hasRole(user.role, 'admin')
   const activeMemberships = (
@@ -24,13 +27,13 @@ export async function resolveDeveloperAccess(
       })),
     )
   ).filter(({ organization }) => organization && !organization.disabled)
-  const selected = new Set(settings.selectedOrganizationIds)
-  const eligibleLevels = new Set(settings.eligibleAccessLevels)
+  const selected = new Set(consoleAccessPolicy.selectedOrganizationIds)
+  const eligibleLevels = new Set(consoleAccessPolicy.eligibleAccessLevels)
   const consoleOrganizations = activeMemberships.flatMap(({ membership, organization }) => {
     if (!organization || organization.id === 'org_platform') return []
     if (!eligibleLevels.has(membership.role as 'owner' | 'admin' | 'developer')) return []
-    if (settings.consoleAccess === 'realm_operators') return []
-    if (settings.consoleAccess === 'selected_organizations' && !selected.has(organization.id)) return []
+    if (consoleAccessPolicy.mode === 'realm_operators') return []
+    if (consoleAccessPolicy.mode === 'selected_organizations' && !selected.has(organization.id)) return []
     return [
       {
         organizationId: organization.id,
@@ -38,7 +41,7 @@ export async function resolveDeveloperAccess(
       },
     ]
   })
-  const canCreateOrganization = mayCreateOrganization(settings, user)
+  const canCreateOrganization = mayCreateOrganization(organizationCreationPolicy, user)
   const showOrganizations =
     canCreateOrganization ||
     memberships.length > 0 ||
@@ -53,13 +56,13 @@ export async function resolveDeveloperAccess(
 }
 
 export function mayCreateOrganization(
-  settings: ManagementDeveloperSettingsResponse,
+  policy: OrganizationCreationPolicyResponse,
   user: Pick<DeveloperAccessUser, 'id' | 'emailVerified' | 'role'>,
 ) {
   return (
     hasRole(user.role, 'admin') ||
-    (settings.organizationCreation === 'approved_users' && settings.approvedUserIds.includes(user.id)) ||
-    (settings.organizationCreation === 'verified_users' && user.emailVerified)
+    (policy.mode === 'approved_users' && policy.approvedUserIds.includes(user.id)) ||
+    (policy.mode === 'verified_users' && user.emailVerified)
   )
 }
 

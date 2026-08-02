@@ -3,13 +3,16 @@ import { toast } from 'sonner'
 import { getConfigz } from '@/lib/api'
 import {
   getAccountOrganization,
-  getAccountOrganizationAuthority,
+  getAccountOrganizationContext,
   getAccountProfile,
   getAccountSecurity,
+  getDeveloperConsoleAccess,
   listAccountAgents,
   listAccountConnections,
+  listAccountOrganizationAgentAccessGrants,
   listAccountOrganizationAgents,
   listAccountOrganizationInvitations,
+  listAccountOrganizationRoleAssignments,
   listAccountOrganizations,
   listAccountSessions,
   listAgentResourceRequests,
@@ -30,10 +33,15 @@ export const accountQueryKeys = {
   accessRequests: ['account', 'access-requests'] as const,
   passkeys: ['account', 'passkeys'] as const,
   profile: ['account', 'profile'] as const,
+  developerConsoleAccess: ['account', 'developer-console-access'] as const,
+  organizationContext: ['account', 'organization-context'] as const,
   organizations: ['account', 'organizations'] as const,
   organizationInvitations: ['account', 'organization-invitations'] as const,
   organizationAgents: (organizationId: string) => ['account', 'organizations', organizationId, 'agents'] as const,
-  organizationAuthority: (organizationId: string) => ['account', 'organizations', organizationId, 'authority'] as const,
+  organizationRoleAssignments: (organizationId: string) =>
+    ['account', 'organizations', organizationId, 'role-assignments'] as const,
+  organizationAgentAccessGrants: (organizationId: string) =>
+    ['account', 'organizations', organizationId, 'agent-access-grants'] as const,
   security: ['account', 'security'] as const,
   sessions: ['account', 'sessions'] as const,
 }
@@ -53,6 +61,22 @@ export function useAccountProfile() {
   return useQuery({
     queryKey: accountQueryKeys.profile,
     queryFn: getAccountProfile,
+    ...accountQueryOptions,
+  })
+}
+
+export function useDeveloperConsoleAccess() {
+  return useQuery({
+    queryKey: accountQueryKeys.developerConsoleAccess,
+    queryFn: getDeveloperConsoleAccess,
+    ...accountQueryOptions,
+  })
+}
+
+export function useAccountOrganizationContext() {
+  return useQuery({
+    queryKey: accountQueryKeys.organizationContext,
+    queryFn: getAccountOrganizationContext,
     ...accountQueryOptions,
   })
 }
@@ -89,10 +113,18 @@ export function useAccountOrganizationAgents(organizationId: string) {
   })
 }
 
-export function useAccountOrganizationAuthority(organizationId: string) {
+export function useAccountOrganizationRoleAssignments(organizationId: string) {
   return useQuery({
-    queryKey: accountQueryKeys.organizationAuthority(organizationId),
-    queryFn: () => getAccountOrganizationAuthority(organizationId),
+    queryKey: accountQueryKeys.organizationRoleAssignments(organizationId),
+    queryFn: () => listAccountOrganizationRoleAssignments(organizationId),
+    ...accountQueryOptions,
+  })
+}
+
+export function useAccountOrganizationAgentAccessGrants(organizationId: string) {
+  return useQuery({
+    queryKey: accountQueryKeys.organizationAgentAccessGrants(organizationId),
+    queryFn: () => listAccountOrganizationAgentAccessGrants(organizationId),
     ...accountQueryOptions,
   })
 }

@@ -1,9 +1,10 @@
 import {
   createApplication,
   createConsent,
+  getApplicationAuthorization,
   listApplicationAuthorizations,
   loadConsentRequest,
-  revokeApplicationAuthorization,
+  putApplicationAuthorizationRevocation,
   revokeConsent,
   updateApplication,
 } from '@server/usecases/applications'
@@ -56,7 +57,9 @@ describe('service.test 3', () => {
     )
     const consent = await createConsent(deps, { clientId: created.clientId, scopes: ['openid'] }, 'user-1')
 
-    await expect(listApplicationAuthorizations(deps, created.id, { limit: 50, offset: 0 })).resolves.toMatchObject({
+    await expect(
+      listApplicationAuthorizations(deps, { applicationId: created.id, limit: 50, offset: 0 }),
+    ).resolves.toMatchObject({
       authorizations: [
         {
           id: consent.id,
@@ -66,10 +69,11 @@ describe('service.test 3', () => {
       ],
       pagination: { total: 1 },
     })
-    await expect(revokeApplicationAuthorization(deps, created.id, consent.id)).resolves.toBeUndefined()
-    await expect(revokeApplicationAuthorization(deps, created.id, consent.id)).rejects.toMatchObject({
-      status: 404,
-      message: 'Application authorization was not found.',
+    const revocation = await putApplicationAuthorizationRevocation(deps, consent.id)
+    await expect(putApplicationAuthorizationRevocation(deps, consent.id)).resolves.toEqual(revocation)
+    await expect(getApplicationAuthorization(deps, consent.id)).resolves.toMatchObject({
+      id: consent.id,
+      status: 'revoked',
     })
   })
 
@@ -188,6 +192,7 @@ class InMemoryApplicationRepository implements ApplicationRepository {
   private applications = new Map<string, ApplicationAggregate>()
   private secrets = new Map<string, ClientSecretRecord[]>()
   private consents = new Map<string, ConsentRecord>()
+  private authorizationRevocations = new Map<string, Date>()
 
   async create(input: {
     application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
@@ -270,31 +275,55 @@ class InMemoryApplicationRepository implements ApplicationRepository {
     return this.consents.get(consentKey(applicationId, userId)) ?? null
   }
 
-  async listAuthorizations(applicationId: string, pagination: { limit: number; offset: number }) {
+  async listAuthorizations(query: {
+    applicationId?: string
+    limit: number
+    offset: number
+    status?: 'active' | 'expired' | 'revoked'
+  }) {
     const authorizations = [...this.consents.entries()]
-      .filter(([key]) => key.startsWith(`${applicationId}:`))
+      .filter(([key]) => !query.applicationId || key.startsWith(`${query.applicationId}:`))
       .map(([key, consent]) => ({
         ...consent,
-        userId: key.slice(applicationId.length + 1),
+        applicationId: key.slice(0, key.indexOf(':')),
+        userId: key.slice(key.indexOf(':') + 1),
         userDisplayName: 'Test user',
         userEmail: 'user@example.com',
         organizationId: null,
         organizationName: null,
         permissions: [],
         expiresAt: null,
+        revokedAt: this.authorizationRevocations.get(consent.id) ?? null,
       }))
     return {
-      items: authorizations.slice(pagination.offset, pagination.offset + pagination.limit),
-      pagination: toPaginationMetadata(pagination, authorizations.length),
+      items: authorizations.slice(query.offset, query.offset + query.limit),
+      pagination: toPaginationMetadata(query, authorizations.length),
     }
   }
 
-  async revokeAuthorization(applicationId: string, authorizationId: string) {
-    const entry = [...this.consents.entries()].find(
-      ([key, consent]) => key.startsWith(`${applicationId}:`) && consent.id === authorizationId,
-    )
+  async findAuthorization(authorizationId: string) {
+    const entry = [...this.consents.entries()].find(([, consent]) => consent.id === authorizationId)
+    if (!entry) return null
+    const [key, consent] = entry
+    const applicationId = key.slice(0, key.indexOf(':'))
+    return {
+      ...consent,
+      applicationId,
+      userId: key.slice(applicationId.length + 1),
+      userDisplayName: 'Test user',
+      userEmail: 'user@example.com',
+      organizationId: null,
+      organizationName: null,
+      permissions: [],
+      expiresAt: null,
+      revokedAt: this.authorizationRevocations.get(consent.id) ?? null,
+    }
+  }
+
+  async revokeAuthorization(authorizationId: string) {
+    const entry = [...this.consents.entries()].find(([, consent]) => consent.id === authorizationId)
     if (!entry) return false
-    this.consents.delete(entry[0])
+    this.authorizationRevocations.set(authorizationId, new Date('2026-05-18T16:00:00.000Z'))
     return true
   }
 

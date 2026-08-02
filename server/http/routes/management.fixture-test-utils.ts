@@ -333,12 +333,20 @@ export function createWebhookServiceMock() {
       }),
     ),
     getRequest: vi.fn().mockResolvedValue(webhookRequestResponse()),
-    retryRequest: vi.fn().mockResolvedValue({
-      ...webhookRequestResponse(),
-      status: 'delivered',
-      attemptCount: 2,
-      httpStatus: 204,
-      error: null,
+    listAttempts: vi.fn().mockResolvedValue({
+      attempts: [webhookDeliveryAttemptResponse()],
+      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    }),
+    getAttempt: vi.fn().mockResolvedValue(webhookDeliveryAttemptResponse()),
+    createAttempt: vi.fn().mockResolvedValue({
+      attempt: {
+        ...webhookDeliveryAttemptResponse(),
+        status: 'delivered',
+        sequence: 2,
+        httpStatus: 204,
+        error: null,
+      },
+      replayed: false,
     }),
   }
 }
@@ -372,6 +380,20 @@ export function webhookRequestResponse() {
     nextAttemptAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+export function webhookDeliveryAttemptResponse() {
+  return {
+    id: 'wha_1',
+    requestId: 'whr_1',
+    sequence: 1,
+    status: 'failed',
+    httpStatus: 500,
+    error: 'Server error',
+    responseBody: '{"error":"failed"}',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    completedAt: '2026-01-01T00:00:01.000Z',
   }
 }
 

@@ -1,4 +1,8 @@
-import type { AccountProfileResponse, AccountSecurityResponse } from '@shared/api/account'
+import type {
+  AccountProfileResponse,
+  AccountSecurityResponse,
+  DeveloperConsoleAccessResponse,
+} from '@shared/api/account'
 import { redirect } from '@tanstack/react-router'
 import { apiClient } from '@/lib/api'
 
@@ -11,6 +15,12 @@ export async function loadAccountProfile() {
   if (response.status === 401) return null
   if (!response.ok) throw new Error(await readErrorMessage(response))
   return (await response.json()) as RouteAccountProfile
+}
+
+export async function loadDeveloperConsoleAccess() {
+  const response = await apiClient.api.account['developer-console-access'].$get()
+  if (!response.ok) throw new Error(await readErrorMessage(response))
+  return (await response.json()) as DeveloperConsoleAccessResponse
 }
 
 export async function requireAccountProfile(locationHref: string) {

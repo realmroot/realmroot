@@ -26,6 +26,7 @@ import {
   useAccountMutation,
   useAccountProfile,
   useConsentedApplications,
+  useDeveloperConsoleAccess,
   useExternalApiResources,
   useLinkedAccounts,
 } from './queries'
@@ -43,6 +44,7 @@ import { enrollWallet, formatDate, readRedirectUrl } from './utils'
 export function AccountConnectionsPage() {
   const configQuery = useAccountConfig()
   const profileQuery = useAccountProfile()
+  const accessQuery = useDeveloperConsoleAccess()
   const config = configQuery.data ?? null
   const accountCenter = config?.accountCenter ?? defaultAccountCenterSettings
   const linkedAccountsQuery = useLinkedAccounts(accountCenter.connectedAccountsEnabled)
@@ -55,6 +57,7 @@ export function AccountConnectionsPage() {
   const queries = [
     configQuery,
     profileQuery,
+    accessQuery,
     linkedAccountsQuery,
     applicationsQuery,
     agentsQuery,
@@ -66,7 +69,7 @@ export function AccountConnectionsPage() {
   if (error)
     return <AccountPageError config={config} message={error instanceof Error ? error.message : tt('Unable to load.')} />
   const profile = profileQuery.data?.user ?? null
-  const access = profileQuery.data?.access
+  const access = accessQuery.data
   if (!profile || !access) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
   return (
     <AccountPageShell

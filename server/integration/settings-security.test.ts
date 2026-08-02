@@ -102,15 +102,17 @@ describe('management settings over real D1', () => {
 
   it('persists General Realm identity through real SQL [spec: admin-console/admin-general-settings]', async () => {
     const cookie = await signInAdmin(harness)
-    const update = await harness.request('/api/general-settings', {
+    const current = await harness.request('/api/realm', { headers: { cookie } })
+    const update = await harness.request('/api/realm', {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ realmName: 'Acme Identity' }),
+      headers: { 'content-type': 'application/json', cookie, 'If-Match': current.headers.get('ETag')! },
+      body: JSON.stringify({ name: 'Acme Identity' }),
     })
     expect(update.status, await update.clone().text()).toBe(200)
-    const read = await harness.request('/api/general-settings', { headers: { cookie } })
+    const read = await harness.request('/api/realm', { headers: { cookie } })
     await expect(read.json()).resolves.toMatchObject({
-      realmName: 'Acme Identity',
+      id: 'realm',
+      name: 'Acme Identity',
       issuer: 'http://localhost/api/auth',
     })
     const configz = await harness.request('/api/configz')
@@ -119,9 +121,10 @@ describe('management settings over real D1', () => {
 
   it('persists Email delivery through real SQL [spec: admin-console/admin-email-delivery-settings]', async () => {
     const cookie = await signInAdmin(harness)
-    const update = await harness.request('/api/email-settings', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', cookie },
+    const current = await harness.request('/api/email-delivery-configuration', { headers: { cookie } })
+    const update = await harness.request('/api/email-delivery-configuration', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', cookie, 'If-Match': current.headers.get('ETag')! },
       body: JSON.stringify({
         provider: 'cloudflare_email',
         enabled: true,
@@ -131,7 +134,7 @@ describe('management settings over real D1', () => {
       }),
     })
     expect(update.status, await update.clone().text()).toBe(200)
-    const read = await harness.request('/api/email-settings', { headers: { cookie } })
+    const read = await harness.request('/api/email-delivery-configuration', { headers: { cookie } })
     await expect(read.json()).resolves.toMatchObject({
       enabled: true,
       fromEmail: 'auth@example.com',

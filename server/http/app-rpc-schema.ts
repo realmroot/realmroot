@@ -2,7 +2,7 @@ import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
   AccountOrganizationAgentsResponse,
-  AccountOrganizationAuthorityResponse,
+  AccountOrganizationContextResponse,
   AccountPasswordChangeInput,
   AccountProfileResponse,
   AccountProfileUpdateInput,
@@ -10,6 +10,7 @@ import type {
   AccountSessionsResponse,
   AccountWalletAddressLinkInput,
   ConsentedApplicationsResponse,
+  DeveloperConsoleAccessResponse,
   LinkedAccountsResponse,
 } from '@shared/api/account'
 import type {
@@ -18,21 +19,25 @@ import type {
   createApiResourceSchema,
   ListAgentAuditEventsQuery,
   ListAgentsQuery,
+  ListManagementAgentAccessGrantsQuery,
+  ListManagementAgentAccessRequestsQuery,
   ManagementAgent,
   ManagementAgentAccessGrant,
   ManagementAgentAccessRequest,
-  ManagementAgentHost,
-  ManagementAgentRole,
+  ManagementAgentInstallation,
   updateApiResourceSchema,
 } from '@shared/api/agent-api'
 import type { AgentAuditEvent } from '@shared/api/agents'
 import type {
+  ApplicationAuthorization,
+  ApplicationAuthorizationRevocation,
   ApplicationResponse,
   ConsentApprovalResponse,
   ConsentRequestResponse,
   CreateApplicationRequest,
   CreateApplicationResponse,
   HostedConsentApprovalRequest,
+  ListApplicationAuthorizationsQuery,
   ListApplicationAuthorizationsResponse,
   ListApplicationsQuery,
   ListApplicationsResponse,
@@ -56,6 +61,7 @@ import type {
   ListRolesResponse,
   OrganizationResponse,
   RoleAssignmentResponse,
+  RoleAssignmentRevocation,
   RolePermissionsResponse,
   RoleResponse,
   UpdateOrganizationRequest,
@@ -71,6 +77,8 @@ import type {
   CreateManagementConnectorRequest,
   CreateManagementFederatedCredentialRequest,
   CreateManagementFederatedCredentialResponse,
+  DeveloperConsoleAccessPolicyResponse,
+  EmailDeliveryConfigurationResponse,
   ListManagementConnectorsResponse,
   ListManagementFederatedCredentialsResponse,
   ListManagementUserApplicationsResponse,
@@ -83,23 +91,23 @@ import type {
   ManagementBrandingSettingsResponse,
   ManagementConnectorResponse,
   ManagementCreateUserRequest,
-  ManagementDeveloperSettingsResponse,
-  ManagementEmailSettingsResponse,
-  ManagementGeneralSettingsResponse,
   ManagementReadinessResponse,
+  ManagementRealmResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
   ManagementUserDetailResponse,
   ManagementUserListQuery,
   ManagementUserResponse,
   ManagementUserSecurityResponse,
+  OrganizationCreationPolicyResponse,
+  ReplaceDeveloperConsoleAccessPolicyRequest,
+  ReplaceEmailDeliveryConfigurationRequest,
+  ReplaceOrganizationCreationPolicyRequest,
   UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
-  UpdateManagementDeveloperSettingsRequest,
-  UpdateManagementEmailSettingsRequest,
   UpdateManagementFederatedCredentialRequest,
-  UpdateManagementGeneralSettingsRequest,
+  UpdateManagementRealmRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
@@ -114,11 +122,13 @@ import type {
 } from '@shared/api/security'
 import type {
   CreateWebhookEndpointRequest,
+  ListWebhookDeliveryAttemptsResponse,
   ListWebhookEndpointsQuery,
   ListWebhookEndpointsResponse,
   ListWebhookRequestsQuery,
   ListWebhookRequestsResponse,
   UpdateWebhookEndpointRequest,
+  WebhookDeliveryAttempt,
   WebhookEndpoint,
   WebhookEndpointSecretResponse,
   WebhookRequest,
@@ -163,6 +173,12 @@ export type RpcSchema = {
   '/api/account/profile': {
     $get: RpcEndpoint<RpcNoInput, AccountProfileResponse>
     $patch: RpcEndpoint<{ json: AccountProfileUpdateInput }, AccountProfileResponse>
+  }
+  '/api/account/developer-console-access': {
+    $get: RpcEndpoint<RpcNoInput, DeveloperConsoleAccessResponse>
+  }
+  '/api/account/organization-context': {
+    $get: RpcEndpoint<RpcNoInput, AccountOrganizationContextResponse>
   }
   '/api/account/avatar': {
     $post: RpcEndpoint<RpcFileUploadInput, UploadedAssetResponse, 201>
@@ -214,9 +230,6 @@ export type RpcSchema = {
       AccountOrganizationAgentsResponse
     >
   }
-  '/api/account/organizations/:organizationId/authority': {
-    $get: RpcEndpoint<{ param: { organizationId: string } }, AccountOrganizationAuthorityResponse>
-  }
   '/api/account/security': {
     $get: RpcEndpoint<RpcNoInput, AccountSecurityResponse>
   }
@@ -264,14 +277,19 @@ export type RpcSchema = {
     >
     $post: RpcEndpoint<{ param: { id: string } }, RotateClientSecretResponse, 201>
   }
-  '/api/applications/:applicationId/authorizations': {
+  '/api/application-authorizations': {
     $get: RpcEndpoint<
-      { param: { applicationId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      {
+        query?: Partial<Record<keyof ListApplicationAuthorizationsQuery, string>>
+      },
       ListApplicationAuthorizationsResponse
     >
   }
-  '/api/applications/:applicationId/authorizations/:authorizationId': {
-    $delete: RpcEndpoint<{ param: { applicationId: string; authorizationId: string } }, EmptyResponse, 204>
+  '/api/application-authorizations/:authorizationId': {
+    $get: RpcEndpoint<{ param: { authorizationId: string } }, ApplicationAuthorization>
+  }
+  '/api/application-authorizations/:authorizationId/revocation': {
+    $put: RpcEndpoint<{ param: { authorizationId: string } }, ApplicationAuthorizationRevocation>
   }
   '/api/applications/:applicationId/logo': {
     $post: RpcEndpoint<{ param: { applicationId: string } } & RpcFileUploadInput, UploadedAssetResponse, 201>
@@ -394,24 +412,44 @@ export type RpcSchema = {
   '/api/webhooks/requests/:id': {
     $get: RpcEndpoint<{ param: { id: string } }, WebhookRequest>
   }
-  '/api/webhooks/requests/:id/retries': {
-    $post: RpcEndpoint<{ param: { id: string } }, WebhookRequest, 202>
+  '/api/webhooks/requests/:id/attempts': {
+    $get: RpcEndpoint<
+      { param: { id: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      ListWebhookDeliveryAttemptsResponse
+    >
+    $post: RpcEndpoint<{ param: { id: string }; header: { 'Idempotency-Key': string } }, WebhookDeliveryAttempt, 201>
+  }
+  '/api/webhooks/requests/:id/attempts/:attemptId': {
+    $get: RpcEndpoint<{ param: { id: string; attemptId: string } }, WebhookDeliveryAttempt>
   }
   '/api/account-center-settings': {
     $get: RpcEndpoint<RpcNoInput, ManagementAccountCenterSettingsResponse>
     $patch: RpcEndpoint<{ json: UpdateManagementAccountCenterSettingsRequest }, ManagementAccountCenterSettingsResponse>
   }
-  '/api/developer-settings': {
-    $get: RpcEndpoint<RpcNoInput, ManagementDeveloperSettingsResponse>
-    $patch: RpcEndpoint<{ json: UpdateManagementDeveloperSettingsRequest }, ManagementDeveloperSettingsResponse>
+  '/api/organization-creation-policy': {
+    $get: RpcEndpoint<RpcNoInput, OrganizationCreationPolicyResponse>
+    $put: RpcEndpoint<
+      { json: ReplaceOrganizationCreationPolicyRequest; header: { 'If-Match': string } },
+      OrganizationCreationPolicyResponse
+    >
   }
-  '/api/general-settings': {
-    $get: RpcEndpoint<RpcNoInput, ManagementGeneralSettingsResponse>
-    $patch: RpcEndpoint<{ json: UpdateManagementGeneralSettingsRequest }, ManagementGeneralSettingsResponse>
+  '/api/developer-console-access-policy': {
+    $get: RpcEndpoint<RpcNoInput, DeveloperConsoleAccessPolicyResponse>
+    $put: RpcEndpoint<
+      { json: ReplaceDeveloperConsoleAccessPolicyRequest; header: { 'If-Match': string } },
+      DeveloperConsoleAccessPolicyResponse
+    >
   }
-  '/api/email-settings': {
-    $get: RpcEndpoint<RpcNoInput, ManagementEmailSettingsResponse>
-    $patch: RpcEndpoint<{ json: UpdateManagementEmailSettingsRequest }, ManagementEmailSettingsResponse>
+  '/api/realm': {
+    $get: RpcEndpoint<RpcNoInput, ManagementRealmResponse>
+    $patch: RpcEndpoint<{ json: UpdateManagementRealmRequest; header: { 'If-Match': string } }, ManagementRealmResponse>
+  }
+  '/api/email-delivery-configuration': {
+    $get: RpcEndpoint<RpcNoInput, EmailDeliveryConfigurationResponse>
+    $put: RpcEndpoint<
+      { json: ReplaceEmailDeliveryConfigurationRequest; header: { 'If-Match': string } },
+      EmailDeliveryConfigurationResponse
+    >
   }
   '/api/readiness': {
     $get: RpcEndpoint<RpcNoInput, ManagementReadinessResponse>
@@ -426,29 +464,29 @@ export type RpcSchema = {
     $get: RpcEndpoint<{ param: { agentId: string } }, { agent: ManagementAgent }>
     $delete: RpcEndpoint<{ param: { agentId: string } }, EmptyResponse, 204>
   }
-  '/api/agents/:agentId/hosts': {
+  '/api/agents/:agentId/installations': {
     $get: RpcEndpoint<
       { param: { agentId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
-      { items: ManagementAgentHost[]; pagination: PaginationMetadata }
+      { items: ManagementAgentInstallation[]; pagination: PaginationMetadata }
     >
   }
-  '/api/agents/:agentId/roles': {
+  '/api/agent-access-requests': {
     $get: RpcEndpoint<
-      { param: { agentId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
-      { items: ManagementAgentRole[]; pagination: PaginationMetadata }
-    >
-  }
-  '/api/agents/:agentId/access-requests': {
-    $get: RpcEndpoint<
-      { param: { agentId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      { query?: Partial<Record<keyof ListManagementAgentAccessRequestsQuery, string>> },
       { items: ManagementAgentAccessRequest[]; pagination: PaginationMetadata }
     >
   }
-  '/api/agents/:agentId/access-grants': {
+  '/api/agent-access-requests/:requestId': {
+    $get: RpcEndpoint<{ param: { requestId: string } }, ManagementAgentAccessRequest>
+  }
+  '/api/agent-access-grants': {
     $get: RpcEndpoint<
-      { param: { agentId: string }; query?: Partial<Record<keyof PaginationQuery, string>> },
+      { query?: Partial<Record<keyof ListManagementAgentAccessGrantsQuery, string>> },
       { items: ManagementAgentAccessGrant[]; pagination: PaginationMetadata }
     >
+  }
+  '/api/agent-access-grants/:grantId': {
+    $get: RpcEndpoint<{ param: { grantId: string } }, ManagementAgentAccessGrant>
   }
   '/api/audit-events': {
     $get: RpcEndpoint<
@@ -483,9 +521,12 @@ export type RpcSchema = {
   '/api/roles/:id/permissions': {
     $get: RpcEndpoint<{ param: { id: string } }, RolePermissionsResponse>
     $put: RpcEndpoint<
-      { param: { id: string }; json: { permissions: Array<{ resourceId: string; scope: string }> } },
-      EmptyResponse,
-      204
+      {
+        param: { id: string }
+        header: { 'If-Match': string }
+        json: { permissions: Array<{ resourceId: string; scope: string }> }
+      },
+      RolePermissionsResponse
     >
   }
   '/api/role-assignments': {
@@ -493,7 +534,10 @@ export type RpcSchema = {
     $post: RpcEndpoint<{ json: CreateRoleAssignmentRequest }, RoleAssignmentResponse, 201>
   }
   '/api/role-assignments/:id': {
-    $delete: RpcEndpoint<{ param: { id: string } }, EmptyResponse, 204>
+    $get: RpcEndpoint<{ param: { id: string } }, RoleAssignmentResponse>
+  }
+  '/api/role-assignments/:id/revocation': {
+    $put: RpcEndpoint<{ param: { id: string } }, RoleAssignmentRevocation>
   }
   '/api/api-resources': {
     $get: RpcEndpoint<

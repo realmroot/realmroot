@@ -243,12 +243,24 @@ describe('webhook management over real D1', () => {
     expect(fetched.status).toBe(200)
 
     outboundStatus = 204
-    const retried = await harness.request(`/api/webhooks/requests/${request.id}/retries`, {
+    const retried = await harness.request(`/api/webhooks/requests/${request.id}/attempts`, {
       method: 'POST',
-      headers: { cookie },
+      headers: { cookie, 'Idempotency-Key': `retry-${request.id}` },
     })
-    expect(retried.status).toBe(200)
-    expect(await retried.json()).toEqual(
+    expect(retried.status).toBe(201)
+    const retriedAttempt = (await retried.json()) as { id: string }
+    expect(retriedAttempt).toEqual(
+      expect.objectContaining({ requestId: request.id, status: 'delivered', sequence: 2, httpStatus: 204 }),
+    )
+    const replayed = await harness.request(`/api/webhooks/requests/${request.id}/attempts`, {
+      method: 'POST',
+      headers: { cookie, 'Idempotency-Key': `retry-${request.id}` },
+    })
+    expect(replayed.status).toBe(201)
+    expect(replayed.headers.get('Idempotency-Replayed')).toBe('true')
+    await expect(replayed.json()).resolves.toEqual(expect.objectContaining({ id: retriedAttempt.id }))
+    const deliveredRequest = await harness.request(`/api/webhooks/requests/${request.id}`, { headers: { cookie } })
+    await expect(deliveredRequest.json()).resolves.toEqual(
       expect.objectContaining({ status: 'delivered', attemptCount: 2, httpStatus: 204 }),
     )
     expect(outbound).toHaveLength(2)

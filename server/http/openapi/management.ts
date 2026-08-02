@@ -4,11 +4,12 @@ import {
   accessGrantsResponseSchema,
   accessRequestSchema,
   agentApiResourcesResponseSchema,
-  agentEnrollmentResponseSchema,
-  agentEnrollmentSchema,
+  agentInstallationEnrollmentResponseSchema,
+  agentInstallationEnrollmentSchema,
   agentResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
+  createAgentInstallationEnrollmentSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { protectedResourceCapabilityNames, requiredProtectedCapability } from '@shared/authz'
@@ -17,8 +18,11 @@ import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
 import {
   errorResponse,
+  idempotencyKeyHeader,
+  idempotencyReplayResponseHeader,
   jsonBody,
   jsonContentType,
+  locationResponseHeader,
   type ManagementRouteConfig,
   managementSecurity,
 } from './management-routes/helpers'
@@ -77,20 +81,35 @@ const managementRoutes: ManagementRouteConfig[] = [
     method: 'post',
     path: '/agent/enrollments',
     operationId: 'enrollAgent',
-    summary: 'Create or extend the current stable Agent',
+    summary: 'Create the current stable Agent',
     security: [{ agentAuth: [] }],
     request: { body: jsonBody(createAgentEnrollmentSchema) },
-    response: z.union([agentResponseSchema, agentEnrollmentResponseSchema]),
+    response: agentResponseSchema,
     status: 201,
   },
   {
+    method: 'post',
+    path: '/agent/installation-enrollments',
+    operationId: 'createAgentInstallationEnrollment',
+    summary: 'Create an Agent installation enrollment',
+    security: [{ agentAuth: [] }],
+    request: { headers: idempotencyKeyHeader, body: jsonBody(createAgentInstallationEnrollmentSchema) },
+    response: agentInstallationEnrollmentResponseSchema,
+    status: 201,
+    responseHeaders: { ...locationResponseHeader, ...idempotencyReplayResponseHeader },
+    errors: {
+      400: 'Idempotency-Key is missing or invalid.',
+      409: 'Idempotency-Key was already used for a different Agent installation enrollment.',
+    },
+  },
+  {
     method: 'get',
-    path: '/agent/enrollments/{enrollmentId}',
-    operationId: 'getAgentEnrollment',
-    summary: 'Read an Agent enrollment',
+    path: '/agent/installation-enrollments/{enrollmentId}',
+    operationId: 'getAgentInstallationEnrollment',
+    summary: 'Read an Agent installation enrollment',
     security: [{ agentAuth: [] }],
     request: { params: z.object({ enrollmentId: z.string() }) },
-    response: agentEnrollmentSchema,
+    response: agentInstallationEnrollmentSchema,
   },
   {
     method: 'get',
@@ -157,17 +176,18 @@ export const unifiedOpenApi = buildUnifiedOpenApi()
 
 function createManagementOpenApiApp() {
   const app = new OpenAPIHono()
-  app.openAPIRegistry.registerComponent('securitySchemes', 'adminSession', {
+  app.openAPIRegistry.registerComponent('securitySchemes', 'browserSession', {
     type: 'apiKey',
     in: 'cookie',
     name: 'better-auth.session_token',
-    description: 'Authenticated administrator session.',
+    description: 'Authenticated browser session; each operation applies Realm, Organization, or account visibility.',
   })
   app.openAPIRegistry.registerComponent('securitySchemes', 'agentAuth', {
-    type: 'http',
-    scheme: 'bearer',
-    bearerFormat: 'agent+jwt',
-    description: 'AgentAuth possession proof supplied transparently by the Realmroot Restish authentication adapter.',
+    type: 'apiKey',
+    in: 'header',
+    name: 'Authorization',
+    description:
+      'AgentAuth possession proof supplied transparently by the Realmroot Restish authentication adapter. Required capabilities are declared per operation.',
   })
   for (const routeConfig of managementRoutes) app.openAPIRegistry.registerPath(createManagementRoute(routeConfig))
   return app
@@ -226,11 +246,8 @@ function createManagementRoute(routeConfig: ManagementRouteConfig) {
     ...(routeConfig.cli
       ? { tags: [routeConfig.cli.group], 'x-cli-name': routeConfig.cli.name }
       : { 'x-cli-hidden': true }),
-    security:
-      routeConfig.security ??
-      (requiredAgentCapability
-        ? [{ agentAuth: [requiredAgentCapability] }, { adminSession: ['admin'] }]
-        : managementSecurity),
+    security: routeConfig.security ?? managementSecurity,
+    ...(requiredAgentCapability ? { 'x-required-agent-capability': requiredAgentCapability } : {}),
     request: routeConfig.request as never,
     responses: routeResponses(routeConfig) as never,
   })
@@ -242,6 +259,7 @@ function routeResponses(routeConfig: ManagementRouteConfig) {
   else
     responses[routeConfig.status ?? 200] = {
       description: routeConfig.summary,
+      ...(routeConfig.responseHeaders ? { headers: routeConfig.responseHeaders } : {}),
       content: { [jsonContentType]: { schema: routeConfig.response } },
     }
   if (routeConfig.security !== undefined && routeConfig.security.length === 0) return responses

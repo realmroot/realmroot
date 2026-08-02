@@ -50,9 +50,10 @@ import {
   useAccountAgents,
   useAccountMutation,
   useAccountOrganization,
+  useAccountOrganizationAgentAccessGrants,
   useAccountOrganizationAgents,
-  useAccountOrganizationAuthority,
   useAccountOrganizationInvitations,
+  useAccountOrganizationRoleAssignments,
   useAccountOrganizations,
   useAccountSecurity,
   useAccountSessions,
@@ -789,7 +790,7 @@ function OrganizationActions({
           className={className ? 'flex-1' : undefined}
           onClick={() =>
             mutate('Active organization changed.', () => setActiveAccountOrganization(id), {
-              invalidate: [accountQueryKeys.profile],
+              invalidate: [accountQueryKeys.profile, accountQueryKeys.organizationContext],
             })
           }
           variant={className ? 'secondary' : 'ghost'}
@@ -889,7 +890,8 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
   const navigate = useNavigate()
   const organizationQuery = useAccountOrganization(organizationId)
   const agentsQuery = useAccountOrganizationAgents(organizationId)
-  const authorityQuery = useAccountOrganizationAuthority(organizationId)
+  const roleAssignmentsQuery = useAccountOrganizationRoleAssignments(organizationId)
+  const agentAccessGrantsQuery = useAccountOrganizationAgentAccessGrants(organizationId)
   const mutate = useAccountMutation()
   const [tab, setTab] = useState('overview')
   const [editOpen, setEditOpen] = useState(false)
@@ -904,7 +906,8 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
   >(null)
   const organization = organizationQuery.data
   const agents = agentsQuery.data?.items ?? []
-  const authority = authorityQuery.data
+  const roleAssignments = roleAssignmentsQuery.data?.assignments ?? []
+  const agentAccessGrants = agentAccessGrantsQuery.data?.grants ?? []
   return (
     <AccountSurface section="organizations">
       {(profile, access) => {
@@ -1017,17 +1020,19 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                 ) : null}
               </AccountTabContent>
               <AccountTabContent value="authority">
-                {authorityQuery.isLoading ? (
+                {roleAssignmentsQuery.isLoading || agentAccessGrantsQuery.isLoading ? (
                   <p className="text-sm text-muted-foreground">{tt('Loading Organization authority…')}</p>
                 ) : null}
-                {authorityQuery.error ? (
+                {roleAssignmentsQuery.error || agentAccessGrantsQuery.error ? (
                   <p className="text-sm text-destructive" role="alert">
-                    {authorityQuery.error instanceof Error
-                      ? authorityQuery.error.message
-                      : tt('Unable to load Organization authority.')}
+                    {roleAssignmentsQuery.error instanceof Error
+                      ? roleAssignmentsQuery.error.message
+                      : agentAccessGrantsQuery.error instanceof Error
+                        ? agentAccessGrantsQuery.error.message
+                        : tt('Unable to load Organization authority.')}
                   </p>
                 ) : null}
-                {authority ? (
+                {!roleAssignmentsQuery.isLoading && !agentAccessGrantsQuery.isLoading ? (
                   <div className="grid gap-8">
                     <AccountObjectSection
                       description={tt(
@@ -1036,10 +1041,10 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                       title={tt('Your effective Roles')}
                     >
                       <AccountRows>
-                        {authority.roles.map(({ role, permissions }) => (
+                        {roleAssignments.map(({ assignment, role, permissions }) => (
                           <AccountRow
                             description={role.description ?? role.key}
-                            key={role.id}
+                            key={assignment.id}
                             label={role.name}
                             value={
                               permissions.length ? (
@@ -1056,7 +1061,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                             }
                           />
                         ))}
-                        {!authority.roles.length ? (
+                        {!roleAssignments.length ? (
                           <AccountRow
                             description={tt('Organization access levels do not grant business API scopes.')}
                             label={tt('No effective Role assignments')}
@@ -1070,7 +1075,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                       title={tt('Agent access grants')}
                     >
                       <AccountRows>
-                        {authority.agentGrants.map((grant) => (
+                        {agentAccessGrants.map((grant) => (
                           <AccountRow
                             description={tt('Resource {{resource}} · {{mode}}', {
                               resource: grant.resourceId,
@@ -1081,7 +1086,7 @@ export function AccountOrganizationDetailPage({ organizationId }: { organization
                             value={<code>{grant.scopes.join(' ')}</code>}
                           />
                         ))}
-                        {!authority.agentGrants.length ? (
+                        {!agentAccessGrants.length ? (
                           <AccountRow label={tt('No active Agent access grants')} value="—" />
                         ) : null}
                       </AccountRows>

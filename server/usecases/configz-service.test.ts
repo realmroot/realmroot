@@ -2,12 +2,12 @@ import type { ConfigzOptions } from '@server/usecases/configz'
 import {
   defaultAccountCenterSettings,
   getConfig,
-  getManagementEmailSettings,
-  getManagementGeneralSettings,
+  getEmailDeliveryConfiguration,
+  getManagementRealm,
+  replaceEmailDeliveryConfiguration,
   updateManagementAccountCenterSettings,
   updateManagementBrandingSettings,
-  updateManagementEmailSettings,
-  updateManagementGeneralSettings,
+  updateManagementRealm,
   updateManagementSignInSettings,
 } from '@server/usecases/configz'
 import type { Deps } from '@server/usecases/deps'
@@ -470,14 +470,15 @@ describe('ConfigzService', () => {
     })
     const deps = createDeps(repository, { onboardingHasUsers: true })
 
-    await expect(getManagementGeneralSettings(deps, defaultOptions())).resolves.toEqual({
-      realmName: 'Acme Realm',
+    await expect(getManagementRealm(deps, defaultOptions())).resolves.toEqual({
+      id: 'realm',
+      name: 'Acme Realm',
       issuer: 'https://auth.example.com/api/auth',
       oidcDiscoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
       jwksUrl: 'https://auth.example.com/api/auth/jwks',
       managementApiUrl: 'https://auth.example.com/api/openapi.json',
     })
-    await updateManagementGeneralSettings(deps, defaultOptions(), { realmName: 'New Realm' })
+    await updateManagementRealm(deps, defaultOptions(), { name: 'New Realm' })
     expect(updated).toEqual({ copy: { productName: 'New Realm' } })
   })
 
@@ -499,14 +500,14 @@ describe('ConfigzService', () => {
       },
     }
 
-    await expect(getManagementEmailSettings(deps, options)).resolves.toMatchObject({
+    await expect(getEmailDeliveryConfiguration(deps, options)).resolves.toMatchObject({
       enabled: true,
       fromEmail: 'fallback@example.com',
       bindingAvailable: true,
       source: 'environment',
     })
     await expect(
-      updateManagementEmailSettings(deps, options, {
+      replaceEmailDeliveryConfiguration(deps, options, {
         provider: 'cloudflare_email',
         enabled: true,
         fromEmail: 'auth@example.com',
@@ -521,7 +522,7 @@ describe('ConfigzService', () => {
       source: 'database',
     })
     await expect(
-      updateManagementEmailSettings(
+      replaceEmailDeliveryConfiguration(
         deps,
         { ...defaultOptions(), emailDelivery: { bindingAvailable: false } },
         {
@@ -604,12 +605,12 @@ function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository 
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => overrides.branding ?? null,
     getAccountCenterSettings: overrides.getAccountCenterSettings ?? (async () => overrides.accountCenter ?? null),
-    getDeveloperSettings:
-      overrides.getDeveloperSettings ??
+    getOrganizationCreationPolicy:
+      overrides.getOrganizationCreationPolicy ?? (async () => ({ mode: 'admins_only', approvedUserIds: [] })),
+    getDeveloperConsoleAccessPolicy:
+      overrides.getDeveloperConsoleAccessPolicy ??
       (async () => ({
-        organizationCreation: 'admins_only',
-        approvedUserIds: [],
-        consoleAccess: 'realm_operators',
+        mode: 'realm_operators',
         eligibleAccessLevels: ['owner', 'admin'],
         selectedOrganizationIds: [],
       })),
@@ -618,7 +619,8 @@ function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository 
     updateSettings: overrides.updateSettings ?? (async () => undefined),
     updateBranding: overrides.updateBranding ?? (async () => undefined),
     updateAccountCenterSettings: overrides.updateAccountCenterSettings ?? (async () => undefined),
-    updateDeveloperSettings: overrides.updateDeveloperSettings ?? (async () => undefined),
+    updateOrganizationCreationPolicy: overrides.updateOrganizationCreationPolicy ?? (async () => undefined),
+    updateDeveloperConsoleAccessPolicy: overrides.updateDeveloperConsoleAccessPolicy ?? (async () => undefined),
     updateEmailSettings: overrides.updateEmailSettings ?? (async () => undefined),
   }
 }
@@ -629,11 +631,13 @@ type MockData = {
   identityProviders: Awaited<ReturnType<ConfigzRepository['listEnabledIdentityProviders']>>
   accountCenter: NonNullable<Awaited<ReturnType<ConfigzRepository['getAccountCenterSettings']>>>
   getAccountCenterSettings: ConfigzRepository['getAccountCenterSettings']
-  getDeveloperSettings: ConfigzRepository['getDeveloperSettings']
+  getOrganizationCreationPolicy: ConfigzRepository['getOrganizationCreationPolicy']
+  getDeveloperConsoleAccessPolicy: ConfigzRepository['getDeveloperConsoleAccessPolicy']
   getEmailSettings: ConfigzRepository['getEmailSettings']
   updateSettings: ConfigzRepository['updateSettings']
   updateBranding: ConfigzRepository['updateBranding']
   updateAccountCenterSettings: ConfigzRepository['updateAccountCenterSettings']
-  updateDeveloperSettings: ConfigzRepository['updateDeveloperSettings']
+  updateOrganizationCreationPolicy: ConfigzRepository['updateOrganizationCreationPolicy']
+  updateDeveloperConsoleAccessPolicy: ConfigzRepository['updateDeveloperConsoleAccessPolicy']
   updateEmailSettings: ConfigzRepository['updateEmailSettings']
 }

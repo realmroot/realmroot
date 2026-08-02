@@ -29,9 +29,11 @@ import type {
 } from '@shared/api/authorization'
 import type { ConfigzConfigResponse } from '@shared/api/configz'
 import type {
+  DeveloperConsoleAccessPolicyResponse,
   EmailServiceSettings,
-  ManagementDeveloperSettingsResponse,
-  UpdateManagementDeveloperSettingsRequest,
+  OrganizationCreationPolicyResponse,
+  ReplaceDeveloperConsoleAccessPolicyRequest,
+  ReplaceOrganizationCreationPolicyRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
@@ -133,6 +135,23 @@ export interface WebhookRequestInsert {
   updatedAt: Date
 }
 
+export interface WebhookDeliveryAttemptRecord {
+  id: string
+  requestId: string
+  idempotencyKey: string
+  sequence: number
+  status: string
+  httpStatus: number | null
+  error: string | null
+  responseBody: string | null
+  createdAt: Date
+  completedAt: Date | null
+}
+
+export interface WebhookDeliveryAttemptInsert extends Omit<WebhookDeliveryAttemptRecord, 'status'> {
+  status: WebhookRequestStatus
+}
+
 export interface WebhookRepository {
   listEndpoints(
     query: ListWebhookEndpointsQuery,
@@ -150,6 +169,13 @@ export interface WebhookRepository {
   findRequest(id: string): Promise<WebhookRequestRecord | null>
   createRequest(input: WebhookRequestInsert): Promise<WebhookRequestRecord>
   updateRequest(id: string, input: Partial<WebhookRequestInsert>): Promise<WebhookRequestRecord | null>
+  listAttempts(requestId: string, page: PaginationInput): Promise<PaginatedResult<WebhookDeliveryAttemptRecord>>
+  findAttempt(id: string): Promise<WebhookDeliveryAttemptRecord | null>
+  findAttemptByIdempotencyKey(requestId: string, idempotencyKey: string): Promise<WebhookDeliveryAttemptRecord | null>
+  reserveAttempt(
+    input: Omit<WebhookDeliveryAttemptInsert, 'sequence'> & { previousAttemptCount: number },
+  ): Promise<{ attempt: WebhookDeliveryAttemptRecord; created: boolean }>
+  updateAttempt(id: string, input: Partial<WebhookDeliveryAttemptInsert>): Promise<WebhookDeliveryAttemptRecord | null>
 }
 
 // --- users ------------------------------------------------------------------
@@ -483,6 +509,11 @@ export interface AgentAccessSummary {
   activeGrantCount: number
 }
 
+export interface AgentAuthorityInventoryScope {
+  ownerOrganizationIds?: string[]
+  ownerUserId?: string
+}
+
 export interface ExternalTokenLeaseRecord {
   id: string
   grantId: string
@@ -532,9 +563,14 @@ export interface ExternalResourceRepository {
   findAccessRequest(id: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByGrant(grantId: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByApprovalTokenHash(tokenHash: string): Promise<AgentAccessRequestRecord | null>
-  listAccessRequestsByAgent(
-    agentIdentityId: string,
-    page: PaginationInput,
+  listAccessRequests(
+    query: PaginationInput & {
+      agentId?: string
+      organizationId?: string
+      resourceId?: string
+      status?: 'pending' | 'approved' | 'denied' | 'consumed' | 'expired'
+    },
+    scope?: AgentAuthorityInventoryScope,
   ): Promise<PaginatedResult<AgentAccessRequestRecord>>
   listPendingAccessRequestsByAgent(agentIdentityId: string, now: Date): Promise<AgentAccessRequestRecord[]>
   listPendingAccessRequests(): Promise<AgentAccessRequestRecord[]>
@@ -553,6 +589,15 @@ export interface ExternalResourceRepository {
   createGrant(input: AgentAccessGrantRecord): Promise<AgentAccessGrantRecord | null>
   findGrant(id: string): Promise<AgentAccessGrantRecord | null>
   listActiveGrantsByAgent(agentIdentityId: string): Promise<AgentAccessGrantRecord[]>
+  listGrants(
+    query: PaginationInput & {
+      agentId?: string
+      organizationId?: string
+      resourceId?: string
+      status?: 'active' | 'revoked' | 'consumed' | 'expired'
+    },
+    scope?: AgentAuthorityInventoryScope,
+  ): Promise<PaginatedResult<AgentAccessGrantRecord>>
   summarizeAgentAccess(agentIdentityIds: string[], now: Date): Promise<Map<string, AgentAccessSummary>>
   listActiveGrantsByConnection(connectionId: string): Promise<AgentAccessGrantRecord[]>
   revokeGrant(id: string, now: Date): Promise<boolean>
@@ -692,6 +737,7 @@ export interface AgentEnrollmentIntentRecord {
   ownerUserId: string | null
   ownerOrganizationId: string | null
   protocolAgentId: string
+  idempotencyKey: string | null
   status: string
   createdByUserId: string
   approvedByUserId: string | null
@@ -717,6 +763,10 @@ export interface AgentIdentityRepository {
   findIdentity(id: string): Promise<AgentIdentityAggregate | null>
   findByIssuerSubject(issuer: string, subject: string): Promise<AgentIdentityRecord | null>
   findIntent(id: string): Promise<AgentEnrollmentIntentRecord | null>
+  findIntentByIdempotencyKey(
+    protocolAgentId: string,
+    idempotencyKey: string,
+  ): Promise<AgentEnrollmentIntentRecord | null>
   findProtocolAgent(id: string): Promise<AgentRecord | null>
   findBindingByProtocolAgent(id: string): Promise<AgentIdentityBindingRecord | null>
   findActiveByProtocolAgent(id: string): Promise<AgentIdentityAggregate | null>
@@ -725,6 +775,9 @@ export interface AgentIdentityRepository {
     binding: Omit<AgentIdentityBindingRecord, 'hostId'>
   }): Promise<AgentIdentityAggregate>
   createIntent(input: AgentEnrollmentIntentRecord): Promise<AgentEnrollmentIntentRecord>
+  createIntentIdempotently(
+    input: AgentEnrollmentIntentRecord & { idempotencyKey: string },
+  ): Promise<{ intent: AgentEnrollmentIntentRecord; created: boolean }>
   approveIntent(input: {
     intentId: string
     identity: AgentIdentityRecord | null
@@ -804,13 +857,15 @@ export interface ConfigzRepository {
   getSettings(): Promise<ConfigzSettings | null>
   getBranding(applicationId: string | null): Promise<ConfigzBranding | null>
   getAccountCenterSettings(): Promise<ConfigzAccountCenter | null>
-  getDeveloperSettings(): Promise<ManagementDeveloperSettingsResponse>
+  getOrganizationCreationPolicy(): Promise<OrganizationCreationPolicyResponse>
+  getDeveloperConsoleAccessPolicy(): Promise<DeveloperConsoleAccessPolicyResponse>
   getEmailSettings(): Promise<EmailServiceSettings | null>
   listEnabledIdentityProviders(): Promise<ConfigzIdentityProvider[]>
   updateSettings(input: UpdateConfigzSettingsInput): Promise<void>
   updateBranding(input: UpdateConfigzBrandingInput): Promise<void>
   updateAccountCenterSettings(input: Partial<ConfigzAccountCenter>): Promise<void>
-  updateDeveloperSettings(input: UpdateManagementDeveloperSettingsRequest): Promise<void>
+  updateOrganizationCreationPolicy(input: ReplaceOrganizationCreationPolicyRequest): Promise<void>
+  updateDeveloperConsoleAccessPolicy(input: ReplaceDeveloperConsoleAccessPolicyRequest): Promise<void>
   updateEmailSettings(input: EmailServiceSettings): Promise<void>
 }
 
@@ -865,6 +920,7 @@ export interface ConsentRecord {
 
 export interface ApplicationAuthorizationRecord {
   id: string
+  applicationId: string
   userId: string
   userDisplayName: string
   userEmail: string
@@ -874,6 +930,7 @@ export interface ApplicationAuthorizationRecord {
   permissions: string[]
   grantedAt: Date
   expiresAt: Date | null
+  revokedAt: Date | null
 }
 
 export interface ApplicationPaginatedResult<T> {
@@ -906,10 +963,11 @@ export interface ApplicationRepository {
     secret: Omit<ClientSecretRecord, 'createdAt' | 'expiresAt' | 'revokedAt'>
   }): Promise<ClientSecretRecord>
   listAuthorizations(
-    applicationId: string,
-    pagination: PaginationQuery,
+    query: PaginationQuery & { applicationId?: string; status?: 'active' | 'expired' | 'revoked' },
+    ownerOrganizationIds?: string[],
   ): Promise<ApplicationPaginatedResult<ApplicationAuthorizationRecord>>
-  revokeAuthorization(applicationId: string, authorizationId: string): Promise<boolean>
+  findAuthorization(authorizationId: string): Promise<ApplicationAuthorizationRecord | null>
+  revokeAuthorization(authorizationId: string): Promise<boolean>
   findConsent(applicationId: string, userId: string): Promise<ConsentRecord | null>
   revokeConsent(consentId: string, userId: string): Promise<boolean>
   createConsent(input: {
@@ -1002,7 +1060,11 @@ export interface AuthorizationRepository {
   listRolePermissions(roleId: string): Promise<RolePermission[]>
   replaceRolePermissions(roleId: string, permissions: RolePermission[]): Promise<void>
   listRoleAssignments(
-    query: ListRoleAssignmentsQuery & { organizationIds?: string[] },
+    query: ListRoleAssignmentsQuery & {
+      organizationIds?: string[]
+      includeRealmAssignments?: boolean
+      contextualOrganizationId?: string
+    },
   ): Promise<AuthorizationPaginatedResult<RoleAssignmentResponse>>
   countEffectiveAgentRoles(
     agents: Array<{ agentIdentityId: string; organizationId: string | null }>,

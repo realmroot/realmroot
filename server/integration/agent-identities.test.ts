@@ -158,10 +158,24 @@ describe('Agent identity enrollment over real D1', () => {
     const stableSubject = approved.agent.subject
 
     const second = await seedAgent(harness, userId, 'identity-second')
-    const secondIntent = await createIntent(harness, userId, {
-      agentIdentityId: approved.agent.id,
-      protocolAgentId: second.agentId,
-    })
+    const reservationKey = 'second-installation-enrollment'
+    const firstReservation = await createAdditionalAgentEnrollmentIntent(
+      harness.deps,
+      approved.agent.id,
+      second.agentId,
+      userId,
+      reservationKey,
+    )
+    const replayedReservation = await createAdditionalAgentEnrollmentIntent(
+      harness.deps,
+      approved.agent.id,
+      second.agentId,
+      userId,
+      reservationKey,
+    )
+    expect(firstReservation.replayed).toBe(false)
+    expect(replayedReservation).toMatchObject({ intent: { id: firstReservation.intent.id }, replayed: true })
+    const secondIntent = firstReservation.intent
     const multiHost = await approveIntent(harness, ownerCookie, secondIntent.id)
     expect(multiHost.agent.subject).toBe(stableSubject)
     const activeBindings = await harness.db
@@ -390,12 +404,14 @@ async function createIntent(
   input: { name?: string; agentIdentityId?: string; protocolAgentId: string },
 ) {
   if (input.agentIdentityId) {
-    return createAdditionalAgentEnrollmentIntent(
+    const result = await createAdditionalAgentEnrollmentIntent(
       harness.deps,
       input.agentIdentityId,
       input.protocolAgentId,
       actorUserId,
+      `${input.protocolAgentId}:${input.agentIdentityId}`,
     )
+    return result.intent
   }
   if (!input.name) throw new Error('A new Agent enrollment requires a name.')
   return createAgentEnrollmentIntent(

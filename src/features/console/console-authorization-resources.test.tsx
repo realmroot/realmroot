@@ -91,6 +91,10 @@ const contract = {
   ],
 }
 
+function rolePermissionsResponse(permissions: Array<{ resourceId: string; scope: string }>) {
+  return jsonResponse({ roleId: 'role-1', permissions }, 200, { etag: '"permissions-v1"' })
+}
+
 describe('console API resources and roles', () => {
   it('shows Roles that use a native Resource server and their active assignment counts', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
@@ -104,7 +108,7 @@ describe('console API resources and roles', () => {
       }
       if (request.url === '/api/roles') return jsonResponse({ roles: [role], pagination })
       if (request.url === '/api/roles/role-1/permissions') {
-        return jsonResponse({ permissions: [{ resourceId: apiResource.id, scope: 'projects:read' }] })
+        return rolePermissionsResponse([{ resourceId: apiResource.id, scope: 'projects:read' }])
       }
       if (request.url === '/api/role-assignments') {
         return jsonResponse({ assignments: [], pagination: { ...pagination, total: 2 } })
@@ -145,10 +149,10 @@ describe('console API resources and roles', () => {
           pagination,
         })
       }
-      if (request.url === '/api/role-assignments/assignment-1' && request.method === 'DELETE') {
+      if (request.url === '/api/role-assignments/assignment-1/revocation' && request.method === 'PUT') {
         requests.push({ url: request.url, method: request.method })
         revokedAt = '2026-01-02T00:00:00.000Z'
-        return new Response(null, { status: 204 })
+        return jsonResponse({ roleAssignmentId: 'assignment-1', revokedAt })
       }
       if (request.url === '/api/roles') return jsonResponse({ roles: [role], pagination })
       if (request.url === '/api/users') return jsonResponse({ users: [user], pagination })
@@ -181,7 +185,9 @@ describe('console API resources and roles', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Revoke role assignment' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke assignment' }))
 
-    await waitFor(() => expect(requests).toEqual([{ url: '/api/role-assignments/assignment-1', method: 'DELETE' }]))
+    await waitFor(() =>
+      expect(requests).toEqual([{ url: '/api/role-assignments/assignment-1/revocation', method: 'PUT' }]),
+    )
     fireEvent.change(screen.getByLabelText('Filter assignment status'), { target: { value: 'revoked' } })
     await waitFor(() => expect(screen.getAllByText('Revoked').some((element) => element.tagName === 'SPAN')).toBe(true))
   })
@@ -438,10 +444,10 @@ describe('console API resources and roles', () => {
         const body = (await request.body) as { permissions: typeof assigned }
         requests.push({ ...request, body })
         assigned = body.permissions
-        return jsonResponse({ roleId: 'role-1', permissions: assigned })
+        return rolePermissionsResponse(assigned)
       }
       if (request.url === '/api/roles/role-1/permissions') {
-        return jsonResponse({ roleId: 'role-1', permissions: assigned })
+        return rolePermissionsResponse(assigned)
       }
       if (request.url === '/api/roles/role-1') return jsonResponse(customRole)
       if (request.url === '/api/api-resources/resource-1/contract') return jsonResponse(contract)
@@ -496,7 +502,7 @@ describe('console API resources and roles', () => {
         return jsonResponse({ ...customRole, ...(requests[0]!.body as object) })
       }
       if (request.url === '/api/roles/role-1/permissions') {
-        return jsonResponse({ roleId: 'role-1', permissions: [] })
+        return rolePermissionsResponse([])
       }
       if (request.url === '/api/roles/role-1') return jsonResponse(customRole)
       if (request.url === '/api/api-resources') return jsonResponse({ items: [], pagination: emptyPagination })
@@ -536,7 +542,7 @@ describe('console API resources and roles', () => {
         return jsonResponse({ assignments: [], pagination: emptyPagination })
       }
       if (request.url === '/api/roles/role-1/permissions') {
-        return jsonResponse({ roleId: 'role-1', permissions: [] })
+        return rolePermissionsResponse([])
       }
       if (request.url === '/api/roles/role-1') return jsonResponse({ ...role, system: false })
       if (request.url === '/api/api-resources') return jsonResponse({ items: [], pagination: emptyPagination })

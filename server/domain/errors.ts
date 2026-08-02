@@ -5,6 +5,8 @@ export type ErrorCode =
   | 'not_found'
   | 'conflict'
   | 'resource_in_use'
+  | 'precondition_failed'
+  | 'precondition_required'
   | 'bad_gateway'
   | 'internal_error'
 
@@ -40,6 +42,8 @@ export const notFound = (message = 'Resource not found.') => new ApiError(404, '
 export const conflict = (message: string) => new ApiError(409, 'conflict', message)
 export const resourceInUse = (message: string, details: Record<string, unknown>) =>
   new ApiError(409, 'resource_in_use', message, details)
+export const preconditionFailed = (message: string) => new ApiError(412, 'precondition_failed', message)
+export const preconditionRequired = (message: string) => new ApiError(428, 'precondition_required', message)
 export const badGateway = (message: string, details?: Record<string, unknown>) =>
   new ApiError(502, 'bad_gateway', message, details)
 export const oauthError = (

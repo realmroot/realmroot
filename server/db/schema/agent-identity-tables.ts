@@ -64,6 +64,7 @@ export const agentEnrollmentIntent = sqliteTable(
     protocolAgentId: text('protocol_agent_id')
       .notNull()
       .references(() => agent.id, { onDelete: 'restrict' }),
+    idempotencyKey: text('idempotency_key'),
     status: text('status').notNull().default('pending'),
     createdByUserId: text('created_by_user_id')
       .notNull()
@@ -77,6 +78,9 @@ export const agentEnrollmentIntent = sqliteTable(
   (table) => [
     index('agentEnrollmentIntent_agentIdentityId_idx').on(table.agentIdentityId),
     index('agentEnrollmentIntent_protocolAgentId_idx').on(table.protocolAgentId),
+    uniqueIndex('agentEnrollmentIntent_protocolAgentIdempotencyKey_uidx')
+      .on(table.protocolAgentId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} is not null`),
     index('agentEnrollmentIntent_status_idx').on(table.status),
     index('agentEnrollmentIntent_expiresAt_idx').on(table.expiresAt),
     check(

@@ -3,6 +3,7 @@ import type {
   ApplicationResponse,
   CreateApplicationRequest,
   CreateApplicationResponse,
+  ListApplicationAuthorizationsQuery,
   ListApplicationAuthorizationsResponse,
   ListApplicationsQuery,
   ListApplicationsResponse,
@@ -43,6 +44,8 @@ import type {
 } from '@shared/api/connectors'
 import type {
   CreateManagementConnectorRequest,
+  DeveloperConsoleAccessPolicyResponse,
+  EmailDeliveryConfigurationResponse,
   ListManagementConnectorsResponse,
   ListManagementUserApplicationsResponse,
   ListManagementUserLinkedAccountsResponse,
@@ -53,35 +56,38 @@ import type {
   ManagementBanUserRequest,
   ManagementBrandingSettingsResponse,
   ManagementCreateUserRequest,
-  ManagementDeveloperSettingsResponse,
-  ManagementEmailSettingsResponse,
-  ManagementGeneralSettingsResponse,
   ManagementReadinessResponse,
+  ManagementRealmResponse,
   ManagementSignInSettingsResponse,
   ManagementUpdateUserRequest,
   ManagementUserDetailResponse,
   ManagementUserListQuery,
   ManagementUserSecurityResponse,
+  OrganizationCreationPolicyResponse,
+  ReplaceDeveloperConsoleAccessPolicyRequest,
+  ReplaceEmailDeliveryConfigurationRequest,
+  ReplaceOrganizationCreationPolicyRequest,
   UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
   UpdateManagementConnectorRequest,
-  UpdateManagementDeveloperSettingsRequest,
-  UpdateManagementEmailSettingsRequest,
-  UpdateManagementGeneralSettingsRequest,
+  UpdateManagementRealmRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { SecurityPolicyResponse, UpdateSecurityPolicyInput } from '@shared/api/security'
 import type {
   CreateWebhookEndpointRequest,
+  ListWebhookDeliveryAttemptsResponse,
   ListWebhookEndpointsQuery,
   ListWebhookEndpointsResponse,
   ListWebhookRequestsQuery,
   ListWebhookRequestsResponse,
   UpdateWebhookEndpointRequest,
+  WebhookDeliveryAttempt,
   WebhookEndpoint,
   WebhookEndpointSecretResponse,
   WebhookRequest,
 } from '@shared/api/webhooks'
+import type { ClientResponse } from 'hono/client'
 import { apiClient, readJsonResponse, readNoContentResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
 import { listApiResources } from './management-api-resources'
 
@@ -220,22 +226,18 @@ export function rotateApplicationClientSecret(id: string): Promise<RotateClientS
 }
 
 export function listApplicationAuthorizations(
-  applicationId: string,
-  query: Partial<PaginationQuery> = {},
+  query: Partial<ListApplicationAuthorizationsQuery> = {},
 ): Promise<ListApplicationAuthorizationsResponse> {
   return readRpcResponse(
-    apiClient.api.applications[':applicationId'].authorizations.$get({
-      param: { applicationId },
+    apiClient.api['application-authorizations'].$get({
       query: stringifyQuery(query),
     }),
   )
 }
 
-export function revokeApplicationAuthorization(applicationId: string, authorizationId: string) {
+export function revokeApplicationAuthorization(authorizationId: string) {
   return readRpcResponse(
-    apiClient.api.applications[':applicationId'].authorizations[':authorizationId'].$delete({
-      param: { applicationId, authorizationId },
-    }),
+    apiClient.api['application-authorizations'][':authorizationId'].revocation.$put({ param: { authorizationId } }),
   )
 }
 
@@ -385,28 +387,102 @@ export function updateAccountCenterSettings(input: UpdateManagementAccountCenter
   return readRpcResponse(apiClient.api['account-center-settings'].$patch({ json: input }))
 }
 
-export function getDeveloperSettings(): Promise<ManagementDeveloperSettingsResponse> {
-  return readRpcResponse(apiClient.api['developer-settings'].$get())
+export type DeveloperSettingsViewModel = {
+  organizationCreation: OrganizationCreationPolicyResponse['mode']
+  approvedUserIds: string[]
+  consoleAccess: DeveloperConsoleAccessPolicyResponse['mode']
+  eligibleAccessLevels: DeveloperConsoleAccessPolicyResponse['eligibleAccessLevels']
+  selectedOrganizationIds: string[]
+  organizationCreationEtag: string
+  consoleAccessEtag: string
 }
 
-export function updateDeveloperSettings(input: UpdateManagementDeveloperSettingsRequest) {
-  return readRpcResponse(apiClient.api['developer-settings'].$patch({ json: input }))
+export async function getDeveloperSettings(): Promise<DeveloperSettingsViewModel> {
+  const [organizationCreation, consoleAccess] = await Promise.all([
+    readVersionedResponse<OrganizationCreationPolicyResponse>(apiClient.api['organization-creation-policy'].$get()),
+    readVersionedResponse<DeveloperConsoleAccessPolicyResponse>(
+      apiClient.api['developer-console-access-policy'].$get(),
+    ),
+  ])
+  return developerSettingsViewModel(organizationCreation, consoleAccess)
 }
 
-export function getGeneralSettings(): Promise<ManagementGeneralSettingsResponse> {
-  return readRpcResponse(apiClient.api['general-settings'].$get())
+export async function updateDeveloperSettings(input: DeveloperSettingsViewModel): Promise<DeveloperSettingsViewModel> {
+  const organizationCreation: ReplaceOrganizationCreationPolicyRequest = {
+    mode: input.organizationCreation,
+    approvedUserIds: input.approvedUserIds,
+  }
+  const consoleAccess: ReplaceDeveloperConsoleAccessPolicyRequest = {
+    mode: input.consoleAccess,
+    eligibleAccessLevels: input.eligibleAccessLevels,
+    selectedOrganizationIds: input.selectedOrganizationIds,
+  }
+  const [savedOrganizationCreation, savedConsoleAccess] = await Promise.all([
+    readVersionedResponse<OrganizationCreationPolicyResponse>(
+      apiClient.api['organization-creation-policy'].$put({
+        json: organizationCreation,
+        header: { 'If-Match': input.organizationCreationEtag },
+      }),
+    ),
+    readVersionedResponse<DeveloperConsoleAccessPolicyResponse>(
+      apiClient.api['developer-console-access-policy'].$put({
+        json: consoleAccess,
+        header: { 'If-Match': input.consoleAccessEtag },
+      }),
+    ),
+  ])
+  return developerSettingsViewModel(savedOrganizationCreation, savedConsoleAccess)
 }
 
-export function updateGeneralSettings(input: UpdateManagementGeneralSettingsRequest) {
-  return readRpcResponse(apiClient.api['general-settings'].$patch({ json: input }))
+export function getRealm(): Promise<ManagementRealmResponse & { etag: string }> {
+  return readVersionedResponse<ManagementRealmResponse>(apiClient.api.realm.$get())
 }
 
-export function getEmailSettings(): Promise<ManagementEmailSettingsResponse> {
-  return readRpcResponse(apiClient.api['email-settings'].$get())
+export function updateRealm({ input, etag }: { input: UpdateManagementRealmRequest; etag: string }) {
+  return readVersionedResponse<ManagementRealmResponse>(
+    apiClient.api.realm.$patch({ json: input, header: { 'If-Match': etag } }),
+  )
 }
 
-export function updateEmailSettings(input: UpdateManagementEmailSettingsRequest) {
-  return readRpcResponse(apiClient.api['email-settings'].$patch({ json: input }))
+export function getEmailDeliveryConfiguration(): Promise<EmailDeliveryConfigurationResponse & { etag: string }> {
+  return readVersionedResponse<EmailDeliveryConfigurationResponse>(apiClient.api['email-delivery-configuration'].$get())
+}
+
+export function replaceEmailDeliveryConfiguration({
+  input,
+  etag,
+}: {
+  input: ReplaceEmailDeliveryConfigurationRequest
+  etag: string
+}) {
+  return readVersionedResponse<EmailDeliveryConfigurationResponse>(
+    apiClient.api['email-delivery-configuration'].$put({ json: input, header: { 'If-Match': etag } }),
+  )
+}
+
+function developerSettingsViewModel(
+  organizationCreation: OrganizationCreationPolicyResponse & { etag: string },
+  consoleAccess: DeveloperConsoleAccessPolicyResponse & { etag: string },
+): DeveloperSettingsViewModel {
+  return {
+    organizationCreation: organizationCreation.mode,
+    approvedUserIds: organizationCreation.approvedUserIds,
+    consoleAccess: consoleAccess.mode,
+    eligibleAccessLevels: consoleAccess.eligibleAccessLevels,
+    selectedOrganizationIds: consoleAccess.selectedOrganizationIds,
+    organizationCreationEtag: organizationCreation.etag,
+    consoleAccessEtag: consoleAccess.etag,
+  }
+}
+
+async function readVersionedResponse<T extends object, Status extends number = number>(
+  request: Promise<ClientResponse<T, Status, 'json'>>,
+): Promise<T & { etag: string }> {
+  const response = await request
+  const etag = response.headers.get('etag')
+  if (!etag) throw new Error('Versioned resource response did not include an ETag.')
+  const representation = (await readRpcResponse(Promise.resolve(response))) as T
+  return { ...representation, etag }
 }
 
 export function getAdminReadiness(): Promise<ManagementReadinessResponse> {
@@ -429,34 +505,34 @@ export function getAgent(agentId: string): Promise<{ agent: import('@shared/api/
   return readRpcResponse(apiClient.api.agents[':agentId'].$get({ param: { agentId } }))
 }
 
-export function listAgentHosts(agentId: string, query: Partial<PaginationQuery> = {}) {
+export function listAgentInstallations(agentId: string, query: Partial<PaginationQuery> = {}) {
   return readRpcResponse(
-    apiClient.api.agents[':agentId'].hosts.$get({ param: { agentId }, query: stringifyQuery(query) }),
+    apiClient.api.agents[':agentId'].installations.$get({ param: { agentId }, query: stringifyQuery(query) }),
   )
 }
 
-export function listAgentRoles(agentId: string, query: Partial<PaginationQuery> = {}) {
-  return readRpcResponse(
-    apiClient.api.agents[':agentId'].roles.$get({ param: { agentId }, query: stringifyQuery(query) }),
-  )
+export async function listAgentRoles(agentId: string, query: Partial<PaginationQuery> = {}) {
+  const [assignments, roles] = await Promise.all([
+    listRoleAssignments({ ...query, subjectType: 'agent', subjectId: agentId, status: 'active' }),
+    listRoles(),
+  ])
+  const assignedRoleIds = new Set(assignments.assignments.map((assignment) => assignment.roleId))
+  return {
+    items: roles.roles.filter((role) => assignedRoleIds.has(role.id)),
+    pagination: assignments.pagination,
+  }
 }
 
-export function listAgentAccessRequests(agentId: string, query: Partial<PaginationQuery> = {}) {
-  return readRpcResponse(
-    apiClient.api.agents[':agentId']['access-requests'].$get({
-      param: { agentId },
-      query: stringifyQuery(query),
-    }),
-  )
+export function listAgentAccessRequests(
+  query: Partial<import('@shared/api/agent-api').ListManagementAgentAccessRequestsQuery> = {},
+) {
+  return readRpcResponse(apiClient.api['agent-access-requests'].$get({ query: stringifyQuery(query) }))
 }
 
-export function listAgentAccessGrants(agentId: string, query: Partial<PaginationQuery> = {}) {
-  return readRpcResponse(
-    apiClient.api.agents[':agentId']['access-grants'].$get({
-      param: { agentId },
-      query: stringifyQuery(query),
-    }),
-  )
+export function listAgentAccessGrants(
+  query: Partial<import('@shared/api/agent-api').ListManagementAgentAccessGrantsQuery> = {},
+) {
+  return readRpcResponse(apiClient.api['agent-access-grants'].$get({ query: stringifyQuery(query) }))
 }
 
 export function getAgentAuditEvents(
@@ -504,8 +580,22 @@ export function getWebhookRequest(id: string): Promise<WebhookRequest> {
   return readRpcResponse(apiClient.api.webhooks.requests[':id'].$get({ param: { id } }))
 }
 
-export function retryWebhookRequest(id: string): Promise<WebhookRequest> {
-  return readRpcResponse(apiClient.api.webhooks.requests[':id'].retries.$post({ param: { id } }))
+export function listWebhookDeliveryAttempts(
+  id: string,
+  query: Partial<PaginationQuery> = {},
+): Promise<ListWebhookDeliveryAttemptsResponse> {
+  return readRpcResponse(
+    apiClient.api.webhooks.requests[':id'].attempts.$get({ param: { id }, query: stringifyQuery(query) }),
+  )
+}
+
+export function createWebhookDeliveryAttempt(id: string, idempotencyKey: string): Promise<WebhookDeliveryAttempt> {
+  return readRpcResponse(
+    apiClient.api.webhooks.requests[':id'].attempts.$post({
+      param: { id },
+      header: { 'Idempotency-Key': idempotencyKey },
+    }),
+  )
 }
 
 export function getSecurityPolicy() {
@@ -620,12 +710,25 @@ export function deleteRole(id: string) {
   return readRpcResponse(apiClient.api.roles[':id'].$delete({ param: { id } }))
 }
 
-export function listRolePermissions(id: string): Promise<RolePermissionsResponse> {
-  return readRpcResponse(apiClient.api.roles[':id'].permissions.$get({ param: { id } }))
+export async function listRolePermissions(id: string): Promise<RolePermissionsResponse & { etag: string }> {
+  const response = await fetch(`/api/roles/${encodeURIComponent(id)}/permissions`, { credentials: 'same-origin' })
+  const permissions = await readJsonResponse<RolePermissionsResponse>(response)
+  const etag = response.headers.get('etag')
+  if (!etag) throw new Error('Role permissions response did not include an ETag.')
+  return { ...permissions, etag }
 }
 
-export function replaceRolePermissions(id: string, permissions: Array<{ resourceId: string; scope: string }>) {
-  return readRpcResponse(apiClient.api.roles[':id'].permissions.$put({ param: { id }, json: { permissions } }))
+export function replaceRolePermissions(
+  id: string,
+  permissions: Array<{ resourceId: string; scope: string }>,
+  etag: string,
+) {
+  return fetch(`/api/roles/${encodeURIComponent(id)}/permissions`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json', 'if-match': etag },
+    body: JSON.stringify({ permissions }),
+  }).then((response) => readJsonResponse<RolePermissionsResponse>(response))
 }
 
 export function listRoleAssignments(
@@ -643,7 +746,7 @@ export function createRoleAssignment(input: CreateRoleAssignmentRequest) {
 }
 
 export function revokeRoleAssignment(id: string) {
-  return readRpcResponse(apiClient.api['role-assignments'][':id'].$delete({ param: { id } }))
+  return readRpcResponse(apiClient.api['role-assignments'][':id'].revocation.$put({ param: { id } }))
 }
 
 export function getApiResourceContract(id: string): Promise<ApiResourceContractResponse> {

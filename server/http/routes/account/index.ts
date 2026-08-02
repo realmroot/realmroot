@@ -1,6 +1,6 @@
 import { badRequest, forbidden } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
-import { getAccountOrganizationAuthority, listAccountOrganizationAgents } from '@server/usecases/account-organizations'
+import { listAccountOrganizationAgents } from '@server/usecases/account-organizations'
 import {
   approveAgentEnrollment,
   getPersonalAgent,
@@ -72,6 +72,15 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
   app.use('*', authenticatedUser())
 
   app.get('/profile', async (c) => c.json(await accountProfile(c)))
+
+  app.get('/developer-console-access', async (c) => {
+    const deps = getDeps(c)
+    return c.json(await resolveDeveloperAccess(deps, await deps.users.getUser(getPrincipal(c).user!.id)))
+  })
+
+  app.get('/organization-context', (c) =>
+    c.json({ activeOrganizationId: getPrincipal(c).session?.session.activeOrganizationId ?? null }),
+  )
 
   app.patch('/profile', async (c) => {
     const body = await readJson(c, accountProfileUpdateSchema)
@@ -392,10 +401,6 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     )
   })
 
-  app.get('/organizations/:organizationId/authority', async (c) =>
-    c.json(await getAccountOrganizationAuthority(getDeps(c), c.req.param('organizationId'), getPrincipal(c).user!.id)),
-  )
-
   app.get('/agent-enrollments/:enrollmentId', async (c) => {
     return c.json(
       agentEnrollmentSchema.parse(
@@ -540,11 +545,7 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
 async function accountProfile(c: Context) {
   const deps = getDeps(c)
   const user = await deps.users.getUser(getPrincipal(c).user!.id)
-  return {
-    activeOrganizationId: getPrincipal(c).session?.session.activeOrganizationId ?? null,
-    user,
-    access: await resolveDeveloperAccess(deps, user),
-  }
+  return { user }
 }
 
 async function accountCenterSettings(c: Context, securityPolicy?: SecurityPolicy): Promise<ConfigzAccountCenter> {

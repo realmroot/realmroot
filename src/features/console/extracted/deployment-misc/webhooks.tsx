@@ -25,12 +25,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   consoleQueryKeys,
+  createWebhookDeliveryAttempt,
   createWebhookEndpoint,
   deleteWebhookEndpoint,
   listOrganizations,
   listWebhookEndpoints,
   listWebhookRequests,
-  retryWebhookRequest,
   rotateWebhookEndpointSecret,
   updateWebhookEndpoint,
 } from '@/lib/api/management'
@@ -116,7 +116,8 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
     },
   })
   const retry = useAdminMutation({
-    mutationFn: retryWebhookRequest,
+    mutationFn: ({ id, idempotencyKey }: { id: string; idempotencyKey: string }) =>
+      createWebhookDeliveryAttempt(id, idempotencyKey),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.webhookRequests }),
   })
   const error = organizations.error ?? (section === 'endpoints' ? endpoints.error : requests.error)
@@ -310,7 +311,7 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
                       <TableCell className="text-right">
                         <Button
                           disabled={item.status === 'delivered' || retry.isPending}
-                          onClick={() => retry.mutate(item.id)}
+                          onClick={() => retry.mutate({ id: item.id, idempotencyKey: crypto.randomUUID() })}
                           size="sm"
                           variant="ghost"
                         >

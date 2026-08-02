@@ -1,20 +1,22 @@
-import { badRequest } from '@server/domain/errors'
+import { conflict, notFound } from '@server/domain/errors'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import type { ConfigzAccountCenter, ConfigzBranding } from '@server/usecases/ports'
 import { type ConfigzConfigResponse, hostedCustomCssSchema } from '@shared/api/configz'
 import type {
+  DeveloperConsoleAccessPolicyResponse,
+  EmailDeliveryConfigurationResponse,
   ManagementAccountCenterSettingsResponse,
   ManagementBrandingSettingsResponse,
-  ManagementDeveloperSettingsResponse,
-  ManagementEmailSettingsResponse,
-  ManagementGeneralSettingsResponse,
+  ManagementRealmResponse,
   ManagementSignInSettingsResponse,
+  OrganizationCreationPolicyResponse,
+  ReplaceDeveloperConsoleAccessPolicyRequest,
+  ReplaceEmailDeliveryConfigurationRequest,
+  ReplaceOrganizationCreationPolicyRequest,
   UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
-  UpdateManagementDeveloperSettingsRequest,
-  UpdateManagementEmailSettingsRequest,
-  UpdateManagementGeneralSettingsRequest,
+  UpdateManagementRealmRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { SecurityPolicy } from '@shared/api/security'
@@ -282,29 +284,44 @@ export async function updateManagementAccountCenterSettings(
   return getManagementAccountCenterSettings(deps, options)
 }
 
-export function getManagementDeveloperSettings(deps: Deps): Promise<ManagementDeveloperSettingsResponse> {
-  return deps.configz.getDeveloperSettings()
+export function getOrganizationCreationPolicy(deps: Deps): Promise<OrganizationCreationPolicyResponse> {
+  return deps.configz.getOrganizationCreationPolicy()
 }
 
-export async function updateManagementDeveloperSettings(
+export async function replaceOrganizationCreationPolicy(
   deps: Deps,
-  input: UpdateManagementDeveloperSettingsRequest,
-): Promise<ManagementDeveloperSettingsResponse> {
-  if (input.organizationCreation === 'approved_users') {
+  input: ReplaceOrganizationCreationPolicyRequest,
+): Promise<OrganizationCreationPolicyResponse> {
+  if (input.mode === 'approved_users') {
     for (const userId of input.approvedUserIds) await deps.users.getUser(userId)
   }
-  await deps.configz.updateDeveloperSettings(input)
-  return getManagementDeveloperSettings(deps)
+  await deps.configz.updateOrganizationCreationPolicy(input)
+  return getOrganizationCreationPolicy(deps)
 }
 
-export async function getManagementGeneralSettings(
+export function getDeveloperConsoleAccessPolicy(deps: Deps): Promise<DeveloperConsoleAccessPolicyResponse> {
+  return deps.configz.getDeveloperConsoleAccessPolicy()
+}
+
+export async function replaceDeveloperConsoleAccessPolicy(
   deps: Deps,
-  options: ConfigzOptions,
-): Promise<ManagementGeneralSettingsResponse> {
+  input: ReplaceDeveloperConsoleAccessPolicyRequest,
+): Promise<DeveloperConsoleAccessPolicyResponse> {
+  for (const organizationId of input.mode === 'selected_organizations' ? input.selectedOrganizationIds : []) {
+    if (!(await deps.authorization.findOrganization(organizationId))) {
+      throw notFound(`Organization ${organizationId} was not found.`)
+    }
+  }
+  await deps.configz.updateDeveloperConsoleAccessPolicy(input)
+  return getDeveloperConsoleAccessPolicy(deps)
+}
+
+export async function getManagementRealm(deps: Deps, options: ConfigzOptions): Promise<ManagementRealmResponse> {
   const settings = await deps.configz.getSettings()
   const issuer = options.issuer.replace(/\/$/, '')
   return {
-    realmName: readCopy(settings?.metadata).productName,
+    id: 'realm',
+    name: readCopy(settings?.metadata).productName,
     issuer: `${issuer}/api/auth`,
     oidcDiscoveryUrl: `${issuer}/api/auth/.well-known/openid-configuration`,
     jwksUrl: `${issuer}/api/auth/jwks`,
@@ -312,19 +329,19 @@ export async function getManagementGeneralSettings(
   }
 }
 
-export async function updateManagementGeneralSettings(
+export async function updateManagementRealm(
   deps: Deps,
   options: ConfigzOptions,
-  input: UpdateManagementGeneralSettingsRequest,
-): Promise<ManagementGeneralSettingsResponse> {
-  await deps.configz.updateSettings({ copy: { productName: input.realmName } })
-  return getManagementGeneralSettings(deps, options)
+  input: UpdateManagementRealmRequest,
+): Promise<ManagementRealmResponse> {
+  await deps.configz.updateSettings({ copy: { productName: input.name } })
+  return getManagementRealm(deps, options)
 }
 
-export async function getManagementEmailSettings(
+export async function getEmailDeliveryConfiguration(
   deps: Deps,
   options: ConfigzOptions,
-): Promise<ManagementEmailSettingsResponse> {
+): Promise<EmailDeliveryConfigurationResponse> {
   const stored = await deps.configz.getEmailSettings()
   const fallback = options.emailDelivery
   return {
@@ -338,16 +355,16 @@ export async function getManagementEmailSettings(
   }
 }
 
-export async function updateManagementEmailSettings(
+export async function replaceEmailDeliveryConfiguration(
   deps: Deps,
   options: ConfigzOptions,
-  input: UpdateManagementEmailSettingsRequest,
-): Promise<ManagementEmailSettingsResponse> {
+  input: ReplaceEmailDeliveryConfigurationRequest,
+): Promise<EmailDeliveryConfigurationResponse> {
   if (input.enabled && !options.emailDelivery?.bindingAvailable) {
-    throw badRequest('Cloudflare Email binding is not available for this deployment.')
+    throw conflict('Cloudflare Email binding is not available for this deployment.')
   }
   await deps.configz.updateEmailSettings(input)
-  return getManagementEmailSettings(deps, options)
+  return getEmailDeliveryConfiguration(deps, options)
 }
 
 function toPublicBranding(branding: ConfigzBranding): ConfigzConfigResponse['branding'] {

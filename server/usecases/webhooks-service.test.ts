@@ -1,16 +1,22 @@
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import type { WebhookEndpointInsert, WebhookEndpointRow, WebhookRequestRow } from '@server/adapters/repos/webhooks'
 import type { Deps } from '@server/usecases/deps'
-import type { WebhookRepository, WebhookRequestInsert } from '@server/usecases/ports'
+import type {
+  WebhookDeliveryAttemptInsert,
+  WebhookDeliveryAttemptRecord,
+  WebhookRepository,
+  WebhookRequestInsert,
+} from '@server/usecases/ports'
 import {
+  createWebhookDeliveryAttempt,
   createWebhookEndpoint,
   deleteWebhookEndpoint,
   getWebhookEndpoint,
   getWebhookRequest,
+  listWebhookDeliveryAttempts,
   listWebhookEndpoints,
   listWebhookRequests,
   publishWebhookEvent,
-  retryWebhookRequest,
   rotateWebhookSecret,
   updateWebhookEndpoint,
 } from '@server/usecases/webhooks'
@@ -84,11 +90,21 @@ describe('WebhookService', () => {
       requests: [{ id: 'whr_1', status: 'failed' }],
       pagination: { total: 1, hasMore: false },
     })
-    await expect(retryWebhookRequest(deps, request.id)).resolves.toMatchObject({
-      id: 'whr_1',
-      status: 'delivered',
-      attemptCount: 2,
-      httpStatus: 204,
+    await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-1')).resolves.toMatchObject({
+      attempt: { requestId: 'whr_1', status: 'delivered', sequence: 2, httpStatus: 204 },
+      replayed: false,
+    })
+    await expect(getWebhookRequest(deps, request.id)).resolves.toMatchObject({ attemptCount: 2, status: 'delivered' })
+    await expect(listWebhookDeliveryAttempts(deps, request.id, { limit: 50, offset: 0 })).resolves.toMatchObject({
+      attempts: [{ requestId: request.id, sequence: 2 }],
+      pagination: { total: 1 },
+    })
+    await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-1')).resolves.toMatchObject({
+      attempt: { requestId: request.id, sequence: 2, status: 'delivered' },
+      replayed: true,
+    })
+    await expect(listWebhookDeliveryAttempts(deps, request.id, { limit: 50, offset: 0 })).resolves.toMatchObject({
+      pagination: { total: 1 },
     })
 
     await deleteWebhookEndpoint(deps, created.endpoint.id)
@@ -130,7 +146,9 @@ describe('WebhookService', () => {
         'admin-1',
       ),
     ).rejects.toMatchObject({ status: 400 })
-    await expect(retryWebhookRequest(deps, request.id)).rejects.toMatchObject({ status: 400 })
+    await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-delivered')).rejects.toMatchObject({
+      status: 409,
+    })
   })
 
   it('returns not found when webhook resources disappear during mutations', async () => {
@@ -141,7 +159,7 @@ describe('WebhookService', () => {
     await expect(deleteWebhookEndpoint(deps, 'missing')).rejects.toMatchObject({ status: 404 })
     await expect(rotateWebhookSecret(deps, 'missing')).rejects.toMatchObject({ status: 404 })
     await expect(getWebhookRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
-    await expect(retryWebhookRequest(deps, 'missing')).rejects.toMatchObject({ status: 404 })
+    await expect(createWebhookDeliveryAttempt(deps, 'missing', 'retry-missing')).rejects.toMatchObject({ status: 404 })
 
     const created = await createWebhookEndpoint(
       deps,
@@ -171,7 +189,9 @@ describe('WebhookService', () => {
       updatedAt: new Date(),
     })
     repository.missingRequestUpdateIds.add(request.id)
-    await expect(retryWebhookRequest(deps, request.id)).rejects.toMatchObject({ status: 404 })
+    await expect(createWebhookDeliveryAttempt(deps, request.id, 'retry-disappeared')).rejects.toMatchObject({
+      status: 404,
+    })
   })
 
   it('publishes a stable signed event and records failed attempts before a real retry', async () => {
@@ -200,8 +220,16 @@ describe('WebhookService', () => {
     expect(repository.rawEndpoint(created.endpoint.id)?.signingSecret).toMatch(/^v1\./)
 
     status = 204
-    const retried = await retryWebhookRequest(deps, failed!.id)
-    expect(retried).toMatchObject({ status: 'delivered', attemptCount: 2, httpStatus: 204 })
+    const retried = await createWebhookDeliveryAttempt(deps, failed!.id, 'retry-after-failure')
+    expect(retried).toMatchObject({
+      attempt: { status: 'delivered', sequence: 2, httpStatus: 204 },
+      replayed: false,
+    })
+    await expect(getWebhookRequest(deps, failed!.id)).resolves.toMatchObject({
+      status: 'delivered',
+      attemptCount: 2,
+      httpStatus: 204,
+    })
     expect(outbound).toHaveLength(2)
     expect(await outbound[1]!.clone().text()).toBe(firstBody)
     expect(outbound[1]!.headers.get('x-realmroot-signature')).not.toBeNull()
@@ -243,6 +271,7 @@ describe('WebhookService', () => {
 class InMemoryWebhookRepository implements WebhookRepository {
   private endpoints: WebhookEndpointRow[] = []
   private requests: WebhookRequestRow[] = []
+  private attempts: WebhookDeliveryAttemptRecord[] = []
   readonly missingEndpointUpdateIds = new Set<string>()
   readonly missingRequestUpdateIds = new Set<string>()
 
@@ -323,5 +352,42 @@ class InMemoryWebhookRepository implements WebhookRepository {
     const row = { ...input, endpointUrl: endpoint.url, organizationId: endpoint.organizationId } as WebhookRequestRow
     this.requests.push(row)
     return row
+  }
+
+  async listAttempts(requestId: string, page: { limit: number; offset: number }) {
+    const items = this.attempts.filter((attempt) => attempt.requestId === requestId)
+    return { items: items.slice(page.offset, page.offset + page.limit), total: items.length, ...page }
+  }
+
+  async findAttempt(id: string) {
+    return this.attempts.find((attempt) => attempt.id === id) ?? null
+  }
+
+  async findAttemptByIdempotencyKey(requestId: string, idempotencyKey: string) {
+    return (
+      this.attempts.find((attempt) => attempt.requestId === requestId && attempt.idempotencyKey === idempotencyKey) ??
+      null
+    )
+  }
+
+  async reserveAttempt(input: Omit<WebhookDeliveryAttemptInsert, 'sequence'> & { previousAttemptCount: number }) {
+    const existing = await this.findAttemptByIdempotencyKey(input.requestId, input.idempotencyKey)
+    if (existing) return { attempt: existing, created: false }
+    const { previousAttemptCount, ...attempt } = input
+    const sequence =
+      Math.max(
+        previousAttemptCount,
+        ...this.attempts.filter((item) => item.requestId === input.requestId).map((item) => item.sequence),
+      ) + 1
+    const row: WebhookDeliveryAttemptRecord = { ...attempt, sequence }
+    this.attempts.push(row)
+    return { attempt: row, created: true }
+  }
+
+  async updateAttempt(id: string, input: Partial<WebhookDeliveryAttemptInsert>) {
+    const current = await this.findAttempt(id)
+    if (!current) return null
+    Object.assign(current, input)
+    return current
   }
 }

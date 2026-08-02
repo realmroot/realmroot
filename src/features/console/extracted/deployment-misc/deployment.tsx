@@ -11,13 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   consoleQueryKeys,
   getDeveloperSettings,
-  getEmailSettings,
-  getGeneralSettings,
+  getEmailDeliveryConfiguration,
+  getRealm,
   listOrganizations,
   listUsers,
+  replaceEmailDeliveryConfiguration,
   updateDeveloperSettings,
-  updateEmailSettings,
-  updateGeneralSettings,
+  updateRealm,
 } from '@/lib/api/management'
 import { tt } from '@/lib/i18n'
 import { ErrorState, LoadingState, MutationError } from '../../helpers/helpers-dialogs'
@@ -71,8 +71,8 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     queryFn: () => listUsers({ limit: 100 }),
   })
   const developerSettings = useQuery({ queryKey: consoleQueryKeys.developer, queryFn: getDeveloperSettings })
-  const generalSettings = useQuery({ queryKey: consoleQueryKeys.general, queryFn: getGeneralSettings })
-  const emailSettings = useQuery({ queryKey: consoleQueryKeys.email, queryFn: getEmailSettings })
+  const generalSettings = useQuery({ queryKey: consoleQueryKeys.general, queryFn: getRealm })
+  const emailSettings = useQuery({ queryKey: consoleQueryKeys.email, queryFn: getEmailDeliveryConfiguration })
   const developerMutation = useAdminMutation({
     mutationFn: updateDeveloperSettings,
     onSuccess: async (settings) => {
@@ -83,15 +83,15 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     },
   })
   const generalMutation = useAdminMutation({
-    mutationFn: updateGeneralSettings,
+    mutationFn: updateRealm,
     onSuccess: async (settings) => {
       queryClient.setQueryData(consoleQueryKeys.general, settings)
-      setSaved((current) => ({ ...current, realmName: settings.realmName }))
+      setSaved((current) => ({ ...current, realmName: settings.name }))
       setEditor(null)
     },
   })
   const emailMutation = useAdminMutation({
-    mutationFn: updateEmailSettings,
+    mutationFn: replaceEmailDeliveryConfiguration,
     onSuccess: async (settings) => {
       queryClient.setQueryData(consoleQueryKeys.email, settings)
       setSaved((current) => ({ ...current, ...emailSettingsState(settings) }))
@@ -105,7 +105,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     }
   }, [developerSettings.data])
   useEffect(() => {
-    if (generalSettings.data) setSaved((current) => ({ ...current, realmName: generalSettings.data.realmName }))
+    if (generalSettings.data) setSaved((current) => ({ ...current, realmName: generalSettings.data.name }))
   }, [generalSettings.data])
   useEffect(() => {
     if (emailSettings.data) setSaved((current) => ({ ...current, ...emailSettingsState(emailSettings.data) }))
@@ -316,16 +316,19 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         onClose={() => setEditor(null)}
         onSave={(next) => {
           if (editor === 'general') {
-            generalMutation.mutate({ realmName: next.realmName! })
+            generalMutation.mutate({ input: { name: next.realmName! }, etag: generalSettings.data!.etag })
             return
           }
           if (editor === 'email') {
             emailMutation.mutate({
-              provider: 'cloudflare_email',
-              enabled: next.emailEnabled!,
-              fromName: next.senderName || null,
-              fromEmail: next.senderAddress!,
-              replyToEmail: next.replyToAddress || null,
+              etag: emailSettings.data!.etag,
+              input: {
+                provider: 'cloudflare_email',
+                enabled: next.emailEnabled!,
+                fromName: next.senderName || null,
+                fromEmail: next.senderAddress!,
+                replyToEmail: next.replyToAddress || null,
+              },
             })
             return
           }
@@ -336,6 +339,8 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
               consoleAccess: consoleAccessValue(next.consoleAccess!),
               eligibleAccessLevels: eligibleAccessLevelValues(next.eligibleLevels!),
               selectedOrganizationIds: next.selectedOrganizationIds ?? [],
+              organizationCreationEtag: developerSettings.data!.organizationCreationEtag,
+              consoleAccessEtag: developerSettings.data!.consoleAccessEtag,
             })
             return
           }
@@ -354,7 +359,7 @@ export function DeploymentSettingsPage() {
 }
 
 function emailSettingsState(
-  settings: Awaited<ReturnType<typeof getEmailSettings>>,
+  settings: Awaited<ReturnType<typeof getEmailDeliveryConfiguration>>,
 ): Pick<SettingsState, 'emailEnabled' | 'senderName' | 'senderAddress' | 'replyToAddress'> {
   return {
     emailEnabled: settings.enabled,

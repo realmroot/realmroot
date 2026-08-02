@@ -227,6 +227,7 @@ export const listClientSecretsResponseSchema = z.object({
 
 export const applicationAuthorizationSchema = z.object({
   id: z.string(),
+  applicationId: z.string(),
   user: z.object({
     id: z.string(),
     displayName: z.string(),
@@ -242,11 +243,23 @@ export const applicationAuthorizationSchema = z.object({
   permissions: z.array(z.string()),
   grantedAt: z.string(),
   expiresAt: z.string().nullable(),
+  revokedAt: z.string().nullable(),
+  status: z.enum(['active', 'expired', 'revoked']),
+})
+
+export const listApplicationAuthorizationsQuerySchema = paginationQuerySchema.extend({
+  applicationId: nonEmptyString.optional(),
+  status: z.enum(['active', 'expired', 'revoked']).optional(),
 })
 
 export const listApplicationAuthorizationsResponseSchema = z.object({
   authorizations: z.array(applicationAuthorizationSchema),
   pagination: paginationMetadataSchema,
+})
+
+export const applicationAuthorizationRevocationSchema = z.object({
+  applicationAuthorizationId: z.string(),
+  revokedAt: z.string(),
 })
 
 export const listRedirectUrisResponseSchema = z.object({
@@ -307,7 +320,9 @@ export type ListApplicationsResponse = z.infer<typeof listApplicationsResponseSc
 export type ListClientSecretsResponse = z.infer<typeof listClientSecretsResponseSchema>
 export type ListRedirectUrisResponse = z.infer<typeof listRedirectUrisResponseSchema>
 export type ApplicationAuthorization = z.infer<typeof applicationAuthorizationSchema>
+export type ListApplicationAuthorizationsQuery = z.infer<typeof listApplicationAuthorizationsQuerySchema>
 export type ListApplicationAuthorizationsResponse = z.infer<typeof listApplicationAuthorizationsResponseSchema>
+export type ApplicationAuthorizationRevocation = z.infer<typeof applicationAuthorizationRevocationSchema>
 export type ConsentRequestResponse = z.infer<typeof consentRequestResponseSchema>
 export type CreateConsentRequest = z.infer<typeof createConsentRequestSchema>
 export type HostedConsentApprovalRequest = z.infer<typeof hostedConsentApprovalRequestSchema>

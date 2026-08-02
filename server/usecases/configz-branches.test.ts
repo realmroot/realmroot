@@ -88,10 +88,9 @@ function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository 
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => null,
     getAccountCenterSettings: async () => null,
-    getDeveloperSettings: async () => ({
-      organizationCreation: 'admins_only',
-      approvedUserIds: [],
-      consoleAccess: 'realm_operators',
+    getOrganizationCreationPolicy: async () => ({ mode: 'admins_only', approvedUserIds: [] }),
+    getDeveloperConsoleAccessPolicy: async () => ({
+      mode: 'realm_operators',
       eligibleAccessLevels: ['owner', 'admin'],
       selectedOrganizationIds: [],
     }),
@@ -100,7 +99,8 @@ function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository 
     updateSettings: async () => undefined,
     updateBranding: async () => undefined,
     updateAccountCenterSettings: async () => undefined,
-    updateDeveloperSettings: async () => undefined,
+    updateOrganizationCreationPolicy: async () => undefined,
+    updateDeveloperConsoleAccessPolicy: async () => undefined,
     updateEmailSettings: async () => undefined,
   }
 }

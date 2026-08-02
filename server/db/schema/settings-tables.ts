@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { uploadedAsset } from './agent-tables'
 import { user } from './auth-tables'
 import { application, organization } from './authorization-tables'
@@ -72,6 +72,32 @@ export const webhookDeliveryRequest = sqliteTable(
     index('webhookDeliveryRequest_endpointId_idx').on(table.endpointId),
     index('webhookDeliveryRequest_status_idx').on(table.status),
     index('webhookDeliveryRequest_createdAt_idx').on(table.createdAt),
+  ],
+)
+
+export const webhookDeliveryAttempt = sqliteTable(
+  'webhook_delivery_attempt',
+  {
+    id: text('id').primaryKey(),
+    requestId: text('request_id')
+      .notNull()
+      .references(() => webhookDeliveryRequest.id, { onDelete: 'cascade' }),
+    idempotencyKey: text('idempotency_key').notNull(),
+    sequence: integer('sequence').notNull(),
+    status: text('status').notNull().default('pending'),
+    httpStatus: integer('http_status'),
+    error: text('error'),
+    responseBody: text('response_body'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    completedAt: integer('completed_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    uniqueIndex('webhookDeliveryAttempt_requestSequence_uidx').on(table.requestId, table.sequence),
+    uniqueIndex('webhookDeliveryAttempt_requestIdempotencyKey_uidx').on(table.requestId, table.idempotencyKey),
+    index('webhookDeliveryAttempt_requestId_idx').on(table.requestId),
+    index('webhookDeliveryAttempt_createdAt_idx').on(table.createdAt),
   ],
 )
 

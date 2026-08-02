@@ -98,7 +98,8 @@ export const developerSettings = {
 }
 
 export const generalSettings = {
-  realmName: 'Realmroot',
+  id: 'realm' as const,
+  name: 'Realmroot',
   issuer: 'https://auth.example.com/api/auth',
   oidcDiscoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
   jwksUrl: 'https://auth.example.com/api/auth/jwks',

@@ -1,21 +1,27 @@
+import { badRequest } from '@server/domain/errors'
 import {
+  createWebhookDeliveryAttempt,
   createWebhookEndpoint,
   deleteWebhookEndpoint,
+  getWebhookDeliveryAttempt,
   getWebhookEndpoint,
   getWebhookRequest,
+  listWebhookDeliveryAttempts,
   listWebhookEndpoints,
   listWebhookRequests,
-  retryWebhookRequest,
   rotateWebhookSecret,
   updateWebhookEndpoint,
 } from '@server/usecases/webhooks'
 import {
   createWebhookEndpointRequestSchema,
+  idempotencyKeySchema,
+  listWebhookDeliveryAttemptsResponseSchema,
   listWebhookEndpointsQuerySchema,
   listWebhookEndpointsResponseSchema,
   listWebhookRequestsQuerySchema,
   listWebhookRequestsResponseSchema,
   updateWebhookEndpointRequestSchema,
+  webhookDeliveryAttemptSchema,
   webhookEndpointSchema,
   webhookEndpointSecretResponseSchema,
   webhookRequestSchema,
@@ -45,6 +51,7 @@ export function createManagementWebhookRoutes() {
     const input = await readJson(c, createWebhookEndpointRequestSchema)
     requireConsoleOwnedOrganization(c, input.organizationId)
     const endpoint = await createWebhookEndpoint(getDeps(c), input, getActorUserId(c))
+    c.header('Location', `/api/webhooks/endpoints/${encodeURIComponent(endpoint.endpoint.id)}`)
     return c.json(webhookEndpointSecretResponseSchema.parse(endpoint), 201)
   })
 
@@ -83,9 +90,39 @@ export function createManagementWebhookRoutes() {
 
   app.get('/requests/:id', async (c) => c.json(webhookRequestSchema.parse(await requireRequestAccess(c))))
 
-  app.post('/requests/:id/retries', async (c) => {
+  app.get('/requests/:id/attempts', async (c) => {
     await requireRequestAccess(c)
-    return c.json(webhookRequestSchema.parse(await retryWebhookRequest(getDeps(c), c.req.param('id'))))
+    return c.json(
+      listWebhookDeliveryAttemptsResponseSchema.parse(
+        await listWebhookDeliveryAttempts(
+          getDeps(c),
+          c.req.param('id'),
+          readQuery(c, listWebhookRequestsQuerySchema.pick({ limit: true, offset: true })),
+        ),
+      ),
+    )
+  })
+
+  app.post('/requests/:id/attempts', async (c) => {
+    await requireRequestAccess(c)
+    const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
+    if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
+    const { attempt, replayed } = await createWebhookDeliveryAttempt(getDeps(c), c.req.param('id'), parsedKey.data)
+    c.header(
+      'Location',
+      `/api/webhooks/requests/${encodeURIComponent(c.req.param('id'))}/attempts/${encodeURIComponent(attempt.id)}`,
+    )
+    if (replayed) c.header('Idempotency-Replayed', 'true')
+    return c.json(webhookDeliveryAttemptSchema.parse(attempt), 201)
+  })
+
+  app.get('/requests/:id/attempts/:attemptId', async (c) => {
+    await requireRequestAccess(c)
+    return c.json(
+      webhookDeliveryAttemptSchema.parse(
+        await getWebhookDeliveryAttempt(getDeps(c), c.req.param('id'), c.req.param('attemptId')),
+      ),
+    )
   })
 
   return app

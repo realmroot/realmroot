@@ -1,5 +1,5 @@
 import { listApplications } from '@server/usecases/applications'
-import { getConfig, getManagementEmailSettings } from '@server/usecases/configz'
+import { getConfig, getEmailDeliveryConfiguration } from '@server/usecases/configz'
 import {
   type ManagementReadinessItem,
   type ManagementReadinessResponse,
@@ -24,7 +24,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
     const [applications, config, emailSettings] = await Promise.all([
       listApplications(deps, issuerFor(c), { limit: 100, offset: 0 }),
       getConfig(deps, options),
-      getManagementEmailSettings(deps, options),
+      getEmailDeliveryConfiguration(deps, options),
     ])
     const hasOidcApplication = applications.applications.length > 0
     const identityProviderCount =

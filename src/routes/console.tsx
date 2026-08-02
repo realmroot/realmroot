@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { ConsoleShell } from '@/components/layout/console-shell'
 import { listOrganizations } from '@/lib/api/management'
-import { requireAccountProfile } from '@/lib/route-auth'
+import { loadDeveloperConsoleAccess, requireAccountProfile } from '@/lib/route-auth'
 
 export const Route = createFileRoute('/console')({
   validateSearch: (search: Record<string, unknown>): { context?: string } => {
@@ -9,10 +9,9 @@ export const Route = createFileRoute('/console')({
     return context ? { context } : {}
   },
   beforeLoad: async ({ location }) => {
-    const profile = await requireAccountProfile(location.href)
-    if (!profile.access.realmOperator && profile.access.consoleOrganizations.length === 0)
-      throw redirect({ href: '/profile' })
-    return { consoleAccess: profile.access, consoleProfile: profile.user }
+    const [profile, access] = await Promise.all([requireAccountProfile(location.href), loadDeveloperConsoleAccess()])
+    if (!access.realmOperator && access.consoleOrganizations.length === 0) throw redirect({ href: '/profile' })
+    return { consoleAccess: access, consoleProfile: profile.user }
   },
   loader: listOrganizations,
   component: ConsoleRoute,

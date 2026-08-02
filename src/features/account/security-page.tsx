@@ -17,6 +17,7 @@ import {
   useAccountProfile,
   useAccountSecurity,
   useAccountSessions,
+  useDeveloperConsoleAccess,
   useLinkedAccounts,
 } from './queries'
 import { PasskeyDialog, TotpDialogs } from './security-dialogs'
@@ -27,6 +28,7 @@ import { formatDate, formatSessionDevice, type TotpEnrollmentDisplay } from './u
 export function AccountSecurityPage() {
   const configQuery = useAccountConfig()
   const profileQuery = useAccountProfile()
+  const accessQuery = useDeveloperConsoleAccess()
   const securityQuery = useAccountSecurity()
   const passkeysQuery = useAccountPasskeys()
   const config = configQuery.data ?? null
@@ -35,13 +37,21 @@ export function AccountSecurityPage() {
   const linkedAccountsQuery = useLinkedAccounts(accountCenter.connectedAccountsEnabled)
   const mutate = useAccountMutation()
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
-  const queries = [configQuery, profileQuery, securityQuery, passkeysQuery, sessionsQuery, linkedAccountsQuery]
+  const queries = [
+    configQuery,
+    profileQuery,
+    accessQuery,
+    securityQuery,
+    passkeysQuery,
+    sessionsQuery,
+    linkedAccountsQuery,
+  ]
   const error = queries.find((query) => query.error)?.error
   if (queries.some((query) => query.isLoading)) return <AccountPageLoading config={config} />
   if (error)
     return <AccountPageError config={config} message={error instanceof Error ? error.message : tt('Unable to load.')} />
   const profile = profileQuery.data?.user ?? null
-  const access = profileQuery.data?.access
+  const access = accessQuery.data
   if (!profile || !access) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
   return (
     <AccountPageShell

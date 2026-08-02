@@ -50,6 +50,7 @@ import {
   user,
   userRelations,
   verification,
+  webhookDeliveryAttempt,
   webhookDeliveryRequest,
   webhookEndpoint,
 } from '@server/db/schema'
@@ -122,7 +123,7 @@ describe('schema.test 2', () => {
     expect(columnNames(deploymentSetting)).toEqual(expect.arrayContaining(['environment', 'base_url', 'issuer_path']))
   })
 
-  it('models webhook endpoint and delivery request persistence explicitly', () => {
+  it('models webhook endpoint, delivery request, and delivery attempt persistence explicitly', () => {
     expect(columnNames(webhookEndpoint)).toEqual(
       expect.arrayContaining([
         'url',
@@ -176,6 +177,32 @@ describe('schema.test 2', () => {
       columns: ['endpoint_id'],
       foreignColumns: ['id'],
       foreignTable: 'webhook_endpoint',
+      onDelete: 'cascade',
+    })
+
+    expect(columnNames(webhookDeliveryAttempt)).toEqual(
+      expect.arrayContaining([
+        'request_id',
+        'sequence',
+        'status',
+        'http_status',
+        'error',
+        'response_body',
+        'created_at',
+        'completed_at',
+      ]),
+    )
+    expect(indexNames(webhookDeliveryAttempt)).toEqual(
+      expect.arrayContaining([
+        'webhookDeliveryAttempt_requestSequence_uidx',
+        'webhookDeliveryAttempt_requestId_idx',
+        'webhookDeliveryAttempt_createdAt_idx',
+      ]),
+    )
+    expect(foreignKeyReferences(webhookDeliveryAttempt)).toContainEqual({
+      columns: ['request_id'],
+      foreignColumns: ['id'],
+      foreignTable: 'webhook_delivery_request',
       onDelete: 'cascade',
     })
   })

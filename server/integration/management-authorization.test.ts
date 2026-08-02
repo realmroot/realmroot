@@ -62,7 +62,7 @@ describe('authorization management over real D1', () => {
     expect(response.status).toBe(403)
   })
 
-  it('constrains Organization Console inventory and exposes governed Agent detail [spec: admin-console/organization-console-resource-boundary] [spec: admin-console/admin-agent-governance-detail]', async () => {
+  it('constrains Organization Console inventory and exposes governed Agent detail [spec: admin-console/organization-console-resource-boundary] [spec: admin-console/admin-agent-governance-detail] [spec: management-api/management-canonical-authority-inventory] [spec: agent-identity/agent-public-resource-model]', async () => {
     const adminCookie = await signInAdmin(harness)
     const developerId = await createUser(harness, adminCookie, {
       email: 'developer@example.com',
@@ -80,13 +80,18 @@ describe('authorization management over real D1', () => {
       userId: developerId,
       role: 'developer',
     })
-    await harness.request('/api/developer-settings', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', cookie: adminCookie },
+    const currentConsolePolicy = await harness.request('/api/developer-console-access-policy', {
+      headers: { cookie: adminCookie },
+    })
+    await harness.request('/api/developer-console-access-policy', {
+      method: 'PUT',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'If-Match': currentConsolePolicy.headers.get('ETag')!,
+      },
       body: JSON.stringify({
-        organizationCreation: 'admins_only',
-        approvedUserIds: [],
-        consoleAccess: 'all_organizations',
+        mode: 'all_organizations',
         eligibleAccessLevels: ['owner', 'admin', 'developer'],
         selectedOrganizationIds: [],
       }),
@@ -331,7 +336,7 @@ describe('authorization management over real D1', () => {
         {
           id: 'owned-agent',
           homeSpace: { type: 'organization', organizationId: ownedOrganization.id },
-          hostCount: 1,
+          installationCount: 1,
           roleCount: 1,
           pendingRequestCount: 1,
           activeGrantCount: 1,
@@ -342,31 +347,51 @@ describe('authorization management over real D1', () => {
     const agentDetail = await harness.request('/api/agents/owned-agent', { headers: { cookie: developerCookie } })
     expect(agentDetail.status).toBe(200)
     await expect(agentDetail.json()).resolves.toMatchObject({
-      agent: { id: 'owned-agent', hostCount: 1, roleCount: 1, pendingRequestCount: 1, activeGrantCount: 1 },
+      agent: { id: 'owned-agent', installationCount: 1, roleCount: 1, pendingRequestCount: 1, activeGrantCount: 1 },
     })
-    const hostsResponse = await harness.request('/api/agents/owned-agent/hosts', {
+    const hostsResponse = await harness.request('/api/agents/owned-agent/installations', {
       headers: { cookie: developerCookie },
     })
     expect(hostsResponse.status).toBe(200)
     const hostInventory = (await hostsResponse.json()) as { items: Array<Record<string, unknown>> }
     expect(hostInventory.items).toEqual([
-      expect.objectContaining({ id: 'owned-host', name: 'Developer laptop', credentialType: 'public_key' }),
+      expect.objectContaining({
+        id: 'owned-agent-binding',
+        name: 'Developer laptop',
+        credentialType: 'public_key',
+      }),
     ])
+    expect(hostInventory.items[0]).not.toHaveProperty('hostId')
+    expect(hostInventory.items[0]).not.toHaveProperty('hostStatus')
     expect(hostInventory.items[0]).not.toHaveProperty('publicKey')
     await expect(
-      (await harness.request('/api/agents/owned-agent/roles', { headers: { cookie: developerCookie } })).json(),
-    ).resolves.toMatchObject({ items: [{ id: agentRole.id, key: 'report.reader' }] })
-    const accessRequestsResponse = await harness.request('/api/agents/owned-agent/access-requests', {
+      (
+        await harness.request('/api/role-assignments?subjectType=agent&subjectId=owned-agent&status=active', {
+          headers: { cookie: developerCookie },
+        })
+      ).json(),
+    ).resolves.toMatchObject({ assignments: [{ roleId: agentRole.id, subjectId: 'owned-agent' }] })
+    const accessRequestsResponse = await harness.request('/api/agent-access-requests?agentId=owned-agent', {
       headers: { cookie: developerCookie },
     })
     const accessRequests = (await accessRequestsResponse.json()) as { items: Array<Record<string, unknown>> }
     expect(accessRequests.items).toEqual([
       expect.objectContaining({ id: 'owned-access-request', scopes: ['orders:read'], status: 'pending' }),
     ])
+    await expect(
+      (await harness.request('/api/agent-access-requests', { headers: { cookie: developerCookie } })).json(),
+    ).resolves.toMatchObject({ items: [{ id: 'owned-access-request' }], pagination: { total: 1 } })
     expect(accessRequests.items[0]).not.toHaveProperty('approvalTokenHash')
     await expect(
-      (await harness.request('/api/agents/owned-agent/access-grants', { headers: { cookie: developerCookie } })).json(),
+      (
+        await harness.request('/api/agent-access-grants?agentId=owned-agent', {
+          headers: { cookie: developerCookie },
+        })
+      ).json(),
     ).resolves.toMatchObject({ items: [{ id: 'owned-access-grant', scopes: ['orders:read'], status: 'active' }] })
+    await expect(
+      (await harness.request('/api/agent-access-grants', { headers: { cookie: developerCookie } })).json(),
+    ).resolves.toMatchObject({ items: [{ id: 'owned-access-grant' }], pagination: { total: 1 } })
     const auditResponse = await harness.request('/api/audit-events', { headers: { cookie: developerCookie } })
     expect(auditResponse.status).toBe(200)
     await expect(auditResponse.json()).resolves.toMatchObject({
@@ -968,12 +993,18 @@ describe('authorization management over real D1', () => {
     })
     expect(((await patched.json()) as { name: string }).name).toBe('Lead Editor')
 
+    const currentPermissions = await harness.request(`/api/roles/${role.id}/permissions`, {
+      headers: { cookie },
+    })
+    const etag = currentPermissions.headers.get('etag')
+    expect(etag).toBeTruthy()
     const replacePermissions = await harness.request(`/api/roles/${role.id}/permissions`, {
       method: 'PUT',
-      headers: { 'content-type': 'application/json', cookie },
+      headers: { 'content-type': 'application/json', cookie, 'if-match': etag! },
       body: JSON.stringify({ permissions: [] }),
     })
-    expect(replacePermissions.status).toBe(204)
+    expect(replacePermissions.status).toBe(200)
+    expect(replacePermissions.headers.get('etag')).toBeTruthy()
 
     const rolePermissions = await harness.request(`/api/roles/${role.id}/permissions`, {
       headers: { cookie },

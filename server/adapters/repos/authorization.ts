@@ -47,7 +47,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .select()
         .from(organization)
         .where(organizationCondition)
-        .orderBy(desc(organization.createdAt))
+        .orderBy(desc(organization.createdAt), desc(organization.id))
         .limit(pagination.limit)
         .offset(pagination.offset)
       const totalResult = await db.select({ total: count() }).from(organization).where(organizationCondition)
@@ -82,7 +82,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .select()
         .from(member)
         .where(eq(member.organizationId, organizationId))
-        .orderBy(desc(member.createdAt))
+        .orderBy(desc(member.createdAt), desc(member.id))
         .limit(pagination.limit)
         .offset(pagination.offset)
       const total = await totalRows(db, member, eq(member.organizationId, organizationId))
@@ -104,7 +104,11 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
     },
 
     async listUserMemberships(userId) {
-      const rows = await db.select().from(member).where(eq(member.userId, userId)).orderBy(desc(member.createdAt))
+      const rows = await db
+        .select()
+        .from(member)
+        .where(eq(member.userId, userId))
+        .orderBy(desc(member.createdAt), desc(member.id))
       return rows.map(toMember)
     },
 
@@ -163,7 +167,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .select()
         .from(invitation)
         .where(eq(invitation.organizationId, organizationId))
-        .orderBy(desc(invitation.createdAt))
+        .orderBy(desc(invitation.createdAt), desc(invitation.id))
         .limit(pagination.limit)
         .offset(pagination.offset)
       const total = await totalRows(db, invitation, eq(invitation.organizationId, organizationId))
@@ -215,7 +219,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .select()
         .from(apiResource)
         .where(ownerCondition)
-        .orderBy(desc(apiResource.createdAt))
+        .orderBy(desc(apiResource.createdAt), desc(apiResource.id))
         .limit(pagination.limit)
         .offset(pagination.offset)
       const totalResult = await db.select({ total: count() }).from(apiResource).where(ownerCondition)
@@ -235,7 +239,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .select()
         .from(apiResource)
         .where(and(eq(apiResource.enabled, true), isNull(apiResource.archivedAt)))
-        .orderBy(desc(apiResource.createdAt))
+        .orderBy(desc(apiResource.createdAt), desc(apiResource.id))
       const eligibility = await loadResourceEligibility(
         db,
         rows.map((row) => row.id),
@@ -473,7 +477,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
       const rows = await db
         .select()
         .from(role)
-        .orderBy(desc(role.createdAt))
+        .orderBy(desc(role.createdAt), desc(role.id))
         .limit(pagination.limit)
         .offset(pagination.offset)
       const total = await totalRows(db, role)
@@ -521,7 +525,14 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         query.subjectType ? eq(roleAssignment.subjectType, query.subjectType) : undefined,
         query.subjectId ? eq(roleAssignment.subjectId, query.subjectId) : undefined,
         query.organizationId ? eq(roleAssignment.organizationId, query.organizationId) : undefined,
-        query.organizationIds ? inArray(roleAssignment.organizationId, query.organizationIds) : undefined,
+        query.organizationIds
+          ? query.includeRealmAssignments
+            ? or(isNull(roleAssignment.organizationId), inArray(roleAssignment.organizationId, query.organizationIds))
+            : inArray(roleAssignment.organizationId, query.organizationIds)
+          : undefined,
+        query.contextualOrganizationId
+          ? or(isNull(roleAssignment.organizationId), eq(roleAssignment.organizationId, query.contextualOrganizationId))
+          : undefined,
         query.context === 'realm' ? isNull(roleAssignment.organizationId) : undefined,
         query.context === 'organization' ? isNotNull(roleAssignment.organizationId) : undefined,
         query.status === 'revoked' ? isNotNull(roleAssignment.revokedAt) : undefined,
@@ -540,7 +551,7 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         .select()
         .from(roleAssignment)
         .where(where)
-        .orderBy(desc(roleAssignment.createdAt))
+        .orderBy(desc(roleAssignment.createdAt), desc(roleAssignment.id))
         .limit(query.limit)
         .offset(query.offset)
       const total = await totalRows(db, roleAssignment, where)
@@ -593,7 +604,12 @@ export function createDrizzleAuthorizationRepository(db: Database): Authorizatio
         createdAt: now,
         updatedAt: now,
       }
-      await db.insert(roleAssignment).values(row)
+      try {
+        await db.insert(roleAssignment).values(row)
+      } catch (error) {
+        if (isUniqueConstraint(error)) throw conflict('An active Role assignment already exists for this context.')
+        throw error
+      }
       return toRoleAssignment(row)
     },
 

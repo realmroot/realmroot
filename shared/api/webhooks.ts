@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { paginationMetadataSchema, paginationQuerySchema } from './applications'
 
+export { idempotencyKeySchema } from './idempotency'
+
 export const webhookEvents = [
   'user.created',
   'user.updated',
@@ -15,6 +17,7 @@ export const webhookEventSchema = z.enum(webhookEvents)
 
 export const webhookEndpointStatusSchema = z.enum(['enabled', 'disabled'])
 export const webhookRequestStatusSchema = z.enum(['pending', 'delivered', 'failed'])
+export const webhookDeliveryAttemptStatusSchema = z.enum(['pending', 'delivered', 'failed'])
 
 const webhookEndpointUrlSchema = z
   .string()
@@ -101,8 +104,28 @@ export const listWebhookRequestsResponseSchema = z.object({
   pagination: paginationMetadataSchema,
 })
 
+export const webhookDeliveryAttemptSchema = z.object({
+  id: z.string(),
+  requestId: z.string(),
+  sequence: z.number().int().positive(),
+  status: webhookDeliveryAttemptStatusSchema,
+  httpStatus: z.number().int().min(100).max(599).nullable(),
+  error: z.string().nullable(),
+  responseBody: z.string().nullable(),
+  createdAt: z.union([z.string(), z.date()]),
+  completedAt: z.union([z.string(), z.date()]).nullable(),
+})
+
+export const listWebhookDeliveryAttemptsQuerySchema = paginationQuerySchema
+
+export const listWebhookDeliveryAttemptsResponseSchema = z.object({
+  attempts: z.array(webhookDeliveryAttemptSchema),
+  pagination: paginationMetadataSchema,
+})
+
 export type WebhookEvent = z.infer<typeof webhookEventSchema>
 export type WebhookRequestStatus = z.infer<typeof webhookRequestStatusSchema>
+export type WebhookDeliveryAttemptStatus = z.infer<typeof webhookDeliveryAttemptStatusSchema>
 export type WebhookEndpoint = z.infer<typeof webhookEndpointSchema>
 export type WebhookRequest = z.infer<typeof webhookRequestSchema>
 export type ListWebhookEndpointsQuery = z.infer<typeof listWebhookEndpointsQuerySchema>
@@ -113,3 +136,5 @@ export type WebhookEndpointSecretResponse = z.infer<typeof webhookEndpointSecret
 export type WebhookEventEnvelope = z.infer<typeof webhookEventEnvelopeSchema>
 export type ListWebhookRequestsQuery = z.infer<typeof listWebhookRequestsQuerySchema>
 export type ListWebhookRequestsResponse = z.infer<typeof listWebhookRequestsResponseSchema>
+export type WebhookDeliveryAttempt = z.infer<typeof webhookDeliveryAttemptSchema>
+export type ListWebhookDeliveryAttemptsResponse = z.infer<typeof listWebhookDeliveryAttemptsResponseSchema>

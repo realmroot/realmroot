@@ -6,7 +6,7 @@ import type {
   WebhookRequestStatus,
 } from '../../../shared/api/webhooks'
 import type { Database } from '../../db/client'
-import { webhookDeliveryRequest, webhookEndpoint } from '../../db/schema'
+import { webhookDeliveryAttempt, webhookDeliveryRequest, webhookEndpoint } from '../../db/schema'
 
 export type WebhookEndpointRow = typeof webhookEndpoint.$inferSelect
 export type WebhookEndpointInsert = typeof webhookEndpoint.$inferInsert
@@ -24,7 +24,7 @@ export function createWebhookRepository(db: Database): WebhookRepository {
         .select()
         .from(webhookEndpoint)
         .where(where)
-        .orderBy(desc(webhookEndpoint.createdAt))
+        .orderBy(desc(webhookEndpoint.createdAt), desc(webhookEndpoint.id))
         .limit(query.limit)
         .offset(query.offset)
       const [total] = await db.select({ value: count() }).from(webhookEndpoint).where(where)
@@ -78,7 +78,7 @@ export function createWebhookRepository(db: Database): WebhookRepository {
         .from(webhookDeliveryRequest)
         .innerJoin(webhookEndpoint, eq(webhookDeliveryRequest.endpointId, webhookEndpoint.id))
         .where(where)
-        .orderBy(desc(webhookDeliveryRequest.createdAt))
+        .orderBy(desc(webhookDeliveryRequest.createdAt), desc(webhookDeliveryRequest.id))
         .limit(query.limit)
         .offset(query.offset)
       const [total] = await db
@@ -127,6 +127,70 @@ export function createWebhookRepository(db: Database): WebhookRepository {
       if (!row) return null
       const endpoint = await this.findEndpoint(row.endpointId)
       return endpoint ? { ...row, endpointUrl: endpoint.url, organizationId: endpoint.organizationId } : null
+    },
+
+    async listAttempts(requestId, page) {
+      const where = eq(webhookDeliveryAttempt.requestId, requestId)
+      const [items, totals] = await Promise.all([
+        db
+          .select()
+          .from(webhookDeliveryAttempt)
+          .where(where)
+          .orderBy(desc(webhookDeliveryAttempt.createdAt), desc(webhookDeliveryAttempt.id))
+          .limit(page.limit)
+          .offset(page.offset),
+        db.select({ value: count() }).from(webhookDeliveryAttempt).where(where),
+      ])
+      return { items, total: totals[0]?.value ?? 0, ...page }
+    },
+
+    async findAttempt(id) {
+      const [row] = await db.select().from(webhookDeliveryAttempt).where(eq(webhookDeliveryAttempt.id, id))
+      return row ?? null
+    },
+
+    async findAttemptByIdempotencyKey(requestId, idempotencyKey) {
+      const [row] = await db
+        .select()
+        .from(webhookDeliveryAttempt)
+        .where(
+          and(
+            eq(webhookDeliveryAttempt.requestId, requestId),
+            eq(webhookDeliveryAttempt.idempotencyKey, idempotencyKey),
+          ),
+        )
+      return row ?? null
+    },
+
+    async reserveAttempt(input) {
+      const { previousAttemptCount, ...attempt } = input
+      const [created] = await db
+        .insert(webhookDeliveryAttempt)
+        .values({
+          ...attempt,
+          sequence: sql<number>`(
+            select max(coalesce(max(${webhookDeliveryAttempt.sequence}), 0), ${previousAttemptCount}) + 1
+            from ${webhookDeliveryAttempt}
+            where ${webhookDeliveryAttempt.requestId} = ${input.requestId}
+          )`,
+        })
+        .onConflictDoNothing({
+          target: [webhookDeliveryAttempt.requestId, webhookDeliveryAttempt.idempotencyKey],
+        })
+        .returning()
+      if (created) return { attempt: created, created: true }
+      const existing = await this.findAttemptByIdempotencyKey(attempt.requestId, attempt.idempotencyKey)
+      if (!existing) throw new Error('Webhook delivery attempt reservation did not return its durable resource.')
+      return { attempt: existing, created: false }
+    },
+
+    async updateAttempt(id, input) {
+      const [row] = await db
+        .update(webhookDeliveryAttempt)
+        .set(input)
+        .where(eq(webhookDeliveryAttempt.id, id))
+        .returning()
+      return row ?? null
     },
   }
 }

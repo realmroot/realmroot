@@ -14,9 +14,10 @@ Feature: Agent identity and delegated API authorization
       Given Agent identity uses protocol registrations, host credentials, and identity bindings internally
       And external authorization uses discovery metadata, OAuth clients, connection state, and token leases internally
       When an Agent, controller, or administrator reads the Realmroot API contract
-      Then the public resources are Agents, Agent enrollments, API resources, account connections, access requests, access grants, and audit events
-      And Agent registrations, hosts, identity bindings, connection intents, OAuth integration records, and token leases are not public resources
+      Then the public resources are Agents, Agent installations, Agent installation enrollments, API resources, account connections, access requests, access grants, and audit events
+      And Agent registrations, hosts, identity bindings, connection intents, OAuth integration records, and token leases remain private implementation records
       And each public resource has one canonical URI in its caller boundary
+      And Agent installation representations never expose internal Host identifiers
 
   Rule: Agent identities remain stable across hosts and credentials
 
@@ -95,9 +96,10 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:agent-protocol @journey:agent-multi-host-continuity
     Scenario: One Agent identity can be used from independently secured hosts
       Given an Agent identity has an active host registration
-      When the Agent client requests another enrollment for that stable Agent from a host with a different public key
-      Then Realmroot creates a pending Agent enrollment and returns its hosted approval URL
-      And the Agent client can poll that enrollment through its canonical Agent protocol URI
+      When the Agent client requests another enrollment for that stable Agent from a host with a different public key and an idempotency key
+      Then Realmroot creates a pending Agent installation enrollment and returns its hosted approval URL
+      And the Agent client can poll that installation enrollment through its canonical Agent protocol URI
+      And retrying with the same idempotency key returns that same installation enrollment
       When an authorized controller approves the hosted enrollment
       Then both host registrations resolve to the same Agent issuer and subject
       And neither host receives the other host's private key

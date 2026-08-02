@@ -52,12 +52,15 @@ describe('admin console applications-detail-a', () => {
     let revocations = 0
     const authorization = {
       id: 'authorization-1',
+      applicationId: 'app-1',
       user: { id: 'user-1', displayName: 'Jane Doe', email: 'jane@example.com' },
       organization: null,
       scopes: ['openid', 'profile'],
       permissions: [],
       grantedAt: '2026-07-01T12:00:00.000Z',
       expiresAt: null,
+      revokedAt: null,
+      status: 'active',
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -65,7 +68,7 @@ describe('admin console applications-detail-a', () => {
       if (url === '/api/applications/app-1' && method === 'GET') {
         return Promise.resolve(jsonResponse(application))
       }
-      if (url === '/api/applications/app-1/authorizations?limit=50&offset=0' && method === 'GET') {
+      if (url === '/api/application-authorizations?applicationId=app-1&limit=50&offset=0' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             authorizations: active ? [authorization] : [],
@@ -79,10 +82,15 @@ describe('admin console applications-detail-a', () => {
           }),
         )
       }
-      if (url === '/api/applications/app-1/authorizations/authorization-1' && method === 'DELETE') {
+      if (url === '/api/application-authorizations/authorization-1/revocation' && method === 'PUT') {
         revocations += 1
         active = false
-        return Promise.resolve(new Response(null, { status: 204 }))
+        return Promise.resolve(
+          jsonResponse({
+            applicationAuthorizationId: 'authorization-1',
+            revokedAt: '2026-07-02T12:00:00.000Z',
+          }),
+        )
       }
       return consoleSharedFetch(input, init)
     })

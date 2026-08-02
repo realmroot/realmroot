@@ -1,4 +1,4 @@
-import type { AccountProfileResponse } from '@shared/api/account'
+import type { DeveloperConsoleAccessResponse } from '@shared/api/account'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   AppWindow,
@@ -72,7 +72,7 @@ export function AccountPageShell({
   profile,
   section,
 }: {
-  access: AccountProfileResponse['access']
+  access: DeveloperConsoleAccessResponse
   accountCenter: AccountCenterSettings
   children: ReactNode
   config: Parameters<typeof brandingStyle>[0]
@@ -196,7 +196,7 @@ function AccountSidebar({
   onNavigate,
   section,
 }: {
-  access: AccountProfileResponse['access']
+  access: DeveloperConsoleAccessResponse
   onNavigate?: () => void
   section: AccountCenterSection
 }) {
@@ -232,7 +232,7 @@ function AccountUserMenu({
   profile,
   onSignOut,
 }: {
-  access: AccountProfileResponse['access']
+  access: DeveloperConsoleAccessResponse
   profile: UserProfile
   onSignOut: () => void
 }) {

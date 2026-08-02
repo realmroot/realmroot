@@ -183,6 +183,13 @@
       "when": 1785638261487,
       "tag": "20260802023741_superb_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1785651012403,
+      "tag": "20260802061012_serious_bushwacker",
+      "breakpoints": true
     }
   ]
 }

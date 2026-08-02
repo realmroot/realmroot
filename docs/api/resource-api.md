@@ -56,23 +56,28 @@ access request
 access token <grant-id>
 ```
 
-The Agent-facing product model uses Agents, enrollments, API Resources, account
-connections, access requests, access grants, and audit events. Protocol
-registrations, Hosts, identity bindings, OAuth connection intents, client
-integration records, refresh credentials, and token leases remain internal
-security records rather than additional public resources.
+The Agent-facing product model uses Agents, Agent installations, installation
+enrollments, API Resources, account connections, access requests, access grants,
+and audit events. An Agent installation is the stable, credential-free product
+projection of one runtime authorized to act as an Agent. Protocol registrations,
+Hosts, identity bindings, OAuth connection intents, client integration records,
+refresh credentials, and token leases remain internal security records.
 
 ## Authentication And Authorization
 
 Protected operations accept either:
 
-- an authenticated administrator browser session; or
+- an authenticated browser session; or
 - an AgentAuth proof bound to an enrolled, active Agent identity.
 
 Authentication establishes the principal. Authorization is evaluated
 separately:
 
-- browser principals require the applicable administrator authority;
+- Realm operators can inspect Realm inventory;
+- Organization developers can inspect only inventory owned by Organizations
+  available to them in Console;
+- Account Center members can inspect only their own effective Role assignments
+  and Agent grants owned by their personal or member Organization spaces;
 - Agent principals require the exact operation capability published by the
   OpenAPI operation.
 
@@ -104,7 +109,8 @@ API errors use one JSON envelope:
 ```
 
 `code` is one of `bad_request`, `unauthorized`, `forbidden`, `not_found`,
-`conflict`, `resource_in_use`, `bad_gateway`, or `internal_error`. `details` is
+`conflict`, `resource_in_use`, `precondition_failed`,
+`precondition_required`, `bad_gateway`, or `internal_error`. `details` is
 present only when the caller needs structured conflict or upstream-boundary
 context.
 
@@ -131,12 +137,37 @@ Collection responses include:
 
 `nextOffset` is `null` when there is no next page.
 
+`/application-authorizations`, `/role-assignments`,
+`/agent-access-requests`, and `/agent-access-grants` are canonical Realm
+inventories. Their relationship fields are optional filters: omitting
+`applicationId`, `agentId`, `organizationId`, or `resourceId` lists every
+record visible to the authenticated principal. A filter never establishes
+ownership or expands visibility. Console and Account Center use these same
+URIs; there are no product-surface aliases.
+
 ## Resource Conventions
 
 Resources use nouns, standard HTTP methods, and explicit child-resource paths.
 Collection mutations that replace a complete set use `PUT`; partial resource
 updates use `PATCH`. Secret material is returned only at creation or rotation
 boundaries and is absent from later reads.
+
+Successful collection creates return `201 Created` with a `Location` header for
+the canonical member URI. Durable revocation and archival state is represented
+as a subordinate resource and changed idempotently with `PUT` or `DELETE`, not
+with action endpoints.
+
+Representations that can be replaced concurrently expose a strong `ETag`.
+Clients send that value in `If-Match`; missing and stale preconditions return
+`428 Precondition Required` and `412 Precondition Failed`, respectively.
+
+Creating a webhook delivery attempt or Agent installation enrollment requires
+`Idempotency-Key`. A webhook attempt key is scoped to its parent delivery
+request; an installation enrollment key is scoped to the authenticated protocol
+Agent registration. The key is retained with the durable resource. Replaying it
+returns the same canonical resource and sets `Idempotency-Replayed: true`.
+Reusing an installation enrollment key for another stable Agent returns
+`409 Conflict`; retrying a webhook attempt never sends the webhook twice.
 
 API Resources identify protected business APIs. Their target OpenAPI documents
 are authoritative for available scope strings and operation requirements;

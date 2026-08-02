@@ -1,4 +1,4 @@
-import { forbidden, unauthorized } from '@server/domain/errors'
+import { badRequest, forbidden, unauthorized } from '@server/domain/errors'
 import {
   createAdditionalAgentEnrollmentIntent,
   createAgentLoginIdentity,
@@ -22,13 +22,15 @@ import {
   accessGrantsResponseSchema,
   accessRequestSchema,
   agentApiResourcesResponseSchema,
-  agentEnrollmentResponseSchema,
-  agentEnrollmentSchema,
+  agentInstallationEnrollmentResponseSchema,
+  agentInstallationEnrollmentSchema,
   agentResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
+  createAgentInstallationEnrollmentSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
+import { idempotencyKeySchema } from '@shared/api/idempotency'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { getDeps } from '../middleware/deps'
@@ -58,24 +60,6 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
       throw forbidden('A controller-approved delegated Agent session is required.')
     }
     const body = await readJson(c, createAgentEnrollmentSchema)
-    if (body.agentId) {
-      const intent = await createAdditionalAgentEnrollmentIntent(
-        getDeps(c),
-        body.agentId,
-        session.agent.id,
-        session.host.userId,
-      )
-      const verificationUri = hostedEnrollmentUrl(intent.id)
-      c.header('Location', `/api/agent/enrollments/${encodeURIComponent(intent.id)}`)
-      return c.json(
-        agentEnrollmentResponseSchema.parse({
-          enrollment: await getPublicAgentEnrollment(getDeps(c), intent.id, session.host.userId),
-          verificationUri,
-        }),
-        201,
-      )
-    }
-    if (!body.name) throw new Error('New Agent enrollment input was not narrowed after validation.')
     const identity = await createAgentLoginIdentity(
       getDeps(c),
       { protocolAgentId: session.agent.id, name: body.name },
@@ -86,10 +70,37 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(agentResponseSchema.parse({ agent: toAgent(identity) }), 201)
   })
 
-  app.get('/enrollments/:enrollmentId', async (c) => {
+  app.post('/installation-enrollments', async (c) => {
+    const session = await requireAgentSession(authApi, c.req.raw.headers)
+    if (!session.host?.userId) {
+      throw forbidden('A controller-approved delegated Agent session is required.')
+    }
+    const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
+    if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
+    const body = await readJson(c, createAgentInstallationEnrollmentSchema)
+    const { intent, replayed } = await createAdditionalAgentEnrollmentIntent(
+      getDeps(c),
+      body.agentId,
+      session.agent.id,
+      session.host.userId,
+      parsedKey.data,
+    )
+    const verificationUri = hostedEnrollmentUrl(intent.id)
+    c.header('Location', `/api/agent/installation-enrollments/${encodeURIComponent(intent.id)}`)
+    if (replayed) c.header('Idempotency-Replayed', 'true')
+    return c.json(
+      agentInstallationEnrollmentResponseSchema.parse({
+        enrollment: await getPublicAgentEnrollment(getDeps(c), intent.id, session.host.userId),
+        verificationUri,
+      }),
+      201,
+    )
+  })
+
+  app.get('/installation-enrollments/:enrollmentId', async (c) => {
     const session = await requireAgentSession(authApi, c.req.raw.headers)
     return c.json(
-      agentEnrollmentSchema.parse(
+      agentInstallationEnrollmentSchema.parse(
         await getProtocolAgentEnrollment(getDeps(c), c.req.param('enrollmentId'), session.agent.id),
       ),
     )

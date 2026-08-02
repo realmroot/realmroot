@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 afterEach(() => {
   vi.resetModules()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('management API client', () => {
@@ -35,8 +36,8 @@ describe('management API client', () => {
     await management.replaceApplicationRedirectUris('app-1', { redirectUris: ['https://app.example.com/callback'] })
     await management.listApplicationClientSecrets('app-1', { limit: 5 })
     await management.rotateApplicationClientSecret('app-1')
-    await management.listApplicationAuthorizations('app-1', { limit: 25, offset: 50 })
-    await management.revokeApplicationAuthorization('app-1', 'authorization-1')
+    await management.listApplicationAuthorizations({ applicationId: 'app-1', limit: 25, offset: 50 })
+    await management.revokeApplicationAuthorization('authorization-1')
     await management.uploadApplicationLogo('app-1', new File(['logo'], 'logo.png'))
     await management.listUsers({ search: 'jane', limit: 50, offset: undefined })
     await management.createUser({ email: 'jane@example.com', displayName: 'Jane Doe' })
@@ -89,7 +90,11 @@ describe('management API client', () => {
     await management.updateRole('role-1', { description: 'Tenant admin' })
     await management.deleteRole('role-1')
     await management.listRolePermissions('role-1')
-    await management.replaceRolePermissions('role-1', [{ resourceId: 'resource-1', scope: 'orders.read' }])
+    await management.replaceRolePermissions(
+      'role-1',
+      [{ resourceId: 'resource-1', scope: 'orders.read' }],
+      '"permissions-v1"',
+    )
     await management.listRoleAssignments({ roleId: 'role-1', status: 'active' })
     await management.createRoleAssignment({ roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' })
     await management.revokeRoleAssignment('assignment-1')
@@ -114,7 +119,7 @@ describe('management API client', () => {
     await management.rotateWebhookEndpointSecret('wh_1')
     await management.listWebhookRequests({ endpointId: 'wh_1', status: 'failed' })
     await management.getWebhookRequest('whr_1')
-    await management.retryWebhookRequest('whr_1')
+    await management.createWebhookDeliveryAttempt('whr_1', 'retry-whr-1')
 
     expect(calls).toEqual([
       ['applications.get'],
@@ -158,8 +163,8 @@ describe('management API client', () => {
       ['redirectUris.put', { param: { id: 'app-1' }, json: { redirectUris: ['https://app.example.com/callback'] } }],
       ['clientSecrets.get', { param: { id: 'app-1' }, query: { limit: '5' } }],
       ['clientSecrets.post', { param: { id: 'app-1' } }],
-      ['applicationAuthorizations.get', { param: { applicationId: 'app-1' }, query: { limit: '25', offset: '50' } }],
-      ['applicationAuthorization.delete', { param: { applicationId: 'app-1', authorizationId: 'authorization-1' } }],
+      ['applicationAuthorizations.get', { query: { applicationId: 'app-1', limit: '25', offset: '50' } }],
+      ['applicationAuthorizationRevocation.put', { param: { authorizationId: 'authorization-1' } }],
       ['upload', '/api/applications/app-1/logo', expect.any(File)],
       ['users.get', { query: { search: 'jane', limit: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
@@ -216,14 +221,20 @@ describe('management API client', () => {
       ['roles.post', { json: { key: 'admin', name: 'Admin' } }],
       ['roles.patch', { param: { id: 'role-1' }, json: { description: 'Tenant admin' } }],
       ['roles.delete', { param: { id: 'role-1' } }],
-      ['rolePermissions.get', { param: { id: 'role-1' } }],
+      ['fetch', '/api/roles/role-1/permissions', { credentials: 'same-origin' }],
       [
-        'rolePermissions.put',
-        { param: { id: 'role-1' }, json: { permissions: [{ resourceId: 'resource-1', scope: 'orders.read' }] } },
+        'fetch',
+        '/api/roles/role-1/permissions',
+        {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', 'if-match': '"permissions-v1"' },
+          body: JSON.stringify({ permissions: [{ resourceId: 'resource-1', scope: 'orders.read' }] }),
+        },
       ],
       ['roleAssignments.get', { query: { roleId: 'role-1', status: 'active' } }],
       ['roleAssignments.post', { json: { roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' } }],
-      ['roleAssignment.delete', { param: { id: 'assignment-1' } }],
+      ['roleAssignmentRevocation.put', { param: { id: 'assignment-1' } }],
       ['apiResources.get'],
       ['apiResource.get', { param: { id: 'resource-1' } }],
       [
@@ -255,7 +266,7 @@ describe('management API client', () => {
       ['webhookEndpointSecret.post', { param: { id: 'wh_1' } }],
       ['webhookRequests.get', { query: { endpointId: 'wh_1', status: 'failed' } }],
       ['webhookRequest.get', { param: { id: 'whr_1' } }],
-      ['webhookRequestRetry.post', { param: { id: 'whr_1' } }],
+      ['webhookDeliveryAttempt.post', { param: { id: 'whr_1' }, header: { 'Idempotency-Key': 'retry-whr-1' } }],
     ])
   })
 
@@ -277,6 +288,18 @@ describe('management API client', () => {
 
 async function loadManagementApi() {
   const calls: Array<[string, unknown?, unknown?]> = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      calls.push(['fetch', String(input), init])
+      return Promise.resolve(
+        new Response(JSON.stringify({ permissions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', etag: '"permissions-v1"' },
+        }),
+      )
+    }),
+  )
   const endpoint = (key: string) =>
     vi.fn((input?: unknown) => {
       calls.push(input === undefined ? [key] : [key, input])
@@ -307,10 +330,6 @@ async function loadManagementApi() {
             },
           },
           ':applicationId': {
-            authorizations: {
-              $get: endpoint('applicationAuthorizations.get'),
-              ':authorizationId': { $delete: endpoint('applicationAuthorization.delete') },
-            },
             'federated-credentials': {
               $get: endpoint('federatedCredentials.get'),
               $post: endpoint('federatedCredentials.post'),
@@ -319,6 +338,12 @@ async function loadManagementApi() {
                 $delete: endpoint('federatedCredential.delete'),
               },
             },
+          },
+        },
+        'application-authorizations': {
+          $get: endpoint('applicationAuthorizations.get'),
+          ':authorizationId': {
+            revocation: { $put: endpoint('applicationAuthorizationRevocation.put') },
           },
         },
         users: {
@@ -389,7 +414,7 @@ async function loadManagementApi() {
         'role-assignments': {
           $get: endpoint('roleAssignments.get'),
           $post: endpoint('roleAssignments.post'),
-          ':id': { $delete: endpoint('roleAssignment.delete') },
+          ':id': { revocation: { $put: endpoint('roleAssignmentRevocation.put') } },
         },
         'api-resources': {
           $get: endpoint('apiResources.get'),
@@ -414,11 +439,15 @@ async function loadManagementApi() {
             $get: endpoint('webhookRequests.get'),
             ':id': {
               $get: endpoint('webhookRequest.get'),
-              retries: { $post: endpoint('webhookRequestRetry.post') },
+              attempts: { $post: endpoint('webhookDeliveryAttempt.post') },
             },
           },
         },
       },
+    },
+    readJsonResponse: async (response: Response) => {
+      if (!response.ok) throw new Error(`Request failed with status ${response.status}.`)
+      return response.json()
     },
     readRpcResponse: (response: unknown) => response,
     uploadApiFile: (path: string, file: File) => {

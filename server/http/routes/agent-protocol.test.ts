@@ -127,7 +127,7 @@ describe('Agent protocol routes', () => {
     }
     const createEnrollment = vi
       .spyOn(agentIdentities, 'createAdditionalAgentEnrollmentIntent')
-      .mockResolvedValue(intent)
+      .mockResolvedValue({ intent, replayed: false })
     vi.spyOn(agentIdentities, 'getPublicAgentEnrollment').mockResolvedValue(enrollment)
     const readEnrollment = vi.spyOn(agentIdentities, 'getProtocolAgentEnrollment').mockResolvedValue(enrollment)
     const app = createRouteApp(
@@ -135,21 +135,34 @@ describe('Agent protocol routes', () => {
       'https://auth.example.com/api/auth',
     )
 
-    const createResponse = await app.request('https://preview.example.net/api/agent/enrollments', {
+    const createResponse = await app.request('https://preview.example.net/api/agent/installation-enrollments', {
       method: 'POST',
-      headers: { authorization: 'Bearer agent-jwt', ...jsonHeaders() },
+      headers: { authorization: 'Bearer agent-jwt', 'idempotency-key': 'enrollment-key-1', ...jsonHeaders() },
       body: JSON.stringify({ agentId: 'identity-1' }),
     })
 
     expect(createResponse.status).toBe(201)
-    expect(createResponse.headers.get('location')).toBe('/api/agent/enrollments/enrollment-1')
+    expect(createResponse.headers.get('location')).toBe('/api/agent/installation-enrollments/enrollment-1')
     await expect(createResponse.json()).resolves.toEqual({
       enrollment,
       verificationUri: 'https://auth.example.com/agent/enrollments/approve?intent_id=enrollment-1',
     })
-    expect(createEnrollment).toHaveBeenCalledWith(expect.anything(), 'identity-1', 'protocol-agent-1', 'user-1')
+    expect(createEnrollment).toHaveBeenCalledWith(
+      expect.anything(),
+      'identity-1',
+      'protocol-agent-1',
+      'user-1',
+      'enrollment-key-1',
+    )
 
-    const readResponse = await app.request('/api/agent/enrollments/enrollment-1', {
+    const missingKeyResponse = await app.request('/api/agent/installation-enrollments', {
+      method: 'POST',
+      headers: { authorization: 'Bearer agent-jwt', ...jsonHeaders() },
+      body: JSON.stringify({ agentId: 'identity-1' }),
+    })
+    expect(missingKeyResponse.status).toBe(400)
+
+    const readResponse = await app.request('/api/agent/installation-enrollments/enrollment-1', {
       headers: { authorization: 'Bearer agent-jwt' },
     })
     expect(readResponse.status).toBe(200)

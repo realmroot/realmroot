@@ -1,9 +1,20 @@
-import { badRequest, forbidden, notFound } from '@server/domain/errors'
+import { badRequest, conflict, forbidden, notFound } from '@server/domain/errors'
 import { appendAgentGovernanceAudit } from '@server/usecases/agent-audit'
 import type { Deps } from '@server/usecases/deps'
 import { revokeAgentResourceAccess, revokeAgentResourceLeasesForBinding } from '@server/usecases/external-resources'
-import type { AgentEnrollmentIntentRecord, AgentIdentityAggregate, AgentIdentityRecord } from '@server/usecases/ports'
-import type { Agent, AgentEnrollment, AgentInfo } from '@shared/api/agent-api'
+import type {
+  AgentAuthorityInventoryScope,
+  AgentEnrollmentIntentRecord,
+  AgentIdentityAggregate,
+  AgentIdentityRecord,
+} from '@server/usecases/ports'
+import type {
+  Agent,
+  AgentEnrollment,
+  AgentInfo,
+  ListManagementAgentAccessGrantsQuery,
+  ListManagementAgentAccessRequestsQuery,
+} from '@shared/api/agent-api'
 import type {
   AgentEnrollmentIntent,
   AgentHomeSpace,
@@ -81,9 +92,12 @@ export async function getManagementAgent(deps: Deps, agentId: string) {
   return { agent: toManagementAgent(aggregate, summaries) }
 }
 
-export async function listManagementAgentHosts(deps: Deps, agentId: string, page: PaginationInput) {
+export async function listManagementAgentInstallations(deps: Deps, agentId: string, page: PaginationInput) {
   const aggregate = await requireIdentity(deps, agentId)
-  const bindings = aggregate.bindings.slice(page.offset, page.offset + page.limit)
+  const allBindings = [...aggregate.bindings].sort(
+    (left, right) => right.boundAt.getTime() - left.boundAt.getTime() || right.id.localeCompare(left.id),
+  )
+  const bindings = allBindings.slice(page.offset, page.offset + page.limit)
   const hosts = await deps.agents.listHostsForAgents([...new Set(bindings.map((binding) => binding.hostId))])
   const hostsById = new Map(hosts.map((host) => [host.id, host]))
   return {
@@ -92,37 +106,25 @@ export async function listManagementAgentHosts(deps: Deps, agentId: string, page
       if (!host) throw new Error(`Agent Host ${binding.hostId} was not found for its stable identity binding.`)
       if (!host.jwksUrl && !host.publicKey) throw new Error(`Agent Host ${host.id} has no authentication credential.`)
       return {
-        id: host.id,
+        id: binding.id,
         name: host.name ?? host.id,
-        status: host.status,
-        bindingStatus: binding.status,
+        status: binding.status,
         credentialType: host.jwksUrl ? ('remote_jwks' as const) : ('public_key' as const),
         boundAt: binding.boundAt.toISOString(),
         lastSeenAt: host.lastUsedAt?.toISOString() ?? null,
       }
     }),
-    pagination: paginationMetadata({ ...page, total: aggregate.bindings.length }),
+    pagination: paginationMetadata({ ...page, total: allBindings.length }),
   }
 }
 
-export async function listManagementAgentRoles(deps: Deps, agentId: string, page: PaginationInput) {
-  const aggregate = await requireIdentity(deps, agentId)
-  const organizationId = aggregate.identity.ownerOrganizationId ?? undefined
-  const roles = (await deps.authorization.listAgentRoleAssignments(agentId, { organizationId })).map(({ role }) => ({
-    id: role.id,
-    key: role.key,
-    name: role.name,
-    description: role.description,
-  }))
-  return {
-    items: roles.slice(page.offset, page.offset + page.limit),
-    pagination: paginationMetadata({ ...page, total: roles.length }),
-  }
-}
-
-export async function listManagementAgentAccessRequests(deps: Deps, agentId: string, page: PaginationInput) {
-  await requireIdentity(deps, agentId)
-  const result = await deps.externalResources.listAccessRequestsByAgent(agentId, page)
+export async function listManagementAgentAccessRequests(
+  deps: Deps,
+  query: ListManagementAgentAccessRequestsQuery,
+  scope?: AgentAuthorityInventoryScope,
+) {
+  const result = await deps.externalResources.listAccessRequests(query, scope)
+  const now = Date.now()
   const resources = await loadManagementResources(
     deps,
     result.items.map((request) => request.resourceId),
@@ -130,10 +132,12 @@ export async function listManagementAgentAccessRequests(deps: Deps, agentId: str
   return {
     items: result.items.map((request) => ({
       id: request.id,
+      agentId: request.agentIdentityId,
       resource: resources.get(request.resourceId)!,
       scopes: request.scopes,
       reason: request.reason,
-      status: request.status,
+      status:
+        request.status === 'pending' && request.expiresAt.getTime() <= now ? ('expired' as const) : request.status,
       expiresAt: request.expiresAt.toISOString(),
       decidedAt: request.decidedAt?.toISOString() ?? null,
       createdAt: request.createdAt.toISOString(),
@@ -142,28 +146,69 @@ export async function listManagementAgentAccessRequests(deps: Deps, agentId: str
   }
 }
 
-export async function listManagementAgentAccessGrants(deps: Deps, agentId: string, page: PaginationInput) {
-  await requireIdentity(deps, agentId)
-  const now = new Date()
-  const grants = (await deps.externalResources.listActiveGrantsByAgent(agentId)).filter(
-    (grant) => grant.expiresAt === null || grant.expiresAt > now,
-  )
-  const items = grants.slice(page.offset, page.offset + page.limit)
+export async function getManagementAgentAccessRequest(deps: Deps, requestId: string) {
+  const request = await deps.externalResources.findAccessRequest(requestId)
+  if (!request) throw notFound('Agent access request was not found.')
+  await requireIdentity(deps, request.agentIdentityId)
+  const resources = await loadManagementResources(deps, [request.resourceId])
+  return {
+    id: request.id,
+    agentId: request.agentIdentityId,
+    resource: resources.get(request.resourceId)!,
+    scopes: request.scopes,
+    reason: request.reason,
+    status: request.status,
+    expiresAt: request.expiresAt.toISOString(),
+    decidedAt: request.decidedAt?.toISOString() ?? null,
+    createdAt: request.createdAt.toISOString(),
+  }
+}
+
+export async function listManagementAgentAccessGrants(
+  deps: Deps,
+  query: ListManagementAgentAccessGrantsQuery,
+  scope?: AgentAuthorityInventoryScope,
+) {
+  const result = await deps.externalResources.listGrants(query, scope)
   const resources = await loadManagementResources(
     deps,
-    items.map((grant) => grant.resourceId),
+    result.items.map((grant) => grant.resourceId),
   )
   return {
-    items: items.map((grant) => ({
+    items: result.items.map((grant) => ({
       id: grant.id,
+      agentId: grant.agentIdentityId,
       resource: resources.get(grant.resourceId)!,
       scopes: grant.scopes,
       mode: grant.mode,
-      status: grant.status,
+      status:
+        grant.status === 'active' && grant.expiresAt && grant.expiresAt.getTime() <= Date.now()
+          ? ('expired' as const)
+          : grant.status,
       expiresAt: grant.expiresAt?.toISOString() ?? null,
       createdAt: grant.createdAt.toISOString(),
     })),
-    pagination: paginationMetadata({ ...page, total: grants.length }),
+    pagination: paginationMetadata(result),
+  }
+}
+
+export async function getManagementAgentAccessGrant(deps: Deps, grantId: string) {
+  const grant = await deps.externalResources.findGrant(grantId)
+  if (!grant) throw notFound('Agent access grant was not found.')
+  await requireIdentity(deps, grant.agentIdentityId)
+  const resources = await loadManagementResources(deps, [grant.resourceId])
+  return {
+    id: grant.id,
+    agentId: grant.agentIdentityId,
+    resource: resources.get(grant.resourceId)!,
+    scopes: grant.scopes,
+    mode: grant.mode,
+    status:
+      grant.status === 'active' && grant.expiresAt && grant.expiresAt.getTime() <= Date.now()
+        ? ('expired' as const)
+        : grant.status,
+    expiresAt: grant.expiresAt?.toISOString() ?? null,
+    createdAt: grant.createdAt.toISOString(),
   }
 }
 
@@ -274,6 +319,7 @@ export async function createAgentEnrollmentIntent(
       requestedName: input.name,
       ...ownerColumns(homeSpace),
       protocolAgentId: input.protocolAgentId,
+      idempotencyKey: null,
       status: 'pending',
       createdByUserId: actorUserId,
       approvedByUserId: null,
@@ -290,7 +336,13 @@ export async function createAdditionalAgentEnrollmentIntent(
   identityId: string,
   protocolAgentId: string,
   actorUserId: string,
-): Promise<AgentEnrollmentIntent> {
+  idempotencyKey: string,
+): Promise<{ intent: AgentEnrollmentIntent; replayed: boolean }> {
+  const existing = await deps.agentIdentities.findIntentByIdempotencyKey(protocolAgentId, idempotencyKey)
+  if (existing) {
+    requireMatchingInstallationEnrollment(existing, identityId, actorUserId)
+    return { intent: toIntent(existing), replayed: true }
+  }
   const aggregate = await requireIdentity(deps, identityId)
   if (aggregate.identity.status === 'retired') throw badRequest('Retired Agent identities cannot enroll hosts.')
   const homeSpace = homeSpaceOf(aggregate.identity)
@@ -298,22 +350,34 @@ export async function createAdditionalAgentEnrollmentIntent(
   await assertProtocolAgentCanEnroll(deps, protocolAgentId, actorUserId)
 
   const now = new Date()
-  return toIntent(
-    await deps.agentIdentities.createIntent({
-      id: createId('agenr'),
-      agentIdentityId: identityId,
-      requestedName: null,
-      ...ownerColumns(homeSpace),
-      protocolAgentId,
-      status: 'pending',
-      createdByUserId: actorUserId,
-      approvedByUserId: null,
-      expiresAt: new Date(now.getTime() + enrollmentLifetimeMs),
-      approvedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    }),
-  )
+  const reserved = await deps.agentIdentities.createIntentIdempotently({
+    id: createId('agenr'),
+    agentIdentityId: identityId,
+    requestedName: null,
+    ...ownerColumns(homeSpace),
+    protocolAgentId,
+    idempotencyKey,
+    status: 'pending',
+    createdByUserId: actorUserId,
+    approvedByUserId: null,
+    expiresAt: new Date(now.getTime() + enrollmentLifetimeMs),
+    approvedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  })
+  requireMatchingInstallationEnrollment(reserved.intent, identityId, actorUserId)
+  return { intent: toIntent(reserved.intent), replayed: !reserved.created }
+}
+
+function requireMatchingInstallationEnrollment(
+  intent: AgentEnrollmentIntentRecord,
+  identityId: string,
+  actorUserId: string,
+) {
+  if (intent.createdByUserId !== actorUserId) throw forbidden('This Agent cannot replay the enrollment request.')
+  if (intent.agentIdentityId !== identityId) {
+    throw conflict('Idempotency-Key was already used for a different Agent installation enrollment.')
+  }
 }
 
 export async function approveAgentEnrollment(
@@ -548,7 +612,7 @@ function toManagementAgent(
   return {
     ...toAgent(aggregate),
     owner,
-    hostCount: aggregate.bindings.filter((binding) => binding.status === 'active').length,
+    installationCount: aggregate.bindings.filter((binding) => binding.status === 'active').length,
     roleCount,
     pendingRequestCount: access.pendingRequestCount,
     activeGrantCount: access.activeGrantCount,
