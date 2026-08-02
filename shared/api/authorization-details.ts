@@ -5,19 +5,7 @@ const nonEmptyString = z.string().trim().min(1)
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
 const jsonValueSchema = z.custom<JsonValue>(isJsonValue, 'Expected a JSON value.').meta({
-  id: 'AuthorizationDetailJsonValue',
   type: ['string', 'number', 'boolean', 'null', 'array', 'object'],
-  anyOf: [
-    { type: 'string' },
-    { type: 'number' },
-    { type: 'boolean' },
-    { type: 'null' },
-    { type: 'array', items: { $ref: '#/components/schemas/AuthorizationDetailJsonValue' } },
-    {
-      type: 'object',
-      additionalProperties: { $ref: '#/components/schemas/AuthorizationDetailJsonValue' },
-    },
-  ],
 })
 
 export const authorizationDetailSchema = z.object({ type: nonEmptyString }).catchall(jsonValueSchema)

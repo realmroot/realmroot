@@ -17,6 +17,7 @@ Feature: Unified Realmroot resource API
     And resources are not grouped under a management path
     And every protected operation declares its exact required Agent capability through an OpenAPI operation extension
     And AgentAuth and cookie-session security requirements accurately describe their transport without claiming OAuth scopes
+    And Restish can validate structured authorization detail request bodies without the root OpenAPI document
 
 
   @entrypoint:restish @journey:management-restish-command-surface

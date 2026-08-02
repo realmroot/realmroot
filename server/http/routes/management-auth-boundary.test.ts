@@ -132,6 +132,10 @@ describe('management routes 1', () => {
     expect(contract.headers.get('link')).toBeNull()
     await expect(contract.json()).resolves.toEqual(unifiedOpenApi)
 
+    const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /agent/access-requests')
+    const standaloneRequestSchema = requestBodyContent(accessRequest?.requestBody).schema
+    expect(JSON.stringify(standaloneRequestSchema)).not.toContain('#/components/')
+
     expect(protectedResponse.status).toBe(401)
     expect(protectedResponse.headers.get('link')).toContain('</api/openapi.json>; rel="service-desc"')
   })
