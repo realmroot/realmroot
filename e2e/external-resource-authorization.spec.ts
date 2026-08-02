@@ -88,12 +88,9 @@ test.describe('external API resource authorization', () => {
       const connections = (await connectionsResponse.json()) as {
         items: Array<{ apiResourceId: string; scopes: string[] }>
       }
-      expect(connections.items).toContainEqual(
-        expect.objectContaining({
-          apiResourceId: resource.id,
-          scopes: expect.arrayContaining(['projects:read', 'projects:write']),
-        }),
-      )
+      const connection = connections.items.find((candidate) => candidate.apiResourceId === resource.id)
+      expect(connection?.scopes).toEqual(expect.arrayContaining(['projects:read']))
+      expect(connection?.scopes).not.toContain('projects:write')
 
       const lease = plugin.issueTargetAccessToken(approved.grantId)
       expect(lease).toMatchObject({ tokenType: 'DPoP', scopes: ['projects:read'] })
