@@ -224,10 +224,20 @@ async function grantAgentResourceScope(page: Page, resourceId: string, agentIden
   expect(roleResponse.status(), await roleResponse.text()).toBe(201)
   const role = (await roleResponse.json()) as { id: string }
 
+  const permissionsResponse = await page.request.get(`/api/roles/${role.id}/permissions`)
+  expect(permissionsResponse.status(), await permissionsResponse.text()).toBe(200)
+  const permissionsEtag = permissionsResponse.headers().etag
+  expect(permissionsEtag).toBeTruthy()
+
   const scopesResponse = await page.request.put(`/api/roles/${role.id}/permissions`, {
+    headers: { 'If-Match': permissionsEtag },
     data: { permissions: [{ resourceId, scope: 'projects:read' }] },
   })
-  expect(scopesResponse.status(), await scopesResponse.text()).toBe(204)
+  expect(scopesResponse.status(), await scopesResponse.text()).toBe(200)
+  await expect(scopesResponse.json()).resolves.toEqual({
+    permissions: [{ resourceId, scope: 'projects:read' }],
+  })
+  expect(scopesResponse.headers().etag).toBeTruthy()
 
   const assignmentResponse = await page.request.post('/api/role-assignments', {
     data: { roleId: role.id, subjectType: 'agent', subjectId: agentIdentityId },
