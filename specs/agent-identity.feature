@@ -247,6 +247,13 @@ Feature: Agent identity and delegated API authorization
       Then the plugin removes that local resource credential
       And the Agent must discover the current connection state and request a new access grant before retrying
 
+    @entrypoint:restish @journey:restish-deep-resource-response
+    Scenario: Restish preserves deeply nested resource responses
+      Given a registered API resource returns a valid deeply nested document such as an OpenAPI contract
+      When Restish passes that response through the Realmroot response middleware
+      Then the middleware accepts the document within its bounded structural limits
+      And Restish returns the resource response unchanged
+
     @entrypoint:restish @journey:restish-target-token-origin
     Scenario: Target token refresh uses the stable Agent issuer
       Given one Realmroot issuer is available through a canonical origin and an alternate profile origin

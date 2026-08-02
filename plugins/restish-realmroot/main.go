@@ -26,13 +26,12 @@ func main() {
 		return
 	}
 
-	decoder := plugin.NewDecoder(os.Stdin)
-	raw, err := decoder.ReadRaw()
+	raw, messageType, err := readHookMessage(os.Stdin)
 	if err != nil {
 		exitWithError(fmt.Errorf("read hook input: %w", err))
 	}
 
-	switch plugin.MessageType(raw) {
+	switch messageType {
 	case "auth":
 		var input plugin.AuthHookInput
 		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
@@ -47,7 +46,7 @@ func main() {
 		}
 	case "response-middleware":
 		var input plugin.ResponseMiddlewareInput
-		if err := plugin.DecMode.Unmarshal(raw, &input); err != nil {
+		if err := responseMiddlewareDecMode.Unmarshal(raw, &input); err != nil {
 			exitWithError(fmt.Errorf("decode response hook input: %w", err))
 		}
 		output, err := handleCapabilityApprovalResponse(
