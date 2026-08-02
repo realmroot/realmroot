@@ -92,6 +92,7 @@ export async function createResourceConnectionIntent(
   const redirectUri = resourceConnectionCallbackUrl(callbackOrigin)
   const authorizationParameters = {
     response_type: 'code',
+    prompt: 'consent',
     client_id: authorization.clientId,
     redirect_uri: redirectUri,
     resource: resource.resourceUrl,

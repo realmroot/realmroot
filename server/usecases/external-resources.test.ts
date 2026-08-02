@@ -136,6 +136,7 @@ describe('external API resource authorization', () => {
     )
     const authorizationUrl = new URL(started.authorizationUrl)
     expect(authorizationUrl.searchParams.get('code_challenge_method')).toBe('S256')
+    expect(authorizationUrl.searchParams.get('prompt')).toBe('consent')
     expect(authorizationUrl.searchParams.get('resource')).toBe('https://projects.example.com/api')
     vi.mocked(deps.externalResources.createConnectionIntent).mockResolvedValueOnce(null)
     await expect(
@@ -280,6 +281,7 @@ describe('external API resource authorization', () => {
         expect(request.method).toBe('POST')
         expect(request.headers.get('authorization')).toMatch(/^Basic /)
         expect(JSON.parse(form.get('authorization_details')!)).toEqual(templates)
+        expect(form.get('prompt')).toBe('consent')
         expect(form.get('state')).toBeTruthy()
         return Response.json(
           { request_uri: 'urn:ietf:params:oauth:request_uri:rar-1', expires_in: 90 },
