@@ -491,7 +491,7 @@ export async function createAgentAccessRequest(
   }
   await validateRequestedScopes(deps, resource.resourceUrl, input.scopes)
   const authorizationDetails = input.authorizationDetails ?? []
-  assertAuthorizationDetailsSelection(resource, connection, authorizationDetails)
+  assertAccessRequestAuthorizationDetails(resource, authorizationDetails)
   await requireAgentScopeEligibility(
     deps,
     principal.identityId,
@@ -499,10 +499,6 @@ export async function createAgentAccessRequest(
     identity.identity.ownerOrganizationId,
     input.scopes,
   )
-  if (connection) {
-    assertScopeSubset(input.scopes, connection.grantedScopes, 'connected account')
-    assertAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails, 'connected account')
-  }
   const scopes = [...new Set(input.scopes)].sort()
   const existingGrant = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).find(
     (grant) =>
@@ -1525,6 +1521,31 @@ function assertAuthorizationDetailsSelection(
   }
   if (authorizationDetails.length === 0) {
     throw invalidAuthorizationDetails('Select at least one granted authorization detail entry.')
+  }
+}
+
+function assertAccessRequestAuthorizationDetails(
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  if (resource.connectorId === null) {
+    if (authorizationDetails.length > 0) {
+      throw invalidAuthorizationDetails('Native API resources do not accept authorization details.')
+    }
+    return
+  }
+  const supportedTypes = new Set(resource.authorizationDetails.map((detail) => detail.type))
+  if (supportedTypes.size === 0) {
+    if (authorizationDetails.length > 0) {
+      throw invalidAuthorizationDetails('This external API resource does not use authorization details.')
+    }
+    return
+  }
+  if (authorizationDetails.length === 0) {
+    throw invalidAuthorizationDetails('Select at least one authorization detail entry.')
+  }
+  if (authorizationDetails.some((detail) => !supportedTypes.has(detail.type))) {
+    throw invalidAuthorizationDetails('Requested authorization details contain an unsupported type.')
   }
 }
 

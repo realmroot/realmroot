@@ -819,7 +819,7 @@ describe('external API resource authorization', () => {
           resourceId: 'resource-1',
           connectionId: 'connection-1',
           scopes: ['projects:read'],
-          authorizationDetails: [{ type: 'project_access', identifier: 'project-3', actions: ['read'] }],
+          authorizationDetails: [{ type: 'unknown_context', identifier: 'project-3' }],
         },
         principal(),
         'https://auth.example.com',
@@ -842,7 +842,7 @@ describe('external API resource authorization', () => {
         principal(),
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('explicitly reauthorized')
+    ).resolves.toMatchObject({ status: 'pending', authorizationDetails: selected })
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
 
     const request = { ...requestRecord(), authorizationDetails: selected }
@@ -1943,7 +1943,7 @@ describe('external API resource authorization', () => {
         principal(),
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('connected account boundary')
+    ).resolves.toMatchObject({ status: 'pending', scopes: ['projects:read'] })
 
     vi.mocked(deps.authorization.findResource).mockResolvedValue(nativeResource())
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
