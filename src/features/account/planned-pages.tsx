@@ -1,4 +1,10 @@
-import type { AccessRequestApproval, Agent, DecideAccessRequest } from '@shared/api/agent-api'
+import type {
+  AccessRequestApproval,
+  AccountConnection,
+  Agent,
+  ConnectableApiResourcesResponse,
+  DecideAccessRequest,
+} from '@shared/api/agent-api'
 import type { OrganizationAccessLevel } from '@shared/organization-access'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
@@ -27,6 +33,7 @@ import {
   rejectAccountOrganizationInvitation,
   removeAccountOrganizationMember,
   retireAgent,
+  revokeAccountConnection,
   revokeApplicationConsent,
   setActiveAccountOrganization,
   updateAccountOrganization,
@@ -48,6 +55,7 @@ import {
   accountQueryKeys,
   useAccountAccessRequests,
   useAccountAgents,
+  useAccountConnections,
   useAccountMutation,
   useAccountOrganization,
   useAccountOrganizationAgentAccessGrants,
@@ -58,6 +66,7 @@ import {
   useAccountSecurity,
   useAccountSessions,
   useConsentedApplications,
+  useExternalApiResources,
 } from './queries'
 import type { ConsentedApplication } from './types'
 import { formatDate, formatSessionDevice } from './utils'
@@ -221,6 +230,8 @@ function AccountMetric({ detail, label, value }: { detail: string; label: string
 
 export function AccountApplicationsPage() {
   const applicationsQuery = useConsentedApplications(true)
+  const resourcesQuery = useExternalApiResources()
+  const connectionsQuery = useAccountConnections()
   const mutate = useAccountMutation()
   const [selected, setSelected] = useState<ConsentedApplication | null>(null)
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
@@ -265,6 +276,23 @@ export function AccountApplicationsPage() {
               ) : null}
             </AccountRows>
           ) : null}
+          <ResourceAccountConnections
+            connections={connectionsQuery.data?.items ?? []}
+            error={connectionsQuery.error ?? resourcesQuery.error}
+            loading={connectionsQuery.isLoading || resourcesQuery.isLoading}
+            onDisconnect={(connection) => {
+              setConfirmation({
+                title: tt('Disconnect resource account'),
+                description: tt('Active Agent grants and token leases for this account will be revoked.'),
+                actionLabel: tt('Disconnect'),
+                onConfirm: () =>
+                  mutate('Resource account disconnected.', () => revokeAccountConnection(connection.id), {
+                    invalidate: [accountQueryKeys.accountConnections],
+                  }),
+              })
+            }}
+            resources={resourcesQuery.data?.items ?? []}
+          />
           <ApplicationReviewDialog
             application={selected}
             onClose={() => setSelected(null)}
@@ -292,6 +320,58 @@ export function AccountApplicationsPage() {
         </>
       )}
     </AccountSurface>
+  )
+}
+
+function ResourceAccountConnections({
+  connections,
+  error,
+  loading,
+  onDisconnect,
+  resources,
+}: {
+  connections: AccountConnection[]
+  error: Error | null
+  loading: boolean
+  onDisconnect: (connection: AccountConnection) => void
+  resources: ConnectableApiResourcesResponse['items']
+}) {
+  const activeConnections = connections.filter((connection) => connection.status === 'active')
+  return (
+    <AccountObjectSection
+      description={tt('Accounts used to authorize direct Agent access to external APIs.')}
+      title={tt('Connected resource accounts')}
+    >
+      {loading ? <p className="text-sm text-muted-foreground">{tt('Loading connected resource accounts…')}</p> : null}
+      {error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error.message}
+        </p>
+      ) : null}
+      {!loading && !error ? (
+        <AccountRows>
+          {activeConnections.map((connection) => {
+            const resource = resources.find((candidate) => candidate.id === connection.apiResourceId)
+            return (
+              <AccountRow
+                action={
+                  <Button onClick={() => onDisconnect(connection)} variant="outline">
+                    {tt('Disconnect')}
+                  </Button>
+                }
+                description={connection.displayName ?? connection.subjectHint ?? tt('Unknown owner')}
+                key={connection.id}
+                label={resource?.name ?? tt('API resource')}
+                value={<code>{connection.scopes.join(' ')}</code>}
+              />
+            )
+          })}
+          {!activeConnections.length ? (
+            <p className="py-8 text-sm text-muted-foreground">{tt('No connected resource accounts.')}</p>
+          ) : null}
+        </AccountRows>
+      ) : null}
+    </AccountObjectSection>
   )
 }
 

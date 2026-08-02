@@ -1,4 +1,4 @@
-import type { AccessRequestApproval } from '@shared/api/agent-api'
+import type { AccessRequestApproval, AccountConnection } from '@shared/api/agent-api'
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { delay } from 'msw'
 import type { ReactNode } from 'react'
@@ -242,6 +242,113 @@ describe('planned Account Center journeys', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Revoke access' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'Revoke access' }).at(-1)!)
     await waitFor(() => expect(revoked).toBe(true))
+  })
+
+  it('[spec: account-center/resource-account-connections] shows and disconnects an external API resource account', async () => {
+    let disconnected = false
+    server.use(
+      http.get(`${base}/api/account/api-resources`, () =>
+        json({
+          items: [
+            {
+              id: 'resource-zpan',
+              identifier: 'zpan',
+              name: 'ZPan Local Dynamic Test',
+              resourceUrl: 'http://localhost:5185/api',
+            },
+          ],
+          pagination: pagination(1),
+        }),
+      ),
+      http.get(`${base}/api/account/account-connections`, () =>
+        json({
+          items: [
+            {
+              id: 'connection-zpan',
+              apiResourceId: 'resource-zpan',
+              owner: { type: 'user', userId: 'user-1' },
+              displayName: 'agent-controller-0802@example.com',
+              subjectHint: '••••g9io',
+              scopes: ['objects:create', 'objects:read'],
+              authorizationDetails: [],
+              status: 'active',
+              credentialExpiresAt: null,
+              authorizationUrl: null,
+              expiresAt: null,
+              createdAt: '2026-08-02T00:00:00.000Z',
+              updatedAt: '2026-08-02T00:00:00.000Z',
+            },
+          ],
+          pagination: pagination(1),
+        }),
+      ),
+      http.delete(`${base}/api/account/account-connections/connection-zpan`, () => {
+        disconnected = true
+        return new Response(null, { status: 204 })
+      }),
+    )
+
+    renderWithClient(<AccountApplicationsPage />)
+
+    expect(await screen.findByText('ZPan Local Dynamic Test')).toBeTruthy()
+    expect(screen.getByText('agent-controller-0802@example.com')).toBeTruthy()
+    expect(screen.getByText('objects:create objects:read')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Disconnect' }).at(-1)!)
+    await waitFor(() => expect(disconnected).toBe(true))
+  })
+
+  it('handles resource account loading, errors, inactive connections, and missing labels', async () => {
+    server.use(
+      http.get(`${base}/api/account/api-resources`, async () => {
+        await delay('infinite')
+        return json({ items: [], pagination: pagination(0) })
+      }),
+      http.get(`${base}/api/account/account-connections`, async () => {
+        await delay('infinite')
+        return json({ items: [], pagination: pagination(0) })
+      }),
+    )
+
+    const loading = renderWithClient(<AccountApplicationsPage />)
+    expect(await screen.findByText('Loading connected resource accounts…')).toBeTruthy()
+    loading.unmount()
+
+    server.resetHandlers()
+    server.use(
+      http.get(`${base}/api/account/api-resources`, () => json({ message: 'Resources unavailable.' }, { status: 500 })),
+    )
+
+    const failed = renderWithClient(<AccountApplicationsPage />)
+    expect((await screen.findByRole('alert')).textContent).toBe('Resources unavailable.')
+    failed.unmount()
+
+    server.resetHandlers()
+    server.use(
+      http.get(`${base}/api/account/api-resources`, () =>
+        json({
+          items: [{ id: 'resource-known', identifier: 'known', name: 'Known API', resourceUrl: 'https://api.test' }],
+          pagination: pagination(1),
+        }),
+      ),
+      http.get(`${base}/api/account/account-connections`, () =>
+        json({
+          items: [
+            accountConnection('connection-hint', 'resource-missing', 'active', null, '••••hint'),
+            accountConnection('connection-unknown', 'resource-known', 'active', null, null),
+            accountConnection('connection-inactive', 'resource-known', 'revoked', 'Revoked account', null),
+          ],
+          pagination: pagination(3),
+        }),
+      ),
+    )
+
+    renderWithClient(<AccountApplicationsPage />)
+    expect(await screen.findByText('API resource')).toBeTruthy()
+    expect(screen.getByText('••••hint')).toBeTruthy()
+    expect(screen.getByText('Known API')).toBeTruthy()
+    expect(screen.getByText('Unknown owner')).toBeTruthy()
+    expect(screen.queryByText('Revoked account')).toBeNull()
   })
 
   it('shows an empty authorized application collection', async () => {
@@ -609,6 +716,30 @@ function accessRequest(): AccessRequestApproval {
     decidedAt: null,
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
+  }
+}
+
+function accountConnection(
+  id: string,
+  apiResourceId: string,
+  status: AccountConnection['status'],
+  displayName: string | null,
+  subjectHint: string | null,
+): AccountConnection {
+  return {
+    id,
+    apiResourceId,
+    owner: { type: 'user', userId: 'user-1' },
+    displayName,
+    subjectHint,
+    scopes: ['objects:read'],
+    authorizationDetails: [],
+    status,
+    credentialExpiresAt: null,
+    authorizationUrl: null,
+    expiresAt: null,
+    createdAt: '2026-08-02T00:00:00.000Z',
+    updatedAt: '2026-08-02T00:00:00.000Z',
   }
 }
 
