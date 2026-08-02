@@ -286,7 +286,7 @@ export function RoleDetailPage({ roleId, section = 'overview' }: { roleId: strin
           }}
           value={selectedTab}
         >
-          <TabsList className="w-full justify-start" variant="line">
+          <TabsList className="w-full" variant="navigation">
             <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
             <TabsTrigger value="permissions">{tt('Permissions')}</TabsTrigger>
             <TabsTrigger value="assignments">{tt('Assignments')}</TabsTrigger>

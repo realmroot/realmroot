@@ -35,7 +35,7 @@ export function AccountTabs({
 }) {
   return (
     <Tabs className="accountTabs" onValueChange={onValueChange} value={value}>
-      <TabsList className="w-full justify-start" variant="line">
+      <TabsList className="w-full" variant="navigation">
         {tabs.map((tab) => (
           <TabsTrigger key={tab.value} value={tab.value}>
             {tab.label}

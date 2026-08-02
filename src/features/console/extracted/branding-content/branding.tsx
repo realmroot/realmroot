@@ -177,7 +177,7 @@ export function ExperiencePage({ section = 'theme' }: { section?: ExperienceSect
         }}
         value={active}
       >
-        <TabsList className="w-full justify-start" variant="line">
+        <TabsList className="w-full" variant="navigation">
           <TabsTrigger value="theme">{tt('Color scheme')}</TabsTrigger>
           <TabsTrigger value="assets">{tt('Brand assets')}</TabsTrigger>
           <TabsTrigger value="legal">{tt('Legal & support')}</TabsTrigger>

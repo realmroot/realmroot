@@ -18,8 +18,8 @@ export function RealmrootWordmark({ className, context }: { className?: string; 
       <strong className="truncate text-[15px] font-semibold tracking-[-0.02em]">realmroot</strong>
       {context ? (
         <>
-          <span aria-hidden="true" className="h-4 w-px bg-border" />
-          <span className="truncate text-sm font-medium text-muted-foreground">{context}</span>
+          <span aria-hidden="true" className="realmrootWordmarkContext h-4 w-px bg-border" />
+          <span className="realmrootWordmarkContext truncate text-sm font-medium text-muted-foreground">{context}</span>
         </>
       ) : null}
     </span>

@@ -496,7 +496,7 @@ export function ApiResourceDetailPage({
           }}
           value={selectedTab}
         >
-          <TabsList className="w-full justify-start" variant="line">
+          <TabsList className="w-full" variant="navigation">
             <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
             <TabsTrigger value="resources">{tt('Resources')}</TabsTrigger>
             <TabsTrigger value="authority">{tt(mode === 'native' ? 'Roles & grants' : 'Authorization')}</TabsTrigger>

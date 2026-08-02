@@ -168,7 +168,7 @@ export function ApplicationDetailPage({
           }}
           value={selectedTab}
         >
-          <TabsList aria-label={tt('Application detail sections')} className="w-full justify-start" variant="line">
+          <TabsList aria-label={tt('Application detail sections')} className="w-full" variant="navigation">
             <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
             <TabsTrigger value="oauth">{tt('OAuth')}</TabsTrigger>
             <TabsTrigger value="authorizations">{tt('Authorizations')}</TabsTrigger>

@@ -155,6 +155,7 @@ export function CreateApplicationDialog({
         </DialogContent>
       ) : (
         <FormDialog
+          contentClassName="sm:max-w-2xl"
           description={tt('Register an OIDC client for a browser, server, native, or device application.')}
           error={validationError ?? error}
           onClose={onClose}
@@ -496,6 +497,7 @@ export function SimpleCreateDialog({
 }
 export function FormDialog({
   children,
+  contentClassName,
   description,
   error,
   onClose,
@@ -504,6 +506,7 @@ export function FormDialog({
   title,
 }: {
   children: ReactNode
+  contentClassName?: string
   description: string
   error: string | null
   onClose: () => void
@@ -512,12 +515,12 @@ export function FormDialog({
   title: string
 }) {
   return (
-    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
+    <DialogContent className={cn('max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl', contentClassName)}>
       <DialogHeader>
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
-      <form className="grid gap-4 p-4" onSubmit={onSubmit}>
+      <form className="grid gap-4" onSubmit={onSubmit}>
         {error ? (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
             {error}

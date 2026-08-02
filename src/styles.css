@@ -32,6 +32,10 @@
   --muted-foreground: #5b696b;
   --destructive: #b83232;
   --destructive-foreground: #ffffff;
+  --success: #147a55;
+  --success-soft: #ecfdf3;
+  --warning: #8a6300;
+  --warning-soft: #fffaeb;
   --border: #dde5e5;
   --input: #cbd6d6;
   color: var(--ink);
@@ -51,7 +55,7 @@
   --chart-3: #147a55;
   --chart-4: #8a6300;
   --chart-5: #5b696b;
-  --radius: 0.5rem;
+  --radius: 0.625rem;
   --sidebar: #f8fbfb;
   --sidebar-foreground: #142022;
   --sidebar-primary: #007b83;
@@ -88,6 +92,10 @@
   --muted-foreground: #a6b6b7;
   --destructive: #f07b7b;
   --destructive-foreground: #1d0a0a;
+  --success: #73d6aa;
+  --success-soft: #16372c;
+  --warning: #efc66a;
+  --warning-soft: #3b3015;
   --border: #314143;
   --input: #45585a;
   --popover: #1b292b;
@@ -167,7 +175,8 @@ textarea {
   font: inherit;
 }
 
-button {
+button:not(:disabled),
+[role='button']:not(:disabled) {
   cursor: pointer;
 }
 
@@ -213,38 +222,8 @@ a {
   transform-origin: bottom;
 }
 
-[data-slot='button'][data-size='default'] {
-  min-height: 40px;
-  padding-inline: 14px;
-}
-
-[data-slot='button'][data-size='lg'] {
-  min-height: 40px;
-  padding-inline: 16px;
-}
-
-[data-slot='button'][data-size='sm'] {
-  min-height: 34px;
-}
-
-[data-slot='button'][data-size='icon'] {
-  width: 40px;
-  height: 40px;
-}
-
-[data-slot='input'],
-[data-slot='native-select'][data-size='default'] {
-  min-height: 40px;
-}
-
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-[role="button"]:focus-visible,
-[tabindex]:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--brand-primary) 72%, white);
+:where(a, button, input, select, textarea, [role='button'], [tabindex]):not([data-slot]):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary) 72%, var(--background));
   outline-offset: 2px;
 }
 
@@ -387,7 +366,7 @@ textarea {
 }
 
 .accountUserMenu {
-  --account-menu-bg: color-mix(in srgb, var(--brand-background) 8%, #f5f6f8);
+  --account-menu-bg: color-mix(in srgb, var(--brand-background) 8%, var(--soft));
   display: grid;
   gap: 8px;
   min-width: 276px;
@@ -684,7 +663,7 @@ textarea {
 .consoleNavGroupLabel {
   margin: 0;
   padding: 4px 10px;
-  color: #768183;
+  color: var(--muted-foreground);
   font-size: 10px;
   font-weight: 750;
   letter-spacing: 0.1em;
@@ -867,10 +846,7 @@ textarea {
   text-transform: uppercase;
 }
 
-.shell h1,
-h2,
-h3,
-p {
+.shell :is(h1, h2, h3, p) {
   overflow-wrap: anywhere;
 }
 
@@ -881,12 +857,6 @@ p {
   line-height: 1.04;
   letter-spacing: 0;
   text-wrap: balance;
-}
-
-main:not(.shell):not(.authShell) h1 {
-  font-size: 20px;
-  line-height: 1.4;
-  letter-spacing: 0;
 }
 
 .intro {
@@ -947,11 +917,11 @@ main:not(.shell):not(.authShell) h1 {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #f59e0b;
+  background: var(--warning);
 }
 
 .statusDot.online {
-  background: #16a34a;
+  background: var(--success);
 }
 
 .authShell {
@@ -961,7 +931,7 @@ main:not(.shell):not(.authShell) h1 {
   justify-content: center;
   min-height: 100dvh;
   padding: 64px 16px 28px;
-  background: color-mix(in srgb, var(--brand-background) 24%, #f8fbfb);
+  background: color-mix(in srgb, var(--brand-background) 24%, var(--soft));
 }
 
 .authBackLink {
@@ -974,7 +944,7 @@ main:not(.shell):not(.authShell) h1 {
   min-height: 36px;
   padding: 0 10px;
   border-radius: 8px;
-  color: #52525b;
+  color: var(--muted-foreground);
   font-size: 14px;
   font-weight: 700;
 }
@@ -1099,7 +1069,7 @@ main:not(.shell):not(.authShell) h1 {
   margin-bottom: 4px;
   border: 1px solid color-mix(in srgb, var(--brand-primary) 18%, var(--line));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--brand-primary) 8%, white);
+  background: color-mix(in srgb, var(--brand-primary) 8%, var(--panel));
   color: var(--brand-primary);
 }
 
@@ -1381,7 +1351,7 @@ main:not(.shell):not(.authShell) h1 {
 
 .authStepTitle {
   margin: 0 0 4px;
-  color: #18181b;
+  color: var(--ink);
   font-size: 15px;
   font-weight: 750;
   line-height: 1.3;
@@ -1705,13 +1675,13 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .uiButton-danger {
-  border-color: #fecaca;
-  background: #fff1f2;
-  color: #be123c;
+  border-color: color-mix(in srgb, var(--destructive) 32%, var(--line));
+  background: color-mix(in srgb, var(--destructive) 10%, var(--panel));
+  color: var(--destructive);
 }
 
 .uiButton-danger:hover {
-  background: #ffe4e6;
+  background: color-mix(in srgb, var(--destructive) 16%, var(--panel));
 }
 
 .segmented {
@@ -1729,7 +1699,7 @@ main:not(.shell):not(.authShell) h1 {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #52525b;
+  color: var(--muted-foreground);
   font-size: 13px;
   font-weight: 700;
   transition:
@@ -1739,7 +1709,7 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .segmented button.active {
-  background: #ffffff;
+  background: var(--panel);
   color: var(--ink);
   box-shadow: 0 1px 8px rgb(24 24 27 / 8%);
 }
@@ -1751,25 +1721,25 @@ main:not(.shell):not(.authShell) h1 {
   margin: 0 0 14px;
   padding: 10px 12px;
   border-radius: 8px;
-  color: #1f2937;
-  background: #f3f4f6;
+  color: var(--foreground);
+  background: var(--muted-color);
   font-size: 13px;
   line-height: 1.5;
 }
 
 .status-success {
-  background: #ecfdf3;
-  color: #067647;
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .status-error {
-  background: #fef3f2;
-  color: #b42318;
+  background: color-mix(in srgb, var(--destructive) 12%, var(--panel));
+  color: var(--destructive);
 }
 
 .status-warning {
-  background: #fffaeb;
-  color: #b54708;
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .identitySummary,
@@ -1781,7 +1751,7 @@ main:not(.shell):not(.authShell) h1 {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fafafa;
+  background: var(--soft);
 }
 
 .identitySummary span,
@@ -1829,7 +1799,7 @@ main:not(.shell):not(.authShell) h1 {
   align-items: center;
   gap: 12px;
   margin: 18px 0;
-  color: #3f3f46;
+  color: var(--muted-foreground);
   font-size: 14px;
   font-weight: 750;
   text-transform: lowercase;
@@ -1839,7 +1809,7 @@ main:not(.shell):not(.authShell) h1 {
 .authMethodDivider::after {
   content: "";
   height: 1px;
-  background: #d4d4d8;
+  background: var(--line);
 }
 
 .authMethodDivider + .socialGrid {
@@ -1971,7 +1941,7 @@ main:not(.shell):not(.authShell) h1 {
   min-height: 32px;
   border: 0;
   background: transparent;
-  color: #52525b;
+  color: var(--muted-foreground);
   font: inherit;
   font-size: 13px;
   font-weight: 700;
@@ -1984,7 +1954,7 @@ main:not(.shell):not(.authShell) h1 {
 
 .authSignupPrompt {
   margin: 0;
-  color: #52525b;
+  color: var(--muted-foreground);
   font-size: 13px;
   line-height: 1.45;
   text-align: center;
@@ -2037,7 +2007,7 @@ main:not(.shell):not(.authShell) h1 {
 
 .accountShell {
   min-height: 100dvh;
-  background: color-mix(in srgb, var(--brand-primary) 1.5%, #fbfdfd);
+  background: color-mix(in srgb, var(--brand-primary) 1.5%, var(--background));
 }
 
 .accountProductTopbar {
@@ -2080,7 +2050,7 @@ main:not(.shell):not(.authShell) h1 {
 
 .accountContent {
   min-width: 0;
-  width: min(100%, 900px);
+  width: min(100%, 1000px);
   padding: 54px clamp(36px, 6vw, 76px) 80px;
   border: 0;
   border-radius: 0;
@@ -2155,8 +2125,8 @@ main:not(.shell):not(.authShell) h1 {
   align-content: start;
   padding: 22px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
+  border-radius: var(--radius-xl);
+  background: var(--panel);
   box-shadow: 0 10px 24px rgb(24 24 27 / 4%);
 }
 
@@ -2173,7 +2143,7 @@ main:not(.shell):not(.authShell) h1 {
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--brand-primary) 16%, var(--line));
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--panel);
   color: var(--brand-primary);
   object-fit: cover;
 }
@@ -2275,7 +2245,7 @@ main:not(.shell):not(.authShell) h1 {
 .accountNavGroup > p {
   margin: 0 0 5px;
   padding: 0 11px;
-  color: #768183;
+  color: var(--muted-foreground);
   font-size: 10px;
   font-weight: 750;
   letter-spacing: 0.1em;
@@ -2332,21 +2302,6 @@ main:not(.shell):not(.authShell) h1 {
   color: var(--muted-foreground);
   font-size: 14px;
   line-height: 1.6;
-}
-
-.accountTabs [data-slot='tabs-list'] {
-  border-bottom: 1px solid var(--border);
-}
-
-.accountTabs [data-slot='tabs-trigger'] {
-  min-height: 42px;
-  padding-inline: 13px;
-  color: var(--muted-foreground);
-  font-size: 13px;
-}
-
-.accountTabs [data-slot='tabs-trigger'][data-active] {
-  color: var(--brand-primary-active);
 }
 
 .accountRows {
@@ -2495,11 +2450,11 @@ main:not(.shell):not(.authShell) h1 {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fafafa;
+  background: var(--soft);
 }
 
 .statusPill span {
-  color: #52525b;
+  color: var(--muted-foreground);
   font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
@@ -2519,8 +2474,8 @@ main:not(.shell):not(.authShell) h1 {
   min-width: 0;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
+  border-radius: var(--radius-xl);
+  background: var(--panel);
   box-shadow: 0 8px 20px rgb(24 24 27 / 3%);
   overflow: hidden;
 }
@@ -2535,7 +2490,7 @@ main:not(.shell):not(.authShell) h1 {
 .accountPanelHeader {
   padding: 18px 20px 16px;
   border-bottom: 1px solid var(--line);
-  background: #fbfbfc;
+  background: var(--soft);
 }
 
 .accountContent .settingsPanel {
@@ -2548,7 +2503,7 @@ main:not(.shell):not(.authShell) h1 {
 
 .settingsAction {
   padding: 17px 20px;
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .settingsAction strong {
@@ -2594,7 +2549,7 @@ main:not(.shell):not(.authShell) h1 {
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--brand-primary) 18%, var(--line));
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--panel);
   color: var(--brand-primary);
 }
 
@@ -2664,7 +2619,7 @@ main:not(.shell):not(.authShell) h1 {
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--panel);
   color: var(--brand-primary);
 }
 
@@ -2682,7 +2637,7 @@ main:not(.shell):not(.authShell) h1 {
   padding: 0 8px;
   border: 1px solid color-mix(in srgb, var(--brand-primary) 18%, var(--line));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--brand-primary) 7%, #ffffff);
+  background: color-mix(in srgb, var(--brand-primary) 7%, var(--panel));
   color: var(--brand-primary);
   font-size: 11px;
   font-weight: 750;
@@ -2700,7 +2655,7 @@ main:not(.shell):not(.authShell) h1 {
   gap: 3px;
   padding: 14px 20px 10px;
   border-top: 1px solid var(--line);
-  background: #fbfbfc;
+  background: var(--soft);
 }
 
 .subsectionTitle h3 {
@@ -2724,7 +2679,7 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .dialogFormBody {
-  padding: 16px;
+  padding: 16px 0;
 }
 
 .consoleToolbar {
@@ -2732,7 +2687,7 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .consoleToolbar.rounded-lg {
-  border-radius: 8px;
+  border-radius: var(--radius-xl);
 }
 
 .consoleToolbar .textInput {
@@ -2749,7 +2704,7 @@ main:not(.shell):not(.authShell) h1 {
 .consoleMetricCard,
 .consoleChartPanel,
 .consoleActivityCard {
-  border-radius: 8px;
+  border-radius: var(--radius-xl);
 }
 
 .consoleResourceFrame th {
@@ -2953,7 +2908,7 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 .applicationSettingsPanel {
-  border-radius: 8px;
+  border-radius: var(--radius-xl);
   box-shadow: none;
 }
 
@@ -2996,7 +2951,7 @@ main:not(.shell):not(.authShell) h1 {
 
 .applicationTypeGrid legend {
   margin-bottom: 6px;
-  color: #27272a;
+  color: var(--ink);
   font-size: 14px;
   font-weight: 600;
 }
@@ -3008,8 +2963,8 @@ main:not(.shell):not(.authShell) h1 {
   min-height: 92px;
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
   color: var(--ink);
   text-align: left;
 }
@@ -3017,7 +2972,7 @@ main:not(.shell):not(.authShell) h1 {
 .applicationTypeCard:hover,
 .applicationTypeCard.selected {
   border-color: color-mix(in srgb, var(--brand-primary) 42%, var(--line));
-  background: color-mix(in srgb, var(--brand-primary) 5%, white);
+  background: color-mix(in srgb, var(--brand-primary) 7%, var(--panel));
 }
 
 .applicationTypeIcon {
@@ -3026,7 +2981,7 @@ main:not(.shell):not(.authShell) h1 {
   height: 32px;
   place-items: center;
   border-radius: 8px;
-  background: #f4f4f5;
+  background: var(--muted-color);
   color: var(--brand-primary);
 }
 
@@ -3254,7 +3209,7 @@ main:not(.shell):not(.authShell) h1 {
   gap: 16px;
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 
@@ -3345,8 +3300,8 @@ main:not(.shell):not(.authShell) h1 {
   margin-top: 16px;
   padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fafafa;
+  border-radius: var(--radius-xl);
+  background: var(--soft);
 }
 
 .setupPanel h3,
@@ -3401,8 +3356,8 @@ main:not(.shell):not(.authShell) h1 {
   gap: 16px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
+  border-radius: var(--radius-xl);
+  background: var(--panel);
 }
 
 .itemRow > div {
@@ -3586,18 +3541,6 @@ main:not(.shell):not(.authShell) h1 {
     padding: 16px;
   }
 
-  .consoleContent [data-slot='tabs-list'][data-variant='line'] {
-    max-width: 100%;
-    justify-content: flex-start;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-  }
-
-  .consoleContent [data-slot='tabs-list'][data-variant='line']::-webkit-scrollbar {
-    display: none;
-  }
-
   .consoleDetailHeader > div {
     min-width: 0;
   }
@@ -3711,6 +3654,23 @@ main:not(.shell):not(.authShell) h1 {
 }
 
 @media (max-width: 560px) {
+  .realmrootWordmarkContext {
+    display: none;
+  }
+
+  [data-slot='table']:has([data-empty-state='true']) {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  [data-slot='table']:has([data-empty-state='true']) [data-slot='table-header'] {
+    display: none;
+  }
+
+  .consoleListToolbar [data-slot='native-select-wrapper'] {
+    width: 100%;
+  }
+
   .consoleTopbar > div {
     gap: 8px;
     padding-inline: 8px;

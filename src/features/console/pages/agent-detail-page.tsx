@@ -118,7 +118,7 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
           }}
           value={tab}
         >
-          <TabsList className="w-full justify-start" variant="line">
+          <TabsList className="w-full" variant="navigation">
             {tabs.map((value) => (
               <TabsTrigger key={value} value={value}>
                 {tt(agentTabLabel(value))}

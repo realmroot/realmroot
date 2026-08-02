@@ -107,7 +107,7 @@ export function DetailTabs({
 }) {
   return (
     <Tabs onValueChange={onChange} value={value}>
-      <TabsList aria-label={label} className="flex w-full flex-wrap sm:inline-flex sm:w-auto" variant="line">
+      <TabsList aria-label={label} className="w-full sm:w-auto" variant="navigation">
         {tabs.map((tab) =>
           createElement(
             TabsTrigger,

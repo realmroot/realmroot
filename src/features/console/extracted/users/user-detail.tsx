@@ -227,7 +227,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
           }}
           value={active}
         >
-          <TabsList className="w-full justify-start" variant="line">
+          <TabsList className="w-full" variant="navigation">
             <TabsTrigger value="overview">{tt('Overview')}</TabsTrigger>
             {realmIdentityAccess ? (
               <>

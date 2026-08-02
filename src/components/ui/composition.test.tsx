@@ -219,7 +219,7 @@ describe('composed UI primitives', () => {
 
     render(
       <Tabs onValueChange={setValue} value="profile">
-        <TabsList>
+        <TabsList variant="navigation">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
@@ -230,7 +230,13 @@ describe('composed UI primitives', () => {
 
     const profileTab = screen.getByRole('tab', { name: 'Profile' })
     const securityTab = screen.getByRole('tab', { name: 'Security' })
+    const tabList = screen.getByRole('tablist')
     const panel = screen.getByRole('tabpanel')
+    expect(tabList.getAttribute('data-variant')).toBe('navigation')
+    expect(tabList.className).toContain('gap-6')
+    expect(tabList.className).toContain('overflow-y-hidden')
+    expect(profileTab.className).toContain('group-data-[variant=navigation]/tabs-list:flex-none')
+    expect(profileTab.className).toContain('group-data-[variant=navigation]/tabs-list:after:hidden')
     expect(panel.textContent).toBe('Profile panel')
     expect(profileTab.getAttribute('aria-selected')).toBe('true')
     expect(profileTab.getAttribute('aria-controls')).toBe(panel.id)

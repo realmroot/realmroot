@@ -193,7 +193,7 @@ export function ConnectorsPage() {
       }}
     >
       <Tabs onValueChange={setSelectedTab} value={selectedTab}>
-        <TabsList className="w-full justify-start px-4 pt-2" variant="line">
+        <TabsList className="w-full px-4 pt-2" variant="navigation">
           <TabsTrigger value="builtin">{tt('Builtin connectors')}</TabsTrigger>
           <TabsTrigger value="oidc">{tt('OIDC connectors')}</TabsTrigger>
         </TabsList>

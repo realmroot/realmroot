@@ -1,6 +1,7 @@
 import { ListChecks } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Card, CardContent } from './card'
+import { cn } from '@/lib/utils'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './empty'
 
 export function EmptyState({
   action,
@@ -15,24 +16,23 @@ export function EmptyState({
   icon?: ReactNode
   title: string
 }) {
-  const content = (
-    <div className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        <span className="grid size-8 place-items-center rounded-md bg-muted text-muted-foreground">{icon}</span>
-        <div>
-          <h2 className="text-sm font-semibold leading-5">{title}</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">{description}</p>
-        </div>
-      </div>
-      {action}
-    </div>
-  )
-
-  if (!framed) return content
-
   return (
-    <Card className="border-dashed">
-      <CardContent className="p-0">{content}</CardContent>
-    </Card>
+    <Empty
+      className={cn(
+        'items-start gap-4 text-left sm:flex-row sm:items-center sm:justify-between',
+        framed ? 'border p-4' : 'p-0',
+      )}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <EmptyMedia className="mb-0" variant="icon">
+          {icon}
+        </EmptyMedia>
+        <EmptyHeader className="min-w-0 items-start gap-1">
+          <EmptyTitle className="font-semibold leading-5">{title}</EmptyTitle>
+          <EmptyDescription className="max-w-2xl leading-5 text-pretty">{description}</EmptyDescription>
+        </EmptyHeader>
+      </div>
+      {action ? <EmptyContent className="w-auto shrink-0 items-stretch">{action}</EmptyContent> : null}
+    </Empty>
   )
 }

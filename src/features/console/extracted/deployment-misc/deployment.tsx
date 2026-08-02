@@ -155,7 +155,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         }}
         value={active}
       >
-        <TabsList className="w-full justify-start" variant="line">
+        <TabsList className="w-full" variant="navigation">
           <TabsTrigger value="general">{tt('General')}</TabsTrigger>
           <TabsTrigger value="email">{tt('Email delivery')}</TabsTrigger>
           <TabsTrigger value="developer">{tt('Developer')}</TabsTrigger>

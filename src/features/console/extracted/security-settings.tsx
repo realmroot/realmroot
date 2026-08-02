@@ -56,7 +56,7 @@ export function SecurityPoliciesPage({ section = 'sign-in' }: { section?: Securi
         }}
         value={active}
       >
-        <TabsList className="w-full justify-start" variant="line">
+        <TabsList className="w-full" variant="navigation">
           <TabsTrigger value="sign-in">{tt('Sign-in security')}</TabsTrigger>
           <TabsTrigger value="mfa">{tt('MFA')}</TabsTrigger>
           <TabsTrigger value="abuse">{tt('Abuse prevention')}</TabsTrigger>
