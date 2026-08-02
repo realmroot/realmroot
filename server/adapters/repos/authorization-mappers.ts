@@ -49,6 +49,7 @@ export function toResource(row: typeof apiResource.$inferSelect, organizationIds
     name: row.name,
     resourceUrl: row.resourceUrl,
     connectorId: row.connectorId,
+    authorizationDetails: row.authorizationDetails,
     description: row.description,
     enabled: row.enabled,
     ownerOrganizationId: row.ownerOrganizationId,

@@ -85,6 +85,7 @@ const resource: ApiResourceResponse = {
   name: 'Projects',
   resourceUrl: 'https://api.example.com',
   connectorId: null,
+  authorizationDetails: [],
   description: null,
   enabled: true,
   ownerOrganizationId: organization.id,
@@ -233,6 +234,8 @@ describe('authorization CRUD and assignment policy', () => {
           'urn:ietf:params:oauth:grant-type:token-exchange',
         ],
         dpop_signing_alg_values_supported: ['ES256'],
+        authorization_details_types_supported: ['payment_initiation'],
+        pushed_authorization_request_endpoint: `${resource.resourceUrl}/par`,
       },
     }
     const connectors = { findById: vi.fn().mockResolvedValue(connector) }
@@ -267,14 +270,40 @@ describe('authorization CRUD and assignment policy', () => {
       }),
     )
     await createResource(deps, {
+      identifier: 'external-without-rar',
+      name: 'External without RAR',
+      resourceUrl: resource.resourceUrl,
+      connectorId: 'connector-1',
+    })
+    expect(authorization.createResource).toHaveBeenLastCalledWith(
+      expect.objectContaining({ authorizationDetails: [], connectorId: 'connector-1' }),
+    )
+    await expect(
+      createResource(deps, {
+        identifier: 'invalid-native-rar',
+        name: 'Invalid native RAR',
+        resourceUrl: resource.resourceUrl,
+        authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
+      }),
+    ).rejects.toThrow('Authorization details require an external API resource connector.')
+    await createResource(deps, {
       identifier: 'external',
       name: 'External',
       resourceUrl: resource.resourceUrl,
       connectorId: 'connector-1',
+      authorizationDetails: [
+        { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
+      ],
       enabled: true,
     })
     expect(authorization.createResource).toHaveBeenLastCalledWith(
-      expect.objectContaining({ connectorId: 'connector-1', enabled: true }),
+      expect.objectContaining({
+        connectorId: 'connector-1',
+        authorizationDetails: [
+          { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
+        ],
+        enabled: true,
+      }),
     )
     await expect(listResources(deps, { limit: 20, offset: 0 })).resolves.toEqual({
       resources: [resource],
@@ -282,6 +311,20 @@ describe('authorization CRUD and assignment policy', () => {
     })
     await expect(getResource(deps, resource.id)).resolves.toBe(resource)
     await expect(updateResource(deps, resource.id, { name: 'Projects 2' })).resolves.toBe(resource)
+    await expect(
+      updateResource(deps, resource.id, {
+        authorizationDetails: [{ type: 'project_access', project_id: 'project-1' }],
+      }),
+    ).rejects.toThrow('Authorization details require an external API resource connector.')
+    authorization.findResource.mockResolvedValue({ ...resource, connectorId: 'connector-1' })
+    await expect(
+      updateResource(deps, resource.id, {
+        authorizationDetails: [
+          { type: 'payment_initiation', actions: ['initiate'], locations: ['https://merchant.example.com'] },
+        ],
+      }),
+    ).resolves.toMatchObject({ id: resource.id })
+    authorization.findResource.mockResolvedValue(resource)
     authorization.updateResource.mockClear()
     await expect(updateResource(deps, resource.id, { connectorId: 'connector-1' })).rejects.toThrow(
       'authorization mode cannot change',

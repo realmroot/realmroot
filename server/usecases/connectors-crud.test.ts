@@ -207,7 +207,9 @@ describe('service.test 2', () => {
     expect(config.genericOAuthProviders).toEqual([expect.objectContaining({ providerId: 'login-oidc' })])
   })
 
-  it('uses canonical callbacks for dynamic OIDC registration [spec: agent-identity/external-api-resource-canonical-callback]', async () => {
+  it(`uses canonical callbacks and RAR types for dynamic OIDC registration
+      [spec: agent-identity/external-api-resource-canonical-callback]
+      [spec: agent-identity/external-resource-rich-authorization-connection]`, async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(
@@ -219,6 +221,7 @@ describe('service.test 2', () => {
           jwks_uri: 'https://idp.example.com/jwks',
           registration_endpoint: 'https://idp.example.com/register',
           grant_types_supported: ['authorization_code'],
+          authorization_details_types_supported: ['project_access'],
         }),
       )
       .mockResolvedValueOnce(
@@ -251,6 +254,7 @@ describe('service.test 2', () => {
         'https://auth.example.com/api/account-connections/oauth/callback',
       ],
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
+      authorization_details_types: ['project_access'],
     })
     expect(deps.connectors.create).toHaveBeenCalledWith(
       expect.objectContaining({

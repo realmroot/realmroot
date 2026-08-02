@@ -165,6 +165,35 @@ describe('external resource connector validation', () => {
       message: 'OIDC connector must advertise RFC 9449 DPoP support for external API access.',
     })
   })
+
+  it('[spec: agent-identity/external-resource-rich-authorization-connection] requires advertised RAR types and PAR', async () => {
+    const authorizationDetails = [{ type: 'project_access', actions: ['read'] }]
+    const unsupported = createDeps()
+    await expect(
+      validateExternalResourceConnector(unsupported, resourceUrl, 'connector-1', authorizationDetails),
+    ).rejects.toThrow('does not support every configured authorization detail type')
+
+    const missingPar = createDeps({
+      connector: connector({
+        providerMetadata: providerMetadata({ authorization_details_types_supported: ['project_access'] }),
+      }),
+    })
+    await expect(
+      validateExternalResourceConnector(missingPar, resourceUrl, 'connector-1', authorizationDetails),
+    ).rejects.toThrow('require RFC 9126 pushed authorization requests')
+
+    const complete = createDeps({
+      connector: connector({
+        providerMetadata: providerMetadata({
+          authorization_details_types_supported: ['project_access'],
+          pushed_authorization_request_endpoint: 'https://idp.example.com/par',
+        }),
+      }),
+    })
+    await expect(
+      validateExternalResourceConnector(complete, resourceUrl, 'connector-1', authorizationDetails),
+    ).resolves.toBeUndefined()
+  })
 })
 
 function createDeps({

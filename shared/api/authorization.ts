@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { paginationMetadataSchema, paginationQuerySchema } from './applications'
+import { authorizationDetailsSchema } from './authorization-details'
 
 const nonEmptyString = z.string().trim().min(1)
 const optionalText = z.string().trim().max(1000).nullable().optional()
@@ -99,6 +100,7 @@ export const apiResourceResponseSchema = z.object({
   name: z.string(),
   resourceUrl: z.url(),
   connectorId: z.string().nullable(),
+  authorizationDetails: authorizationDetailsSchema,
   description: z.string().nullable(),
   enabled: z.boolean(),
   ownerOrganizationId: z.string(),
@@ -114,6 +116,7 @@ export const createApiResourceRequestSchema = z.object({
   name: nonEmptyString,
   resourceUrl: z.url(),
   connectorId: nonEmptyString.optional(),
+  authorizationDetails: authorizationDetailsSchema.default([]),
   description: optionalText,
   enabled: z.boolean().optional(),
   ownerOrganizationId: nonEmptyString.optional(),
@@ -126,6 +129,7 @@ export const updateApiResourceRequestSchema = z.object({
   name: nonEmptyString.optional(),
   resourceUrl: z.url().optional(),
   connectorId: nonEmptyString.nullable().optional(),
+  authorizationDetails: authorizationDetailsSchema.optional(),
   description: optionalText,
   enabled: z.boolean().optional(),
   ownerOrganizationId: nonEmptyString.optional(),

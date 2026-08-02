@@ -101,6 +101,7 @@ describe('admin console authorization creation and Organization detail', () => {
             identifier: 'billing-api',
             name: 'Billing API',
             resourceUrl: 'https://billing.example.com',
+            authorizationDetails: [],
             description: 'Billing resource',
             ownerOrganizationId: 'org-1',
             accessEligibility: { mode: 'realm', organizationIds: [] },

@@ -1,3 +1,4 @@
+import type { AuthorizationDetail } from '@shared/api/authorization-details'
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { uploadedAsset } from './agent-tables'
@@ -235,6 +236,10 @@ export const apiResource = sqliteTable(
     connectorId: text('connector_id').references(() => identityProviderConnector.id, {
       onDelete: 'restrict',
     }),
+    authorizationDetails: text('authorization_details', { mode: 'json' })
+      .$type<AuthorizationDetail[]>()
+      .notNull()
+      .default(sql`'[]'`),
     description: text('description'),
     enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
     ownerOrganizationId: text('owner_organization_id')

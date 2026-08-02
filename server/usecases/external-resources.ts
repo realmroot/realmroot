@@ -1,4 +1,4 @@
-import { badRequest, forbidden, notFound, unauthorized } from '@server/domain/errors'
+import { badRequest, forbidden, notFound, oauthError, unauthorized } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import type {
   AgentAccessGrantRecord,
@@ -15,6 +15,7 @@ import type {
   CreateAccessRequest,
   CreateAccountConnection,
 } from '@shared/api/agent-api'
+import { type AuthorizationDetail, authorizationDetailsSchema } from '@shared/api/authorization-details'
 import type {
   CreateAgentAccessRequest,
   CreateResourceConnectionIntentRequest,
@@ -82,11 +83,46 @@ export async function createResourceConnectionIntent(
   const scopes = input.scopes
   await validateRequestedScopes(deps, resource.resourceUrl, scopes)
   const requestedScopes = [...new Set([...scopes, 'openid', 'offline_access'])].sort()
+  const authorizationDetails = resource.authorizationDetails
+  assertAuthorizationDetailsSupported(authorizationDetails, authorization)
   const id = createId('resconnint')
   const state = randomToken()
   const verifier = randomToken()
   const now = new Date()
-  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
+  const redirectUri = resourceConnectionCallbackUrl(callbackOrigin)
+  const authorizationParameters = {
+    response_type: 'code',
+    client_id: authorization.clientId,
+    redirect_uri: redirectUri,
+    resource: resource.resourceUrl,
+    scope: requestedScopes.join(' '),
+    state,
+    code_challenge: await sha256(verifier),
+    code_challenge_method: 'S256',
+    ...(authorizationDetails.length > 0 ? { authorization_details: JSON.stringify(authorizationDetails) } : {}),
+  }
+  let expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
+  let authorizationUrl: string
+  if (authorizationDetails.length > 0) {
+    const pushed = await postPushedAuthorizationRequest(
+      deps,
+      authorization.pushedAuthorizationRequestEndpoint!,
+      authorizationParameters,
+      authorization.clientId,
+      authorizationClientSecret(authorization),
+    )
+    const requestUri = requiredString(pushed, 'request_uri', 'Pushed authorization response')
+    const expiresIn = requiredPositiveInteger(pushed, 'expires_in', 'Pushed authorization response')
+    expiresAt = new Date(Math.min(expiresAt.getTime(), now.getTime() + expiresIn * 1000))
+    const url = new URL(authorization.authorizationEndpoint)
+    url.searchParams.set('client_id', authorization.clientId)
+    url.searchParams.set('request_uri', requestUri)
+    authorizationUrl = url.toString()
+  } else {
+    const url = new URL(authorization.authorizationEndpoint)
+    for (const [name, value] of Object.entries(authorizationParameters)) url.searchParams.set(name, value)
+    authorizationUrl = url.toString()
+  }
   const created = await deps.externalResources.createConnectionIntent({
     id,
     stateHash: await sha256(state),
@@ -94,6 +130,7 @@ export async function createResourceConnectionIntent(
     ownerUserId: actorUserId,
     ownerOrganizationId: input.owner.type === 'organization' ? input.owner.organizationId : null,
     scopes: requestedScopes,
+    authorizationDetails,
     encryptedPkceVerifier: await deps.secrets.seal(verifier, connectionIntentContext(id)),
     returnTo: input.returnTo ?? 'account-center',
     status: 'pending',
@@ -103,16 +140,6 @@ export async function createResourceConnectionIntent(
     updatedAt: now,
   })
   if (!created) throw notFound('Enabled external API resource was not found.')
-  const redirectUri = resourceConnectionCallbackUrl(callbackOrigin)
-  const url = new URL(authorization.authorizationEndpoint)
-  url.searchParams.set('response_type', 'code')
-  url.searchParams.set('client_id', authorization.clientId)
-  url.searchParams.set('redirect_uri', redirectUri)
-  url.searchParams.set('resource', resource.resourceUrl)
-  url.searchParams.set('scope', requestedScopes.join(' '))
-  url.searchParams.set('state', state)
-  url.searchParams.set('code_challenge', await sha256(verifier))
-  url.searchParams.set('code_challenge_method', 'S256')
   return {
     id,
     resourceId,
@@ -120,7 +147,8 @@ export async function createResourceConnectionIntent(
       input.owner.type === 'organization'
         ? { type: 'organization' as const, organizationId: input.owner.organizationId }
         : { type: 'user' as const, userId: actorUserId },
-    authorizationUrl: url.toString(),
+    authorizationUrl,
+    authorizationDetails,
     expiresAt: expiresAt.toISOString(),
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
@@ -152,6 +180,12 @@ export async function completeResourceConnectionIntent(
   )
   const accessToken = requiredString(token, 'access_token', 'OAuth token response')
   const refreshToken = requiredString(token, 'refresh_token', 'OAuth token response')
+  const authorizationDetails = readAuthorizationDetails(
+    token.authorization_details,
+    intent.authorizationDetails.length > 0,
+    intent.authorizationDetails.map((detail) => detail.type),
+    'OAuth token response',
+  )
   const profile = await fetchObject(
     deps,
     authorization.userInfoEndpoint!,
@@ -181,6 +215,7 @@ export async function completeResourceConnectionIntent(
       connectionTokensContext(connectionId),
     ),
     grantedScopes,
+    authorizationDetails,
     status: 'active' as const,
     credentialExpiresAt: expiresAt,
     revokedAt: null,
@@ -197,6 +232,9 @@ export async function completeResourceConnectionIntent(
         createdAt: now,
       })
   if (!connection) throw badRequest('The API resource was archived while completing the connection.')
+  if (existing) {
+    await revokeUncoveredGrants(deps, connection, intent.authorizationDetails.length > 0, intent.ownerUserId, now)
+  }
   return {
     ...toResourceConnection(connection),
     returnTo: intent.returnTo,
@@ -363,6 +401,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
                 grantedScopes: connection.grantedScopes.filter(
                   (scope) => scope !== 'openid' && scope !== 'offline_access',
                 ),
+                authorizationDetails: connection.authorizationDetails,
               }))
           : [],
       grants: grants
@@ -402,6 +441,7 @@ export async function listAgentApiResources(
       displayName: connection.displayName,
       subjectHint: connection.subjectHint,
       scopes: connection.grantedScopes,
+      authorizationDetails: connection.authorizationDetails,
     })),
     accessGrants: resource.grants.map((grant) =>
       toAccessGrant({
@@ -410,6 +450,7 @@ export async function listAgentApiResources(
         connectionId: grant.connectionId,
         agentIdentityId: grant.agentIdentityId,
         scopes: grant.scopes,
+        authorizationDetails: grant.authorizationDetails,
         mode: grant.mode,
         status: grant.status,
         grantedByUserId: grant.grantedByUserId,
@@ -449,6 +490,8 @@ export async function createAgentAccessRequest(
     throw badRequest('Native API resources do not use account connections.')
   }
   await validateRequestedScopes(deps, resource.resourceUrl, input.scopes)
+  const authorizationDetails = input.authorizationDetails ?? []
+  assertAuthorizationDetailsSelection(resource, connection, authorizationDetails)
   await requireAgentScopeEligibility(
     deps,
     principal.identityId,
@@ -456,13 +499,17 @@ export async function createAgentAccessRequest(
     identity.identity.ownerOrganizationId,
     input.scopes,
   )
-  if (connection) assertScopeSubset(input.scopes, connection.grantedScopes, 'connected account')
+  if (connection) {
+    assertScopeSubset(input.scopes, connection.grantedScopes, 'connected account')
+    assertAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails, 'connected account')
+  }
   const scopes = [...new Set(input.scopes)].sort()
   const existingGrant = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).find(
     (grant) =>
       grant.connectionId === (connection?.id ?? null) &&
       grant.resourceId === resource.id &&
       exactScopes(grant.scopes, scopes) &&
+      exactAuthorizationDetails(grant.authorizationDetails, authorizationDetails) &&
       (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
   )
   const binding = identity.bindings.find(
@@ -473,7 +520,8 @@ export async function createAgentAccessRequest(
     (request) =>
       request.resourceId === resource.id &&
       request.connectionId === (connection?.id ?? null) &&
-      exactScopes(request.scopes, scopes),
+      exactScopes(request.scopes, scopes) &&
+      exactAuthorizationDetails(request.authorizationDetails, authorizationDetails),
   )
   if (pending) {
     const token = await deps.secrets.open(pending.encryptedApprovalToken, accessRequestTokenContext(pending.id))
@@ -489,6 +537,7 @@ export async function createAgentAccessRequest(
     agentIdentityId: principal.identityId,
     bindingId: binding.id,
     scopes,
+    authorizationDetails,
     reason: input.reason ?? null,
     status: existingGrant ? 'approved' : 'pending',
     approvalTokenHash: await sha256(rawApprovalToken),
@@ -509,6 +558,7 @@ export async function createAgentAccessRequest(
     connection,
     grantId: existingGrant?.id ?? null,
     scopes,
+    authorizationDetails,
     reasonCode: null,
   })
   return toAgentAccessRequest(
@@ -532,6 +582,7 @@ export async function createAccessRequest(
         resourceId: input.target.apiResourceId,
         connectionId: input.target.accountConnectionId ?? null,
         scopes: input.scopes,
+        authorizationDetails: input.authorizationDetails ?? [],
         reason: input.reason,
       },
       principal,
@@ -671,12 +722,17 @@ export async function decideAgentAccessRequest(
       grantId: null,
       controllerUserId: actorUserId,
       scopes: request.scopes,
+      authorizationDetails: request.authorizationDetails,
       reasonCode: 'controller_denied',
     })
     return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
   }
 
   const resource = await requireEnabledResource(deps, request.resourceId)
+  const authorizationDetails = input.authorizationDetails ?? []
+  if (!exactAuthorizationDetails(authorizationDetails, request.authorizationDetails)) {
+    throw invalidAuthorizationDetails('Approved authorization details do not match the pending access request.')
+  }
   await validateRequestedScopes(deps, resource.resourceUrl, request.scopes)
   const requestIdentity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   if (!requestIdentity) throw notFound('Active Agent identity was not found.')
@@ -701,8 +757,12 @@ export async function decideAgentAccessRequest(
       requestIdentity.identity.ownerOrganizationId,
     )
     assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
+    assertAuthorizationDetailsSelection(resource, connection, authorizationDetails)
+    assertAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails, 'connected account')
   } else if (connectionId) {
     throw badRequest('Native API resources do not use account connections.')
+  } else {
+    assertAuthorizationDetailsSelection(resource, null, authorizationDetails)
   }
   const expiresAt = input.mode === 'until' ? new Date(input.expiresAt!) : null
   if (expiresAt && expiresAt.getTime() <= now.getTime()) throw badRequest('Grant expiry must be in the future.')
@@ -712,6 +772,7 @@ export async function decideAgentAccessRequest(
     connectionId,
     agentIdentityId: request.agentIdentityId,
     scopes: request.scopes,
+    authorizationDetails,
     mode: input.mode!,
     status: 'active',
     grantedByUserId: actorUserId,
@@ -738,6 +799,7 @@ export async function decideAgentAccessRequest(
     grantId: grant.id,
     controllerUserId: actorUserId,
     scopes: request.scopes,
+    authorizationDetails,
     reasonCode: null,
   })
   return toAgentAccessRequest(decided, await requestHostId(deps, request), null)
@@ -782,7 +844,11 @@ export async function issueTargetAccessToken(
     identity.identity.ownerOrganizationId,
     grant.scopes,
   )
+  if (!exactAuthorizationDetails(grant.authorizationDetails, request.authorizationDetails)) {
+    throw forbidden('Agent access grant authorization details do not match the approved request.')
+  }
   if (resource.connectorId === null) {
+    assertAuthorizationDetailsSelection(resource, null, grant.authorizationDetails)
     return issueNativeAccessToken(
       deps,
       { grant, request, resource, identity, roleAuthorization },
@@ -801,6 +867,8 @@ export async function issueTargetAccessToken(
     throw forbidden('Active external API resource grant is required.')
   }
   assertScopeSubset(grant.scopes, connection.grantedScopes, 'connected account')
+  assertAuthorizationDetailsSelection(resource, connection, grant.authorizationDetails)
+  assertAuthorizationDetailsSubset(grant.authorizationDetails, connection.authorizationDetails, 'connected account')
   const confirmationJkt = await dpopThumbprint(deps, dpopProof, authorization.tokenEndpoint)
   const subjectToken = await refreshConnectionToken(deps, connection, authorization)
   const nowSeconds = Math.floor(Date.now() / 1000)
@@ -839,6 +907,9 @@ export async function issueTargetAccessToken(
       requested_token_type: accessTokenType,
       resource: resource.resourceUrl,
       scope: request.scopes.join(' '),
+      ...(grant.authorizationDetails.length > 0
+        ? { authorization_details: JSON.stringify(grant.authorizationDetails) }
+        : {}),
     },
     authorization.clientId,
     clientSecret,
@@ -853,6 +924,15 @@ export async function issueTargetAccessToken(
   if (!exactScopes(issuedScope, request.scopes)) {
     throw unauthorized('Target authorization server issued a different scope set.')
   }
+  const issuedAuthorizationDetails = readAuthorizationDetails(
+    token.authorization_details,
+    grant.authorizationDetails.length > 0,
+    grant.authorizationDetails.map((detail) => detail.type),
+    'Token exchange response',
+  )
+  if (!exactAuthorizationDetails(issuedAuthorizationDetails, grant.authorizationDetails)) {
+    throw unauthorized('Target authorization server issued different authorization details.')
+  }
   const now = new Date()
   const leaseId = createId('tokenlease')
   const lease = await deps.externalResources.createTokenLease({
@@ -866,6 +946,7 @@ export async function issueTargetAccessToken(
     tokenHash: await sha256(accessToken),
     confirmationJkt,
     scopes: request.scopes,
+    authorizationDetails: grant.authorizationDetails,
     expiresAt: new Date(now.getTime() + expiresIn * 1000),
     revokedAt: null,
     createdAt: now,
@@ -882,6 +963,7 @@ export async function issueTargetAccessToken(
     request,
     grantId: grant.id,
     scopes: request.scopes,
+    authorizationDetails: grant.authorizationDetails,
     reasonCode: null,
   })
   return {
@@ -890,6 +972,7 @@ export async function issueTargetAccessToken(
     expiresIn,
     expiresAt: new Date(now.getTime() + expiresIn * 1000).toISOString(),
     scopes: request.scopes,
+    authorizationDetails: grant.authorizationDetails,
     resourceUrl: resource.resourceUrl,
   }
 }
@@ -955,6 +1038,7 @@ async function issueNativeAccessToken(
     tokenHash: await sha256(accessToken),
     confirmationJkt,
     scopes: request.scopes,
+    authorizationDetails: [],
     expiresAt,
     revokedAt: null,
     createdAt: now,
@@ -971,6 +1055,7 @@ async function issueNativeAccessToken(
     request,
     grantId: grant.id,
     scopes: request.scopes,
+    authorizationDetails: [],
     reasonCode: null,
   })
   return {
@@ -979,6 +1064,7 @@ async function issueNativeAccessToken(
     expiresIn: Math.max(1, Math.floor((expiresAt.getTime() - now.getTime()) / 1000)),
     expiresAt: expiresAt.toISOString(),
     scopes: request.scopes,
+    authorizationDetails: [],
     resourceUrl: resource.resourceUrl,
   }
 }
@@ -1024,6 +1110,7 @@ export async function revokeAgentAccessGrant(deps: Deps, grantId: string, actorU
     grantId: grant.id,
     controllerUserId: actorUserId,
     scopes: grant.scopes,
+    authorizationDetails: grant.authorizationDetails,
     reasonCode: null,
   })
 }
@@ -1092,13 +1179,31 @@ async function refreshConnectionToken(
   const token = await postForm(
     deps,
     authorization.tokenEndpoint,
-    { grant_type: 'refresh_token', refresh_token: refreshToken },
+    {
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      ...(connection.authorizationDetails.length > 0
+        ? { authorization_details: JSON.stringify(connection.authorizationDetails) }
+        : {}),
+    },
     authorization.clientId,
     clientSecret,
   )
   const accessToken = requiredString(token, 'access_token', 'OAuth refresh response')
   const nextRefreshToken = optionalString(token, 'refresh_token') ?? refreshToken
   const scopes = scopeString(token.scope) ?? connection.grantedScopes
+  const authorizationDetails =
+    token.authorization_details === undefined
+      ? connection.authorizationDetails
+      : readAuthorizationDetails(
+          token.authorization_details,
+          connection.authorizationDetails.length > 0,
+          connection.authorizationDetails.map((detail) => detail.type),
+          'OAuth refresh response',
+        )
+  if (!exactAuthorizationDetails(authorizationDetails, connection.authorizationDetails)) {
+    throw unauthorized('Target authorization server changed authorization details during refresh.')
+  }
   const now = new Date()
   await deps.externalResources.updateConnectionTokens(connection.id, {
     encryptedTokens: await deps.secrets.seal(
@@ -1208,6 +1313,13 @@ async function findExternalAuthorization(
     issuer: connector.issuer,
     authorizationEndpoint: connector.authorizationEndpoint,
     tokenEndpoint: connector.tokenEndpoint,
+    pushedAuthorizationRequestEndpoint:
+      typeof connector.providerMetadata?.pushed_authorization_request_endpoint === 'string'
+        ? connector.providerMetadata.pushed_authorization_request_endpoint
+        : null,
+    authorizationDetailsTypesSupported: metadataStringArray(
+      connector.providerMetadata?.authorization_details_types_supported,
+    ),
     registrationEndpoint: connector.registrationEndpoint,
     revocationEndpoint: connector.revocationEndpoint,
     jwksUri: connector.jwksEndpoint,
@@ -1319,9 +1431,16 @@ async function appendResourceAudit(
     grantId: string | null
     controllerUserId?: string
     scopes: string[]
+    authorizationDetails?: AuthorizationDetail[]
     reasonCode: string | null
   },
 ) {
+  const authorizationDetails =
+    input.authorizationDetails ?? input.request?.authorizationDetails ?? input.connection?.authorizationDetails ?? []
+  const authorizationDetailProjections = authorizationDetails.map((detail) => ({
+    type: detail.type,
+    ...(typeof detail.identifier === 'string' ? { identifier: detail.identifier } : {}),
+  }))
   await deps.agentAudit.append({
     id: createId('agaudit'),
     action: input.action,
@@ -1336,9 +1455,135 @@ async function appendResourceAudit(
     accessGrantId: input.grantId,
     scopes: input.scopes,
     reasonCode: input.reasonCode,
-    metadata: null,
+    metadata:
+      authorizationDetailProjections.length > 0 ? { authorizationDetails: authorizationDetailProjections } : null,
     occurredAt: new Date(),
   })
+}
+
+async function revokeUncoveredGrants(
+  deps: Deps,
+  connection: ResourceAccountConnectionRecord,
+  authorizationDetailsRequired: boolean,
+  controllerUserId: string,
+  now: Date,
+) {
+  for (const grant of await deps.externalResources.listActiveGrantsByConnection(connection.id)) {
+    const covered =
+      (!authorizationDetailsRequired || grant.authorizationDetails.length > 0) &&
+      isAuthorizationDetailsSubset(grant.authorizationDetails, connection.authorizationDetails)
+    if (covered) continue
+    await revokeGrantTokenLeases(deps, grant, now)
+    await deps.externalResources.revokeGrant(grant.id, now)
+    await appendResourceAudit(deps, {
+      action: 'api_resource.access_revoked',
+      result: 'allowed',
+      resourceId: grant.resourceId,
+      connection,
+      grantId: grant.id,
+      controllerUserId,
+      scopes: grant.scopes,
+      authorizationDetails: grant.authorizationDetails,
+      reasonCode: 'connection_authorization_changed',
+    })
+  }
+}
+
+function assertAuthorizationDetailsSupported(
+  authorizationDetails: AuthorizationDetail[],
+  authorization: ResolvedExternalAuthorization,
+) {
+  if (authorizationDetails.length === 0) return
+  if (!authorization.pushedAuthorizationRequestEndpoint) {
+    throw invalidAuthorizationDetails('RAR-enabled resources require a pushed authorization request endpoint.')
+  }
+  if (authorizationDetails.some((detail) => !authorization.authorizationDetailsTypesSupported.includes(detail.type))) {
+    throw invalidAuthorizationDetails(
+      'The authorization server does not support every configured authorization detail type.',
+    )
+  }
+}
+
+function assertAuthorizationDetailsSelection(
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  connection: ResourceAccountConnectionRecord | null,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  if (resource.connectorId === null) {
+    if (authorizationDetails.length > 0) {
+      throw invalidAuthorizationDetails('Native API resources do not accept authorization details.')
+    }
+    return
+  }
+  const required = resource.authorizationDetails.length > 0
+  if (!required && authorizationDetails.length > 0) {
+    throw invalidAuthorizationDetails('This external API resource does not use authorization details.')
+  }
+  if (!required) return
+  if (!connection || connection.authorizationDetails.length === 0) {
+    throw invalidAuthorizationDetails('The resource account must be explicitly reauthorized for authorization details.')
+  }
+  if (authorizationDetails.length === 0) {
+    throw invalidAuthorizationDetails('Select at least one granted authorization detail entry.')
+  }
+}
+
+function assertAuthorizationDetailsSubset(
+  requested: AuthorizationDetail[],
+  allowed: AuthorizationDetail[],
+  boundary: string,
+) {
+  if (!isAuthorizationDetailsSubset(requested, allowed)) {
+    throw invalidAuthorizationDetails(`Requested authorization details exceed the ${boundary} boundary.`)
+  }
+}
+
+function isAuthorizationDetailsSubset(requested: AuthorizationDetail[], allowed: AuthorizationDetail[]) {
+  const remaining = allowed.map(canonicalJson)
+  for (const detail of requested.map(canonicalJson)) {
+    const index = remaining.indexOf(detail)
+    if (index === -1) return false
+    remaining.splice(index, 1)
+  }
+  return true
+}
+
+function exactAuthorizationDetails(left: AuthorizationDetail[], right: AuthorizationDetail[]) {
+  if (left.length !== right.length) return false
+  const leftEntries = left.map(canonicalJson).sort()
+  const rightEntries = right.map(canonicalJson).sort()
+  return leftEntries.every((value, index) => value === rightEntries[index])
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value)!
+}
+
+function readAuthorizationDetails(value: unknown, required: boolean, allowedTypes: string[], label: string) {
+  if (value === undefined && !required) return []
+  const parsed = authorizationDetailsSchema.safeParse(value)
+  if (!parsed.success || (required && parsed.data.length === 0)) {
+    throw invalidAuthorizationDetails(`${label} has malformed authorization_details.`)
+  }
+  if (parsed.data.some((detail) => !allowedTypes.includes(detail.type))) {
+    throw invalidAuthorizationDetails(`${label} contains an unknown authorization detail type.`)
+  }
+  return parsed.data
+}
+
+function invalidAuthorizationDetails(description: string) {
+  return oauthError('invalid_authorization_details', description)
+}
+
+function metadataStringArray(value: unknown): string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? [...new Set(value as string[])] : []
 }
 
 async function fetchObject(
@@ -1369,6 +1614,38 @@ async function postForm(
   )
   if (!response.ok) throw unauthorized('External authorization server rejected the token request.')
   return readObject(response, 'External authorization server response is invalid.')
+}
+
+async function postPushedAuthorizationRequest(
+  deps: Deps,
+  url: string,
+  body: Record<string, string>,
+  clientId: string,
+  clientSecret: string,
+) {
+  const response = await deps.externalHttp.fetch(
+    new Request(url, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        authorization: `Basic ${base64(`${clientId}:${clientSecret}`)}`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams(body),
+    }),
+  )
+  if (response.status !== 201) {
+    const error = await response.json().catch(() => null)
+    const value = error && typeof error === 'object' && !Array.isArray(error) ? (error as Record<string, unknown>) : {}
+    throw oauthError(
+      typeof value.error === 'string' ? value.error : 'invalid_request',
+      typeof value.error_description === 'string'
+        ? value.error_description
+        : 'External authorization server rejected the pushed authorization request.',
+      response.status >= 400 ? response.status : 400,
+    )
+  }
+  return readObject(response, 'Pushed authorization response is invalid.')
 }
 
 async function postEmptyForm(
@@ -1454,6 +1731,8 @@ function toExternalAuthorization(record: ExternalResourceAuthorizationRecord) {
     issuer: record.issuer,
     authorizationEndpoint: record.authorizationEndpoint,
     tokenEndpoint: record.tokenEndpoint,
+    pushedAuthorizationRequestEndpoint: record.pushedAuthorizationRequestEndpoint,
+    authorizationDetailsTypesSupported: record.authorizationDetailsTypesSupported,
     registrationEndpoint: record.registrationEndpoint,
     revocationEndpoint: record.revocationEndpoint,
     jwksUri: record.jwksUri,
@@ -1482,6 +1761,7 @@ function toResourceConnection(record: ResourceAccountConnectionRecord) {
     externalSubject: record.externalSubject,
     displayName: record.displayName,
     grantedScopes: record.grantedScopes,
+    authorizationDetails: record.authorizationDetails,
     status: record.status as 'active' | 'revoked',
     credentialExpiresAt: record.credentialExpiresAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
@@ -1497,6 +1777,7 @@ function toAgentAccessRequest(record: AgentAccessRequestRecord, hostId: string, 
     agentIdentityId: record.agentIdentityId,
     hostId,
     scopes: record.scopes,
+    authorizationDetails: record.authorizationDetails,
     reason: record.reason,
     status: record.status as 'pending' | 'approved' | 'denied' | 'consumed' | 'expired',
     approvalUrl,
@@ -1515,6 +1796,7 @@ function toAgentAccessGrant(record: AgentAccessGrantRecord) {
     connectionId: record.connectionId,
     agentIdentityId: record.agentIdentityId,
     scopes: record.scopes,
+    authorizationDetails: record.authorizationDetails,
     mode: record.mode as 'once' | 'until' | 'persistent',
     status: record.status as 'active' | 'revoked' | 'consumed' | 'expired',
     grantedByUserId: record.grantedByUserId,
@@ -1535,6 +1817,7 @@ function toAccountConnection(record: ResourceAccountConnectionRecord): AccountCo
     displayName: record.displayName,
     subjectHint: redactSubject(record.externalSubject),
     scopes: record.grantedScopes.filter((scope) => scope !== 'openid' && scope !== 'offline_access'),
+    authorizationDetails: record.authorizationDetails,
     status: record.status as 'active' | 'revoked',
     credentialExpiresAt: record.credentialExpiresAt?.toISOString() ?? null,
     authorizationUrl: null,
@@ -1555,6 +1838,7 @@ function toPendingAccountConnection(
     displayName: null,
     subjectHint: null,
     scopes,
+    authorizationDetails: pending.authorizationDetails,
     status: 'pending_authorization',
     credentialExpiresAt: null,
     authorizationUrl: pending.authorizationUrl,
@@ -1576,6 +1860,7 @@ function toAccessRequest(
       ...(request.connectionId ? { accountConnectionId: request.connectionId } : {}),
     },
     scopes: request.scopes,
+    authorizationDetails: request.authorizationDetails,
     reason: request.reason,
     status: request.status,
     approval: request.approvalUrl
@@ -1602,6 +1887,7 @@ function toAccessGrant(record: AgentAccessGrantRecord): AccessGrant {
       ...(record.connectionId ? { accountConnectionId: record.connectionId } : {}),
     },
     scopes: record.scopes,
+    authorizationDetails: record.authorizationDetails,
     mode: record.mode as AccessGrant['mode'],
     status: record.status as AccessGrant['status'],
     expiresAt: record.expiresAt?.toISOString() ?? null,

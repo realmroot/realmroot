@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { authorizationDetailsSchema } from './authorization-details'
 import { oidcClientRegistrationModeSchema } from './connectors'
 
 const nonEmptyString = z.string().trim().min(1)
@@ -16,6 +17,8 @@ export const externalResourceAuthorizationSchema = z.object({
   issuer: z.url(),
   authorizationEndpoint: z.url(),
   tokenEndpoint: z.url(),
+  pushedAuthorizationRequestEndpoint: z.url().nullable(),
+  authorizationDetailsTypesSupported: z.array(z.string()),
   registrationEndpoint: z.url().nullable(),
   revocationEndpoint: z.url(),
   jwksUri: z.url(),
@@ -59,6 +62,7 @@ export const resourceAccountConnectionSchema = z.object({
   externalSubject: z.string(),
   displayName: z.string(),
   grantedScopes: z.array(z.string()),
+  authorizationDetails: authorizationDetailsSchema,
   status: z.enum(['active', 'revoked']),
   credentialExpiresAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
@@ -87,6 +91,7 @@ export const createAgentAccessRequestSchema = z.object({
   resourceId: nonEmptyString,
   connectionId: nonEmptyString.nullable(),
   scopes: scopeListSchema,
+  authorizationDetails: authorizationDetailsSchema.default([]),
   reason: z.string().trim().max(500).nullable().optional(),
 })
 
@@ -97,6 +102,7 @@ export const agentAccessRequestSchema = z.object({
   agentIdentityId: z.string(),
   hostId: z.string(),
   scopes: z.array(z.string()),
+  authorizationDetails: authorizationDetailsSchema,
   reason: z.string().nullable(),
   status: agentAccessRequestStatusSchema,
   approvalUrl: z.url().nullable(),
@@ -112,6 +118,7 @@ export const decideAgentAccessRequestSchema = z.object({
   mode: agentAccessGrantModeSchema.optional(),
   expiresAt: z.iso.datetime().optional(),
   accountConnectionId: nonEmptyString.optional(),
+  authorizationDetails: authorizationDetailsSchema.default([]),
 })
 
 export const agentAccessApprovalTokenQuerySchema = z.object({ token: nonEmptyString })
@@ -132,6 +139,7 @@ export const agentAccessGrantSchema = z.object({
   connectionId: z.string().nullable(),
   agentIdentityId: z.string(),
   scopes: z.array(z.string()),
+  authorizationDetails: authorizationDetailsSchema,
   mode: agentAccessGrantModeSchema,
   status: z.enum(['active', 'revoked', 'consumed', 'expired']),
   grantedByUserId: z.string(),
@@ -156,6 +164,7 @@ export const agentResourceDiscoverySchema = z.object({
           displayName: z.string(),
           subjectHint: z.string(),
           grantedScopes: z.array(z.string()),
+          authorizationDetails: authorizationDetailsSchema,
         }),
       ),
       grants: z.array(agentAccessGrantSchema),
@@ -165,8 +174,8 @@ export const agentResourceDiscoverySchema = z.object({
 
 export type ExternalResourceAuthorizationRecord = z.infer<typeof externalResourceAuthorizationSchema>
 export type CreateResourceConnectionIntentRequest = z.infer<typeof createResourceConnectionIntentRequestSchema>
-export type CreateAgentAccessRequest = z.infer<typeof createAgentAccessRequestSchema>
-export type DecideAgentAccessRequest = z.infer<typeof decideAgentAccessRequestSchema>
+export type CreateAgentAccessRequest = z.input<typeof createAgentAccessRequestSchema>
+export type DecideAgentAccessRequest = z.input<typeof decideAgentAccessRequestSchema>
 export type ConnectableExternalResourcesResponse = z.infer<typeof connectableExternalResourcesResponseSchema>
 export type ListResourceConnectionsResponse = z.infer<typeof listResourceConnectionsResponseSchema>
 export type ResourceConnectionIntentResponse = z.infer<typeof resourceConnectionIntentResponseSchema>

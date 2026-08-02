@@ -202,6 +202,7 @@ describe('Agent protocol routes', () => {
         accountConnectionId: 'connection-1',
       },
       scopes: ['projects:read'],
+      authorizationDetails: [],
       reason: 'Read projects',
       status: 'pending',
       approval: {
@@ -272,6 +273,7 @@ describe('Agent protocol routes', () => {
       expiresIn: 300,
       expiresAt: '2026-01-01T00:05:00.000Z',
       scopes: ['projects:read'],
+      authorizationDetails: [],
       resourceUrl: 'https://projects.example.com/api',
     })
     const app = createRouteApp(

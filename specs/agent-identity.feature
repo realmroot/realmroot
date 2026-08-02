@@ -309,6 +309,40 @@ Feature: Agent identity and delegated API authorization
       Then its login and resource-account redirect URIs and JWKS URI use the configured deployment origin
       And a later Account Center authorization request uses that same redirect URI
 
+    @entrypoint:product-ui @journey:external-resource-rich-authorization-connection
+    Scenario: A controller connects one external subject to multiple target contexts
+      Given an authorization server advertises RFC 9396 authorization detail types and an RFC 9126 pushed authorization request endpoint
+      And an external API resource configures opaque connection authorization detail templates using supported types
+      When Realmroot dynamically registers its reusable OIDC connector
+      Then the registration declares the authorization detail types that the connector can use
+      When the controller authorizes the resource account
+      Then Realmroot pushes the complete authorization request including the configured authorization details
+      And sends only the returned one-time request URI through the browser
+      When the target consent enriches one template into multiple granted contexts
+      Then Realmroot requires and stores every returned authorization detail under the single account connection
+      And refresh-token rotation preserves the granted authorization details
+      And unknown types or malformed authorization details fail with invalid_authorization_details
+
+    @entrypoint:agent-protocol @journey:external-resource-contextual-delegation
+    Scenario: An Agent delegates an exact external-resource context alongside scopes
+      Given one external account connection grants multiple opaque authorization detail entries
+      When the Agent discovers that resource and selects one exact entry and an exact scope subset
+      Then the pending request and controller approval preserve both authority dimensions
+      And an ungranted entry or browser-tampered approval fails with invalid_authorization_details
+      When the controller approves the request and the Agent exchanges a token
+      Then Realmroot sends the approved scopes and authorization details to the target authorization server
+      And requires the target token response to return the exact assigned scopes and authorization details
+      And stores both dimensions with the token lease
+      And audit events expose only safe authorization detail type and identifier projections
+
+    @entrypoint:product-ui @journey:external-resource-rich-authorization-reauthorization
+    Scenario: Reauthorization removes stale contextual authority without changing non-RAR resources
+      Given an existing external resource account has active contextual Agent grants
+      When reauthorization no longer returns one previously granted authorization detail entry
+      Then Realmroot prevents future issuance from every grant containing the removed entry
+      And existing connections must be explicitly reauthorized when their resource becomes RAR-required
+      And resources without configured authorization details preserve their existing connection, refresh, grant, token exchange, revocation, and audit behavior
+
     @e2e @entrypoint:agent-protocol @journey:external-resource-first-access
     Scenario: An Agent requests first access to an external API resource
       Given an enabled external API resource has active authorization configuration

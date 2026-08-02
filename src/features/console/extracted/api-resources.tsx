@@ -6,6 +6,7 @@ import {
   type OrganizationResponse,
   updateApiResourceRequestSchema,
 } from '@shared/api/authorization'
+import { authorizationDetailsSchema } from '@shared/api/authorization-details'
 import type { ConnectorResponse } from '@shared/api/connectors'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
@@ -264,6 +265,7 @@ function ApiResourceCreateDialog({
   const [eligibilityMode, setEligibilityMode] = useState<ApiResourceEligibilityMode>('realm')
   const [eligibleOrganizationIds, setEligibleOrganizationIds] = useState<string[]>([])
   const [availableToAgents, setAvailableToAgents] = useState(true)
+  const [authorizationDetails, setAuthorizationDetails] = useState('[]')
   const [validationError, setValidationError] = useState<string | null>(null)
   useEffect(() => {
     if (!open || ownerOrganizationId) return
@@ -287,6 +289,7 @@ function ApiResourceCreateDialog({
             onSubmit(
               parseForm(createApiResourceRequestSchema, {
                 ...form,
+                authorizationDetails: form.connectorId ? parseAuthorizationDetails(authorizationDetails) : [],
                 ownerOrganizationId,
                 accessEligibility: { mode: eligibilityMode, organizationIds: eligibleOrganizationIds },
                 availableToAgents,
@@ -341,6 +344,22 @@ function ApiResourceCreateDialog({
             ))}
           </SelectInput>
         </Field>
+        {form.connectorId ? (
+          <Field
+            help={tt(
+              'Opaque RFC 9396 templates sent to the authorization server. Each array entry must contain a non-empty type.',
+            )}
+            label={tt('Authorization detail templates')}
+          >
+            <TextArea
+              aria-label={tt('Authorization detail templates')}
+              name="authorizationDetails"
+              onChange={(event) => setAuthorizationDetails(event.target.value)}
+              rows={8}
+              value={authorizationDetails}
+            />
+          </Field>
+        ) : null}
         <Field
           help={tt(
             'Eligibility controls who may request permissions from this server; roles still decide which scopes they receive.',
@@ -872,6 +891,18 @@ function ResourceSettings({
             }
           />
           <DetailRow label="Issuer" value={resource.authorization?.issuer ?? '—'} />
+          <DetailRow
+            label="Authorization detail templates"
+            value={
+              resource.authorizationDetails.length > 0 ? (
+                <pre className="max-w-md overflow-x-auto whitespace-pre-wrap text-xs">
+                  {JSON.stringify(resource.authorizationDetails, null, 2)}
+                </pre>
+              ) : (
+                tt('Not configured')
+              )
+            }
+          />
           <DetailRow label="Connection status" value={resource.authorization?.status ?? tt('Pending validation')} />
         </DetailSection>
       ) : null}
@@ -953,7 +984,13 @@ function ResourceEditorSheet({
   const [eligibilityMode, setEligibilityMode] = useState<ApiResourceEligibilityMode>(resource.accessEligibility.mode)
   const [organizationIds, setOrganizationIds] = useState(resource.accessEligibility.organizationIds)
   const [agents, setAgents] = useState(resource.availableToAgents)
+  const [authorizationDetails, setAuthorizationDetails] = useState(
+    JSON.stringify(resource.authorizationDetails, null, 2),
+  )
+  const [validationError, setValidationError] = useState<string | null>(null)
   useEffect(() => {
+    setValidationError(null)
+    setAuthorizationDetails(JSON.stringify(resource.authorizationDetails, null, 2))
     if (editor !== 'eligibility') return
     setOwnerOrganizationId(resource.ownerOrganizationId)
     setEligibilityMode(resource.accessEligibility.mode)
@@ -1026,7 +1063,15 @@ function ResourceEditorSheet({
             id={formId}
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault()
-              onSave({ connectorId: String(new FormData(event.currentTarget).get('connectorId') ?? '') })
+              try {
+                setValidationError(null)
+                onSave({
+                  connectorId: String(new FormData(event.currentTarget).get('connectorId') ?? ''),
+                  authorizationDetails: parseAuthorizationDetails(authorizationDetails),
+                })
+              } catch (submitError) {
+                setValidationError(submitError instanceof Error ? tt(submitError.message) : tt('Invalid form input.'))
+              }
             }}
           >
             <Field label={tt('OIDC connector')}>
@@ -1037,6 +1082,20 @@ function ResourceEditorSheet({
                   </option>
                 ))}
               </SelectInput>
+            </Field>
+            <Field
+              help={tt(
+                'Opaque RFC 9396 templates sent to the authorization server. Each array entry must contain a non-empty type.',
+              )}
+              label={tt('Authorization detail templates')}
+            >
+              <TextArea
+                aria-label={tt('Authorization detail templates')}
+                name="authorizationDetails"
+                onChange={(event) => setAuthorizationDetails(event.target.value)}
+                rows={10}
+                value={authorizationDetails}
+              />
             </Field>
           </form>
         ) : null}
@@ -1094,9 +1153,9 @@ function ResourceEditorSheet({
             </div>
           </form>
         ) : null}
-        {error ? (
+        {(validationError ?? error) ? (
           <p className="px-4 text-sm text-destructive" role="alert">
-            {error}
+            {validationError ?? error}
           </p>
         ) : null}
         <SheetFooter className="shrink-0">
@@ -1136,6 +1195,11 @@ function DetailSection({
     </section>
   )
 }
+
+function parseAuthorizationDetails(value: string) {
+  return authorizationDetailsSchema.parse(JSON.parse(value))
+}
+
 function DetailRow({
   action,
   description,

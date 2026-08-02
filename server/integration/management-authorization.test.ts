@@ -447,6 +447,91 @@ describe('authorization management over real D1', () => {
     expect(response.status).toBe(400)
   })
 
+  it('[spec: agent-identity/external-resource-rich-authorization-connection] persists opaque authorization detail templates through the management API', async () => {
+    const cookie = await signInAdmin(harness)
+    const now = new Date()
+    const connector = await harness.deps.connectors.create({
+      id: 'connector-rar-projects',
+      slug: 'rar-projects',
+      providerType: 'generic_oauth',
+      providerId: 'rar-projects',
+      displayName: 'RAR Projects',
+      enabled: true,
+      loginEnabled: false,
+      clientId: 'rar-projects-client',
+      clientSecret: 'rar-projects-secret',
+      clientSecretContext: null,
+      issuer: 'https://projects.example.com',
+      authorizationEndpoint: 'https://projects.example.com/authorize',
+      tokenEndpoint: 'https://projects.example.com/token',
+      userInfoEndpoint: 'https://projects.example.com/userinfo',
+      jwksEndpoint: 'https://projects.example.com/jwks',
+      registrationEndpoint: null,
+      revocationEndpoint: 'https://projects.example.com/revoke',
+      registrationMode: 'manual',
+      registrationAccessToken: null,
+      registrationAccessTokenContext: null,
+      scopes: ['openid', 'offline_access', 'projects:read'],
+      attributeMapping: null,
+      providerMetadata: {
+        grant_types_supported: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          'urn:ietf:params:oauth:grant-type:token-exchange',
+        ],
+        dpop_signing_alg_values_supported: ['ES256'],
+        authorization_details_types_supported: ['project_access'],
+        pushed_authorization_request_endpoint: 'https://projects.example.com/par',
+      },
+      createdAt: now,
+      updatedAt: now,
+    })
+    harness.deps.externalHttp.fetch = async (request) => {
+      if (request.url.endsWith('/.well-known/oauth-protected-resource/api')) {
+        return Response.json({
+          resource: 'https://projects.example.com/api',
+          authorization_servers: [connector.issuer],
+        })
+      }
+      return resourceOpenApiFetch(request)
+    }
+    const authorizationDetails = [
+      { type: 'project_access', actions: ['read'], project_id: 'project-1', tenant: { id: 'tenant-1' } },
+    ]
+
+    const created = await postJson(harness, cookie, '/api/api-resources', {
+      identifier: 'rar-projects-api',
+      name: 'RAR Projects API',
+      resourceUrl: 'https://projects.example.com/api',
+      connectorId: connector.id,
+      authorizationDetails,
+    })
+    const resource = (await created.json()) as { id: string; authorizationDetails: unknown }
+    expect(resource.authorizationDetails).toEqual(authorizationDetails)
+    await expect(harness.db.select().from(apiResource).where(eq(apiResource.id, resource.id))).resolves.toMatchObject([
+      { authorizationDetails },
+    ])
+
+    const updatedAuthorizationDetails = [
+      { type: 'project_access', actions: ['read', 'comment'], project_id: 'project-1' },
+    ]
+    const updated = await harness.request(`/api/api-resources/${resource.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ authorizationDetails: updatedAuthorizationDetails }),
+    })
+    expect(updated.status, await updated.clone().text()).toBe(200)
+    await expect(updated.json()).resolves.toMatchObject({ authorizationDetails: updatedAuthorizationDetails })
+
+    const unsupported = await harness.request(`/api/api-resources/${resource.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ authorizationDetails: [{ type: 'unknown_context' }] }),
+    })
+    expect(unsupported.status).toBe(400)
+  })
+
   it('rejects an undiscoverable enabled resource but saves a disabled draft', async () => {
     const cookie = await signInAdmin(harness)
     harness.deps.externalHttp.fetch = async () => new Response('<html></html>')
@@ -867,6 +952,7 @@ describe('authorization management over real D1', () => {
         ownerUserId: admin.id,
         ownerOrganizationId: null,
         scopes: ['files:read'],
+        authorizationDetails: [],
         encryptedPkceVerifier: 'late-verifier',
         returnTo: 'account-center',
         status: 'pending',
@@ -884,6 +970,7 @@ describe('authorization management over real D1', () => {
         agentIdentityId: 'archive-identity',
         bindingId: 'archive-binding',
         scopes: ['files:read'],
+        authorizationDetails: [],
         reason: null,
         status: 'pending',
         approvalTokenHash: 'late-approval-hash',
@@ -905,6 +992,7 @@ describe('authorization management over real D1', () => {
         tokenHash: 'late-token-hash',
         confirmationJkt: 'late-jkt',
         scopes: ['files:read'],
+        authorizationDetails: [],
         expiresAt,
         revokedAt: null,
         createdAt: now,
