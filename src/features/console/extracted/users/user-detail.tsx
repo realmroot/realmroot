@@ -849,14 +849,14 @@ function browserLabel(userAgent: string | null) {
         : userAgent.includes('Safari/')
           ? 'Safari'
           : tt('Browser')
-  const platform = userAgent.includes('Mac OS X')
-    ? 'macOS'
-    : userAgent.includes('Windows')
-      ? 'Windows'
-      : userAgent.includes('Android')
-        ? 'Android'
-        : /iPhone|iPad/.test(userAgent)
-          ? 'iOS'
+  const platform = /iPhone|iPad/.test(userAgent)
+    ? 'iOS'
+    : userAgent.includes('Mac OS X')
+      ? 'macOS'
+      : userAgent.includes('Windows')
+        ? 'Windows'
+        : userAgent.includes('Android')
+          ? 'Android'
           : userAgent.includes('Linux')
             ? 'Linux'
             : null

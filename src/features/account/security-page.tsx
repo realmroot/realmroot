@@ -2,7 +2,6 @@ import { Fingerprint, Laptop, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { deletePasskey, revokeOtherSessions, revokeSession } from '@/lib/api/account'
-import { signOut } from '@/lib/auth-client'
 import { tt } from '@/lib/i18n'
 import { AccountPageHeader, AccountTabContent, AccountTabs } from './account-page'
 import { AccountPageError, AccountPageLoading, AccountPageShell } from './account-shell'
@@ -357,14 +356,7 @@ function SessionsPanel({
 }
 
 async function revokeUserSession(session: UserSessionDevice, mutate: MutationHandler) {
-  const result = await mutate('Session revoked.', () => revokeSession(session.id), {
-    invalidate: session.current ? [] : [accountQueryKeys.sessions],
+  await mutate('Session revoked.', () => revokeSession(session.id), {
+    invalidate: [accountQueryKeys.sessions],
   })
-  if (result && session.current) {
-    try {
-      await signOut()
-    } finally {
-      window.location.assign('/auth/sign-in')
-    }
-  }
 }

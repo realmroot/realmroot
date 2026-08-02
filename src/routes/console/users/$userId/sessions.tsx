@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { UserSessionsPage } from '@/features/console/extracted/users/user-detail-pages'
+import { UserDetailPage } from '@/features/console/extracted/users/user-detail'
 
 export const Route = createFileRoute('/console/users/$userId/sessions')({
   component: UserSessionsRoute,
@@ -7,5 +7,5 @@ export const Route = createFileRoute('/console/users/$userId/sessions')({
 
 function UserSessionsRoute() {
   const { userId } = Route.useParams()
-  return <UserSessionsPage userId={userId} />
+  return <UserDetailPage userId={userId} section="sessions" />
 }

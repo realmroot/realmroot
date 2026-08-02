@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ApplicationSettingsPage } from '@/features/console/extracted/applications/application-detail-pages'
+import { ApplicationDetailPage } from '@/features/console/extracted/applications/application-detail'
 
 export const Route = createFileRoute('/console/applications/$applicationId/settings')({
   component: ApplicationSettingsRoute,
@@ -7,5 +7,5 @@ export const Route = createFileRoute('/console/applications/$applicationId/setti
 
 function ApplicationSettingsRoute() {
   const { applicationId } = Route.useParams()
-  return <ApplicationSettingsPage applicationId={applicationId} />
+  return <ApplicationDetailPage applicationId={applicationId} section="settings" />
 }

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { UserSecurityPage } from '@/features/console/extracted/users/user-detail-pages'
+import { UserDetailPage } from '@/features/console/extracted/users/user-detail'
 
 export const Route = createFileRoute('/console/users/$userId/security')({
   component: UserSecurityRoute,
@@ -7,5 +7,5 @@ export const Route = createFileRoute('/console/users/$userId/security')({
 
 function UserSecurityRoute() {
   const { userId } = Route.useParams()
-  return <UserSecurityPage userId={userId} />
+  return <UserDetailPage userId={userId} section="authentication" />
 }

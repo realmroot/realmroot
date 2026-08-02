@@ -58,7 +58,7 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: consoleQueryKeys.agents })
       setRetireOpen(false)
-      await navigate({ search: context ? { context } : {}, to: '/console/agents' })
+      await navigate({ search: {}, to: '/console/agents' })
     },
   })
   useEffect(() => {
@@ -81,6 +81,15 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
     [...(requests.data?.items ?? []), ...(grants.data?.items ?? [])].map((item) => [item.resource.id, item.resource]),
   )
   const owner = `${agent.owner.displayName} · ${agent.owner.id}`
+  const tabs: AgentDetailSection[] = [
+    'overview',
+    'hosts',
+    'roles',
+    'requests',
+    'grants',
+    'activity',
+    ...(!context ? (['settings'] as const) : []),
+  ]
 
   return (
     <>
@@ -110,13 +119,11 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
           value={tab}
         >
           <TabsList className="w-full justify-start" variant="line">
-            {['overview', 'hosts', 'roles', 'requests', 'grants', 'activity', ...(!context ? ['settings'] : [])].map(
-              (value) => (
-                <TabsTrigger key={value} value={value}>
-                  {tt(agentTabLabel(value))}
-                </TabsTrigger>
-              ),
-            )}
+            {tabs.map((value) => (
+              <TabsTrigger key={value} value={value}>
+                {tt(agentTabLabel(value))}
+              </TabsTrigger>
+            ))}
           </TabsList>
           <TabsContent className="mt-5" value="overview">
             <DetailRows
@@ -190,20 +197,16 @@ export function AgentDetailPage({ agentId, section = 'overview' }: { agentId: st
   )
 }
 
-function agentTabLabel(value: string) {
-  return (
-    (
-      {
-        overview: 'Overview',
-        hosts: 'Installations',
-        roles: 'Roles',
-        requests: 'Access requests',
-        grants: 'Access grants',
-        activity: 'Activity',
-        settings: 'Settings',
-      } as Record<string, string>
-    )[value] ?? value
-  )
+function agentTabLabel(value: AgentDetailSection) {
+  return {
+    overview: 'Overview',
+    hosts: 'Installations',
+    roles: 'Roles',
+    requests: 'Access requests',
+    grants: 'Access grants',
+    activity: 'Activity',
+    settings: 'Settings',
+  }[value]
 }
 
 function DetailRows({ rows }: { rows: Array<[string, string]> }) {
@@ -387,12 +390,8 @@ function agentEventLabel(action: string, result: string) {
   return action
 }
 
-function agentResultLabel(result: string) {
-  return (
-    ({ allowed: 'Allowed', denied: 'Denied', pending: 'Pending', failed: 'Failed' } as Record<string, string>)[
-      result
-    ] ?? result
-  )
+function agentResultLabel(result: 'allowed' | 'denied' | 'pending') {
+  return { allowed: 'Allowed', denied: 'Denied', pending: 'Pending' }[result]
 }
 
 function ScopeList({ scopes }: { scopes: string[] }) {

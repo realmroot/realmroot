@@ -1,30 +1,7 @@
-import { SettingRow, tt } from '../../console-shared'
-import { SettingsSection, SettingsSections, TokenCustomizationCard } from '../../helpers/helpers-preview'
+import { tt } from '../../console-shared'
+import { SettingsSections, TokenCustomizationCard } from '../../helpers/helpers-preview'
 import { ResourcePage } from '../../helpers/helpers-resource'
 
-export function ConsolePlaceholderPage({
-  description,
-  rows,
-  title,
-}: {
-  description: string
-  rows: Array<[string, string]>
-  title: string
-}) {
-  return (
-    <ResourcePage title={title} description={description} framed={false}>
-      <SettingsSections>
-        <SettingsSection title={title} description={description}>
-          <div className="grid gap-3">
-            {rows.map(([label, value]) => (
-              <SettingRow key={label} label={label} value={value} />
-            ))}
-          </div>
-        </SettingsSection>
-      </SettingsSections>
-    </ResourcePage>
-  )
-}
 export function CustomizeJwtPage() {
   return (
     <ResourcePage

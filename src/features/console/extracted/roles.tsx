@@ -219,11 +219,8 @@ export function RoleDetailPage({ roleId, section = 'overview' }: { roleId: strin
     },
   })
   const permissionsMutation = useAdminMutation({
-    mutationFn: (permissions: RolePermission[]) => {
-      const etag = permissionsQuery.data?.etag
-      if (!etag) throw new Error('Role permissions must be loaded before they can be replaced.')
-      return replaceRolePermissions(roleId, permissions, etag)
-    },
+    mutationFn: (permissions: RolePermission[]) =>
+      replaceRolePermissions(roleId, permissions, permissionsQuery.data!.etag),
     onSuccess: () => {
       setPermissionsOpen(false)
       return permissionsQuery.refetch()

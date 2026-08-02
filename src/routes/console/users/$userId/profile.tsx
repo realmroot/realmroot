@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { UserProfilePage } from '@/features/console/extracted/users/user-detail-pages'
+import { UserDetailPage } from '@/features/console/extracted/users/user-detail'
 
 export const Route = createFileRoute('/console/users/$userId/profile')({
   component: UserProfileRoute,
@@ -7,5 +7,5 @@ export const Route = createFileRoute('/console/users/$userId/profile')({
 
 function UserProfileRoute() {
   const { userId } = Route.useParams()
-  return <UserProfilePage userId={userId} />
+  return <UserDetailPage userId={userId} section="overview" />
 }
