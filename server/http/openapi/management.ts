@@ -7,11 +7,13 @@ import {
   agentInstallationEnrollmentResponseSchema,
   agentInstallationEnrollmentSchema,
   agentResponseSchema,
+  authorizationDetailCatalogResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
   createAgentInstallationEnrollmentSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
+import { paginationQuerySchema } from '@shared/api/pagination'
 import { protectedResourceCapabilityNames, requiredProtectedCapability } from '@shared/authz'
 import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
@@ -118,6 +120,19 @@ const managementRoutes: ManagementRouteConfig[] = [
     summary: 'List API resources available to the Agent',
     security: [{ agentAuth: [] }],
     response: agentApiResourcesResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/agent/api-resources/{resourceId}/authorization-detail-catalog',
+    operationId: 'listAgentAuthorizationDetailCatalog',
+    summary: 'List available authorization contexts for an API resource',
+    cli: { group: 'access', name: 'contexts' },
+    security: [{ agentAuth: [] }],
+    request: {
+      params: z.object({ resourceId: z.string() }),
+      query: paginationQuerySchema,
+    },
+    response: authorizationDetailCatalogResponseSchema,
   },
   {
     method: 'post',

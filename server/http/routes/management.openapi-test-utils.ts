@@ -165,6 +165,7 @@ export function toManagementOperationKey(route: HonoRoute) {
     route.path === '/api/agent/installation-enrollments' ||
     route.path.startsWith('/api/agent/installation-enrollments/:') ||
     route.path === '/api/agent/api-resources' ||
+    route.path.startsWith('/api/agent/api-resources/:') ||
     route.path === '/api/agent/access-grants' ||
     route.path.startsWith('/api/agent/access-grants/:') ||
     route.path === '/api/agent/access-requests' ||

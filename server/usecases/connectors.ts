@@ -365,6 +365,25 @@ async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, c
     'authorization_details_types_supported',
     'OIDC discovery response',
   )
+  const authorizationDetailsCatalogEndpoint =
+    metadata.authorization_details_catalog_endpoint === undefined
+      ? null
+      : requireNetworkUrl(
+          requiredString(metadata, 'authorization_details_catalog_endpoint', 'OIDC discovery response'),
+          'authorization details catalog endpoint',
+        )
+  const authorizationDetailsCatalogScope =
+    metadata.authorization_details_catalog_scope === undefined
+      ? null
+      : requiredString(metadata, 'authorization_details_catalog_scope', 'OIDC discovery response')
+  if (Boolean(authorizationDetailsCatalogEndpoint) !== Boolean(authorizationDetailsCatalogScope)) {
+    throw badRequest(
+      'OIDC discovery response must advertise authorization_details_catalog_endpoint and authorization_details_catalog_scope together.',
+    )
+  }
+  if (authorizationDetailsCatalogScope?.match(/\s/)) {
+    throw badRequest('OIDC discovery response has invalid authorization_details_catalog_scope.')
+  }
 
   if ((input.registrationMode ?? 'manual') === 'manual') {
     if (!input.clientId || !input.clientSecret)
@@ -393,6 +412,7 @@ async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, c
     input.providerId,
     input.displayName,
     authorizationDetailsTypes,
+    authorizationDetailsCatalogScope,
   )
   return {
     issuer,
@@ -432,6 +452,7 @@ async function registerOidcClient(
   providerId: string,
   displayName: string,
   authorizationDetailsTypes: string[],
+  authorizationDetailsCatalogScope: string | null,
 ) {
   const response = await deps.externalHttp.fetch(
     new Request(endpoint, {
@@ -451,7 +472,9 @@ async function registerOidcClient(
         ],
         response_types: ['code'],
         token_endpoint_auth_method: 'client_secret_basic',
-        scope: 'openid profile email offline_access',
+        scope: ['openid', 'profile', 'email', 'offline_access', authorizationDetailsCatalogScope]
+          .filter((scope): scope is string => Boolean(scope))
+          .join(' '),
         jwks_uri: `${origin}/api/auth/jwks`,
         ...(authorizationDetailsTypes.length > 0 ? { authorization_details_types: authorizationDetailsTypes } : {}),
       }),

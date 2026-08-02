@@ -14,6 +14,7 @@ import type {
   AccountConnection,
   Agent,
   AgentEnrollment,
+  AuthorizationDetailCatalogEntry,
   ConnectableApiResourcesResponse,
   CreateAccountConnection,
   DecideAccessRequest,
@@ -337,6 +338,26 @@ export function getAgentResourceApproval(token: string) {
       }>(response),
     )
     .then((result) => result.items[0]!)
+}
+
+export function listApprovalAuthorizationDetailCatalog(
+  requestId: string,
+  approvalToken: string,
+  pagination: { limit: number; offset: number } = { limit: 100, offset: 0 },
+) {
+  const query = new URLSearchParams({
+    approvalToken,
+    limit: String(pagination.limit),
+    offset: String(pagination.offset),
+  })
+  return fetch(`/api/account/access-requests/${encodeURIComponent(requestId)}/authorization-detail-catalog?${query}`, {
+    credentials: 'same-origin',
+  }).then((response) =>
+    readJsonResponse<{
+      items: AuthorizationDetailCatalogEntry[]
+      pagination: import('@shared/api/pagination').PaginationMetadata
+    }>(response),
+  )
 }
 
 export function listAgentResourceRequests() {

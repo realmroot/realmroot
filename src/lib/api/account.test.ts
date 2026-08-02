@@ -11,6 +11,7 @@ import {
   listAccountAgents,
   listAccountConnections,
   listApprovalAccountConnections,
+  listApprovalAuthorizationDetailCatalog,
   listExternalApiResources,
   retireAgent,
   revokeAccountConnection,
@@ -229,6 +230,13 @@ describe('account API client over the real network boundary', () => {
           pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
         })
       }),
+      http.get(`${base}/api/account/access-requests/:requestId/authorization-detail-catalog`, ({ request }) => {
+        requests.push({ url: new URL(request.url), method: request.method, body: null })
+        return HttpResponse.json({
+          items: [],
+          pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        })
+      }),
       http.put(`${base}/api/account/access-requests/:requestId/decision`, async ({ request }) => {
         requests.push({ url: new URL(request.url), method: request.method, body: await request.json() })
         return HttpResponse.json({ id: 'request-1', status: 'approved' })
@@ -248,6 +256,9 @@ describe('account API client over the real network boundary', () => {
     ).resolves.toMatchObject({ id: 'connection-1' })
     await expect(revokeAccountConnection('connection/1')).resolves.toBeUndefined()
     await expect(getAgentResourceApproval('approval token')).resolves.toMatchObject({ id: 'request-1' })
+    await expect(listApprovalAuthorizationDetailCatalog('request/1', 'approval token')).resolves.toMatchObject({
+      items: [],
+    })
     await expect(
       decideAgentResourceApproval('request/1', 'approval token', { decision: 'approve', mode: 'once' }),
     ).resolves.toMatchObject({ status: 'approved' })
@@ -264,6 +275,13 @@ describe('account API client over the real network boundary', () => {
       expect.objectContaining({
         method: 'GET',
         url: expect.objectContaining({ search: '?approvalToken=approval%20token' }),
+      }),
+      expect.objectContaining({
+        method: 'GET',
+        url: expect.objectContaining({
+          pathname: expect.stringContaining('request%2F1/authorization-detail-catalog'),
+          search: '?approvalToken=approval+token&limit=100&offset=0',
+        }),
       }),
       expect.objectContaining({
         method: 'PUT',

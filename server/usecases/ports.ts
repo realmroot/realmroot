@@ -428,6 +428,8 @@ export interface ExternalResourceAuthorizationRecord {
   tokenEndpoint: string
   pushedAuthorizationRequestEndpoint: string | null
   authorizationDetailsTypesSupported: string[]
+  authorizationDetailsCatalogEndpoint: string | null
+  authorizationDetailsCatalogScope: string | null
   registrationEndpoint: string | null
   revocationEndpoint: string
   jwksUri: string

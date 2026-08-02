@@ -265,6 +265,41 @@ describe('Agent protocol routes', () => {
     expect(createAccessRequest).not.toHaveBeenCalled()
   })
 
+  it('exposes authorization context discovery to the authenticated Agent [spec: agent-identity/external-resource-contextual-delegation]', async () => {
+    vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
+    const listCatalog = vi.spyOn(externalResources, 'listAgentAuthorizationDetailCatalog').mockResolvedValue({
+      items: [
+        {
+          authorizationDetail: { type: 'workspace', identifier: 'workspace-1' },
+          display: { label: 'Workspace One' },
+          connectionAuthorized: true,
+          agentGrants: [],
+        },
+      ],
+      pagination: { limit: 25, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+    const app = createRouteApp({ getAgentSession: vi.fn().mockResolvedValue(session()) })
+
+    const response = await app.request(
+      'https://auth.example.com/api/agent/api-resources/resource-1/authorization-detail-catalog?limit=25',
+      { headers: { authorization: 'Bearer agent-jwt' } },
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      items: [
+        {
+          authorizationDetail: { type: 'workspace', identifier: 'workspace-1' },
+          connectionAuthorized: true,
+        },
+      ],
+    })
+    expect(listCatalog).toHaveBeenCalledWith(expect.anything(), 'resource-1', expect.anything(), {
+      limit: 25,
+      offset: 0,
+    })
+  })
+
   it('uses the unified grant token operation for native APIs [spec: agent-identity/native-api-resource-token]', async () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
     const issue = vi.spyOn(externalResources, 'issueTargetAccessToken').mockResolvedValue({

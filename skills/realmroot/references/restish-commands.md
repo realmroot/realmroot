@@ -138,6 +138,21 @@ Replace every example value with an exact discovered value and request only the
 scopes needed by the user's task. The adapter opens the controller approval
 page and keeps the request waiting.
 
+For a resource that advertises authorization contexts, inspect the account's
+live catalog before requesting access:
+
+```bash
+restish "$API_NAME" access contexts resource_123 -o json
+```
+
+Follow `pagination.nextOffset` until `hasMore` is false. Each item reports the
+exact `authorizationDetail`, whether the connected account has authorized it,
+and matching active Agent grants. Use one exact detail in each access request;
+if an active grant already covers the required scopes, issue credentials from
+that grant directly and do not create another approval request. If
+`connectionAuthorized` is false, request account reauthorization instead of
+claiming that the workspace does not exist.
+
 If interrupted after request creation, resume inspection with the returned
 request ID:
 

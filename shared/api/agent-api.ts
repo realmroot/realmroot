@@ -5,7 +5,7 @@ import {
   createApiResourceRequestSchema,
   updateApiResourceRequestSchema,
 } from './authorization'
-import { authorizationDetailsSchema } from './authorization-details'
+import { authorizationDetailCatalogItemSchema, authorizationDetailsSchema } from './authorization-details'
 import {
   agentAccessGrantModeSchema,
   agentAccessRequestStatusSchema,
@@ -227,6 +227,22 @@ export const agentApiResourcesResponseSchema = z.object({
   pagination: paginationMetadataSchema,
 })
 
+export const authorizationDetailCatalogEntrySchema = authorizationDetailCatalogItemSchema.extend({
+  connectionAuthorized: z.boolean(),
+  agentGrants: z.array(
+    z.object({
+      id: z.string(),
+      scopes: z.array(z.string()),
+      status: z.literal('active'),
+    }),
+  ),
+})
+
+export const authorizationDetailCatalogResponseSchema = z.object({
+  items: z.array(authorizationDetailCatalogEntrySchema),
+  pagination: paginationMetadataSchema,
+})
+
 export const connectableApiResourcesResponseSchema = z.object({
   items: z.array(
     z.object({
@@ -335,7 +351,11 @@ export const accessRequestsResponseSchema = z.object({
 
 export const accessRequestApprovalSchema = accessRequestSchema.extend({
   agent: z.object({ id: z.string(), name: z.string() }),
-  resource: z.object({ id: z.string(), name: z.string() }),
+  resource: z.object({
+    id: z.string(),
+    name: z.string(),
+    authorizationDetailTemplates: authorizationDetailsSchema,
+  }),
 })
 
 export const accessRequestApprovalsResponseSchema = z.object({
@@ -412,3 +432,4 @@ export type AccessRequest = z.infer<typeof accessRequestSchema>
 export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>
 export type DecideAccessRequest = z.input<typeof decideAccessRequestSchema>
 export type AccessGrant = z.infer<typeof accessGrantSchema>
+export type AuthorizationDetailCatalogEntry = z.infer<typeof authorizationDetailCatalogEntrySchema>

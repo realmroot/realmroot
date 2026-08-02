@@ -16,6 +16,7 @@ import {
   issueTargetAccessToken,
   listAgentAccessGrants,
   listAgentApiResources,
+  listAgentAuthorizationDetailCatalog,
 } from '@server/usecases/external-resources'
 import {
   accessGrantSchema,
@@ -25,6 +26,7 @@ import {
   agentInstallationEnrollmentResponseSchema,
   agentInstallationEnrollmentSchema,
   agentResponseSchema,
+  authorizationDetailCatalogResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
   createAgentInstallationEnrollmentSchema,
@@ -111,6 +113,20 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(
       agentApiResourcesResponseSchema.parse(
         await listAgentApiResources(getDeps(c), principal, readQuery(c, paginationQuerySchema)),
+      ),
+    )
+  })
+
+  app.get('/api-resources/:resourceId/authorization-detail-catalog', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    return c.json(
+      authorizationDetailCatalogResponseSchema.parse(
+        await listAgentAuthorizationDetailCatalog(
+          getDeps(c),
+          c.req.param('resourceId'),
+          principal,
+          readQuery(c, paginationQuerySchema),
+        ),
       ),
     )
   })
