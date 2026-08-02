@@ -1612,8 +1612,27 @@ async function postForm(
   const response = await deps.externalHttp.fetch(
     new Request(url, { method: 'POST', headers, body: new URLSearchParams(body) }),
   )
-  if (!response.ok) throw unauthorized('External authorization server rejected the token request.')
+  if (!response.ok) {
+    const detail = await oauthErrorDetail(response)
+    throw unauthorized(
+      detail
+        ? `External authorization server rejected the token request: ${detail}.`
+        : 'External authorization server rejected the token request.',
+    )
+  }
   return readObject(response, 'External authorization server response is invalid.')
+}
+
+async function oauthErrorDetail(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as Record<string, unknown>
+    const error = typeof body.error === 'string' ? body.error : null
+    const description = typeof body.error_description === 'string' ? body.error_description : null
+    if (!error) return null
+    return description ? `${error}: ${description}` : error
+  } catch {
+    return null
+  }
 }
 
 async function postPushedAuthorizationRequest(

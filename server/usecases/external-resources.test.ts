@@ -1033,6 +1033,7 @@ describe('external API resource authorization', () => {
         { issuer: principal().issuer, sign },
       ),
     ).rejects.toThrow('invalid expires_in')
+    exchangeResponse = { error: 'invalid_grant', error_description: 'Agent assertion is invalid' }
     exchangeStatus = 400
     await expect(
       issueTargetAccessToken(
@@ -1043,7 +1044,7 @@ describe('external API resource authorization', () => {
         principal(),
         { issuer: principal().issuer, sign },
       ),
-    ).rejects.toThrow('rejected the token request')
+    ).rejects.toThrow('invalid_grant: Agent assertion is invalid')
   })
 
   it('[spec: agent-identity/external-resource-contextual-delegation] exchanges and leases the exact approved authorization details', async () => {
