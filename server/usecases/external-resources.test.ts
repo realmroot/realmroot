@@ -1289,14 +1289,14 @@ describe('external API resource authorization', () => {
     )
   })
 
-  it('[spec: agent-identity/external-resource-first-access] connects the account with the current catalog and keeps the request exact', async () => {
+  it('[spec: agent-identity/external-resource-first-access] connects the account with the pending request scopes', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)
-    mockResourceOpenApi(deps, resource().resourceUrl, ['projects:read', 'projects:write'])
+    mockResourceOpenApi(deps, resource().resourceUrl, ['objects:purge', 'projects:read', 'projects:write'])
     const request = {
       ...requestRecord(),
       connectionId: null,
-      scopes: ['projects:read', 'projects:write'],
+      scopes: ['projects:read'],
     }
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(request)
     vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
@@ -1317,14 +1317,14 @@ describe('external API resource authorization', () => {
     ).resolves.toMatchObject({
       apiResourceId: 'resource-1',
       owner: { type: 'user', userId: 'user-1' },
-      scopes: ['projects:read', 'projects:write'],
+      scopes: ['projects:read'],
       status: 'pending_authorization',
     })
     expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
       expect.objectContaining({
         resourceId: 'resource-1',
         ownerUserId: 'user-1',
-        scopes: ['offline_access', 'openid', 'projects:read', 'projects:write'],
+        scopes: ['offline_access', 'openid', 'projects:read'],
         returnTo: 'access-approval',
       }),
     )

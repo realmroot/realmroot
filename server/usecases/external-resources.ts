@@ -265,7 +265,7 @@ export async function createAccountConnection(
     const owner = identity.identity.ownerOrganizationId
       ? { type: 'organization' as const, organizationId: identity.identity.ownerOrganizationId }
       : { type: 'user' as const }
-    const connectionScopes = (await readDeclaredScopes(deps, resource.resourceUrl)).map((scope) => scope.value)
+    const connectionScopes = request.scopes
     const pending = await createResourceConnectionIntent(
       deps,
       request.resourceId,

@@ -353,14 +353,14 @@ Feature: Agent identity and delegated API authorization
       When the controller opens the approval page
       Then Realmroot shows the home space's single connected account without account-selection controls
       Or requires the controller to connect that resource account before deciding the Agent request
-      And the new account authorization requests the target's current Agent-delegable scope catalog
+      And the new account authorization requests the pending Agent request's exact scope set
       When OAuth returns after connecting the account
       Then Realmroot returns to the pending Agent approval with that account displayed
       When the controller separately approves the exact Agent scopes and grant lifetime
       Then Realmroot records a resource account connection owned by the Agent's home space
       And stores its refresh credential encrypted
       And never exposes the refresh credential through an API, audit event, or error
-      And binds the broad account connection to the exact request and grant
+      And binds the account connection to the exact request and grant
       And the Agent can obtain a DPoP-bound target access token
 
     @entrypoint:product-ui @journey:resource-account-reauthorization
@@ -370,7 +370,7 @@ Feature: Agent identity and delegated API authorization
       When the controller opens the approval page
       Then Realmroot displays the connected account as requiring expanded authorization
       And prevents approval until the account covers every requested scope
-      When the controller reauthorizes that account for the resource's current scope catalog
+      When the controller reauthorizes that account for the pending Agent request's exact scope set
       And OAuth returns the same external subject with replacement credentials and scopes
       Then Realmroot preserves the account connection identity
       And replaces its encrypted credentials, scopes, display name, and expiry
