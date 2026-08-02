@@ -98,7 +98,9 @@ describe('Agent resource access approval', () => {
     expect(screen.queryByRole('radio', { name: 'ZPan Demo' })).toBeNull()
     expect(screen.getAllByText('projects:read')).toHaveLength(2)
     expect(screen.getByText('Read project status')).toBeTruthy()
-    expect(screen.getByText('{"type":"project","project_id":"project-1","actions":["read"]}')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Requested authorization details' }).textContent).toContain(
+      '{"actions":["read"],"project_id":"project-1","type":"project"}',
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
 
     await waitFor(() =>
@@ -110,6 +112,45 @@ describe('Agent resource access approval', () => {
       }),
     )
     expect(await screen.findByText('Resource access approved')).toBeTruthy()
+  })
+
+  it('resolves a generic request to every matching authorization detail on the connected account', async () => {
+    api.getAgentResourceApproval.mockResolvedValue({
+      ...request,
+      authorizationDetails: [{ type: 'project' }],
+    })
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [
+        {
+          ...connection,
+          authorizationDetails: [
+            { type: 'project', project_id: 'project-1' },
+            { type: 'project', project_id: 'project-2' },
+          ],
+        },
+      ],
+      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+
+    render(<ResourceAccessApproval />)
+
+    const approve = await screen.findByRole('button', { name: 'Approve exact access' })
+    expect(approve.hasAttribute('disabled')).toBe(false)
+    const context = screen.getByRole('region', { name: 'Requested authorization details' }).textContent
+    expect(context).toContain('{"project_id":"project-1","type":"project"}')
+    expect(context).toContain('{"project_id":"project-2","type":"project"}')
+    fireEvent.click(approve)
+    await waitFor(() =>
+      expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
+        decision: 'approve',
+        mode: 'once',
+        accountConnectionId: 'connection-1',
+        authorizationDetails: [
+          { type: 'project', project_id: 'project-1' },
+          { type: 'project', project_id: 'project-2' },
+        ],
+      }),
+    )
   })
 
   it('shows a native resource name without requiring an account connection', async () => {

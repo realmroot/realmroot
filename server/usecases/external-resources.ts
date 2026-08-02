@@ -727,7 +727,7 @@ export async function decideAgentAccessRequest(
 
   const resource = await requireEnabledResource(deps, request.resourceId)
   const authorizationDetails = input.authorizationDetails ?? []
-  if (!exactAuthorizationDetails(authorizationDetails, request.authorizationDetails)) {
+  if (!authorizationDetailsMatchRequest(authorizationDetails, request.authorizationDetails)) {
     throw invalidAuthorizationDetails('Approved authorization details do not match the pending access request.')
   }
   await validateRequestedScopes(deps, resource.resourceUrl, request.scopes)
@@ -841,7 +841,7 @@ export async function issueTargetAccessToken(
     identity.identity.ownerOrganizationId,
     grant.scopes,
   )
-  if (!exactAuthorizationDetails(grant.authorizationDetails, request.authorizationDetails)) {
+  if (!authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails)) {
     throw forbidden('Agent access grant authorization details do not match the approved request.')
   }
   if (resource.connectorId === null) {
@@ -1575,6 +1575,18 @@ function exactAuthorizationDetails(left: AuthorizationDetail[], right: Authoriza
   const leftEntries = left.map(canonicalJson).sort()
   const rightEntries = right.map(canonicalJson).sort()
   return leftEntries.every((value, index) => value === rightEntries[index])
+}
+
+function authorizationDetailsMatchRequest(approved: AuthorizationDetail[], requested: AuthorizationDetail[]) {
+  if (new Set(approved.map(canonicalJson)).size !== approved.length) return false
+  if (approved.some((detail) => !requested.some((template) => authorizationDetailMatchesTemplate(detail, template)))) {
+    return false
+  }
+  return requested.every((template) => approved.some((detail) => authorizationDetailMatchesTemplate(detail, template)))
+}
+
+function authorizationDetailMatchesTemplate(detail: AuthorizationDetail, template: AuthorizationDetail) {
+  return Object.entries(template).every(([key, value]) => canonicalJson(detail[key]) === canonicalJson(value))
 }
 
 function canonicalJson(value: unknown): string {

@@ -80,7 +80,7 @@ export function ResourceAccessApproval() {
           : {
               decision: 'approve',
               mode,
-              authorizationDetails: request!.authorizationDetails,
+              authorizationDetails: approvedAuthorizationDetails!,
               ...(connection ? { accountConnectionId: connection.id } : {}),
               ...(mode === 'until' ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
             }
@@ -111,11 +111,15 @@ export function ResourceAccessApproval() {
     }
   }
 
+  const approvedAuthorizationDetails =
+    request && connection
+      ? resolveAuthorizationDetails(request.authorizationDetails, connection.authorizationDetails)
+      : request?.authorizationDetails
   const connectionCoversRequest =
     request !== null &&
     connection !== null &&
     request.scopes.every((scope) => connection.scopes.includes(scope)) &&
-    authorizationDetailsAreCovered(request.authorizationDetails, connection.authorizationDetails)
+    approvedAuthorizationDetails !== null
   const expiryIsValid = mode !== 'until' || isFutureExpiry(expiresAt)
 
   if (decision) {
@@ -189,9 +193,11 @@ export function ResourceAccessApproval() {
         ) : null}
         {request?.target.type === 'api-resource' && request.authorizationDetails.length > 0 ? (
           <section className="decisionPermissions" aria-label="Requested authorization details">
-            <h2>Requested context</h2>
+            <h2>Authorization context</h2>
             <pre className="whitespace-pre-wrap break-all text-xs">
-              <code>{request.authorizationDetails.map((detail) => JSON.stringify(detail)).join('\n')}</code>
+              <code>
+                {(approvedAuthorizationDetails ?? request.authorizationDetails).map(canonicalJson).join('\n')}
+              </code>
             </pre>
           </section>
         ) : null}
@@ -311,17 +317,17 @@ function clearStoredApproval() {
   window.sessionStorage.removeItem(approvalTokenStorageKey)
 }
 
-function authorizationDetailsAreCovered(
+function resolveAuthorizationDetails(
   requested: AccessRequestApproval['authorizationDetails'],
   connected: AccountConnection['authorizationDetails'],
 ) {
-  const available = connected.map(canonicalJson)
-  return requested.every((detail) => {
-    const index = available.indexOf(canonicalJson(detail))
-    if (index === -1) return false
-    available.splice(index, 1)
-    return true
-  })
+  const matches = connected.filter((candidate) => requested.some((template) => matchesTemplate(candidate, template)))
+  if (requested.some((template) => !matches.some((candidate) => matchesTemplate(candidate, template)))) return null
+  return [...new Map(matches.map((detail) => [canonicalJson(detail), detail])).values()]
+}
+
+function matchesTemplate(candidate: Record<string, unknown>, template: Record<string, unknown>) {
+  return Object.entries(template).every(([key, value]) => canonicalJson(candidate[key]) === canonicalJson(value))
 }
 
 function canonicalJson(value: unknown): string {

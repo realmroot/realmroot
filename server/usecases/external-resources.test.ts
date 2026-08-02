@@ -883,6 +883,25 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.createGrant).toHaveBeenCalledWith(
       expect.objectContaining({ authorizationDetails: selected }),
     )
+
+    const genericRequest = {
+      ...request,
+      authorizationDetails: [{ type: 'project_access', actions: ['read'] }],
+    }
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(genericRequest)
+    await decideAgentAccessRequest(
+      deps,
+      genericRequest.id,
+      {
+        decision: 'approve',
+        mode: 'persistent',
+        authorizationDetails: connection.authorizationDetails,
+      },
+      'user-1',
+    )
+    expect(deps.externalResources.createGrant).toHaveBeenLastCalledWith(
+      expect.objectContaining({ authorizationDetails: connection.authorizationDetails }),
+    )
   })
 
   it(`exchanges user and Agent authority for a target-issued DPoP token
