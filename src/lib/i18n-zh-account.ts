@@ -78,6 +78,7 @@ export const zhAccountTranslations: Record<string, string> = {
   JSON: 'JSON',
   Language: '语言',
   'Last updated': '最近更新',
+  'Loading connected resource accounts…': '正在加载已连接的资源账户…',
   Leave: '退出',
   'Leave organization': '退出组织',
   'Leave {{name}}?': '退出 {{name}}？',

@@ -244,6 +244,60 @@ describe('planned Account Center journeys', () => {
     await waitFor(() => expect(revoked).toBe(true))
   })
 
+  it('[spec: account-center/resource-account-connections] shows and disconnects an external API resource account', async () => {
+    let disconnected = false
+    server.use(
+      http.get(`${base}/api/account/api-resources`, () =>
+        json({
+          items: [
+            {
+              id: 'resource-zpan',
+              identifier: 'zpan',
+              name: 'ZPan Local Dynamic Test',
+              resourceUrl: 'http://localhost:5185/api',
+            },
+          ],
+          pagination: pagination(1),
+        }),
+      ),
+      http.get(`${base}/api/account/account-connections`, () =>
+        json({
+          items: [
+            {
+              id: 'connection-zpan',
+              apiResourceId: 'resource-zpan',
+              owner: { type: 'user', userId: 'user-1' },
+              displayName: 'agent-controller-0802@example.com',
+              subjectHint: '••••g9io',
+              scopes: ['objects:create', 'objects:read'],
+              authorizationDetails: [],
+              status: 'active',
+              credentialExpiresAt: null,
+              authorizationUrl: null,
+              expiresAt: null,
+              createdAt: '2026-08-02T00:00:00.000Z',
+              updatedAt: '2026-08-02T00:00:00.000Z',
+            },
+          ],
+          pagination: pagination(1),
+        }),
+      ),
+      http.delete(`${base}/api/account/account-connections/connection-zpan`, () => {
+        disconnected = true
+        return new Response(null, { status: 204 })
+      }),
+    )
+
+    renderWithClient(<AccountApplicationsPage />)
+
+    expect(await screen.findByText('ZPan Local Dynamic Test')).toBeTruthy()
+    expect(screen.getByText('agent-controller-0802@example.com')).toBeTruthy()
+    expect(screen.getByText('objects:create objects:read')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Disconnect' }).at(-1)!)
+    await waitFor(() => expect(disconnected).toBe(true))
+  })
+
   it('shows an empty authorized application collection', async () => {
     renderWithClient(<AccountApplicationsPage />)
     expect(await screen.findByText('No applications are authorized for this account.')).toBeTruthy()

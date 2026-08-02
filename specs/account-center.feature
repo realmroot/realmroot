@@ -122,6 +122,13 @@ Feature: Account Center
     When I revoke the grant
     Then the application is removed from authorized apps
 
+  @entrypoint:product-ui @journey:resource-account-connections
+  Scenario: Connected API resource accounts appear with authorized applications
+    Given I connected an external API resource account for Agent access
+    When I open /account/applications
+    Then I see the API resource and connected external account
+    And I can disconnect it separately from OAuth application grants
+
   @entrypoint:product-ui @journey:account-organization-management
   Scenario: Organization members manage their shared context
     When I create an Organization from Account Center
