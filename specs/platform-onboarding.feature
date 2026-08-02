@@ -22,6 +22,14 @@ Feature: Platform bootstrap and route access
     And the fork generates an ignored Wrangler configuration with its own Worker, D1, R2, Queue, and secrets
     And each build uses the same Wrangler configuration that its deployment uses
 
+  @entrypoint:product-ui @journey:existing-d1-upgrade
+  Scenario: Existing deployments migrate without losing authorization data
+    Given an existing D1 database contains Applications, Resource servers, and dependent authorization records
+    When the operator applies the pending production migrations
+    Then the migration preserves every dependent record
+    And existing Applications and Resource servers receive the platform Organization as owner
+    And the migrated database satisfies all foreign key constraints
+
   @e2e @entrypoint:product-ui @journey:first-admin-gate
   Scenario: Fresh deployment routes redirect to first-admin onboarding
     Given no users exist
