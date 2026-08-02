@@ -21,7 +21,6 @@ const maxByteSizes: Record<AssetPurpose, number> = {
 
 export async function uploadAsset(
   deps: Deps,
-  origin: string,
   input: {
     purpose: AssetPurpose
     file: File
@@ -32,7 +31,7 @@ export async function uploadAsset(
   const checksumSha256 = await sha256Hex(bytes)
   const assetId = createId('asset')
   const storageKey = `${input.purpose}/${checksumSha256.slice(0, 2)}/${assetId}-${safeFileName(input.file.name)}`
-  const publicUrl = new URL(`/api/assets/${assetId}`, origin).toString()
+  const publicUrl = `/api/assets/${assetId}`
 
   await deps.assetStorage.put(storageKey, bytes, { httpMetadata: { contentType } })
   const asset = await deps.assets.createAsset({

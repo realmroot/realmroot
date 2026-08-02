@@ -1,13 +1,16 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ApplicationDetailPage } from '@/features/console/extracted/applications/application-detail'
 import { ApplicationsPage } from '@/features/console/extracted/applications/applications-list'
-import { AppRouter, queryClient } from '@/router'
+import { queryClient } from '@/router'
+import { application, consoleSharedFetch, jsonResponse, pagination, renderWithQuery } from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
   disconnect() {}
   observe() {}
   unobserve() {}
 }
+Element.prototype.scrollIntoView ??= () => {}
 
 afterEach(() => {
   cleanup()
@@ -17,24 +20,17 @@ afterEach(() => {
   window.history.pushState(null, '', '/')
 })
 
-import {
-  application,
-  configz,
-  consoleAccountProfile,
-  consoleSharedFetch,
-  jsonResponse,
-  pagination,
-  renderWithQuery,
-  signInSettings,
-  uploadedAsset,
-} from './console.test-utils'
-
 describe('admin console applications-detail-a', () => {
-  it('renders application list rows with compact client metadata', async () => {
-    const thirdPartyApplication = { ...application, id: 'app-2', firstParty: false, name: 'Partner app' }
+  it('renders the unified application inventory with compact client metadata', async () => {
+    const thirdPartyApplication = {
+      ...application,
+      id: 'app-2',
+      clientId: 'partner-client',
+      firstParty: false,
+      name: 'Partner app',
+    }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
-      if (url === '/api/applications') {
+      if (String(input) === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [application, thirdPartyApplication], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -43,118 +39,163 @@ describe('admin console applications-detail-a', () => {
     renderWithQuery(<ApplicationsPage />)
 
     expect(await screen.findByText('Customer portal')).toBeTruthy()
-    expect(screen.getByText('My app')).toBeTruthy()
     expect(screen.getByText('client-1')).toBeTruthy()
-    expect(screen.getByText('Public SPA')).toBeTruthy()
+    expect(screen.getByText('Partner app')).toBeTruthy()
+    expect(screen.getByText('partner-client')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Audience' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'My apps' })).toBeNull()
     expect(screen.queryByLabelText('Upload logo for Customer portal')).toBeNull()
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Third-party apps' }))
-    expect(await screen.findByText('Partner app')).toBeTruthy()
-    expect(screen.getByText('Third-party')).toBeTruthy()
-    expect(screen.queryByLabelText('Upload logo for Partner app')).toBeNull()
   })
 
-  it('renders application detail lifecycle, redirect/origin/custom-data editing, and integration controls [spec: admin-console/admin-application-detail] [spec: admin-console/admin-application-oidc-claims]', async () => {
-    const requests: Array<{ url: string; body: unknown; method: string }> = []
-    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: clipboard,
-    })
-    let currentApplication = application
+  it('shows and revokes real application authorizations [spec: admin-console/admin-application-detail]', async () => {
+    let active = true
+    let revocations = 0
+    const authorization = {
+      id: 'authorization-1',
+      applicationId: 'app-1',
+      user: { id: 'user-1', displayName: 'Jane Doe', email: 'jane@example.com' },
+      organization: null,
+      scopes: ['openid', 'profile'],
+      permissions: [],
+      grantedAt: '2026-07-01T12:00:00.000Z',
+      expiresAt: null,
+      revokedAt: null,
+      status: 'active',
+    }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/applications/app-1' && method === 'GET') {
+        return Promise.resolve(jsonResponse(application))
+      }
+      if (url === '/api/application-authorizations?applicationId=app-1&limit=50&offset=0' && method === 'GET') {
         return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
+          jsonResponse({
+            authorizations: active ? [authorization] : [],
+            pagination: {
+              limit: 50,
+              offset: 0,
+              total: active ? 51 : 0,
+              hasMore: active,
+              nextOffset: active ? 50 : null,
+            },
+          }),
         )
       }
+      if (url === '/api/application-authorizations?applicationId=app-1&limit=50&offset=50' && method === 'GET') {
+        return Promise.resolve(
+          jsonResponse({
+            authorizations: active
+              ? [
+                  {
+                    ...authorization,
+                    organization: { id: 'org-1', name: 'Acme Inc.' },
+                    expiresAt: '2027-07-01T12:00:00.000Z',
+                  },
+                ]
+              : [],
+            pagination: { limit: 50, offset: 50, total: active ? 51 : 0, hasMore: false, nextOffset: null },
+          }),
+        )
+      }
+      if (url === '/api/application-authorizations/authorization-1/revocation' && method === 'PUT') {
+        revocations += 1
+        active = false
+        return Promise.resolve(
+          jsonResponse({
+            applicationAuthorizationId: 'authorization-1',
+            revokedAt: '2026-07-02T12:00:00.000Z',
+          }),
+        )
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="authorizations" />)
+
+    expect(await screen.findByText('Jane Doe')).toBeTruthy()
+    expect(screen.getByText('jane@example.com')).toBeTruthy()
+    expect(screen.getByText('openid')).toBeTruthy()
+    expect(screen.getByText('Does not expire')).toBeTruthy()
+    expect(screen.queryByRole('columnheader', { name: 'Last used' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('Acme Inc.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
+    expect(await screen.findByText('Realm')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('Acme Inc.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    expect(await screen.findByText(/Jane Doe’s approval/)).toBeTruthy()
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Revoke authorization' }))
+    expect(await screen.findByText('No active authorizations')).toBeTruthy()
+    expect(revocations).toBe(1)
+  })
+
+  it('uses section-level editors for application OAuth, claims, consent, and lifecycle settings [spec: admin-console/admin-application-detail] [spec: admin-console/admin-application-oidc-claims]', async () => {
+    const requests: Array<{ url: string; body: unknown; method: string }> = []
+    let currentApplication = application
+    let deleted = false
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
       if (url === '/api/applications/app-1' && method === 'PATCH') {
         const body = JSON.parse(String(init?.body))
         requests.push({ url, method, body })
         currentApplication = { ...currentApplication, ...body }
         return Promise.resolve(jsonResponse(currentApplication))
       }
-      if (url === '/api/applications/app-1/logo' && method === 'POST') {
-        requests.push({ url, method, body: init?.body instanceof FormData ? '[form-data]' : init?.body })
-        return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
-      }
       if (url === '/api/applications/app-1' && method === 'DELETE') {
         requests.push({ url, method, body: null })
+        deleted = true
         return Promise.resolve(new Response(null, { status: 204 }))
       }
+      if (deleted && url.startsWith('/api/applications/app-1')) {
+        throw new Error(`Removed application detail was refetched: ${method} ${url}`)
+      }
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(currentApplication))
-      if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [application], pagination }))
+      if (url === '/api/applications/app-1/federated-credentials') {
+        return Promise.resolve(jsonResponse({ credentials: [] }))
+      }
+      if (url === '/api/api-resources') {
+        return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
       }
       return consoleSharedFetch(input, init)
     })
-    window.history.pushState(null, '', '/console/applications/app-1')
 
-    render(<AppRouter />)
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" />)
 
     expect(await screen.findByRole('heading', { name: 'Customer portal' })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: 'Settings' })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: 'Branding' })).toBeTruthy()
-    expect(screen.getByLabelText('Application name')).toHaveProperty('value', 'Customer portal')
-    expect(screen.getByLabelText('Post sign-out redirect URIs')).toHaveProperty(
-      'value',
-      'https://app.example.com/signed-out',
-    )
-    expect(screen.getByLabelText('CORS origins')).toHaveProperty('value', 'https://app.example.com')
-    expect(screen.getByLabelText('Custom data JSON')).toHaveProperty('value', '{\n  "plan": "enterprise"\n}')
-    expect(screen.queryByText('Backchannel logout')).toBeNull()
-    expect(screen.queryByText('Token exchange')).toBeNull()
-    expect(screen.queryByText('Concurrent device limit')).toBeNull()
-    expect(screen.getByText('https://auth.example.com/authorize')).toBeTruthy()
-    expect(screen.getByText('https://auth.example.com/token')).toBeTruthy()
-    expect(screen.getByText('https://auth.example.com/userinfo')).toBeTruthy()
-    expect(screen.getByText('https://auth.example.com/jwks')).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Access token roles' }).getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('switch', { name: 'ID token roles' }).getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByRole('switch', { name: 'UserInfo organization name' }).getAttribute('aria-checked')).toBe(
-      'false',
-    )
-    expect(screen.getByText('No client secret is issued for public clients.')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Application name'), {
-      target: { value: 'Customer portal updated' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() => {
-      expect(requests).toContainEqual({
-        url: '/api/applications/app-1',
-        method: 'PATCH',
-        body: { name: 'Customer portal updated', description: null },
-      })
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Copy client config' }))
-    expect(JSON.parse(clipboard.writeText.mock.calls[0]?.[0])).toEqual({
-      issuer: 'https://auth.example.com',
-      discoveryUrl: 'https://auth.example.com/.well-known/openid-configuration',
-      clientId: 'client-1',
-      redirectUris: ['https://app.example.com/callback'],
-      postLogoutRedirectUris: ['https://app.example.com/signed-out'],
-      corsOrigins: ['https://app.example.com'],
-      scopes: 'openid profile',
-      tokenEndpointAuthMethod: 'none',
-      customData: { plan: 'enterprise' },
-    })
+    expect(screen.getByText('Public SPA · client-1')).toBeTruthy()
+    expect(screen.getByText('All Realm users')).toBeTruthy()
+    expect(screen.getByText('Platform-owned')).toBeTruthy()
+    expect(screen.getByText('Skipped for this trusted application')).toBeTruthy()
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Overview',
+      'OAuth',
+      'Authorizations',
+      'Settings',
+    ])
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OAuth' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByRole('heading', { name: 'Redirects and origins' })).toBeTruthy()
 
-    fireEvent.change(screen.getByLabelText('Redirect URIs'), {
+    cleanup()
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
+    await screen.findByRole('heading', { name: 'Customer portal' })
+    const redirects = screen.getByRole('heading', { name: 'Redirects and origins' }).closest('section') as HTMLElement
+    expect(within(redirects).getByText('https://app.example.com/callback')).toBeTruthy()
+    fireEvent.click(within(redirects).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Redirect URIs'), {
       target: { value: 'https://new.example.com/callback' },
     })
-    fireEvent.change(screen.getByLabelText('Post sign-out redirect URIs'), {
+    fireEvent.change(screen.getByLabelText('Post sign-out redirects'), {
       target: { value: 'https://new.example.com/signed-out' },
     })
     fireEvent.change(screen.getByLabelText('CORS origins'), {
       target: { value: 'https://new.example.com\nhttp://localhost:4173' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save redirects and origins' }))
-    await waitFor(() => {
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/applications/app-1',
         method: 'PATCH',
@@ -163,214 +204,137 @@ describe('admin console applications-detail-a', () => {
           postLogoutRedirectUris: ['https://new.example.com/signed-out'],
           corsOrigins: ['https://new.example.com', 'http://localhost:4173'],
         },
-      })
-    })
+      }),
+    )
 
-    const redirectUrisInput = screen.getByLabelText('Redirect URIs')
-    redirectUrisInput.removeAttribute('required')
-    fireEvent.change(redirectUrisInput, {
-      target: { value: '' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save redirects and origins' }))
-    expect(await screen.findByText('Too small: expected array to have >=1 items')).toBeTruthy()
-
-    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
-      target: { value: '   ' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
-    await waitFor(() => {
+    const authorization = screen.getByRole('heading', { name: 'Authorization' }).closest('section') as HTMLElement
+    fireEvent.click(within(authorization).getByRole('button', { name: 'Edit' }))
+    expect(screen.queryByRole('checkbox', { name: 'Client credentials' })).toBeNull()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Refresh token' }))
+    expect(screen.getByRole('checkbox', { name: 'Offline access' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('checkbox', { name: 'Offline access' })).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/applications/app-1',
         method: 'PATCH',
-        body: { customData: {} },
-      })
-    })
+        body: {
+          allowedGrantTypes: ['authorization_code', 'refresh_token'],
+          allowedScopes: ['openid', 'profile', 'offline_access'],
+        },
+      }),
+    )
 
-    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
-      target: { value: '{"plan":"growth","beta":true}' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
-    await waitFor(() => {
-      expect(requests).toContainEqual({
-        url: '/api/applications/app-1',
-        method: 'PATCH',
-        body: { customData: { plan: 'growth', beta: true } },
-      })
-    })
-
-    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
-      target: { value: '["not-an-object"]' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
-    expect(await screen.findByText('Custom data JSON must be an object.')).toBeTruthy()
-
-    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
-      target: { value: '' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save custom data' }))
-    await waitFor(() => {
-      expect(requests).toContainEqual({
-        url: '/api/applications/app-1',
-        method: 'PATCH',
-        body: { customData: {} },
-      })
-    })
-
-    fireEvent.click(screen.getByRole('switch', { name: 'Access token organization ID' }))
-    fireEvent.click(screen.getByRole('switch', { name: 'ID token roles' }))
-    fireEvent.click(screen.getByRole('switch', { name: 'ID token groups' }))
-    fireEvent.click(screen.getByRole('switch', { name: 'UserInfo organization name' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save OIDC claims' }))
-    await waitFor(() => {
+    const claims = screen.getByRole('heading', { name: 'Token claims' }).closest('section') as HTMLElement
+    fireEvent.click(within(claims).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(await screen.findByRole('switch', { name: 'ID token roles' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/applications/app-1',
         method: 'PATCH',
         body: {
           oidcClaims: {
-            accessToken: {
-              authorization: true,
-              roles: true,
-              groups: true,
-              organizationId: true,
-            },
-            idToken: {
-              roles: true,
-              groups: true,
-            },
-            userInfo: {
-              organizationName: true,
-            },
+            ...application.oidcClaims,
+            idToken: { roles: true },
           },
         },
-      })
-    })
-    expect(screen.getByRole('switch', { name: 'Access token organization ID' }).getAttribute('aria-checked')).toBe(
-      'true',
+      }),
     )
-    expect(screen.queryByLabelText('Client secret')).toBeNull()
 
-    fireEvent.change(screen.getByLabelText('Custom data JSON'), {
-      target: { value: '{"plan":"discarded"}' },
-    })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Discard' }).at(-1) as HTMLButtonElement)
-    expect(screen.getByLabelText('Custom data JSON')).toHaveProperty('value', '{}')
-    fireEvent.click(screen.getByRole('tab', { name: 'Branding' }))
-    expect(screen.getByText('Display name')).toBeTruthy()
-    expect(screen.getByText('Homepage URL')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Upload logo for Customer portal updated'), {
-      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
-    })
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }))
+    cleanup()
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="settings" />)
+    await screen.findByRole('heading', { name: 'Customer portal' })
+    const details = screen.getByRole('heading', { name: 'Application details' }).closest('section') as HTMLElement
+    fireEvent.click(within(details).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Updated portal' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Updated client' } })
+    fireEvent.change(screen.getByLabelText('Homepage URL'), { target: { value: 'https://portal.example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/applications/app-1',
+        method: 'PATCH',
+        body: {
+          name: 'Updated portal',
+          description: 'Updated client',
+          homepageUrl: 'https://portal.example.com',
+        },
+      }),
+    )
+
+    const audience = screen.getByRole('heading', { name: 'Ownership & audience' }).closest('section') as HTMLElement
+    fireEvent.click(within(audience).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Owner'), { target: { value: 'org-1' } })
+    fireEvent.change(screen.getByLabelText('Who can sign in'), { target: { value: 'organizations' } })
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Allowed Organizations' }))
+    fireEvent.click(screen.getAllByRole('option', { name: /Acme Inc/ }).find((option) => option.tagName === 'DIV')!)
+    fireEvent.change(screen.getByLabelText('Who can sign in'), { target: { value: 'users' } })
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Allowed users' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Jane Doe/ }))
+    fireEvent.change(screen.getByLabelText('Who can sign in'), { target: { value: 'public' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/applications/app-1',
+        method: 'PATCH',
+        body: {
+          ownerOrganizationId: 'org-1',
+          audience: { mode: 'public', organizationIds: ['org-1'], userIds: ['user-1'] },
+        },
+      }),
+    )
+
+    const consent = screen.getByRole('heading', { name: 'User consent' }).closest('section') as HTMLElement
+    fireEvent.click(within(consent).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Publisher relationship'), { target: { value: 'third-party' } })
+    fireEvent.click(screen.getByText('Require user consent'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/applications/app-1',
+        method: 'PATCH',
+        body: { firstParty: false, trusted: false },
+      }),
+    )
+
     fireEvent.click(screen.getByRole('button', { name: 'Disable application' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/applications/app-1',
+        method: 'PATCH',
+        body: { disabled: true, disabledReason: 'Disabled by Realm operator' },
+      }),
+    )
     expect(await screen.findByRole('button', { name: 'Enable application' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Enable application' }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/applications/app-1',
+        method: 'PATCH',
+        body: { disabled: false, disabledReason: null },
+      }),
+    )
+
     fireEvent.click(screen.getByRole('button', { name: 'Delete application' }))
+    expect(await screen.findByRole('heading', { name: 'Delete application' })).toBeTruthy()
+    expect(screen.getByText(/Deleting Updated portal/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete application' }))
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete application' }).at(-1) as HTMLButtonElement)
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete application' }))
+    await waitFor(() => expect(deleted).toBe(true))
+  })
 
-    await waitFor(() => {
-      expect(requests).toEqual([
-        {
-          url: '/api/applications/app-1',
-          method: 'PATCH',
-          body: { name: 'Customer portal updated', description: null },
-        },
-        {
-          url: '/api/applications/app-1',
-          method: 'PATCH',
-          body: {
-            redirectUris: ['https://new.example.com/callback'],
-            postLogoutRedirectUris: ['https://new.example.com/signed-out'],
-            corsOrigins: ['https://new.example.com', 'http://localhost:4173'],
-          },
-        },
-        {
-          url: '/api/applications/app-1',
-          method: 'PATCH',
-          body: { customData: {} },
-        },
-        {
-          url: '/api/applications/app-1',
-          method: 'PATCH',
-          body: { customData: { plan: 'growth', beta: true } },
-        },
-        {
-          url: '/api/applications/app-1',
-          method: 'PATCH',
-          body: { customData: {} },
-        },
-        {
-          url: '/api/applications/app-1',
-          method: 'PATCH',
-          body: {
-            oidcClaims: {
-              accessToken: {
-                authorization: true,
-                roles: true,
-                groups: true,
-                organizationId: true,
-              },
-              idToken: {
-                roles: true,
-                groups: true,
-              },
-              userInfo: {
-                organizationName: true,
-              },
-            },
-          },
-        },
-        {
-          url: '/api/applications/app-1/logo',
-          method: 'POST',
-          body: '[form-data]',
-        },
-        {
-          url: '/api/applications/app-1',
-          method: 'PATCH',
-          body: { disabled: true, disabledReason: 'Disabled from Console' },
-        },
-        {
-          url: '/api/applications/app-1',
-          method: 'PATCH',
-          body: { disabled: false, disabledReason: null },
-        },
-        { url: '/api/applications/app-1', method: 'DELETE', body: null },
-      ])
-    })
-    await waitFor(() => expect(window.location.pathname).toBe('/console/applications'))
-  }, 10_000)
-
-  it('shows confidential client secret metadata and one-time rotated secret material', async () => {
+  it('shows only metadata for existing confidential secrets and discloses a rotated secret once', async () => {
     const confidentialApplication = {
       ...application,
       clientType: 'confidential_web',
       public: false,
       requirePkce: false,
       tokenEndpointAuthMethod: 'client_secret_basic',
-      secretMetadata: [
-        {
-          id: 'secret-1',
-          version: 1,
-          prefix: 'fas_existing',
-          status: 'active',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          expiresAt: null,
-          revokedAt: null,
-        },
-      ],
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/readiness') {
-        return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
-        )
-      }
       if (url.startsWith('/api/applications/app-1/client-secrets') && init?.method === 'POST') {
         return Promise.resolve(
           jsonResponse({
@@ -388,21 +352,51 @@ describe('admin console applications-detail-a', () => {
         )
       }
       if (url.startsWith('/api/applications/app-1/client-secrets')) {
-        return Promise.resolve(jsonResponse({ secrets: confidentialApplication.secretMetadata, pagination }))
+        return Promise.resolve(
+          jsonResponse({
+            secrets: [
+              {
+                id: 'secret-1',
+                version: 1,
+                prefix: 'fas_existing',
+                status: 'active',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                expiresAt: null,
+                revokedAt: null,
+              },
+            ],
+            pagination,
+          }),
+        )
       }
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(confidentialApplication))
+      if (url === '/api/applications/app-1/federated-credentials') {
+        return Promise.resolve(jsonResponse({ credentials: [] }))
+      }
+      if (url === '/api/api-resources') {
+        return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
+      }
       return consoleSharedFetch(input, init)
     })
-    window.history.pushState(null, '', '/console/applications/app-1')
 
-    render(<AppRouter />)
+    renderWithQuery(<ApplicationDetailPage applicationId="app-1" section="oauth" />)
 
-    expect(await screen.findByText('fas_existing')).toBeTruthy()
-    expect(screen.queryByText('fas_rotated_secret')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Rotate client secret' }))
-
+    expect(await screen.findByText(/Version 1 · created/)).toBeTruthy()
+    expect(screen.queryByText('fas_existing')).toBeNull()
+    const authorization = screen.getByRole('heading', { name: 'Authorization' }).closest('section') as HTMLElement
+    fireEvent.click(within(authorization).getByRole('button', { name: 'Edit' }))
+    expect(await screen.findByRole('checkbox', { name: 'Client credentials' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Client credentials' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }))
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Rotate client secret?' })
+    expect(within(confirmation).getByText(/current client secret will stop working immediately/i)).toBeTruthy()
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }))
+    const confirmed = await screen.findByRole('alertdialog', { name: 'Rotate client secret?' })
+    fireEvent.click(within(confirmed).getByRole('button', { name: 'Rotate secret' }))
     expect(await screen.findByText('fas_rotated_secret')).toBeTruthy()
-    fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' })[0])
+    fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' })[0]!)
     await waitFor(() => expect(screen.queryByText('fas_rotated_secret')).toBeNull())
   })
 })

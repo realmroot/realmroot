@@ -82,7 +82,7 @@ describe('console connectors built-in drawers', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }))
     fireEvent.change(screen.getByLabelText('OTP length'), { target: { value: '8' } })
-    fireEvent.change(screen.getByLabelText('Code expiry seconds'), { target: { value: '600' } })
+    fireEvent.change(screen.getByLabelText('Code expiry'), { target: { value: '600' } })
     const save = screen.getByRole('button', { name: 'Save' })
     expect(save).toHaveProperty('disabled', false)
     fireEvent.click(save)
@@ -96,11 +96,17 @@ describe('console connectors built-in drawers', () => {
     })
   })
 
-  it('toggles passkey enablement and allow-for-sign-up through two RPCs', async () => {
+  it('manages the complete passkey connector configuration [spec: connectors-and-methods/connectors-passkeys]', async () => {
     const requests = mountConnectors()
     await openProvider(/Passkey.*Runtime enabled.*Enabled/)
     expect(await screen.findByRole('heading', { name: 'Passkey' })).toBeTruthy()
-    expect(screen.getByText('Acme Auth')).toBeTruthy()
+    expect(await screen.findByDisplayValue('Acme Auth')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Relying party name'), { target: { value: 'Realmroot' } })
+    fireEvent.change(screen.getByLabelText('Relying party ID'), { target: { value: 'identity.acme.dev' } })
+    fireEvent.change(screen.getByLabelText('Allowed origins'), {
+      target: { value: 'https://identity.acme.dev\nhttps://accounts.acme.dev' },
+    })
 
     // Disable passkeys and disable allow-for-sign-up
     const switches = screen.getAllByRole('switch')
@@ -113,9 +119,26 @@ describe('console connectors built-in drawers', () => {
       expect(
         requests.some(
           (r) =>
-            r.url === '/api/sign-in-settings' && r.method === 'PATCH' && JSON.stringify(r.body).includes('passkey'),
+            r.url === '/api/security/policy' &&
+            r.method === 'PATCH' &&
+            JSON.stringify(r.body) ===
+              JSON.stringify({
+                policy: {
+                  passkeys: {
+                    enabled: false,
+                    origins: ['https://identity.acme.dev', 'https://accounts.acme.dev'],
+                    rpId: 'identity.acme.dev',
+                    rpName: 'Realmroot',
+                  },
+                },
+              }),
         ),
       ).toBe(true)
+      expect(requests).toContainEqual({
+        url: '/api/sign-in-settings',
+        method: 'PATCH',
+        body: { builtInProviders: { passkey: { allowSignUp: false } } },
+      })
     })
   })
 
@@ -158,7 +181,7 @@ describe('console connectors built-in drawers', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }))
     fireEvent.change(screen.getByLabelText('Twilio Account SID'), { target: { value: 'AC123' } })
     fireEvent.change(screen.getByLabelText('OTP length'), { target: { value: '7' } })
-    fireEvent.change(screen.getByLabelText('Code expiry seconds'), { target: { value: '900' } })
+    fireEvent.change(screen.getByLabelText('Code expiry'), { target: { value: '900' } })
     const verifySwitch = screen.getByRole('switch', { name: 'Require verification' })
     fireEvent.click(verifySwitch)
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -307,7 +330,7 @@ describe('console connectors built-in drawers', () => {
     expect(await screen.findByRole('heading', { name: 'Google' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Delete/ }))
     expect(await screen.findByRole('heading', { name: 'Delete connector' })).toBeTruthy()
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete connector' })).toBeNull())
   })
@@ -365,7 +388,7 @@ describe('console connectors built-in drawers', () => {
     fireEvent.click(screen.getByRole('button', { name: /Delete/ }))
     // confirm dialog opens
     expect(await screen.findByRole('heading', { name: 'Delete connector' })).toBeTruthy()
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {

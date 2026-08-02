@@ -102,6 +102,23 @@ describe('account API client', () => {
       ['securitySession.delete', { param: { sessionId: 'session-1' } }],
     ])
   })
+
+  it('uses auth-client status metadata when an Organization request fails', async () => {
+    vi.doUnmock('@/lib/api')
+    vi.doMock('@/lib/auth-client', () => ({
+      authClient: {
+        organization: {
+          list: vi.fn().mockResolvedValue({ data: null, error: { statusText: 'Organization service unavailable.' } }),
+        },
+      },
+      nativeAuth: vi.fn(),
+    }))
+    const { listAccountOrganizations } = await import('@/lib/api/account')
+    await expect(listAccountOrganizations()).rejects.toMatchObject({
+      message: 'Organization service unavailable.',
+      status: 500,
+    })
+  })
 })
 
 const base = 'http://localhost:3000'

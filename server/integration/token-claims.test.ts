@@ -8,9 +8,16 @@ afterEach(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS)
 })
 
-async function postJson(harness: Harness, cookie: string, path: string, body: unknown, expected = 201) {
+async function postJson(
+  harness: Harness,
+  cookie: string,
+  path: string,
+  body: unknown,
+  expected = 201,
+  method = 'POST',
+) {
   const res = await harness.request(path, {
-    method: 'POST',
+    method,
     headers: { 'content-type': 'application/json', cookie },
     body: JSON.stringify(body),
   })
@@ -27,11 +34,33 @@ describe('OAuth token claim building over real D1', () => {
   })
 
   // Exercises the authorization repo read paths that only fire during token-claim
-  // assembly — findResourceByResourceUrl, listUserRoleAssignments,
-  // listApplicationRoleAssignments, and findMemberByOrganizationUser +
-  // listMemberRoleAssignments — through real SQL (the usecase tests cover the
+  // assembly — findResourceByResourceUrl plus contextual user and workload
+  // assignment reads — through real SQL (the usecase tests cover the
   // branching logic with fake ports; this proves the real queries).
   it('resolves audience + user/application/member role assignments [spec: admin-console/oidc-claim-emission]', async () => {
+    harness.deps.externalHttp.fetch = async (request) => {
+      if (new URL(request.url).pathname.endsWith('/openapi.json')) {
+        return Response.json({
+          openapi: '3.1.0',
+          components: {
+            securitySchemes: {
+              oauth: {
+                type: 'oauth2',
+                flows: {
+                  authorizationCode: {
+                    authorizationUrl: '/authorize',
+                    tokenUrl: '/token',
+                    scopes: { 'contacts:read': 'Read contacts' },
+                  },
+                },
+              },
+            },
+          },
+          paths: { '/contacts': { get: { security: [{ oauth: ['contacts:read'] }] } } },
+        })
+      }
+      return new Response(null, { headers: { link: '</openapi.json>; rel="service-desc"' } })
+    }
     const cookie = await signInAdmin(harness)
     const userId = await createUser(harness, cookie, {
       email: 'claims-user@example.com',
@@ -59,17 +88,19 @@ describe('OAuth token claim building over real D1', () => {
     const organization = (await (
       await postJson(harness, cookie, '/api/organizations', { slug: 'claims-org', name: 'Claims Org' })
     ).json()) as { id: string }
-    const member = (await (
-      await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
-        userId,
-        role: 'member',
-      })
-    ).json()) as { id: string }
+    expect(
+      (
+        await postJson(harness, cookie, `/api/organizations/${organization.id}/members`, {
+          userId,
+          role: 'member',
+        })
+      ).status,
+    ).toBe(201)
 
     // Distinct roles per subject so each assignment read is independently proven.
     const roleId = async (key: string, name: string) =>
       (
-        (await (await postJson(harness, cookie, '/api/roles', { key, name, resourceId: resource.id })).json()) as {
+        (await (await postJson(harness, cookie, '/api/roles', { key, name })).json()) as {
           id: string
         }
       ).id
@@ -77,15 +108,33 @@ describe('OAuth token claim building over real D1', () => {
     const appRole = await roleId('contacts-app-role', 'Contacts App')
     const memberRole = await roleId('contacts-member-role', 'Contacts Member')
 
-    await postJson(harness, cookie, '/api/roles/assignments/users', { roleId: userRole, subjectId: userId }, 204)
-    await postJson(
-      harness,
-      cookie,
-      '/api/roles/assignments/applications',
-      { roleId: appRole, subjectId: application.id },
-      204,
-    )
-    await postJson(harness, cookie, '/api/roles/assignments/members', { roleId: memberRole, subjectId: member.id }, 204)
+    for (const roleId of [userRole, appRole, memberRole]) {
+      const current = await harness.request(`/api/roles/${roleId}/permissions`, { headers: { cookie } })
+      const etag = current.headers.get('etag')
+      expect(etag).toBeTruthy()
+      const replaced = await harness.request(`/api/roles/${roleId}/permissions`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', cookie, 'if-match': etag! },
+        body: JSON.stringify({ permissions: [{ resourceId: resource.id, scope: 'contacts:read' }] }),
+      })
+      expect(replaced.status, await replaced.clone().text()).toBe(200)
+    }
+    await postJson(harness, cookie, '/api/role-assignments', {
+      roleId: userRole,
+      subjectType: 'user',
+      subjectId: userId,
+    })
+    await postJson(harness, cookie, '/api/role-assignments', {
+      roleId: appRole,
+      subjectType: 'workload',
+      subjectId: application.id,
+    })
+    await postJson(harness, cookie, '/api/role-assignments', {
+      roleId: memberRole,
+      subjectType: 'user',
+      subjectId: userId,
+      organizationId: organization.id,
+    })
 
     const claims = (await buildTokenClaims(harness.deps, {
       userId,
@@ -94,7 +143,9 @@ describe('OAuth token claim building over real D1', () => {
       resource: audience,
       scopes: ['openid', 'contacts:read'],
       destination: 'access_token',
-    })) as { authorization: { audience: string; resource: string; organization_id: string; roles: string[] } }
+    })) as {
+      authorization: { audience: string; resource: string; organization_id: string; roles: string[]; scopes: string[] }
+    }
 
     // findResourceByResourceUrl returned the registered resource.
     expect(claims.authorization.audience).toBe(audience)
@@ -104,6 +155,7 @@ describe('OAuth token claim building over real D1', () => {
     expect(claims.authorization.roles).toEqual(
       expect.arrayContaining(['contacts-user-role', 'contacts-app-role', 'contacts-member-role']),
     )
+    expect(claims.authorization.scopes).toEqual(['contacts:read'])
   })
 
   it('returns audience-free claims when the resource is unregistered [spec: admin-console/admin-application-oidc-claims]', async () => {

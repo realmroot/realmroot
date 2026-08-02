@@ -17,7 +17,8 @@ describe('Agent stable identity approval', () => {
     api.getAgentEnrollment.mockResolvedValue({
       id: 'intent-1',
       agentId: null,
-      requestedName: 'Build Agent',
+      name: 'Build Agent',
+      kind: 'new_identity',
       homeSpace: { type: 'personal', userId: 'user-1' },
       status: 'pending',
       expiresAt: '2026-08-01T00:10:00.000Z',
@@ -44,26 +45,29 @@ describe('Agent stable identity approval', () => {
     render(<AgentIdentityApproval />)
 
     expect(await screen.findByText('Build Agent')).toBeTruthy()
-    expect(screen.getByText('Personal · user-1')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Approve stable identity' }))
+    expect(screen.getByText('Personal account')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve Agent identity' }))
 
     await waitFor(() => expect(api.approveAgentEnrollment).toHaveBeenCalledWith('intent-1'))
-    expect(await screen.findByText(/Agent identity approved: https:\/\/auth\.example\.com · agt_1/)).toBeTruthy()
+    expect(await screen.findByText('Build Agent is ready on this host.')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Agent enrollment approved.' })).toBeTruthy()
   })
 
   it('does not approve without an enrollment intent id', () => {
     window.history.pushState(null, '', '/agent/enrollments/approve')
     render(<AgentIdentityApproval />)
 
-    expect(screen.getByText('Missing enrollment intent.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Approve stable identity' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('heading', { name: 'Agent enrollment unavailable.' })).toBeTruthy()
+    expect(screen.getByText('This Agent enrollment request is incomplete.')).toBeTruthy()
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
   it('renders organization and completed enrollment details without enabling approval', async () => {
     api.getAgentEnrollment.mockResolvedValue({
       id: 'intent-1',
       agentId: 'identity-1',
-      requestedName: null,
+      name: 'Build Agent',
+      kind: 'additional_host',
       homeSpace: { type: 'organization', organizationId: 'org-1' },
       status: 'approved',
       expiresAt: '2026-08-01T00:10:00.000Z',
@@ -73,8 +77,8 @@ describe('Agent stable identity approval', () => {
     })
     render(<AgentIdentityApproval />)
 
-    expect(await screen.findByText('Organization · org-1')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Approve stable identity' }).hasAttribute('disabled')).toBe(true)
+    expect(await screen.findByText('Organization')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Add trusted host' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('surfaces load and approval errors from Error and unknown failures', async () => {
@@ -91,7 +95,8 @@ describe('Agent stable identity approval', () => {
     api.getAgentEnrollment.mockResolvedValue({
       id: 'intent-1',
       agentId: null,
-      requestedName: 'Build Agent',
+      name: 'Build Agent',
+      kind: 'new_identity',
       homeSpace: { type: 'personal', userId: 'user-1' },
       status: 'pending',
       expiresAt: '2026-08-01T00:10:00.000Z',
@@ -101,13 +106,13 @@ describe('Agent stable identity approval', () => {
     })
     api.approveAgentEnrollment.mockRejectedValue(new Error('Approval failed'))
     render(<AgentIdentityApproval />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve stable identity' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve Agent identity' }))
     expect(await screen.findByText('Approval failed')).toBeTruthy()
     cleanup()
 
     api.approveAgentEnrollment.mockRejectedValue('offline')
     render(<AgentIdentityApproval />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve stable identity' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve Agent identity' }))
     expect(await screen.findByText('Unable to approve Agent identity.')).toBeTruthy()
   })
 
@@ -123,7 +128,8 @@ describe('Agent stable identity approval', () => {
     resolveIntent({
       id: 'intent-1',
       agentId: null,
-      requestedName: 'Build Agent',
+      name: 'Build Agent',
+      kind: 'new_identity',
       homeSpace: { type: 'personal', userId: 'user-1' },
       status: 'pending',
       expiresAt: '2026-08-01T00:10:00.000Z',

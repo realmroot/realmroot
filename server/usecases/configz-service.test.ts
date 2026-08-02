@@ -2,13 +2,21 @@ import type { ConfigzOptions } from '@server/usecases/configz'
 import {
   defaultAccountCenterSettings,
   getConfig,
+  getDeveloperConsoleAccessPolicy,
+  getEmailDeliveryConfiguration,
+  getManagementRealm,
+  getOrganizationCreationPolicy,
+  replaceDeveloperConsoleAccessPolicy,
+  replaceEmailDeliveryConfiguration,
+  replaceOrganizationCreationPolicy,
   updateManagementAccountCenterSettings,
   updateManagementBrandingSettings,
+  updateManagementRealm,
   updateManagementSignInSettings,
 } from '@server/usecases/configz'
 import type { Deps } from '@server/usecases/deps'
 import type { ConfigzRepository, ConnectorRecord } from '@server/usecases/ports'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 describe('ConfigzService', () => {
   it('composes hosted auth config without leaking connector secrets', async () => {
@@ -293,7 +301,7 @@ describe('ConfigzService', () => {
     )
 
     const response = await updateManagementSignInSettings(deps, defaultOptions(), {
-      signIn: { passwordEnabled: false, identifierFirst: true },
+      signIn: { passwordEnabled: false, usernameEnabled: false, identifierFirst: true },
       links: { supportEmail: 'support@example.com' },
       copy: { productName: 'Acme ID' },
     })
@@ -301,6 +309,7 @@ describe('ConfigzService', () => {
     expect(updates).toEqual([
       {
         passwordEnabled: false,
+        usernameEnabled: false,
         identifierFirst: true,
         termsUri: undefined,
         privacyUri: undefined,
@@ -315,6 +324,20 @@ describe('ConfigzService', () => {
         headline: 'Existing headline',
         description: 'Existing description.',
       },
+    })
+  })
+
+  it('uses the managed username sign-in setting before the deployment default', async () => {
+    const deps = createDeps(
+      createRepository({
+        settings: { ...defaultSettings(), metadata: { usernameEnabled: false, emailOtpEnabled: false } },
+      }),
+      { onboardingHasUsers: true },
+    )
+
+    await expect(getConfig(deps, { ...defaultOptions(), usernameEnabled: true })).resolves.toMatchObject({
+      signIn: { usernameEnabled: false, emailOtpEnabled: false },
+      builtInProviders: { email: { enabled: false } },
     })
   })
 
@@ -440,6 +463,143 @@ describe('ConfigzService', () => {
       },
     })
   })
+
+  it('[spec: admin-console/admin-general-settings] persists the Realm name and derives protocol endpoints', async () => {
+    let updated: Parameters<ConfigzRepository['updateSettings']>[0] | null = null
+    const repository = createRepository({
+      settings: { ...defaultSettings(), metadata: { copy: { productName: 'Acme Realm' } } },
+      updateSettings: async (input) => {
+        updated = input
+      },
+    })
+    const deps = createDeps(repository, { onboardingHasUsers: true })
+
+    await expect(getManagementRealm(deps, defaultOptions())).resolves.toEqual({
+      id: 'realm',
+      name: 'Acme Realm',
+      issuer: 'https://auth.example.com/api/auth',
+      oidcDiscoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+      jwksUrl: 'https://auth.example.com/api/auth/jwks',
+      managementApiUrl: 'https://auth.example.com/api/openapi.json',
+    })
+    await updateManagementRealm(deps, defaultOptions(), { name: 'New Realm' })
+    expect(updated).toEqual({ copy: { productName: 'New Realm' } })
+  })
+
+  it('[spec: admin-console/admin-email-delivery-settings] persists email delivery separately from its binding', async () => {
+    let stored: Awaited<ReturnType<ConfigzRepository['getEmailSettings']>> = null
+    const repository = createRepository({
+      getEmailSettings: async () => stored,
+      updateEmailSettings: async (input) => {
+        stored = input
+      },
+    })
+    const deps = createDeps(repository, { onboardingHasUsers: true })
+    const options = {
+      ...defaultOptions(),
+      emailDelivery: {
+        bindingAvailable: true,
+        fromEmail: 'fallback@example.com',
+        fromName: 'Fallback',
+      },
+    }
+
+    await expect(getEmailDeliveryConfiguration(deps, options)).resolves.toMatchObject({
+      enabled: true,
+      fromEmail: 'fallback@example.com',
+      bindingAvailable: true,
+      source: 'environment',
+    })
+    await expect(
+      replaceEmailDeliveryConfiguration(deps, options, {
+        provider: 'cloudflare_email',
+        enabled: true,
+        fromEmail: 'auth@example.com',
+        fromName: 'Acme Realm',
+        replyToEmail: 'support@example.com',
+      }),
+    ).resolves.toMatchObject({
+      enabled: true,
+      fromEmail: 'auth@example.com',
+      fromName: 'Acme Realm',
+      replyToEmail: 'support@example.com',
+      source: 'database',
+    })
+    await expect(
+      replaceEmailDeliveryConfiguration(
+        deps,
+        { ...defaultOptions(), emailDelivery: { bindingAvailable: false } },
+        {
+          provider: 'cloudflare_email',
+          enabled: true,
+          fromEmail: 'auth@example.com',
+          fromName: null,
+          replyToEmail: null,
+        },
+      ),
+    ).rejects.toThrow('Cloudflare Email binding is not available')
+  })
+
+  it('[spec: admin-console/admin-organization-creation-policy] validates policy references before replacement', async () => {
+    let organizationPolicy = { mode: 'admins_only' as const, approvedUserIds: [] as string[] }
+    let developerPolicy = {
+      mode: 'realm_operators' as const,
+      eligibleAccessLevels: ['owner' as const],
+      selectedOrganizationIds: [] as string[],
+    }
+    const repository = createRepository({
+      getOrganizationCreationPolicy: async () => organizationPolicy,
+      updateOrganizationCreationPolicy: async (input) => {
+        organizationPolicy = input as typeof organizationPolicy
+      },
+      getDeveloperConsoleAccessPolicy: async () => developerPolicy,
+      updateDeveloperConsoleAccessPolicy: async (input) => {
+        developerPolicy = input as typeof developerPolicy
+      },
+    })
+    const getUser = vi.fn().mockResolvedValue({ id: 'user-1' })
+    const findOrganization = vi
+      .fn()
+      .mockImplementation(async (id: string) => (id === 'org-1' ? { id: 'org-1', disabled: false } : null))
+    const deps = {
+      ...createDeps(repository, { onboardingHasUsers: true }),
+      users: { getUser },
+      authorization: { findOrganization },
+    } as unknown as Deps
+
+    await expect(getOrganizationCreationPolicy(deps)).resolves.toEqual(organizationPolicy)
+    await expect(
+      replaceOrganizationCreationPolicy(deps, { mode: 'approved_users', approvedUserIds: ['user-1'] }),
+    ).resolves.toEqual({ mode: 'approved_users', approvedUserIds: ['user-1'] })
+    expect(getUser).toHaveBeenCalledWith('user-1')
+
+    await expect(getDeveloperConsoleAccessPolicy(deps)).resolves.toEqual(developerPolicy)
+    await expect(
+      replaceDeveloperConsoleAccessPolicy(deps, {
+        mode: 'selected_organizations',
+        eligibleAccessLevels: ['owner'],
+        selectedOrganizationIds: ['org-1'],
+      }),
+    ).resolves.toEqual({
+      mode: 'selected_organizations',
+      eligibleAccessLevels: ['owner'],
+      selectedOrganizationIds: ['org-1'],
+    })
+    await expect(
+      replaceDeveloperConsoleAccessPolicy(deps, {
+        mode: 'selected_organizations',
+        eligibleAccessLevels: ['owner'],
+        selectedOrganizationIds: ['org-missing'],
+      }),
+    ).rejects.toMatchObject({ status: 404 })
+
+    await replaceOrganizationCreationPolicy(deps, { mode: 'admins_only', approvedUserIds: [] })
+    await replaceDeveloperConsoleAccessPolicy(deps, {
+      mode: 'all_organizations',
+      eligibleAccessLevels: ['owner'],
+      selectedOrganizationIds: [],
+    })
+  })
 })
 
 function defaultOptions(): ConfigzOptions {
@@ -510,10 +670,23 @@ function createRepository(overrides: Partial<MockData> = {}): ConfigzRepository 
     getSettings: async () => overrides.settings ?? null,
     getBranding: async () => overrides.branding ?? null,
     getAccountCenterSettings: overrides.getAccountCenterSettings ?? (async () => overrides.accountCenter ?? null),
+    getOrganizationCreationPolicy:
+      overrides.getOrganizationCreationPolicy ?? (async () => ({ mode: 'admins_only', approvedUserIds: [] })),
+    getDeveloperConsoleAccessPolicy:
+      overrides.getDeveloperConsoleAccessPolicy ??
+      (async () => ({
+        mode: 'realm_operators',
+        eligibleAccessLevels: ['owner', 'admin'],
+        selectedOrganizationIds: [],
+      })),
+    getEmailSettings: overrides.getEmailSettings ?? (async () => null),
     listEnabledIdentityProviders: async () => overrides.identityProviders ?? [],
     updateSettings: overrides.updateSettings ?? (async () => undefined),
     updateBranding: overrides.updateBranding ?? (async () => undefined),
     updateAccountCenterSettings: overrides.updateAccountCenterSettings ?? (async () => undefined),
+    updateOrganizationCreationPolicy: overrides.updateOrganizationCreationPolicy ?? (async () => undefined),
+    updateDeveloperConsoleAccessPolicy: overrides.updateDeveloperConsoleAccessPolicy ?? (async () => undefined),
+    updateEmailSettings: overrides.updateEmailSettings ?? (async () => undefined),
   }
 }
 
@@ -523,7 +696,13 @@ type MockData = {
   identityProviders: Awaited<ReturnType<ConfigzRepository['listEnabledIdentityProviders']>>
   accountCenter: NonNullable<Awaited<ReturnType<ConfigzRepository['getAccountCenterSettings']>>>
   getAccountCenterSettings: ConfigzRepository['getAccountCenterSettings']
+  getOrganizationCreationPolicy: ConfigzRepository['getOrganizationCreationPolicy']
+  getDeveloperConsoleAccessPolicy: ConfigzRepository['getDeveloperConsoleAccessPolicy']
+  getEmailSettings: ConfigzRepository['getEmailSettings']
   updateSettings: ConfigzRepository['updateSettings']
   updateBranding: ConfigzRepository['updateBranding']
   updateAccountCenterSettings: ConfigzRepository['updateAccountCenterSettings']
+  updateOrganizationCreationPolicy: ConfigzRepository['updateOrganizationCreationPolicy']
+  updateDeveloperConsoleAccessPolicy: ConfigzRepository['updateDeveloperConsoleAccessPolicy']
+  updateEmailSettings: ConfigzRepository['updateEmailSettings']
 }

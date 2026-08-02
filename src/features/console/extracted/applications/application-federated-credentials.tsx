@@ -1,3 +1,4 @@
+import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { consoleQueryKeys } from '@/lib/api/console-query-keys'
 import {
   createFederatedCredential,
@@ -9,25 +10,39 @@ import {
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   createManagementFederatedCredentialRequestSchema,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Field,
   type FormEvent,
   type ManagementFederatedCredentialResponse,
+  MoreHorizontal,
+  Plus,
   Save,
   SelectInput,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  Table,
+  TableBody,
+  TableCell,
+  TableEmptyRow,
+  TableHead,
+  TableHeader,
+  TableRow,
   TextArea,
   TextInput,
-  Trash2,
   tt,
   type updateManagementFederatedCredentialRequestSchema,
   useMutation,
   useQuery,
   useQueryClient,
+  useState,
 } from '../../console-shared'
 import { MutationError } from '../../helpers/helpers-dialogs'
 import { parseForm } from '../../helpers/helpers-utils'
@@ -84,14 +99,19 @@ export function ApplicationFederatedCredentialsPanel({ applicationId }: { applic
   })
   const resourcesQuery = useQuery({
     queryKey: consoleQueryKeys.apiResources,
-    queryFn: listApiResources,
+    queryFn: () => listApiResources(),
   })
   const resources = resourcesQuery.data?.items ?? []
   const invalidate = () => queryClient.invalidateQueries({ queryKey })
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deleteCredential, setDeleteCredential] = useState<ManagementFederatedCredentialResponse | null>(null)
   const createMutation = useMutation({
     mutationFn: (input: ReturnType<typeof parseForm<typeof createManagementFederatedCredentialRequestSchema>>) =>
       createFederatedCredential(applicationId, input),
-    onSuccess: invalidate,
+    onSuccess: async () => {
+      await invalidate()
+      setCreateOpen(false)
+    },
   })
   const updateMutation = useMutation({
     mutationFn: ({
@@ -101,69 +121,106 @@ export function ApplicationFederatedCredentialsPanel({ applicationId }: { applic
       id: string
       input: ReturnType<typeof parseForm<typeof updateManagementFederatedCredentialRequestSchema>>
     }) => updateFederatedCredential(applicationId, id, input),
-    onSuccess: invalidate,
+    onSuccess: async () => {
+      await invalidate()
+      setDeleteCredential(null)
+    },
   })
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteFederatedCredential(applicationId, id),
-    onSuccess: invalidate,
+    onSuccess: async () => {
+      await invalidate()
+      setDeleteCredential(null)
+    },
   })
   const credentials = credentialsQuery.data?.credentials ?? []
 
   return (
-    <div className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>{tt('Add federated credential')}</CardTitle>
-          <CardDescription>
-            {tt(
-              'Let an external workload exchange its own OIDC token for an access token, with no client secret to manage.',
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FederatedCredentialForm
-            error={createMutation.error}
-            pending={createMutation.isPending}
-            resources={resources}
-            onSubmit={(material, base) =>
-              createMutation.mutate(
-                parseForm(createManagementFederatedCredentialRequestSchema, { ...base, ...material }),
-              )
-            }
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{tt('Federated credentials')}</CardTitle>
-          <CardDescription>
-            {tt('Trusted issuer and subject pairs that may request tokens for this application.')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {credentials.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
-              {tt('No federated credentials yet.')}
-            </p>
-          ) : (
-            <div className="grid gap-2">
-              {credentials.map((credential) => (
+    <section className="detailSection mt-7">
+      <header>
+        <div>
+          <h2>{tt('Federated credentials')}</h2>
+          <p>{tt('Trusted workload issuer and subject pairs that can exchange tokens without a client secret.')}</p>
+        </div>
+        <Button onClick={() => setCreateOpen(true)} variant="outline">
+          <Plus />
+          {tt('Add credential')}
+        </Button>
+      </header>
+      <div className="overflow-hidden rounded-xl border mt-4">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{tt('Credential')}</TableHead>
+              <TableHead>{tt('Audience')}</TableHead>
+              <TableHead>{tt('Key material')}</TableHead>
+              <TableHead>{tt('Status')}</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {credentials.length ? (
+              credentials.map((credential) => (
                 <FederatedCredentialRow
                   credential={credential}
                   key={credential.id}
-                  onDelete={() => deleteMutation.mutate(credential.id)}
+                  onDelete={() => setDeleteCredential(credential)}
                   onToggle={() => updateMutation.mutate({ id: credential.id, input: { enabled: !credential.enabled } })}
                   pending={updateMutation.isPending || deleteMutation.isPending}
                   resources={resources}
                 />
-              ))}
-            </div>
-          )}
-          <MutationError error={updateMutation.error ?? deleteMutation.error} />
-        </CardContent>
-      </Card>
-    </div>
+              ))
+            ) : (
+              <TableEmptyRow
+                colSpan={5}
+                description={tt('Add a trusted workload identity only when this client needs token exchange.')}
+                title={tt('No federated credentials')}
+              />
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      <MutationError error={updateMutation.error ?? deleteMutation.error} />
+      <Sheet onOpenChange={setCreateOpen} open={createOpen}>
+        <SheetContent className="h-full overflow-hidden sm:max-w-xl">
+          <SheetHeader className="shrink-0">
+            <SheetTitle>{tt('Add federated credential')}</SheetTitle>
+            <SheetDescription>
+              {tt('Trust an external workload identity for client authentication and token exchange.')}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+            <FederatedCredentialForm
+              error={createMutation.error}
+              pending={createMutation.isPending}
+              resources={resources}
+              onSubmit={(material, base) =>
+                createMutation.mutate(
+                  parseForm(createManagementFederatedCredentialRequestSchema, { ...base, ...material }),
+                )
+              }
+            />
+          </div>
+          <SheetFooter className="shrink-0">
+            <Button onClick={() => setCreateOpen(false)} variant="outline">
+              {tt('Cancel')}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      <DestructiveConfirmation
+        confirmLabel={deleteMutation.isPending ? tt('Deleting…') : tt('Delete credential')}
+        description={tt('The matching workload can no longer exchange its identity token through this application.')}
+        error={<MutationError error={deleteMutation.error} />}
+        onClose={() => setDeleteCredential(null)}
+        onConfirm={() => {
+          if (deleteCredential) deleteMutation.mutate(deleteCredential.id)
+        }}
+        open={deleteCredential !== null}
+        pending={deleteMutation.isPending}
+        title={tt('Delete federated credential?')}
+      />
+    </section>
   )
 }
 
@@ -181,13 +238,20 @@ function FederatedCredentialForm({
     base: { name: string; issuer: string; subject: string; audienceResourceId: string },
   ) => void
 }) {
+  const [validationError, setValidationError] = useState<unknown>(null)
+
   return (
     <form
       className="formStack"
       onSubmit={(event: FormEvent<HTMLFormElement>) => {
         event.preventDefault()
-        const { material, base } = parseFederatedCredentialForm(new FormData(event.currentTarget))
-        onSubmit(material, base)
+        setValidationError(null)
+        try {
+          const { material, base } = parseFederatedCredentialForm(new FormData(event.currentTarget))
+          onSubmit(material, base)
+        } catch (caught) {
+          setValidationError(caught)
+        }
       }}
     >
       <Field label={tt('Name')}>
@@ -224,7 +288,7 @@ function FederatedCredentialForm({
         <Save data-icon="inline-start" />
         {tt('Add credential')}
       </Button>
-      <MutationError error={error} />
+      <MutationError error={validationError ?? error} />
     </form>
   )
 }
@@ -247,31 +311,35 @@ function FederatedCredentialRow({
     ? credential.jwksUrl
     : `${credential.publicKeys?.length ?? 0} ${tt('public key(s)')}`
   return (
-    <div className="rounded-md border border-border p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <p className="font-medium">{credential.name}</p>
-            <Badge variant={credential.enabled ? 'default' : 'secondary'}>
-              {credential.enabled ? tt('Enabled') : tt('Disabled')}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {credential.issuer} · {credential.subject}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {tt('Audience')}: {audience?.name ?? credential.audienceResourceId} · {keyMaterial}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button disabled={pending} onClick={onToggle} type="button" variant="secondary">
-            {credential.enabled ? tt('Disable') : tt('Enable')}
-          </Button>
-          <Button disabled={pending} onClick={onDelete} type="button" variant="danger">
-            <Trash2 data-icon="inline-start" /> {tt('Delete')}{' '}
-          </Button>
-        </div>
-      </div>
-    </div>
+    <TableRow>
+      <TableCell>
+        <span className="font-medium">{credential.name}</span>
+        <span className="block font-mono text-xs text-muted-foreground">
+          {credential.issuer} · {credential.subject}
+        </span>
+      </TableCell>
+      <TableCell>{audience?.name ?? credential.audienceResourceId}</TableCell>
+      <TableCell className="max-w-56 truncate font-mono text-xs">{keyMaterial}</TableCell>
+      <TableCell>
+        <Badge variant={credential.enabled ? 'secondary' : 'outline'}>
+          {credential.enabled ? tt('Enabled') : tt('Disabled')}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button aria-label={tt('Credential actions')} disabled={pending} size="icon" variant="ghost">
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onToggle}>{credential.enabled ? tt('Disable') : tt('Enable')}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onDelete} variant="destructive">
+              {tt('Delete')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+    </TableRow>
   )
 }

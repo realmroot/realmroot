@@ -1,5 +1,6 @@
 import { KeyRound, Mail, Upload, UserRound } from 'lucide-react'
 import type { FormEvent } from 'react'
+import { Field, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Field, TextInput } from '@/components/ui/field'
 import { Status } from '@/components/ui/status'
 import { tt } from '@/lib/i18n'
 import type { UserProfile } from './types'
@@ -20,6 +20,8 @@ export function ProfileDialogs({
   avatarPreview,
   changeEmail,
   changePassword,
+  closeDialog,
+  confirmPassword,
   currentPassword,
   dialog,
   displayName,
@@ -30,8 +32,8 @@ export function ProfileDialogs({
   passwordError,
   profile,
   saveProfile,
+  setConfirmPassword,
   setCurrentPassword,
-  setDialog,
   setDisplayName,
   setEmail,
   setEmailOtp,
@@ -44,6 +46,8 @@ export function ProfileDialogs({
   avatarPreview: string
   changeEmail: (event: FormEvent) => void
   changePassword: (event: FormEvent) => void
+  closeDialog: () => void
+  confirmPassword: string
   currentPassword: string
   dialog: ProfileDialog
   displayName: string
@@ -54,8 +58,8 @@ export function ProfileDialogs({
   passwordError: string | null
   profile: UserProfile
   saveProfile: (event: FormEvent) => void
+  setConfirmPassword: (value: string) => void
   setCurrentPassword: (value: string) => void
-  setDialog: (dialog: ProfileDialog) => void
   setDisplayName: (value: string) => void
   setEmail: (value: string) => void
   setEmailOtp: (value: string) => void
@@ -69,40 +73,42 @@ export function ProfileDialogs({
     <>
       <ProfileImageDialog
         avatarPreview={avatarPreview}
+        closeDialog={closeDialog}
         dialog={dialog}
         displayName={displayName}
         saveProfile={saveProfile}
-        setDialog={setDialog}
         setDisplayName={setDisplayName}
         uploadAvatar={uploadAvatar}
       />
       <UsernameDialog
+        closeDialog={closeDialog}
         dialog={dialog}
         saveProfile={saveProfile}
-        setDialog={setDialog}
         setUsername={setUsername}
         username={username}
       />
       <EmailDialog
         changeEmail={changeEmail}
+        closeDialog={closeDialog}
         dialog={dialog}
         email={email}
         emailOtp={emailOtp}
         emailStep={emailStep}
-        setDialog={setDialog}
         setEmail={setEmail}
         setEmailOtp={setEmailOtp}
         setEmailStep={setEmailStep}
       />
       <PasswordDialog
         changePassword={changePassword}
+        closeDialog={closeDialog}
+        confirmPassword={confirmPassword}
         currentPassword={currentPassword}
         dialog={dialog}
         newPassword={newPassword}
         passwordError={passwordError}
         profile={profile}
+        setConfirmPassword={setConfirmPassword}
         setCurrentPassword={setCurrentPassword}
-        setDialog={setDialog}
         setNewPassword={setNewPassword}
       />
     </>
@@ -111,23 +117,23 @@ export function ProfileDialogs({
 
 function ProfileImageDialog({
   avatarPreview,
+  closeDialog,
   dialog,
   displayName,
   saveProfile,
-  setDialog,
   setDisplayName,
   uploadAvatar,
 }: {
   avatarPreview: string
+  closeDialog: () => void
   dialog: ProfileDialog
   displayName: string
   saveProfile: (event: FormEvent) => void
-  setDialog: (dialog: ProfileDialog) => void
   setDisplayName: (value: string) => void
   uploadAvatar: (file: File | undefined) => void
 }) {
   return (
-    <Dialog open={dialog === 'avatar' || dialog === 'displayName'}>
+    <Dialog onOpenChange={(open) => !open && closeDialog()} open={dialog === 'avatar' || dialog === 'displayName'}>
       <DialogContent>
         <form onSubmit={saveProfile}>
           <DialogHeader>
@@ -159,6 +165,7 @@ function ProfileImageDialog({
                     aria-label={tt('Avatar image')}
                     className="visuallyHidden"
                     id="account-avatar-upload"
+                    name="avatar"
                     onChange={(event) => uploadAvatar(event.currentTarget.files?.[0])}
                     tabIndex={-1}
                     type="file"
@@ -169,6 +176,7 @@ function ProfileImageDialog({
               <Field label={tt('Display name')}>
                 <TextInput
                   autoComplete="name"
+                  name="display-name"
                   onChange={(event) => setDisplayName(event.target.value)}
                   required
                   value={displayName}
@@ -177,7 +185,7 @@ function ProfileImageDialog({
             )}
           </div>
           <DialogFooter>
-            <Button onClick={() => setDialog(null)} type="button" variant="secondary">
+            <Button onClick={closeDialog} type="button" variant="secondary">
               {tt('Cancel')}
             </Button>
             <Button type="submit">{dialog === 'avatar' ? tt('Save avatar') : tt('Save display name')}</Button>
@@ -189,20 +197,20 @@ function ProfileImageDialog({
 }
 
 function UsernameDialog({
+  closeDialog,
   dialog,
   saveProfile,
-  setDialog,
   setUsername,
   username,
 }: {
+  closeDialog: () => void
   dialog: ProfileDialog
   saveProfile: (event: FormEvent) => void
-  setDialog: (dialog: ProfileDialog) => void
   setUsername: (value: string) => void
   username: string
 }) {
   return (
-    <Dialog open={dialog === 'username'}>
+    <Dialog onOpenChange={(open) => !open && closeDialog()} open={dialog === 'username'}>
       <DialogContent>
         <form onSubmit={saveProfile}>
           <DialogHeader>
@@ -213,13 +221,14 @@ function UsernameDialog({
             <Field label={tt('Username')}>
               <TextInput
                 autoComplete="username"
+                name="username"
                 onChange={(event) => setUsername(event.target.value)}
                 value={username}
               />
             </Field>
           </div>
           <DialogFooter>
-            <Button onClick={() => setDialog(null)} type="button" variant="secondary">
+            <Button onClick={closeDialog} type="button" variant="secondary">
               {tt('Cancel')}
             </Button>
             <Button type="submit" variant="secondary">
@@ -234,27 +243,27 @@ function UsernameDialog({
 
 function EmailDialog({
   changeEmail,
+  closeDialog,
   dialog,
   email,
   emailOtp,
   emailStep,
-  setDialog,
   setEmail,
   setEmailOtp,
   setEmailStep,
 }: {
   changeEmail: (event: FormEvent) => void
+  closeDialog: () => void
   dialog: ProfileDialog
   email: string
   emailOtp: string
   emailStep: 'request' | 'confirm'
-  setDialog: (dialog: ProfileDialog) => void
   setEmail: (value: string) => void
   setEmailOtp: (value: string) => void
   setEmailStep: (value: 'request' | 'confirm') => void
 }) {
   return (
-    <Dialog open={dialog === 'email'}>
+    <Dialog onOpenChange={(open) => !open && closeDialog()} open={dialog === 'email'}>
       <DialogContent>
         <form onSubmit={changeEmail}>
           <DialogHeader>
@@ -270,6 +279,7 @@ function EmailDialog({
               <Field label={tt('Email')}>
                 <TextInput
                   autoComplete="email"
+                  name="email"
                   onChange={(event) => setEmail(event.target.value)}
                   required
                   type="email"
@@ -281,6 +291,7 @@ function EmailDialog({
                 <TextInput
                   autoComplete="one-time-code"
                   inputMode="numeric"
+                  name="email-otp"
                   onChange={(event) => setEmailOtp(event.target.value)}
                   required
                   value={emailOtp}
@@ -289,15 +300,7 @@ function EmailDialog({
             )}
           </div>
           <DialogFooter>
-            <Button
-              onClick={() => {
-                setDialog(null)
-                setEmailStep('request')
-                setEmailOtp('')
-              }}
-              type="button"
-              variant="secondary"
-            >
+            <Button onClick={closeDialog} type="button" variant="secondary">
               {tt('Cancel')}
             </Button>
             {emailStep === 'confirm' ? (
@@ -325,27 +328,31 @@ function EmailDialog({
 
 function PasswordDialog({
   changePassword,
+  closeDialog,
+  confirmPassword,
   currentPassword,
   dialog,
   newPassword,
   passwordError,
   profile,
+  setConfirmPassword,
   setCurrentPassword,
-  setDialog,
   setNewPassword,
 }: {
   changePassword: (event: FormEvent) => void
+  closeDialog: () => void
+  confirmPassword: string
   currentPassword: string
   dialog: ProfileDialog
   newPassword: string
   passwordError: string | null
   profile: UserProfile
+  setConfirmPassword: (value: string) => void
   setCurrentPassword: (value: string) => void
-  setDialog: (dialog: ProfileDialog) => void
   setNewPassword: (value: string) => void
 }) {
   return (
-    <Dialog open={dialog === 'password'}>
+    <Dialog onOpenChange={(open) => !open && closeDialog()} open={dialog === 'password'}>
       <DialogContent>
         <form onSubmit={changePassword}>
           <DialogHeader>
@@ -356,10 +363,11 @@ function PasswordDialog({
           </DialogHeader>
           <div className="dialogFormBody formStack">
             {passwordError ? <Status tone="error">{passwordError}</Status> : null}
-            <input autoComplete="username" hidden readOnly type="text" value={profile.email} />
+            <input autoComplete="username" hidden name="username" readOnly type="text" value={profile.email} />
             <Field label={tt('Current password')}>
               <TextInput
                 autoComplete="current-password"
+                name="current-password"
                 onChange={(event) => setCurrentPassword(event.target.value)}
                 required
                 type="password"
@@ -370,15 +378,27 @@ function PasswordDialog({
               <TextInput
                 autoComplete="new-password"
                 minLength={8}
+                name="new-password"
                 onChange={(event) => setNewPassword(event.target.value)}
                 required
                 type="password"
                 value={newPassword}
               />
             </Field>
+            <Field label={tt('Confirm new password')}>
+              <TextInput
+                autoComplete="new-password"
+                minLength={8}
+                name="confirm-password"
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                required
+                type="password"
+                value={confirmPassword}
+              />
+            </Field>
           </div>
           <DialogFooter>
-            <Button onClick={() => setDialog(null)} type="button" variant="secondary">
+            <Button onClick={closeDialog} type="button" variant="secondary">
               {tt('Cancel')}
             </Button>
             <Button type="submit" variant="secondary">

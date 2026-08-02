@@ -40,6 +40,17 @@ Feature: Account Center
     Then the avatar preview updates
     And the account API persists the asset reference
 
+  @entrypoint:product-ui @journey:account-preferences
+  Scenario: Account presentation preferences apply to this browser
+    When I change the Account Center language or time zone
+    Then the interface language and displayed dates use that preference
+    And the preference remains after reload
+
+  @entrypoint:product-ui @journey:account-data-export
+  Scenario: Account data can be exported
+    When I request my account data export
+    Then Realmroot downloads a machine-readable snapshot of my profile, identities, sessions, and grants
+
   @entrypoint:product-ui @journey:email-update
   Scenario: Email change requests verification
     When I request a new email address
@@ -49,6 +60,8 @@ Feature: Account Center
   Scenario: Password change rotates credentials
     When I submit my current password and a valid new password
     Then the new password can be used for sign-in
+    And my current browser receives a replacement session while other sessions are revoked
+    And a mismatched new-password confirmation is rejected before submission
 
   @entrypoint:product-ui @journey:password-policy-native-change
   Scenario: Native password change endpoint enforces managed password policy
@@ -60,14 +73,18 @@ Feature: Account Center
   @entrypoint:product-ui @journey:totp-flow
   Scenario: TOTP enrollment verifies a real code
     When I start TOTP enrollment
-    And I submit the current authenticator code
+    Then Account Center shows a scannable authenticator QR code
+    When I submit the current authenticator code
     Then TOTP is enrolled for my account
+    And backup codes are shown before I finish setup
 
   @entrypoint:product-ui @journey:mfa-policy-enforcement
   Scenario: MFA policy controls enrollment and API access
     Given tenant MFA policy disables or requires TOTP
     When I attempt enrollment or protected API access
-    Then Realmroot enforces the current policy
+    Then Realmroot keeps the profile, configuration, and enrollment surfaces available
+    And redirects an unenrolled signed-in user to Account Security before protected product journeys
+    And blocks every other protected API until enrollment is complete
 
   @entrypoint:product-ui @journey:passkey-flow
   Scenario: Passkey enrollment completes with WebAuthn
@@ -104,6 +121,23 @@ Feature: Account Center
     Given I have granted an application access
     When I revoke the grant
     Then the application is removed from authorized apps
+
+  @entrypoint:product-ui @journey:account-organization-management
+  Scenario: Organization members manage their shared context
+    When I create an Organization from Account Center
+    Then I become its Owner
+    And I can open the Organization detail with its members and pending invitations
+    And its Agent identities, my contextual Role assignments, and active Agent access grants come from canonical resource collections shared with Console
+    And I can switch the active Organization without changing Developer Console eligibility
+    When I update its profile or invite a member with an access level
+    Then the Organization detail reflects the change
+
+  @entrypoint:product-ui @journey:consumer-organization-boundary
+  Scenario: A consumer Organization does not imply Developer Console access
+    Given Organization creation is allowed but Developer Console remains restricted to Realm operators
+    When I create and manage an Organization from Account Center
+    Then I can manage its profile and members without an Open Console action
+    And its membership grants no access to technical resource management APIs
 
   @entrypoint:product-ui @journey:agent-approval
   Scenario: Delegated agents can request read-only account access

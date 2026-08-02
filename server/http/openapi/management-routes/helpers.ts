@@ -1,4 +1,5 @@
 import { z } from '@hono/zod-openapi'
+import { idempotencyKeySchema } from '@shared/api/idempotency'
 import type { ZodType } from 'zod'
 
 export { z } from '@hono/zod-openapi'
@@ -11,9 +12,14 @@ export {
   requestAgentCapabilitiesSchema,
 } from '@shared/api/agents'
 export {
+  applicationAuthorizationRevocationSchema,
+  applicationAuthorizationSchema,
   applicationResponseSchema,
   createApplicationRequestSchema,
   createApplicationResponseSchema,
+  listApplicationAuthorizationsQuerySchema,
+  listApplicationAuthorizationsResponseSchema,
+  listApplicationsQuerySchema,
   listApplicationsResponseSchema,
   listClientSecretsResponseSchema,
   listRedirectUrisResponseSchema,
@@ -25,20 +31,27 @@ export { uploadedAssetResponseSchema } from '@shared/api/assets'
 export {
   addMemberRequestSchema,
   apiResourceResponseSchema,
-  assignRoleRequestSchema,
   createApiResourceRequestSchema,
   createInvitationRequestSchema,
   createOrganizationRequestSchema,
+  createRoleAssignmentRequestSchema,
   createRoleRequestSchema,
+  invitationResponseSchema,
+  listApiResourcesQuerySchema,
   listApiResourcesResponseSchema,
   listInvitationsResponseSchema,
   listMembersResponseSchema,
   listOrganizationsResponseSchema,
+  listRoleAssignmentsQuerySchema,
+  listRoleAssignmentsResponseSchema,
   listRolesResponseSchema,
+  memberResponseSchema,
   organizationResponseSchema,
-  replaceRoleScopesRequestSchema,
+  replaceRolePermissionsRequestSchema,
+  roleAssignmentResponseSchema,
+  roleAssignmentRevocationSchema,
+  rolePermissionsResponseSchema,
   roleResponseSchema,
-  roleScopesResponseSchema,
   updateApiResourceRequestSchema,
   updateMemberRequestSchema,
   updateOrganizationRequestSchema,
@@ -50,6 +63,8 @@ export {
   createManagementConnectorRequestSchema,
   createManagementFederatedCredentialRequestSchema,
   createManagementFederatedCredentialResponseSchema,
+  developerConsoleAccessPolicyResponseSchema,
+  emailDeliveryConfigurationResponseSchema,
   listManagementConnectorsResponseSchema,
   listManagementFederatedCredentialsResponseSchema,
   listManagementUserApplicationsResponseSchema,
@@ -65,32 +80,40 @@ export {
   managementErrorResponseSchema,
   managementPasswordResetRequestSchema,
   managementReadinessResponseSchema,
+  managementRealmResponseSchema,
   managementSignInSettingsResponseSchema,
   managementUpdateUserRequestSchema,
   managementUserDetailResponseSchema,
   managementUserSecurityResponseSchema,
+  organizationCreationPolicyResponseSchema,
   paginationQuerySchema,
+  replaceDeveloperConsoleAccessPolicyRequestSchema,
+  replaceEmailDeliveryConfigurationRequestSchema,
+  replaceOrganizationCreationPolicyRequestSchema,
   updateManagementAccountCenterSettingsRequestSchema,
   updateManagementBrandingSettingsRequestSchema,
   updateManagementConnectorRequestSchema,
   updateManagementFederatedCredentialRequestSchema,
+  updateManagementRealmRequestSchema,
   updateManagementSignInSettingsRequestSchema,
 } from '@shared/api/management'
-export { securityPolicySchema, updateSecurityPolicySchema } from '@shared/api/security'
+export { securityPolicyResponseSchema, updateSecurityPolicySchema } from '@shared/api/security'
 export {
   createWebhookEndpointRequestSchema,
+  idempotencyKeySchema,
+  listWebhookDeliveryAttemptsResponseSchema,
   listWebhookEndpointsQuerySchema,
   listWebhookEndpointsResponseSchema,
   listWebhookRequestsQuerySchema,
   listWebhookRequestsResponseSchema,
   updateWebhookEndpointRequestSchema,
+  webhookDeliveryAttemptSchema,
   webhookEndpointSchema,
   webhookEndpointSecretResponseSchema,
   webhookRequestSchema,
 } from '@shared/api/webhooks'
 export type { ZodType } from 'zod'
 
-import { assignRoleRequestSchema } from '@shared/api/authorization'
 import { managementErrorResponseSchema } from '@shared/api/management'
 
 export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete'
@@ -112,12 +135,13 @@ export interface ManagementRouteConfig {
   status?: number
   response?: ZodType
   noBody?: boolean
-  errors?: Partial<Record<400 | 404 | 409, string>>
+  responseHeaders?: Record<string, { description: string; schema: Record<string, unknown> }>
+  errors?: Partial<Record<400 | 404 | 409 | 412 | 422 | 428 | 429 | 502, string>>
   security?: Array<Record<string, string[]>>
 }
 export const jsonContentType = 'application/json'
 export const multipartContentType = 'multipart/form-data'
-export const managementSecurity: Array<Record<string, string[]>> = [{ agentAuth: [] }, { adminSession: ['admin'] }]
+export const managementSecurity: Array<Record<string, string[]>> = [{ agentAuth: [] }, { browserSession: [] }]
 export function errorResponse(description: string) {
   return { description, content: { [jsonContentType]: { schema: managementErrorResponseSchema } } }
 }
@@ -141,6 +165,8 @@ export function params(...names: string[]) {
 }
 export const idParam = params('id')
 export const applicationIdParam = params('applicationId')
+export const applicationAuthorizationParam = params('applicationId', 'authorizationId')
+export const authorizationIdParam = params('authorizationId')
 export const federatedCredentialParam = params('applicationId', 'credentialId')
 export const organizationIdParam = params('organizationId')
 export const userIdParam = params('id')
@@ -149,20 +175,24 @@ export const userPasskeyParam = params('id', 'passkeyId')
 export const memberParam = params('id', 'memberId')
 export const invitationParam = params('id', 'invitationId')
 export const agentIdentityParam = params('identityId')
-export function assignmentRoutes(): ManagementRouteConfig[] {
-  const assignments = [
-    ['roles/assignments/users', 'assignUserRole'],
-    ['roles/assignments/members', 'assignMemberRole'],
-    ['roles/assignments/applications', 'assignApplicationRole'],
-    ['roles/assignments/agents', 'assignAgentRole'],
-  ] as const
-  return assignments.map(([path, operationId]) => ({
-    method: 'post',
-    path: `/${path}`,
-    operationId,
-    summary: 'Assign role',
-    request: { body: jsonBody(assignRoleRequestSchema) },
-    response: z.object({ assignment: z.object({ id: z.string() }) }),
-    status: 201,
-  }))
+export const ifMatchHeader = z.object({
+  'If-Match': z.string().openapi({ param: { name: 'If-Match', in: 'header' }, example: '"resource-version"' }),
+})
+export const idempotencyKeyHeader = z.object({
+  'Idempotency-Key': idempotencyKeySchema.openapi({
+    param: { name: 'Idempotency-Key', in: 'header' },
+    example: '018f4f92-f32d-7af5-8ed0-83fe6c24d404',
+  }),
+})
+export const locationResponseHeader = {
+  Location: { description: 'Canonical URI of the created resource.', schema: { type: 'string' } },
+}
+export const etagResponseHeader = {
+  ETag: { description: 'Current strong entity tag for the representation.', schema: { type: 'string' } },
+}
+export const idempotencyReplayResponseHeader = {
+  'Idempotency-Replayed': {
+    description: 'True when this response replays the resource reserved by the same idempotency key.',
+    schema: { type: 'string', enum: ['true'] },
+  },
 }

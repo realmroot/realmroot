@@ -30,7 +30,7 @@ Run **Deploy Realmroot Fork** manually and select an existing fork branch or
 tag in GitHub's workflow ref selector.
 
 Pinned deployment changes code only. It continues to use the fork's configured
-Worker, D1, R2, Queue, sender, and existing secrets.
+Worker, D1, R2, and existing secrets.
 
 ## Deployment Configuration
 
@@ -39,10 +39,13 @@ in committed application files:
 
 - secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and optionally
   `BETTER_AUTH_SECRET` and `CREDENTIAL_ENCRYPTION_KEY`
-- required variable: `REALMROOT_EMAIL_FROM`
-- optional variables: `REALMROOT_EMAIL_FROM_NAME`, `REALMROOT_WORKER_NAME`,
-  `REALMROOT_D1_DATABASE`, `REALMROOT_R2_BUCKET`, and
-  `REALMROOT_EMAIL_QUEUE`
+- optional variables: `REALMROOT_WORKER_NAME`, `REALMROOT_D1_DATABASE`, and
+  `REALMROOT_R2_BUCKET`
+
+Email sender identity is now stored in D1 through **Console > Settings > Email
+delivery**. Existing `EMAIL_FROM` and `EMAIL_FROM_NAME` Worker variables remain
+an upgrade fallback until the settings are saved, but new deployments do not
+require them. The unused `EMAIL_QUEUE` producer can be removed.
 
 Deployments with a custom domain should set `BETTER_AUTH_URL` to that immutable
 public origin. Both users and Agents use its `/api/auth` issuer.

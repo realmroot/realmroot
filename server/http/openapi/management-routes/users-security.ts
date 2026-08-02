@@ -13,7 +13,7 @@ import {
   managementUserDetailResponseSchema,
   managementUserSecurityResponseSchema,
   paginationQuerySchema,
-  securityPolicySchema,
+  securityPolicyResponseSchema,
   updateSecurityPolicySchema,
   userIdParam,
   userPasskeyParam,
@@ -164,7 +164,7 @@ export const userSecurityRoutes: ManagementRouteConfig[] = [
     path: '/security/policy',
     operationId: 'getSecurityPolicy',
     summary: 'Get security policy',
-    response: z.object({ policy: securityPolicySchema }),
+    response: z.object({ policy: securityPolicyResponseSchema }),
   },
   {
     method: 'patch',
@@ -172,6 +172,6 @@ export const userSecurityRoutes: ManagementRouteConfig[] = [
     operationId: 'updateSecurityPolicy',
     summary: 'Update security policy',
     request: { body: jsonBody(updateSecurityPolicySchema) },
-    response: z.object({ policy: securityPolicySchema }),
+    response: z.object({ policy: securityPolicyResponseSchema }),
   },
 ]

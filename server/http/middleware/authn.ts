@@ -15,6 +15,7 @@ export interface AuthUser {
 
 export interface AuthSession {
   id: string
+  activeOrganizationId?: string | null
 }
 
 export interface AuthSessionResult {

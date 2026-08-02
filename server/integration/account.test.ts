@@ -1,5 +1,5 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { verification } from '@server/db/schema'
+import { agentAccessGrant, agentIdentity, verification } from '@server/db/schema'
 import { privateKeyToAccount } from 'viem/accounts'
 import { createSiweMessage } from 'viem/siwe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -10,7 +10,7 @@ afterEach(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS)
 })
 
-async function signedInUser(harness: Harness): Promise<{ cookie: string; userId: string }> {
+async function signedInUser(harness: Harness): Promise<{ adminCookie: string; cookie: string; userId: string }> {
   const adminCookie = await signInAdmin(harness)
   await createUser(harness, adminCookie, {
     email: 'account@example.com',
@@ -21,7 +21,21 @@ async function signedInUser(harness: Harness): Promise<{ cookie: string; userId:
   const cookie = await signIn(harness, 'account@example.com', 'account-password-2026')
   const me = await harness.request('/api/account/profile', { headers: { cookie } })
   const userId = ((await me.json()) as { user: { id: string } }).user.id
-  return { cookie, userId }
+  return { adminCookie, cookie, userId }
+}
+
+function mergeResponseCookies(currentCookie: string, response: Response) {
+  const cookies = new Map<string, string>()
+  for (const pair of currentCookie.split(';')) {
+    const separator = pair.indexOf('=')
+    if (separator > 0) cookies.set(pair.slice(0, separator).trim(), pair.slice(separator + 1).trim())
+  }
+  for (const part of (response.headers.get('set-cookie') ?? '').split(',')) {
+    const pair = part.trim().split(';')[0]
+    const separator = pair.indexOf('=')
+    if (separator > 0) cookies.set(pair.slice(0, separator), pair.slice(separator + 1))
+  }
+  return [...cookies].map(([name, value]) => `${name}=${value}`).join('; ')
 }
 
 describe('account self-service over real D1', () => {
@@ -73,6 +87,183 @@ describe('account self-service over real D1', () => {
     })
     expect(updated.status, await updated.clone().text()).toBe(200)
     expect(((await updated.json()) as { user: { displayName: string } }).user.displayName).toBe('Renamed Account')
+  })
+
+  it('creates and manages a consumer Organization without Console access [spec: account-center/account-organization-management] [spec: account-center/consumer-organization-boundary]', async () => {
+    const { adminCookie, cookie: initialCookie, userId } = await signedInUser(harness)
+    let cookie = initialCookie
+    const currentPolicyResponse = await harness.request('/api/organization-creation-policy', {
+      headers: { cookie: adminCookie },
+    })
+    expect(currentPolicyResponse.status, await currentPolicyResponse.clone().text()).toBe(200)
+    const currentPolicy = (await currentPolicyResponse.json()) as Record<string, unknown>
+    const policy = await harness.request('/api/organization-creation-policy', {
+      method: 'PUT',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'If-Match': currentPolicyResponse.headers.get('ETag')!,
+      },
+      body: JSON.stringify({ ...currentPolicy, mode: 'approved_users', approvedUserIds: [userId] }),
+    })
+    expect(policy.status, await policy.clone().text()).toBe(200)
+    let headers = { 'content-type': 'application/json', cookie, origin: baseURL }
+
+    const created = await harness.request('/api/auth/organization/create', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'Product Lab', slug: 'product-lab' }),
+    })
+    expect(created.status, await created.clone().text()).toBe(200)
+    const organizationId = ((await created.json()) as { id: string }).id
+
+    const clearActive = await harness.request('/api/auth/organization/set-active', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ organizationId: null }),
+    })
+    expect(clearActive.status, await clearActive.clone().text()).toBe(200)
+    cookie = mergeResponseCookies(cookie, clearActive)
+    headers = { 'content-type': 'application/json', cookie, origin: baseURL }
+    await expect(
+      (await harness.request('/api/account/organization-context', { headers: { cookie } })).json(),
+    ).resolves.toMatchObject({
+      activeOrganizationId: null,
+    })
+    const switchActive = await harness.request('/api/auth/organization/set-active', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ organizationId }),
+    })
+    expect(switchActive.status, await switchActive.clone().text()).toBe(200)
+    cookie = mergeResponseCookies(cookie, switchActive)
+    headers = { 'content-type': 'application/json', cookie, origin: baseURL }
+    await expect(
+      (await harness.request('/api/account/organization-context', { headers: { cookie } })).json(),
+    ).resolves.toMatchObject({
+      activeOrganizationId: organizationId,
+    })
+    await expect(
+      (await harness.request('/api/account/developer-console-access', { headers: { cookie } })).json(),
+    ).resolves.toMatchObject({ realmOperator: false, consoleOrganizations: [] })
+
+    const roleResponse = await harness.request('/api/roles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ key: 'household.viewer', name: 'Household viewer' }),
+    })
+    expect(roleResponse.status, await roleResponse.clone().text()).toBe(201)
+    const roleId = ((await roleResponse.json()) as { id: string }).id
+    const assignment = await harness.request('/api/role-assignments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ roleId, subjectType: 'user', subjectId: userId, organizationId }),
+    })
+    expect(assignment.status, await assignment.clone().text()).toBe(201)
+
+    const resourceResponse = await harness.request('/api/api-resources', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({
+        identifier: 'household-api',
+        name: 'Household API',
+        resourceUrl: 'https://household.example.com/api',
+        enabled: false,
+        ownerOrganizationId: organizationId,
+      }),
+    })
+    expect(resourceResponse.status, await resourceResponse.clone().text()).toBe(201)
+    const resourceId = ((await resourceResponse.json()) as { id: string }).id
+    const now = new Date()
+    await harness.db.insert(agentIdentity).values({
+      id: 'household-agent',
+      issuer: 'http://localhost/api/auth',
+      subject: 'household-agent-subject',
+      name: 'Household assistant',
+      ownerOrganizationId: organizationId,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    await harness.db.insert(agentAccessGrant).values({
+      id: 'household-agent-grant',
+      resourceId,
+      agentIdentityId: 'household-agent',
+      scopes: ['household:read'],
+      mode: 'persistent',
+      status: 'active',
+      grantedByUserId: userId,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const updated = await harness.request('/api/auth/organization/update', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ organizationId, data: { name: 'Product Engineering', slug: 'product-engineering' } }),
+    })
+    expect(updated.status, await updated.clone().text()).toBe(200)
+
+    const invited = await harness.request('/api/auth/organization/invite-member', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ organizationId, email: 'developer@example.com', role: 'developer' }),
+    })
+    expect(invited.status, await invited.clone().text()).toBe(200)
+
+    const detail = await harness.request(
+      `/api/auth/organization/get-full-organization?organizationId=${organizationId}`,
+      {
+        headers: { cookie },
+      },
+    )
+    expect(detail.status, await detail.clone().text()).toBe(200)
+    const body = (await detail.json()) as {
+      name: string
+      members: Array<{ userId: string; role: string }>
+      invitations: Array<{ email: string; role: string; status: string }>
+    }
+    expect(body.name).toBe('Product Engineering')
+    expect(body.members).toEqual(expect.arrayContaining([expect.objectContaining({ userId, role: 'owner' })]))
+    expect(body.invitations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ email: 'developer@example.com', role: 'developer', status: 'pending' }),
+      ]),
+    )
+
+    const agents = await harness.request(`/api/account/organizations/${organizationId}/agents`, {
+      headers: { cookie },
+    })
+    expect(agents.status, await agents.clone().text()).toBe(200)
+    await expect(agents.json()).resolves.toMatchObject({ items: [{ id: 'household-agent' }] })
+    const roleAssignments = await harness.request(
+      `/api/role-assignments?organizationId=${organizationId}&status=active`,
+      { headers: { cookie } },
+    )
+    expect(roleAssignments.status, await roleAssignments.clone().text()).toBe(200)
+    await expect(roleAssignments.json()).resolves.toMatchObject({
+      assignments: [{ roleId, subjectId: userId, organizationId }],
+    })
+    const agentAccessGrants = await harness.request(
+      `/api/agent-access-grants?organizationId=${organizationId}&status=active`,
+      {
+        headers: { cookie },
+      },
+    )
+    expect(agentAccessGrants.status, await agentAccessGrants.clone().text()).toBe(200)
+    await expect(agentAccessGrants.json()).resolves.toMatchObject({
+      items: [{ id: 'household-agent-grant', agentId: 'household-agent', scopes: ['household:read'] }],
+    })
+    const profile = await harness.request('/api/account/profile', { headers: { cookie } })
+    await expect(profile.json()).resolves.toMatchObject({ user: { id: userId } })
+    const developerAccess = await harness.request('/api/account/developer-console-access', {
+      headers: { cookie },
+    })
+    await expect(developerAccess.json()).resolves.toMatchObject({
+      realmOperator: false,
+      consoleOrganizations: [],
+    })
+    expect((await harness.request('/api/applications', { headers: { cookie } })).status).toBe(403)
   })
 
   it('rejects an invalid profile update with 400', async () => {

@@ -115,6 +115,8 @@ export const twoFactor = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     verified: integer('verified', { mode: 'boolean' }).default(true),
+    failedVerificationCount: integer('failed_verification_count').default(0),
+    lockedUntil: integer('locked_until', { mode: 'timestamp_ms' }),
   },
   (table) => [index('twoFactor_secret_idx').on(table.secret), index('twoFactor_userId_idx').on(table.userId)],
 )
@@ -280,6 +282,12 @@ export const oauthConsent = sqliteTable(
     index('oauthConsent_clientId_idx').on(table.clientId),
     index('oauthConsent_userId_idx').on(table.userId),
     index('oauthConsent_referenceId_idx').on(table.referenceId),
+    uniqueIndex('oauthConsent_clientUser_default_unique')
+      .on(table.clientId, table.userId)
+      .where(sql`${table.userId} is not null and ${table.referenceId} is null`),
+    uniqueIndex('oauthConsent_clientUserReference_unique')
+      .on(table.clientId, table.userId, table.referenceId)
+      .where(sql`${table.userId} is not null and ${table.referenceId} is not null`),
   ],
 )
 

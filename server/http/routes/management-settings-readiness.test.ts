@@ -10,6 +10,8 @@ import { adminHeaders, applicationFixture, builtInProvidersFixture, createAuthMo
 type SignInSettings = Awaited<ReturnType<typeof configz.getManagementSignInSettings>>
 type BrandingSettings = Awaited<ReturnType<typeof configz.getManagementBrandingSettings>>
 type AccountCenterSettings = Awaited<ReturnType<typeof configz.getManagementAccountCenterSettings>>
+type RealmSettings = Awaited<ReturnType<typeof configz.getManagementRealm>>
+type EmailSettings = Awaited<ReturnType<typeof configz.getEmailDeliveryConfiguration>>
 type ConfigzConfig = Awaited<ReturnType<typeof configz.getConfig>>
 type ListApplicationsResponse = Awaited<ReturnType<typeof applications.listApplications>>
 
@@ -132,6 +134,82 @@ describe('management routes 3', () => {
     })
   })
 
+  it('persists General and Email settings through dedicated management resources', async () => {
+    const realm: RealmSettings = {
+      id: 'realm',
+      name: 'Acme Realm',
+      issuer: 'https://auth.example.com/api/auth',
+      oidcDiscoveryUrl: 'https://auth.example.com/api/auth/.well-known/openid-configuration',
+      jwksUrl: 'https://auth.example.com/api/auth/jwks',
+      managementApiUrl: 'https://auth.example.com/api/openapi.json',
+    }
+    const email: EmailSettings = {
+      provider: 'cloudflare_email',
+      enabled: true,
+      fromEmail: 'auth@example.com',
+      fromName: 'Acme Realm',
+      replyToEmail: 'support@example.com',
+      bindingAvailable: true,
+      source: 'database',
+    }
+    vi.spyOn(configz, 'getManagementRealm').mockResolvedValue(realm)
+    vi.spyOn(configz, 'getEmailDeliveryConfiguration').mockResolvedValue(email)
+    const updateRealm = vi.spyOn(configz, 'updateManagementRealm').mockResolvedValue(realm)
+    const updateEmail = vi.spyOn(configz, 'replaceEmailDeliveryConfiguration').mockResolvedValue(email)
+    const app = createApp(createAuthMock(), createTestDeps())
+    const headers = adminHeaders()
+
+    const realmRead = await app.request('/api/realm', { headers })
+    const realmWrite = await app.request('/api/realm', {
+      method: 'PATCH',
+      headers: { ...headers, 'If-Match': realmRead.headers.get('ETag')! },
+      body: JSON.stringify({ name: 'Acme Realm' }),
+    })
+    const emailRead = await app.request('/api/email-delivery-configuration', { headers })
+    const emailWrite = await app.request('/api/email-delivery-configuration', {
+      method: 'PUT',
+      headers: { ...headers, 'If-Match': emailRead.headers.get('ETag')! },
+      body: JSON.stringify({
+        provider: 'cloudflare_email',
+        enabled: true,
+        fromEmail: 'auth@example.com',
+        fromName: 'Acme Realm',
+        replyToEmail: 'support@example.com',
+      }),
+    })
+    const missingRealmPrecondition = await app.request('/api/realm', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ name: 'Lost update' }),
+    })
+    const staleRealmPrecondition = await app.request('/api/realm', {
+      method: 'PATCH',
+      headers: { ...headers, 'If-Match': '"stale"' },
+      body: JSON.stringify({ name: 'Lost update' }),
+    })
+
+    expect(realmRead.status).toBe(200)
+    expect(realmWrite.status).toBe(200)
+    expect(emailRead.status).toBe(200)
+    expect(emailWrite.status).toBe(200)
+    expect(realmRead.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
+    expect(realmWrite.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
+    expect(emailRead.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
+    expect(emailWrite.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
+    expect(missingRealmPrecondition.status).toBe(428)
+    expect(staleRealmPrecondition.status).toBe(412)
+    await expect(realmRead.json()).resolves.toEqual(realm)
+    await expect(emailRead.json()).resolves.toEqual(email)
+    expect(updateRealm).toHaveBeenCalledWith(expect.anything(), expect.anything(), { name: 'Acme Realm' })
+    expect(updateEmail).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
+      provider: 'cloudflare_email',
+      enabled: true,
+      fromEmail: 'auth@example.com',
+      fromName: 'Acme Realm',
+      replyToEmail: 'support@example.com',
+    })
+  })
+
   it('updates managed sign-in, branding, and account center settings with validated input', async () => {
     const updateSignIn = vi.spyOn(configz, 'updateManagementSignInSettings').mockResolvedValue(signInSettings())
     const updateBranding = vi.spyOn(configz, 'updateManagementBrandingSettings').mockResolvedValue(brandingSettings())
@@ -218,6 +296,54 @@ describe('management routes 3', () => {
         description: 'Continue.',
       },
     })
+  })
+
+  it('persists independent Organization creation and Console access policies [spec: admin-console/admin-developer-access-policy]', async () => {
+    const organizationCreation: Awaited<ReturnType<typeof configz.getOrganizationCreationPolicy>> = {
+      mode: 'verified_users',
+      approvedUserIds: [],
+    }
+    const consoleAccess: Awaited<ReturnType<typeof configz.getDeveloperConsoleAccessPolicy>> = {
+      mode: 'selected_organizations',
+      eligibleAccessLevels: ['owner', 'admin', 'developer'],
+      selectedOrganizationIds: ['org-1'],
+    }
+    const getCreation = vi.spyOn(configz, 'getOrganizationCreationPolicy').mockResolvedValue(organizationCreation)
+    const replaceCreation = vi
+      .spyOn(configz, 'replaceOrganizationCreationPolicy')
+      .mockResolvedValue(organizationCreation)
+    const getAccess = vi.spyOn(configz, 'getDeveloperConsoleAccessPolicy').mockResolvedValue(consoleAccess)
+    const replaceAccess = vi.spyOn(configz, 'replaceDeveloperConsoleAccessPolicy').mockResolvedValue(consoleAccess)
+    const app = createApp(createAuthMock(), createTestDeps())
+    const headers = adminHeaders()
+
+    const creationRead = await app.request('/api/organization-creation-policy', { headers })
+    const creationWrite = await app.request('/api/organization-creation-policy', {
+      method: 'PUT',
+      headers: { ...headers, 'If-Match': creationRead.headers.get('ETag')! },
+      body: JSON.stringify(organizationCreation),
+    })
+    const accessRead = await app.request('/api/developer-console-access-policy', { headers })
+    const accessWrite = await app.request('/api/developer-console-access-policy', {
+      method: 'PUT',
+      headers: { ...headers, 'If-Match': accessRead.headers.get('ETag')! },
+      body: JSON.stringify(consoleAccess),
+    })
+
+    expect(creationRead.status).toBe(200)
+    expect(creationWrite.status).toBe(200)
+    expect(accessRead.status).toBe(200)
+    expect(accessWrite.status).toBe(200)
+    expect(creationRead.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
+    expect(creationWrite.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
+    expect(accessRead.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
+    expect(accessWrite.headers.get('ETag')).toMatch(/^"[a-f0-9]{64}"$/)
+    await expect(creationRead.json()).resolves.toEqual(organizationCreation)
+    await expect(accessRead.json()).resolves.toEqual(consoleAccess)
+    expect(getCreation).toHaveBeenCalledWith(expect.anything())
+    expect(replaceCreation).toHaveBeenCalledWith(expect.anything(), organizationCreation)
+    expect(getAccess).toHaveBeenCalledWith(expect.anything())
+    expect(replaceAccess).toHaveBeenCalledWith(expect.anything(), consoleAccess)
   })
 
   it('uses management-specific configz readers when available', async () => {
@@ -315,7 +441,7 @@ describe('management routes 3', () => {
           label: 'Enable a sign-in method',
           description: 'Keep at least one hosted sign-in method available for users.',
           status: 'complete',
-          href: '/console/sign-in-experience/sign-up-and-sign-in',
+          href: '/console/sign-in-experience/sign-in',
           action: 'Review methods',
         },
       ],

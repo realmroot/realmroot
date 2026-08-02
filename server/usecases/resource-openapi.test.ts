@@ -1,13 +1,92 @@
 import { createTestDeps } from '@server/http/test-deps'
 import {
+  extractProtectedOperations,
   extractResourceScopes,
   readDeclaredScopes,
+  readResourceContract,
   validateRequestedScopes,
   validateResourceUrl,
 } from '@server/usecases/resource-openapi'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('business resource OpenAPI scope discovery', () => {
+  it('returns protected operations and exact alternative scope sets [spec: admin-console/admin-create-api-resource]', async () => {
+    const deps = createTestDeps()
+    vi.mocked(deps.externalHttp.fetch)
+      .mockResolvedValueOnce(
+        new Response(null, {
+          headers: { link: '</openapi.json>; rel="service-desc"' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          openapi: '3.1.0',
+          components: {
+            securitySchemes: {
+              oauth: {
+                type: 'oauth2',
+                flows: {
+                  clientCredentials: {
+                    tokenUrl: 'https://orders.example.com/token',
+                    scopes: {
+                      'orders:read': 'Read orders',
+                      'orders:manage': 'Manage orders',
+                      'orders:admin': 'Administer orders',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          paths: {
+            '/orders/{id}': {
+              get: {
+                operationId: 'getOrder',
+                summary: 'Get an order',
+                description: 'Returns one order.',
+                security: [{ oauth: ['orders:read', 'orders:manage'] }, { oauth: ['orders:admin'] }],
+                responses: {},
+              },
+              parameters: [],
+            },
+            '/health': {
+              get: { security: [], responses: {} },
+            },
+            '/status': {
+              get: { security: [{ oauth: [] }], responses: {} },
+            },
+          },
+        }),
+      )
+
+    await expect(readResourceContract(deps, 'https://orders.example.com/')).resolves.toEqual({
+      sourceUrl: 'https://orders.example.com/openapi.json',
+      scopes: [
+        { value: 'orders:admin', description: 'Administer orders' },
+        { value: 'orders:manage', description: 'Manage orders' },
+        { value: 'orders:read', description: 'Read orders' },
+      ],
+      operations: [
+        {
+          method: 'GET',
+          path: '/orders/{id}',
+          operationId: 'getOrder',
+          summary: 'Get an order',
+          description: 'Returns one order.',
+          requiredScopeSets: [['orders:manage', 'orders:read'], ['orders:admin']],
+        },
+        {
+          method: 'GET',
+          path: '/status',
+          operationId: null,
+          summary: null,
+          description: null,
+          requiredScopeSets: [[]],
+        },
+      ],
+    })
+  })
+
   it('derives native and external requestable scopes only from operation security [spec: agent-identity/native-api-resource-registration]', async () => {
     const deps = createTestDeps()
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
@@ -266,5 +345,35 @@ paths:
         },
       }),
     ).toEqual([{ value: 'valid', description: 'Valid' }])
+  })
+
+  it('ignores non-operation path item fields when extracting protected operations', () => {
+    expect(
+      extractProtectedOperations({
+        openapi: '3.0.3',
+        components: { securitySchemes: {} },
+        paths: { '/items': { parameters: [], summary: 'Items' } },
+      }),
+    ).toEqual([])
+  })
+
+  it('requires protected-operation documents to use OpenAPI 3.x', () => {
+    expect(() => extractProtectedOperations({})).toThrow('must publish an OpenAPI 3.x document')
+    expect(() => extractProtectedOperations({ openapi: '2.0', paths: {} })).toThrow(
+      'must publish an OpenAPI 3.x document',
+    )
+  })
+
+  it('ignores non-scope security requirements while retaining empty OAuth requirements', () => {
+    expect(
+      extractProtectedOperations({
+        openapi: '3.1.0',
+        components: { securitySchemes: { oauth: { type: 'oauth2' } } },
+        security: [{ unknown: [] }, { oauth: 'invalid' }, { oauth: [] }],
+        paths: { '/items': { get: { responses: {} } } },
+      }),
+    ).toEqual([
+      { method: 'GET', path: '/items', operationId: null, summary: null, description: null, requiredScopeSets: [[]] },
+    ])
   })
 })

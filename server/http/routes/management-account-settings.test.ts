@@ -338,7 +338,7 @@ function createAuthMock() {
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
       requestEmailChangeEmailOTP: vi.fn().mockResolvedValue({ success: true }),
       changeEmailEmailOTP: vi.fn().mockResolvedValue({ success: true }),
-      changePassword: vi.fn().mockResolvedValue({ status: true }),
+      changePassword: vi.fn().mockResolvedValue(Response.json({ status: true })),
       linkSocialAccount: vi.fn().mockResolvedValue({ url: 'https://accounts.example.com/oauth', redirect: true }),
       oAuth2LinkAccount: vi.fn().mockResolvedValue({ url: 'https://idp.example.com/oauth', redirect: true }),
       unlinkAccount: vi.fn().mockResolvedValue({ status: true }),

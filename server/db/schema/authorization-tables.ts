@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { uploadedAsset } from './agent-tables'
 import { oauthClient, user } from './auth-tables'
 import { identityProviderConnector } from './connector-tables'
@@ -92,8 +92,10 @@ export const application = sqliteTable(
     description: text('description'),
     homepageUrl: text('homepage_url'),
     logoAssetId: text('logo_asset_id').references(() => uploadedAsset.id, { onDelete: 'set null' }),
-    ownerUserId: text('owner_user_id').references(() => user.id, { onDelete: 'set null' }),
-    ownerOrganizationId: text('owner_organization_id').references(() => organization.id, { onDelete: 'set null' }),
+    ownerOrganizationId: text('owner_organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'restrict' }),
+    audienceMode: text('audience_mode').notNull().default('realm'),
     firstParty: integer('first_party', { mode: 'boolean' }).default(false).notNull(),
     trusted: integer('trusted', { mode: 'boolean' }).default(false).notNull(),
     disabled: integer('disabled', { mode: 'boolean' }).default(false).notNull(),
@@ -111,9 +113,46 @@ export const application = sqliteTable(
   },
   (table) => [
     uniqueIndex('application_oauthClientId_unique').on(table.oauthClientId),
-    index('application_ownerUserId_idx').on(table.ownerUserId),
     index('application_ownerOrganizationId_idx').on(table.ownerOrganizationId),
     index('application_disabled_idx').on(table.disabled),
+  ],
+)
+
+export const applicationAudienceOrganization = sqliteTable(
+  'application_audience_organization',
+  {
+    applicationId: text('application_id')
+      .notNull()
+      .references(() => application.id, { onDelete: 'cascade' }),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('applicationAudienceOrganization_unique').on(table.applicationId, table.organizationId),
+    index('applicationAudienceOrganization_organizationId_idx').on(table.organizationId),
+  ],
+)
+
+export const applicationAudienceUser = sqliteTable(
+  'application_audience_user',
+  {
+    applicationId: text('application_id')
+      .notNull()
+      .references(() => application.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('applicationAudienceUser_unique').on(table.applicationId, table.userId),
+    index('applicationAudienceUser_userId_idx').on(table.userId),
   ],
 )
 
@@ -180,6 +219,9 @@ export const applicationConsent = sqliteTable(
     index('applicationConsent_applicationId_idx').on(table.applicationId),
     index('applicationConsent_userId_idx').on(table.userId),
     index('applicationConsent_organizationId_idx').on(table.organizationId),
+    uniqueIndex('applicationConsent_activeApplicationUser_unique')
+      .on(table.applicationId, table.userId)
+      .where(sql`${table.revokedAt} is null`),
   ],
 )
 
@@ -195,6 +237,11 @@ export const apiResource = sqliteTable(
     }),
     description: text('description'),
     enabled: integer('enabled', { mode: 'boolean' }).default(true).notNull(),
+    ownerOrganizationId: text('owner_organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'restrict' }),
+    accessEligibilityMode: text('access_eligibility_mode').notNull().default('realm'),
+    availableToAgents: integer('available_to_agents', { mode: 'boolean' }).default(true).notNull(),
     archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
@@ -208,6 +255,26 @@ export const apiResource = sqliteTable(
     uniqueIndex('apiResource_resourceUrl_unique').on(table.resourceUrl),
     index('apiResource_enabled_idx').on(table.enabled),
     index('apiResource_connectorId_idx').on(table.connectorId),
+    index('apiResource_ownerOrganizationId_idx').on(table.ownerOrganizationId),
+  ],
+)
+
+export const apiResourceEligibleOrganization = sqliteTable(
+  'api_resource_eligible_organization',
+  {
+    resourceId: text('resource_id')
+      .notNull()
+      .references(() => apiResource.id, { onDelete: 'cascade' }),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('apiResourceEligibleOrganization_unique').on(table.resourceId, table.organizationId),
+    index('apiResourceEligibleOrganization_organizationId_idx').on(table.organizationId),
   ],
 )
 
@@ -218,9 +285,6 @@ export const role = sqliteTable(
     key: text('key').notNull(),
     name: text('name').notNull(),
     description: text('description'),
-    resourceId: text('resource_id').references(() => apiResource.id, { onDelete: 'cascade' }),
-    organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
-    applicationId: text('application_id').references(() => application.id, { onDelete: 'cascade' }),
     system: integer('system', { mode: 'boolean' }).default(false).notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
@@ -230,94 +294,62 @@ export const role = sqliteTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [
-    index('role_key_idx').on(table.key),
-    index('role_resourceId_idx').on(table.resourceId),
-    index('role_organizationId_idx').on(table.organizationId),
-    index('role_applicationId_idx').on(table.applicationId),
-  ],
+  (table) => [uniqueIndex('role_key_unique').on(table.key)],
 )
 
-export const roleScope = sqliteTable(
-  'role_scope',
+export const rolePermission = sqliteTable(
+  'role_permission',
   {
     roleId: text('role_id')
       .notNull()
       .references(() => role.id, { onDelete: 'cascade' }),
+    resourceId: text('resource_id')
+      .notNull()
+      .references(() => apiResource.id, { onDelete: 'restrict' }),
     scope: text('scope').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
   },
-  (table) => [uniqueIndex('roleScope_roleId_scope_unique').on(table.roleId, table.scope)],
-)
-
-export const userRoleAssignment = sqliteTable(
-  'user_role_assignment',
-  {
-    id: text('id').primaryKey(),
-    roleId: text('role_id')
-      .notNull()
-      .references(() => role.id, { onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    assignedByUserId: text('assigned_by_user_id').references(() => user.id, { onDelete: 'set null' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
-  },
   (table) => [
-    uniqueIndex('userRoleAssignment_roleId_userId_unique').on(table.roleId, table.userId),
-    index('userRoleAssignment_roleId_idx').on(table.roleId),
-    index('userRoleAssignment_userId_idx').on(table.userId),
+    uniqueIndex('rolePermission_roleId_resourceId_scope_unique').on(table.roleId, table.resourceId, table.scope),
+    index('rolePermission_roleId_idx').on(table.roleId),
+    index('rolePermission_resourceId_idx').on(table.resourceId),
   ],
 )
 
-export const applicationRoleAssignment = sqliteTable(
-  'application_role_assignment',
+export const roleAssignment = sqliteTable(
+  'role_assignment',
   {
     id: text('id').primaryKey(),
     roleId: text('role_id')
       .notNull()
       .references(() => role.id, { onDelete: 'cascade' }),
-    applicationId: text('application_id')
-      .notNull()
-      .references(() => application.id, { onDelete: 'cascade' }),
+    subjectType: text('subject_type').notNull(),
+    subjectId: text('subject_id').notNull(),
+    organizationId: text('organization_id').references(() => organization.id, { onDelete: 'cascade' }),
     assignedByUserId: text('assigned_by_user_id').references(() => user.id, { onDelete: 'set null' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
-  },
-  (table) => [
-    uniqueIndex('applicationRoleAssignment_roleId_applicationId_unique').on(table.roleId, table.applicationId),
-    index('applicationRoleAssignment_roleId_idx').on(table.roleId),
-    index('applicationRoleAssignment_applicationId_idx').on(table.applicationId),
-  ],
-)
-
-export const memberRoleAssignment = sqliteTable(
-  'member_role_assignment',
-  {
-    id: text('id').primaryKey(),
-    roleId: text('role_id')
-      .notNull()
-      .references(() => role.id, { onDelete: 'cascade' }),
-    memberId: text('member_id')
-      .notNull()
-      .references(() => member.id, { onDelete: 'cascade' }),
-    assignedByUserId: text('assigned_by_user_id').references(() => user.id, { onDelete: 'set null' }),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => new Date())
       .notNull(),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
   },
   (table) => [
-    uniqueIndex('memberRoleAssignment_roleId_memberId_unique').on(table.roleId, table.memberId),
-    index('memberRoleAssignment_roleId_idx').on(table.roleId),
-    index('memberRoleAssignment_memberId_idx').on(table.memberId),
+    check('roleAssignment_subjectType_check', sql`${table.subjectType} in ('user', 'agent', 'workload')`),
+    uniqueIndex('roleAssignment_realm_unique')
+      .on(table.roleId, table.subjectType, table.subjectId)
+      .where(sql`${table.organizationId} is null and ${table.revokedAt} is null`),
+    uniqueIndex('roleAssignment_organization_unique')
+      .on(table.roleId, table.subjectType, table.subjectId, table.organizationId)
+      .where(sql`${table.organizationId} is not null and ${table.revokedAt} is null`),
+    index('roleAssignment_roleId_idx').on(table.roleId),
+    index('roleAssignment_subject_idx').on(table.subjectType, table.subjectId),
+    index('roleAssignment_organizationId_idx').on(table.organizationId),
   ],
 )
 

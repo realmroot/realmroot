@@ -18,20 +18,34 @@ export const passwordPolicySchema = z.object({
   rejectCustomWords: z.boolean(),
 })
 
-export const captchaPolicySchema = z
-  .object({
-    enabled: z.boolean(),
-    provider: z.literal('turnstile'),
-    siteKey: z.string().trim().max(200),
-    secretBinding: z.string().trim().max(80),
+export const captchaProviderSchema = z.enum(['turnstile', 'hcaptcha', 'recaptcha-enterprise'])
+
+const captchaConfigurationSchema = z.object({
+  enabled: z.boolean(),
+  provider: captchaProviderSchema,
+  siteKey: z.string().trim().max(200),
+  projectId: z.string().trim().max(200).nullable(),
+})
+
+export const captchaPolicySchema = captchaConfigurationSchema
+  .extend({
+    secretKey: z.string().trim().max(500),
+    legacySecretBinding: z.string().trim().max(80).optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.enabled) return
     if (!value.siteKey) ctx.addIssue({ code: 'custom', path: ['siteKey'], message: 'Site key is required.' })
-    if (!value.secretBinding) {
-      ctx.addIssue({ code: 'custom', path: ['secretBinding'], message: 'Secret binding is required.' })
+    if (!value.secretKey && !value.legacySecretBinding) {
+      ctx.addIssue({ code: 'custom', path: ['secretKey'], message: 'Secret key is required.' })
+    }
+    if (value.provider === 'recaptcha-enterprise' && !value.projectId) {
+      ctx.addIssue({ code: 'custom', path: ['projectId'], message: 'Project ID is required.' })
     }
   })
+
+export const captchaPolicyResponseSchema = captchaConfigurationSchema.extend({
+  secretConfigured: z.boolean(),
+})
 
 export const blocklistPolicySchema = z.object({
   blockSubaddressing: z.boolean(),
@@ -67,12 +81,43 @@ export const securityPolicySchema = z.object({
   blocklist: blocklistPolicySchema,
 })
 
+export const securityPolicyResponseSchema = securityPolicySchema.extend({
+  captcha: captchaPolicyResponseSchema,
+})
+
+const managedSessionPolicySchema = securityPolicySchema.shape.sessions.superRefine((value, ctx) => {
+  if (value.updateAgeSeconds > value.expiresInSeconds) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['updateAgeSeconds'],
+      message: 'Refresh interval cannot exceed session lifetime.',
+    })
+  }
+  if (value.freshAgeSeconds > value.expiresInSeconds) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['freshAgeSeconds'],
+      message: 'Fresh authentication window cannot exceed session lifetime.',
+    })
+  }
+})
+
 export const updateSecurityPolicySchema = z.object({
   policy: z.object({
     mfa: mfaPolicySchema.partial().optional(),
-    passkeys: securityPolicySchema.shape.passkeys.pick({ enabled: true }).partial().optional(),
+    passkeys: securityPolicySchema.shape.passkeys.partial().optional(),
     password: passwordPolicySchema.optional(),
-    captcha: captchaPolicySchema.optional(),
+    sessions: managedSessionPolicySchema.optional(),
+    captcha: captchaConfigurationSchema
+      .extend({ secretKey: z.string().trim().max(500).optional() })
+      .superRefine((value, ctx) => {
+        if (!value.enabled) return
+        if (!value.siteKey) ctx.addIssue({ code: 'custom', path: ['siteKey'], message: 'Site key is required.' })
+        if (value.provider === 'recaptcha-enterprise' && !value.projectId) {
+          ctx.addIssue({ code: 'custom', path: ['projectId'], message: 'Project ID is required.' })
+        }
+      })
+      .optional(),
     blocklist: blocklistPolicySchema.optional(),
   }),
 })
@@ -109,6 +154,7 @@ export const securityPasskeyVerificationSchema = z.record(z.string(), z.unknown(
 
 export type SecurityPolicy = z.infer<typeof securityPolicySchema>
 export type UpdateSecurityPolicyInput = z.infer<typeof updateSecurityPolicySchema>
+export type SecurityPolicyResponse = z.infer<typeof securityPolicyResponseSchema>
 export type SecurityTotpEnrollmentInput = z.infer<typeof securityTotpEnrollmentSchema>
 export type SecurityTotpDisableInput = z.infer<typeof securityTotpDisableSchema>
 export type SecurityTotpVerificationInput = z.infer<typeof securityTotpVerificationSchema>

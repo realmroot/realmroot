@@ -205,10 +205,10 @@ export function SignInPage() {
     }
   }
   const methodButtons =
-    !showIdentifierStep && enabled ? (
+    mode === null && !showIdentifierStep && enabled ? (
       <SignInMethodButtons
         callback={callback}
-        emailEnabled={enabled.emailOtpEnabled}
+        emailEnabled={enabled.emailOtpEnabled && primaryMode !== 'otp'}
         onEmailClick={() => {
           setMode('otp')
           setStep('credential')
@@ -226,8 +226,8 @@ export function SignInPage() {
         onWalletClick={onWalletSubmit}
         oneTapEnabled={Boolean(config?.builtInProviders?.oneTap?.enabled)}
         passkeyEnabled={Boolean(config?.security.passkeysEnabled)}
-        phoneEnabled={Boolean(config?.builtInProviders?.phone?.enabled)}
-        phoneVisible={Boolean(config?.builtInProviders?.phone?.enabled)}
+        phoneEnabled={Boolean(config?.builtInProviders?.phone?.enabled) && primaryMode !== 'phone'}
+        phoneVisible={Boolean(config?.builtInProviders?.phone?.enabled) && primaryMode !== 'phone'}
         providers={socialProviders}
         walletEnabled={Boolean(config?.builtInProviders?.web3Wallet?.enabled)}
       />
@@ -253,7 +253,7 @@ export function SignInPage() {
       !config?.security.passkeysEnabled &&
       !config?.builtInProviders.web3Wallet.enabled &&
       !config?.builtInProviders.oneTap.enabled ? (
-        <Status tone="warning">{tt('No sign-in methods are enabled. Contact the workspace administrator.')}</Status>
+        <Status tone="warning">{tt('No sign-in methods are enabled. Contact the Realm operator.')}</Status>
       ) : null}
 
       <SignInCardBody
@@ -276,6 +276,7 @@ export function SignInPage() {
               <TextInput
                 autoComplete="one-time-code"
                 inputMode="numeric"
+                name="totp-code"
                 onChange={(event) => setTwoFactorCode(event.target.value)}
                 required
                 value={twoFactorCode}
@@ -298,6 +299,7 @@ export function SignInPage() {
             <Field label={enabled?.usernameEnabled ? tt('Email or username') : tt('Email')}>
               <TextInput
                 autoComplete="username"
+                name="identifier"
                 onChange={(event) => setIdentifier(event.target.value)}
                 required
                 type="text"
@@ -327,6 +329,7 @@ export function SignInPage() {
               <Field label={enabled.usernameEnabled ? tt('Email or username') : tt('Email')}>
                 <TextInput
                   autoComplete="username"
+                  name="identifier"
                   onChange={(event) => setIdentifier(event.target.value)}
                   required
                   type="text"
@@ -337,6 +340,7 @@ export function SignInPage() {
             <Field label={tt('Password')}>
               <PasswordInput
                 autoComplete="current-password"
+                name="password"
                 onChange={(event) => setPassword(event.target.value)}
                 required
                 value={password}
@@ -366,6 +370,7 @@ export function SignInPage() {
               <Field label={tt('Email')}>
                 <TextInput
                   autoComplete="email"
+                  name="email"
                   onChange={(event) => setIdentifier(event.target.value)}
                   required
                   type="email"
@@ -378,6 +383,7 @@ export function SignInPage() {
                 <TextInput
                   autoComplete="one-time-code"
                   inputMode="numeric"
+                  name="email-otp"
                   onChange={(event) => setOtp(event.target.value)}
                   required
                   value={otp}
@@ -421,6 +427,7 @@ export function SignInPage() {
                 <TextInput
                   autoComplete="tel"
                   inputMode="tel"
+                  name="phone"
                   onChange={(event) => setPhoneNumber(event.target.value)}
                   placeholder="+15555550123"
                   required
@@ -434,6 +441,7 @@ export function SignInPage() {
                 <TextInput
                   autoComplete="one-time-code"
                   inputMode="numeric"
+                  name="phone-otp"
                   onChange={(event) => setOtp(event.target.value)}
                   required
                   value={otp}

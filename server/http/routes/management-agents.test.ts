@@ -17,8 +17,13 @@ describe('management Agent routes', () => {
           subject: 'agt_1',
           name: 'Build Agent',
           homeSpace: { type: 'personal', userId: 'user-1' },
+          owner: { id: 'user-1', type: 'user', displayName: 'Alice' },
           status: 'active',
           retiredAt: null,
+          installationCount: 1,
+          roleCount: 2,
+          pendingRequestCount: 1,
+          activeGrantCount: 3,
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
@@ -39,18 +44,24 @@ describe('management Agent routes', () => {
           subject: 'agt_1',
           name: 'Build Agent',
           homeSpace: { type: 'personal', userId: 'user-1' },
+          owner: { id: 'user-1', type: 'user', displayName: 'Alice' },
           status: 'active',
           retiredAt: null,
+          installationCount: 1,
+          roleCount: 2,
+          pendingRequestCount: 1,
+          activeGrantCount: 3,
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       ],
       pagination: { limit: 10, offset: 20, total: 1, hasMore: false, nextOffset: null },
     })
-    expect(agentIdentitiesUsecase.listAllAgents).toHaveBeenCalledWith(expect.anything(), {
-      limit: 10,
-      offset: 20,
-    })
+    expect(agentIdentitiesUsecase.listAllAgents).toHaveBeenCalledWith(
+      expect.anything(),
+      { limit: 10, offset: 20 },
+      undefined,
+    )
   })
 })
 

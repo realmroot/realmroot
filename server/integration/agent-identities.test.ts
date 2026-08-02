@@ -8,7 +8,7 @@ import {
   approvalRequest,
 } from '@server/db/schema'
 import { createAdditionalAgentEnrollmentIntent, createAgentEnrollmentIntent } from '@server/usecases/agent-identities'
-import { assignAgentRole, createResource, createRole, replaceRoleScopes } from '@server/usecases/authorization'
+import { assignAgentRole, createResource, createRole, replaceRolePermissions } from '@server/usecases/authorization'
 import { createAccessRequest, issueTargetAccessToken, listAgentApiResources } from '@server/usecases/external-resources'
 import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
@@ -158,10 +158,24 @@ describe('Agent identity enrollment over real D1', () => {
     const stableSubject = approved.agent.subject
 
     const second = await seedAgent(harness, userId, 'identity-second')
-    const secondIntent = await createIntent(harness, userId, {
-      agentIdentityId: approved.agent.id,
-      protocolAgentId: second.agentId,
-    })
+    const reservationKey = 'second-installation-enrollment'
+    const firstReservation = await createAdditionalAgentEnrollmentIntent(
+      harness.deps,
+      approved.agent.id,
+      second.agentId,
+      userId,
+      reservationKey,
+    )
+    const replayedReservation = await createAdditionalAgentEnrollmentIntent(
+      harness.deps,
+      approved.agent.id,
+      second.agentId,
+      userId,
+      reservationKey,
+    )
+    expect(firstReservation.replayed).toBe(false)
+    expect(replayedReservation).toMatchObject({ intent: { id: firstReservation.intent.id }, replayed: true })
+    const secondIntent = firstReservation.intent
     const multiHost = await approveIntent(harness, ownerCookie, secondIntent.id)
     expect(multiHost.agent.subject).toBe(stableSubject)
     const activeBindings = await harness.db
@@ -244,9 +258,8 @@ describe('Agent identity enrollment over real D1', () => {
     const resourceRole = await createRole(harness.deps, {
       key: 'native-api-reader',
       name: 'Native API reader',
-      resourceId: resource.id,
     })
-    await replaceRoleScopes(harness.deps, resourceRole.id, ['repo:read'])
+    await replaceRolePermissions(harness.deps, resourceRole.id, [{ resourceId: resource.id, scope: 'repo:read' }])
     await assignAgentRole(harness.deps, { roleId: resourceRole.id, subjectId: approved.agent.id }, userId)
     const principal = {
       issuer: approved.agent.issuer,
@@ -391,12 +404,14 @@ async function createIntent(
   input: { name?: string; agentIdentityId?: string; protocolAgentId: string },
 ) {
   if (input.agentIdentityId) {
-    return createAdditionalAgentEnrollmentIntent(
+    const result = await createAdditionalAgentEnrollmentIntent(
       harness.deps,
       input.agentIdentityId,
       input.protocolAgentId,
       actorUserId,
+      `${input.protocolAgentId}:${input.agentIdentityId}`,
     )
+    return result.intent
   }
   if (!input.name) throw new Error('A new Agent enrollment requires a name.')
   return createAgentEnrollmentIntent(

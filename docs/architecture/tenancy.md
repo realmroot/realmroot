@@ -96,8 +96,6 @@ BETTER_AUTH_SECRET
 BETTER_AUTH_URL
 TRUSTED_ORIGINS
 WEBAUTHN_RP_ID
-EMAIL_FROM
-EMAIL_FROM_NAME
 ```
 
 Use one GitHub fork for each new product auth realm. The fork workflow checks

@@ -37,9 +37,7 @@ describe('AgentApproveRoute', () => {
     expect(await screen.findByRole('heading', { name: 'Authorization successful' })).toBeTruthy()
     expect(screen.getByText('You can safely close this page.')).toBeTruthy()
     expect(
-      screen.getByText(
-        'The requested Agent permissions have been granted. The Agent can now retry its Restish command.',
-      ),
+      screen.getByText('The requested Agent permissions have been granted. The Agent can now retry its command.'),
     ).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Approve permissions' })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Requested capabilities' })).toBeNull()
@@ -52,16 +50,17 @@ describe('AgentApproveRoute', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Approve login' }))
 
     expect(await screen.findByRole('heading', { name: 'Authorization successful' })).toBeTruthy()
-    expect(screen.getByText('The Agent login has been approved. Restish will continue automatically.')).toBeTruthy()
+    expect(screen.getByText('The Agent login has been approved. The client will continue automatically.')).toBeTruthy()
     expect(screen.getByText('You can safely close this page.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Approve login' })).toBeNull()
   })
 
-  it('keeps actions disabled without an AgentAuth approval query', () => {
+  it('shows only a recovery state without an AgentAuth approval query', () => {
     render(<AgentApproval />)
 
-    expect((screen.getByRole('button', { name: 'Approve login' }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: 'Deny' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('heading', { name: 'Agent approval unavailable.' })).toBeTruthy()
+    expect(screen.getByText('This Agent approval request is incomplete.')).toBeTruthy()
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
   it('surfaces delegated approval failures', async () => {

@@ -59,13 +59,14 @@ describe('security policy validation', () => {
     expect(() => validateEmailPolicy('allowed@example.com', policy)).not.toThrow()
   })
 
-  it('requires Turnstile deployment bindings only when CAPTCHA is enabled', () => {
+  it('requires managed provider credentials only when CAPTCHA is enabled', () => {
     expect(
       captchaPolicySchema.safeParse({
         enabled: false,
         provider: 'turnstile',
         siteKey: '',
-        secretBinding: '',
+        projectId: null,
+        secretKey: '',
       }).success,
     ).toBe(true)
 
@@ -73,7 +74,8 @@ describe('security policy validation', () => {
       enabled: true,
       provider: 'turnstile',
       siteKey: '',
-      secretBinding: '',
+      projectId: null,
+      secretKey: '',
     })
 
     expect(result.success).toBe(false)
@@ -81,9 +83,19 @@ describe('security policy validation', () => {
       expect(result.error.issues).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ path: ['siteKey'], message: 'Site key is required.' }),
-          expect.objectContaining({ path: ['secretBinding'], message: 'Secret binding is required.' }),
+          expect.objectContaining({ path: ['secretKey'], message: 'Secret key is required.' }),
         ]),
       )
     }
+
+    expect(
+      captchaPolicySchema.safeParse({
+        enabled: true,
+        provider: 'recaptcha-enterprise',
+        siteKey: 'site-key-1',
+        projectId: null,
+        secretKey: 'api-key-1',
+      }).success,
+    ).toBe(false)
   })
 })

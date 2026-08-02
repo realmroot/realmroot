@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { SecurityCaptchaPage } from '@/features/console/extracted/security-settings'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/security/captcha')({
-  component: SecurityCaptchaPage,
+  beforeLoad: () => {
+    throw redirect({ href: '/console/security/abuse' })
+  },
 })

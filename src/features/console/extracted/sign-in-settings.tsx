@@ -1,3 +1,10 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { type ReactNode, useEffect, useState } from 'react'
+import { SelectInput } from '@/components/product-form'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
 import {
   consoleQueryKeys,
   getBrandingSettings,
@@ -6,410 +13,391 @@ import {
   updateSecurityPolicy,
   updateSignInSettings,
 } from '@/lib/api/management'
-import {
-  Field,
-  type FormEvent,
-  type HostedAuthPreviewState,
-  SelectInput,
-  Switch,
-  TextArea,
-  TextInput,
-  tt,
-  updateManagementSignInSettingsRequestSchema,
-  useEffect,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useState,
-} from '../console-shared'
-import { SwitchRow, useConnectorPreviewProviders } from '../helpers/helpers-dialogs'
-import {
-  ChangesSection,
-  HostedAuthPreview,
-  SettingsSection,
-  SettingsSections,
-  SignInExperienceEditorLayout,
-  SignInExperiencePage,
-} from '../helpers/helpers-preview'
-import { lines } from '../helpers/helpers-resource'
-import { shallowEqual, useAdminMutation } from '../helpers/helpers-utils'
+import { tt } from '@/lib/i18n'
+import type { HostedAuthPreviewState } from '../console-shared'
+import { useConnectorPreviewProviders } from '../helpers/helpers-dialogs'
+import { HostedAuthPreview, SignInExperienceEditorLayout } from '../helpers/helpers-preview'
+import { ResourcePage } from '../helpers/helpers-resource'
+import { useAdminMutation } from '../helpers/helpers-utils'
+
+type Editor = 'registration' | 'methods' | null
+type SignInForm = {
+  signupEnabled: boolean
+  usernameEnabled: boolean
+  identifierFirst: boolean
+  passwordEnabled: boolean
+  passkeyEnabled: boolean
+  emailCodeEnabled: boolean
+  socialEnabled: boolean
+  phoneEnabled: boolean
+  web3Enabled: boolean
+}
+
+const emptyForm: SignInForm = {
+  signupEnabled: true,
+  usernameEnabled: false,
+  identifierFirst: false,
+  passwordEnabled: true,
+  passkeyEnabled: false,
+  emailCodeEnabled: false,
+  socialEnabled: true,
+  phoneEnabled: false,
+  web3Enabled: false,
+}
 
 export function SignInSettingsPage() {
-  const query = useQuery({
-    queryKey: consoleQueryKeys.signIn,
-    queryFn: getSignInSettings,
-  })
-  const brandingQuery = useQuery({
-    queryKey: consoleQueryKeys.branding,
-    queryFn: getBrandingSettings,
-  })
-  const securityQuery = useQuery({
-    queryKey: consoleQueryKeys.security,
-    queryFn: getSecurityPolicy,
-  })
-  const connectorsQuery = useConnectorPreviewProviders()
   const queryClient = useQueryClient()
-  const [form, setForm] = useState({
-    passkeyLoginEnabled: false,
-    passwordlessEnabled: false,
-    phoneLoginEnabled: false,
-    signupEnabled: true,
-    socialLoginEnabled: true,
-    web3WalletLoginEnabled: false,
-  })
-  const [minLength, setMinLength] = useState(8)
-  const [requiredCharacterTypes, setRequiredCharacterTypes] = useState(1)
-  const [customWords, setCustomWords] = useState('')
-  const [rejectUserInfo, setRejectUserInfo] = useState(true)
-  const [rejectSequential, setRejectSequential] = useState(true)
-  const [rejectCustomWords, setRejectCustomWords] = useState(false)
-  const updateMutation = useAdminMutation({
-    mutationFn: updateSignInSettings,
-    onSuccess: () => {
-      return queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.signIn,
-      })
-    },
-  })
-  const securityMutation = useMutation({
-    mutationFn: () =>
-      updateSecurityPolicy({
-        policy: {
-          passkeys: {
-            enabled: form.passkeyLoginEnabled,
-          },
-          password: {
-            minLength,
-            requiredCharacterTypes,
-            customWords: lines(customWords),
-            rejectUserInfo,
-            rejectSequential,
-            rejectCustomWords,
-          },
-        },
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: consoleQueryKeys.security,
-      })
-    },
-  })
+  const query = useQuery({ queryKey: consoleQueryKeys.signIn, queryFn: getSignInSettings })
+  const branding = useQuery({ queryKey: consoleQueryKeys.branding, queryFn: getBrandingSettings })
+  const security = useQuery({ queryKey: consoleQueryKeys.security, queryFn: getSecurityPolicy })
+  const connectors = useConnectorPreviewProviders()
+  const [editor, setEditor] = useState<Editor>(null)
+  const [form, setForm] = useState<SignInForm>(emptyForm)
   useEffect(() => {
-    if (!query.data?.signIn || !query.data.builtInProviders) return
+    if (!query.data || !security.data) return
     setForm({
-      passkeyLoginEnabled: securityQuery.data?.policy?.passkeys?.enabled ?? false,
-      passwordlessEnabled: !query.data.signIn.passwordEnabled,
-      phoneLoginEnabled: query.data.builtInProviders.phone.enabled,
       signupEnabled: query.data.signIn.signupEnabled,
-      socialLoginEnabled: query.data.signIn.socialLoginEnabled,
-      web3WalletLoginEnabled: query.data.builtInProviders.web3Wallet.enabled,
+      usernameEnabled: query.data.signIn.usernameEnabled,
+      identifierFirst: query.data.signIn.identifierFirst,
+      passwordEnabled: query.data.signIn.passwordEnabled,
+      passkeyEnabled: security.data.policy.passkeys.enabled,
+      emailCodeEnabled: query.data.signIn.emailOtpEnabled,
+      socialEnabled: query.data.signIn.socialLoginEnabled,
+      phoneEnabled: query.data.builtInProviders.phone.enabled,
+      web3Enabled: query.data.builtInProviders.web3Wallet.enabled,
     })
-  }, [query.data, securityQuery.data])
-  useEffect(() => {
-    if (!securityQuery.data?.policy?.password) return
-    const policy = securityQuery.data.policy.password
-    setMinLength(policy.minLength)
-    setRequiredCharacterTypes(policy.requiredCharacterTypes)
-    setCustomWords(policy.customWords.join('\n'))
-    setRejectUserInfo(policy.rejectUserInfo)
-    setRejectSequential(policy.rejectSequential)
-    setRejectCustomWords(policy.rejectCustomWords)
-  }, [securityQuery.data])
-  const loadedForm =
-    query.data?.signIn && query.data.builtInProviders
-      ? {
-          passkeyLoginEnabled: securityQuery.data?.policy?.passkeys?.enabled ?? false,
-          passwordlessEnabled: !query.data.signIn.passwordEnabled,
-          phoneLoginEnabled: query.data.builtInProviders.phone.enabled,
-          signupEnabled: query.data.signIn.signupEnabled,
-          socialLoginEnabled: query.data.signIn.socialLoginEnabled,
-          web3WalletLoginEnabled: query.data.builtInProviders.web3Wallet.enabled,
-        }
-      : null
-  const hasChanges = loadedForm ? !shallowEqual(form, loadedForm) : false
-  const signInHasChanges = loadedForm
-    ? !shallowEqual(
-        {
-          passwordlessEnabled: form.passwordlessEnabled,
-          phoneLoginEnabled: form.phoneLoginEnabled,
-          signupEnabled: form.signupEnabled,
-          socialLoginEnabled: form.socialLoginEnabled,
-          web3WalletLoginEnabled: form.web3WalletLoginEnabled,
-        },
-        {
-          passwordlessEnabled: loadedForm.passwordlessEnabled,
-          phoneLoginEnabled: loadedForm.phoneLoginEnabled,
-          signupEnabled: loadedForm.signupEnabled,
-          socialLoginEnabled: loadedForm.socialLoginEnabled,
-          web3WalletLoginEnabled: loadedForm.web3WalletLoginEnabled,
-        },
-      )
-    : false
-  const passkeyHasChanges = loadedForm ? form.passkeyLoginEnabled !== loadedForm.passkeyLoginEnabled : false
-  const loadedPasswordPolicy = securityQuery.data?.policy?.password
-    ? {
-        minLength: securityQuery.data.policy.password.minLength,
-        requiredCharacterTypes: securityQuery.data.policy.password.requiredCharacterTypes,
-        customWords: securityQuery.data.policy.password.customWords.join('\n'),
-        rejectUserInfo: securityQuery.data.policy.password.rejectUserInfo,
-        rejectSequential: securityQuery.data.policy.password.rejectSequential,
-        rejectCustomWords: securityQuery.data.policy.password.rejectCustomWords,
-      }
-    : null
-  const passwordPolicyHasChanges = loadedPasswordPolicy
-    ? !shallowEqual(
-        {
-          minLength,
-          requiredCharacterTypes,
-          customWords,
-          rejectUserInfo,
-          rejectSequential,
-          rejectCustomWords,
-        },
-        loadedPasswordPolicy,
-      )
-    : false
-  function onSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (signInHasChanges && query.data) {
-      const payload = updateManagementSignInSettingsRequestSchema.parse({
-        builtInProviders: {
-          phone: {
-            ...query.data.builtInProviders.phone,
-            enabled: form.phoneLoginEnabled,
+  }, [query.data, security.data])
+  const mutation = useAdminMutation({
+    mutationFn: async (next: SignInForm) => {
+      await Promise.all([
+        updateSignInSettings({
+          signIn: {
+            signupEnabled: next.signupEnabled,
+            usernameEnabled: next.usernameEnabled,
+            identifierFirst: next.identifierFirst,
+            passwordEnabled: next.passwordEnabled,
+            emailOtpEnabled: next.emailCodeEnabled,
+            socialLoginEnabled: next.socialEnabled,
           },
-          web3Wallet: {
-            ...query.data.builtInProviders.web3Wallet,
-            enabled: form.web3WalletLoginEnabled,
+          builtInProviders: {
+            phone: { enabled: next.phoneEnabled },
+            web3Wallet: { enabled: next.web3Enabled },
           },
-        },
-        signIn: {
-          passwordEnabled: !form.passwordlessEnabled,
-          signupEnabled: form.signupEnabled,
-          socialLoginEnabled: form.socialLoginEnabled,
-        },
-      })
-      updateMutation.mutate(payload)
-    }
-    if (passwordPolicyHasChanges || passkeyHasChanges) securityMutation.mutate()
-  }
+        }),
+        updateSecurityPolicy({ policy: { passkeys: { enabled: next.passkeyEnabled } } }),
+      ])
+      return next
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: consoleQueryKeys.signIn }),
+        queryClient.invalidateQueries({ queryKey: consoleQueryKeys.security }),
+      ])
+      setEditor(null)
+    },
+  })
   const preview: HostedAuthPreviewState = {
-    productName: query.data?.copy?.productName ?? '',
-    headline: query.data?.copy?.headline ?? '',
-    description: query.data?.copy?.description ?? '',
-    logoUrl: brandingQuery.data?.branding?.logoUrl ?? undefined,
-    primaryColor: brandingQuery.data?.branding?.primaryColor ?? undefined,
-    backgroundColor: brandingQuery.data?.branding?.backgroundColor ?? undefined,
-    customCss: brandingQuery.data?.branding?.customCss ?? undefined,
-    passwordEnabled: !form.passwordlessEnabled,
-    passkeysEnabled: form.passkeyLoginEnabled,
-    phoneEnabled: form.phoneLoginEnabled,
+    productName: query.data?.copy.productName ?? 'Realmroot',
+    headline: query.data?.copy.headline ?? 'Sign in to Realmroot',
+    description: query.data?.copy.description ?? 'Use your account to continue securely.',
+    logoUrl: branding.data?.branding.logoUrl ?? undefined,
+    primaryColor: branding.data?.branding.primaryColor ?? undefined,
+    backgroundColor: branding.data?.branding.backgroundColor ?? undefined,
+    passwordEnabled: form.passwordEnabled,
+    passkeysEnabled: form.passkeyEnabled,
+    emailOtpEnabled: form.emailCodeEnabled,
+    oneTapEnabled: query.data?.builtInProviders.oneTap.enabled,
+    socialLoginEnabled: form.socialEnabled,
+    socialProviders: connectors.providers,
+    phoneEnabled: form.phoneEnabled,
+    web3WalletEnabled: form.web3Enabled,
     signupEnabled: form.signupEnabled,
-    socialLoginEnabled: form.socialLoginEnabled,
-    socialProviders: connectorsQuery.providers,
-    oneTapEnabled: query.data?.builtInProviders?.oneTap?.enabled,
-    web3WalletEnabled: form.web3WalletLoginEnabled,
-    identifierFirst: false,
-    usernameEnabled: query.data?.signIn?.usernameEnabled,
-    emailOtpEnabled: query.data?.signIn?.emailOtpEnabled,
-    termsUri: query.data?.links?.termsUri ?? '',
-    privacyUri: query.data?.links?.privacyUri ?? '',
-    supportEmail: query.data?.links?.supportEmail ?? '',
+    usernameEnabled: form.usernameEnabled,
+    identifierFirst: form.identifierFirst,
+    termsUri: query.data?.links.termsUri ?? undefined,
+    privacyUri: query.data?.links.privacyUri ?? undefined,
+    supportEmail: query.data?.links.supportEmail ?? undefined,
+  }
+  const closeEditor = () => {
+    if (query.data && security.data) {
+      setForm({
+        signupEnabled: query.data.signIn.signupEnabled,
+        usernameEnabled: query.data.signIn.usernameEnabled,
+        identifierFirst: query.data.signIn.identifierFirst,
+        passwordEnabled: query.data.signIn.passwordEnabled,
+        passkeyEnabled: security.data.policy.passkeys.enabled,
+        emailCodeEnabled: query.data.signIn.emailOtpEnabled,
+        socialEnabled: query.data.signIn.socialLoginEnabled,
+        phoneEnabled: query.data.builtInProviders.phone.enabled,
+        web3Enabled: query.data.builtInProviders.web3Wallet.enabled,
+      })
+    }
+    setEditor(null)
   }
   return (
-    <SignInExperiencePage
-      activeTab="sign-up-and-sign-in"
-      description={tt('Configure self-service registration and hosted sign-in method visibility.')}
-      error={query.error ?? brandingQuery.error ?? securityQuery.error ?? connectorsQuery.error}
-      loading={query.isLoading || brandingQuery.isLoading || securityQuery.isLoading}
+    <ResourcePage
+      title={tt('Sign-in & registration')}
+      description={tt(
+        'Control account creation, accepted identifiers, and which configured methods appear on hosted sign-in.',
+      )}
+      error={query.error ?? branding.error ?? security.error ?? connectors.error}
+      framed={false}
+      loading={query.isLoading || branding.isLoading || security.isLoading}
       onRetry={() => {
         void query.refetch()
-        void brandingQuery.refetch()
-        void securityQuery.refetch()
-        void connectorsQuery.refetch()
+        void branding.refetch()
+        void security.refetch()
+        void connectors.refetch()
       }}
-      title={tt('Sign-up and sign-in')}
     >
-      {query.data && securityQuery.data ? (
-        <form onSubmit={onSubmit}>
-          <SignInExperienceEditorLayout
-            preview={<HostedAuthPreview preview={preview} />}
-            settings={
-              <SettingsSections>
-                <SettingsSection
-                  title={tt('Sign-up')}
-                  description={tt('Control whether new users can create accounts.')}
-                >
-                  <div className="grid gap-3">
-                    <SwitchRow
-                      checked={form.signupEnabled}
-                      label={tt('Allow sign up')}
-                      onCheckedChange={(signupEnabled) =>
-                        setForm((value) => ({
-                          ...value,
-                          signupEnabled,
-                        }))
-                      }
-                    />
-                  </div>
-                </SettingsSection>
-                <SettingsSection
-                  title={tt('Sign-in')}
-                  description={tt('Control which non-password sign-in methods are available.')}
-                >
-                  <div className="grid gap-3">
-                    <SwitchRow
-                      checked={form.socialLoginEnabled}
-                      label={tt('Social login')}
-                      onCheckedChange={(socialLoginEnabled) =>
-                        setForm((value) => ({
-                          ...value,
-                          socialLoginEnabled,
-                        }))
-                      }
-                    />
-                    <SwitchRow
-                      checked={form.phoneLoginEnabled}
-                      label={tt('Phone login')}
-                      onCheckedChange={(phoneLoginEnabled) =>
-                        setForm((value) => ({
-                          ...value,
-                          phoneLoginEnabled,
-                        }))
-                      }
-                    />
-                    <SwitchRow
-                      checked={form.passkeyLoginEnabled}
-                      label={tt('Passkey login')}
-                      onCheckedChange={(passkeyLoginEnabled) =>
-                        setForm((value) => ({
-                          ...value,
-                          passkeyLoginEnabled,
-                        }))
-                      }
-                    />
-                    <SwitchRow
-                      checked={form.web3WalletLoginEnabled}
-                      label={tt('Web3 wallet login')}
-                      onCheckedChange={(web3WalletLoginEnabled) =>
-                        setForm((value) => ({
-                          ...value,
-                          web3WalletLoginEnabled,
-                        }))
-                      }
-                    />
-                  </div>
-                </SettingsSection>
-                <SettingsSection
-                  title={tt('Passwordless')}
-                  description={tt(
-                    'Turn off password-based hosted auth. Password requirements stay visible but only apply when passwords are used.',
-                  )}
-                >
-                  <div className="grid gap-4">
-                    <Field label={tt('Passwordless')}>
-                      <div className="flex min-h-10 items-center justify-between gap-4 rounded-md border border-border px-3 py-2">
-                        <span className="text-sm text-muted-foreground">
-                          {form.passwordlessEnabled ? 'Enabled' : 'Disabled'}
-                        </span>
-                        <Switch
-                          aria-label={tt('Passwordless')}
-                          checked={form.passwordlessEnabled}
-                          onCheckedChange={(passwordlessEnabled) =>
-                            setForm((value) => ({
-                              ...value,
-                              passwordlessEnabled,
-                            }))
-                          }
-                        />
-                      </div>
-                    </Field>
-                    <Field label={tt('Minimum length')}>
-                      <TextInput
-                        aria-label={tt('Minimum length')}
-                        disabled={form.passwordlessEnabled}
-                        min={8}
-                        max={128}
-                        onChange={(event) => setMinLength(Number(event.target.value))}
-                        type="number"
-                        value={String(minLength)}
-                      />
-                    </Field>
-                    <Field label={tt('Required character types')}>
-                      <SelectInput
-                        aria-label={tt('Required character types')}
-                        disabled={form.passwordlessEnabled}
-                        onChange={(event) => setRequiredCharacterTypes(Number(event.target.value))}
-                        value={String(requiredCharacterTypes)}
-                      >
-                        <option value="1">{tt('1 required character type')}</option>
-                        <option value="2">{tt('2 required character types')}</option>
-                        <option value="3">{tt('3 required character types')}</option>
-                        <option value="4">{tt('4 required character types')}</option>
-                      </SelectInput>
-                    </Field>
-                    <SwitchRow
-                      checked={rejectSequential}
-                      disabled={form.passwordlessEnabled}
-                      label={tt('Reject repetitive or sequential characters')}
-                      onCheckedChange={setRejectSequential}
-                    />
-                    <SwitchRow
-                      checked={rejectUserInfo}
-                      disabled={form.passwordlessEnabled}
-                      label={tt('Reject user information')}
-                      onCheckedChange={setRejectUserInfo}
-                    />
-                    <SwitchRow
-                      checked={rejectCustomWords}
-                      disabled={form.passwordlessEnabled}
-                      label={tt('Reject custom words')}
-                      onCheckedChange={setRejectCustomWords}
-                    />
-                    {rejectCustomWords && !form.passwordlessEnabled ? (
-                      <Field label={tt('Custom words')}>
-                        <TextArea
-                          aria-label={tt('Custom words')}
-                          onChange={(event) => setCustomWords(event.target.value)}
-                          placeholder={tt('company\nproduct')}
-                          value={customWords}
-                        />
-                      </Field>
-                    ) : null}
-                  </div>
-                </SettingsSection>
-                <ChangesSection
-                  description={tt('Save updates through the management boundary or restore the loaded values.')}
-                  error={
-                    updateMutation.errorMessage || securityMutation.error ? (
-                      <div className="text-sm text-destructive">
-                        {updateMutation.errorMessage ??
-                          (securityMutation.error instanceof Error
-                            ? tt(securityMutation.error.message)
-                            : tt('Request failed.'))}
-                      </div>
-                    ) : null
-                  }
-                  onDiscard={() => {
-                    if (loadedForm) setForm(loadedForm)
-                    if (loadedPasswordPolicy) {
-                      setMinLength(loadedPasswordPolicy.minLength)
-                      setRequiredCharacterTypes(loadedPasswordPolicy.requiredCharacterTypes)
-                      setCustomWords(loadedPasswordPolicy.customWords)
-                      setRejectUserInfo(loadedPasswordPolicy.rejectUserInfo)
-                      setRejectSequential(loadedPasswordPolicy.rejectSequential)
-                      setRejectCustomWords(loadedPasswordPolicy.rejectCustomWords)
-                    }
-                  }}
-                  pending={updateMutation.isPending || securityMutation.isPending}
-                  saveLabel="Save sign-in settings"
-                  visible={hasChanges || passwordPolicyHasChanges}
+      {query.data && security.data ? (
+        <SignInExperienceEditorLayout
+          preview={<HostedAuthPreview preview={preview} />}
+          settings={
+            <div className="detailSections">
+              <SettingsBlock
+                action={
+                  <Button onClick={() => setEditor('registration')} variant="outline">
+                    {tt('Edit')}
+                  </Button>
+                }
+                description="Control account creation and accepted sign-in identifiers."
+                title="Registration and identifiers"
+              >
+                <DetailRow label="Public sign-up" value={enabled(form.signupEnabled)} />
+                <DetailRow label="Username sign-in" value={enabled(form.usernameEnabled)} />
+                <DetailRow
+                  label="Sign-in sequence"
+                  value={form.identifierFirst ? tt('Identifier first') : tt('Identifier and credential together')}
                 />
-              </SettingsSections>
-            }
-          />
-        </form>
+              </SettingsBlock>
+              <SettingsBlock
+                action={
+                  <Button onClick={() => setEditor('methods')} variant="outline">
+                    {tt('Edit')}
+                  </Button>
+                }
+                description="Choose which configured connectors appear on hosted sign-in."
+                title="Available sign-in methods"
+              >
+                <DetailRow label="Password" value={enabled(form.passwordEnabled)} />
+                <DetailRow label="Passkey" value={enabled(form.passkeyEnabled)} />
+                <DetailRow label="Email code" value={enabled(form.emailCodeEnabled)} />
+                <DetailRow label="Social login" value={enabled(form.socialEnabled)} />
+                <DetailRow label="Phone" value={enabled(form.phoneEnabled)} />
+                <DetailRow label="Web3 wallet" value={enabled(form.web3Enabled)} />
+              </SettingsBlock>
+            </div>
+          }
+        />
       ) : null}
-    </SignInExperiencePage>
+      <SignInEditor
+        editor={editor}
+        error={mutation.errorMessage}
+        form={form}
+        onChange={setForm}
+        onClose={closeEditor}
+        onSave={() => mutation.mutate(form)}
+        pending={mutation.isPending}
+      />
+    </ResourcePage>
   )
+}
+
+function SignInEditor({
+  editor,
+  error,
+  form,
+  onChange,
+  onClose,
+  onSave,
+  pending,
+}: {
+  editor: Editor
+  error?: string | null
+  form: SignInForm
+  onChange: (form: SignInForm) => void
+  onClose: () => void
+  onSave: () => void
+  pending: boolean
+}) {
+  return (
+    <Sheet
+      modal={false}
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+      open={editor !== null}
+    >
+      <SheetContent className="h-full overflow-hidden" side="left">
+        <SheetHeader className="shrink-0">
+          <SheetTitle>
+            {tt(editor === 'methods' ? 'Available sign-in methods' : 'Registration and identifiers')}
+          </SheetTitle>
+          <SheetDescription>
+            {tt(
+              editor === 'methods'
+                ? 'Only enabled and configured connectors appear on hosted sign-in.'
+                : 'Choose who can register and how the first sign-in step behaves.',
+            )}
+          </SheetDescription>
+        </SheetHeader>
+        <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5">
+          {editor === 'registration' ? (
+            <>
+              <ControlledSwitch
+                checked={form.signupEnabled}
+                label="Public sign-up"
+                name="signupEnabled"
+                note="Allow verified visitors to create an account."
+                onChange={(signupEnabled) => onChange({ ...form, signupEnabled })}
+              />
+              <ControlledSwitch
+                checked={form.usernameEnabled}
+                label="Username sign-in"
+                name="usernameEnabled"
+                note="Accept username in addition to verified email."
+                onChange={(usernameEnabled) => onChange({ ...form, usernameEnabled })}
+              />
+              <label className="grid gap-2 text-sm" htmlFor="sign-in-sequence">
+                <span className="font-medium">{tt('Sign-in sequence')}</span>
+                <SelectInput
+                  id="sign-in-sequence"
+                  name="signInSequence"
+                  onChange={(event) =>
+                    onChange({ ...form, identifierFirst: event.target.value === 'identifier-first' })
+                  }
+                  value={form.identifierFirst ? 'identifier-first' : 'combined'}
+                >
+                  <option value="combined">{tt('Identifier and credential together')}</option>
+                  <option value="identifier-first">{tt('Identifier first')}</option>
+                </SelectInput>
+              </label>
+            </>
+          ) : null}
+          {editor === 'methods' ? (
+            <>
+              <ControlledSwitch
+                checked={form.passwordEnabled}
+                label="Password"
+                name="passwordEnabled"
+                note="Use the built-in credential connector."
+                onChange={(passwordEnabled) => onChange({ ...form, passwordEnabled })}
+              />
+              <ControlledSwitch
+                checked={form.passkeyEnabled}
+                label="Passkey"
+                name="passkeyEnabled"
+                note="Offer passwordless WebAuthn sign-in."
+                onChange={(passkeyEnabled) => onChange({ ...form, passkeyEnabled })}
+              />
+              <ControlledSwitch
+                checked={form.emailCodeEnabled}
+                label="Email code"
+                name="emailCodeEnabled"
+                note="Send a one-time code to a verified email."
+                onChange={(emailCodeEnabled) => onChange({ ...form, emailCodeEnabled })}
+              />
+              <ControlledSwitch
+                checked={form.socialEnabled}
+                label="Social login"
+                name="socialEnabled"
+                note="Show every enabled social and workforce connector."
+                onChange={(socialEnabled) => onChange({ ...form, socialEnabled })}
+              />
+              <ControlledSwitch
+                checked={form.phoneEnabled}
+                label="Phone"
+                name="phoneEnabled"
+                note="Use the configured SMS connector."
+                onChange={(phoneEnabled) => onChange({ ...form, phoneEnabled })}
+              />
+              <ControlledSwitch
+                checked={form.web3Enabled}
+                label="Web3 wallet"
+                name="web3Enabled"
+                note="Allow configured wallet identity sign-in."
+                onChange={(web3Enabled) => onChange({ ...form, web3Enabled })}
+              />
+            </>
+          ) : null}
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <SheetFooter className="shrink-0">
+          <Button onClick={onClose} variant="outline">
+            {tt('Cancel')}
+          </Button>
+          <Button disabled={pending} onClick={onSave}>
+            {pending ? tt('Saving…') : tt('Save changes')}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function SettingsBlock({
+  action,
+  children,
+  description,
+  title,
+}: {
+  action: ReactNode
+  children: ReactNode
+  description: string
+  title: string
+}) {
+  return (
+    <section className="detailSection">
+      <header>
+        <div>
+          <h2>{tt(title)}</h2>
+          <p>{tt(description)}</p>
+        </div>
+        {action}
+      </header>
+      <div className="detailFlatRows">{children}</div>
+    </section>
+  )
+}
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="detailFlatRow">
+      <div>
+        <strong>{tt(label)}</strong>
+      </div>
+      <span>{value}</span>
+      <i />
+    </div>
+  )
+}
+function ControlledSwitch({
+  checked,
+  label,
+  name,
+  note,
+  onChange,
+}: {
+  checked: boolean
+  label: string
+  name: string
+  note: string
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <span>
+        <strong className="block text-sm">{tt(label)}</strong>
+        <small className="text-muted-foreground">{tt(note)}</small>
+      </span>
+      <Switch aria-label={tt(label)} checked={checked} name={name} onCheckedChange={onChange} />
+    </div>
+  )
+}
+function enabled(value: boolean) {
+  return <Badge variant={value ? 'secondary' : 'outline'}>{value ? tt('Enabled') : tt('Disabled')}</Badge>
 }

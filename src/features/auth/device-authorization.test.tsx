@@ -51,7 +51,9 @@ describe('DeviceVerification', () => {
   it('keeps approval actions disabled when no user code is available', () => {
     render(<DeviceVerification mode="approval" />)
 
-    expect(screen.getByText('Missing code')).toBeTruthy()
+    expect(
+      screen.getByText('Enter the device code shown by the requesting application before approving access.'),
+    ).toBeTruthy()
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve' }).disabled).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Deny' }).disabled).toBe(true)
     expect(verifyDeviceCode).not.toHaveBeenCalled()

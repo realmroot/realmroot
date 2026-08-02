@@ -26,6 +26,7 @@ import {
   useAccountMutation,
   useAccountProfile,
   useConsentedApplications,
+  useDeveloperConsoleAccess,
   useExternalApiResources,
   useLinkedAccounts,
 } from './queries'
@@ -43,6 +44,7 @@ import { enrollWallet, formatDate, readRedirectUrl } from './utils'
 export function AccountConnectionsPage() {
   const configQuery = useAccountConfig()
   const profileQuery = useAccountProfile()
+  const accessQuery = useDeveloperConsoleAccess()
   const config = configQuery.data ?? null
   const accountCenter = config?.accountCenter ?? defaultAccountCenterSettings
   const linkedAccountsQuery = useLinkedAccounts(accountCenter.connectedAccountsEnabled)
@@ -55,6 +57,7 @@ export function AccountConnectionsPage() {
   const queries = [
     configQuery,
     profileQuery,
+    accessQuery,
     linkedAccountsQuery,
     applicationsQuery,
     agentsQuery,
@@ -66,9 +69,16 @@ export function AccountConnectionsPage() {
   if (error)
     return <AccountPageError config={config} message={error instanceof Error ? error.message : tt('Unable to load.')} />
   const profile = profileQuery.data?.user ?? null
-  if (!profile) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
+  const access = accessQuery.data
+  if (!profile || !access) return <AccountPageError config={config} message={tt('Unable to load account center.')} />
   return (
-    <AccountPageShell accountCenter={accountCenter} config={config} profile={profile} section="connections">
+    <AccountPageShell
+      access={access}
+      accountCenter={accountCenter}
+      config={config}
+      profile={profile}
+      section="applications"
+    >
       <div className="accountSectionStackFlat">
         <ConnectionsPanel
           accounts={linkedAccountsQuery.data?.accounts ?? []}
@@ -254,7 +264,7 @@ function ConnectionsPanel({
   )
 }
 
-function ConnectionsSection({
+export function ConnectionsSection({
   accounts,
   confirm,
   mutate,
@@ -276,8 +286,8 @@ function ConnectionsSection({
       linkAccount({
         providerType: provider.providerType === 'generic_oauth' ? 'generic_oauth' : 'social',
         providerId: provider.providerId,
-        callbackURL: `${window.location.origin}/linked-accounts`,
-        errorCallbackURL: `${window.location.origin}/profile`,
+        callbackURL: `${window.location.origin}/security`,
+        errorCallbackURL: `${window.location.origin}/security`,
       }),
     )
     const redirectUrl = readRedirectUrl(result)

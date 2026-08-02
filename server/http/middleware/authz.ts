@@ -1,7 +1,19 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
+import { resolveDeveloperAccess } from '@server/usecases/developer-access'
 import { type ProtectedResource, requiredResourceCapability } from '@shared/authz'
 import type { MiddlewareHandler } from 'hono'
 import { getPrincipal } from './authn'
+import { getDeps } from './deps'
+
+declare module 'hono' {
+  interface ContextVariableMap {
+    consoleOrganizationIds: string[] | null
+    managementAccessScope:
+      | { kind: 'realm' }
+      | { kind: 'organizations'; organizationIds: string[] }
+      | { kind: 'account'; userId: string; organizationIds: string[] }
+  }
+}
 
 export function authz(resource: ProtectedResource): MiddlewareHandler {
   return async (c, next) => {
@@ -9,7 +21,31 @@ export function authz(resource: ProtectedResource): MiddlewareHandler {
     if (!user && !agent) throw unauthorized()
 
     if (user) {
-      if (!hasRole(user.role, 'admin')) throw forbidden()
+      if (hasRole(user.role, 'admin')) {
+        c.set('consoleOrganizationIds', null)
+        c.set('managementAccessScope', { kind: 'realm' })
+        await next()
+        return
+      }
+      const deps = getDeps(c)
+      const access = await resolveDeveloperAccess(deps, await deps.users.getUser(user.id))
+      const organizationIds = access.consoleOrganizations.map((item) => item.organizationId)
+      if (organizationIds.length && developerResourceAllowed(c.req.method, c.req.path, resource)) {
+        c.set('consoleOrganizationIds', organizationIds)
+        c.set('managementAccessScope', { kind: 'organizations', organizationIds })
+        await next()
+        return
+      }
+      if (!accountAuthorityReadAllowed(c.req.method, c.req.path)) throw forbidden()
+      const memberships = await deps.authorization.listUserMemberships(user.id)
+      const activeOrganizations = await Promise.all(
+        memberships.map((membership) => deps.authorization.findOrganization(membership.organizationId)),
+      )
+      const accountOrganizationIds = activeOrganizations.flatMap((organization) =>
+        organization && !organization.disabled ? [organization.id] : [],
+      )
+      c.set('consoleOrganizationIds', [])
+      c.set('managementAccessScope', { kind: 'account', userId: user.id, organizationIds: accountOrganizationIds })
       await next()
       return
     }
@@ -19,8 +55,82 @@ export function authz(resource: ProtectedResource): MiddlewareHandler {
       throw forbidden(required ? `Agent capability "${required}" is required.` : 'This resource is read-only.')
     }
 
+    c.set('consoleOrganizationIds', null)
+    c.set('managementAccessScope', { kind: 'realm' })
     await next()
   }
+}
+
+export function getManagementAccessScope(c: Parameters<typeof getPrincipal>[0]) {
+  return c.get('managementAccessScope')
+}
+
+export function getConsoleOrganizationScope(c: Parameters<typeof getPrincipal>[0]) {
+  return c.get('consoleOrganizationIds')
+}
+
+export function requireConsoleOrganizationAccess(c: Parameters<typeof getPrincipal>[0], organizationId: string) {
+  const organizationIds = getConsoleOrganizationScope(c)
+  if (organizationIds && !organizationIds.includes(organizationId)) throw forbidden()
+}
+
+export function requireConsoleOwnedOrganization(
+  c: Parameters<typeof getPrincipal>[0],
+  organizationId: string | null | undefined,
+) {
+  const organizationIds = getConsoleOrganizationScope(c)
+  if (!organizationIds) return
+  if (!organizationId || !organizationIds.includes(organizationId)) throw forbidden()
+}
+
+export async function requireConsoleUserAccess(c: Parameters<typeof getPrincipal>[0], userId: string) {
+  const organizationIds = getConsoleOrganizationScope(c)
+  if (!organizationIds) return
+  const allowedUserIds = await getDeps(c).authorization.listMemberUserIds(organizationIds)
+  if (!allowedUserIds.includes(userId)) throw forbidden()
+}
+
+export function requireRealmConsoleAccess(c: Parameters<typeof getPrincipal>[0]) {
+  if (getConsoleOrganizationScope(c)) throw forbidden()
+}
+
+export function resolveOrganizationInventoryScope(
+  c: Parameters<typeof getPrincipal>[0],
+  requestedOrganizationId?: string,
+) {
+  const organizationIds = getConsoleOrganizationScope(c)
+  if (!organizationIds) return requestedOrganizationId ? [requestedOrganizationId] : undefined
+  if (!requestedOrganizationId) return organizationIds
+  return organizationIds.includes(requestedOrganizationId) ? [requestedOrganizationId] : []
+}
+
+function developerResourceAllowed(method: string, path: string, resource: ProtectedResource) {
+  if (method === 'GET' || method === 'HEAD') {
+    return [
+      'applications',
+      'users',
+      'organizations',
+      'roles',
+      'apiResources',
+      'agents',
+      'auditEvents',
+      'connectors',
+      'webhooks',
+    ].includes(resource)
+  }
+  if (resource === 'applications' || resource === 'apiResources' || resource === 'webhooks') return true
+  return resource === 'roles' && path.startsWith('/api/role-assignments')
+}
+
+function accountAuthorityReadAllowed(method: string, path: string) {
+  if (method !== 'GET' && method !== 'HEAD') return false
+  return (
+    path === '/api/role-assignments' ||
+    /^\/api\/role-assignments\/[^/]+$/.test(path) ||
+    /^\/api\/roles\/[^/]+(?:\/permissions)?$/.test(path) ||
+    path === '/api/agent-access-grants' ||
+    /^\/api\/agent-access-grants\/[^/]+$/.test(path)
+  )
 }
 
 export function authenticatedUser(): MiddlewareHandler {

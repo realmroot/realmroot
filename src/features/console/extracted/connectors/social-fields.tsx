@@ -78,6 +78,7 @@ function ConnectorTextField({
   return (
     <Field help={help} label={label}>
       <TextInput
+        name={field}
         onChange={(event) => setValue(setForm, field, event.target.value)}
         readOnly={readOnly}
         required={required}
@@ -94,7 +95,7 @@ export function CallbackUrlField({ value }: { value: string }) {
     <div className="field">
       <label htmlFor={id}>{tt('Callback URL')}</label>
       <div className="flex gap-2">
-        <TextInput className="font-mono" id={id} readOnly value={value} />
+        <TextInput className="font-mono" id={id} name="callbackUrl" readOnly value={value} />
         <Button onClick={() => navigator.clipboard.writeText(value)} type="button" variant="secondary">
           <Copy data-icon="inline-start" /> {tt('Copy')}{' '}
         </Button>
@@ -123,6 +124,7 @@ export function ConnectorDynamicFields({
         return (
           <Field help={fieldHelp(field, isExisting)} key={field.formKey} label={field.label}>
             <TextInput
+              name={field.formKey}
               onChange={(event) => setValue(setForm, field.formKey, event.target.value)}
               required={field.required && !(field.key === 'clientSecret' && isExisting)}
               type={field.secret ? 'password' : 'text'}

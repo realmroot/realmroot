@@ -57,6 +57,10 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
         )
     },
 
+    async listCapabilityGrantsForAgent(agentId) {
+      return db.select().from(agentCapabilityGrant).where(eq(agentCapabilityGrant.agentId, agentId))
+    },
+
     async decideApproval(input) {
       const [request] = await db
         .select()

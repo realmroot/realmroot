@@ -1,12 +1,16 @@
 import type {
   AccountEmailChangeConfirmInput,
   AccountEmailChangeInput,
+  AccountOrganizationAgentAccessGrantsResponse,
+  AccountOrganizationAgentsResponse,
+  AccountOrganizationRoleAssignmentsResponse,
   AccountPasswordChangeInput,
   AccountProfileUpdateInput,
   AccountWalletAddressLinkInput,
 } from '@shared/api/account'
 import type {
   AccessRequest,
+  AccessRequestApproval,
   AccountConnection,
   Agent,
   AgentEnrollment,
@@ -20,11 +24,84 @@ import type {
   SecurityTotpEnrollmentInput,
   SecurityTotpVerificationInput,
 } from '@shared/api/security'
-import { apiClient, readJsonResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
-import { nativeAuth } from '@/lib/auth-client'
+import type { OrganizationAccessLevel } from '@shared/organization-access'
+import { ApiRequestError, apiClient, readJsonResponse, readRpcResponse, uploadApiFile } from '@/lib/api'
+import { getRole, listAgentAccessGrants, listRoleAssignments, listRolePermissions } from '@/lib/api/management'
+import { authClient, nativeAuth } from '@/lib/auth-client'
 
 export function getAccountProfile() {
   return readRpcResponse(apiClient.api.account.profile.$get())
+}
+
+export function getDeveloperConsoleAccess() {
+  return readRpcResponse(apiClient.api.account['developer-console-access'].$get())
+}
+
+export function getAccountOrganizationContext() {
+  return readRpcResponse(apiClient.api.account['organization-context'].$get())
+}
+
+export async function listAccountOrganizations() {
+  return readAuthClientResult(await authClient.organization.list())
+}
+
+export async function listAccountOrganizationInvitations() {
+  return readAuthClientResult(await authClient.organization.listUserInvitations())
+}
+
+export async function createAccountOrganization(input: { name: string; slug: string }) {
+  return readAuthClientResult(await authClient.organization.create(input))
+}
+
+export async function getAccountOrganization(organizationId: string) {
+  return readAuthClientResult(await authClient.organization.getFullOrganization({ query: { organizationId } }))
+}
+
+export async function setActiveAccountOrganization(organizationId: string | null) {
+  return readAuthClientResult(await authClient.organization.setActive({ organizationId }))
+}
+
+export async function updateAccountOrganization(organizationId: string, input: { name: string; slug: string }) {
+  return readAuthClientResult(await authClient.organization.update({ organizationId, data: input }))
+}
+
+export async function deleteAccountOrganization(organizationId: string) {
+  return readAuthClientResult(await authClient.organization.delete({ organizationId }))
+}
+
+export async function leaveAccountOrganization(organizationId: string) {
+  return readAuthClientResult(await authClient.organization.leave({ organizationId }))
+}
+
+export async function inviteAccountOrganizationMember(
+  organizationId: string,
+  input: { email: string; role: OrganizationAccessLevel },
+) {
+  return readAuthClientResult(await authClient.organization.inviteMember({ organizationId, ...input }))
+}
+
+export async function cancelAccountOrganizationInvitation(invitationId: string) {
+  return readAuthClientResult(await authClient.organization.cancelInvitation({ invitationId }))
+}
+
+export async function acceptAccountOrganizationInvitation(invitationId: string) {
+  return readAuthClientResult(await authClient.organization.acceptInvitation({ invitationId }))
+}
+
+export async function rejectAccountOrganizationInvitation(invitationId: string) {
+  return readAuthClientResult(await authClient.organization.rejectInvitation({ invitationId }))
+}
+
+export async function removeAccountOrganizationMember(organizationId: string, memberIdOrEmail: string) {
+  return readAuthClientResult(await authClient.organization.removeMember({ organizationId, memberIdOrEmail }))
+}
+
+export async function updateAccountOrganizationMemberRole(
+  organizationId: string,
+  memberId: string,
+  role: OrganizationAccessLevel,
+) {
+  return readAuthClientResult(await authClient.organization.updateMemberRole({ organizationId, memberId, role }))
 }
 
 export function updateAccountProfile(input: AccountProfileUpdateInput) {
@@ -111,6 +188,76 @@ export function listAccountAgents(): Promise<{
   return readRpcResponse(apiClient.api.account.agents.$get())
 }
 
+export function listAccountOrganizationAgents(organizationId: string): Promise<AccountOrganizationAgentsResponse> {
+  return readRpcResponse(
+    apiClient.api.account.organizations[':organizationId'].agents.$get({ param: { organizationId }, query: {} }),
+  )
+}
+
+export async function listAccountOrganizationRoleAssignments(
+  organizationId: string,
+): Promise<AccountOrganizationRoleAssignmentsResponse> {
+  const profile = await getAccountProfile()
+  const [organizationAssignments, realmAssignments] = await Promise.all([
+    listRoleAssignments({
+      organizationId,
+      subjectType: 'user',
+      subjectId: profile.user.id,
+      status: 'active',
+      limit: 100,
+    }),
+    listRoleAssignments({
+      context: 'realm',
+      subjectType: 'user',
+      subjectId: profile.user.id,
+      status: 'active',
+      limit: 100,
+    }),
+  ])
+  const assignments = [...organizationAssignments.assignments, ...realmAssignments.assignments]
+  return {
+    assignments: await Promise.all(
+      assignments.map(async (assignment) => {
+        const [role, permissions] = await Promise.all([
+          getRole(assignment.roleId),
+          listRolePermissions(assignment.roleId),
+        ])
+        return { assignment, role, permissions: permissions.permissions }
+      }),
+    ),
+    pagination: {
+      limit: 100,
+      offset: 0,
+      total: organizationAssignments.pagination.total + realmAssignments.pagination.total,
+      hasMore: organizationAssignments.pagination.hasMore || realmAssignments.pagination.hasMore,
+      nextOffset: null,
+    },
+  }
+}
+
+export async function listAccountOrganizationAgentAccessGrants(
+  organizationId: string,
+): Promise<AccountOrganizationAgentAccessGrantsResponse> {
+  const [result, agents] = await Promise.all([
+    listAgentAccessGrants({ organizationId, status: 'active', limit: 100 }),
+    listAccountOrganizationAgents(organizationId),
+  ])
+  const names = new Map(agents.items.map((agent) => [agent.id, agent.name]))
+  return {
+    grants: result.items.map((grant) => ({
+      id: grant.id,
+      agentId: grant.agentId,
+      agentName: names.get(grant.agentId) ?? grant.agentId,
+      resourceId: grant.resource.id,
+      scopes: grant.scopes,
+      mode: grant.mode,
+      expiresAt: grant.expiresAt,
+      createdAt: grant.createdAt,
+    })),
+    pagination: result.pagination,
+  }
+}
+
 export function getAgentEnrollment(enrollmentId: string): Promise<AgentEnrollment> {
   return fetch(`/api/account/agent-enrollments/${encodeURIComponent(enrollmentId)}`, {
     credentials: 'same-origin',
@@ -185,11 +332,29 @@ export function getAgentResourceApproval(token: string) {
   })
     .then((response) =>
       readJsonResponse<{
-        items: AccessRequest[]
+        items: AccessRequestApproval[]
         pagination: import('@shared/api/pagination').PaginationMetadata
       }>(response),
     )
     .then((result) => result.items[0]!)
+}
+
+export function listAgentResourceRequests() {
+  return fetch('/api/account/access-requests', { credentials: 'same-origin' }).then((response) =>
+    readJsonResponse<{
+      items: AccessRequestApproval[]
+      pagination: import('@shared/api/pagination').PaginationMetadata
+    }>(response),
+  )
+}
+
+export function decideAccountAgentResourceRequest(requestId: string, input: DecideAccessRequest) {
+  return fetch(`/api/account/access-requests/${encodeURIComponent(requestId)}/decision`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  }).then((response) => readJsonResponse<AccessRequest>(response))
 }
 
 export function decideAgentResourceApproval(requestId: string, token: string, input: DecideAccessRequest) {
@@ -215,6 +380,18 @@ export function verifyTotp(input: SecurityTotpVerificationInput) {
 
 export function disableTotp(input: SecurityTotpDisableInput) {
   return readRpcResponse(apiClient.api.account.security.mfa.totp.$delete({ json: input }))
+}
+
+function readAuthClientResult<T>(
+  result: { data: T; error: null } | { data: null; error: { message?: string; status?: number; statusText?: string } },
+): T {
+  if (result.error) {
+    throw new ApiRequestError(
+      result.error.message ?? result.error.statusText ?? 'Account request failed.',
+      result.error.status ?? 500,
+    )
+  }
+  return result.data
 }
 
 export function listPasskeys() {

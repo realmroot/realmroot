@@ -13,8 +13,8 @@ describe('PageHeader', () => {
     )
 
     const heading = screen.getByRole('heading', { level: 1, name: 'Applications' })
-    expect(heading.className).toContain('text-xl')
-    expect(screen.getByText('Manage OIDC clients.').className).toContain('leading-5')
+    expect(heading.tagName).toBe('H1')
+    expect(screen.getByText('Manage OIDC clients.').tagName).toBe('P')
     expect(screen.queryByText('Console')).toBeNull()
     expect(screen.getByRole('button', { name: 'Create' })).toBeTruthy()
   })

@@ -94,6 +94,7 @@ describe('pure readers', () => {
       secret: null,
       backupCodes: [],
     })
+    expect(readTotpEnrollment({ totpURI: 'otpauth://totp/Realmroot:user?secret=ABC234' }).secret).toBe('ABC234')
     expect(readTotpEnrollment(null)).toEqual({ qrCode: null, otpAuthUri: null, secret: null, backupCodes: [] })
   })
 })

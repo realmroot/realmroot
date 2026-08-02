@@ -13,19 +13,32 @@ export function createSecurityRepository(db: Database, policy: SecurityPolicy): 
 
     async updatePolicy(input) {
       const current = await readManagedPolicy(db, policy)
+      const nextCaptchaSecret = input.policy.captcha?.secretKey?.trim()
+        ? input.policy.captcha.secretKey
+        : input.policy.captcha?.provider === current.captcha.provider
+          ? current.captcha.secretKey
+          : ''
+      const captcha = input.policy.captcha
+        ? {
+            ...input.policy.captcha,
+            secretKey: nextCaptchaSecret,
+          }
+        : current.captcha
       const next = securityPolicySchema.parse({
         ...current,
         ...input.policy,
+        captcha,
         mfa: { ...current.mfa, ...input.policy.mfa },
         passkeys: { ...current.passkeys, ...input.policy.passkeys },
-        sessions: current.sessions,
+        sessions: input.policy.sessions ?? current.sessions,
       })
       const row = await readSettingsRow(db)
       const metadata = {
         ...(row?.metadata ?? {}),
         securityPolicy: {
           mfa: next.mfa,
-          passkeys: { enabled: next.passkeys.enabled },
+          passkeys: next.passkeys,
+          sessions: next.sessions,
           password: next.password,
           captcha: next.captcha,
           blocklist: next.blocklist,
@@ -139,14 +152,31 @@ const settingsId = 'default'
 async function readManagedPolicy(db: Database, defaults: SecurityPolicy): Promise<SecurityPolicy> {
   const row = await readSettingsRow(db)
   const managed = readObject(row?.metadata, 'securityPolicy')
+  const managedCaptcha = readObject(managed, 'captcha')
   return securityPolicySchema.parse({
     ...defaults,
     mfa: { ...defaults.mfa, ...(readObject(managed, 'mfa') ?? {}) },
     passkeys: { ...defaults.passkeys, ...(readObject(managed, 'passkeys') ?? {}) },
+    sessions: readObject(managed, 'sessions') ?? defaults.sessions,
     password: readObject(managed, 'password') ?? defaults.password,
-    captcha: readObject(managed, 'captcha') ?? defaults.captcha,
+    captcha: managedCaptcha ? normalizeManagedCaptcha(managedCaptcha, defaults.captcha) : defaults.captcha,
     blocklist: readObject(managed, 'blocklist') ?? defaults.blocklist,
   })
+}
+
+function normalizeManagedCaptcha(value: Record<string, unknown>, defaults: SecurityPolicy['captcha']) {
+  return {
+    ...defaults,
+    ...value,
+    projectId: typeof value.projectId === 'string' ? value.projectId : null,
+    secretKey: typeof value.secretKey === 'string' ? value.secretKey : '',
+    legacySecretBinding:
+      typeof value.legacySecretBinding === 'string'
+        ? value.legacySecretBinding
+        : typeof value.secretBinding === 'string'
+          ? value.secretBinding
+          : undefined,
+  }
 }
 
 async function readSettingsRow(db: Database): Promise<typeof signInExperience.$inferSelect | null> {

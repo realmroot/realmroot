@@ -1,13 +1,19 @@
-import { consoleQueryKeys, createApplication, listApplications, updateApplication } from '@/lib/api/management'
+import {
+  consoleQueryKeys,
+  createApplication,
+  listApplications,
+  listOrganizations,
+  listUsers,
+  updateApplication,
+} from '@/lib/api/management'
+import { useConsoleScope } from '@/lib/console-context'
 import {
   Button,
   Plus,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
+  SelectInput,
   TextInput,
   tt,
+  useEffect,
   useQuery,
   useQueryClient,
   useState,
@@ -16,17 +22,30 @@ import { CreateApplicationDialog } from '../../helpers/helpers-create'
 import { MutationError } from '../../helpers/helpers-dialogs'
 import { ListToolbar, ResourcePage } from '../../helpers/helpers-resource'
 import { useAdminMutation } from '../../helpers/helpers-utils'
+import { organizationOptions } from '../../helpers/ownership-access-controls'
 import { ApplicationsTableContent } from './application-detail-sections'
 
 export function ApplicationsPage() {
+  const { organizationId: context } = useConsoleScope()
+  const [owner, setOwner] = useState(context ?? '')
   const query = useQuery({
-    queryKey: consoleQueryKeys.applications,
-    queryFn: listApplications,
+    queryKey: [...consoleQueryKeys.applications, { ownerOrganizationId: owner || undefined }],
+    queryFn: () => listApplications({ ownerOrganizationId: owner || undefined }),
+  })
+  const organizationsQuery = useQuery({
+    queryKey: consoleQueryKeys.organizations,
+    queryFn: listOrganizations,
+  })
+  const usersQuery = useQuery({
+    queryKey: [...consoleQueryKeys.users, { limit: 100, purpose: 'application-audience' }],
+    queryFn: () => listUsers({ limit: 100 }),
   })
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [selectedTab, setSelectedTab] = useState<'my-apps' | 'third-party'>('my-apps')
   const [search, setSearch] = useState('')
+  const [type, setType] = useState('')
+  const [audience, setAudience] = useState('')
+  useEffect(() => setOwner(context ?? ''), [context])
   const createMutation = useAdminMutation({
     mutationFn: createApplication,
     onSuccess: () => {
@@ -46,14 +65,21 @@ export function ApplicationsPage() {
   })
   const applications = query.data?.applications ?? []
   const visibleApplications = applications.filter((application) => {
-    const matchesTab = selectedTab === 'my-apps' ? application.firstParty : !application.firstParty
     const matchesSearch =
       search.trim().length === 0 ||
       [application.name, application.clientId, application.slug].some((value) =>
         value.toLowerCase().includes(search.trim().toLowerCase()),
       )
-    return matchesTab && matchesSearch
+    return (
+      matchesSearch &&
+      (!owner || application.ownerOrganizationId === owner) &&
+      (!type || application.clientType === type) &&
+      (!audience || application.audience.mode === audience)
+    )
   })
+  const organizations = organizationsQuery.data?.organizations ?? []
+  const users = usersQuery.data?.users ?? []
+  const owners = organizationOptions(organizations).sort((left, right) => left.label.localeCompare(right.label))
   return (
     <ResourcePage
       title={tt('Applications')}
@@ -65,6 +91,10 @@ export function ApplicationsPage() {
       }
       auxiliary={
         <CreateApplicationDialog
+          defaultOwnerOrganizationId={context}
+          key={context ?? 'realm'}
+          organizations={organizations}
+          users={users}
           createdApplication={createMutation.data ?? null}
           error={createMutation.errorMessage}
           onClose={() => {
@@ -76,58 +106,64 @@ export function ApplicationsPage() {
           pending={createMutation.isPending}
         />
       }
-      error={query.error}
+      error={query.error ?? organizationsQuery.error ?? usersQuery.error}
       empty={applications.length === 0}
       emptyDescription="Create your first OIDC client to connect an application to hosted authentication."
       emptyTitle="No applications yet"
-      loading={query.isLoading}
-      onRetry={() => query.refetch()}
-    >
-      <Tabs setValue={(value) => setSelectedTab(value as 'my-apps' | 'third-party')} value={selectedTab}>
+      loading={query.isLoading || organizationsQuery.isLoading || usersQuery.isLoading}
+      onRetry={() => Promise.all([query.refetch(), organizationsQuery.refetch(), usersQuery.refetch()])}
+      toolbar={
         <ListToolbar>
-          <TabsList aria-label={tt('Application lists')}>
-            <TabsTrigger value="my-apps">{tt('My apps')}</TabsTrigger>
-            <TabsTrigger value="third-party">{tt('Third-party apps')}</TabsTrigger>
-          </TabsList>
           <TextInput
             aria-label={tt('Search applications')}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={tt('Search applications')}
             value={search}
           />
+          <SelectInput aria-label={tt('Filter owner')} onChange={(event) => setOwner(event.target.value)} value={owner}>
+            <option value="">{tt('Any owner')}</option>
+            {owners.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.label}
+              </option>
+            ))}
+          </SelectInput>
+          <SelectInput aria-label={tt('Filter type')} onChange={(event) => setType(event.target.value)} value={type}>
+            <option value="">{tt('Any type')}</option>
+            <option value="confidential_web">{tt('Web application')}</option>
+            <option value="public_spa">{tt('Single-page app')}</option>
+            <option value="public_native">{tt('Native application')}</option>
+          </SelectInput>
+          <SelectInput
+            aria-label={tt('Filter audience')}
+            onChange={(event) => setAudience(event.target.value)}
+            value={audience}
+          >
+            <option value="">{tt('Any audience')}</option>
+            <option value="realm">{tt('All Realm users')}</option>
+            <option value="organizations">{tt('Selected Organizations')}</option>
+            <option value="users">{tt('Assigned users')}</option>
+            <option value="public">{tt('Anyone who can register')}</option>
+          </SelectInput>
         </ListToolbar>
-        <MutationError error={toggleMutation.error} />
-        <TabsContent value="my-apps">
-          <ApplicationsTableContent
-            applications={visibleApplications}
-            emptyDescription={
-              search
-                ? 'No applications match the current search in this tab.'
-                : 'Applications created by external publishers will appear here when available.'
-            }
-            emptyTitle={search ? 'No applications found' : 'No applications in this tab'}
-            hasApplications={applications.length > 0}
-            onToggleDisabled={(application) =>
-              toggleMutation.mutate({ id: application.id, disabled: !application.disabled })
-            }
-          />
-        </TabsContent>
-        <TabsContent value="third-party">
-          <ApplicationsTableContent
-            applications={visibleApplications}
-            emptyDescription={
-              search
-                ? 'No applications match the current search in this tab.'
-                : 'Applications created by external publishers will appear here when available.'
-            }
-            emptyTitle={search ? 'No applications found' : 'No applications in this tab'}
-            hasApplications={applications.length > 0}
-            onToggleDisabled={(application) =>
-              toggleMutation.mutate({ id: application.id, disabled: !application.disabled })
-            }
-          />
-        </TabsContent>
-      </Tabs>
+      }
+    >
+      <MutationError error={toggleMutation.error} />
+      <ApplicationsTableContent
+        applications={visibleApplications}
+        context={context}
+        organizations={organizations}
+        emptyDescription={
+          search || owner || type || audience
+            ? 'No applications match the current filters.'
+            : 'Create an OIDC client to connect an application.'
+        }
+        emptyTitle={search || owner || type || audience ? 'No applications found' : 'No applications yet'}
+        hasApplications={applications.length > 0}
+        onToggleDisabled={(application) =>
+          toggleMutation.mutate({ id: application.id, disabled: !application.disabled })
+        }
+      />
     </ResourcePage>
   )
 }

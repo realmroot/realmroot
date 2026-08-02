@@ -1,4 +1,4 @@
-import { createEmailSender } from '@server/adapters/gateways/email/sender'
+import { createConfiguredEmailSender, createEmailSender } from '@server/adapters/gateways/email/sender'
 import { renderEmailTemplate } from '@server/adapters/gateways/email/templates'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -49,6 +49,59 @@ describe('createEmailSender', () => {
         from: 'noreply@example.com',
       }),
     )
+  })
+
+  it('[spec: admin-console/admin-email-delivery-settings] loads persisted sender settings for every message', async () => {
+    const send = vi.fn().mockResolvedValue({ messageId: 'email-3' })
+    let enabled = true
+    const sender = createConfiguredEmailSender(
+      { send },
+      async () => ({
+        provider: 'cloudflare_email',
+        enabled,
+        fromEmail: 'auth@example.com',
+        fromName: 'Acme Realm',
+        replyToEmail: 'support@example.com',
+      }),
+      { from: 'fallback@example.com' },
+    )
+
+    await sender.send({
+      to: 'user@example.com',
+      template: { type: 'otp', otp: '123456' },
+    })
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: { email: 'auth@example.com', name: 'Acme Realm' },
+        replyTo: 'support@example.com',
+      }),
+    )
+
+    enabled = false
+    await expect(sender.send({ to: 'user@example.com', template: { type: 'otp', otp: '123456' } })).rejects.toThrow(
+      'Email delivery is disabled.',
+    )
+  })
+
+  it('uses deployment fallback settings and surfaces missing deployment boundaries', async () => {
+    const send = vi.fn().mockResolvedValue({ messageId: 'email-4' })
+    const email = { to: 'user@example.com', template: { type: 'otp' as const, otp: '123456' } }
+
+    await expect(
+      createConfiguredEmailSender({ send }, async () => null, { from: 'fallback@example.com' }).send(email),
+    ).resolves.toEqual({ messageId: 'email-4' })
+    await expect(createConfiguredEmailSender({ send }, async () => null).send(email)).rejects.toThrow(
+      'Email sender settings are not configured.',
+    )
+    await expect(
+      createConfiguredEmailSender(undefined, async () => ({
+        provider: 'cloudflare_email',
+        enabled: true,
+        fromEmail: 'auth@example.com',
+        fromName: null,
+        replyToEmail: null,
+      })).send(email),
+    ).rejects.toThrow('Cloudflare Email binding is not configured for this deployment.')
   })
 })
 

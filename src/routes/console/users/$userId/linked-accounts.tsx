@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { UserLinkedAccountsPage } from '@/features/console/extracted/users/user-detail-pages'
+import { UserDetailPage } from '@/features/console/extracted/users/user-detail'
 
 export const Route = createFileRoute('/console/users/$userId/linked-accounts')({
   component: UserLinkedAccountsRoute,
@@ -7,5 +7,5 @@ export const Route = createFileRoute('/console/users/$userId/linked-accounts')({
 
 function UserLinkedAccountsRoute() {
   const { userId } = Route.useParams()
-  return <UserLinkedAccountsPage userId={userId} />
+  return <UserDetailPage userId={userId} section="authentication" />
 }

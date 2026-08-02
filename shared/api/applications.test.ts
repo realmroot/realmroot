@@ -1,4 +1,5 @@
 import {
+  applicationAudienceSchema,
   createApplicationRequestSchema,
   createApplicationResponseSchema,
   deviceCodeGrantType,
@@ -9,6 +10,28 @@ import {
   updateApplicationRequestSchema,
 } from '@shared/api/applications'
 import { describe, expect, it } from 'vitest'
+
+describe('application audience contracts', () => {
+  it('requires and normalizes audience targets', () => {
+    expect(applicationAudienceSchema.safeParse({ mode: 'organizations' }).success).toBe(false)
+    expect(applicationAudienceSchema.safeParse({ mode: 'users' }).success).toBe(false)
+    expect(
+      applicationAudienceSchema.parse({
+        mode: 'organizations',
+        organizationIds: ['org-b', 'org-a', 'org-b'],
+        userIds: ['ignored-user'],
+      }),
+    ).toEqual({ mode: 'organizations', organizationIds: ['org-a', 'org-b'], userIds: [] })
+    expect(
+      applicationAudienceSchema.parse({ mode: 'users', organizationIds: ['ignored-org'], userIds: ['user-1'] }),
+    ).toEqual({ mode: 'users', organizationIds: [], userIds: ['user-1'] })
+    expect(applicationAudienceSchema.parse({ mode: 'realm' })).toEqual({
+      mode: 'realm',
+      organizationIds: [],
+      userIds: [],
+    })
+  })
+})
 
 describe('application API pagination contracts', () => {
   it('parses pagination query defaults and numeric query strings', () => {
@@ -58,6 +81,8 @@ describe('application API pagination contracts', () => {
       postLogoutRedirectUris: ['https://app.example.com/signed-out'],
       corsOrigins: ['https://app.example.com'],
       customData: { tier: 'gold' },
+      ownerOrganizationId: 'org_platform',
+      audience: { mode: 'realm', organizationIds: [], userIds: [] },
       allowedGrantTypes: ['authorization_code'],
       allowedScopes: ['openid', 'profile'],
       requirePkce: false,

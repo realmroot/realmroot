@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConsoleDashboardPage } from '@/features/console/pages/dashboard-page'
+import { ConsoleScopeProvider } from '@/lib/console-context'
 import { AppRouter, queryClient } from '@/router'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -38,6 +39,60 @@ import {
 } from './console.test-utils'
 
 describe('console dashboard guards', () => {
+  it('derives Organization next steps and ready state from contextual inventory', async () => {
+    let populated = false
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const request = input instanceof Request ? input : null
+      const url = new URL(request?.url ?? String(input), window.location.origin)
+      const items = populated ? [{}] : []
+      const contextualPagination = { ...emptyPagination, total: items.length }
+      if (url.pathname === '/api/organizations/org-1') {
+        return Promise.resolve(
+          jsonResponse(populated ? { ...organization, displayName: null, name: 'Acme' } : organization),
+        )
+      }
+      if (url.pathname === '/api/applications') {
+        return Promise.resolve(jsonResponse({ applications: items, pagination: contextualPagination }))
+      }
+      if (url.pathname === '/api/users') {
+        return Promise.resolve(jsonResponse({ users: items, pagination: contextualPagination }))
+      }
+      if (url.pathname === '/api/api-resources') {
+        return Promise.resolve(jsonResponse({ items, pagination: contextualPagination }))
+      }
+      if (url.pathname === '/api/agents') {
+        return Promise.resolve(jsonResponse({ items, pagination: contextualPagination }))
+      }
+      if (url.pathname === '/api/role-assignments') {
+        return Promise.resolve(jsonResponse({ assignments: items, pagination: contextualPagination }))
+      }
+      throw new Error(`Unexpected Organization dashboard request: ${request?.method ?? init?.method ?? 'GET'} ${url}`)
+    })
+
+    const empty = renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
+        <ConsoleDashboardPage />
+      </ConsoleScopeProvider>,
+    )
+    expect(await screen.findByRole('heading', { name: 'Acme Inc.' })).toBeTruthy()
+    expect(screen.getByText('Register an application')).toBeTruthy()
+    expect(screen.getByText('Register a resource server')).toBeTruthy()
+    expect(screen.getByText('Assign a role')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Register an application' }).getAttribute('href')).toContain(
+      'context=org-1',
+    )
+    empty.unmount()
+
+    populated = true
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: 'org-1', realmOperator: false }}>
+        <ConsoleDashboardPage />
+      </ConsoleScopeProvider>,
+    )
+    expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
+    expect(screen.getByText('Development inventory is ready')).toBeTruthy()
+  })
+
   it('renders dashboard metrics and recent operational state [spec: admin-console/admin-dashboard]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -51,7 +106,7 @@ describe('console dashboard guards', () => {
       if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
       }
-      if (url === '/api/organizations') {
+      if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
       if (url.startsWith('/api/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
@@ -67,18 +122,14 @@ describe('console dashboard guards', () => {
     renderWithQuery(<ConsoleDashboardPage />)
 
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy()
-    expect(screen.getByText('Total users')).toBeTruthy()
-    expect(screen.getByText('New users today')).toBeTruthy()
-    expect(screen.getByText('New users past 7 days')).toBeTruthy()
-    expect(screen.getAllByText('Pending')).toHaveLength(4)
-    expect(screen.getByText('Daily active users')).toBeTruthy()
-    expect(screen.getByText('Weekly active users')).toBeTruthy()
-    expect(screen.getByText('Monthly active users')).toBeTruthy()
-    expect(metricValue('Total users')).toBe('1')
-    expect(metricValue('New users today')).toBe('--')
-    expect(metricValue('New users past 7 days')).toBe('--')
-    expect(screen.getByText('Pending activity data')).toBeTruthy()
-    expect(screen.getByRole('img', { name: 'Daily active users trend' })).toBeTruthy()
+    expect(metricValue('Users')).toBe('1')
+    expect(metricValue('Applications')).toBe('1')
+    expect(metricValue('Resource servers')).toBe('1')
+    expect(metricValue('Organizations')).toBe('1')
+    expect(screen.getByText('Realm readiness')).toBeTruthy()
+    expect(screen.getByText('3 available')).toBeTruthy()
+    expect(screen.getByText('1 ready')).toBeTruthy()
+    expect(screen.getByText('No overview gaps')).toBeTruthy()
   })
 
   it('renders dashboard empty metrics without setup marketing cards', async () => {
@@ -93,7 +144,7 @@ describe('console dashboard guards', () => {
       if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
       }
-      if (url === '/api/organizations') {
+      if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
       if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
@@ -118,9 +169,14 @@ describe('console dashboard guards', () => {
     renderWithQuery(<ConsoleDashboardPage />)
 
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy()
-    expect(metricValue('Total users')).toBe('0')
-    expect(screen.getAllByText('--').length).toBeGreaterThanOrEqual(5)
-    expect(screen.getAllByText('Pending')).toHaveLength(4)
+    expect(metricValue('Users')).toBe('0')
+    expect(metricValue('Applications')).toBe('0')
+    expect(metricValue('Resource servers')).toBe('0')
+    expect(metricValue('Organizations')).toBe('0')
+    expect(screen.getByText('Register an application')).toBeTruthy()
+    expect(screen.getByText('Register a resource server')).toBeTruthy()
+    expect(screen.getByText('Define a role')).toBeTruthy()
+    expect(screen.queryByText('Enable a sign-in method')).toBeNull()
     expect(screen.queryByText('Setup progress')).toBeNull()
     expect(screen.queryByText('Private cloud')).toBeNull()
   })
@@ -139,7 +195,7 @@ describe('console dashboard guards', () => {
       if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
       }
-      if (url === '/api/organizations') {
+      if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/roles')) {
@@ -174,7 +230,7 @@ describe('console dashboard guards', () => {
       if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
       }
-      if (url === '/api/organizations') {
+      if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
       if (url.startsWith('/api/roles')) {
@@ -233,7 +289,24 @@ describe('console dashboard guards', () => {
       const url = String(input)
       requests.push(url)
       if (url === '/api/account/profile')
-        return Promise.resolve(jsonResponse({ user: { ...consoleAccountProfile, role: 'user' } }))
+        return Promise.resolve(
+          jsonResponse({
+            user: { ...consoleAccountProfile, role: 'user' },
+          }),
+        )
+      if (url === '/api/account/developer-console-access') {
+        return Promise.resolve(
+          jsonResponse({
+            canCreateOrganization: true,
+            showOrganizations: false,
+            realmOperator: false,
+            consoleOrganizations: [],
+          }),
+        )
+      }
+      if (url === '/api/account/organization-context') {
+        return Promise.resolve(jsonResponse({ activeOrganizationId: null }))
+      }
       return consoleSharedFetch(input, init)
     })
     window.history.pushState(null, '', '/console/dashboard')

@@ -1,3 +1,6 @@
+import { Check } from 'lucide-react'
+import { toast } from 'sonner'
+import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import { consoleQueryKeys, listConnectors } from '@/lib/api/management'
 import {
   AlertCircle,
@@ -63,10 +66,21 @@ export function PolicyCard({
   return <Card>{content}</Card>
 }
 export function CopyButton({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+    } catch {
+      toast.error(tt('Unable to copy to the clipboard.'))
+    }
+  }
+
   return (
-    <Button onClick={() => navigator.clipboard.writeText(value)} type="button" variant="secondary">
-      <Copy data-icon="inline-start" />
-      {label}
+    <Button onClick={() => void copy()} type="button" variant="secondary">
+      {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
+      {copied ? tt('Copied') : label}
     </Button>
   )
 }
@@ -82,7 +96,12 @@ export function SecretDisclosureDialog({
   open: boolean
 }) {
   return (
-    <Dialog open={open}>
+    <Dialog
+      onOpenChange={(next) => {
+        if (!next) onClose()
+      }}
+      open={open}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{tt('Copy client secret')}</DialogTitle>
@@ -96,23 +115,12 @@ export function SecretDisclosureDialog({
         <div className="grid gap-3 p-4">
           <SettingRow label={tt('Client ID')} value={clientId ?? ''} />
           <SettingRow label={tt('Client secret')} value={clientSecret ?? ''} />
-          <CopyButton
-            label={tt('Copy secret')}
-            value={JSON.stringify(
-              {
-                clientId,
-                clientSecret,
-                tokenEndpointAuthMethod: 'client_secret_basic',
-              },
-              null,
-              2,
-            )}
-          />
+          <CopyButton label={tt('Copy secret')} value={clientSecret ?? ''} />
         </div>
         <DialogFooter className="m-0">
           <Button onClick={onClose} type="button" variant="secondary">
             {' '}
-            {tt('Close')}{' '}
+            {tt('Done')}{' '}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -135,31 +143,21 @@ export function DeleteApplicationDialog({
   pending: boolean
 }) {
   return (
-    <Dialog open={open}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{tt('Delete application')}</DialogTitle>
-          <DialogDescription>
-            {' '}
-            {tt('Deleting')} {applicationName}{' '}
-            {tt('removes the OIDC client and stops existing integrations from authenticating.')}{' '}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="p-4">
-          <MutationError error={error} />
-        </div>
-        <DialogFooter className="m-0">
-          <Button onClick={onClose} type="button" variant="secondary">
-            {' '}
-            {tt('Cancel')}{' '}
-          </Button>
-          <Button disabled={pending} onClick={onConfirm} type="button" variant="danger">
-            {' '}
-            {tt('Delete application')}{' '}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <DestructiveConfirmation
+      confirmLabel={tt('Delete application')}
+      description={
+        <>
+          {tt('Deleting')} {applicationName}{' '}
+          {tt('removes the OIDC client and stops existing integrations from authenticating.')}
+        </>
+      }
+      error={<MutationError error={error} />}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      open={open}
+      pending={pending}
+      title={tt('Delete application')}
+    />
   )
 }
 export function BanUserDialog({
@@ -189,7 +187,7 @@ export function BanUserDialog({
         </DialogHeader>
         <div className="grid gap-4 p-4">
           <Field label={tt('Reason')}>
-            <TextArea onChange={(event) => setReason(event.target.value)} value={reason} />
+            <TextArea name="reason" onChange={(event) => setReason(event.target.value)} value={reason} />
           </Field>
           <MutationError error={error} />
         </div>
@@ -198,7 +196,7 @@ export function BanUserDialog({
             {' '}
             {tt('Cancel')}{' '}
           </Button>
-          <Button disabled={pending} onClick={() => onConfirm(reason)} type="button" variant="danger">
+          <Button disabled={pending} onClick={() => onConfirm(reason)} type="button" variant="destructive">
             {' '}
             {tt('Ban user')}{' '}
           </Button>
@@ -227,32 +225,25 @@ export function DangerConfirmDialog({
   title: string
 }) {
   return (
-    <Dialog open={open}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <div className="p-4">
-          <MutationError error={error} />
-        </div>
-        <DialogFooter className="m-0">
-          <Button onClick={onClose} type="button" variant="secondary">
-            {' '}
-            {tt('Cancel')}{' '}
-          </Button>
-          <Button disabled={pending} onClick={onConfirm} type="button" variant="danger">
-            {actionLabel}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <DestructiveConfirmation
+      confirmLabel={actionLabel}
+      description={description}
+      error={<MutationError error={error} />}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      open={open}
+      pending={pending}
+      title={title}
+    />
   )
 }
 export function MutationError({ error }: { error: unknown }) {
   if (!error) return null
   return (
-    <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+    <div
+      className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+      role="alert"
+    >
       {error instanceof Error ? tt(error.message) : tt('Request failed.')}
     </div>
   )

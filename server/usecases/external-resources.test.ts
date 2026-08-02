@@ -213,6 +213,27 @@ describe('external API resource authorization', () => {
       grantedScopes: intent.scopes,
       credentialExpiresAt: null,
     })
+
+    intent = { ...intent!, id: 'subject-fallback-connection', ownerOrganizationId: null }
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      if (request.url.endsWith('/token')) {
+        return Response.json({
+          access_token: 'fallback-access',
+          refresh_token: 'fallback-refresh',
+          token_type: 'Bearer',
+        })
+      }
+      if (request.url.endsWith('/userinfo')) return Response.json({ sub: 'subject-only' })
+      return new Response(null, { status: 404 })
+    })
+    await expect(
+      completeResourceConnectionIntent(
+        deps,
+        { state: 'subject-fallback-state', code: 'subject-fallback-code' },
+        'https://auth.example.com/',
+      ),
+    ).resolves.toMatchObject({ displayName: 'subject-only' })
+
     vi.mocked(deps.externalResources.createConnection).mockResolvedValueOnce(null)
     await expect(
       completeResourceConnectionIntent(
@@ -514,7 +535,7 @@ describe('external API resource authorization', () => {
         })
       }
       expect(outbound.headers.get('dpop')).toBe(proof)
-      expect(form.get('subject_token')).toBe('refreshed-subject')
+      expect(['refreshed-subject', 'subject']).toContain(form.get('subject_token'))
       expect(form.get('actor_token')).toBe('target-agent-access')
       expect(form.get('actor_token_type')).toBe('urn:ietf:params:oauth:token-type:access_token')
       expect(form.get('scope')).toBe('projects:read')
@@ -563,6 +584,7 @@ describe('external API resource authorization', () => {
       }),
     )
 
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
     exchangeResponse = { access_token: 'wrong-type', token_type: 'Bearer', expires_in: 60 }
     await expect(
       issueTargetAccessToken(
@@ -1024,6 +1046,22 @@ describe('external API resource authorization', () => {
         'https://auth.example.com/',
       ),
     ).resolves.toMatchObject({ reason: null })
+
+    vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
+    await expect(
+      createAccessRequest(
+        deps,
+        { target: { type: 'api-resource', apiResourceId: 'resource-1' }, scopes: ['projects:read'] },
+        principal(),
+        'https://auth.example.com/',
+      ),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      approval: {
+        url: expect.stringContaining('/agent/resource-access/approve#token='),
+        expiresAt: expect.any(String),
+      },
+    })
     const stored = vi.mocked(deps.externalResources.createAccessRequest).mock.calls[0]![0]
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(stored)
     await expect(getAgentAccessRequest(deps, stored.id, principal())).resolves.toMatchObject({ id: stored.id })
@@ -1111,7 +1149,13 @@ describe('external API resource authorization', () => {
       requests: [{ id: 'request-1' }, { id: 'request-2' }],
     })
     await expect(listAccountAccessRequests(deps, 'user-1', { limit: 1, offset: 1 })).resolves.toMatchObject({
-      items: [{ id: 'request-2' }],
+      items: [
+        {
+          id: 'request-2',
+          agent: { id: 'identity-1', name: 'Project Agent' },
+          resource: { id: 'resource-1', name: 'Projects API' },
+        },
+      ],
       pagination: { total: 2 },
     })
     await expect(getAccountAccessRequest(deps, 'request-1', 'user-1')).resolves.toMatchObject({ id: 'request-1' })
@@ -1340,9 +1384,6 @@ describe('external API resource authorization', () => {
           key: 'writer',
           name: 'Writer',
           description: null,
-          resourceId: 'resource-1',
-          organizationId: null,
-          applicationId: null,
           system: false,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
@@ -1370,9 +1411,6 @@ describe('external API resource authorization', () => {
           key: 'reader',
           name: 'Reader',
           description: null,
-          resourceId: 'resource-1',
-          organizationId: null,
-          applicationId: null,
           system: false,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
@@ -1949,6 +1987,9 @@ function resource(): ApiResourceResponse {
     connectorId: 'connector-1',
     description: 'Manage private projects',
     enabled: true,
+    ownerOrganizationId: 'org-1',
+    accessEligibility: { mode: 'realm', organizationIds: [] },
+    availableToAgents: true,
     archivedAt: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),

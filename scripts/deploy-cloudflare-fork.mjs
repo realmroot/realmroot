@@ -15,10 +15,6 @@ const settings = {
   databaseName: process.env.REALMROOT_D1_DATABASE?.trim() || workerName,
   bucketName:
     process.env.REALMROOT_R2_BUCKET?.trim() || (suffix ? `realmroot-assets-${suffix}` : `${workerName}-assets`),
-  queueName:
-    process.env.REALMROOT_EMAIL_QUEUE?.trim() || (suffix ? `realmroot-email-${suffix}` : `${workerName}-email`),
-  emailFrom: required('REALMROOT_EMAIL_FROM'),
-  emailFromName: process.env.REALMROOT_EMAIL_FROM_NAME?.trim() || 'Realmroot',
 }
 
 const databases = JSON.parse(capture('pnpm', ['exec', 'wrangler', 'd1', 'list', '--json']))
@@ -37,20 +33,11 @@ ensureResource(
   ['exec', 'wrangler', 'r2', 'bucket', 'create', settings.bucketName],
   `R2 bucket ${settings.bucketName}`,
 )
-ensureResource(
-  ['exec', 'wrangler', 'queues', 'info', settings.queueName],
-  ['exec', 'wrangler', 'queues', 'create', settings.queueName],
-  `Queue ${settings.queueName}`,
-)
-
 run('node', ['scripts/prepare-deployment-config.mjs'], {
   REALMROOT_WORKER_NAME: settings.workerName,
   REALMROOT_D1_DATABASE: settings.databaseName,
   REALMROOT_D1_DATABASE_ID: database.uuid,
   REALMROOT_R2_BUCKET: settings.bucketName,
-  REALMROOT_EMAIL_QUEUE: settings.queueName,
-  REALMROOT_EMAIL_FROM: settings.emailFrom,
-  REALMROOT_EMAIL_FROM_NAME: settings.emailFromName,
 })
 run('pnpm', ['run', 'deploy:check', '--', 'wrangler.deployment.toml'])
 
@@ -111,7 +98,6 @@ if (process.env.GITHUB_STEP_SUMMARY) {
       `- Worker: \`${settings.workerName}\``,
       `- D1: \`${settings.databaseName}\``,
       `- R2: \`${settings.bucketName}\``,
-      `- Queue: \`${settings.queueName}\``,
       '',
     ].join('\n'),
   )

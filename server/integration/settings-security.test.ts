@@ -1,4 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
+import { user } from '@server/db/schema'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createHarness, createUser, type Harness, signIn, signInAdmin } from './harness'
 
@@ -98,6 +100,51 @@ describe('management settings over real D1', () => {
     expect(response.status).toBe(400)
   })
 
+  it('persists General Realm identity through real SQL [spec: admin-console/admin-general-settings]', async () => {
+    const cookie = await signInAdmin(harness)
+    const current = await harness.request('/api/realm', { headers: { cookie } })
+    const update = await harness.request('/api/realm', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie, 'If-Match': current.headers.get('ETag')! },
+      body: JSON.stringify({ name: 'Acme Identity' }),
+    })
+    expect(update.status, await update.clone().text()).toBe(200)
+    const read = await harness.request('/api/realm', { headers: { cookie } })
+    await expect(read.json()).resolves.toMatchObject({
+      id: 'realm',
+      name: 'Acme Identity',
+      issuer: 'http://localhost/api/auth',
+    })
+    const configz = await harness.request('/api/configz')
+    await expect(configz.json()).resolves.toMatchObject({ copy: { productName: 'Acme Identity' } })
+  })
+
+  it('persists Email delivery through real SQL [spec: admin-console/admin-email-delivery-settings]', async () => {
+    const cookie = await signInAdmin(harness)
+    const current = await harness.request('/api/email-delivery-configuration', { headers: { cookie } })
+    const update = await harness.request('/api/email-delivery-configuration', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', cookie, 'If-Match': current.headers.get('ETag')! },
+      body: JSON.stringify({
+        provider: 'cloudflare_email',
+        enabled: true,
+        fromEmail: 'auth@example.com',
+        fromName: 'Acme Identity',
+        replyToEmail: 'support@example.com',
+      }),
+    })
+    expect(update.status, await update.clone().text()).toBe(200)
+    const read = await harness.request('/api/email-delivery-configuration', { headers: { cookie } })
+    await expect(read.json()).resolves.toMatchObject({
+      enabled: true,
+      fromEmail: 'auth@example.com',
+      fromName: 'Acme Identity',
+      replyToEmail: 'support@example.com',
+      bindingAvailable: true,
+      source: 'database',
+    })
+  })
+
   it('exposes the readiness summary built from real SQL', async () => {
     const cookie = await signInAdmin(harness)
     const response = await harness.request('/api/readiness', { headers: { cookie } })
@@ -118,6 +165,9 @@ describe('security policy and per-user security over real D1', () => {
 
   it('reads and updates the security policy through real SQL', async () => {
     const cookie = await signInAdmin(harness)
+    const profile = await harness.request('/api/account/profile', { headers: { cookie } })
+    const adminUserId = ((await profile.json()) as { user: { id: string } }).user.id
+    await harness.db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, adminUserId))
 
     const read = await harness.request('/api/security/policy', { headers: { cookie } })
     expect(read.status).toBe(200)

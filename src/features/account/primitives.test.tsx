@@ -36,7 +36,7 @@ describe('presentational primitives', () => {
         value="value text"
       />,
     )
-    expect(screen.getByRole('heading', { name: 'Setting' })).toBeTruthy()
+    expect(screen.getByText('Setting').tagName).toBe('STRONG')
     expect(screen.getByText('value text')).toBeTruthy()
     expect(screen.getByText('status text')).toBeTruthy()
   })
@@ -133,6 +133,19 @@ describe('DestructiveConfirmationDialog', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onConfirm).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('closes from the explicit cancel action', () => {
+    const onClose = vi.fn()
+    render(
+      <DestructiveConfirmationDialog
+        confirmation={{ title: 'Remove', description: 'desc', actionLabel: 'Remove', onConfirm: vi.fn() }}
+        onClose={onClose}
+      />,
+    )
+    expect(screen.getByRole('alertdialog')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onClose).toHaveBeenCalledOnce()
   })
 })

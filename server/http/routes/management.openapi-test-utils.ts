@@ -37,7 +37,7 @@ export function createAuthMock() {
       requestPasswordReset: vi.fn().mockResolvedValue({ status: true }),
       sendVerificationEmail: vi.fn().mockResolvedValue({ status: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
-      changePassword: vi.fn().mockResolvedValue({ status: true }),
+      changePassword: vi.fn().mockResolvedValue(Response.json({ status: true })),
     },
     handler: vi.fn(),
   }
@@ -133,6 +133,7 @@ export function openApiOperationObjects() {
           requestBody: resolvedOperation.requestBody,
           responses: resolvedOperation.responses,
           security: resolvedOperation.security,
+          requiredAgentCapability: resolvedOperation['x-required-agent-capability'],
           jsonResponseSchemas: Object.values(resolvedOperation.responses)
             .map((response) => openApiJsonResponseSchema(response))
             .filter((schema) => schema !== null),
@@ -160,6 +161,9 @@ export function toManagementOperationKey(route: HonoRoute) {
   if (
     route.path === '/api/agent' ||
     route.path === '/api/agent/enrollments' ||
+    route.path.startsWith('/api/agent/enrollments/:') ||
+    route.path === '/api/agent/installation-enrollments' ||
+    route.path.startsWith('/api/agent/installation-enrollments/:') ||
     route.path === '/api/agent/api-resources' ||
     route.path === '/api/agent/access-grants' ||
     route.path.startsWith('/api/agent/access-grants/:') ||
@@ -171,15 +175,23 @@ export function toManagementOperationKey(route: HonoRoute) {
   }
   const tenantPaths = [
     '/api/applications',
+    '/api/application-authorizations',
     '/api/api-resources',
     '/api/agents',
+    '/api/agent-access-requests',
+    '/api/agent-access-grants',
     '/api/audit-events',
     '/api/organizations',
     '/api/roles',
+    '/api/role-assignments',
     '/api/users',
     '/api/security',
     '/api/sign-in-settings',
     '/api/branding-settings',
+    '/api/organization-creation-policy',
+    '/api/developer-console-access-policy',
+    '/api/realm',
+    '/api/email-delivery-configuration',
     '/api/account-center-settings',
     '/api/branding',
     '/api/readiness',
@@ -346,7 +358,9 @@ export const operationsWithoutRequestBody = new Set([
   'POST /applications/{param}/client-secrets',
   'POST /users/{param}/password-reset-requests',
   'POST /webhooks/endpoints/{param}/secrets',
-  'POST /webhooks/requests/{param}/retries',
+  'POST /webhooks/requests/{param}/attempts',
+  'PUT /application-authorizations/{param}/revocation',
+  'PUT /role-assignments/{param}/revocation',
   'POST /agent/access-grants/{param}/tokens',
 ])
 
@@ -364,6 +378,7 @@ export interface OpenApiOperation {
   tags?: string[]
   'x-cli-hidden'?: boolean
   'x-cli-name'?: string
+  'x-required-agent-capability'?: string
 }
 
 export interface OpenApiParameter {

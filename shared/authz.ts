@@ -1,6 +1,6 @@
 export const resourceAccess = {
   applications: {
-    routePrefixes: ['applications'],
+    routePrefixes: ['applications', 'application-authorizations'],
     capabilities: { read: 'applications:read', write: 'applications:write' },
   },
   users: {
@@ -12,7 +12,7 @@ export const resourceAccess = {
     capabilities: { read: 'organizations:read', write: 'organizations:write' },
   },
   roles: {
-    routePrefixes: ['roles'],
+    routePrefixes: ['roles', 'role-assignments'],
     capabilities: { read: 'roles:read', write: 'roles:write' },
   },
   apiResources: {
@@ -24,7 +24,16 @@ export const resourceAccess = {
     capabilities: { read: 'connectors:read', write: 'connectors:write' },
   },
   settings: {
-    routePrefixes: ['sign-in-settings', 'branding-settings', 'account-center-settings', 'branding'],
+    routePrefixes: [
+      'sign-in-settings',
+      'branding-settings',
+      'account-center-settings',
+      'organization-creation-policy',
+      'developer-console-access-policy',
+      'email-delivery-configuration',
+      'realm',
+      'branding',
+    ],
     capabilities: { read: 'settings:read', write: 'settings:write' },
   },
   security: {
@@ -36,7 +45,7 @@ export const resourceAccess = {
     capabilities: { read: 'webhooks:read', write: 'webhooks:write' },
   },
   agents: {
-    routePrefixes: ['agents'],
+    routePrefixes: ['agents', 'agent-access-requests', 'agent-access-grants'],
     capabilities: { read: 'agents:read', write: 'agents:write' },
   },
   auditEvents: {

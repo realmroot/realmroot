@@ -34,9 +34,5 @@ database_name = "realmroot-db-e2e"
 database_id = "00000000-0000-0000-0000-0000000000e2"
 migrations_dir = "../migrations"
 
-[[queues.producers]]
-binding = "EMAIL_QUEUE"
-queue = "realmroot-email-e2e"
-
 [observability]
 enabled = false

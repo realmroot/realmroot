@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   server: {
+    allowedHosts: ['local.realmroot.dev'],
     port: 4179,
   },
 }))

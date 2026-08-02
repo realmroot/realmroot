@@ -1,61 +1,105 @@
-import { useEffect } from 'react'
+import { CircleAlert, CircleCheck } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AuthLayout } from '@/components/layout/auth-layout'
+import { LinkButton } from '@/components/link-button'
+import { Status } from '@/components/ui/status'
+import { useConfigz } from '@/features/auth/hooks'
+import { LoadingMessage } from '@/features/auth/pages/controls'
 import { tt } from '@/lib/i18n'
 
 const oidcStateStorageKey = 'realmroot.oidc.state'
 const oidcVerifierStorageKey = 'realmroot.oidc.verifier'
 
-export function OidcStartRoute({
-  startAuthorization = () => startOidcAuthorization((url) => window.location.assign(url)),
-}: {
-  startAuthorization?: () => Promise<void>
-}) {
+export function OidcStartRoute({ startAuthorization }: { startAuthorization?: () => Promise<void> }) {
+  const { data: config } = useConfigz()
+  const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    void startAuthorization()
+    const start = startAuthorization ?? (() => startOidcAuthorization((url) => window.location.assign(url)))
+    void start().catch((startError: unknown) => {
+      setError(startError instanceof Error ? startError.message : tt('Unable to start client sign-in.'))
+    })
   }, [startAuthorization])
   return (
-    <main className="shell">
-      <section className="hero">
-        <p className="eyebrow">{tt('OIDC client')}</p>
-        <h1>{tt('Starting client sign-in')}</h1>
-        <p className="intro">{tt('Opening the authorization request for the configured callback.')}</p>
-      </section>
-    </main>
+    <AuthLayout
+      backHref={error ? '/auth/sign-in' : undefined}
+      config={config}
+      eyebrow="OIDC client"
+      icon={error ? <CircleAlert aria-hidden="true" size={28} /> : undefined}
+      layout="focused"
+      title={error ? tt('Client sign-in could not start.') : tt('Starting client sign-in')}
+      description={
+        error
+          ? tt('Review the error below, then return to sign in.')
+          : tt('Opening the authorization request for the configured callback.')
+      }
+      variant={error ? 'message' : 'form'}
+    >
+      {error ? <Status tone="error">{error}</Status> : <LoadingMessage label={tt('Opening authorization')} />}
+    </AuthLayout>
   )
 }
 
 export function OidcCallbackRoute() {
+  const { data: config } = useConfigz()
+  const [callback] = useState(readOidcCallback)
+  const { error: callbackError, valid } = callback
+  useEffect(() => {
+    if (!valid) return
+    window.sessionStorage.removeItem(oidcStateStorageKey)
+    window.sessionStorage.removeItem(oidcVerifierStorageKey)
+  }, [valid])
+  return (
+    <AuthLayout
+      backHref={valid ? undefined : '/auth/sign-in'}
+      config={config}
+      eyebrow="OIDC callback"
+      icon={valid ? <CircleCheck aria-hidden="true" size={28} /> : <CircleAlert aria-hidden="true" size={28} />}
+      layout="focused"
+      title={valid ? tt('Authorization received.') : tt('Authorization could not continue.')}
+      description={
+        valid
+          ? tt('The callback state is valid and the authorization response was received.')
+          : tt('Review the error below, then return to sign in.')
+      }
+      variant={valid ? 'form' : 'message'}
+    >
+      {valid ? (
+        <>
+          <Status tone="success">{tt('Authorization code received securely.')}</Status>
+          <LinkButton href="/account">{tt('Open Account Center')}</LinkButton>
+        </>
+      ) : (
+        <Status tone="error">{callbackError}</Status>
+      )}
+    </AuthLayout>
+  )
+}
+
+function readOidcCallback() {
   const params = new URLSearchParams(window.location.search)
   const state = params.get('state')
   const expectedState = window.sessionStorage.getItem(oidcStateStorageKey)
   const error = params.get('error')
   const code = params.get('code')
-  const valid = !error && code && state && expectedState && state === expectedState
-  return (
-    <main className="shell">
-      <section className="hero">
-        <p className="eyebrow">{tt('OIDC callback')}</p>
-        <h1>{tt('Client callback')}</h1>
-        {valid ? (
-          <>
-            <p className="intro">{tt('Authorization response validated for this client integration.')}</p>
-            <code>{params.toString()}</code>
-          </>
-        ) : (
-          <p className="intro">{tt('Authorization response is missing a valid code and state.')}</p>
-        )}
-      </section>
-    </main>
-  )
+  const valid = Boolean(!error && code && state && expectedState && state === expectedState)
+  return {
+    valid,
+    error: error
+      ? (params.get('error_description') ?? error)
+      : tt('Authorization response is missing a valid code and state.'),
+  }
 }
 
 export async function startOidcAuthorization(redirect: (url: URL) => void) {
   const currentUrl = new URL(window.location.href)
+  const clientId = currentUrl.searchParams.get('client_id')
+  if (!clientId) throw new Error(tt('A client ID is required to start OIDC sign-in.'))
   const state = randomUrlToken()
   const verifier = randomUrlToken()
   const authorizationUrl = new URL('/api/auth/oauth2/authorize', window.location.origin)
   window.sessionStorage.setItem(oidcStateStorageKey, state)
   window.sessionStorage.setItem(oidcVerifierStorageKey, verifier)
-  authorizationUrl.searchParams.set('client_id', currentUrl.searchParams.get('client_id') ?? 'client-1')
+  authorizationUrl.searchParams.set('client_id', clientId)
   authorizationUrl.searchParams.set(
     'redirect_uri',
     currentUrl.searchParams.get('redirect_uri') ?? `${window.location.origin}/oidc/callback`,

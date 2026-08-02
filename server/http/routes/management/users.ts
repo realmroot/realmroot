@@ -1,5 +1,6 @@
 import { badRequest } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
+import { publishWebhookEvent } from '@server/usecases/webhooks'
 import { listManagementUsersResponseSchema } from '@shared/api/management'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import {
@@ -13,6 +14,11 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getPrincipal, isAutomationPrincipal } from '../../middleware/authn'
+import {
+  requireConsoleUserAccess,
+  requireRealmConsoleAccess,
+  resolveOrganizationInventoryScope,
+} from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
 import type { ManagementAuthApi } from '../auth-api'
 import { toBoundaryError } from '../auth-api'
@@ -28,9 +34,11 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   app.get('/', async (c) => {
     const users = getDeps(c).users
     const query = readQuery(c, adminUserListQuerySchema)
+    const organizationIds = resolveOrganizationInventoryScope(c, query.organizationId)
 
-    if (isAutomationPrincipal(c)) {
-      const page = await users.listManagedUsers(query)
+    if (isAutomationPrincipal(c) || organizationIds) {
+      const userIds = organizationIds ? await getDeps(c).authorization.listMemberUserIds(organizationIds) : undefined
+      const page = await users.listManagedUsers(query, userIds)
       return c.json(
         listManagementUsersResponseSchema.parse({
           users: page.items,
@@ -78,7 +86,9 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     }
 
     if (isAutomationPrincipal(c)) {
-      return c.json({ user: await users.createManagedUser(body) }, 201)
+      const user = await users.createManagedUser(body)
+      await publishWebhookEvent(getDeps(c), 'user.created', { user: managementUserWebhookData(user) })
+      return c.json({ user }, 201)
     }
 
     try {
@@ -123,7 +133,10 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
 
   app.post('/password-reset-requests', requestPasswordReset)
 
-  app.get('/:id', async (c) => c.json({ user: await getDeps(c).users.getUser(c.req.param('id')) }))
+  app.get('/:id', async (c) => {
+    await requireConsoleUserAccess(c, c.req.param('id'))
+    return c.json({ user: await getDeps(c).users.getUser(c.req.param('id')) })
+  })
 
   app.post('/:id/password-reset-requests', async (c) => {
     const body = await readJson(c, adminPasswordResetSchema.pick({ redirectTo: true }))
@@ -145,11 +158,13 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/linked-accounts', async (c) => {
+    requireRealmConsoleAccess(c)
     const page = await getDeps(c).users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
   })
 
   app.get('/:id/applications', async (c) => {
+    requireRealmConsoleAccess(c)
     const page = await getDeps(c).users.listConsentedApplications(
       c.req.param('id'),
       readQuery(c, paginationQuerySchema),
@@ -157,11 +172,13 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     return c.json({ applications: page.items, pagination: paginationMetadata(page) })
   })
 
-  app.get('/:id/security', async (c) =>
-    c.json({ security: await getDeps(c).security.getSecurityState(c.req.param('id')) }),
-  )
+  app.get('/:id/security', async (c) => {
+    requireRealmConsoleAccess(c)
+    return c.json({ security: await getDeps(c).security.getSecurityState(c.req.param('id')) })
+  })
 
   app.get('/:id/passkeys', async (c) => {
+    requireRealmConsoleAccess(c)
     const page = await getDeps(c).security.listPasskeys(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ passkeys: page.items, pagination: paginationMetadata(page) })
   })
@@ -177,7 +194,9 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     await users.assertAdminAvatarReference(body.avatarAssetId)
 
     if (isAutomationPrincipal(c)) {
-      return c.json({ user: await users.updateManagedUser(c.req.param('id'), body) })
+      const user = await users.updateManagedUser(c.req.param('id'), body)
+      await publishWebhookEvent(getDeps(c), 'user.updated', { user: managementUserWebhookData(user) })
+      return c.json({ user })
     }
 
     try {
@@ -240,7 +259,9 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
       if (actor?.id === userId) {
         throw badRequest('You cannot remove yourself.')
       }
+      const user = await getDeps(c).users.getUser(userId)
       await getDeps(c).users.deleteManagedUser(userId)
+      await publishWebhookEvent(getDeps(c), 'user.deleted', { user: managementUserWebhookData(user) })
       return c.body(null, 204)
     }
 
@@ -252,6 +273,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
   })
 
   app.get('/:id/sessions', async (c) => {
+    requireRealmConsoleAccess(c)
     const page = await getDeps(c).users.listSessions(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ sessions: page.items, pagination: paginationMetadata(page) })
   })
@@ -308,4 +330,12 @@ function toListUsersResponse(response: unknown, page: { limit: number; offset: n
       nextOffset,
     },
   })
+}
+
+function managementUserWebhookData(user: object) {
+  const record = user as Record<string, unknown>
+  const fields = ['id', 'email', 'emailVerified', 'displayName', 'username', 'role', 'createdAt', 'updatedAt']
+  return Object.fromEntries(
+    fields.filter((field) => record[field] !== undefined).map((field) => [field, record[field]]),
+  )
 }

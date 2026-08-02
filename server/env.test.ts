@@ -8,19 +8,22 @@ describe('validateEnv', () => {
     )
   })
 
-  it('fails fast for each missing Cloudflare deployment binding', () => {
+  it('fails fast for each required Cloudflare deployment binding', () => {
     expect(() => validateEnv(createEnv({ ASSETS: undefined }), 'https://tenant.example.com')).toThrow(
       'ASSETS binding is not configured for this deployment.',
-    )
-    expect(() => validateEnv(createEnv({ EMAIL: undefined }), 'https://tenant.example.com')).toThrow(
-      'EMAIL binding is not configured for this deployment.',
     )
     expect(() => validateEnv(createEnv({ ASSET_BUCKET: undefined }), 'https://tenant.example.com')).toThrow(
       'ASSET_BUCKET binding is not configured for this deployment.',
     )
-    expect(() => validateEnv(createEnv({ EMAIL_QUEUE: undefined }), 'https://tenant.example.com')).toThrow(
-      'EMAIL_QUEUE binding is not configured for this deployment.',
-    )
+  })
+
+  it('allows email binding and sender settings to be completed from Console later', () => {
+    expect(() =>
+      validateEnv(
+        createEnv({ EMAIL: undefined, EMAIL_FROM: undefined, EMAIL_FROM_NAME: undefined }),
+        'https://tenant.example.com',
+      ),
+    ).not.toThrow()
   })
 
   it('normalizes trusted origins and rejects non-origin entries', () => {
@@ -89,7 +92,8 @@ describe('validateEnv', () => {
           enabled: false,
           provider: 'turnstile',
           siteKey: '',
-          secretBinding: '',
+          projectId: null,
+          secretKey: '',
         },
         blocklist: {
           blockSubaddressing: false,
@@ -146,7 +150,8 @@ describe('validateEnv', () => {
         enabled: false,
         provider: 'turnstile',
         siteKey: '',
-        secretBinding: '',
+        projectId: null,
+        secretKey: '',
       },
       blocklist: {
         blockSubaddressing: false,
@@ -176,7 +181,6 @@ function createEnv(overrides: Partial<Env> = {}): Env {
       send: async () => ({ messageId: 'email-1' }),
     },
     ASSET_BUCKET: {},
-    EMAIL_QUEUE: {},
     BETTER_AUTH_SECRET: 'secret',
     CREDENTIAL_ENCRYPTION_KEY: 'credential-encryption-key-for-tests-2026',
     EMAIL_FROM: 'noreply@example.com',

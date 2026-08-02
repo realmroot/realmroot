@@ -1,28 +1,46 @@
 import { agentAuthClient } from '@better-auth/agent-auth/client'
 import { oauthProviderClient } from '@better-auth/oauth-provider/client'
 import { passkeyClient } from '@better-auth/passkey/client'
-import { adminClient, emailOTPClient, usernameClient } from 'better-auth/client/plugins'
+import { organizationAccessControl, organizationRoles } from '@shared/organization-access'
+import { adminClient, emailOTPClient, organizationClient, usernameClient } from 'better-auth/client/plugins'
 import { createAuthClient } from 'better-auth/react'
 import { ApiRequestError } from './api'
 import { i18n } from './i18n'
 
 export const authClient = createAuthClient({
+  fetchOptions: {
+    customFetchImpl: (...args) => fetch(...args),
+  },
   plugins: [
     adminClient(),
     agentAuthClient(),
     emailOTPClient(),
     oauthProviderClient(),
+    organizationClient({
+      ac: organizationAccessControl,
+      roles: organizationRoles,
+      teams: { enabled: false },
+    }),
     passkeyClient(),
     usernameClient(),
   ],
 })
 
 type NativeAuthResult = {
+  redirect?: boolean
   url?: string
   redirectTo?: string
   callbackURL?: string
   twoFactorRedirect?: boolean
   twoFactorMethods?: string[]
+}
+
+export function completeOAuthConsent(input: { accept: boolean; scope?: string; oauthQuery: string }) {
+  return nativeAuth('/oauth2/consent', {
+    accept: input.accept,
+    ...(input.scope ? { scope: input.scope } : {}),
+    oauth_query: input.oauthQuery,
+  })
 }
 
 export function signInWithPassword(input: {

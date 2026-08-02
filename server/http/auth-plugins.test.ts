@@ -71,9 +71,6 @@ describe('auth.test 2', () => {
       teams: {
         enabled: false,
       },
-      dynamicAccessControl: {
-        enabled: true,
-      },
     })
   })
 
@@ -225,7 +222,8 @@ function createSecurityPolicy(overrides: Partial<SecurityPolicyInput> = {}) {
       enabled: false,
       provider: 'turnstile',
       siteKey: '',
-      secretBinding: '',
+      projectId: null,
+      secretKey: '',
       ...overrides.captcha,
     },
     blocklist: {
@@ -318,7 +316,8 @@ interface SecurityPolicyInput {
     enabled: boolean
     provider: 'turnstile'
     siteKey: string
-    secretBinding: string
+    projectId: string | null
+    secretKey: string
   }
   blocklist: {
     blockSubaddressing: boolean

@@ -16,9 +16,33 @@ import type {
   ConsentRecord,
 } from '@server/usecases/ports'
 import { type ApplicationResponse, deviceCodeGrantType } from '@shared/api/applications'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 describe('service.test 1', () => {
+  it('requires an explicitly selected owner Organization to be active', async () => {
+    const repository = new InMemoryApplicationRepository()
+    const findOrganization = vi.fn().mockResolvedValue(null)
+    const deps = { applications: repository, authorization: { findOrganization } } as unknown as Deps
+    const input = {
+      name: 'Organization App',
+      clientType: 'public_spa' as const,
+      redirectUris: ['https://spa.example.com/callback'],
+      ownerOrganizationId: 'org-1',
+    }
+
+    await expect(createApplication(deps, 'https://auth.example.com', input, 'admin-1')).rejects.toMatchObject({
+      status: 404,
+    })
+    findOrganization.mockResolvedValue({ id: 'org-1', disabled: true })
+    await expect(createApplication(deps, 'https://auth.example.com', input, 'admin-1')).rejects.toMatchObject({
+      status: 400,
+    })
+    findOrganization.mockResolvedValue({ id: 'org-1', disabled: false })
+    const created = await createApplication(deps, 'https://auth.example.com', input, 'admin-1')
+    await expect(
+      updateApplication(deps, 'https://auth.example.com', created.id, { ownerOrganizationId: 'org-1' }),
+    ).resolves.toMatchObject({ ownerOrganizationId: 'org-1' })
+  })
   it('creates, lists, updates, inspects, and deletes confidential clients with one-time secrets', async () => {
     const repository = new InMemoryApplicationRepository()
     const deps = { applications: repository } as unknown as Deps
@@ -337,6 +361,7 @@ class InMemoryApplicationRepository implements ApplicationRepository {
   private applications = new Map<string, ApplicationAggregate>()
   private secrets = new Map<string, ClientSecretRecord[]>()
   private consents = new Map<string, ConsentRecord>()
+  private authorizationRevocations = new Map<string, Date>()
 
   async create(input: {
     application: Omit<ApplicationAggregate, 'createdAt' | 'updatedAt'>
@@ -417,6 +442,58 @@ class InMemoryApplicationRepository implements ApplicationRepository {
 
   async findConsent(applicationId: string, userId: string) {
     return this.consents.get(consentKey(applicationId, userId)) ?? null
+  }
+
+  async listAuthorizations(query: {
+    applicationId?: string
+    limit: number
+    offset: number
+    status?: 'active' | 'expired' | 'revoked'
+  }) {
+    const authorizations = [...this.consents.entries()]
+      .filter(([key]) => !query.applicationId || key.startsWith(`${query.applicationId}:`))
+      .map(([key, consent]) => ({
+        ...consent,
+        applicationId: key.slice(0, key.indexOf(':')),
+        userId: key.slice(key.indexOf(':') + 1),
+        userDisplayName: 'Test user',
+        userEmail: 'user@example.com',
+        organizationId: null,
+        organizationName: null,
+        permissions: [],
+        expiresAt: null,
+        revokedAt: this.authorizationRevocations.get(consent.id) ?? null,
+      }))
+    return {
+      items: authorizations.slice(query.offset, query.offset + query.limit),
+      pagination: toPaginationMetadata(query, authorizations.length),
+    }
+  }
+
+  async findAuthorization(authorizationId: string) {
+    const entry = [...this.consents.entries()].find(([, consent]) => consent.id === authorizationId)
+    if (!entry) return null
+    const [key, consent] = entry
+    const applicationId = key.slice(0, key.indexOf(':'))
+    return {
+      ...consent,
+      applicationId,
+      userId: key.slice(applicationId.length + 1),
+      userDisplayName: 'Test user',
+      userEmail: 'user@example.com',
+      organizationId: null,
+      organizationName: null,
+      permissions: [],
+      expiresAt: null,
+      revokedAt: this.authorizationRevocations.get(consent.id) ?? null,
+    }
+  }
+
+  async revokeAuthorization(authorizationId: string) {
+    const entry = [...this.consents.entries()].find(([, consent]) => consent.id === authorizationId)
+    if (!entry) return false
+    this.authorizationRevocations.set(authorizationId, new Date('2026-05-18T16:00:00.000Z'))
+    return true
   }
 
   async revokeConsent(consentId: string, userId: string) {

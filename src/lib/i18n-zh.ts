@@ -1,3 +1,4 @@
+import { zhAccountTranslations } from './i18n-zh-account'
 import { zhFlatTranslationsExtraA } from './i18n-zh-extra-a'
 import { zhFlatTranslationsExtraB } from './i18n-zh-extra-b'
 
@@ -171,7 +172,7 @@ export const zhFlatTranslations: Record<string, string> = {
   'No passkeys have been added yet.': '尚未添加通行密钥。',
   'No roles yet': '暂无角色',
   'No sign-in connectors are available.': '暂无可用登录连接器。',
-  'No sign-in methods are enabled. Contact the workspace administrator.': '未启用登录方式。请联系工作区管理员。',
+  'No sign-in methods are enabled. Contact the Realm operator.': '未启用登录方式。请联系 Realm 管理员。',
   'No users yet': '暂无用户',
   Off: '关闭',
   'One-time code': '一次性验证码',
@@ -218,7 +219,7 @@ export const zhFlatTranslations: Record<string, string> = {
   'Save OIDC claims': '保存 OIDC 声明',
   'Save profile': '保存资料',
   Saving: '正在保存',
-  'Saving...': '正在保存...',
+  'Saving…': '正在保存…',
   Scope: '范围',
   Scopes: '范围',
   Search: '搜索',
@@ -335,4 +336,4 @@ export const zhFlatTranslations: Record<string, string> = {
   'Public keys must be a valid JWK or JWK Set in JSON format.': '公钥必须是有效的 JWK 或 JWK Set（JSON 格式）。',
 }
 
-Object.assign(zhFlatTranslations, zhFlatTranslationsExtraA, zhFlatTranslationsExtraB)
+Object.assign(zhFlatTranslations, zhFlatTranslationsExtraA, zhFlatTranslationsExtraB, zhAccountTranslations)

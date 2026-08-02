@@ -29,7 +29,11 @@ export function BuiltinProviderForm({
     <form className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
       <div className="min-h-0 flex-1 overflow-y-auto px-8">
         <div className="grid gap-4">
-          {error ? <div className="text-sm text-destructive">{error}</div> : null}
+          {error ? (
+            <div className="text-sm text-destructive" role="alert">
+              {error}
+            </div>
+          ) : null}
           {children}
         </div>
       </div>
@@ -40,7 +44,7 @@ export function BuiltinProviderForm({
           </Button>
         </SheetClose>
         <Button disabled={!hasChanges || pending} type="submit">
-          {pending ? tt('Saving...') : tt('Save')}
+          {pending ? tt('Saving…') : tt('Save')}
         </Button>
       </SheetFooter>
     </form>
@@ -69,18 +73,26 @@ export function BuiltInProviderSwitch({
   )
 }
 
-export function NumberField({
+export function NumberSelectField({
   label,
   onChange,
+  options,
   value,
 }: {
   label: string
   onChange: (value: number) => void
+  options: Array<{ label: string; value: number }>
   value: number
 }) {
   return (
     <Field label={tt(label)}>
-      <TextInput onChange={(event) => onChange(Number(event.target.value))} type="number" value={String(value)} />
+      <SelectInput onChange={(event) => onChange(Number(event.target.value))} value={String(value)}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {tt(option.label)}
+          </option>
+        ))}
+      </SelectInput>
     </Field>
   )
 }

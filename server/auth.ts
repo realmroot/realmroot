@@ -7,12 +7,16 @@ import { createDrizzleAgentTokenRepository } from '@server/adapters/repos/agent-
 import { createDrizzleAgentRepository } from '@server/adapters/repos/agents'
 import { createDrizzleApplicationRepository } from '@server/adapters/repos/applications'
 import { createDrizzleAuthorizationRepository } from '@server/adapters/repos/authorization'
+import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { executeReadOnlyCapability } from '@server/usecases/agents'
+import { assertApplicationAudience } from '@server/usecases/applications'
 import type { AuthConnectorConfig } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
+import { mayCreateOrganization } from '@server/usecases/developer-access'
 import type { ApplicationRepository } from '@server/usecases/ports'
 import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
 import {
   admin,
   deviceAuthorization,
@@ -23,7 +27,6 @@ import {
   siwe,
   twoFactor,
 } from 'better-auth/plugins'
-import { createAccessControl } from 'better-auth/plugins/access'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { organization } from 'better-auth/plugins/organization'
 import { username } from 'better-auth/plugins/username'
@@ -52,39 +55,10 @@ import { hashPassword, verifyPassword } from './domain/password'
 export { buildOAuthAccessTokenClaims, buildOAuthIdTokenClaims, buildOAuthUserInfoClaims } from './auth-helpers'
 
 import { createUserRepository } from '@server/adapters/repos/users'
+import type { WebhookEvent } from '@shared/api/webhooks'
+import { organizationAccessControl, organizationRoles } from '@shared/organization-access'
 
 const oauthScopes = ['openid', 'profile', 'email', 'offline_access']
-const organizationAccessControl = createAccessControl({
-  organization: ['create', 'read', 'update', 'delete'],
-  member: ['create', 'read', 'update', 'delete'],
-  invitation: ['create', 'read', 'cancel'],
-  role: ['create', 'read', 'update', 'delete', 'assign'],
-  apiResource: ['create', 'read', 'update', 'delete'],
-} as const)
-
-const organizationRoles = {
-  owner: organizationAccessControl.newRole({
-    organization: ['create', 'read', 'update', 'delete'],
-    member: ['create', 'read', 'update', 'delete'],
-    invitation: ['create', 'read', 'cancel'],
-    role: ['create', 'read', 'update', 'delete', 'assign'],
-    apiResource: ['create', 'read', 'update', 'delete'],
-  }),
-  admin: organizationAccessControl.newRole({
-    organization: ['read', 'update'],
-    member: ['create', 'read', 'update', 'delete'],
-    invitation: ['create', 'read', 'cancel'],
-    role: ['read', 'assign'],
-    apiResource: ['read'],
-  }),
-  member: organizationAccessControl.newRole({
-    organization: ['read'],
-    member: ['read'],
-    invitation: ['read'],
-    role: ['read'],
-    apiResource: ['read'],
-  }),
-}
 
 export function createAuth(
   db: Database,
@@ -103,9 +77,11 @@ export function createAuth(
     builtInProviders?: ManagementSignInSettingsResponse['builtInProviders']
     twoFactorEmailOtpEnabled?: boolean
     validAudiences?: string[]
+    publishWebhookEvent?: (event: WebhookEvent, data: Record<string, unknown>) => Promise<void>
   } = {},
 ) {
   const applications = createDrizzleApplicationRepository(db)
+  const configz = createDrizzleConfigzRepository(db)
   // The better-auth boundary builds its own repos; only the slices the token-claim
   // and agent-capability usecases read are populated here.
   const deps = {
@@ -137,6 +113,95 @@ export function createAuth(
           ]
         : []),
     ],
+    databaseHooks: options.publishWebhookEvent
+      ? {
+          user: {
+            create: {
+              after: async (user) =>
+                options.publishWebhookEvent?.('user.created', {
+                  user: webhookRecord(user, [
+                    'id',
+                    'email',
+                    'emailVerified',
+                    'name',
+                    'username',
+                    'role',
+                    'createdAt',
+                    'updatedAt',
+                  ]),
+                }),
+            },
+            update: {
+              after: async (user) =>
+                options.publishWebhookEvent?.('user.updated', {
+                  user: webhookRecord(user, [
+                    'id',
+                    'email',
+                    'emailVerified',
+                    'name',
+                    'username',
+                    'role',
+                    'createdAt',
+                    'updatedAt',
+                  ]),
+                }),
+            },
+            delete: {
+              after: async (user) =>
+                options.publishWebhookEvent?.('user.deleted', {
+                  user: webhookRecord(user, ['id', 'email', 'name', 'username', 'role', 'createdAt', 'updatedAt']),
+                }),
+            },
+          },
+          session: {
+            create: {
+              after: async (session) =>
+                options.publishWebhookEvent?.('session.created', {
+                  session: webhookRecord(session, [
+                    'id',
+                    'userId',
+                    'expiresAt',
+                    'ipAddress',
+                    'userAgent',
+                    'createdAt',
+                    'updatedAt',
+                  ]),
+                }),
+            },
+            delete: {
+              after: async (session) =>
+                options.publishWebhookEvent?.('session.revoked', {
+                  session: webhookRecord(session, [
+                    'id',
+                    'userId',
+                    'expiresAt',
+                    'ipAddress',
+                    'userAgent',
+                    'createdAt',
+                    'updatedAt',
+                  ]),
+                }),
+            },
+          },
+        }
+      : undefined,
+    hooks: {
+      before: createAuthMiddleware(async (context) => {
+        if (context.path !== '/oauth2/authorize') return
+        const clientId = readString(context.query as Record<string, unknown> | undefined, 'client_id')
+        if (!clientId) return
+        const session = await getSessionFromCtx(context)
+        if (!session) return
+        const application = await applications.findByClientId(clientId)
+        if (!application || application.disabled) return
+        try {
+          await assertApplicationAudience(deps, application, session.user.id)
+        } catch (error) {
+          if (error instanceof Error) throw new APIError('FORBIDDEN', { message: error.message })
+          throw error
+        }
+      }),
+    },
     trustedOrigins,
     socialProviders: connectors.socialProviders,
     account: {
@@ -353,11 +418,14 @@ export function createAuth(
         usernameValidator: (value) => /^[a-zA-Z0-9_.-]+$/.test(value),
       }),
       organization({
+        allowUserToCreateOrganization: async (user) =>
+          mayCreateOrganization(await configz.getOrganizationCreationPolicy(), {
+            id: user.id,
+            emailVerified: user.emailVerified,
+            role: typeof user.role === 'string' ? user.role : null,
+          }),
         teams: {
           enabled: false,
-        },
-        dynamicAccessControl: {
-          enabled: true,
         },
         ac: organizationAccessControl,
         roles: organizationRoles,
@@ -367,7 +435,7 @@ export function createAuth(
             template: {
               type: 'invitation',
               inviterName: inviter.user.name,
-              url: `${baseURL}/organization/accept-invitation?id=${id}`,
+              url: `${baseURL}/account/organizations?invitation=${encodeURIComponent(id)}`,
             },
           })
         },
@@ -397,6 +465,12 @@ export function createAuth(
       }),
     ],
   })
+}
+
+function webhookRecord(record: Record<string, unknown>, fields: string[]) {
+  return Object.fromEntries(
+    fields.filter((field) => record[field] !== undefined).map((field) => [field, record[field]]),
+  )
 }
 
 export type Auth = ReturnType<typeof createAuth>

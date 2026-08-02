@@ -30,7 +30,11 @@ export function ApplicationBrandingCard({
         <SettingRow label={tt('Display name')} value={application.name} />
         <SettingRow label={tt('Homepage URL')} value={application.homepageUrl ?? 'Not set'} />
         <MutationError error={error} />
-        {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
+        {errorMessage ? (
+          <p className="text-sm text-destructive" role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   )

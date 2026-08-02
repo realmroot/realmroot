@@ -1,19 +1,26 @@
+import type {
+  AccountProfileResponse,
+  AccountSecurityResponse,
+  DeveloperConsoleAccessResponse,
+} from '@shared/api/account'
 import { redirect } from '@tanstack/react-router'
 import { apiClient } from '@/lib/api'
 
 const returnTargetPrefix = 'realmroot:return-target:'
 
-export type RouteAccountProfile = {
-  user?: {
-    role?: string | null
-  }
-}
+export type RouteAccountProfile = AccountProfileResponse
 
 export async function loadAccountProfile() {
   const response = await apiClient.api.account.profile.$get()
   if (response.status === 401) return null
   if (!response.ok) throw new Error(await readErrorMessage(response))
   return (await response.json()) as RouteAccountProfile
+}
+
+export async function loadDeveloperConsoleAccess() {
+  const response = await apiClient.api.account['developer-console-access'].$get()
+  if (!response.ok) throw new Error(await readErrorMessage(response))
+  return (await response.json()) as DeveloperConsoleAccessResponse
 }
 
 export async function requireAccountProfile(locationHref: string) {
@@ -27,7 +34,17 @@ export async function requireAccountProfile(locationHref: string) {
     }
     throw redirect({ href: `/auth/sign-in?return_to=${encodeURIComponent(locationHref)}` })
   }
+  if (new URL(locationHref, 'http://realmroot.local').pathname !== '/security') {
+    const security = await loadAccountSecurity()
+    if (security.policy.mfa.mode === 'required' && !security.mfa.enabled) throw redirect({ href: '/security' })
+  }
   return profile
+}
+
+async function loadAccountSecurity() {
+  const response = await apiClient.api.account.security.$get()
+  if (!response.ok) throw new Error(await readErrorMessage(response))
+  return ((await response.json()) as AccountSecurityResponse).security
 }
 
 export function takeAccountReturnTarget(returnKey: string | undefined) {

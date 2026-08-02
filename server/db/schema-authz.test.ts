@@ -8,8 +8,6 @@ import {
   agentHost,
   agentHostRelations,
   agentRelations,
-  agentRoleAssignment,
-  agentRoleAssignmentRelations,
   apiResource,
   apiResourceRelations,
   application,
@@ -17,8 +15,6 @@ import {
   applicationClientSecret,
   applicationConsent,
   applicationRelations,
-  applicationRoleAssignment,
-  applicationRoleAssignmentRelations,
   approvalRequest,
   approvalRequestRelations,
   brandingSetting,
@@ -29,21 +25,22 @@ import {
   invitation,
   jwks,
   member,
-  memberRoleAssignment,
-  memberRoleAssignmentRelations,
   oauthAccessToken,
   oauthClient,
   oauthConsent,
   oauthRefreshToken,
   organization,
+  organizationInvitationRelations,
   organizationMemberRelations,
   organizationRelations,
   passkey,
   passkeyRelations,
   role,
+  roleAssignment,
+  roleAssignmentRelations,
+  rolePermission,
+  rolePermissionRelations,
   roleRelations,
-  roleScope,
-  roleScopeRelations,
   session,
   sessionRelations,
   signInExperience,
@@ -52,9 +49,8 @@ import {
   uploadedAsset,
   user,
   userRelations,
-  userRoleAssignment,
-  userRoleAssignmentRelations,
   verification,
+  webhookDeliveryAttempt,
   webhookDeliveryRequest,
   webhookEndpoint,
 } from '@server/db/schema'
@@ -127,18 +123,36 @@ describe('schema.test 2', () => {
     expect(columnNames(deploymentSetting)).toEqual(expect.arrayContaining(['environment', 'base_url', 'issuer_path']))
   })
 
-  it('models webhook endpoint and delivery request persistence explicitly', () => {
+  it('models webhook endpoint, delivery request, and delivery attempt persistence explicitly', () => {
     expect(columnNames(webhookEndpoint)).toEqual(
-      expect.arrayContaining(['url', 'events', 'enabled', 'signing_secret', 'secret_prefix', 'created_by_user_id']),
+      expect.arrayContaining([
+        'url',
+        'events',
+        'enabled',
+        'organization_id',
+        'signing_secret',
+        'secret_prefix',
+        'created_by_user_id',
+      ]),
     )
     expect(indexNames(webhookEndpoint)).toEqual(
-      expect.arrayContaining(['webhookEndpoint_enabled_idx', 'webhookEndpoint_createdByUserId_idx']),
+      expect.arrayContaining([
+        'webhookEndpoint_enabled_idx',
+        'webhookEndpoint_organizationId_idx',
+        'webhookEndpoint_createdByUserId_idx',
+      ]),
     )
     expect(foreignKeyReferences(webhookEndpoint)).toContainEqual({
       columns: ['created_by_user_id'],
       foreignColumns: ['id'],
       foreignTable: 'user',
       onDelete: 'set null',
+    })
+    expect(foreignKeyReferences(webhookEndpoint)).toContainEqual({
+      columns: ['organization_id'],
+      foreignColumns: ['id'],
+      foreignTable: 'organization',
+      onDelete: 'cascade',
     })
 
     expect(columnNames(webhookDeliveryRequest)).toEqual(
@@ -165,6 +179,32 @@ describe('schema.test 2', () => {
       foreignTable: 'webhook_endpoint',
       onDelete: 'cascade',
     })
+
+    expect(columnNames(webhookDeliveryAttempt)).toEqual(
+      expect.arrayContaining([
+        'request_id',
+        'sequence',
+        'status',
+        'http_status',
+        'error',
+        'response_body',
+        'created_at',
+        'completed_at',
+      ]),
+    )
+    expect(indexNames(webhookDeliveryAttempt)).toEqual(
+      expect.arrayContaining([
+        'webhookDeliveryAttempt_requestSequence_uidx',
+        'webhookDeliveryAttempt_requestId_idx',
+        'webhookDeliveryAttempt_createdAt_idx',
+      ]),
+    )
+    expect(foreignKeyReferences(webhookDeliveryAttempt)).toContainEqual({
+      columns: ['request_id'],
+      foreignColumns: ['id'],
+      foreignTable: 'webhook_delivery_request',
+      onDelete: 'cascade',
+    })
   })
 
   it('defines relation graphs for auth, organization, application, and authorization records', () => {
@@ -180,7 +220,6 @@ describe('schema.test 2', () => {
         'oauthConsents',
         'ownedApplications',
         'organizationMemberships',
-        'roleAssignments',
       ]),
     )
     expect(relationKeys(twoFactorRelations)).toEqual(['user'])
@@ -194,40 +233,29 @@ describe('schema.test 2', () => {
     expect(relationKeys(sessionRelations)).toEqual(['user'])
     expect(relationKeys(accountRelations)).toEqual(['user'])
     expect(relationKeys(organizationRelations)).toEqual(
-      expect.arrayContaining(['logoAsset', 'members', 'invitations', 'applications', 'roles']),
+      expect.arrayContaining(['logoAsset', 'members', 'invitations', 'applications']),
     )
-    expect(relationKeys(organizationMemberRelations)).toEqual(
-      expect.arrayContaining(['organization', 'user', 'roleAssignments']),
-    )
+    expect(relationKeys(organizationMemberRelations)).toEqual(expect.arrayContaining(['organization', 'user']))
+    expect(relationKeys(organizationInvitationRelations)).toEqual(['organization', 'inviter'])
     expect(relationKeys(applicationRelations)).toEqual(
       expect.arrayContaining([
         'oauthClient',
-        'ownerUser',
         'ownerOrganization',
         'logoAsset',
         'clientSecrets',
         'consents',
-        'roleAssignments',
+        'audienceOrganizations',
+        'audienceUsers',
       ]),
     )
-    expect(relationKeys(apiResourceRelations)).toEqual(['roles'])
-    expect(relationKeys(roleRelations)).toEqual(
-      expect.arrayContaining([
-        'resource',
-        'organization',
-        'application',
-        'scopes',
-        'userAssignments',
-        'applicationAssignments',
-        'memberAssignments',
-        'agentAssignments',
-      ]),
-    )
-    expect(relationKeys(roleScopeRelations)).toEqual(['role'])
-    expect(relationKeys(agentRoleAssignmentRelations)).toEqual(expect.arrayContaining(['role', 'agentIdentity']))
-    expect(relationKeys(userRoleAssignmentRelations)).toEqual(expect.arrayContaining(['role', 'user']))
-    expect(relationKeys(applicationRoleAssignmentRelations)).toEqual(expect.arrayContaining(['role', 'application']))
-    expect(relationKeys(memberRoleAssignmentRelations)).toEqual(expect.arrayContaining(['role', 'member']))
+    expect(relationKeys(apiResourceRelations)).toEqual([
+      'ownerOrganization',
+      'eligibleOrganizations',
+      'rolePermissions',
+    ])
+    expect(relationKeys(roleRelations)).toEqual(expect.arrayContaining(['permissions', 'assignments']))
+    expect(relationKeys(rolePermissionRelations)).toEqual(['role', 'resource'])
+    expect(relationKeys(roleAssignmentRelations)).toEqual(['role', 'organization', 'assignedBy'])
   })
 
   it('keeps timestamp update hooks executable for mutable records', () => {
@@ -236,7 +264,7 @@ describe('schema.test 2', () => {
       .filter((column) => column.onUpdateFn)
       .map((column) => column.onUpdateFn?.())
 
-    expect(updateValues).toHaveLength(21)
+    expect(updateValues).toHaveLength(22)
     for (const value of updateValues) {
       expect(value).toBeInstanceOf(Date)
     }
@@ -264,12 +292,9 @@ const schemaTables = [
   member,
   invitation,
   apiResource,
-  roleScope,
-  agentRoleAssignment,
+  rolePermission,
+  roleAssignment,
   role,
-  userRoleAssignment,
-  applicationRoleAssignment,
-  memberRoleAssignment,
   application,
   applicationClientSecret,
   applicationClientMetadata,

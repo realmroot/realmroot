@@ -12,6 +12,7 @@ import {
   createConnectorServiceMock,
   createWebhookServiceMock,
   userHeaders,
+  webhookDeliveryAttemptResponse,
   webhookEndpointResponse,
   webhookRequestResponse,
 } from './management.test-utils'
@@ -60,9 +61,15 @@ function spyWebhooks() {
   const getRequest = vi
     .spyOn(webhooksUsecase, 'getWebhookRequest')
     .mockImplementation((_deps, id) => service.getRequest(id))
-  const retryRequest = vi
-    .spyOn(webhooksUsecase, 'retryWebhookRequest')
-    .mockImplementation((_deps, id) => service.retryRequest(id))
+  const listAttempts = vi
+    .spyOn(webhooksUsecase, 'listWebhookDeliveryAttempts')
+    .mockImplementation((_deps, id, page) => service.listAttempts(id, page))
+  const getAttempt = vi
+    .spyOn(webhooksUsecase, 'getWebhookDeliveryAttempt')
+    .mockImplementation((_deps, id, attemptId) => service.getAttempt(id, attemptId))
+  const createAttempt = vi
+    .spyOn(webhooksUsecase, 'createWebhookDeliveryAttempt')
+    .mockImplementation((_deps, id, idempotencyKey) => service.createAttempt(id, idempotencyKey))
   return {
     service,
     listEndpoints,
@@ -73,7 +80,9 @@ function spyWebhooks() {
     rotateSecret,
     listRequests,
     getRequest,
-    retryRequest,
+    listAttempts,
+    getAttempt,
+    createAttempt,
   }
 }
 
@@ -271,6 +280,7 @@ describe('management routes 4', () => {
         url: 'https://events.example.com/realmroot',
         events: ['user.created'],
         enabled: true,
+        organizationId: null,
       }),
     })
     const detail = await app.request('/api/webhooks/endpoints/wh_1', { headers })
@@ -284,7 +294,12 @@ describe('management routes 4', () => {
       headers,
     })
     const requestDetail = await app.request('/api/webhooks/requests/whr_1', { headers })
-    const retried = await app.request('/api/webhooks/requests/whr_1/retries', { method: 'POST', headers })
+    const attempts = await app.request('/api/webhooks/requests/whr_1/attempts', { headers })
+    const attemptDetail = await app.request('/api/webhooks/requests/whr_1/attempts/wha_1', { headers })
+    const createdAttempt = await app.request('/api/webhooks/requests/whr_1/attempts', {
+      method: 'POST',
+      headers: { ...headers, 'Idempotency-Key': 'retry-whr-1' },
+    })
     const deleted = await app.request('/api/webhooks/endpoints/wh_1', { method: 'DELETE', headers })
 
     expect(list.status).toBe(200)
@@ -309,26 +324,47 @@ describe('management routes 4', () => {
       pagination: { limit: 2, offset: 4, total: 1, hasMore: false, nextOffset: null },
     })
     await expect(requestDetail.json()).resolves.toEqual(webhookRequestResponse())
-    expect(retried.status).toBe(202)
-    await expect(retried.json()).resolves.toEqual({ ...webhookRequestResponse(), status: 'pending' })
+    await expect(attempts.json()).resolves.toEqual({
+      attempts: [webhookDeliveryAttemptResponse()],
+      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+    await expect(attemptDetail.json()).resolves.toEqual(webhookDeliveryAttemptResponse())
+    expect(createdAttempt.status).toBe(201)
+    await expect(createdAttempt.json()).resolves.toEqual({
+      ...webhookDeliveryAttemptResponse(),
+      status: 'delivered',
+      sequence: 2,
+      httpStatus: 204,
+      error: null,
+    })
     expect(deleted.status).toBe(204)
 
-    expect(webhooks.listEndpoints).toHaveBeenCalledWith(expect.anything(), {
-      limit: 10,
-      offset: 5,
-      search: 'auth',
-      status: 'enabled',
-    })
+    expect(webhooks.listEndpoints).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        limit: 10,
+        offset: 5,
+        search: 'auth',
+        status: 'enabled',
+      },
+      undefined,
+    )
     expect(webhooks.createEndpoint).toHaveBeenCalledWith(
       expect.anything(),
-      { url: 'https://events.example.com/realmroot', events: ['user.created'], enabled: true },
+      { url: 'https://events.example.com/realmroot', events: ['user.created'], enabled: true, organizationId: null },
       'admin-1',
     )
     expect(webhooks.updateEndpoint).toHaveBeenCalledWith(expect.anything(), 'wh_1', { enabled: false })
     expect(webhooks.rotateSecret).toHaveBeenCalledWith(expect.anything(), 'wh_1')
-    expect(webhooks.listRequests).toHaveBeenCalledWith(expect.anything(), { limit: 2, offset: 4, status: 'failed' })
+    expect(webhooks.listRequests).toHaveBeenCalledWith(
+      expect.anything(),
+      { limit: 2, offset: 4, status: 'failed' },
+      undefined,
+    )
     expect(webhooks.getRequest).toHaveBeenCalledWith(expect.anything(), 'whr_1')
-    expect(webhooks.retryRequest).toHaveBeenCalledWith(expect.anything(), 'whr_1')
+    expect(webhooks.listAttempts).toHaveBeenCalledWith(expect.anything(), 'whr_1', { limit: 50, offset: 0 })
+    expect(webhooks.getAttempt).toHaveBeenCalledWith(expect.anything(), 'whr_1', 'wha_1')
+    expect(webhooks.createAttempt).toHaveBeenCalledWith(expect.anything(), 'whr_1', 'retry-whr-1')
     expect(webhooks.deleteEndpoint).toHaveBeenCalledWith(expect.anything(), 'wh_1')
   })
 
@@ -343,10 +379,16 @@ describe('management routes 4', () => {
       headers: adminHeaders(),
       body: JSON.stringify({ url: 'http://events.example.com/realmroot', events: [] }),
     })
+    const missingIdempotencyKey = await app.request('/api/webhooks/requests/whr_1/attempts', {
+      method: 'POST',
+      headers: adminHeaders(),
+    })
 
     expect(unauthenticated.status).toBe(401)
     expect(nonAdmin.status).toBe(403)
     expect(invalid.status).toBe(400)
+    expect(missingIdempotencyKey.status).toBe(400)
     expect(webhooks.createEndpoint).not.toHaveBeenCalled()
+    expect(webhooks.createAttempt).not.toHaveBeenCalled()
   })
 })

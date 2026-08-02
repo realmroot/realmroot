@@ -1,11 +1,20 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiResourcesPage } from '@/features/console/extracted/api-resources'
-import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
-import { OrganizationTemplatePage } from '@/features/console/extracted/deployment-misc/misc'
 import { OrganizationDetailPage, OrganizationsPage } from '@/features/console/extracted/organizations'
 import { RolesPage } from '@/features/console/extracted/roles'
 import { queryClient } from '@/router'
+import {
+  apiResource,
+  consoleSharedFetch,
+  emptyPagination,
+  jsonResponse,
+  organization,
+  pagination,
+  renderWithQuery,
+  role,
+  user,
+} from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
   disconnect() {}
@@ -21,109 +30,27 @@ afterEach(() => {
   window.history.pushState(null, '', '/')
 })
 
-import {
-  apiResource,
-  consoleSharedFetch,
-  jsonResponse,
-  organization,
-  pagination,
-  renderWithQuery,
-  role,
-  signInSettings,
-  summaryCard,
-} from './console.test-utils'
-
-describe('admin console webhooks-content', () => {
-  it('renders content validation errors without sending invalid links', async () => {
-    const requests: string[] = []
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
-      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
-        requests.push(url)
-        return Promise.resolve(jsonResponse(signInSettings))
-      }
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      return consoleSharedFetch(input, init)
-    })
-
-    renderWithQuery(<ContentSettingsPage />)
-
-    fireEvent.change(await screen.findByLabelText('Privacy URL'), { target: { value: 'http://example.com/privacy' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save content' }))
-
-    expect(await screen.findByText('URL must use https.')).toBeTruthy()
-    expect(requests).toEqual([])
-  })
-
-  it('renders content save errors from the management boundary', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
-      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
-        return Promise.resolve(jsonResponse({ error: { message: 'Content save failed.' } }, 500))
-      }
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      return consoleSharedFetch(input, init)
-    })
-
-    renderWithQuery(<ContentSettingsPage />)
-
-    fireEvent.change(await screen.findByLabelText('Product name'), { target: { value: 'Changed Auth' } })
-    fireEvent.click(await screen.findByRole('button', { name: 'Save content' }))
-
-    expect(await screen.findByText('Content save failed.')).toBeTruthy()
-  })
-
-  it('uses empty content link defaults when optional links are absent', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
-      if (url === '/api/sign-in-settings') {
-        return Promise.resolve(
-          jsonResponse({
-            ...signInSettings,
-            links: { termsUri: null, privacyUri: null, supportEmail: null },
-          }),
-        )
-      }
-      return consoleSharedFetch(input, init)
-    })
-
-    renderWithQuery(<ContentSettingsPage />)
-
-    expect(await screen.findByLabelText('Terms URL')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Privacy URL')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Support email')).toHaveProperty('value', '')
-    fireEvent.change(screen.getByLabelText('Terms URL'), { target: { value: 'https://changed.example.com/terms' } })
-    fireEvent.change(screen.getByLabelText('Privacy URL'), {
-      target: { value: 'https://changed.example.com/privacy' },
-    })
-    fireEvent.change(screen.getByLabelText('Support email'), { target: { value: 'changed@example.com' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
-
-    expect(screen.getByLabelText('Terms URL')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Privacy URL')).toHaveProperty('value', '')
-    expect(screen.getByLabelText('Support email')).toHaveProperty('value', '')
-  })
-
-  it('creates organizations, roles, and API resources from admin dialogs [spec: admin-console/admin-create-organization] [spec: admin-console/admin-create-role] [spec: admin-console/admin-create-api-resource]', async () => {
+describe('admin console authorization creation and Organization detail', () => {
+  it('creates Organizations, global Roles, and Resource servers from secondary dialogs [spec: admin-console/admin-create-organization] [spec: admin-console/admin-create-role] [spec: admin-console/admin-create-api-resource]', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
-      if (url === '/api/organizations' && init?.method === 'POST') {
+      const url = String(input).split('?')[0]
+      if (['/api/organizations', '/api/roles', '/api/api-resources'].includes(url) && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
-        return Promise.resolve(jsonResponse(organization, 201))
-      }
-      if (url === '/api/roles' && init?.method === 'POST') {
-        requests.push({ url, body: JSON.parse(String(init.body)) })
-        return Promise.resolve(jsonResponse(role, 201))
-      }
-      if (url === '/api/api-resources' && init?.method === 'POST') {
-        requests.push({ url, body: JSON.parse(String(init.body)) })
+        if (url === '/api/organizations') return Promise.resolve(jsonResponse(organization, 201))
+        if (url === '/api/roles') return Promise.resolve(jsonResponse(role, 201))
         return Promise.resolve(jsonResponse(apiResource, 201))
       }
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
+      if (url === '/api/organizations/org-1/members') {
+        return Promise.resolve(jsonResponse({ members: [], pagination: emptyPagination }))
+      }
       if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/roles/role-1/permissions') {
+        return Promise.resolve(jsonResponse({ roleId: 'role-1', permissions: [] }))
+      }
       if (url === '/api/api-resources') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
@@ -131,56 +58,43 @@ describe('admin console webhooks-content', () => {
     })
 
     const { unmount } = renderWithQuery(<OrganizationsPage />)
-
-    expect(await screen.findByText('Acme')).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Organization' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Display name' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Logo' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New organization' }))
-    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'northwind' } })
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Northwind' } })
-    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Northwind Traders' } })
+    expect(await screen.findByText('Acme Inc.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Provision organization' }))
+    fireEvent.change(await screen.findByLabelText('Slug'), { target: { value: 'northwind' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Northwind Traders' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(requests).toHaveLength(1))
 
     unmount()
     renderWithQuery(<RolesPage />)
     expect(await screen.findByText('Admin')).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Role' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Scope' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'System' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New role' }))
-    fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'auditor' } })
+    fireEvent.change(await screen.findByLabelText('Key'), { target: { value: 'auditor' } })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Auditor' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Reads audit events' } })
-    fireEvent.change(screen.getByLabelText('API resource'), { target: { value: 'resource-1' } })
+    expect(screen.queryByLabelText('Permissions')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(requests).toHaveLength(2))
 
     unmount()
     renderWithQuery(<ApiResourcesPage />)
     expect(await screen.findByText('Management API')).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Resource' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Resource URL' })).toBeTruthy()
-    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New API resource' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Billing API' } })
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'billing-api' } })
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Billing API' } })
-    fireEvent.change(screen.getByLabelText('Resource URL'), { target: { value: 'https://billing.example.com' } })
+    fireEvent.change(screen.getByLabelText('Protected resource URL'), {
+      target: { value: 'https://billing.example.com' },
+    })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Billing resource' } })
+    expect(screen.getByLabelText('Authorization model')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Access eligibility')).toHaveProperty('value', 'realm')
+    expect(screen.getByRole('switch', { name: 'Available to Agents' }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => {
+    await waitFor(() =>
       expect(requests).toEqual([
-        {
-          url: '/api/organizations',
-          body: { slug: 'northwind', name: 'Northwind', displayName: 'Northwind Traders' },
-        },
-        {
-          url: '/api/roles',
-          body: { key: 'auditor', name: 'Auditor', description: 'Reads audit events', resourceId: 'resource-1' },
-        },
+        { url: '/api/organizations', body: { slug: 'northwind', name: 'Northwind Traders' } },
+        { url: '/api/roles', body: { key: 'auditor', name: 'Auditor', description: 'Reads audit events' } },
         {
           url: '/api/api-resources',
           body: {
@@ -188,95 +102,109 @@ describe('admin console webhooks-content', () => {
             name: 'Billing API',
             resourceUrl: 'https://billing.example.com',
             description: 'Billing resource',
+            ownerOrganizationId: 'org-1',
+            accessEligibility: { mode: 'realm', organizationIds: [] },
+            availableToAgents: true,
           },
         },
-      ])
-    })
+      ]),
+    )
   })
 
-  it('renders and updates organization detail records', async () => {
+  it('renders a compact Organization overview and edits identity from Settings', async () => {
     const requests: Array<{ url: string; body: unknown }> = []
+    let deleted = false
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
+      const raw = String(input)
+      const url = raw.startsWith('http') ? new URL(raw).pathname : raw.split('?')[0]
+      if (url === '/api/organizations/org-1' && init?.method === 'DELETE') {
+        deleted = true
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
       if (url === '/api/organizations/org-1' && init?.method === 'PATCH') {
-        requests.push({ url, body: JSON.parse(String(init.body)) })
-        return Promise.resolve(jsonResponse({ ...organization, ...JSON.parse(String(init.body)) }))
+        const body = JSON.parse(String(init.body))
+        requests.push({ url, body })
+        return Promise.resolve(jsonResponse({ ...organization, ...body }))
+      }
+      if (deleted && url.startsWith('/api/organizations/org-1')) {
+        throw new Error(`Removed Organization detail was refetched: ${init?.method ?? 'GET'} ${raw}`)
       }
       if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
-      if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
-      }
-      return consoleSharedFetch(input, init)
-    })
-
-    renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
-
-    expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected')).toBe('true')
-    expect(summaryCard('Organization summary').getByText('org-1')).toBeTruthy()
-    expect(summaryCard('Organization summary').getByText('acme')).toBeTruthy()
-    expect(summaryCard('Organization summary').getByText('Acme Inc.')).toBeTruthy()
-    expect(summaryCard('Organization summary').getByText('Enabled')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Acme Updated' } })
-    fireEvent.change(screen.getByLabelText('Disabled reason'), { target: { value: '' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save organization' }))
-
-    await waitFor(() => {
-      expect(requests).toContainEqual({
-        url: '/api/organizations/org-1',
-        body: {
-          slug: 'acme',
-          name: 'Acme',
-          displayName: 'Acme Updated',
-          disabledReason: null,
-        },
-      })
-    })
-    fireEvent.click(screen.getByRole('tab', { name: 'Authorization' }))
-    expect(screen.getAllByText('Organization ID').length).toBeGreaterThan(0)
-    expect(screen.getByText('Members and invitations')).toBeTruthy()
-    expect(summaryCard('Organization summary').getByText('Not set')).toBeTruthy()
-  })
-
-  it('searches organization template roles', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
-      if (url === '/api/roles') {
+      if (url === '/api/organizations/org-1/members') {
         return Promise.resolve(
           jsonResponse({
-            roles: [
+            members: [
               {
-                ...role,
-                id: 'role-billing',
-                key: 'billing-manager',
-                name: 'Billing manager',
-                description: 'Controls invoices',
+                id: 'member-owner',
                 organizationId: 'org-1',
-              },
-              {
-                ...role,
-                id: 'role-member',
-                key: 'member',
-                name: 'Member',
-                description: 'Default organization membership',
+                userId: user.id,
+                role: 'owner',
+                title: null,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
               },
             ],
-            pagination,
+            pagination: { ...emptyPagination, total: 1 },
           }),
         )
       }
-      return consoleSharedFetch(input, init)
+      if (url === '/api/organizations/org-1/invitations') {
+        return Promise.resolve(
+          jsonResponse({
+            invitations: [
+              {
+                id: 'invitation-canceled',
+                organizationId: 'org-1',
+                email: 'canceled@example.com',
+                role: 'member',
+                inviterId: 'user-1',
+                status: 'canceled',
+                expiresAt: '2026-01-08T00:00:00.000Z',
+                acceptedAt: null,
+                revokedAt: null,
+                createdAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+            pagination: { ...emptyPagination, total: 1 },
+          }),
+        )
+      }
+      if (url === '/api/users') return Promise.resolve(jsonResponse({ users: [user], pagination }))
+      if (url === '/api/agents') return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+      if (url === '/api/audit-events') return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+      throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${raw}`)
     })
 
-    renderWithQuery(<OrganizationTemplatePage />)
+    renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
+    expect(await screen.findByRole('heading', { name: 'Acme' })).toBeTruthy()
+    expect(screen.getByText(/org-1/)).toBeTruthy()
+    expect(screen.getAllByText('Members').length).toBeGreaterThan(0)
+    expect(screen.getByText('Pending invitations')).toBeTruthy()
+    expect(screen.getByText('Pending invitations').closest('.detailFlatRow')?.textContent).toContain('0')
+    expect(screen.getByText('Agent identities')).toBeTruthy()
+    expect(screen.queryByText('Applications & resource servers')).toBeNull()
 
-    expect(await screen.findByRole('heading', { name: 'Organization roles' })).toBeTruthy()
-    expect(screen.getByText('Billing manager')).toBeTruthy()
-    expect(screen.getByText('Member')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Search organization roles'), { target: { value: 'billing' } })
-    expect(screen.getByText('Billing manager')).toBeTruthy()
-    expect(screen.queryByText('Member')).toBeNull()
-    expect(screen.getByText('Organization')).toBeTruthy()
-    expect(screen.getByText('roles')).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Members' }), { button: 0, ctrlKey: false })
+    expect(screen.queryByText('canceled@example.com')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Manage Jane Doe' })).toBeNull()
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Acme Updated' } })
+    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'acme-updated' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          url: '/api/organizations/org-1',
+          body: { name: 'Acme Updated', slug: 'acme-updated' },
+        },
+      ]),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete organization' }))
+    await waitFor(() => expect(deleted).toBe(true))
   })
 })

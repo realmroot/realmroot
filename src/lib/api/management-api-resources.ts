@@ -1,9 +1,17 @@
 import type { ApiResource, createApiResourceSchema, updateApiResourceSchema } from '@shared/api/agent-api'
+import type { ListApiResourcesQuery } from '@shared/api/authorization'
 import type { z } from 'zod'
 import { apiClient, readRpcResponse } from '@/lib/api'
 
-export function listApiResources() {
-  return readRpcResponse(apiClient.api['api-resources'].$get())
+export function listApiResources(query: Partial<ListApiResourcesQuery> = {}) {
+  const serialized = Object.fromEntries(
+    Object.entries(query).flatMap(([key, value]) => (value === undefined ? [] : [[key, String(value)]])),
+  )
+  return readRpcResponse(
+    Object.keys(serialized).length === 0
+      ? apiClient.api['api-resources'].$get()
+      : apiClient.api['api-resources'].$get({ query: serialized }),
+  )
 }
 
 export function getApiResource(id: string): Promise<ApiResource> {

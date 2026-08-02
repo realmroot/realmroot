@@ -44,11 +44,11 @@ describe('management routes 1', () => {
     const operationIds = openApiOperationObjects().map((operation) => operation.operationId)
     expect(operationIds).not.toContain(undefined)
     expect(new Set(operationIds).size).toBe(operationIds.length)
-    expect(unifiedOpenApi.security).toEqual([{ agentAuth: [] }, { adminSession: ['admin'] }])
+    expect(unifiedOpenApi.security).toEqual([{ agentAuth: [] }, { browserSession: [] }])
     expect(unifiedOpenApi.components.securitySchemes.agentAuth).toMatchObject({
-      type: 'http',
-      scheme: 'bearer',
-      bearerFormat: 'agent+jwt',
+      type: 'apiKey',
+      in: 'header',
+      name: 'Authorization',
     })
     expect(unifiedOpenApi['x-cli-config']).toEqual({
       profiles: {
@@ -88,10 +88,8 @@ describe('management routes 1', () => {
         operation.key.slice(operation.method.length + 1),
       )
       if (requiredCapability) {
-        expect(operation.security, operation.key).toEqual([
-          { agentAuth: [requiredCapability] },
-          { adminSession: ['admin'] },
-        ])
+        expect(operation.security, operation.key).toEqual([{ agentAuth: [] }, { browserSession: [] }])
+        expect(operation.requiredAgentCapability, operation.key).toBe(requiredCapability)
       }
 
       if (methodsWithJsonRequestBody.has(operation.method) && !operationsWithoutRequestBody.has(operation.key)) {
@@ -155,7 +153,7 @@ describe('management routes 1', () => {
     ])
   })
 
-  it('documents application setup fields and role scope replacement request bodies', () => {
+  it('documents application setup fields and role permission replacement request bodies', () => {
     const createApplication = openApiOperationObjects().find((operation) => operation.key === 'POST /applications')
     const createApplicationSchema = openApiSchemaObject(requestBodyContent(createApplication?.requestBody).schema)
     const createApplicationProperties = openApiRecord(createApplicationSchema.properties)
@@ -165,15 +163,19 @@ describe('management routes 1', () => {
     expect(createApplicationProperties).not.toHaveProperty('clientId')
     expect(createApplicationProperties).not.toHaveProperty('clientSecret')
 
-    const replaceRoleScopes = openApiOperationObjects().find(
-      (operation) => operation.key === 'PUT /roles/{param}/scopes',
+    const replaceRolePermissions = openApiOperationObjects().find(
+      (operation) => operation.key === 'PUT /roles/{param}/permissions',
     )
-    const replaceRoleScopesSchema = openApiSchemaObject(requestBodyContent(replaceRoleScopes?.requestBody).schema)
-    const replaceRoleScopesProperties = openApiRecord(replaceRoleScopesSchema.properties)
+    const replaceRolePermissionsSchema = openApiSchemaObject(
+      requestBodyContent(replaceRolePermissions?.requestBody).schema,
+    )
+    const replaceRolePermissionsProperties = openApiRecord(replaceRolePermissionsSchema.properties)
 
-    expect(replaceRoleScopesProperties).toHaveProperty('scopes')
-    expect(replaceRoleScopes?.responses).toHaveProperty('204')
-    expect(replaceRoleScopes?.responses).not.toHaveProperty('200')
+    expect(replaceRolePermissionsProperties).toHaveProperty('permissions')
+    expect(replaceRolePermissions?.responses).toHaveProperty('200')
+    expect(replaceRolePermissions?.responses).toHaveProperty('412')
+    expect(replaceRolePermissions?.responses).toHaveProperty('428')
+    expect(replaceRolePermissions?.responses).not.toHaveProperty('204')
 
     const deleteApiResource = openApiOperationObjects().find(
       (operation) => operation.key === 'DELETE /api-resources/{param}',

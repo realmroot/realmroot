@@ -16,7 +16,7 @@ test.describe('admin config CRUD (Console UI)', () => {
     await signIn(page)
 
     await page.goto('/console/applications')
-    await expect(page.getByRole('columnheader', { name: 'Application name' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Application' })).toBeVisible()
 
     await page.getByRole('button', { name: 'New application' }).click()
     const dialog = page.getByRole('dialog')
@@ -30,8 +30,8 @@ test.describe('admin config CRUD (Console UI)', () => {
 
     // Creating an OIDC client succeeds through the UI: the dialog reveals the new
     // client's credentials. Close it, then confirm the app is in the Console list.
-    await expect(dialog.getByText('Client ID')).toBeVisible()
-    await dialog.getByRole('button', { name: 'Close' }).click()
+    await expect(dialog.getByText('Client ID', { exact: true })).toBeVisible()
+    await dialog.getByRole('button', { name: 'Done' }).click()
     await expect(dialog).toBeHidden()
     await expect(page.getByRole('cell', { name: 'E2E CRUD Application' }).first()).toBeVisible()
   })

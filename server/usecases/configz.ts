@@ -1,13 +1,22 @@
+import { conflict, notFound } from '@server/domain/errors'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
 import type { ConfigzAccountCenter, ConfigzBranding } from '@server/usecases/ports'
 import { type ConfigzConfigResponse, hostedCustomCssSchema } from '@shared/api/configz'
 import type {
+  DeveloperConsoleAccessPolicyResponse,
+  EmailDeliveryConfigurationResponse,
   ManagementAccountCenterSettingsResponse,
   ManagementBrandingSettingsResponse,
+  ManagementRealmResponse,
   ManagementSignInSettingsResponse,
+  OrganizationCreationPolicyResponse,
+  ReplaceDeveloperConsoleAccessPolicyRequest,
+  ReplaceEmailDeliveryConfigurationRequest,
+  ReplaceOrganizationCreationPolicyRequest,
   UpdateManagementAccountCenterSettingsRequest,
   UpdateManagementBrandingSettingsRequest,
+  UpdateManagementRealmRequest,
   UpdateManagementSignInSettingsRequest,
 } from '@shared/api/management'
 import type { SecurityPolicy } from '@shared/api/security'
@@ -17,6 +26,11 @@ export interface ConfigzOptions {
   emailOtpEnabled?: boolean
   usernameEnabled?: boolean
   securityPolicy?: SecurityPolicy
+  emailDelivery?: {
+    bindingAvailable: boolean
+    fromEmail?: string
+    fromName?: string
+  }
 }
 
 const defaultCopy = {
@@ -90,7 +104,8 @@ export async function getConfig(deps: Deps, options: ConfigzOptions): Promise<Co
   const identityProviders = await deps.configz.listEnabledIdentityProviders()
   const availableIdentityProviderIds = new Set((await loadAuthConnectorConfig(deps.connectors)).trustedProviders)
   const copy = readCopy(settings?.metadata)
-  const builtInProviders = readBuiltInProviders(settings?.metadata, options.emailOtpEnabled ?? true)
+  const emailOtpEnabled = readBoolean(settings?.metadata, 'emailOtpEnabled') ?? options.emailOtpEnabled ?? true
+  const builtInProviders = readBuiltInProviders(settings?.metadata, emailOtpEnabled)
   const passwordEnabled = settings?.passwordEnabled ?? true
   const signupEnabled = settings?.signupEnabled ?? true
   const issuer = options.issuer.replace(/\/$/, '')
@@ -105,7 +120,7 @@ export async function getConfig(deps: Deps, options: ConfigzOptions): Promise<Co
       signupEnabled,
       socialLoginEnabled: settings?.socialLoginEnabled ?? true,
       emailOtpEnabled: builtInProviders.email.enabled,
-      usernameEnabled: options.usernameEnabled ?? true,
+      usernameEnabled: readBoolean(settings?.metadata, 'usernameEnabled') ?? options.usernameEnabled ?? true,
       identifierFirst: settings?.identifierFirst ?? false,
     },
     builtInProviders: {
@@ -189,7 +204,7 @@ export async function getConfig(deps: Deps, options: ConfigzOptions): Promise<Co
     accountCenter: accountCenter ?? defaultAccountCenterSettings,
     captcha: {
       enabled: options.securityPolicy?.captcha.enabled ?? false,
-      provider: 'turnstile',
+      provider: options.securityPolicy?.captcha.provider ?? 'turnstile',
       siteKey: options.securityPolicy?.captcha.siteKey ?? '',
     },
   }
@@ -269,6 +284,89 @@ export async function updateManagementAccountCenterSettings(
   return getManagementAccountCenterSettings(deps, options)
 }
 
+export function getOrganizationCreationPolicy(deps: Deps): Promise<OrganizationCreationPolicyResponse> {
+  return deps.configz.getOrganizationCreationPolicy()
+}
+
+export async function replaceOrganizationCreationPolicy(
+  deps: Deps,
+  input: ReplaceOrganizationCreationPolicyRequest,
+): Promise<OrganizationCreationPolicyResponse> {
+  if (input.mode === 'approved_users') {
+    for (const userId of input.approvedUserIds) await deps.users.getUser(userId)
+  }
+  await deps.configz.updateOrganizationCreationPolicy(input)
+  return getOrganizationCreationPolicy(deps)
+}
+
+export function getDeveloperConsoleAccessPolicy(deps: Deps): Promise<DeveloperConsoleAccessPolicyResponse> {
+  return deps.configz.getDeveloperConsoleAccessPolicy()
+}
+
+export async function replaceDeveloperConsoleAccessPolicy(
+  deps: Deps,
+  input: ReplaceDeveloperConsoleAccessPolicyRequest,
+): Promise<DeveloperConsoleAccessPolicyResponse> {
+  for (const organizationId of input.mode === 'selected_organizations' ? input.selectedOrganizationIds : []) {
+    if (!(await deps.authorization.findOrganization(organizationId))) {
+      throw notFound(`Organization ${organizationId} was not found.`)
+    }
+  }
+  await deps.configz.updateDeveloperConsoleAccessPolicy(input)
+  return getDeveloperConsoleAccessPolicy(deps)
+}
+
+export async function getManagementRealm(deps: Deps, options: ConfigzOptions): Promise<ManagementRealmResponse> {
+  const settings = await deps.configz.getSettings()
+  const issuer = options.issuer.replace(/\/$/, '')
+  return {
+    id: 'realm',
+    name: readCopy(settings?.metadata).productName,
+    issuer: `${issuer}/api/auth`,
+    oidcDiscoveryUrl: `${issuer}/api/auth/.well-known/openid-configuration`,
+    jwksUrl: `${issuer}/api/auth/jwks`,
+    managementApiUrl: `${issuer}/api/openapi.json`,
+  }
+}
+
+export async function updateManagementRealm(
+  deps: Deps,
+  options: ConfigzOptions,
+  input: UpdateManagementRealmRequest,
+): Promise<ManagementRealmResponse> {
+  await deps.configz.updateSettings({ copy: { productName: input.name } })
+  return getManagementRealm(deps, options)
+}
+
+export async function getEmailDeliveryConfiguration(
+  deps: Deps,
+  options: ConfigzOptions,
+): Promise<EmailDeliveryConfigurationResponse> {
+  const stored = await deps.configz.getEmailSettings()
+  const fallback = options.emailDelivery
+  return {
+    provider: 'cloudflare_email',
+    enabled: stored?.enabled ?? Boolean(fallback?.bindingAvailable && fallback.fromEmail),
+    fromEmail: stored?.fromEmail ?? fallback?.fromEmail ?? null,
+    fromName: stored?.fromName ?? fallback?.fromName ?? null,
+    replyToEmail: stored?.replyToEmail ?? null,
+    bindingAvailable: fallback?.bindingAvailable ?? false,
+    source: stored ? 'database' : fallback?.fromEmail ? 'environment' : 'unconfigured',
+  }
+}
+
+export async function replaceEmailDeliveryConfiguration(
+  deps: Deps,
+  options: ConfigzOptions,
+  input: ReplaceEmailDeliveryConfigurationRequest,
+): Promise<EmailDeliveryConfigurationResponse> {
+  if (input.enabled && !options.emailDelivery?.bindingAvailable) {
+    throw conflict('Cloudflare Email binding is not available for this deployment.')
+  }
+  await deps.configz.updateEmailSettings(input)
+  return getEmailDeliveryConfiguration(deps, options)
+}
+
 function toPublicBranding(branding: ConfigzBranding): ConfigzConfigResponse['branding'] {
   return {
     logoUrl: branding.logoUrl ?? branding.logoAssetUrl,
@@ -325,4 +423,9 @@ function readString(value: Record<string, unknown> | null, key: string) {
   if (!value || !(key in value)) return null
   const field = value[key]
   return typeof field === 'string' && field.trim() ? field : null
+}
+
+function readBoolean(value: Record<string, unknown> | null | undefined, key: string) {
+  const field = value?.[key]
+  return typeof field === 'boolean' ? field : null
 }

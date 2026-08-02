@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { OrganizationTemplatePage } from '@/features/console/extracted/deployment-misc/misc'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/organization-template/organization-roles')({
-  component: () => <OrganizationTemplatePage section="organization-roles" />,
+  beforeLoad: () => {
+    throw redirect({ href: '/console/roles' })
+  },
 })

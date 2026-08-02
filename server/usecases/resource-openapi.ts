@@ -9,6 +9,21 @@ export interface ResourceScopeDefinition {
   description: string | null
 }
 
+export interface ResourceOperationDefinition {
+  method: string
+  path: string
+  operationId: string | null
+  summary: string | null
+  description: string | null
+  requiredScopeSets: string[][]
+}
+
+export interface ResourceContractDefinition {
+  sourceUrl: string
+  scopes: ResourceScopeDefinition[]
+  operations: ResourceOperationDefinition[]
+}
+
 export function validateResourceUrl(resourceUrl: string) {
   const url = new URL(resourceUrl)
   const loopback =
@@ -32,6 +47,10 @@ export async function validateRequestedScopes(deps: Deps, resourceUrl: string, r
 }
 
 export async function readDeclaredScopes(deps: Deps, resourceUrl: string): Promise<ResourceScopeDefinition[]> {
+  return (await readResourceContract(deps, resourceUrl)).scopes
+}
+
+export async function readResourceContract(deps: Deps, resourceUrl: string): Promise<ResourceContractDefinition> {
   const resourceResponse = await fetchForDiscovery(
     deps,
     new Request(resourceUrl, {
@@ -54,7 +73,11 @@ export async function readDeclaredScopes(deps: Deps, resourceUrl: string): Promi
 
   const source = await documentResponse.text()
   const document = parseDocument(source, documentResponse.headers.get('content-type'))
-  return extractResourceScopes(document)
+  return {
+    sourceUrl: documentUrl,
+    scopes: extractResourceScopes(document),
+    operations: extractProtectedOperations(document),
+  }
 }
 
 async function fetchForDiscovery(
@@ -110,6 +133,64 @@ export function extractResourceScopes(document: unknown): ResourceScopeDefinitio
   }
 
   return [...scopes].sort().map((value) => ({ value, description: scopeDescriptions.get(value) ?? null }))
+}
+
+export function extractProtectedOperations(document: unknown): ResourceOperationDefinition[] {
+  const root = objectValue(document, 'Business resource OpenAPI document is invalid.')
+  if (typeof root.openapi !== 'string' || !root.openapi.startsWith('3.')) {
+    throw badRequest('Business resource must publish an OpenAPI 3.x document.')
+  }
+
+  const securitySchemes = objectValueOrEmpty(objectValueOrEmpty(root.components).securitySchemes)
+  const scopeSchemeNames = new Set<string>()
+  for (const [name, candidate] of Object.entries(securitySchemes)) {
+    const scheme = resolveSecurityScheme(candidate, securitySchemes)
+    if (scheme && (scheme.type === 'oauth2' || scheme.type === 'openIdConnect')) scopeSchemeNames.add(name)
+  }
+
+  const documentSecurity = securityRequirements(root.security)
+  const operations: ResourceOperationDefinition[] = []
+  for (const [pathName, candidate] of Object.entries(objectValueOrEmpty(root.paths))) {
+    const path = objectValueOrEmpty(candidate)
+    for (const method of operationMethods) {
+      const operation = objectValueOrEmpty(path[method])
+      if (Object.keys(operation).length === 0) continue
+      const requirements = 'security' in operation ? securityRequirements(operation.security) : documentSecurity
+      const requiredScopeSets = operationScopeSets(requirements, scopeSchemeNames)
+      if (requiredScopeSets.length === 0) continue
+      operations.push({
+        method: method.toUpperCase(),
+        path: pathName,
+        operationId: stringValue(operation.operationId),
+        summary: stringValue(operation.summary),
+        description: stringValue(operation.description),
+        requiredScopeSets,
+      })
+    }
+  }
+  return operations
+}
+
+function operationScopeSets(requirements: Record<string, unknown>[], schemeNames: Set<string>) {
+  const unique = new Map<string, string[]>()
+  for (const requirement of requirements) {
+    const scopes = new Set<string>()
+    let matchedScheme = false
+    for (const [schemeName, values] of Object.entries(requirement)) {
+      if (!schemeNames.has(schemeName) || !Array.isArray(values)) continue
+      matchedScheme = true
+      for (const value of values) {
+        if (typeof value === 'string' && value.trim()) scopes.add(value)
+      }
+    }
+    const scopeSet = [...scopes].sort()
+    if (matchedScheme) unique.set(scopeSet.join('\u0000'), scopeSet)
+  }
+  return [...unique.values()]
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value : null
 }
 
 function serviceDescriptionUrl(link: string | null, resourceUrl: string) {

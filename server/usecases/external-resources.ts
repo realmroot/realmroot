@@ -9,6 +9,7 @@ import type {
 import type {
   AccessGrant,
   AccessRequest,
+  AccessRequestApproval,
   AccountConnection,
   ApiResource,
   CreateAccessRequest,
@@ -59,8 +60,8 @@ export async function getApiResource(deps: Deps, resourceId: string): Promise<Ap
   }
 }
 
-export async function listApiResources(deps: Deps, pagination: PaginationInput) {
-  const page = await deps.authorization.listResources(pagination)
+export async function listApiResources(deps: Deps, pagination: PaginationInput, ownerOrganizationIds?: string[]) {
+  const page = await deps.authorization.listResources(pagination, ownerOrganizationIds)
   return {
     items: await Promise.all(page.items.map((resource) => getApiResource(deps, resource.id))),
     pagination: page.pagination,
@@ -579,7 +580,11 @@ export async function listControllerAccessRequests(deps: Deps, actorUserId: stri
 export async function listAccountAccessRequests(deps: Deps, actorUserId: string, pagination: PaginationInput) {
   const requests = (await listControllerAccessRequests(deps, actorUserId)).requests.map(toAccessRequest)
   return {
-    items: requests.slice(pagination.offset, pagination.offset + pagination.limit),
+    items: await Promise.all(
+      requests
+        .slice(pagination.offset, pagination.offset + pagination.limit)
+        .map((request) => resolveAccessRequestApproval(deps, request)),
+    ),
     pagination: paginationMetadata({ ...pagination, total: requests.length }),
   }
 }
@@ -601,8 +606,24 @@ export async function getAccountAccessRequestByToken(
   deps: Deps,
   approvalToken: string,
   actorUserId: string,
-): Promise<AccessRequest> {
-  return toAccessRequest(await getControllerAccessRequestByToken(deps, approvalToken, actorUserId))
+): Promise<AccessRequestApproval> {
+  const request = toAccessRequest(await getControllerAccessRequestByToken(deps, approvalToken, actorUserId))
+  return resolveAccessRequestApproval(deps, request)
+}
+
+async function resolveAccessRequestApproval(deps: Deps, request: AccessRequest): Promise<AccessRequestApproval> {
+  if (request.target.type !== 'api-resource') throw notFound('Agent access request was not found.')
+  const [identity, resource] = await Promise.all([
+    deps.agentIdentities.findIdentity(request.agentId),
+    deps.authorization.findResource(request.target.apiResourceId),
+  ])
+  if (!identity) throw notFound('Agent identity was not found.')
+  if (!resource) throw notFound('API resource was not found.')
+  return {
+    ...request,
+    agent: { id: identity.identity.id, name: identity.identity.name },
+    resource: { id: resource.id, name: resource.name },
+  }
 }
 
 export async function getControllerAccessRequestByToken(deps: Deps, token: string, actorUserId: string) {

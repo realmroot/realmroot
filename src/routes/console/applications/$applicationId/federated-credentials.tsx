@@ -1,11 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { ApplicationFederatedCredentialsPage } from '@/features/console/extracted/applications/application-detail-pages'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/applications/$applicationId/federated-credentials')({
-  component: ApplicationFederatedCredentialsRoute,
+  beforeLoad: ({ params }) => {
+    throw redirect({ href: `/console/applications/${params.applicationId}/oauth` })
+  },
 })
-
-function ApplicationFederatedCredentialsRoute() {
-  const { applicationId } = Route.useParams()
-  return <ApplicationFederatedCredentialsPage applicationId={applicationId} />
-}

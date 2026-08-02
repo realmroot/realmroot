@@ -31,8 +31,8 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
     username: '',
   })
   const previewStyle = {
-    '--brand-primary': preview.primaryColor ?? '#b42318',
-    '--brand-background': preview.backgroundColor ?? '#f7f3ee',
+    '--brand-primary': preview.primaryColor ?? '#007b83',
+    '--brand-background': preview.backgroundColor ?? '#f7fbfb',
     ...customCssProperties(preview.customCss ?? ''),
   } as CSSProperties
   const productName = preview.productName || 'Realmroot'
@@ -59,7 +59,7 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
           <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{tt('Live preview')}</p>
           <h2>{tt('Hosted sign-in')}</h2>
         </div>
-        <Tabs setValue={(value) => setSurface(value as SignInPreviewSurface)} value={surface}>
+        <Tabs onValueChange={(value) => setSurface(value as SignInPreviewSurface)} value={surface}>
           <TabsList aria-label={tt('Preview viewport')}>
             <TabsTrigger value="desktop">{tt('Desktop')}</TabsTrigger>
             <TabsTrigger value="mobile">{tt('Mobile')}</TabsTrigger>
@@ -90,6 +90,7 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
           {effectiveFlow === 'sign-up' ? (
             <SignUpCardBody
               created={false}
+              email={signupForm.email}
               form={
                 <SignUpForm
                   email={signupForm.email}
@@ -120,6 +121,7 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
                     }))
                   }
                   password={signupForm.password}
+                  renderAsForm={false}
                   username={signupForm.username}
                   usernameEnabled={preview.usernameEnabled}
                 />
@@ -188,12 +190,19 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
               <div className="formStack">
                 <label className="field">
                   {effectiveFlow === 'email' || !preview.usernameEnabled ? tt('Email') : tt('Email or username')}
-                  <input className="textInput" readOnly type={effectiveFlow === 'email' ? 'email' : 'text'} value="" />
+                  <input
+                    autoComplete={effectiveFlow === 'email' ? 'email' : 'username'}
+                    className="textInput"
+                    readOnly
+                    type={effectiveFlow === 'email' ? 'email' : 'text'}
+                    value=""
+                  />
                 </label>
                 {previewMode === 'password' && !preview.identifierFirst ? (
                   <label className="field">
                     {' '}
-                    {tt('Password')} <input className="textInput" readOnly type="password" value="" />
+                    {tt('Password')}{' '}
+                    <input autoComplete="current-password" className="textInput" readOnly type="password" value="" />
                   </label>
                 ) : null}
                 <button className="uiButton uiButton-primary w-full" type="button">
@@ -222,14 +231,14 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
         </AuthCardFrame>
       </div>
       <Button onClick={() => window.open('/auth/sign-in', '_blank', 'noopener')} type="button" variant="secondary">
-        <Eye data-icon="inline-start" /> {tt('Open hosted sign-in')}{' '}
+        <Eye data-icon="inline-start" /> {tt('Open live hosted page')}{' '}
       </Button>
     </div>
   )
 }
 export function PreviewBrandMark({ logoUrl, productName }: { logoUrl?: string | null; productName: string }) {
   const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null)
-  const brandInitial = productName.trim().slice(0, 1).toUpperCase() || 'F'
+  const brandInitial = productName.trim().slice(0, 1).toUpperCase() || 'R'
   const showLogo = Boolean(logoUrl && failedLogoUrl !== logoUrl)
   if (showLogo && logoUrl) {
     return (

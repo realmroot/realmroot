@@ -22,6 +22,8 @@ export function toApplicationInsert(input: Omit<ApplicationAggregate, 'createdAt
     name: input.name,
     description: input.description,
     homepageUrl: input.homepageUrl,
+    ownerOrganizationId: input.ownerOrganizationId,
+    audienceMode: input.audience.mode,
     firstParty: input.firstParty,
     trusted: input.trusted,
     disabled: input.disabled,
@@ -67,7 +69,11 @@ export function toOAuthClientInsert(
   }
 }
 
-export function toAggregate(app: ApplicationRow, client: OAuthClientRow): ApplicationAggregate {
+export function toAggregate(
+  app: ApplicationRow,
+  client: OAuthClientRow,
+  audience: { organizationIds: string[]; userIds: string[] } = { organizationIds: [], userIds: [] },
+): ApplicationAggregate {
   return {
     id: app.id,
     slug: app.slug,
@@ -82,6 +88,12 @@ export function toAggregate(app: ApplicationRow, client: OAuthClientRow): Applic
     trusted: app.trusted,
     disabled: app.disabled || !!client.disabled,
     disabledReason: app.disabledReason,
+    ownerOrganizationId: app.ownerOrganizationId,
+    audience: {
+      mode: toAudienceMode(app.audienceMode),
+      organizationIds: audience.organizationIds,
+      userIds: audience.userIds,
+    },
     redirectUris: parseList(client.redirectUris),
     postLogoutRedirectUris: parseList(client.postLogoutRedirectUris),
     corsOrigins: readCorsOrigins(app.metadata),
@@ -94,6 +106,11 @@ export function toAggregate(app: ApplicationRow, client: OAuthClientRow): Applic
     createdAt: app.createdAt,
     updatedAt: app.updatedAt,
   }
+}
+
+function toAudienceMode(value: string): ApplicationAggregate['audience']['mode'] {
+  if (value === 'organizations' || value === 'users' || value === 'public') return value
+  return 'realm'
 }
 
 export function toConsent(row: typeof applicationConsent.$inferSelect): ConsentRecord {
@@ -178,8 +195,8 @@ export function readClaimSelection(value: unknown): ApplicationOidcClaims['acces
   return {
     ...(input.authorization === true ? { authorization: true } : {}),
     ...(input.scopes === true ? { scopes: true } : {}),
+    ...(input.groups === true ? { groups: true } : {}),
     ...(input.roles === true ? { roles: true } : {}),
-    ...(input.permissions === true ? { permissions: true } : {}),
     ...(input.organizationId === true ? { organizationId: true } : {}),
     ...(input.organizationName === true ? { organizationName: true } : {}),
   }

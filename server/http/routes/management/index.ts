@@ -3,10 +3,11 @@ import { Hono } from 'hono'
 import type { ManagementAuthApi } from '../auth-api'
 import { managementAgentsRoute } from './agents'
 import { createManagementApiResourcesRoute } from './api-resources'
-import { managementApplicationsRoute } from './applications'
+import { managementApplicationAuthorizationsRoute, managementApplicationsRoute } from './applications'
 import { createManagementConnectorRoutes } from './connectors'
 import { managementOrganizationsRoute } from './organizations'
 import { createManagementReadinessRoute } from './readiness'
+import { managementRoleAssignmentsRoute } from './role-assignments'
 import { managementRolesRoute } from './roles'
 import { managementSecurityRoutes } from './security'
 import { createManagementSettingsRoutes } from './settings'
@@ -23,10 +24,12 @@ export function createProtectedResourceRoutes(options: ProtectedResourceRoutesOp
   const app = new Hono()
 
   app.route('/applications', managementApplicationsRoute)
+  app.route('/application-authorizations', managementApplicationAuthorizationsRoute)
   app.route('/api-resources', createManagementApiResourcesRoute())
   app.route('/', managementAgentsRoute)
   app.route('/organizations', managementOrganizationsRoute)
   app.route('/roles', managementRolesRoute)
+  app.route('/role-assignments', managementRoleAssignmentsRoute)
   app.route('/users', managementUserRoutes(options.authApi, { normalizeListResponse: true }))
   app.route('/security', managementSecurityRoutes())
 

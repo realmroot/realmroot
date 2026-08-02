@@ -23,10 +23,10 @@ export interface ManagementAuthApi {
   changeEmail: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   requestEmailChangeEmailOTP: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   changeEmailEmailOTP: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
-  changePassword: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  changePassword: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
   enableTwoFactor: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
-  disableTwoFactor: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
-  verifyTOTP: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
+  disableTwoFactor: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
+  verifyTOTP: AuthResponseEndpoint<{ body: Record<string, unknown>; headers: Headers }>
   generateBackupCodes: AuthEndpoint<{ body: Record<string, unknown>; headers: Headers }, unknown>
   listPasskeys: AuthEndpoint<{ headers: Headers }, unknown>
   deletePasskey: AuthEndpoint<{ body: { id: string }; headers: Headers }, unknown>

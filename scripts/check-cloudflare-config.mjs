@@ -10,7 +10,6 @@ const requiredSnippets = [
   'name = "EMAIL"',
   'binding = "ASSET_BUCKET"',
   'binding = "DB"',
-  'binding = "EMAIL_QUEUE"',
   '[triggers]',
   'crons =',
 ]
@@ -25,4 +24,4 @@ for (const config of configs) {
   }
 }
 
-console.log('Cloudflare config includes required Assets, Email, R2, D1, Queue, and Cron bindings.')
+console.log('Cloudflare config includes required Assets, Email, R2, D1, and Cron bindings.')

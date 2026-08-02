@@ -47,7 +47,7 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterS
     await assertAuthenticatorAppEnabled(c)
 
     try {
-      return c.json(await authApi.verifyTOTP({ body, headers: c.req.raw.headers }))
+      return await authApi.verifyTOTP({ asResponse: true, body, headers: c.req.raw.headers })
     } catch (error) {
       throw toBoundaryError(error)
     }
@@ -63,7 +63,7 @@ export function accountSecurityRoutes(authApi: ManagementAuthApi, accountCenterS
     const body = await readJson(c, securityTotpDisableSchema)
 
     try {
-      return c.json(await authApi.disableTwoFactor({ body, headers: c.req.raw.headers }))
+      return await authApi.disableTwoFactor({ asResponse: true, body, headers: c.req.raw.headers })
     } catch (error) {
       throw toBoundaryError(error)
     }

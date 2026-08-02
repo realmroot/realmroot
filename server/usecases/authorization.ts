@@ -1,14 +1,10 @@
-import { badRequest, notFound, resourceInUse } from '@server/domain/errors'
-import {
-  type AuthorizationTokenClaimInput,
-  createId,
-  toAssignmentInput,
-  toTokenClaims,
-} from '@server/usecases/authorization-utils'
+import { badRequest, forbidden, notFound, resourceInUse } from '@server/domain/errors'
+import { platformOrganization } from '@server/domain/platform-organization'
+import { type AuthorizationTokenClaimInput, createId, toTokenClaims } from '@server/usecases/authorization-utils'
 import type { Deps } from '@server/usecases/deps'
-import type { RoleAssignmentScope } from '@server/usecases/ports'
 import { validateExternalResourceConnector } from '@server/usecases/resource-connectors'
 import {
+  readResourceContract,
   validateRequestedScopes,
   validateResourceContract,
   validateResourceUrl,
@@ -28,17 +24,22 @@ export interface ResourceMutationActor {
 
 import type {
   AddMemberRequest,
+  ApiResourceResponse,
   AssignRoleRequest,
   CreateApiResourceRequest,
   CreateInvitationRequest,
   CreateOrganizationRequest,
+  CreateRoleAssignmentRequest,
   CreateRoleRequest,
+  ListRoleAssignmentsQuery,
   PaginationQuery,
+  RolePermission,
   UpdateApiResourceRequest,
   UpdateMemberRequest,
   UpdateOrganizationRequest,
   UpdateRoleRequest,
 } from '@shared/api/authorization'
+import { apiResourceEligibilitySchema } from '@shared/api/authorization'
 
 export function createOrganization(deps: Deps, input: CreateOrganizationRequest) {
   return deps.authorization.createOrganization({
@@ -52,8 +53,8 @@ export function createOrganization(deps: Deps, input: CreateOrganizationRequest)
   })
 }
 
-export function listOrganizations(deps: Deps, pagination: PaginationQuery) {
-  return deps.authorization.listOrganizations(pagination).then((page) => ({
+export function listOrganizations(deps: Deps, pagination: PaginationQuery, organizationIds?: string[]) {
+  return deps.authorization.listOrganizations(pagination, organizationIds).then((page) => ({
     organizations: page.items,
     pagination: page.pagination,
   }))
@@ -94,13 +95,15 @@ export async function listMembers(deps: Deps, organizationId: string, pagination
 }
 
 export async function updateMember(deps: Deps, organizationId: string, memberId: string, input: UpdateMemberRequest) {
-  await requireMemberForOrganization(deps, memberId, organizationId)
+  const member = await requireMemberForOrganization(deps, memberId, organizationId)
+  if (input.role && input.role !== 'owner') await rejectLastOwnerMutation(deps, member)
   await deps.authorization.updateMember(memberId, input)
   return requireMember(deps, memberId)
 }
 
 export async function removeMember(deps: Deps, organizationId: string, memberId: string) {
-  await requireMemberForOrganization(deps, memberId, organizationId)
+  const member = await requireMemberForOrganization(deps, memberId, organizationId)
+  await rejectLastOwnerMutation(deps, member)
   await deps.authorization.removeMember(memberId)
 }
 
@@ -138,6 +141,12 @@ export async function cancelInvitation(deps: Deps, organizationId: string, id: s
 
 export async function createResource(deps: Deps, input: CreateApiResourceRequest) {
   const enabled = input.enabled ?? true
+  const ownerOrganizationId = input.ownerOrganizationId ?? platformOrganization.id
+  if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
+  const accessEligibility = apiResourceEligibilitySchema.parse(
+    input.accessEligibility ?? { mode: 'realm', organizationIds: [] },
+  )
+  await validateResourceEligibility(deps, accessEligibility)
   validateResourceUrl(input.resourceUrl)
   if (input.connectorId) {
     await validateExternalResourceConnector(deps, input.resourceUrl, input.connectorId)
@@ -152,6 +161,9 @@ export async function createResource(deps: Deps, input: CreateApiResourceRequest
     connectorId: input.connectorId ?? null,
     description: input.description ?? null,
     enabled,
+    ownerOrganizationId,
+    accessEligibility,
+    availableToAgents: input.availableToAgents ?? true,
   })
 }
 
@@ -167,10 +179,21 @@ export async function getResource(deps: Deps, id: string) {
   return resource
 }
 
+export async function getResourceContract(deps: Deps, id: string) {
+  const resource = await getResource(deps, id)
+  const contract = await readResourceContract(deps, resource.resourceUrl)
+  return {
+    resourceId: resource.id,
+    ...contract,
+  }
+}
+
 export async function updateResource(deps: Deps, id: string, input: UpdateApiResourceRequest) {
   const resource = await getResource(deps, id)
   if (resource.archivedAt) throw badRequest('Archived API resources must be restored before updating.')
   if (input.resourceUrl !== undefined) validateResourceUrl(input.resourceUrl)
+  if (input.ownerOrganizationId) await requireActiveOrganization(deps, input.ownerOrganizationId)
+  if (input.accessEligibility) await validateResourceEligibility(deps, input.accessEligibility)
   if (input.connectorId !== undefined && (input.connectorId === null) !== (resource.connectorId === null)) {
     throw badRequest('API resource authorization mode cannot change after creation.')
   }
@@ -187,6 +210,17 @@ export async function updateResource(deps: Deps, id: string, input: UpdateApiRes
     throw badRequest('Archived API resources must be restored before updating.')
   }
   return getResource(deps, id)
+}
+
+async function requireActiveOrganization(deps: Deps, organizationId: string) {
+  const organization = await getOrganization(deps, organizationId)
+  if (organization.disabled) throw badRequest('Organization must be active.')
+  return organization
+}
+
+async function validateResourceEligibility(deps: Deps, eligibility: ApiResourceResponse['accessEligibility']) {
+  if (eligibility.mode !== 'organizations') return
+  for (const organizationId of eligibility.organizationIds) await requireActiveOrganization(deps, organizationId)
 }
 
 export async function archiveResource(deps: Deps, id: string, actor: ResourceMutationActor) {
@@ -246,9 +280,6 @@ export async function createRole(deps: Deps, input: CreateRoleRequest) {
     key: input.key,
     name: input.name,
     description: input.description ?? null,
-    resourceId: input.resourceId ?? null,
-    organizationId: input.organizationId ?? null,
-    applicationId: input.applicationId ?? null,
     system: input.system ?? false,
   })
 }
@@ -264,14 +295,7 @@ export async function getRole(deps: Deps, id: string) {
 }
 
 export async function updateRole(deps: Deps, id: string, input: UpdateRoleRequest) {
-  const role = await getRole(deps, id)
-  if (
-    (input.resourceId !== undefined && input.resourceId !== role.resourceId) ||
-    (input.organizationId !== undefined && input.organizationId !== role.organizationId) ||
-    (input.applicationId !== undefined && input.applicationId !== role.applicationId)
-  ) {
-    throw badRequest('Role resource and subject scope cannot be changed after creation.')
-  }
+  await getRole(deps, id)
   await deps.authorization.updateRole(id, input)
   return getRole(deps, id)
 }
@@ -282,55 +306,106 @@ export async function deleteRole(deps: Deps, id: string) {
   await deps.authorization.deleteRole(id)
 }
 
-export async function listRoleScopes(deps: Deps, roleId: string) {
+export async function listRolePermissions(deps: Deps, roleId: string) {
   await getRole(deps, roleId)
-  return { scopes: await deps.authorization.listRoleScopes(roleId) }
+  return { permissions: await deps.authorization.listRolePermissions(roleId) }
 }
 
-export async function replaceRoleScopes(deps: Deps, roleId: string, scopes: string[]) {
-  const role = await getRole(deps, roleId)
-  if (!role.resourceId) throw badRequest('A role must belong to an API resource before scopes can be assigned.')
-  const resource = await getResource(deps, role.resourceId)
-  await validateRequestedScopes(deps, resource.resourceUrl, scopes)
-  await deps.authorization.replaceRoleScopes(roleId, scopes)
-}
-
-export async function assignUserRole(deps: Deps, input: AssignRoleRequest, actorUserId: string | null) {
-  const role = await getRole(deps, input.roleId)
-  if (role.organizationId || role.applicationId) {
-    throw badRequest('User role assignments must use global roles.')
+export async function replaceRolePermissions(deps: Deps, roleId: string, permissions: RolePermission[]) {
+  await getRole(deps, roleId)
+  const permissionsByResource = new Map<string, RolePermission[]>()
+  for (const permission of permissions) {
+    permissionsByResource.set(permission.resourceId, [
+      ...(permissionsByResource.get(permission.resourceId) ?? []),
+      permission,
+    ])
   }
-  await deps.authorization.assignUserRole(toAssignmentInput(input, actorUserId))
+  for (const [resourceId, resourcePermissions] of permissionsByResource) {
+    const resource = await getResource(deps, resourceId)
+    await validateRequestedScopes(
+      deps,
+      resource.resourceUrl,
+      resourcePermissions.map((permission) => permission.scope),
+    )
+  }
+  await deps.authorization.replaceRolePermissions(roleId, permissions)
 }
 
-export async function assignApplicationRole(deps: Deps, input: AssignRoleRequest, actorUserId: string | null) {
-  const role = await getRole(deps, input.roleId)
-  if (role.organizationId || (role.applicationId && role.applicationId !== input.subjectId)) {
-    throw badRequest('Application role assignments must use global roles or roles scoped to the same application.')
-  }
-  await deps.authorization.assignApplicationRole(toAssignmentInput(input, actorUserId))
+export function listRoleAssignments(
+  deps: Deps,
+  query: ListRoleAssignmentsQuery,
+  visibility?: { organizationIds: string[]; includeRealmAssignments?: boolean },
+) {
+  return deps.authorization.listRoleAssignments({ ...query, ...visibility }).then((page) => ({
+    assignments: page.items,
+    pagination: page.pagination,
+  }))
 }
 
-export async function assignMemberRole(deps: Deps, input: AssignRoleRequest, actorUserId: string | null) {
-  const role = await getRole(deps, input.roleId)
-  const member = await requireMember(deps, input.subjectId)
-  if (role.applicationId || (role.organizationId && role.organizationId !== member.organizationId)) {
-    throw badRequest('Member role assignments must use global roles or roles scoped to the same organization.')
+export async function getRoleAssignment(deps: Deps, id: string) {
+  const assignment = await deps.authorization.findRoleAssignment(id)
+  if (!assignment) throw notFound('Role assignment was not found.')
+  return assignment
+}
+
+export async function createRoleAssignment(deps: Deps, input: CreateRoleAssignmentRequest, actorUserId: string | null) {
+  await getRole(deps, input.roleId)
+  const organizationId = input.organizationId ?? null
+  if (organizationId) await getOrganization(deps, organizationId)
+  await validateRoleAssignmentSubject(deps, input.subjectType, input.subjectId, organizationId)
+  return deps.authorization.createRoleAssignment({
+    id: createId('assignment'),
+    roleId: input.roleId,
+    subjectType: input.subjectType,
+    subjectId: input.subjectId,
+    organizationId,
+    assignedByUserId: actorUserId,
+    expiresAt: input.expiresAt ?? null,
+  })
+}
+
+export async function putRoleAssignmentRevocation(deps: Deps, id: string) {
+  const assignment = await getRoleAssignment(deps, id)
+  if (assignment.revokedAt) return { roleAssignmentId: id, revokedAt: assignment.revokedAt }
+  const revokedAt = new Date()
+  if (!(await deps.authorization.revokeRoleAssignment(id, revokedAt))) throw notFound('Role assignment was not found.')
+  return { roleAssignmentId: id, revokedAt: revokedAt.toISOString() }
+}
+
+async function validateRoleAssignmentSubject(
+  deps: Deps,
+  subjectType: CreateRoleAssignmentRequest['subjectType'],
+  subjectId: string,
+  organizationId: string | null,
+) {
+  if (subjectType === 'user') {
+    await deps.users.getUser(subjectId)
+    if (organizationId && !(await deps.authorization.findMemberByOrganizationUser(organizationId, subjectId))) {
+      throw badRequest('User must be a member of the assignment Organization context.')
+    }
+    return
   }
-  await deps.authorization.assignMemberRole(toAssignmentInput(input, actorUserId))
+  if (subjectType === 'workload') {
+    const application = await deps.applications.findById(subjectId)
+    if (!application) throw notFound('Workload Application was not found.')
+    if (organizationId && application.ownerOrganizationId !== organizationId) {
+      throw badRequest('Workload must be owned by the assignment Organization context.')
+    }
+    return
+  }
+  const agent = await deps.agentIdentities.findIdentity(subjectId)
+  if (!agent || agent.identity.status !== 'active') throw notFound('Active Agent identity was not found.')
+  if (!organizationId || agent.identity.ownerOrganizationId === organizationId) return
+  if (
+    !agent.identity.ownerUserId ||
+    !(await deps.authorization.findMemberByOrganizationUser(organizationId, agent.identity.ownerUserId))
+  ) {
+    throw badRequest('Agent must belong to the assignment Organization or one of its members.')
+  }
 }
 
 export async function assignAgentRole(deps: Deps, input: AssignRoleRequest, actorUserId: string | null) {
-  const role = await getRole(deps, input.roleId)
-  if (!role.resourceId || role.applicationId) {
-    throw badRequest('Agent role assignments require an API resource role.')
-  }
-  const identity = await deps.agentIdentities.findIdentity(input.subjectId)
-  if (!identity || identity.identity.status !== 'active') throw notFound('Active Agent identity was not found.')
-  if (role.organizationId && role.organizationId !== identity.identity.ownerOrganizationId) {
-    throw badRequest('Agent role must belong to the Agent home organization.')
-  }
-  await deps.authorization.assignAgentRole(toAssignmentInput(input, actorUserId))
+  await createRoleAssignment(deps, { ...input, subjectType: 'agent', organizationId: null }, actorUserId)
 }
 
 export async function getAgentRoleAuthorization(
@@ -339,6 +414,10 @@ export async function getAgentRoleAuthorization(
   resourceId: string,
   organizationId?: string,
 ) {
+  const resource = await getResource(deps, resourceId)
+  if (!resource.availableToAgents || !resourceEligibleForOrganization(resource, organizationId)) {
+    return { roles: [], scopes: [] }
+  }
   const assignments = await deps.authorization.listAgentRoleAssignments(agentIdentityId, {
     resourceId,
     organizationId,
@@ -359,27 +438,32 @@ export async function buildTokenClaims(deps: Deps, input: AuthorizationTokenClai
       ? await deps.authorization.findOrganization(input.organizationId)
       : null
   const resourceId = resource?.id
+  if (input.userId && input.organizationId) {
+    const membership = await deps.authorization.findMemberByOrganizationUser(input.organizationId, input.userId)
+    if (!membership) throw forbidden('User is not a member of the active Organization context.')
+  }
+  if (resource && !resourceEligibleForOrganization(resource, input.organizationId)) {
+    return toTokenClaims({ ...input, scopes: [] }, [], resource, organization)
+  }
   const scope = {
     resourceId,
     organizationId: input.organizationId,
-    applicationId: input.applicationId ?? undefined,
   }
   const userAssignments = input.userId ? await deps.authorization.listUserRoleAssignments(input.userId, scope) : []
   const applicationAssignments = input.applicationId
     ? await deps.authorization.listApplicationRoleAssignments(input.applicationId, scope)
     : []
-  const memberAssignments =
-    input.userId && input.organizationId
-      ? await memberAssignmentsFor(deps, input.userId, input.organizationId, scope)
-      : []
-
-  const assignments = [...userAssignments, ...applicationAssignments, ...memberAssignments]
+  const assignments = [...userAssignments, ...applicationAssignments]
   return toTokenClaims(input, assignments, resource, organization)
 }
 
-async function memberAssignmentsFor(deps: Deps, userId: string, organizationId: string, scope: RoleAssignmentScope) {
-  const member = await deps.authorization.findMemberByOrganizationUser(organizationId, userId)
-  return member ? deps.authorization.listMemberRoleAssignments(member.id, scope) : []
+function resourceEligibleForOrganization(resource: ApiResourceResponse, organizationId?: string) {
+  if (resource.accessEligibility.mode === 'realm') return true
+  if (!organizationId) return false
+  if (resource.accessEligibility.mode === 'owner_organization') {
+    return resource.ownerOrganizationId === organizationId
+  }
+  return resource.accessEligibility.organizationIds.includes(organizationId)
 }
 
 async function requireMember(deps: Deps, id: string) {
@@ -394,4 +478,12 @@ async function requireMemberForOrganization(deps: Deps, id: string, organization
     throw notFound('Organization member was not found.')
   }
   return member
+}
+
+async function rejectLastOwnerMutation(deps: Deps, member: Awaited<ReturnType<typeof requireMember>>) {
+  if (member.role !== 'owner') return
+  const ownerCount = await deps.authorization.countMembersByRole(member.organizationId, 'owner')
+  if (ownerCount <= 1) {
+    throw badRequest('Transfer Organization ownership before changing or removing the last Owner.')
+  }
 }

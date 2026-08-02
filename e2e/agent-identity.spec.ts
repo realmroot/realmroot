@@ -82,10 +82,10 @@ test.describe('new Agent stable identity enrollment', () => {
 
       expect(plugin.listApplications().applications).toEqual(expect.any(Array))
 
-      await page.goto('/connections')
-      const identities = page.getByLabel('Agent identities')
-      await expect(identities.getByRole('heading', { name: 'E2E Build Agent' })).toBeVisible()
-      await expect(identities.getByText(new RegExp(result.agent.subject))).toBeVisible()
+      await page.goto('/account/agents')
+      await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
+      await expect(page.getByText('E2E Build Agent', { exact: true })).toBeVisible()
+      await expect(page.getByText(new RegExp(result.agent.subject))).toBeVisible()
     } finally {
       plugin.dispose()
     }

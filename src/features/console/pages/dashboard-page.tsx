@@ -1,128 +1,294 @@
 import { useQuery } from '@tanstack/react-query'
-import { CalendarDays } from 'lucide-react'
+import { AppWindow, ArrowRight, KeyRound, Server, ShieldCheck, UsersRound } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { LinkButton } from '@/components/link-button'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
-import type { AdminDashboard } from '@/lib/api/management'
-import { consoleQueryKeys, getAdminDashboard } from '@/lib/api/management'
+import type { AdminDashboard, OrganizationDashboard } from '@/lib/api/management'
+import { consoleQueryKeys, getAdminDashboard, getOrganizationDashboard } from '@/lib/api/management'
+import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
 import { ErrorState, LoadingState } from '../helpers/helpers-dialogs'
 
 export function ConsoleDashboardPage() {
-  const query = useQuery({
-    queryKey: consoleQueryKeys.dashboard,
-    queryFn: getAdminDashboard,
+  const { organizationId: context } = useConsoleScope()
+  const query = useQuery<AdminDashboard | OrganizationDashboard>({
+    queryKey: [...consoleQueryKeys.dashboard, { organizationId: context }],
+    queryFn: () => (context ? getOrganizationDashboard(context) : getAdminDashboard()),
   })
   if (query.isLoading) return <LoadingState label={tt('Loading Console dashboard')} />
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />
   const dashboard = query.data
-  /* v8 ignore next -- data is always present after the isLoading/isError guards above */
   if (!dashboard) return null
+  if (context) return <OrganizationDashboardView context={context} dashboard={dashboard as OrganizationDashboard} />
+  const realmDashboard = dashboard as AdminDashboard
+
   return (
     <>
       <PageHeader
+        description={tt('Review Realm inventory, hosted authentication readiness, and configuration gaps.')}
         title={tt('Dashboard')}
-        description={tt('Get an overview about your identity service performance.')}
       />
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard detail={tt('Realm identities')} label={tt('Users')} value={realmDashboard.users.pagination.total} />
         <MetricCard
-          detail={tt('Tenant identities available to hosted auth.')}
-          label={tt('Total users')}
-          value={dashboard.users.pagination.total}
+          detail={tt('Registered OIDC clients')}
+          label={tt('Applications')}
+          value={realmDashboard.applications.pagination.total}
         />
         <MetricCard
-          detail={tt('Users created in the last 24 hours.')}
-          label={tt('New users today')}
-          pending
-          value="--"
+          detail={tt('Protected APIs')}
+          label={tt('Resource servers')}
+          value={realmDashboard.apiResources.pagination.total}
         />
         <MetricCard
-          detail={tt('Users created in the past seven days.')}
-          label={tt('New users past 7 days')}
-          pending
-          value="--"
+          detail={tt('Shared membership spaces')}
+          label={tt('Organizations')}
+          value={realmDashboard.organizations.pagination.total}
         />
       </div>
-      <DashboardChartPanel dashboard={dashboard} />
+      <div className="consoleDashboardGrid">
+        <RealmReadiness dashboard={realmDashboard} />
+        <ConfigurationGaps dashboard={realmDashboard} />
+      </div>
     </>
   )
 }
 
-export function MetricCard({
-  detail,
-  label,
-  pending,
-  value,
-}: {
-  detail: string
-  label: string
-  pending?: boolean
-  value: number | string
-}) {
+function OrganizationDashboardView({ context, dashboard }: { context: string; dashboard: OrganizationDashboard }) {
+  const nextSteps: Array<{ href: string; icon: ReactNode; label: string; meta: string }> = []
+  if (dashboard.applications.pagination.total === 0)
+    nextSteps.push({
+      href: '/console/applications',
+      icon: <AppWindow />,
+      label: tt('Register an application'),
+      meta: tt('This Organization has no OIDC client yet.'),
+    })
+  if (dashboard.apiResources.pagination.total === 0)
+    nextSteps.push({
+      href: '/console/api-resources',
+      icon: <Server />,
+      label: tt('Register a resource server'),
+      meta: tt('This Organization has no protected API yet.'),
+    })
+  if (dashboard.assignments.pagination.total === 0)
+    nextSteps.push({
+      href: '/console/role-assignments',
+      icon: <ShieldCheck />,
+      label: tt('Assign a role'),
+      meta: tt('No actor has contextual authority in this Organization.'),
+    })
   return (
-    <Card className="consoleMetricCard">
-      <CardHeader className="p-5">
-        <div className="flex items-center justify-between gap-2">
-          <CardDescription className="font-semibold text-foreground">{label}</CardDescription>
-          {pending ? <Badge variant="outline">{tt('Pending')}</Badge> : null}
-        </div>
-        <CardTitle className="pt-5 text-2xl leading-none">{value}</CardTitle>
+    <>
+      <PageHeader
+        description={tt(
+          'Review people, Agent identities, development inventory, and contextual authority for this Organization.',
+        )}
+        title={dashboard.organization.displayName ?? dashboard.organization.name}
+      />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard detail={tt('Organization members')} label={tt('Users')} value={dashboard.users.pagination.total} />
+        <MetricCard
+          detail={tt('Owned OIDC clients')}
+          label={tt('Applications')}
+          value={dashboard.applications.pagination.total}
+        />
+        <MetricCard
+          detail={tt('Owned protected APIs')}
+          label={tt('Resource servers')}
+          value={dashboard.apiResources.pagination.total}
+        />
+        <MetricCard
+          detail={tt('Organization-owned identities')}
+          label={tt('Agents')}
+          value={dashboard.agents.pagination.total}
+        />
+      </div>
+      <Card className="border shadow-none ring-0">
+        <CardHeader>
+          <CardTitle>{tt('Next steps')}</CardTitle>
+          <CardDescription>{tt('Actionable gaps in this Organization context.')}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid p-0">
+          {nextSteps.length ? (
+            nextSteps.map((item) => (
+              <div className="consoleAttentionRow" key={item.label}>
+                <span className="consoleAttentionIcon">{item.icon}</span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.meta}</span>
+                </div>
+                <LinkButton
+                  aria-label={tt('Open {{item}}', { item: item.label })}
+                  href={`${item.href}?context=${encodeURIComponent(context)}`}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <ArrowRight />
+                </LinkButton>
+              </div>
+            ))
+          ) : (
+            <div className="consoleDashboardClearState">
+              <UsersRound />
+              <div>
+                <strong>{tt('Development inventory is ready')}</strong>
+                <span>{tt('Core applications, APIs, and authorization assignments are present.')}</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+
+export function MetricCard({ detail, label, value }: { detail: string; label: string; value: number | string }) {
+  return (
+    <Card className="consoleMetricCard border shadow-none ring-0">
+      <CardHeader>
+        <CardDescription className="font-semibold">{label}</CardDescription>
+        <CardTitle className="pt-3 text-[26px] font-semibold tracking-[-0.04em]">{value}</CardTitle>
         <p className="text-xs leading-5 text-muted-foreground">{detail}</p>
       </CardHeader>
     </Card>
   )
 }
 
-function DashboardChartPanel({ dashboard }: { dashboard: AdminDashboard }) {
-  void dashboard
+function RealmReadiness({ dashboard }: { dashboard: AdminDashboard }) {
+  const enabledMethods = hostedMethodCount(dashboard)
+  const enabledConnectors = dashboard.connectors.connectors.filter((connector) => connector.enabled).length
+  const rows = [
+    {
+      label: tt('Hosted sign-in methods'),
+      value: tt('{{count}} available', { count: enabledMethods }),
+      ready: enabledMethods > 0,
+    },
+    {
+      label: tt('Identity connectors'),
+      value: enabledConnectors ? tt('{{count}} ready', { count: enabledConnectors }) : tt('Built-in methods only'),
+      ready: true,
+    },
+    {
+      label: tt('MFA prompt policy'),
+      value: dashboard.security.policy.mfa.mode === 'required' ? tt('Required') : tt('Optional'),
+      ready: true,
+    },
+    {
+      label: tt('Passkeys'),
+      value: dashboard.security.policy.passkeys.enabled ? tt('Available') : tt('Not available'),
+      ready: dashboard.security.policy.passkeys.enabled,
+    },
+  ]
+
   return (
-    <Card className="consoleChartPanel">
-      <CardHeader className="flex-row items-start justify-between gap-3 p-5">
-        <div>
-          <CardTitle>{tt('Daily active users')}</CardTitle>
-          <div className="mt-6 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold leading-none">--</span>
-            <span className="text-sm font-medium text-muted-foreground">{tt('Pending activity data')}</span>
-          </div>
-        </div>
-        <Button type="button" variant="secondary">
-          {formatDashboardDate(new Date())}
-          <CalendarDays data-icon="inline-end" />
-        </Button>
+    <Card className="border shadow-none ring-0">
+      <CardHeader>
+        <CardTitle>{tt('Realm readiness')}</CardTitle>
+        <CardDescription>{tt('Live authentication state from the current management configuration.')}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-6 p-5 pt-0">
-        <div aria-label={tt('Daily active users trend')} className="consoleChartCanvas" role="img">
-          <div className="consoleChartAxis" />
-          <div className="consoleChartAxis" />
-          <div className="consoleChartAxis" />
-          <div className="consoleChartAxis" />
-          <div className="consoleChartLine" />
-          <div className="consoleChartLabels" aria-hidden="true">
-            {dashboardChartLabels(new Date()).map((label) => (
-              <span key={label}>{label}</span>
-            ))}
+      <CardContent className="grid p-0">
+        {rows.map((row) => (
+          <div className="consoleDashboardStatusRow" key={row.label}>
+            <div>
+              <strong>{row.label}</strong>
+              <span>{row.value}</span>
+            </div>
+            <Badge variant={row.ready ? 'secondary' : 'outline'}>{row.ready ? tt('Ready') : tt('Review')}</Badge>
           </div>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <DashboardActivityCard label={tt('Weekly active users')} />
-          <DashboardActivityCard label={tt('Monthly active users')} />
-        </div>
+        ))}
       </CardContent>
     </Card>
   )
 }
 
-function DashboardActivityCard({ label }: { label: string }) {
+function ConfigurationGaps({ dashboard }: { dashboard: AdminDashboard }) {
+  const items: Array<{ href: string; icon: ReactNode; label: string; meta: string }> = []
+  if (hostedMethodCount(dashboard) === 0) {
+    items.push({
+      href: '/console/sign-in-experience/sign-in',
+      icon: <KeyRound />,
+      label: tt('Enable a sign-in method'),
+      meta: tt('Hosted authentication currently has no usable method.'),
+    })
+  }
+  if (dashboard.applications.pagination.total === 0) {
+    items.push({
+      href: '/console/applications',
+      icon: <AppWindow />,
+      label: tt('Register an application'),
+      meta: tt('No client can use this Realm yet.'),
+    })
+  }
+  if (dashboard.apiResources.pagination.total === 0) {
+    items.push({
+      href: '/console/api-resources',
+      icon: <Server />,
+      label: tt('Register a resource server'),
+      meta: tt('No protected API is represented in authorization.'),
+    })
+  }
+  if (dashboard.roles.pagination.total === 0) {
+    items.push({
+      href: '/console/roles',
+      icon: <ShieldCheck />,
+      label: tt('Define a role'),
+      meta: tt('No reusable permission set is available for assignment.'),
+    })
+  }
+
   return (
-    <div className="consoleActivityCard">
-      <p className="text-sm font-semibold">{label}</p>
-      <div className="mt-8 flex items-baseline justify-between gap-3">
-        <span className="text-2xl font-semibold leading-none">--</span>
-        <span className="text-sm font-medium text-muted-foreground">{tt('Pending')}</span>
-      </div>
-    </div>
+    <Card className="border shadow-none ring-0">
+      <CardHeader>
+        <CardTitle>{tt('Configuration gaps')}</CardTitle>
+        <CardDescription>{tt('Actionable gaps derived from current Realm inventory.')}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid p-0">
+        {items.length ? (
+          items.map((item) => (
+            <div className="consoleAttentionRow" key={item.label}>
+              <span className="consoleAttentionIcon">{item.icon}</span>
+              <div>
+                <strong>{item.label}</strong>
+                <span>{item.meta}</span>
+              </div>
+              <LinkButton
+                aria-label={tt('Open {{item}}', { item: item.label })}
+                href={item.href}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <ArrowRight />
+              </LinkButton>
+            </div>
+          ))
+        ) : (
+          <div className="consoleDashboardClearState">
+            <UsersRound />
+            <div>
+              <strong>{tt('No overview gaps')}</strong>
+              <span>{tt('Core identity, application, API, and role inventory is present.')}</span>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
+}
+
+function hostedMethodCount(dashboard: AdminDashboard) {
+  const { builtInProviders, signIn } = dashboard.signIn
+  return [
+    signIn.passwordEnabled,
+    signIn.emailOtpEnabled && builtInProviders.email.enabled,
+    signIn.socialLoginEnabled &&
+      dashboard.connectors.connectors.some((connector) => connector.enabled && connector.loginEnabled),
+    dashboard.security.policy.passkeys.enabled,
+    builtInProviders.phone.enabled,
+    builtInProviders.web3Wallet.enabled,
+    builtInProviders.oneTap.enabled,
+  ].filter(Boolean).length
 }
 
 export function formatDashboardDate(date: Date) {
@@ -136,8 +302,6 @@ export function dashboardChartLabels(date: Date) {
   return Array.from({ length: 8 }, (_, index) => {
     const labelDate = new Date(date)
     labelDate.setDate(date.getDate() - (7 - index) * 4)
-    const month = String(labelDate.getMonth() + 1).padStart(2, '0')
-    const day = String(labelDate.getDate()).padStart(2, '0')
-    return `${month}-${day}`
+    return `${String(labelDate.getMonth() + 1).padStart(2, '0')}-${String(labelDate.getDate()).padStart(2, '0')}`
   })
 }

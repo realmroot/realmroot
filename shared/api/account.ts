@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import type { Agent } from './agent-api'
+import type { RoleAssignmentResponse, RolePermission, RoleResponse } from './authorization'
 import type { PaginationMetadata } from './pagination'
 import { usernameSchema } from './users'
 
@@ -52,6 +54,48 @@ export type AccountProfileResponse = {
     image: string | null
     role: string | null
   }
+}
+
+export type DeveloperConsoleAccessResponse = {
+  canCreateOrganization: boolean
+  showOrganizations: boolean
+  realmOperator: boolean
+  consoleOrganizations: Array<{
+    organizationId: string
+    accessLevel: 'owner' | 'admin' | 'developer'
+  }>
+}
+
+export type AccountOrganizationContextResponse = {
+  activeOrganizationId: string | null
+}
+
+export type AccountOrganizationAgentsResponse = {
+  items: Agent[]
+  pagination: PaginationMetadata
+}
+
+export type AccountOrganizationRoleAssignmentsResponse = {
+  assignments: Array<{
+    assignment: RoleAssignmentResponse
+    role: RoleResponse
+    permissions: RolePermission[]
+  }>
+  pagination: PaginationMetadata
+}
+
+export type AccountOrganizationAgentAccessGrantsResponse = {
+  grants: Array<{
+    id: string
+    agentId: string
+    agentName: string
+    resourceId: string
+    scopes: string[]
+    mode: string
+    expiresAt: string | null
+    createdAt: string
+  }>
+  pagination: PaginationMetadata
 }
 
 export type LinkedAccountsResponse = {

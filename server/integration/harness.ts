@@ -1,5 +1,4 @@
 import { env } from 'cloudflare:test'
-import { createEmailSender } from '@server/adapters/gateways/email/sender'
 import { createAuth } from '@server/auth'
 import { createDeps } from '@server/composition'
 import { createDb } from '@server/db/client'
@@ -7,6 +6,7 @@ import { agent, agentCapabilityGrant, agentHost, approvalRequest } from '@server
 import type { Env, RuntimeConfig } from '@server/env'
 import { createApp } from '@server/http/app'
 import type { AgentAssertionSigner } from '@server/usecases/external-resources'
+import { publishWebhookEvent } from '@server/usecases/webhooks'
 import type { SecurityPolicy } from '@shared/api/security'
 
 export const baseURL = 'http://localhost'
@@ -22,7 +22,6 @@ function integrationEnv(): Env {
     DB: env.DB,
     ASSET_BUCKET: noopBucket(),
     EMAIL: { send: async () => ({ messageId: 'integration' }) },
-    EMAIL_QUEUE: { send: async () => {}, sendBatch: async () => {} },
     ASSETS: { fetch: async () => new Response(null, { status: 404 }) },
     BETTER_AUTH_SECRET: authSecret,
     CREDENTIAL_ENCRYPTION_KEY: 'integration-credential-encryption-key-2026',
@@ -63,7 +62,7 @@ function integrationSecurityPolicy(): SecurityPolicy {
       rejectSequential: false,
       rejectCustomWords: false,
     },
-    captcha: { enabled: false, provider: 'turnstile', siteKey: '', secretBinding: '' },
+    captcha: { enabled: false, provider: 'turnstile', siteKey: '', projectId: null, secretKey: '' },
     blocklist: { blockSubaddressing: false, entries: [] },
   } as SecurityPolicy
 }
@@ -83,10 +82,7 @@ export async function createHarness(): Promise<Harness> {
   const config = integrationConfig()
   const deps = createDeps(integrationEnv(), config)
   const db = createDb(env.DB)
-  const emailSender = createEmailSender(integrationEnv().EMAIL, {
-    from: config.emailFrom,
-    fromName: config.emailFromName,
-  })
+  const emailSender = deps.email
   const auth = createAuth(
     db,
     config.authSecret,
@@ -94,6 +90,12 @@ export async function createHarness(): Promise<Harness> {
     config.trustedOrigins,
     emailSender,
     config.securityPolicy,
+    undefined,
+    {
+      publishWebhookEvent: async (event, data) => {
+        await publishWebhookEvent(deps, event, data)
+      },
+    },
   )
 
   const app = createApp(auth, deps, {
@@ -104,7 +106,7 @@ export async function createHarness(): Promise<Harness> {
 
   return {
     app,
-    request: async (input, init) => app.request(new URL(input, baseURL).toString(), init),
+    request: async (input, init) => app.request(new URL(input, baseURL).toString(), init, integrationEnv()),
     db,
     deps,
     agentTokenSigner: {

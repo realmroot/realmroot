@@ -1,31 +1,38 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router'
 import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { expect } from 'vitest'
 export function renderWithQuery(children: ReactNode) {
-  return render(
+  const routeTree = createRootRoute({ component: () => children })
+  const router = createRouter({
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+    routeTree,
+  })
+  const result = render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      {children}
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   )
+  return { ...result, router }
 }
 
 export function metricValue(label: string) {
-  const card = screen.getByText(label).closest('[data-ui="card"]')
+  const card = screen.getByText(label).closest('[data-slot="card"]')
   expect(card).toBeTruthy()
-  return card?.querySelector('.text-2xl')?.textContent ?? ''
+  return card?.querySelector('[data-slot="card-title"]')?.textContent ?? ''
 }
 
 export function summaryCard(title: string) {
-  const card = screen.getByRole('heading', { name: title }).closest('[data-ui="card"]')
+  const card = screen.getByRole('heading', { name: title }).closest('[data-slot="card"]')
   expect(card).toBeTruthy()
   return within(card as HTMLElement)
 }
 
-export function jsonResponse(body: unknown, status = 200) {
+export function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   })
 }
 
@@ -42,9 +49,45 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
   const url = parsedUrl ? `${parsedUrl.pathname}${parsedUrl.search}` : String(input)
 
   if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-  if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
+  if (url === '/api/account/profile') {
+    return Promise.resolve(jsonResponse({ user: consoleAccountProfile }))
+  }
+  if (url === '/api/account/developer-console-access') return Promise.resolve(jsonResponse(consoleAccountAccess))
+  if (url === '/api/account/organization-context') {
+    return Promise.resolve(jsonResponse({ activeOrganizationId: null }))
+  }
+  if (url === '/api/account/security') return Promise.resolve(jsonResponse({ security: accountSecurity }))
   if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
   if (url === '/api/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
+  if (url === '/api/organization-creation-policy') {
+    return Promise.resolve(
+      jsonResponse(
+        {
+          mode: developerSettings.organizationCreation,
+          approvedUserIds: developerSettings.approvedUserIds,
+        },
+        200,
+        { ETag: '"organization-creation-v1"' },
+      ),
+    )
+  }
+  if (url === '/api/developer-console-access-policy') {
+    return Promise.resolve(
+      jsonResponse(
+        {
+          mode: developerSettings.consoleAccess,
+          eligibleAccessLevels: developerSettings.eligibleAccessLevels,
+          selectedOrganizationIds: developerSettings.selectedOrganizationIds,
+        },
+        200,
+        { ETag: '"developer-console-v1"' },
+      ),
+    )
+  }
+  if (url === '/api/realm') return Promise.resolve(jsonResponse(generalSettings, 200, { ETag: '"realm-v1"' }))
+  if (url === '/api/email-delivery-configuration') {
+    return Promise.resolve(jsonResponse(emailSettings, 200, { ETag: '"email-delivery-v1"' }))
+  }
   if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
   if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
   if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
@@ -59,6 +102,12 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
   }
   if (url === '/api/audit-events') {
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+  }
+  if (/^\/api\/users(?:\?|$)/.test(url)) {
+    return Promise.resolve(jsonResponse({ users: [user], pagination }))
+  }
+  if (url === '/api/organizations') {
+    return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
   }
 
   return unexpectedConsoleRequest(input, init)
@@ -85,7 +134,9 @@ export function consoleRouteFetch(input: RequestInfo | URL) {
   const request = input instanceof Request ? input : null
   const url = request?.url ? new URL(request.url).pathname : String(input)
   if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-  if (url === '/api/account/profile') return Promise.resolve(jsonResponse({ user }))
+  if (url === '/api/account/profile') {
+    return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
+  }
   if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
   if (url === '/api/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
   if (url === '/api/readiness') {
@@ -128,6 +179,9 @@ import {
   accountSecurity,
   brandingSettings,
   configz,
+  developerSettings,
+  emailSettings,
+  generalSettings,
   securityPolicy,
   signInSettings,
 } from './console.settings-fixtures'
@@ -136,6 +190,8 @@ import {
   application,
   connector,
   connectorTemplates,
+  consoleAccountAccess,
+  consoleAccountProfile,
   emptyPagination,
   organization,
   pagination,

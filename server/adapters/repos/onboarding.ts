@@ -1,4 +1,5 @@
 import { forbidden } from '@server/domain/errors'
+import { platformOrganization } from '@server/domain/platform-organization'
 import type { OnboardingRepository } from '@server/usecases/ports'
 
 export function createOnboardingRepository(db: D1Database): OnboardingRepository {
@@ -11,6 +12,7 @@ export function createOnboardingRepository(db: D1Database): OnboardingRepository
     async createBootstrapAdmin(input) {
       const userId = crypto.randomUUID()
       const accountId = crypto.randomUUID()
+      const memberId = crypto.randomUUID()
       const statements = [
         db
           .prepare(
@@ -30,11 +32,37 @@ where exists (select 1 from user where id = ?2 and role = 'admin')
 `.trim(),
           )
           .bind(accountId, userId, input.passwordHash),
+        db
+          .prepare(
+            `
+insert into organization (id, slug, name, metadata)
+values (?1, ?2, ?3, ?4)
+on conflict(id) do nothing
+`.trim(),
+          )
+          .bind(
+            platformOrganization.id,
+            platformOrganization.slug,
+            platformOrganization.name,
+            JSON.stringify(platformOrganization.metadata),
+          ),
+        db
+          .prepare(
+            `
+insert into member (id, organization_id, user_id, role)
+select ?1, ?2, ?3, 'owner'
+where exists (select 1 from user where id = ?3 and role = 'admin')
+  and not exists (
+    select 1 from member where organization_id = ?2 and user_id = ?3
+  )
+`.trim(),
+          )
+          .bind(memberId, platformOrganization.id, userId),
       ]
 
-      const [userInsert, accountInsert] = await db.batch(statements)
+      const [userInsert, accountInsert, _organizationInsert, memberInsert] = await db.batch(statements)
 
-      if (userInsert.meta.changes !== 1 || accountInsert.meta.changes !== 1) {
+      if (userInsert.meta.changes !== 1 || accountInsert.meta.changes !== 1 || memberInsert.meta.changes !== 1) {
         throw forbidden('Onboarding is locked after the first user exists.')
       }
 

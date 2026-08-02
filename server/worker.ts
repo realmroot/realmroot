@@ -1,4 +1,4 @@
-import { createEmailSender } from '@server/adapters/gateways/email/sender'
+import { createConfiguredEmailSender } from '@server/adapters/gateways/email/sender'
 import { createSecretCipher } from '@server/adapters/gateways/secrets'
 import { createDrizzleConfigzRepository } from '@server/adapters/repos/configz'
 import { createConnectorRepository } from '@server/adapters/repos/connectors'
@@ -9,6 +9,7 @@ import { type Env, type RuntimeConfig, validateEnv } from '@server/env'
 import { createApp, healthStatus } from '@server/http/app'
 import { defaultBuiltInProviders } from '@server/usecases/configz'
 import { loadAuthConnectorConfig } from '@server/usecases/connectors'
+import { publishWebhookEvent } from '@server/usecases/webhooks'
 import { managementBuiltInProviderSettingsSchema } from '@shared/api/management'
 
 let cachedAuth: Auth | null = null
@@ -24,7 +25,7 @@ export default {
     const config = validateEnv(env, request.url)
     const deps = createDeps(env, config)
     const securityPolicy = await deps.security.getPolicy()
-    const auth = await getAuth(env, { ...config, securityPolicy })
+    const auth = await getAuth(env, { ...config, securityPolicy }, deps)
     return createApp(auth, deps, {
       baseURL: config.baseURL,
       trustedOrigins: config.trustedOrigins,
@@ -33,20 +34,21 @@ export default {
   },
 }
 
-async function getAuth(env: Env, config: RuntimeConfig): Promise<Auth> {
+async function getAuth(env: Env, config: RuntimeConfig, deps: ReturnType<typeof createDeps>): Promise<Auth> {
   const db = createDb(env.DB)
+  const configz = createDrizzleConfigzRepository(db)
   const connectors = await loadAuthConnectorConfig(
     createConnectorRepository(db, createSecretCipher(config.credentialEncryptionKey)),
   )
   const validAudiences = await loadValidAudiences(env.DB, config.baseURL)
-  const storedBuiltInProviders = (await createDrizzleConfigzRepository(db).getSettings())?.metadata?.builtInProviders
+  const storedBuiltInProviders = (await configz.getSettings())?.metadata?.builtInProviders
   const builtInProviders = managementBuiltInProviderSettingsSchema.parse(
     mergeBuiltInProviders(defaultBuiltInProviders, storedBuiltInProviders),
   )
   const cacheKey = [
     config.authSecret,
     config.baseURL,
-    config.emailFrom,
+    config.emailFrom ?? '',
     config.emailFromName ?? '',
     config.trustedOrigins.join(','),
     JSON.stringify(config.securityPolicy),
@@ -56,10 +58,13 @@ async function getAuth(env: Env, config: RuntimeConfig): Promise<Auth> {
   ].join('\n')
 
   if (!cachedAuth || cachedKey !== cacheKey || cachedDb !== env.DB || cachedEmail !== env.EMAIL) {
-    const emailSender = createEmailSender(env.EMAIL, {
-      from: config.emailFrom,
-      fromName: config.emailFromName,
-    })
+    const emailSender = createConfiguredEmailSender(
+      env.EMAIL,
+      () => configz.getEmailSettings(),
+      config.emailFrom
+        ? { from: config.emailFrom, ...(config.emailFromName ? { fromName: config.emailFromName } : {}) }
+        : undefined,
+    )
 
     cachedAuth = createAuth(
       db,
@@ -73,6 +78,9 @@ async function getAuth(env: Env, config: RuntimeConfig): Promise<Auth> {
         builtInProviders,
         twoFactorEmailOtpEnabled: config.securityPolicy.mfa.emailOtpEnabled,
         validAudiences,
+        publishWebhookEvent: async (event, data) => {
+          await publishWebhookEvent(deps, event, data)
+        },
       },
     )
     cachedKey = cacheKey

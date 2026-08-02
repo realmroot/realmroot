@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { SecurityGeneralPage } from '@/features/console/extracted/security-settings'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/console/security/general')({
-  component: SecurityGeneralPage,
+  beforeLoad: () => {
+    throw redirect({ href: '/console/security/sign-in' })
+  },
 })

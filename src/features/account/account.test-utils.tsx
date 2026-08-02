@@ -10,6 +10,13 @@ export type AccountStore = ReturnType<typeof createAccountStore>
 
 export function createAccountStore() {
   return {
+    activeOrganizationId: null as string | null,
+    access: {
+      canCreateOrganization: true,
+      showOrganizations: false,
+      realmOperator: false,
+      consoleOrganizations: [] as Array<{ organizationId: string; level: string }>,
+    },
     profile: {
       id: 'user-1',
       email: 'jane@example.com',
@@ -50,6 +57,7 @@ export function createAccountStore() {
       applicationName: string
       scopes: string[]
       grantedAt: string
+      expiresAt?: string | null
     }>,
     agents: [] as Array<{
       id: string
@@ -164,6 +172,12 @@ export function accountHandlers(store: AccountStore, config: ReturnType<typeof c
   return [
     http.get(`${base}/api/configz`, () => HttpResponse.json(config)),
     http.get(`${base}/api/account/profile`, () => HttpResponse.json({ user: store.profile })),
+    http.get(`${base}/api/account/developer-console-access`, () => HttpResponse.json(store.access)),
+    http.get(`${base}/api/account/organization-context`, () =>
+      HttpResponse.json({ activeOrganizationId: store.activeOrganizationId }),
+    ),
+    http.get(`${base}/api/auth/organization/list`, () => HttpResponse.json([])),
+    http.get(`${base}/api/auth/organization/list-user-invitations`, () => HttpResponse.json([])),
     http.patch(`${base}/api/account/profile`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>
       Object.assign(store.profile, body)

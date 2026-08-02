@@ -1,13 +1,5 @@
 import { type ReactNode, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { DestructiveConfirmation as DestructiveConfirmationSurface } from '@/components/destructive-confirmation'
 import { tt } from '@/lib/i18n'
 import type { DestructiveConfirmation, ListItem } from './types'
 
@@ -63,19 +55,19 @@ export function SettingsAction({
   value?: string
 }) {
   return (
-    <article className="settingsAction">
-      <div className="settingsActionMain">
-        <div className="settingsActionIcon" aria-hidden="true">
+    <article className="accountRow settingsAction">
+      <div className="accountRowLabel">
+        <span className="sr-only" aria-hidden="true">
           {icon}
-        </div>
-        <div>
-          <h3>{title}</h3>
-          {value ? <strong>{value}</strong> : null}
-          <p>{meta}</p>
-          {status ? <p>{status}</p> : null}
-        </div>
+        </span>
+        <strong>{title}</strong>
+        <span>{meta}</span>
       </div>
-      {action}
+      <div className="accountRowValue">
+        {value ? <span className="block font-medium text-foreground">{value}</span> : null}
+        {status ? <span>{status}</span> : null}
+      </div>
+      <div className="accountRowAction">{action}</div>
     </article>
   )
 }
@@ -99,35 +91,24 @@ export function ItemList({
   items: ListItem[]
 }) {
   return (
-    <div className="itemList">
+    <div className="accountRows itemList">
       {items.length === 0 ? (
-        <article className="itemRow itemRowEmpty">
-          <div>
-            <h3>{empty}</h3>
-            <p>{emptyDescription}</p>
+        <article className="accountRow itemRow itemRowEmpty">
+          <div className="accountRowLabel">
+            <strong>{empty}</strong>
+            <span>{emptyDescription}</span>
           </div>
         </article>
       ) : (
         items.map((item) => (
-          <article className="itemRow" key={item.id}>
-            <div className="grid min-w-0 flex-1 gap-1">
-              <div className="itemRowMain">
-                {item.icon ? (
-                  <div className="itemRowIcon" aria-hidden="true">
-                    {item.icon}
-                  </div>
-                ) : null}
-                <div>
-                  <div className="itemRowTitle">
-                    <h3>{item.title}</h3>
-                    {item.status ? <span>{item.status}</span> : null}
-                  </div>
-                  <p>{item.meta}</p>
-                </div>
-              </div>
+          <article className="accountRow itemRow" key={item.id}>
+            <div className="accountRowLabel">
+              <strong>{item.title}</strong>
+              <span>{item.meta}</span>
               {item.children}
             </div>
-            {item.action}
+            <div className="accountRowValue">{item.status}</div>
+            <div className="accountRowAction">{item.action}</div>
           </article>
         ))
       )}
@@ -144,30 +125,18 @@ export function DestructiveConfirmationDialog({
 }) {
   if (!confirmation) return null
   return (
-    <Dialog open={true}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{confirmation.title}</DialogTitle>
-          <DialogDescription>{confirmation.description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button onClick={onClose} type="button" variant="secondary">
-            {tt('Cancel')}
-          </Button>
-          <Button
-            onClick={() => {
-              const confirmed = confirmation
-              onClose()
-              void confirmed.onConfirm()
-            }}
-            type="button"
-            variant="danger"
-          >
-            {confirmation.actionLabel}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <DestructiveConfirmationSurface
+      confirmLabel={confirmation.actionLabel}
+      description={confirmation.description}
+      onClose={onClose}
+      onConfirm={() => {
+        const confirmed = confirmation
+        onClose()
+        void confirmed.onConfirm()
+      }}
+      open
+      title={confirmation.title}
+    />
   )
 }
 

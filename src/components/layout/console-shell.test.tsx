@@ -3,8 +3,54 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConsoleShell } from '@/components/layout/console-shell'
 
+globalThis.ResizeObserver ??= class ResizeObserver {
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+}
+Element.prototype.scrollIntoView ??= () => {}
+
+const profile = {
+  id: 'user-1',
+  email: 'admin@example.com',
+  emailVerified: true,
+  displayName: 'Realmroot Admin',
+  username: 'admin',
+  avatarAssetId: null,
+  image: null,
+  role: 'admin',
+}
+const organizations = [
+  {
+    id: 'org-1',
+    name: 'payments-team',
+    displayName: 'Payments Team',
+    slug: 'payments-team',
+    logo: null,
+    disabled: false,
+    disabledReason: null,
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+  },
+]
+const access = {
+  canCreateOrganization: true,
+  showOrganizations: true,
+  realmOperator: true,
+  consoleOrganizations: [],
+}
+
+function TestConsoleShell({ children }: { children: ReactNode }) {
+  return (
+    <ConsoleShell access={access} organizations={organizations} profile={profile}>
+      {children}
+    </ConsoleShell>
+  )
+}
+
 let pathname = '/console'
 const signOut = vi.fn().mockResolvedValue({})
+const navigate = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -26,6 +72,8 @@ vi.mock('@tanstack/react-router', () => ({
   ),
   useRouterState: ({ select }: { select: (state: { location: { pathname: string } }) => string }) =>
     select({ location: { pathname } }),
+  useSearch: () => ({ context: undefined }),
+  useNavigate: () => navigate,
 }))
 
 vi.mock('@/lib/auth-client', () => ({
@@ -35,18 +83,32 @@ vi.mock('@/lib/auth-client', () => ({
 afterEach(() => {
   cleanup()
   pathname = '/console'
+  navigate.mockClear()
   signOut.mockClear()
   window.history.pushState(null, '', '/')
 })
 
 describe('ConsoleShell', () => {
-  it('renders Console navigation and marks the exact dashboard route active', () => {
-    render(<ConsoleShell>Dashboard content</ConsoleShell>)
+  it('preserves the current route when changing Console context', () => {
+    pathname = '/console/role-assignments'
+    render(<TestConsoleShell>Role assignments</TestConsoleShell>)
 
-    expect(screen.getByText('Admin Console')).toBeTruthy()
-    expect(screen.getAllByText('Default').length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Console context' }), { target: { value: 'org-1' } })
+
+    expect(navigate).toHaveBeenCalledWith({
+      replace: true,
+      search: { context: 'org-1' },
+      to: '/console/role-assignments',
+    })
+  })
+
+  it('renders Console navigation and marks the exact dashboard route active', () => {
+    render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
+
+    expect(screen.getByText('Console')).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Console context' })).toBeTruthy()
     expect(screen.getAllByRole('button', { name: 'Account menu' }).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('link', { name: /Account center/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Account center/i })).toBeNull()
     expect(screen.getByText('Dashboard content')).toBeTruthy()
     expect(screen.getByText('Dashboard content').closest('.consoleShell')).toBeTruthy()
     expect(document.querySelector('header')?.className).toContain('consoleTopbar')
@@ -55,39 +117,49 @@ describe('ConsoleShell', () => {
     expect(document.querySelector('main')?.className).toContain('consoleMain')
     expect(screen.getByText('Dashboard content').closest('.consoleContent')).toBeTruthy()
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].getAttribute('aria-current')).toBe('page')
-    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('bg-primary/10')
-    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('h-9')
-    expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).not.toContain('bg-primary/10')
+    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('is-active')
+    expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).not.toContain('is-active')
     expect(screen.queryByText('Tenant health')).toBeNull()
     expect(screen.queryByText('OIDC clients')).toBeNull()
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
   })
 
+  it('searches and opens a Console page [spec: admin-console/admin-route-backed-navigation]', async () => {
+    render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search Console' }))
+    fireEvent.change(await screen.findByPlaceholderText('Search Console…'), { target: { value: 'applications' } })
+    fireEvent.click(await screen.findByRole('option', { name: /Applications/ }))
+
+    expect(navigate).toHaveBeenCalledWith({ search: {}, to: '/console/applications' })
+    expect(screen.queryByPlaceholderText('Search Console…')).toBeNull()
+  })
+
   it('opens the account menu with shell-local actions', async () => {
-    render(<ConsoleShell>Dashboard content</ConsoleShell>)
+    render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Account menu' })[0])
+    fireEvent.pointerDown(screen.getAllByRole('button', { name: 'Account menu' })[0], {
+      button: 0,
+      ctrlKey: false,
+    })
 
-    expect(await screen.findByText('Account')).toBeTruthy()
-    expect(screen.queryByText('Admin User')).toBeNull()
-    expect(screen.queryByText('admin@example.com')).toBeNull()
+    expect(await screen.findByText('Realmroot Admin')).toBeTruthy()
+    expect(screen.getByText('admin@example.com')).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: /Language/ }).getAttribute('aria-haspopup')).toBe('menu')
     expect(screen.getByRole('menuitem', { name: /Theme/ }).getAttribute('aria-haspopup')).toBe('menu')
 
     fireEvent.click(screen.getByRole('menuitem', { name: /Language/ }))
 
-    expect(screen.getByRole('menuitemradio', { name: 'EN' }).getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('menuitemradio', { name: '中文' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('menuitemradio', { name: 'English' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('menuitemradio', { name: '简体中文' }).getAttribute('aria-checked')).toBe('false')
 
     fireEvent.click(screen.getByRole('menuitem', { name: /Theme/ }))
 
     expect(screen.getByRole('menuitemradio', { name: 'Light' }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole('menuitemradio', { name: 'Dark' }).getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByRole('menuitem', { name: 'Profile' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Account Center' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: 'Profile' }).getAttribute('href')).toBe('/profile')
-    const menuItems = screen.getAllByRole('menuitem').map((item) => item.textContent)
-    expect(menuItems).toEqual(['Profile', 'Language', 'Theme', 'Sign out'])
+    expect(screen.getByRole('link', { name: 'Account Center' }).getAttribute('href')).toBe('/profile')
     for (const item of screen.getAllByRole('menuitem')) {
       expect(item.querySelector('svg')).toBeTruthy()
     }
@@ -99,19 +171,18 @@ describe('ConsoleShell', () => {
   it('marks the dashboard alias active for local visual review', () => {
     pathname = '/console/dashboard'
 
-    render(<ConsoleShell>Dashboard content</ConsoleShell>)
+    render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
 
     expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].getAttribute('aria-current')).toBe('page')
-    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('bg-primary/10')
+    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).toContain('is-active')
   })
 
   it('renders the expected grouped Console navigation rhythm', () => {
-    render(<ConsoleShell>Dashboard content</ConsoleShell>)
+    render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
 
     const consoleNav = screen.getByRole('navigation', { name: 'Console' })
-    const groups = ['Overview', 'Authentication', 'Authorization', 'Users', 'Developer', 'Tenant']
+    const groups = ['Identity', 'Develop', 'Authorization', 'Authentication', 'Configuration']
     expect(groups.map((group) => within(consoleNav).getByText(group).textContent)).toEqual(groups)
-    expect(within(consoleNav).getByRole('link', { name: /Custom JWT/ })).toBeTruthy()
     expect(within(consoleNav).getByRole('link', { name: /Webhooks/ })).toBeTruthy()
     expect(screen.queryByText('Enterprise SSO')).toBeNull()
     expect(screen.queryByRole('link', { name: /Audit logs/ })).toBeNull()
@@ -121,62 +192,66 @@ describe('ConsoleShell', () => {
   it('marks nested Console navigation sections active', () => {
     pathname = '/console/applications/app-1'
 
-    render(<ConsoleShell>Application details</ConsoleShell>)
+    render(<TestConsoleShell>Application details</TestConsoleShell>)
 
-    expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).toContain('bg-primary/10')
+    expect(screen.getAllByRole('link', { name: /Applications/ })[0].className).toContain('is-active')
     expect(screen.getAllByRole('link', { name: /Applications/ })[0].getAttribute('aria-current')).toBe('page')
-    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).not.toContain('bg-primary/10')
+    expect(screen.getAllByRole('link', { name: /Dashboard/ })[0].className).not.toContain('is-active')
   })
 
   it('marks match-based Console navigation items active for nested defaults', () => {
-    pathname = '/console/sign-in-experience/branding'
+    pathname = '/console/sign-in-experience/theme'
 
-    render(<ConsoleShell>Branding content</ConsoleShell>)
+    render(<TestConsoleShell>Branding content</TestConsoleShell>)
 
-    expect(screen.getAllByRole('link', { name: /Sign-in & account/ })[0].className).toContain('bg-primary/10')
-    expect(screen.getAllByRole('link', { name: /Security/ })[0].className).not.toContain('bg-primary/10')
+    expect(screen.getAllByRole('link', { name: /Experience/ })[0].className).toContain('is-active')
+    expect(screen.getAllByRole('link', { name: /Security policies/ })[0].className).not.toContain('is-active')
   })
 
   it('keeps grouped route-family active states for tenant and developer sections', () => {
     pathname = '/console/webhooks/requests'
 
-    const { rerender } = render(<ConsoleShell>Webhook requests</ConsoleShell>)
+    const { rerender } = render(<TestConsoleShell>Webhook requests</TestConsoleShell>)
 
-    expect(screen.getAllByRole('link', { name: /Webhooks/ })[0].className).toContain('bg-primary/10')
+    expect(screen.getAllByRole('link', { name: /Webhooks/ })[0].className).toContain('is-active')
     expect(screen.queryByRole('link', { name: /Audit logs/ })).toBeNull()
 
     pathname = '/console/tenant-settings/runtime'
-    rerender(<ConsoleShell>Runtime settings</ConsoleShell>)
+    rerender(<TestConsoleShell>Runtime settings</TestConsoleShell>)
 
-    expect(screen.getAllByRole('link', { name: /Settings/ })[0].className).toContain('bg-primary/10')
+    expect(screen.getAllByRole('link', { name: /Settings/ })[0].className).toContain('is-active')
   })
 
   it('opens responsive Console navigation without exposing onboarding as persistent navigation', () => {
-    render(<ConsoleShell>Users content</ConsoleShell>)
+    render(<TestConsoleShell>Users content</TestConsoleShell>)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open console navigation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
 
-    expect(screen.getByRole('navigation', { name: 'Console mobile' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Dismiss console navigation' })).toBeTruthy()
-    expect(screen.getAllByRole('link', { name: /Sign-in & account/ }).length).toBeGreaterThan(0)
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('navigation', { name: 'Console' })).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: /Sign-in & registration/ }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Onboarding/ })).toBeNull()
     expect(screen.queryByRole('link', { name: /Audit logs/ })).toBeNull()
 
-    fireEvent.click(
-      within(screen.getByRole('navigation', { name: 'Console mobile' })).getByRole('link', { name: /Applications/ }),
-    )
+    fireEvent.click(screen.getAllByRole('link', { name: /Applications/ })[0])
 
-    expect(screen.queryByRole('navigation', { name: 'Console mobile' })).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('dismisses responsive Console navigation from the backdrop control', () => {
-    render(<ConsoleShell>Users content</ConsoleShell>)
+  it('dismisses responsive Console navigation with the Sheet controls and Escape', async () => {
+    render(<TestConsoleShell>Users content</TestConsoleShell>)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open console navigation' }))
-    expect(screen.getByRole('navigation', { name: 'Console mobile' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    expect(within(screen.getByRole('dialog')).getByRole('navigation', { name: 'Console' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss console navigation' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
 
-    expect(screen.queryByRole('navigation', { name: 'Console mobile' })).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open navigation' })))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })

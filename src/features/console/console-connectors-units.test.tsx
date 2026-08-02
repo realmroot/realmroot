@@ -1,6 +1,6 @@
 import type { ConnectorResponse, ConnectorTemplate } from '@shared/api/connectors'
 import type { ManagementSignInSettingsResponse } from '@shared/api/management'
-import type { SecurityPolicy } from '@shared/api/security'
+import type { SecurityPolicyResponse } from '@shared/api/security'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
@@ -40,7 +40,7 @@ describe('connector provider rows', () => {
           oneTap: { ...signInSettings.builtInProviders.oneTap, enabled: true },
         },
       } as ManagementSignInSettingsResponse,
-      securityPolicy.policy as SecurityPolicy,
+      securityPolicy.policy as SecurityPolicyResponse,
     )
     const byKey = Object.fromEntries(rows.map((row) => [row.key, row]))
     expect(byKey['builtin:email'].configurationLabel).toBe('Runtime disabled')
@@ -265,9 +265,11 @@ describe('BuiltinProviderPanel with absent settings', () => {
     cleanup()
   })
 
-  it('renders the passkey form with "Not loaded" relying party when security is absent', () => {
+  it('renders empty passkey relying-party fields when security is absent', () => {
     renderPanel('passkey')
-    expect(screen.getByText('Not loaded')).toBeTruthy()
+    expect(screen.getByLabelText('Relying party name')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Relying party ID')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Allowed origins')).toHaveProperty('value', '')
     cleanup()
   })
 

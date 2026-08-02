@@ -15,7 +15,8 @@ Feature: Unified Realmroot resource API
     And the default hosted Restish profile targets https://id.realmroot.dev/api
     And Restish v2 exposes the current Agent and resource operations from the same contract
     And resources are not grouped under a management path
-    And every protected operation declares its required Agent scope through the standard OpenAPI security requirement
+    And every protected operation declares its exact required Agent capability through an OpenAPI operation extension
+    And AgentAuth and cookie-session security requirements accurately describe their transport without claiming OAuth scopes
 
 
   @entrypoint:restish @journey:management-restish-command-surface
@@ -54,6 +55,7 @@ Feature: Unified Realmroot resource API
     Given the Agent has approved applications:read and applications:write scopes
     When I create, update, list, and delete an application with Restish
     Then the unified API applies each application change
+    And Application authorizations form one Realm inventory whose application and status filters are optional
 
 
   @entrypoint:restish @journey:management-restish-user-crud
@@ -68,6 +70,7 @@ Feature: Unified Realmroot resource API
     Given the Agent has approved organizations:read and organizations:write scopes
     When I create, update, list, and delete an organization with Restish
     Then the unified API applies each organization change
+    And Organization, member, and invitation creation return their canonical locations
 
 
   @entrypoint:restish @journey:management-restish-role-crud
@@ -76,6 +79,10 @@ Feature: Unified Realmroot resource API
     When I create, update, list, and delete a role and replace its OpenAPI scope references with Restish
     Then the unified API applies each role change
     And each role scope must exist in its business resource server OpenAPI contract
+    And complete permission replacement uses conditional requests to prevent lost updates
+    And Role creation returns its canonical location
+    And Role assignment creation returns its canonical location and duplicate active assignments conflict
+    And Role assignment revocation is an idempotent child resource
 
 
   @entrypoint:restish @journey:management-restish-api-resource-crud
@@ -83,6 +90,7 @@ Feature: Unified Realmroot resource API
     Given the Agent has approved api-resources:read and api-resources:write scopes
     When I create, update, list, and delete an API resource with Restish
     Then the unified API applies each API authorization change
+    And API resource creation returns its canonical location
     And no permission catalog, scope catalog, or scope mutation operation exists
     And requestable scopes come only from each business resource server's OpenAPI security requirements
 
@@ -114,10 +122,24 @@ Feature: Unified Realmroot resource API
     Given the Agent has approved webhooks:read and webhooks:write scopes
     When I create, update, rotate, list, and delete a webhook endpoint with Restish
     Then the unified API applies each webhook change
+    And retrying a delivery request creates a new delivery attempt resource
+    And every retry requires an idempotency key scoped to the delivery request
+    And replaying the same key returns the same attempt without delivering twice
+
+
+  @entrypoint:restish @journey:management-canonical-authority-inventory
+  Scenario: Authority records keep one canonical URI across product surfaces
+    Given Role assignments and Agent access records exist for personal and Organization-owned subjects
+    When a Realm operator, Organization developer, or Account Center member reads authority inventory
+    Then each Role assignment, Agent access request, and Agent access grant has one canonical API URI
+    And filters only narrow the inventory and are never required to establish resource ownership
+    And the server limits each principal to the records that principal may inspect
+    And Account Center does not publish duplicate Organization authority collection paths
 
 
   @entrypoint:restish @journey:management-restish-settings-update
   Scenario: An authorized Agent manages tenant settings
     Given the Agent has approved settings:read, settings:write, security:read, and security:write scopes
-    When I update branding, Account Center, sign-in, and security settings with Restish
+    When I update branding, Account Center, sign-in, Realm, Organization creation policy, Developer Console access policy, Email delivery configuration, and security resources with Restish
     Then the unified API persists each tenant setting change
+    And replacing Realm, Organization creation, Developer Console access, or Email delivery state requires the current strong entity tag

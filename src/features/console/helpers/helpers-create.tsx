@@ -1,4 +1,7 @@
-import { deviceCodeGrantType } from '@shared/api/applications'
+import { type ApplicationAudienceMode, deviceCodeGrantType } from '@shared/api/applications'
+import type { OrganizationResponse } from '@shared/api/authorization'
+import type { ManagementUserResponse } from '@shared/api/management'
+import { DestructiveConfirmation } from '@/components/destructive-confirmation'
 import {
   type ApplicationResponse,
   applicationTypeOptions,
@@ -25,11 +28,19 @@ import {
   TextArea,
   TextInput,
   tt,
+  useEffect,
   useState,
   type z,
 } from '../console-shared'
-import { listValue, SwitchRow } from './helpers-dialogs'
+import { CopyButton, listValue, SwitchRow } from './helpers-dialogs'
 import { parseForm, setValue } from './helpers-utils'
+import {
+  applicationAudienceLabel,
+  IdentityMultiSelect,
+  OrganizationOwnerField,
+  organizationOptions,
+  userOptions,
+} from './ownership-access-controls'
 
 export function createApplicationGrantTypes(clientType: string, deviceLoginEnabled: boolean) {
   if (clientType === 'public_native' && deviceLoginEnabled) {
@@ -40,31 +51,55 @@ export function createApplicationGrantTypes(clientType: string, deviceLoginEnabl
 
 export function CreateApplicationDialog({
   createdApplication,
+  defaultOwnerOrganizationId,
   error,
   onClose,
   onSubmit,
   open,
+  organizations,
   pending,
+  users,
 }: {
   createdApplication:
     | (ApplicationResponse & {
         clientSecret?: string
       })
     | null
+  defaultOwnerOrganizationId?: string
   error: string | null
   onClose: () => void
   onSubmit: (input: z.infer<typeof createApplicationRequestSchema>) => void
   open: boolean
+  organizations: OrganizationResponse[]
   pending: boolean
+  users: ManagementUserResponse[]
 }) {
   const [form, setForm] = useState<FormState>({
     clientType: 'public_spa',
     redirectUris: '',
   })
   const [deviceLoginEnabled, setDeviceLoginEnabled] = useState(false)
+  const [ownerOrganizationId, setOwnerOrganizationId] = useState('')
+  const [audienceMode, setAudienceMode] = useState<ApplicationAudienceMode>('realm')
+  const [audienceOrganizationIds, setAudienceOrganizationIds] = useState<string[]>([])
+  const [audienceUserIds, setAudienceUserIds] = useState<string[]>([])
   const [validationError, setValidationError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!open || ownerOrganizationId) return
+    setOwnerOrganizationId(
+      defaultOwnerOrganizationId ??
+        organizations.find((organization) => organization.id === 'org_platform')?.id ??
+        organizations[0]?.id ??
+        '',
+    )
+  }, [defaultOwnerOrganizationId, open, organizations, ownerOrganizationId])
   return (
-    <Dialog open={open}>
+    <Dialog
+      onOpenChange={(next) => {
+        if (!next) onClose()
+      }}
+      open={open}
+    >
       {createdApplication ? (
         <DialogContent>
           <DialogHeader>
@@ -79,9 +114,25 @@ export function CreateApplicationDialog({
               <CheckCircle2 data-icon="inline-start" />
               {createdApplication.name}
             </div>
-            <SettingRow label={tt('Client ID')} value={createdApplication.clientId} />
+            <SettingRow
+              label={tt('Client ID')}
+              value={
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <code className="break-all">{createdApplication.clientId}</code>
+                  <CopyButton label={tt('Copy client ID')} value={createdApplication.clientId} />
+                </div>
+              }
+            />
             {createdApplication.clientSecret ? (
-              <SettingRow label={tt('Client secret')} value={createdApplication.clientSecret} />
+              <SettingRow
+                label={tt('Client secret')}
+                value={
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <code className="break-all">{createdApplication.clientSecret}</code>
+                    <CopyButton label={tt('Copy secret')} value={createdApplication.clientSecret} />
+                  </div>
+                }
+              />
             ) : (
               <SettingRow label={tt('Client secret')} value="No secret for public clients" />
             )}
@@ -89,18 +140,22 @@ export function CreateApplicationDialog({
             <SettingRow label={tt('Next step')} value="Review redirects, origins, and client metadata." />
           </div>
           <DialogFooter className="m-0">
-            <LinkButton href={`/console/applications/${createdApplication.id}/settings`} variant="secondary">
+            <LinkButton
+              href={`/console/applications/${createdApplication.id}/settings${defaultOwnerOrganizationId ? `?context=${encodeURIComponent(defaultOwnerOrganizationId)}` : ''}`}
+              variant="secondary"
+            >
               {' '}
               {tt('Open settings')}{' '}
             </LinkButton>
             <Button onClick={onClose} type="button">
               {' '}
-              {tt('Close')}{' '}
+              {tt('Done')}{' '}
             </Button>
           </DialogFooter>
         </DialogContent>
       ) : (
         <FormDialog
+          description={tt('Register an OIDC client for a browser, server, native, or device application.')}
           error={validationError ?? error}
           onClose={onClose}
           onSubmit={(event) => {
@@ -111,6 +166,12 @@ export function CreateApplicationDialog({
                 parseForm(createApplicationRequestSchema, {
                   ...form,
                   firstParty: true,
+                  ownerOrganizationId,
+                  audience: {
+                    mode: audienceMode,
+                    organizationIds: audienceOrganizationIds,
+                    userIds: audienceUserIds,
+                  },
                   allowedGrantTypes: createApplicationGrantTypes(form.clientType, deviceLoginEnabled),
                   redirectUris: form.redirectUris.split('\n').filter(Boolean),
                 }),
@@ -123,14 +184,20 @@ export function CreateApplicationDialog({
           title={tt('Create application')}
         >
           <Field label={tt('Name')}>
-            <TextInput onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
+            <TextInput name="name" onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
           </Field>
           <Field label={tt('Slug')}>
             <TextInput
               onChange={(event) => setValue(setForm, 'slug', event.target.value)}
+              name="slug"
               placeholder="customer-portal"
             />
           </Field>
+          <OrganizationOwnerField
+            onChange={setOwnerOrganizationId}
+            organizations={organizations}
+            value={ownerOrganizationId}
+          />
           <ApplicationTypeCards
             onChange={(clientType) => {
               setValue(setForm, 'clientType', clientType)
@@ -145,8 +212,50 @@ export function CreateApplicationDialog({
               onCheckedChange={setDeviceLoginEnabled}
             />
           ) : null}
+          <Field
+            help={tt(
+              'Audience determines who may begin authorization; OAuth scopes still control what the application can access.',
+            )}
+            label={tt('Audience')}
+          >
+            <SelectInput
+              name="audience"
+              onChange={(event) => setAudienceMode(event.target.value as ApplicationAudienceMode)}
+              value={audienceMode}
+            >
+              {(['realm', 'organizations', 'users', 'public'] as const).map((mode) => (
+                <option key={mode} value={mode}>
+                  {applicationAudienceLabel(mode)}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          {audienceMode === 'organizations' ? (
+            <IdentityMultiSelect
+              emptyLabel={tt('No Organizations found')}
+              label={tt('Allowed Organizations')}
+              onChange={setAudienceOrganizationIds}
+              options={organizationOptions(organizations).filter((organization) => organization.id !== 'org_platform')}
+              placeholder={tt('Select Organizations')}
+              value={audienceOrganizationIds}
+            />
+          ) : null}
+          {audienceMode === 'users' ? (
+            <IdentityMultiSelect
+              emptyLabel={tt('No users found')}
+              label={tt('Allowed users')}
+              onChange={setAudienceUserIds}
+              options={userOptions(users)}
+              placeholder={tt('Select users')}
+              value={audienceUserIds}
+            />
+          ) : null}
           <Field label={tt('Redirect URIs')} help={tt('One URI per line.')}>
-            <TextArea onChange={(event) => setValue(setForm, 'redirectUris', event.target.value)} required />
+            <TextArea
+              name="redirectUris"
+              onChange={(event) => setValue(setForm, 'redirectUris', event.target.value)}
+              required
+            />
           </Field>
         </FormDialog>
       )}
@@ -196,6 +305,7 @@ export function CreateUserDialog({
   return (
     <Dialog open={open}>
       <FormDialog
+        description={tt('Add a human identity that can authenticate in this Realm.')}
         error={validationError ?? error}
         onClose={onClose}
         onSubmit={(event) => {
@@ -211,17 +321,33 @@ export function CreateUserDialog({
         title={tt('Create user')}
       >
         <Field label={tt('Email')}>
-          <TextInput onChange={(event) => setValue(setForm, 'email', event.target.value)} required type="email" />
+          <TextInput
+            autoComplete="email"
+            name="email"
+            onChange={(event) => setValue(setForm, 'email', event.target.value)}
+            required
+            type="email"
+          />
         </Field>
         <Field label={tt('Display name')}>
-          <TextInput onChange={(event) => setValue(setForm, 'displayName', event.target.value)} required />
+          <TextInput
+            autoComplete="name"
+            name="displayName"
+            onChange={(event) => setValue(setForm, 'displayName', event.target.value)}
+            required
+          />
         </Field>
         <Field label={tt('Username')}>
-          <TextInput autoComplete="username" onChange={(event) => setValue(setForm, 'username', event.target.value)} />
+          <TextInput
+            autoComplete="username"
+            name="username"
+            onChange={(event) => setValue(setForm, 'username', event.target.value)}
+          />
         </Field>
         <Field label={tt('Initial password')}>
           <TextInput
             autoComplete="new-password"
+            name="password"
             onChange={(event) => setValue(setForm, 'password', event.target.value)}
             type="password"
           />
@@ -236,23 +362,19 @@ export function CreateRoleDialog({
   onSubmit,
   open,
   pending,
-  resources,
 }: {
   error: string | null
   onClose: () => void
   onSubmit: (input: z.infer<typeof createRoleRequestSchema>) => void
   open: boolean
   pending: boolean
-  resources: Array<{
-    id: string
-    name: string
-  }>
 }) {
   const [form, setForm] = useState<FormState>(emptyForm)
   const [validationError, setValidationError] = useState<string | null>(null)
   return (
     <Dialog open={open}>
       <FormDialog
+        description={tt('Define a reusable set of Resource server permissions for contextual assignment.')}
         error={validationError ?? error}
         onClose={onClose}
         onSubmit={(event) => {
@@ -268,23 +390,13 @@ export function CreateRoleDialog({
         title={tt('Create role')}
       >
         <Field label={tt('Key')}>
-          <TextInput onChange={(event) => setValue(setForm, 'key', event.target.value)} required />
+          <TextInput name="key" onChange={(event) => setValue(setForm, 'key', event.target.value)} required />
         </Field>
         <Field label={tt('Name')}>
-          <TextInput onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
+          <TextInput name="name" onChange={(event) => setValue(setForm, 'name', event.target.value)} required />
         </Field>
         <Field label={tt('Description')}>
-          <TextInput onChange={(event) => setValue(setForm, 'description', event.target.value)} />
-        </Field>
-        <Field label={tt('API resource')}>
-          <SelectInput onChange={(event) => setValue(setForm, 'resourceId', event.target.value)} defaultValue="">
-            <option value="">{tt('Global role')}</option>
-            {resources.map((resource) => (
-              <option key={resource.id} value={resource.id}>
-                {resource.name}
-              </option>
-            ))}
-          </SelectInput>
+          <TextInput name="description" onChange={(event) => setValue(setForm, 'description', event.target.value)} />
         </Field>
       </FormDialog>
     </Dialog>
@@ -308,29 +420,24 @@ export function ConfirmDialog({
   title: string
 }) {
   return (
-    <Dialog open={open}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        {error ? (
+    <DestructiveConfirmation
+      confirmLabel={pending ? tt('Deleting…') : tt('Delete')}
+      description={description}
+      error={
+        error ? (
           <div className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{error}</div>
-        ) : null}
-        <DialogFooter>
-          <Button onClick={onClose} type="button" variant="secondary">
-            {' '}
-            {tt('Cancel')}{' '}
-          </Button>
-          <Button disabled={pending} onClick={onConfirm} type="button" variant="danger">
-            {pending ? tt('Deleting...') : tt('Delete')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        ) : null
+      }
+      onClose={onClose}
+      onConfirm={onConfirm}
+      open={open}
+      pending={pending}
+      title={title}
+    />
   )
 }
 export function SimpleCreateDialog({
+  description,
   error,
   fields,
   onClose,
@@ -339,6 +446,7 @@ export function SimpleCreateDialog({
   pending,
   title,
 }: {
+  description: string
   error: string | null
   fields: Array<[string, string]>
   onClose: () => void
@@ -349,9 +457,16 @@ export function SimpleCreateDialog({
 }) {
   const [form, setForm] = useState<FormState>(emptyForm)
   const [validationError, setValidationError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!open) {
+      setForm(emptyForm)
+      setValidationError(null)
+    }
+  }, [open])
   return (
     <Dialog open={open}>
       <FormDialog
+        description={description}
         error={validationError ?? error}
         onClose={onClose}
         onSubmit={(event) => {
@@ -369,6 +484,7 @@ export function SimpleCreateDialog({
         {fields.map(([name, label]) => (
           <Field key={name} label={label}>
             <TextInput
+              name={name}
               onChange={(event) => setValue(setForm, name, event.target.value)}
               required={name !== 'description'}
             />
@@ -380,6 +496,7 @@ export function SimpleCreateDialog({
 }
 export function FormDialog({
   children,
+  description,
   error,
   onClose,
   onSubmit,
@@ -387,6 +504,7 @@ export function FormDialog({
   title,
 }: {
   children: ReactNode
+  description: string
   error: string | null
   onClose: () => void
   onSubmit: (event: FormEvent) => void
@@ -394,12 +512,10 @@ export function FormDialog({
   title: string
 }) {
   return (
-    <DialogContent>
+    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
       <DialogHeader>
         <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>
-          {tt('Required fields are validated before the management API request is sent.')}
-        </DialogDescription>
+        <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <form className="grid gap-4 p-4" onSubmit={onSubmit}>
         {error ? (
@@ -414,7 +530,7 @@ export function FormDialog({
             {tt('Cancel')}{' '}
           </Button>
           <Button disabled={pending} type="submit">
-            {pending ? tt('Saving...') : tt('Save')}
+            {pending ? tt('Saving…') : tt('Save')}
           </Button>
         </DialogFooter>
       </form>

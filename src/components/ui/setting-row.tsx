@@ -2,9 +2,9 @@ import type { ReactNode } from 'react'
 
 export function SettingRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 rounded-md border border-border px-3 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      <span className="text-sm font-medium leading-5">{label}</span>
-      <span className="break-words text-sm leading-5 text-muted-foreground sm:max-w-[70%] sm:text-right">{value}</span>
+    <div className="grid min-h-16 gap-2 border-t px-4 py-3 first:border-t-0 sm:grid-cols-[minmax(150px,0.8fr)_minmax(0,1.4fr)] sm:items-start sm:gap-6">
+      <span className="text-sm font-semibold leading-6">{label}</span>
+      <span className="min-w-0 break-words text-sm leading-6 text-muted-foreground">{value}</span>
     </div>
   )
 }

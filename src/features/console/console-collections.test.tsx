@@ -5,7 +5,7 @@ import { ApplicationsPage } from '@/features/console/extracted/applications/appl
 import { BrandingPage } from '@/features/console/extracted/branding-content/branding'
 import { ContentSettingsPage } from '@/features/console/extracted/branding-content/content-settings'
 import { ConnectorsPage } from '@/features/console/extracted/connectors'
-import { DeploymentSettingsPage } from '@/features/console/extracted/deployment-misc/deployment'
+import { DeploymentSettingsPage, SettingsPage } from '@/features/console/extracted/deployment-misc/deployment'
 import { WebhooksPage } from '@/features/console/extracted/deployment-misc/webhooks'
 import { ConsoleOnboardingPage } from '@/features/console/extracted/onboarding'
 import { OrganizationsPage } from '@/features/console/extracted/organizations'
@@ -36,6 +36,8 @@ import {
   connector,
   connectorTemplates,
   consoleSharedFetch,
+  emailSettings,
+  generalSettings,
   jsonResponse,
   organization,
   pagination,
@@ -78,21 +80,21 @@ describe('console collections', () => {
         searchLabel: 'Search applications',
       },
       { action: 'New user', component: <UsersPage />, heading: 'Users', searchLabel: 'Search users' },
-      { action: null, component: <ConnectorsPage />, heading: 'Connectors', searchLabel: null },
+      { action: null, component: <ConnectorsPage />, heading: 'Identity providers', searchLabel: null },
       {
-        action: 'New organization',
+        action: 'Provision organization',
         component: <OrganizationsPage />,
         heading: 'Organizations',
         searchLabel: 'Search organizations',
       },
       { action: 'New role', component: <RolesPage />, heading: 'Roles', searchLabel: 'Search roles' },
       {
-        action: 'New API resource',
+        action: 'New resource server',
         component: <ApiResourcesPage />,
-        heading: 'API resources',
-        searchLabel: 'Search API resources',
+        heading: 'Resource servers',
+        searchLabel: 'Search resource servers',
       },
-      { action: 'Create endpoint', component: <WebhooksPage />, heading: 'Webhooks', searchLabel: 'Search webhooks' },
+      { action: 'Create endpoint', component: <WebhooksPage />, heading: 'Webhooks', searchLabel: null },
     ]
 
     for (const page of pages) {
@@ -105,6 +107,28 @@ describe('console collections', () => {
       cleanup()
       queryClient.clear()
     }
+  })
+
+  it('keeps invalid webhook URLs inside the create dialog without issuing a request [spec: admin-console/admin-webhook-endpoint-lifecycle]', async () => {
+    const requests: Array<{ method: string; url: string }> = []
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      requests.push({ method: init?.method ?? 'GET', url })
+      if (url.startsWith('/api/webhooks/endpoints')) {
+        return Promise.resolve(jsonResponse({ endpoints: [], pagination }))
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<WebhooksPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Create endpoint' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Endpoint URL' }), {
+      target: { value: 'http://example.com/hooks' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create endpoint' }))
+
+    expect(await screen.findByText('Endpoint URL must use https.')).toBeTruthy()
+    expect(requests.filter((request) => request.method === 'POST')).toEqual([])
   })
 
   it('filters changed admin resource lists and shows filter-specific empty states [spec: admin-console/admin-authorization-inventory]', async () => {
@@ -185,12 +209,12 @@ describe('console collections', () => {
     unmount()
     renderWithQuery(<OrganizationsPage />)
 
-    expect(await screen.findByText('Acme')).toBeTruthy()
-    expect(screen.getByText('Northwind')).toBeTruthy()
+    expect(await screen.findByText('Acme Inc.')).toBeTruthy()
+    expect(screen.getByText('Northwind Traders')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Search organizations'), { target: { value: 'north' } })
     await waitFor(() => {
-      expect(screen.getByText('Northwind')).toBeTruthy()
-      expect(screen.queryByText('Acme')).toBeNull()
+      expect(screen.getByText('Northwind Traders')).toBeTruthy()
+      expect(screen.queryByText('Acme Inc.')).toBeNull()
     })
     fireEvent.change(screen.getByLabelText('Search organizations'), { target: { value: 'missing' } })
     expect(await screen.findByText('No organizations found')).toBeTruthy()
@@ -210,15 +234,15 @@ describe('console collections', () => {
       expect(screen.queryByText('Orders reader')).toBeNull()
     })
     fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('Filter role scope'), { target: { value: 'resource' } })
+    fireEvent.change(screen.getByLabelText('Filter role type'), { target: { value: 'system' } })
     await waitFor(() => {
-      expect(screen.getByText('Orders reader')).toBeTruthy()
-      expect(screen.queryByText('Admin')).toBeNull()
+      expect(screen.getByText('Admin')).toBeTruthy()
       expect(screen.queryByText('Billing manager')).toBeNull()
+      expect(screen.queryByText('Orders reader')).toBeNull()
     })
-    fireEvent.change(screen.getByLabelText('Filter role scope'), { target: { value: 'application' } })
+    fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: 'missing' } })
     expect(await screen.findByText('No roles found')).toBeTruthy()
-    expect(screen.getByText('No roles match the current search or scope filter.')).toBeTruthy()
+    expect(screen.getByText('No roles match the current filters.')).toBeTruthy()
 
     cleanup()
     queryClient.clear()
@@ -226,14 +250,14 @@ describe('console collections', () => {
 
     expect(await screen.findByText('Management API')).toBeTruthy()
     expect(screen.getByText('Billing API')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Search API resources'), { target: { value: 'billing' } })
+    fireEvent.change(screen.getByLabelText('Search resource servers'), { target: { value: 'billing' } })
     await waitFor(() => {
       expect(screen.getByText('Billing API')).toBeTruthy()
       expect(screen.queryByText('Management API')).toBeNull()
     })
-    fireEvent.change(screen.getByLabelText('Search API resources'), { target: { value: 'missing' } })
-    expect(await screen.findByText('No API resources found')).toBeTruthy()
-    expect(screen.getByText('No API resources match the current search.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search resource servers'), { target: { value: 'missing' } })
+    expect(await screen.findByText('No resource servers found')).toBeTruthy()
+    expect(screen.getByText('No resource servers match the current filters.')).toBeTruthy()
   })
 
   it('renders collection loading and query error states', async () => {
@@ -290,31 +314,31 @@ describe('console collections', () => {
         component: <SignInSettingsPage />,
         matches: (url: string) => url === '/api/sign-in-settings',
         success: signInSettings,
-        text: 'Sign-up and sign-in',
+        text: 'Registration and identifiers',
       },
       {
         component: <ContentSettingsPage />,
         matches: (url: string) => url === '/api/sign-in-settings',
         success: signInSettings,
-        text: 'Hosted messages',
+        text: 'Legal & support',
       },
       {
         component: <BrandingPage />,
         matches: (url: string) => url === '/api/branding-settings',
         success: brandingSettings,
-        text: 'Live preview',
+        text: 'Color scheme',
       },
       {
         component: <MfaPage />,
         matches: (url: string) => url === '/api/security/policy',
         success: securityPolicy,
-        text: 'Factors',
+        text: 'Available factors',
       },
       {
         component: <OrganizationsPage />,
         matches: (url: string) => url === '/api/organizations',
         success: { organizations: [organization], pagination },
-        text: 'Acme',
+        text: 'Acme Inc.',
       },
       {
         component: <RolesPage />,
@@ -340,7 +364,7 @@ describe('console collections', () => {
         }
         if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
         if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-        return Promise.resolve(jsonResponse({}))
+        return consoleSharedFetch(input, _init)
       })
 
       renderWithQuery(scenario.component)
@@ -363,15 +387,69 @@ describe('console collections', () => {
     })
     const { unmount } = renderWithQuery(<BrandingPage />)
 
-    expect(screen.getByRole('heading', { name: 'Branding' })).toBeTruthy()
-    expect(await screen.findByDisplayValue('Acme Auth')).toBeTruthy()
-    expect(screen.getByText('Live preview')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Experience' })).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'Color scheme' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeTruthy()
 
     unmount()
     renderWithQuery(<DeploymentSettingsPage />)
 
-    expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy()
     expect(await screen.findByText('Cloudflare Workers')).toBeTruthy()
-    expect(screen.getByText('/api')).toBeTruthy()
+    expect(screen.getByText('Cloudflare D1')).toBeTruthy()
+  })
+
+  it('persists Realm identity from the General settings sheet [spec: admin-console/admin-general-settings]', async () => {
+    let stored = generalSettings
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = input instanceof Request ? input : null
+      const url = new URL(request?.url ?? String(input), window.location.origin).pathname
+      if (url === '/api/realm') {
+        if ((request?.method ?? init?.method) === 'PATCH') {
+          const body = (request ? await request.clone().json() : JSON.parse(String(init?.body))) as {
+            name: string
+          }
+          stored = { ...stored, name: body.name }
+        }
+        return jsonResponse(stored, 200, { ETag: '"realm-v1"' })
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<SettingsPage section="general" />)
+    expect(await screen.findByText('https://auth.example.com/api/auth')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText('Realm name'), { target: { value: 'Acme Identity' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByText('Acme Identity')).toBeTruthy()
+    expect(stored.name).toBe('Acme Identity')
+  })
+
+  it('persists the Cloudflare sender and reply-to identity [spec: admin-console/admin-email-delivery-settings]', async () => {
+    let stored = emailSettings
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = input instanceof Request ? input : null
+      const url = new URL(request?.url ?? String(input), window.location.origin).pathname
+      if (url === '/api/email-delivery-configuration') {
+        if ((request?.method ?? init?.method) === 'PUT') {
+          const body = (request ? await request.clone().json() : JSON.parse(String(init?.body))) as typeof emailSettings
+          stored = { ...stored, ...body, source: 'database' }
+        }
+        return jsonResponse(stored, 200, { ETag: '"email-delivery-v1"' })
+      }
+      return consoleSharedFetch(input, init)
+    })
+
+    renderWithQuery(<SettingsPage section="email" />)
+    expect(await screen.findByText('Realmroot <noreply@example.com>')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Configure' }))
+    fireEvent.change(screen.getByLabelText('Sender name'), { target: { value: 'Acme Identity' } })
+    fireEvent.change(screen.getByLabelText('Sender address'), { target: { value: 'auth@example.com' } })
+    fireEvent.change(screen.getByLabelText('Reply-to address'), { target: { value: 'support@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByText('Acme Identity <auth@example.com>')).toBeTruthy()
+    expect(screen.getByText('support@example.com')).toBeTruthy()
   })
 })

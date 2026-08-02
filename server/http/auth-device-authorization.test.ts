@@ -452,6 +452,8 @@ function deviceApplication(overrides: Partial<ApplicationAggregate> = {}): Appli
     trusted: false,
     disabled: false,
     disabledReason: null,
+    ownerOrganizationId: 'org-platform',
+    audience: { mode: 'realm', organizationIds: [], userIds: [] },
     redirectUris: ['com.example.app:/callback'],
     postLogoutRedirectUris: [],
     corsOrigins: [],

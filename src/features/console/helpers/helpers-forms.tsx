@@ -57,7 +57,10 @@ export function AuthorizationForm({
         {buttonLabel}
       </Button>
       {validationError ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+        <div
+          className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          role="alert"
+        >
           {validationError}
         </div>
       ) : null}
@@ -101,7 +104,7 @@ export function AuthorizationRows({
                 {' '}
                 {tt('Edit')}{' '}
               </Button>
-              <Button onClick={row.onDelete} type="button" variant="danger">
+              <Button onClick={row.onDelete} type="button" variant="destructive">
                 <Trash2 data-icon="inline-start" /> {tt('Delete')}{' '}
               </Button>
             </div>

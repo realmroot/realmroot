@@ -2,7 +2,7 @@ import {
   assignAgentRole,
   buildTokenClaims,
   getAgentRoleAuthorization,
-  replaceRoleScopes,
+  replaceRolePermissions,
   updateRole,
 } from '@server/usecases/authorization'
 import type { Deps } from '@server/usecases/deps'
@@ -14,9 +14,6 @@ const role: RoleResponse = {
   key: 'documents-reader',
   name: 'Documents reader',
   description: null,
-  resourceId: 'resource-documents',
-  organizationId: 'org-home',
-  applicationId: null,
   system: false,
   createdAt: '2026-07-29T00:00:00.000Z',
   updatedAt: '2026-07-29T00:00:00.000Z',
@@ -30,13 +27,16 @@ const resource: ApiResourceResponse = {
   connectorId: null,
   description: null,
   enabled: true,
+  ownerOrganizationId: 'org-home',
+  accessEligibility: { mode: 'realm', organizationIds: [] },
+  availableToAgents: true,
   archivedAt: null,
   createdAt: '2026-07-29T00:00:00.000Z',
   updatedAt: '2026-07-29T00:00:00.000Z',
 }
 
 describe('authorization policy', () => {
-  it('[spec: management-api/replace-role-scopes] validates role scopes against the business OpenAPI authority', async () => {
+  it('[spec: management-api/replace-role-scopes] validates role permissions against the business OpenAPI authority', async () => {
     const replace = vi.fn()
     const fetch = vi.fn(async (request: Request) =>
       request.url.endsWith('/openapi.json')
@@ -69,15 +69,17 @@ describe('authorization policy', () => {
       authorization: {
         findRole: vi.fn().mockResolvedValue(role),
         findResource: vi.fn().mockResolvedValue(resource),
-        replaceRoleScopes: replace,
+        replaceRolePermissions: replace,
       },
       externalHttp: { fetch },
     } as unknown as Deps
 
-    await replaceRoleScopes(deps, role.id, ['documents.read'])
+    await replaceRolePermissions(deps, role.id, [{ resourceId: resource.id, scope: 'documents.read' }])
 
-    expect(replace).toHaveBeenCalledWith(role.id, ['documents.read'])
-    await expect(replaceRoleScopes(deps, role.id, ['documents.write'])).rejects.toMatchObject({
+    expect(replace).toHaveBeenCalledWith(role.id, [{ resourceId: resource.id, scope: 'documents.read' }])
+    await expect(
+      replaceRolePermissions(deps, role.id, [{ resourceId: resource.id, scope: 'documents.write' }]),
+    ).rejects.toMatchObject({
       status: 400,
     })
   })
@@ -87,7 +89,8 @@ describe('authorization policy', () => {
     const deps = {
       authorization: {
         findRole: vi.fn().mockResolvedValue(role),
-        assignAgentRole: assign,
+        findResource: vi.fn().mockResolvedValue(resource),
+        createRoleAssignment: assign,
         listAgentRoleAssignments: vi.fn().mockResolvedValue([{ role, scopes: ['documents.read'] }]),
       },
       agentIdentities: {
@@ -103,7 +106,9 @@ describe('authorization policy', () => {
     expect(assign).toHaveBeenCalledWith(
       expect.objectContaining({
         roleId: role.id,
+        subjectType: 'agent',
         subjectId: 'agent-1',
+        organizationId: null,
         assignedByUserId: 'controller-1',
       }),
     )
@@ -119,7 +124,7 @@ describe('authorization policy', () => {
         findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
         listUserRoleAssignments: vi.fn().mockResolvedValue([{ role, scopes: ['documents.read'] }]),
         listApplicationRoleAssignments: vi.fn().mockResolvedValue([]),
-        findMemberByOrganizationUser: vi.fn().mockResolvedValue(null),
+        findMemberByOrganizationUser: vi.fn().mockResolvedValue({ id: 'member-1' }),
       },
     } as unknown as Deps
 
@@ -144,14 +149,62 @@ describe('authorization policy', () => {
     })
   })
 
-  it('keeps the role resource and subject scope immutable', async () => {
+  it('[spec: admin-console/admin-developer-access-policy] keeps Organization access levels out of business scopes', async () => {
+    const membership = vi.fn().mockResolvedValue({ id: 'member-1', role: 'developer' })
     const deps = {
-      authorization: { findRole: vi.fn().mockResolvedValue(role) },
+      authorization: {
+        findResourceByResourceUrl: vi.fn().mockResolvedValue(resource),
+        listUserRoleAssignments: vi.fn().mockResolvedValue([{ role, scopes: ['documents.read'] }]),
+        listApplicationRoleAssignments: vi.fn().mockResolvedValue([]),
+        findMemberByOrganizationUser: membership,
+      },
+    } as unknown as Deps
+    const input = {
+      userId: 'user-1',
+      organizationId: 'org-home',
+      resource: resource.resourceUrl,
+      scopes: ['documents.read', 'documents.write'],
+    }
+
+    await expect(buildTokenClaims(deps, input)).resolves.toMatchObject({
+      authorization: { roles: ['documents-reader'], scopes: ['documents.read'] },
+    })
+    membership.mockResolvedValue({ id: 'member-1', role: 'member' })
+    await expect(buildTokenClaims(deps, input)).resolves.toMatchObject({
+      authorization: { roles: ['documents-reader'], scopes: ['documents.read'] },
+    })
+  })
+
+  it('removes requested scopes when the active Organization is not eligible for the target resource', async () => {
+    const deps = {
+      authorization: {
+        findResourceByResourceUrl: vi.fn().mockResolvedValue({
+          ...resource,
+          accessEligibility: { mode: 'owner_organization', organizationIds: [] },
+        }),
+        findMemberByOrganizationUser: vi.fn().mockResolvedValue({ id: 'member-1', role: 'member' }),
+      },
     } as unknown as Deps
 
-    await expect(updateRole(deps, role.id, { resourceId: 'another-resource' })).rejects.toMatchObject({
-      status: 400,
-      message: 'Role resource and subject scope cannot be changed after creation.',
-    })
+    await expect(
+      buildTokenClaims(deps, {
+        userId: 'user-1',
+        organizationId: 'org-other',
+        resource: resource.resourceUrl,
+        scopes: ['documents.read'],
+      }),
+    ).resolves.toMatchObject({ authorization: { roles: [], scopes: [] } })
+  })
+
+  it('updates Realm role metadata without an ownership scope', async () => {
+    const deps = {
+      authorization: {
+        findRole: vi.fn().mockResolvedValue(role),
+        updateRole: vi.fn(),
+      },
+    } as unknown as Deps
+
+    await expect(updateRole(deps, role.id, { name: 'Document reader' })).resolves.toBe(role)
+    expect(deps.authorization.updateRole).toHaveBeenCalledWith(role.id, { name: 'Document reader' })
   })
 })

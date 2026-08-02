@@ -1,5 +1,5 @@
 import { listApplications } from '@server/usecases/applications'
-import { getConfig } from '@server/usecases/configz'
+import { getConfig, getEmailDeliveryConfiguration } from '@server/usecases/configz'
 import {
   type ManagementReadinessItem,
   type ManagementReadinessResponse,
@@ -13,7 +13,6 @@ import { getDeps } from '../../middleware/deps'
 
 interface ReadinessBindings {
   EMAIL?: unknown
-  EMAIL_FROM?: string
 }
 
 export function createManagementReadinessRoute({ securityPolicy }: { securityPolicy?: SecurityPolicy }) {
@@ -21,9 +20,11 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
 
   app.get('/readiness', async (c) => {
     const deps = getDeps(c)
-    const [applications, config] = await Promise.all([
+    const options = configzOptions(c, securityPolicy)
+    const [applications, config, emailSettings] = await Promise.all([
       listApplications(deps, issuerFor(c), { limit: 100, offset: 0 }),
-      getConfig(deps, configzOptions(c, securityPolicy)),
+      getConfig(deps, options),
+      getEmailDeliveryConfiguration(deps, options),
     ])
     const hasOidcApplication = applications.applications.length > 0
     const identityProviderCount =
@@ -31,7 +32,9 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
     const hasSocialSignInMethod = config.signIn.socialLoginEnabled && identityProviderCount > 0
     const hasSignInMethod = config.signIn.passwordEnabled || config.signIn.emailOtpEnabled || hasSocialSignInMethod
     const emailMethodsEnabled = config.signIn.emailOtpEnabled || config.signIn.signupEnabled
-    const emailDeliveryReady = !emailMethodsEnabled || (Boolean(c.env?.EMAIL) && Boolean(c.env?.EMAIL_FROM))
+    const emailDeliveryReady =
+      !emailMethodsEnabled ||
+      (emailSettings.enabled && emailSettings.bindingAvailable && Boolean(emailSettings.fromEmail))
     const brandingReady =
       config.copy.productName !== 'Realmroot' ||
       Boolean(config.branding.logoUrl || config.branding.faviconUrl || config.branding.primaryColor)
@@ -51,7 +54,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
         label: 'Enable a sign-in method',
         description: 'Keep at least one hosted sign-in method available for users.',
         complete: hasSignInMethod,
-        href: '/console/sign-in-experience/sign-up-and-sign-in',
+        href: '/console/sign-in-experience/sign-in',
         action: 'Review methods',
       }),
     ]
@@ -61,15 +64,15 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
         label: 'Confirm email delivery',
         description: 'Email binding and sender settings are needed for verification, OTP, and reset flows.',
         complete: emailDeliveryReady,
-        href: '/console/tenant-settings/oidc-configs',
-        action: 'Review deployment',
+        href: '/console/tenant-settings/email',
+        action: 'Configure delivery',
       }),
       readinessItem({
         id: 'branding_basics',
         label: 'Set branding basics',
         description: 'Product name, colors, logo, and favicon make hosted auth recognizable to users.',
         complete: brandingReady,
-        href: '/console/sign-in-experience/branding',
+        href: '/console/sign-in-experience/theme',
         action: 'Edit branding',
       }),
       readinessItem({
@@ -77,7 +80,7 @@ export function createManagementReadinessRoute({ securityPolicy }: { securityPol
         label: 'Review security baseline',
         description: 'MFA or passkeys should be enabled before production rollout.',
         complete: securityReady,
-        href: '/console/security/password-policy',
+        href: '/console/security/mfa',
         action: 'Review security',
       }),
       readinessItem({

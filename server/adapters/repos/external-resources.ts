@@ -1,9 +1,10 @@
-import type { ExternalResourceRepository } from '@server/usecases/ports'
-import { and, eq, exists, gt, inArray, isNull, sql } from 'drizzle-orm'
+import type { AgentAuthorityInventoryScope, ExternalResourceRepository } from '@server/usecases/ports'
+import { and, count, desc, eq, exists, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
   agentAccessRequest,
+  agentIdentity,
   apiResource,
   externalTokenLease,
   resourceAccountConnection,
@@ -202,6 +203,41 @@ export function createExternalResourceRepository(db: Database): ExternalResource
       return row ?? null
     },
 
+    async listAccessRequests(query, scope) {
+      const now = new Date()
+      const statusCondition =
+        query.status === 'expired'
+          ? and(eq(agentAccessRequest.status, 'pending'), lte(agentAccessRequest.expiresAt, now))
+          : query.status === 'pending'
+            ? and(eq(agentAccessRequest.status, 'pending'), gt(agentAccessRequest.expiresAt, now))
+            : query.status
+              ? eq(agentAccessRequest.status, query.status)
+              : undefined
+      const condition = and(
+        query.agentId ? eq(agentAccessRequest.agentIdentityId, query.agentId) : undefined,
+        query.resourceId ? eq(agentAccessRequest.resourceId, query.resourceId) : undefined,
+        query.organizationId ? eq(agentIdentity.ownerOrganizationId, query.organizationId) : undefined,
+        authorityOwnerCondition(scope),
+        statusCondition,
+      )
+      const [items, totals] = await Promise.all([
+        db
+          .select({ request: agentAccessRequest })
+          .from(agentAccessRequest)
+          .innerJoin(agentIdentity, eq(agentAccessRequest.agentIdentityId, agentIdentity.id))
+          .where(condition)
+          .orderBy(desc(agentAccessRequest.createdAt), desc(agentAccessRequest.id))
+          .limit(query.limit)
+          .offset(query.offset),
+        db
+          .select({ value: count() })
+          .from(agentAccessRequest)
+          .innerJoin(agentIdentity, eq(agentAccessRequest.agentIdentityId, agentIdentity.id))
+          .where(condition),
+      ])
+      return { items: items.map(({ request }) => request), total: totals[0]?.value ?? 0, ...query }
+    },
+
     async listPendingAccessRequestsByAgent(agentIdentityId, now) {
       return db
         .select()
@@ -309,6 +345,83 @@ export function createExternalResourceRepository(db: Database): ExternalResource
         .orderBy(agentAccessGrant.createdAt)
     },
 
+    async listGrants(query, scope) {
+      const now = new Date()
+      const statusCondition =
+        query.status === 'expired'
+          ? and(eq(agentAccessGrant.status, 'active'), lte(agentAccessGrant.expiresAt, now))
+          : query.status === 'active'
+            ? and(
+                eq(agentAccessGrant.status, 'active'),
+                or(isNull(agentAccessGrant.expiresAt), gt(agentAccessGrant.expiresAt, now)),
+              )
+            : query.status
+              ? eq(agentAccessGrant.status, query.status)
+              : undefined
+      const where = and(
+        query.agentId ? eq(agentAccessGrant.agentIdentityId, query.agentId) : undefined,
+        query.resourceId ? eq(agentAccessGrant.resourceId, query.resourceId) : undefined,
+        query.organizationId ? eq(agentIdentity.ownerOrganizationId, query.organizationId) : undefined,
+        authorityOwnerCondition(scope),
+        statusCondition,
+      )
+      const [items, totals] = await Promise.all([
+        db
+          .select({ grant: agentAccessGrant })
+          .from(agentAccessGrant)
+          .innerJoin(agentIdentity, eq(agentAccessGrant.agentIdentityId, agentIdentity.id))
+          .where(where)
+          .orderBy(desc(agentAccessGrant.createdAt), desc(agentAccessGrant.id))
+          .limit(query.limit)
+          .offset(query.offset),
+        db
+          .select({ value: count() })
+          .from(agentAccessGrant)
+          .innerJoin(agentIdentity, eq(agentAccessGrant.agentIdentityId, agentIdentity.id))
+          .where(where),
+      ])
+      return {
+        items: items.map(({ grant }) => grant),
+        total: totals[0]?.value ?? 0,
+        limit: query.limit,
+        offset: query.offset,
+      }
+    },
+
+    async summarizeAgentAccess(agentIdentityIds, now) {
+      if (agentIdentityIds.length === 0) return new Map()
+      const [requests, grants] = await Promise.all([
+        db
+          .select({ agentIdentityId: agentAccessRequest.agentIdentityId, value: count() })
+          .from(agentAccessRequest)
+          .where(
+            and(
+              inArray(agentAccessRequest.agentIdentityId, agentIdentityIds),
+              eq(agentAccessRequest.status, 'pending'),
+              gt(agentAccessRequest.expiresAt, now),
+            ),
+          )
+          .groupBy(agentAccessRequest.agentIdentityId),
+        db
+          .select({ agentIdentityId: agentAccessGrant.agentIdentityId, value: count() })
+          .from(agentAccessGrant)
+          .where(
+            and(
+              inArray(agentAccessGrant.agentIdentityId, agentIdentityIds),
+              eq(agentAccessGrant.status, 'active'),
+              or(isNull(agentAccessGrant.expiresAt), gt(agentAccessGrant.expiresAt, now)),
+            ),
+          )
+          .groupBy(agentAccessGrant.agentIdentityId),
+      ])
+      const summaries = new Map(
+        agentIdentityIds.map((agentIdentityId) => [agentIdentityId, { pendingRequestCount: 0, activeGrantCount: 0 }]),
+      )
+      for (const row of requests) summaries.get(row.agentIdentityId)!.pendingRequestCount = row.value
+      for (const row of grants) summaries.get(row.agentIdentityId)!.activeGrantCount = row.value
+      return summaries
+    },
+
     async listActiveGrantsByConnection(connectionId) {
       return db
         .select()
@@ -407,4 +520,15 @@ export function createExternalResourceRepository(db: Database): ExternalResource
   function activeResource(resourceId: string) {
     return and(eq(apiResource.id, resourceId), eq(apiResource.enabled, true), isNull(apiResource.archivedAt))
   }
+}
+
+function authorityOwnerCondition(scope?: AgentAuthorityInventoryScope) {
+  if (!scope) return undefined
+  const owners = [
+    scope.ownerUserId ? eq(agentIdentity.ownerUserId, scope.ownerUserId) : undefined,
+    scope.ownerOrganizationIds?.length
+      ? inArray(agentIdentity.ownerOrganizationId, scope.ownerOrganizationIds)
+      : undefined,
+  ].filter((condition) => condition !== undefined)
+  return owners.length > 0 ? or(...owners) : sql`0`
 }

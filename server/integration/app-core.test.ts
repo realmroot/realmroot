@@ -56,7 +56,7 @@ describe('onboarding bootstrap writes real D1 rows', () => {
     await expect(response.json()).resolves.toEqual({ required: true })
   })
 
-  it('creates the first admin, then locks onboarding', async () => {
+  it('creates the first admin and private platform Organization, then locks onboarding [spec: platform-onboarding/public-onboarding]', async () => {
     const { request } = await createHarness()
 
     const created = await request('/api/onboarding/admin-users', {
@@ -80,6 +80,20 @@ describe('onboarding bootstrap writes real D1 rows', () => {
       .bind('admin@example.com')
       .first<{ role: string }>()
     expect(userRow?.role).toBe('admin')
+    const platformOrganization = await env.DB.prepare(
+      `
+select organization.id, organization.metadata, member.role, member.user_id as userId
+from organization
+join member on member.organization_id = organization.id
+where organization.id = 'org_platform'
+`.trim(),
+    ).first<{ id: string; metadata: string; role: string; userId: string }>()
+    expect(platformOrganization).toMatchObject({
+      id: 'org_platform',
+      role: 'owner',
+      userId: expect.any(String),
+    })
+    expect(JSON.parse(platformOrganization?.metadata ?? '{}')).toEqual({ realmroot: { platform: true } })
 
     const status = await request('/api/onboarding/status')
     await expect(status.json()).resolves.toEqual({ required: false })

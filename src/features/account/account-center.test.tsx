@@ -58,22 +58,26 @@ describe('account pages', () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountProfilePage />)
 
-    expect(await screen.findByRole('heading', { name: 'Jane Stone' })).toBeTruthy()
-    await waitFor(() => expect(requests).toEqual(['/api/configz', '/api/account/profile']))
+    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy()
+    await waitFor(() =>
+      expect(requests).toEqual(['/api/configz', '/api/account/profile', '/api/account/developer-console-access']),
+    )
   })
 
   it('security page loads security-owned account data', async () => {
     const requests = mockAccountFetch()
     renderWithClient(<AccountSecurityPage />)
 
-    expect(await screen.findByRole('heading', { name: 'Multi-factor authentication' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Sign-in & security' })).toBeTruthy()
     await waitFor(() =>
       expect(requests).toEqual([
         '/api/configz',
         '/api/account/profile',
+        '/api/account/developer-console-access',
         '/api/account/security',
         '/api/account/security/passkeys',
         '/api/account/sessions',
+        '/api/account/linked-accounts',
       ]),
     )
   })
@@ -87,6 +91,7 @@ describe('account pages', () => {
       expect(requests).toEqual([
         '/api/configz',
         '/api/account/profile',
+        '/api/account/developer-console-access',
         '/api/account/linked-accounts',
         '/api/account/applications',
         '/api/account/agents',
@@ -108,7 +113,23 @@ function mockAccountFetch() {
     const path = String(input)
     requests.push(path)
     if (path === '/api/configz') return Promise.resolve(jsonResponse(configz()))
-    if (path === '/api/account/profile') return Promise.resolve(jsonResponse({ user: profile() }))
+    if (path === '/api/account/profile') {
+      return Promise.resolve(
+        jsonResponse({
+          user: profile(),
+        }),
+      )
+    }
+    if (path === '/api/account/developer-console-access') {
+      return Promise.resolve(
+        jsonResponse({
+          canCreateOrganization: true,
+          showOrganizations: false,
+          realmOperator: false,
+          consoleOrganizations: [],
+        }),
+      )
+    }
     if (path === '/api/account/security') return Promise.resolve(jsonResponse({ security }))
     if (path === '/api/account/security/passkeys') return Promise.resolve(jsonResponse({ passkeys: [] }))
     if (path === '/api/account/sessions') return Promise.resolve(jsonResponse({ sessions: [] }))

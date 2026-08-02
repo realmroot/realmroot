@@ -16,6 +16,7 @@ export const webhookEndpoint = {
   url: 'https://app.example.com/webhooks/auth',
   events: ['user.created', 'session.revoked'],
   enabled: true,
+  organizationId: null,
   secretPrefix: 'whsec_abcd123',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
@@ -25,6 +26,7 @@ export const webhookRequest = {
   id: 'whr_1',
   endpointId: 'wh_1',
   endpointUrl: 'https://app.example.com/webhooks/auth',
+  organizationId: null,
   event: 'user.created',
   status: 'failed',
   attemptCount: 1,
@@ -51,6 +53,8 @@ export const application = {
   trusted: true,
   disabled: false,
   disabledReason: null,
+  ownerOrganizationId: 'org-1',
+  audience: { mode: 'realm', organizationIds: [], userIds: [] },
   redirectUris: ['https://app.example.com/callback'],
   postLogoutRedirectUris: ['https://app.example.com/signed-out'],
   corsOrigins: ['https://app.example.com'],
@@ -104,6 +108,13 @@ export const profile = {
 export const consoleAccountProfile = {
   ...profile,
   role: 'admin',
+}
+
+export const consoleAccountAccess = {
+  canCreateOrganization: true,
+  showOrganizations: true,
+  realmOperator: true,
+  consoleOrganizations: [],
 }
 
 export const connector = {
@@ -233,6 +244,10 @@ export const apiResource = {
   resourceUrl: 'https://auth.example.com/api',
   connectorId: null,
   enabled: true,
+  ownerOrganizationId: 'org-1',
+  accessEligibility: { mode: 'realm' as const, organizationIds: [] },
+  availableToAgents: true,
+  authorization: null,
   archivedAt: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',

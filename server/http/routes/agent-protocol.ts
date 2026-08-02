@@ -1,5 +1,12 @@
-import { forbidden, unauthorized } from '@server/domain/errors'
-import { createAgentLoginIdentity, getAgentIdentityByProtocolAgent, toAgent } from '@server/usecases/agent-identities'
+import { badRequest, forbidden, unauthorized } from '@server/domain/errors'
+import {
+  createAdditionalAgentEnrollmentIntent,
+  createAgentLoginIdentity,
+  getAgentIdentityByProtocolAgent,
+  getProtocolAgentEnrollment,
+  getPublicAgentEnrollment,
+  toAgent,
+} from '@server/usecases/agent-identities'
 import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import {
@@ -15,11 +22,15 @@ import {
   accessGrantsResponseSchema,
   accessRequestSchema,
   agentApiResourcesResponseSchema,
+  agentInstallationEnrollmentResponseSchema,
+  agentInstallationEnrollmentSchema,
   agentResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
+  createAgentInstallationEnrollmentSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
+import { idempotencyKeySchema } from '@shared/api/idempotency'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
 import { getDeps } from '../middleware/deps'
@@ -57,6 +68,42 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
     c.header('Location', '/api/agent')
     return c.json(agentResponseSchema.parse({ agent: toAgent(identity) }), 201)
+  })
+
+  app.post('/installation-enrollments', async (c) => {
+    const session = await requireAgentSession(authApi, c.req.raw.headers)
+    if (!session.host?.userId) {
+      throw forbidden('A controller-approved delegated Agent session is required.')
+    }
+    const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
+    if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
+    const body = await readJson(c, createAgentInstallationEnrollmentSchema)
+    const { intent, replayed } = await createAdditionalAgentEnrollmentIntent(
+      getDeps(c),
+      body.agentId,
+      session.agent.id,
+      session.host.userId,
+      parsedKey.data,
+    )
+    const verificationUri = hostedEnrollmentUrl(intent.id)
+    c.header('Location', `/api/agent/installation-enrollments/${encodeURIComponent(intent.id)}`)
+    if (replayed) c.header('Idempotency-Replayed', 'true')
+    return c.json(
+      agentInstallationEnrollmentResponseSchema.parse({
+        enrollment: await getPublicAgentEnrollment(getDeps(c), intent.id, session.host.userId),
+        verificationUri,
+      }),
+      201,
+    )
+  })
+
+  app.get('/installation-enrollments/:enrollmentId', async (c) => {
+    const session = await requireAgentSession(authApi, c.req.raw.headers)
+    return c.json(
+      agentInstallationEnrollmentSchema.parse(
+        await getProtocolAgentEnrollment(getDeps(c), c.req.param('enrollmentId'), session.agent.id),
+      ),
+    )
   })
 
   app.get('/api-resources', async (c) => {
@@ -126,6 +173,12 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   function requireOidcIssuer() {
     if (!oidcIssuer) throw new Error('Agent operations require the configured OIDC issuer.')
     return oidcIssuer
+  }
+
+  function hostedEnrollmentUrl(intentId: string) {
+    const url = new URL('/agent/enrollments/approve', new URL(requireOidcIssuer()).origin)
+    url.searchParams.set('intent_id', intentId)
+    return url.toString()
   }
 }
 

@@ -1,24 +1,20 @@
 import type { ApiResource } from '@shared/api/agent-api'
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiResourceSummaryCard } from '@/features/console/extracted/api-resource-summary-card'
 import { ApiResourceDetailPage, ApiResourcesPage } from '@/features/console/extracted/api-resources'
-import {
-  ConsolePlaceholderPage,
-  CustomizeJwtPage,
-  OrganizationTemplatePage,
-} from '@/features/console/extracted/deployment-misc/misc'
-import { OrganizationDetailPage, OrganizationsPage } from '@/features/console/extracted/organizations'
-import { RoleSummaryCard } from '@/features/console/extracted/role-summary-card'
-import { RoleDetailPage, RolesPage } from '@/features/console/extracted/roles'
+import { RoleDetailPage } from '@/features/console/extracted/roles'
+import { RoleAssignmentsPage } from '@/features/console/pages/role-assignments-page'
+import { ConsoleScopeProvider } from '@/lib/console-context'
 import {
   apiResource,
+  application,
   emptyPagination,
   jsonResponse,
   organization,
   pagination,
   renderWithQuery,
   role,
+  user,
 } from './console.test-utils'
 
 const navigate = vi.fn()
@@ -26,6 +22,13 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   const original = await importOriginal<typeof import('@tanstack/react-router')>()
   return { ...original, useNavigate: () => navigate }
 })
+
+globalThis.ResizeObserver ??= class ResizeObserver {
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+}
+Element.prototype.scrollIntoView ??= () => {}
 
 afterEach(() => {
   cleanup()
@@ -35,335 +38,677 @@ afterEach(() => {
 
 function requestParts(input: RequestInfo | URL, init?: RequestInit) {
   const request = input instanceof Request ? input : null
+  const rawUrl = String(input)
   return {
-    url: request?.url ? new URL(request.url).pathname : String(input),
+    url: request?.url
+      ? new URL(request.url).pathname
+      : rawUrl.startsWith('http')
+        ? new URL(rawUrl).pathname
+        : rawUrl.split('?')[0],
     method: request?.method ?? init?.method ?? 'GET',
     body: request?.body ? request.json() : init?.body ? Promise.resolve(JSON.parse(String(init.body))) : null,
   }
 }
 
+const genericConnector = {
+  id: 'connector-1',
+  providerId: 'projects',
+  providerType: 'generic_oauth',
+  slug: 'projects',
+  displayName: 'Projects OIDC',
+  enabled: true,
+  loginEnabled: false,
+  clientId: 'realmroot',
+  clientSecretConfigured: true,
+  issuer: 'https://projects.example.com',
+  authorizationEndpoint: 'https://projects.example.com/authorize',
+  tokenEndpoint: 'https://projects.example.com/token',
+  userInfoEndpoint: null,
+  jwksEndpoint: 'https://projects.example.com/jwks',
+  registrationEndpoint: null,
+  revocationEndpoint: null,
+  registrationMode: 'manual',
+  scopes: ['openid'],
+  providerMetadata: {},
+  createdAt: apiResource.createdAt,
+  updatedAt: apiResource.updatedAt,
+}
+
+const contract = {
+  resourceId: 'resource-1',
+  sourceUrl: 'https://auth.example.com/openapi.json',
+  scopes: [
+    { value: 'projects:read', description: 'Read projects' },
+    { value: 'projects:write', description: 'Change projects' },
+  ],
+  operations: [
+    {
+      method: 'GET',
+      path: '/projects',
+      operationId: 'listProjects',
+      summary: 'List projects',
+      description: 'Returns visible projects.',
+      requiredScopeSets: [['projects:read']],
+    },
+  ],
+}
+
+function rolePermissionsResponse(permissions: Array<{ resourceId: string; scope: string }>) {
+  return jsonResponse({ roleId: 'role-1', permissions }, 200, { etag: '"permissions-v1"' })
+}
+
 describe('console API resources and roles', () => {
-  it('renders authorization summaries and organization-template utility pages', async () => {
-    const roles = [
-      role,
-      { ...role, id: 'org-role', name: 'Org operator', organizationId: 'org-1' },
-      { ...role, id: 'app-role', name: 'App operator', applicationId: 'app-1' },
-      { ...role, id: 'resource-role', name: 'Resource operator', resourceId: 'resource-1' },
-    ]
-    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse({ roles, pagination }))
-
-    renderWithQuery(
-      <>
-        <ApiResourceSummaryCard resource={{ ...apiResource, enabled: false }} />
-        <RoleSummaryCard role={role} scopeCount={0} />
-        <RoleSummaryCard role={{ ...role, system: false, resourceId: 'resource-1' }} scopeCount={2} />
-        <RoleSummaryCard role={{ ...role, organizationId: 'org-1' }} scopeCount={1} />
-        <RoleSummaryCard role={{ ...role, applicationId: 'app-1' }} scopeCount={1} />
-      </>,
-    )
-    expect(screen.getByText('Business OpenAPI')).toBeTruthy()
-    expect(screen.getByText('API resource resource-1')).toBeTruthy()
-    expect(screen.getByText('Organization org-1')).toBeTruthy()
-    expect(screen.getByText('Application app-1')).toBeTruthy()
-    expect(screen.getByText('Tenant')).toBeTruthy()
-
-    cleanup()
-    renderWithQuery(
-      <ConsolePlaceholderPage title="Placeholder" description="Description" rows={[['Mode', 'Native']]} />,
-    )
-    expect(screen.getByText('Native')).toBeTruthy()
-
-    cleanup()
-    renderWithQuery(<CustomizeJwtPage />)
-    expect(screen.getByText('Role keys are emitted in the roles claim.')).toBeTruthy()
-    expect(screen.getByText('Relevant organization IDs are emitted in the groups claim.')).toBeTruthy()
-
-    cleanup()
-    renderWithQuery(<OrganizationTemplatePage />)
-    expect(await screen.findByText('Org operator')).toBeTruthy()
-    expect(screen.getByText('Global template')).toBeTruthy()
-    expect(screen.queryByText('App operator')).toBeNull()
-    expect(screen.queryByText('Resource operator')).toBeNull()
-    fireEvent.change(screen.getByLabelText('Search organization roles'), { target: { value: 'missing' } })
-    expect(screen.queryByText('Org operator')).toBeNull()
-  })
-
-  it('retries organization-template role loading', async () => {
-    let failed = true
-    vi.spyOn(window, 'fetch').mockImplementation(() =>
-      Promise.resolve(
-        failed ? jsonResponse({ error: 'Roles unavailable.' }, 503) : jsonResponse({ roles: [role], pagination }),
-      ),
-    )
-    renderWithQuery(<OrganizationTemplatePage />)
-    expect(await screen.findByText('Roles unavailable.')).toBeTruthy()
-    failed = false
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByText('Admin')).toBeTruthy()
-    fireEvent.click(screen.getByRole('link', { name: 'Organization roles' }))
-
-    cleanup()
-    renderWithQuery(<OrganizationTemplatePage section={'hidden' as 'organization-roles'} />)
-    expect(await screen.findByRole('heading', { name: 'Organization template' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Organization roles', level: 2 })).toBeNull()
-  })
-
-  it('filters resource and role inventories across every role scope', async () => {
-    const roles = [
-      role,
-      { ...role, id: 'role-app', key: 'app-reader', name: 'App reader', system: false, applicationId: 'app-1' },
-      {
-        ...role,
-        id: 'role-org',
-        key: 'org-admin',
-        name: 'Org admin',
-        system: false,
-        organizationId: 'org-1',
-      },
-      {
-        ...role,
-        id: 'role-resource',
-        key: 'projects-reader',
-        name: 'Projects reader',
-        description: null,
-        system: false,
-        resourceId: 'resource-1',
-      },
-    ]
-    const external = {
-      ...apiResource,
-      id: 'resource-external',
-      identifier: 'projects',
-      name: 'Projects API',
-      resourceUrl: 'https://projects.example.com/api',
-      connectorId: 'connector-1',
-      enabled: false,
-      authorization: null,
-    }
-    vi.spyOn(window, 'fetch').mockImplementation((input) => {
-      const { url } = requestParts(input)
-      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles, pagination }))
-      if (url === '/api/api-resources') {
-        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }, external], pagination }))
-      }
-      throw new Error(`Unexpected request: ${url}`)
-    })
-
-    renderWithQuery(<ApiResourcesPage />)
-    expect(await screen.findByText('Projects API')).toBeTruthy()
-    expect(screen.getByText('External issuer')).toBeTruthy()
-    expect(screen.getByText('Disabled')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Search API resources'), { target: { value: 'missing' } })
-    expect(screen.getByText('No API resources found')).toBeTruthy()
-
-    cleanup()
-    renderWithQuery(<RolesPage />)
-    expect(await screen.findByText('Projects reader')).toBeTruthy()
-    expect(screen.getByText('app-1')).toBeTruthy()
-    expect(screen.getByText('org-1')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Filter role scope'), { target: { value: 'resource' } })
-    expect(screen.queryByText('App reader')).toBeNull()
-    expect(screen.getByText('Projects reader')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: 'missing' } })
-    expect(screen.getByText('No roles found')).toBeTruthy()
-  })
-
-  it('creates external resources and resource-scoped roles', async () => {
-    const requests: Array<{ url: string; method: string; body: unknown }> = []
+  it('shows Roles that use a native Resource server and their active assignment counts', async () => {
+    let permissionAttempts = 0
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.method === 'POST') {
-        requests.push({ ...request, body: await request.body })
-        if (request.url === '/api/api-resources') {
-          return jsonResponse({ ...apiResource, connectorId: 'connector-1', authorization: null }, 201)
-        }
-        if (request.url === '/api/roles') return jsonResponse({ ...role, resourceId: 'resource-1' }, 201)
+      if (request.url === '/api/api-resources/resource-1') return jsonResponse(apiResource)
+      if (request.url === '/api/organizations') {
+        return jsonResponse({ organizations: [organization], pagination })
       }
-      if (request.url === '/api/api-resources') {
-        return jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination })
+      if (request.url === '/api/connectors') {
+        return jsonResponse({ connectors: [], pagination: emptyPagination })
       }
-      if (request.url === '/api/roles') return jsonResponse({ roles: [], pagination: emptyPagination })
-      if (request.url.startsWith('/api/connectors')) {
+      if (request.url === '/api/roles') return jsonResponse({ roles: [role], pagination })
+      if (request.url === '/api/roles/role-1/permissions') {
+        permissionAttempts += 1
+        if (permissionAttempts === 1) return jsonResponse({ error: 'permissions unavailable' }, 503)
+        return rolePermissionsResponse([{ resourceId: apiResource.id, scope: 'projects:read' }])
+      }
+      if (request.url === '/api/role-assignments') {
+        return jsonResponse({ assignments: [], pagination: { ...pagination, total: 2 } })
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    })
+
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: true }}>
+        <ApiResourceDetailPage resourceId="resource-1" section="authority" />
+      </ConsoleScopeProvider>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    const row = (await screen.findByRole('link', { name: role.name })).closest('tr') as HTMLElement
+    expect(within(row).getByText('projects:read')).toBeTruthy()
+    expect(within(row).getByText('2')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Active assignments' })).toBeTruthy()
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).toBeNull()
+  })
+
+  it('filters and revokes assignments from the Realm-wide role inventory', async () => {
+    let revokedAt: string | null = null
+    const requests: Array<{ url: string; method: string }> = []
+    const creations: unknown[] = []
+    const agent = {
+      id: 'agent-1',
+      issuer: 'https://identity.example.com',
+      subject: 'agt_build',
+      name: 'Build Agent',
+      homeSpace: { type: 'organization', organizationId: organization.id },
+      owner: { id: organization.id, type: 'organization', displayName: organization.displayName },
+      status: 'active',
+      retiredAt: null,
+      installationCount: 1,
+      roleCount: 1,
+      pendingRequestCount: 0,
+      activeGrantCount: 0,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = requestParts(input, init)
+      if (request.url === '/api/role-assignments' && request.method === 'GET') {
         return jsonResponse({
-          connectors: [
+          assignments: [
             {
-              id: 'connector-1',
-              providerType: 'generic_oauth',
-              displayName: 'Projects OIDC',
-              issuer: 'https://projects.example.com',
-              enabled: true,
+              id: 'assignment-1',
+              roleId: role.id,
+              subjectType: 'user',
+              subjectId: user.id,
+              organizationId: organization.id,
+              expiresAt: null,
+              revokedAt,
+              assignedByUserId: user.id,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+            {
+              id: 'assignment-expired',
+              roleId: role.id,
+              subjectType: 'workload',
+              subjectId: application.id,
+              organizationId: null,
+              expiresAt: '2020-01-01T00:00:00.000Z',
+              revokedAt: null,
+              assignedByUserId: null,
+              createdAt: '2020-01-01T00:00:00.000Z',
+              updatedAt: '2020-01-01T00:00:00.000Z',
+            },
+            {
+              id: 'assignment-revoked',
+              roleId: 'role-missing',
+              subjectType: 'agent',
+              subjectId: agent.id,
+              organizationId: 'org-missing',
+              expiresAt: null,
+              revokedAt: '2026-01-01T00:00:00.000Z',
+              assignedByUserId: 'user-missing',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+            {
+              id: 'assignment-unknown-subject',
+              roleId: role.id,
+              subjectType: 'user',
+              subjectId: 'user-unknown',
+              organizationId: null,
+              expiresAt: null,
+              revokedAt: '2026-01-01T00:00:00.000Z',
+              assignedByUserId: null,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
             },
           ],
-          pagination: emptyPagination,
+          pagination,
+        })
+      }
+      if (request.url === '/api/role-assignments' && request.method === 'POST') {
+        const body = await request.body
+        creations.push(body)
+        return jsonResponse(
+          {
+            id: 'assignment-created',
+            ...(body as object),
+            assignedByUserId: user.id,
+            revokedAt: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+          201,
+        )
+      }
+      if (request.url === '/api/role-assignments/assignment-1/revocation' && request.method === 'PUT') {
+        requests.push({ url: request.url, method: request.method })
+        revokedAt = '2026-01-02T00:00:00.000Z'
+        return jsonResponse({ roleAssignmentId: 'assignment-1', revokedAt })
+      }
+      if (request.url === '/api/roles') return jsonResponse({ roles: [role], pagination })
+      if (request.url === '/api/users') return jsonResponse({ users: [user], pagination })
+      if (request.url === '/api/applications') return jsonResponse({ applications: [application], pagination })
+      if (request.url === '/api/agents') return jsonResponse({ items: [agent], pagination })
+      if (request.url === '/api/organizations') {
+        return jsonResponse({
+          organizations: [organization, { ...organization, id: 'org-2', displayName: null, name: 'Plain Org' }],
+          pagination,
         })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
-    renderWithQuery(<ApiResourcesPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'New API resource' }))
-    expect(screen.getByRole('heading', { name: 'Create API resource' })).toBeTruthy()
-    for (const [label, value] of [
-      ['Identifier', 'projects'],
-      ['Name', 'Projects API'],
-      ['Resource URL', 'https://projects.example.com/api'],
-      ['Description', 'Projects'],
-    ]) {
-      fireEvent.change(screen.getByLabelText(label), { target: { value } })
-    }
-    fireEvent.change(screen.getByLabelText('OIDC connector'), { target: { value: 'connector-1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    renderWithQuery(<RoleAssignmentsPage />)
+    expect((await screen.findAllByText('Jane Doe')).length).toBeGreaterThan(0)
+    expect(screen.getByText('Customer portal')).toBeTruthy()
+    expect(screen.getByText('Build Agent')).toBeTruthy()
+    expect(screen.getAllByText('Expired').some((element) => element.tagName === 'SPAN')).toBe(true)
+    expect(screen.getAllByText('System')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
+    let assignmentDialog = screen.getByRole('dialog', { name: 'Assign role' })
+    fireEvent.change(within(assignmentDialog).getByLabelText('Subject type'), { target: { value: 'agent' } })
+    expect(within(assignmentDialog).getByRole('option', { name: 'Build Agent' })).toBeTruthy()
+    fireEvent.change(within(assignmentDialog).getByLabelText('Subject type'), { target: { value: 'application' } })
+    fireEvent.change(within(assignmentDialog).getByLabelText('Subject'), { target: { value: application.id } })
+    fireEvent.change(within(assignmentDialog).getByLabelText('Role'), { target: { value: role.id } })
+    fireEvent.change(within(assignmentDialog).getByLabelText('Context'), { target: { value: organization.id } })
+    fireEvent.change(within(assignmentDialog).getByLabelText('Expires'), { target: { value: 'date' } })
+    fireEvent.change(within(assignmentDialog).getByLabelText('Expiry date and time'), {
+      target: { value: '2030-01-02T03:04' },
+    })
+    fireEvent.click(within(assignmentDialog).getByRole('button', { name: 'Assign role' }))
     await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/api-resources',
-        method: 'POST',
-        body: expect.objectContaining({
-          connectorId: 'connector-1',
-        }),
-      }),
+      expect(creations).toEqual([
+        {
+          roleId: role.id,
+          subjectId: application.id,
+          expiresAt: new Date('2030-01-02T03:04').toISOString(),
+          subjectType: 'workload',
+          organizationId: organization.id,
+        },
+      ]),
     )
+    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
+    assignmentDialog = screen.getByRole('dialog', { name: 'Assign role' })
+    expect(within(assignmentDialog).getByLabelText('Expires')).toHaveProperty('value', 'never')
+    expect(within(assignmentDialog).queryByLabelText('Expiry date and time')).toBeNull()
+    fireEvent.click(within(assignmentDialog).getByRole('button', { name: 'Cancel' }))
+    fireEvent.change(screen.getByLabelText('Search role assignments'), { target: { value: 'absent-value' } })
+    expect(screen.getByRole('heading', { name: 'No matching role assignments' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search role assignments'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Filter assignment subject type'), { target: { value: 'workload' } })
+    expect(screen.getByText('Customer portal')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Filter assignment subject type'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Filter assignments by role'), { target: { value: role.id } })
+    fireEvent.change(screen.getByLabelText('Filter assignments by context'), { target: { value: 'realm' } })
+    expect(screen.getByText('Customer portal')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Filter assignments by context'), { target: { value: organization.id } })
+    fireEvent.change(screen.getByLabelText('Filter assignment status'), { target: { value: 'active' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Revoke role assignment' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke assignment' }))
 
-    cleanup()
-    renderWithQuery(<ApiResourcesPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'New API resource' }))
-    for (const [label, value] of [
-      ['Identifier', 'local'],
-      ['Name', 'Local API'],
-      ['Resource URL', 'https://auth.example.com/local'],
-    ]) {
-      fireEvent.change(screen.getByLabelText(label), { target: { value } })
-    }
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/api-resources',
-        method: 'POST',
-        body: expect.not.objectContaining({ connectorId: expect.anything() }),
-      }),
+      expect(requests).toEqual([{ url: '/api/role-assignments/assignment-1/revocation', method: 'PUT' }]),
     )
-
-    cleanup()
-    renderWithQuery(<RolesPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'New role' }))
-    fireEvent.submit(
-      screen.getByRole('heading', { name: 'Create role' }).closest('[role="dialog"]')!.querySelector('form')!,
-    )
-    expect(await screen.findByText(/Invalid input/)).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'projects-reader' } })
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Projects reader' } })
-    fireEvent.change(screen.getByLabelText('API resource'), { target: { value: 'resource-1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/roles',
-        method: 'POST',
-        body: expect.objectContaining({ key: 'projects-reader', resourceId: 'resource-1' }),
-      }),
-    )
+    fireEvent.change(screen.getByLabelText('Filter assignment status'), { target: { value: 'revoked' } })
+    await waitFor(() => expect(screen.getAllByText('Revoked').some((element) => element.tagName === 'SPAN')).toBe(true))
   })
 
-  it('shows validation errors for incomplete resource creation', async () => {
-    vi.spyOn(window, 'fetch').mockResolvedValue(jsonResponse({ items: [], pagination: emptyPagination }))
-    renderWithQuery(<ApiResourcesPage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'New API resource' }))
-    fireEvent.submit(
-      screen.getByRole('heading', { name: 'Create API resource' }).closest('[role="dialog"]')!.querySelector('form')!,
-    )
-    expect(await screen.findByText(/Invalid input/)).toBeTruthy()
-  })
-
-  it('updates native resources and changes an external resource connector [spec: agent-identity/external-api-resource-registration]', async () => {
-    const requests: Array<{ url: string; method: string; body: unknown }> = []
-    const external: ApiResource = {
+  it('renders and filters the unified Resource server inventory', async () => {
+    const external = {
       ...apiResource,
+      id: 'resource-external',
       name: 'Projects API',
-      connectorId: 'connector-1',
       resourceUrl: 'https://projects.example.com/api',
+      connectorId: 'connector-1',
       enabled: false,
-      authorization: {
-        connectorId: 'connector-1',
-        resourceUrl: 'https://projects.example.com/api',
-        issuer: 'https://projects.example.com',
-        authorizationEndpoint: 'https://projects.example.com/authorize',
-        tokenEndpoint: 'https://projects.example.com/token',
-        registrationEndpoint: 'https://projects.example.com/register',
-        revocationEndpoint: 'https://projects.example.com/revoke',
-        jwksUri: 'https://projects.example.com/jwks',
-        userInfoEndpoint: 'https://projects.example.com/userinfo',
-        registrationMode: 'dynamic' as const,
-        clientId: 'realmroot',
-        clientSecretConfigured: true as const,
-        status: 'active' as const,
-        createdAt: apiResource.createdAt,
-        updatedAt: apiResource.updatedAt,
-      },
     }
-    const oidcConnector = {
-      id: 'connector-1',
-      slug: 'projects',
-      providerType: 'generic_oauth',
-      providerId: 'projects',
-      displayName: 'Projects OIDC',
-      enabled: true,
-      loginEnabled: false,
-      clientId: 'realmroot',
-      clientSecretConfigured: true,
-      issuer: 'https://projects.example.com',
-      authorizationEndpoint: 'https://projects.example.com/authorize',
-      tokenEndpoint: 'https://projects.example.com/token',
-      userInfoEndpoint: 'https://projects.example.com/userinfo',
-      jwksEndpoint: 'https://projects.example.com/jwks',
-      registrationEndpoint: 'https://projects.example.com/register',
-      revocationEndpoint: 'https://projects.example.com/revoke',
-      registrationMode: 'manual',
-      scopes: ['openid'],
-      providerMetadata: {},
-      createdAt: apiResource.createdAt,
-      updatedAt: apiResource.updatedAt,
-    }
-    let selected: ApiResource = { ...apiResource, authorization: null }
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const { url } = requestParts(input)
+      if (url === '/api/api-resources') {
+        return Promise.resolve(jsonResponse({ items: [apiResource, external], pagination }))
+      }
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [genericConnector], pagination }))
+      }
+      if (url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(
+      <ConsoleScopeProvider value={{ organizationId: organization.id, realmOperator: true }}>
+        <ApiResourcesPage />
+      </ConsoleScopeProvider>,
+    )
+
+    expect(await screen.findByText('Projects API')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Authorization' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Protected resource' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeTruthy()
+    expect(screen.getAllByText('External').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByLabelText('Filter authorization'), { target: { value: 'native' } })
+    expect(screen.queryByText('Projects API')).toBeNull()
+    expect(screen.getByText('Management API')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search resource servers'), { target: { value: 'missing' } })
+    expect(screen.getByText('No resource servers found')).toBeTruthy()
+  })
+
+  it('creates an externally authorized Resource server with explicit ownership and eligibility [spec: agent-identity/external-api-resource-registration]', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/api-resources/resource-1' && request.method === 'GET') {
-        return jsonResponse(selected)
-      }
-      if (request.url === '/api/api-resources/resource-1' && request.method === 'PATCH') {
+      if (request.url === '/api/api-resources' && request.method === 'POST') {
         requests.push({ ...request, body: await request.body })
+        return jsonResponse({ ...apiResource, name: 'Projects API', connectorId: 'connector-1' }, 201)
+      }
+      if (request.url === '/api/api-resources') {
+        return jsonResponse({ items: [], pagination: emptyPagination })
+      }
+      if (request.url === '/api/connectors') {
+        return jsonResponse({ connectors: [genericConnector], pagination })
+      }
+      if (request.url === '/api/organizations') {
+        return jsonResponse({ organizations: [organization], pagination })
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    })
+
+    renderWithQuery(<ApiResourcesPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'New resource server' }))
+    expect(screen.getByRole('heading', { name: 'New resource server' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Projects API' } })
+    fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'projects' } })
+    fireEvent.change(screen.getByLabelText('Protected resource URL'), {
+      target: { value: 'https://projects.example.com/api' },
+    })
+    fireEvent.change(screen.getByLabelText('Authorization model'), { target: { value: 'connector-1' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Projects' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          url: '/api/api-resources',
+          method: 'POST',
+          body: {
+            name: 'Projects API',
+            identifier: 'projects',
+            resourceUrl: 'https://projects.example.com/api',
+            connectorId: 'connector-1',
+            description: 'Projects',
+            ownerOrganizationId: 'org-1',
+            accessEligibility: { mode: 'realm', organizationIds: [] },
+            availableToAgents: true,
+          },
+        },
+      ]),
+    )
+  })
+
+  it('filters lifecycle states and creates a Resource server for selected Organizations', async () => {
+    const betaOrganization = {
+      ...organization,
+      id: 'org-2',
+      slug: 'beta',
+      name: 'Beta',
+      displayName: 'Beta LLC',
+    }
+    const disabledResource = {
+      ...apiResource,
+      id: 'resource-disabled',
+      name: 'Disabled API',
+      enabled: false,
+      ownerOrganizationId: betaOrganization.id,
+    }
+    const archivedResource = {
+      ...apiResource,
+      id: 'resource-archived',
+      name: 'Archived API',
+      archivedAt: '2026-07-30T19:00:00.000Z',
+      ownerOrganizationId: betaOrganization.id,
+    }
+    const requests: unknown[] = []
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = requestParts(input, init)
+      if (request.url === '/api/api-resources' && request.method === 'POST') {
+        requests.push(await request.body)
+        return jsonResponse({ ...apiResource, id: 'resource-created', name: 'Selected API' }, 201)
+      }
+      if (request.url === '/api/api-resources') {
+        return jsonResponse({ items: [apiResource, disabledResource, archivedResource], pagination })
+      }
+      if (request.url === '/api/connectors') {
+        return jsonResponse({ connectors: [genericConnector], pagination })
+      }
+      if (request.url === '/api/organizations') {
+        return jsonResponse({ organizations: [organization, betaOrganization], pagination })
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    })
+
+    renderWithQuery(<ApiResourcesPage />)
+    expect(await screen.findByText('Disabled API')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Filter status'), { target: { value: 'disabled' } })
+    expect(screen.getByText('Disabled API')).toBeTruthy()
+    expect(screen.queryByText('Archived API')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Filter status'), { target: { value: 'archived' } })
+    expect(screen.getByText('Archived API')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Filter owner'), { target: { value: betaOrganization.id } })
+    expect(await screen.findByText('Archived API')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New resource server' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Selected API' } })
+    fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'selected-api' } })
+    fireEvent.change(screen.getByLabelText('Protected resource URL'), {
+      target: { value: 'https://selected.example.com/api' },
+    })
+    fireEvent.change(screen.getByLabelText('Access eligibility'), { target: { value: 'organizations' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Select at least one Organization.')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Owner'), { target: { value: betaOrganization.id } })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Eligible Organizations' }))
+    const betaOption = (await screen.findAllByRole('option', { name: /Beta LLC/ })).find(
+      (option) => option.tagName === 'DIV',
+    )
+    expect(betaOption).toBeTruthy()
+    fireEvent.click(betaOption as HTMLElement)
+    fireEvent.click(screen.getByRole('switch', { name: 'Available to Agents' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          name: 'Selected API',
+          identifier: 'selected-api',
+          resourceUrl: 'https://selected.example.com/api',
+          ownerOrganizationId: betaOrganization.id,
+          accessEligibility: { mode: 'organizations', organizationIds: [betaOrganization.id] },
+          availableToAgents: false,
+        },
+      ]),
+    )
+  })
+
+  it('shows protected resources and their required scopes as a dedicated detail tab', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const { url } = requestParts(input)
+      if (url === '/api/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/api-resources/resource-1/contract') return Promise.resolve(jsonResponse(contract))
+      if (url === '/api/connectors')
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      if (url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="resources" />)
+
+    expect(await screen.findByRole('heading', { name: 'Management API' })).toBeTruthy()
+    expect(screen.getByText('List projects')).toBeTruthy()
+    expect(screen.getByText('/projects')).toBeTruthy()
+    expect(screen.getByText('projects:read')).toBeTruthy()
+    expect(screen.getByText('Returns visible projects.')).toBeTruthy()
+    expect(screen.queryByText(contract.sourceUrl)).toBeNull()
+  })
+
+  it('recovers the protected-resource contract and renders every scope requirement shape', async () => {
+    let contractAttempts = 0
+    const complexContract = {
+      ...contract,
+      operations: [
+        {
+          method: 'GET',
+          path: '/summary',
+          operationId: 'getSummary',
+          summary: 'Get summary',
+          description: null,
+          requiredScopeSets: [[], ['summary:read', 'summary:audit'], ['summary:admin']],
+        },
+        {
+          method: 'POST',
+          path: '/operation-id',
+          operationId: 'createById',
+          summary: null,
+          description: 'Creates a record.',
+          requiredScopeSets: [['records:write']],
+        },
+        {
+          method: 'DELETE',
+          path: '/fallback',
+          operationId: null,
+          summary: null,
+          description: null,
+          requiredScopeSets: [],
+        },
+      ],
+    }
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const { url } = requestParts(input)
+      if (url === '/api/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/api-resources/resource-1/contract') {
+        contractAttempts += 1
+        return Promise.resolve(
+          contractAttempts === 1 ? jsonResponse({ error: 'contract unavailable' }, 503) : jsonResponse(complexContract),
+        )
+      }
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
+    expect(await screen.findByText('Native authorization · resource-1')).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Resources' }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+
+    expect(await screen.findByText('Get summary')).toBeTruthy()
+    expect(screen.getByText('getSummary')).toBeTruthy()
+    expect(screen.getByText('createById')).toBeTruthy()
+    expect(screen.getByText('Protected operation')).toBeTruthy()
+    expect(screen.getByText('Authenticated')).toBeTruthy()
+    expect(screen.getAllByText('or')).toHaveLength(2)
+    expect(screen.getByText('+')).toBeTruthy()
+    expect(screen.getAllByText('—')).toHaveLength(2)
+  })
+
+  it('edits Resource server ownership and actor eligibility from its settings section', async () => {
+    const betaOrganization = {
+      ...organization,
+      id: 'org-2',
+      slug: 'beta',
+      name: 'Beta',
+      displayName: 'Beta LLC',
+    }
+    const requests: unknown[] = []
+    let selected: ApiResource = {
+      ...apiResource,
+      description: null,
+      enabled: false,
+      availableToAgents: false,
+      accessEligibility: { mode: 'organizations', organizationIds: [betaOrganization.id] },
+    }
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = requestParts(input, init)
+      if (request.url === '/api/api-resources/resource-1' && request.method === 'PATCH') {
+        const body = await request.body
+        requests.push(body)
+        selected = { ...selected, ...(body as Partial<ApiResource>) }
         return jsonResponse(selected)
       }
-      if (request.url === '/api/api-resources/resource-1' && request.method === 'DELETE') {
-        requests.push({ ...request, body: null })
-        return new Response(null, { status: 204 })
+      if (request.url === '/api/api-resources/resource-1') return jsonResponse(selected)
+      if (request.url === '/api/connectors') {
+        return jsonResponse({ connectors: [], pagination: emptyPagination })
       }
-      if (request.url.startsWith('/api/connectors') && request.method === 'GET') {
-        return jsonResponse({
-          connectors: [
-            oidcConnector,
-            {
-              ...oidcConnector,
-              id: 'connector-2',
-              displayName: 'Projects OIDC 2',
-            },
-          ],
-          pagination: emptyPagination,
-        })
+      if (request.url === '/api/organizations') {
+        return jsonResponse({ organizations: [organization, betaOrganization], pagination })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
     renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect(await screen.findByRole('heading', { name: 'Resource settings' })).toBeTruthy()
-    expect(screen.getByText('Business OpenAPI')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Updated API' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save resource' }))
+    expect(await screen.findByText('Beta LLC')).toBeTruthy()
+    expect(screen.getByText('No')).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByText('Not configured')).toBeTruthy()
+
+    const access = screen.getByRole('heading', { name: 'Ownership & access' }).closest('section') as HTMLElement
+    fireEvent.click(within(access).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Owner'), { target: { value: betaOrganization.id } })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Eligible Organizations' }))
+    const acmeOption = (await screen.findAllByRole('option', { name: /Acme Inc\./ })).find(
+      (option) => option.tagName === 'DIV',
+    )
+    expect(acmeOption).toBeTruthy()
+    fireEvent.click(acmeOption as HTMLElement)
+    fireEvent.click(screen.getByRole('switch', { name: 'Available to Agents' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        ownerOrganizationId: betaOrganization.id,
+        accessEligibility: { mode: 'organizations', organizationIds: [betaOrganization.id, organization.id] },
+        availableToAgents: true,
+      }),
+    )
+    fireEvent.click(within(access).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Eligible actors'), { target: { value: 'owner_organization' } })
+    expect(screen.queryByRole('combobox', { name: 'Eligible Organizations' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
+    await waitFor(() => expect(requests).toContainEqual({ enabled: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  })
+
+  it('shows incomplete external authorization without inventing provider state', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const { url } = requestParts(input)
+      if (url === '/api/api-resources/resource-1') {
+        return Promise.resolve(jsonResponse({ ...apiResource, connectorId: 'connector-1', authorization: null }))
+      }
+      if (url === '/api/connectors') {
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      }
+      if (url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="authority" />)
+    expect(await screen.findByText('External OIDC provider')).toBeTruthy()
+    expect(screen.getAllByText('Not configured')).toHaveLength(3)
+    const overviewTab = screen.getByRole('tab', { name: 'Overview' })
+    fireEvent.mouseDown(overviewTab, { button: 0, ctrlKey: false })
+    expect(await screen.findByText('Access eligibility')).toBeTruthy()
+    expect(overviewTab.getAttribute('aria-selected')).toBe('true')
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Settings' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByRole('heading', { name: 'Authorization provider' })).toBeTruthy()
+    expect(screen.getByText('connector-1')).toBeTruthy()
+    expect(screen.getByText('Pending validation')).toBeTruthy()
+  })
+
+  it('uses section-level editors and preserves native/external authorization differences', async () => {
+    const requests: Array<{ url: string; method: string; body: unknown }> = []
+    let selected: ApiResource = apiResource
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const request = requestParts(input, init)
+      if (request.url === '/api/api-resources/resource-1' && request.method === 'PATCH') {
+        const body = await request.body
+        requests.push({ ...request, body })
+        selected = { ...selected, ...(body as Partial<ApiResource>) }
+        return jsonResponse(selected)
+      }
+      if (request.url === '/api/api-resources/resource-1') return jsonResponse(selected)
+      if (request.url === '/api/connectors') {
+        return jsonResponse({
+          connectors: [genericConnector, { ...genericConnector, id: 'connector-2', displayName: 'Projects OIDC 2' }],
+          pagination,
+        })
+      }
+      if (request.url === '/api/organizations') {
+        return jsonResponse({ organizations: [organization], pagination })
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    })
+
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
+    expect(await screen.findByText('Native authorization · resource-1')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Authorization provider' })).toBeNull()
+    const details = screen.getByRole('heading', { name: 'Resource server details' }).closest('section') as HTMLElement
+    fireEvent.click(within(details).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Updated API' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/api-resources/resource-1',
         method: 'PATCH',
-        body: expect.objectContaining({
+        body: {
           name: 'Updated API',
+          identifier: apiResource.identifier,
           resourceUrl: apiResource.resourceUrl,
-        }),
+          description: apiResource.description,
+        },
       }),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Disable' }))
@@ -374,30 +719,35 @@ describe('console API resources and roles', () => {
         body: { enabled: false },
       }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Delete resource' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/api-resources/resource-1',
-        method: 'DELETE',
-        body: null,
-      }),
-    )
 
     cleanup()
-    selected = external
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect(await screen.findByRole('heading', { name: 'OIDC connector' })).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'External API' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save resource' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/api-resources/resource-1',
-        method: 'PATCH',
-        body: expect.objectContaining({ resourceUrl: external.resourceUrl }),
-      }),
-    )
-    fireEvent.change(screen.getByLabelText('OIDC connector'), { target: { value: 'connector-2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Change connector' }))
+    selected = {
+      ...apiResource,
+      connectorId: 'connector-1',
+      authorization: {
+        connectorId: 'connector-1',
+        resourceUrl: 'https://projects.example.com/api',
+        issuer: 'https://projects.example.com',
+        authorizationEndpoint: 'https://projects.example.com/authorize',
+        tokenEndpoint: 'https://projects.example.com/token',
+        registrationEndpoint: null,
+        revocationEndpoint: 'https://projects.example.com/revoke',
+        jwksUri: 'https://projects.example.com/jwks',
+        userInfoEndpoint: null,
+        registrationMode: 'manual',
+        clientId: 'realmroot',
+        clientSecretConfigured: true,
+        status: 'active',
+        createdAt: apiResource.createdAt,
+        updatedAt: apiResource.updatedAt,
+      },
+    }
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
+    expect(await screen.findByText('External authorization · resource-1')).toBeTruthy()
+    const provider = screen.getByRole('heading', { name: 'Authorization provider' }).closest('section') as HTMLElement
+    fireEvent.click(within(provider).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('OIDC connector'), { target: { value: 'connector-2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: '/api/api-resources/resource-1',
@@ -405,298 +755,192 @@ describe('console API resources and roles', () => {
         body: { connectorId: 'connector-2' },
       }),
     )
-    expect((await screen.findAllByText(/https:\/\/projects\.example\.com/)).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: 'Detach connector' })).toBeNull()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Authorization' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByText('https://projects.example.com')).toBeTruthy()
+    expect(screen.getByText('active')).toBeTruthy()
+    expect(screen.getByText('manual')).toBeTruthy()
   })
 
-  it('[spec: admin-console/admin-archive-api-resource] archives and restores an API resource as disabled', async () => {
+  it('[spec: admin-console/admin-archive-api-resource] archives and restores a Resource server as a disabled draft', async () => {
     const requests: Array<{ url: string; method: string }> = []
-    let selected: ApiResource = { ...apiResource, authorization: null }
-    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+    let selected: ApiResource = apiResource
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/api-resources/resource-1' && request.method === 'GET') {
-        return jsonResponse(selected)
-      }
       if (request.url === '/api/api-resources/resource-1/archival' && request.method === 'PUT') {
         requests.push({ url: request.url, method: request.method })
-        selected = {
-          ...selected,
-          enabled: false,
-          archivedAt: '2026-07-30T19:00:00.000Z',
-        }
-        return jsonResponse(selected)
+        selected = { ...selected, enabled: false, archivedAt: '2026-07-30T19:00:00.000Z' }
+        return Promise.resolve(jsonResponse(selected))
       }
       if (request.url === '/api/api-resources/resource-1/archival' && request.method === 'DELETE') {
         requests.push({ url: request.url, method: request.method })
         selected = { ...selected, enabled: false, archivedAt: null }
-        return jsonResponse(selected)
+        return Promise.resolve(jsonResponse(selected))
+      }
+      if (request.url === '/api/api-resources/resource-1') return Promise.resolve(jsonResponse(selected))
+      if (request.url === '/api/connectors')
+        return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
+      if (request.url === '/api/organizations') {
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Archive resource' }))
-    const dialog = screen.getByRole('dialog')
-    expect(
-      within(dialog).getByText(/permanently revokes its active connections, access grants, pending requests/),
-    ).toBeTruthy()
-    expect(requests).toEqual([])
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Archive resource' }))
+    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" section="settings" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText(/revokes active connections, grants, pending requests/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Archive resource server' }))
 
     expect(await screen.findByText('Archived')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Restore resource' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Save resource' })).toBeNull()
-    expect(requests).toContainEqual({
-      url: '/api/api-resources/resource-1/archival',
-      method: 'PUT',
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Restore resource' }))
-
-    expect(await screen.findByText('Disabled')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Archive resource' })).toBeTruthy()
-    expect(requests).toContainEqual({
-      url: '/api/api-resources/resource-1/archival',
-      method: 'DELETE',
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Restore resource server' }))
+    expect((await screen.findAllByText('Disabled')).length).toBeGreaterThan(0)
+    expect(requests).toEqual([
+      { url: '/api/api-resources/resource-1/archival', method: 'PUT' },
+      { url: '/api/api-resources/resource-1/archival', method: 'DELETE' },
+    ])
   })
 
-  it('retries resource queries and directs unconfigured resources to OIDC connectors', async () => {
-    let listFailed = true
-    let detailFailed = true
+  it('edits global role permissions with search and Resource server filtering', async () => {
+    const customRole = { ...role, system: false }
+    let assigned = [{ resourceId: 'resource-1', scope: 'projects:read' }]
     const requests: Array<{ url: string; method: string; body: unknown }> = []
-    const external = {
-      ...apiResource,
-      name: 'Projects API',
-      connectorId: 'connector-missing',
-      enabled: false,
-      resourceUrl: 'https://projects.example.com/api',
-      authorization: null,
-    }
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/api-resources' && request.method === 'GET') {
-        return listFailed
-          ? jsonResponse({ error: 'Resources unavailable.' }, 503)
-          : jsonResponse({ items: [external], pagination })
+      if (request.url === '/api/roles/role-1/permissions' && request.method === 'PUT') {
+        const body = (await request.body) as { permissions: typeof assigned }
+        requests.push({ ...request, body })
+        assigned = body.permissions
+        return rolePermissionsResponse(assigned)
       }
-      if (request.url === '/api/api-resources/resource-1' && request.method === 'GET') {
-        return detailFailed ? jsonResponse({ error: 'Resource unavailable.' }, 503) : jsonResponse(external)
+      if (request.url === '/api/roles/role-1/permissions') {
+        return rolePermissionsResponse(assigned)
       }
-      if (request.url === '/api/api-resources/resource-1' && request.method === 'PATCH') {
-        requests.push({ ...request, body: await request.body })
-        return jsonResponse(external)
-      }
-      if (request.url.startsWith('/api/connectors') && request.method === 'GET') {
-        return jsonResponse({ connectors: [], pagination: emptyPagination })
-      }
+      if (request.url === '/api/roles/role-1') return jsonResponse(customRole)
+      if (request.url === '/api/api-resources/resource-1/contract') return jsonResponse(contract)
+      if (request.url === '/api/api-resources') return jsonResponse({ items: [apiResource], pagination })
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
-    renderWithQuery(<ApiResourcesPage />)
-    expect(await screen.findByText('Resources unavailable.')).toBeTruthy()
-    listFailed = false
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByText('Projects API')).toBeTruthy()
+    renderWithQuery(<RoleDetailPage roleId="role-1" section="permissions" />)
+    expect(await screen.findByText('projects:read')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit permissions' }))
+    const search = await screen.findByLabelText('Search available permissions')
+    fireEvent.change(search, { target: { value: 'missing' } })
+    expect(screen.getByRole('heading', { name: 'No matching permissions' })).toBeTruthy()
+    fireEvent.change(search, { target: { value: 'write' } })
+    expect(screen.getByText('projects:write')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Filter available permissions by resource server'), {
+      target: { value: 'resource-1' },
+    })
+    fireEvent.click(screen.getByLabelText('Select projects:write'))
+    fireEvent.change(search, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save permissions' }))
 
-    cleanup()
-    renderWithQuery(<ApiResourceDetailPage resourceId="resource-1" />)
-    expect(await screen.findByText('Resource unavailable.')).toBeTruthy()
-    detailFailed = false
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByRole('button', { name: 'Enable' })).toBeTruthy()
-    expect((await screen.findByRole('link', { name: 'Open Connectors' })).getAttribute('href')).toBe(
-      '/console/connectors',
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/roles/role-1/permissions',
+        method: 'PUT',
+        body: {
+          permissions: [
+            { resourceId: 'resource-1', scope: 'projects:read' },
+            { resourceId: 'resource-1', scope: 'projects:write' },
+          ],
+        },
+      }),
     )
-    expect(requests).toEqual([])
   })
 
-  it('updates and deletes custom roles while disabling scopes for global roles', async () => {
+  it('keeps the Role key stable while editing human-readable metadata [spec: admin-console/admin-create-role]', async () => {
     const customRole = { ...role, system: false }
     const requests: Array<{ url: string; method: string; body: unknown }> = []
+    let deleted = false
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/roles/role-1' && request.method === 'GET') return jsonResponse(customRole)
-      if (request.url === '/api/roles/role-1/scopes' && request.method === 'GET') {
-        return jsonResponse({ roleId: 'role-1', scopes: [] })
+      if (request.url === '/api/roles/role-1' && request.method === 'DELETE') {
+        deleted = true
+        return new Response(null, { status: 204 })
+      }
+      if (deleted && request.url.startsWith('/api/roles/role-1')) {
+        throw new Error(`Removed Role detail was refetched: ${request.method} ${request.url}`)
       }
       if (request.url === '/api/roles/role-1' && request.method === 'PATCH') {
         requests.push({ ...request, body: await request.body })
-        return jsonResponse({ ...customRole, name: 'Updated role' })
+        return jsonResponse({ ...customRole, ...(requests[0]!.body as object) })
       }
-      if (request.url === '/api/roles/role-1' && request.method === 'DELETE') {
-        requests.push({ ...request, body: null })
-        return new Response(null, { status: 204 })
+      if (request.url === '/api/roles/role-1/permissions') {
+        return rolePermissionsResponse([])
       }
+      if (request.url === '/api/roles/role-1') return jsonResponse(customRole)
+      if (request.url === '/api/api-resources') return jsonResponse({ items: [], pagination: emptyPagination })
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
-    renderWithQuery(<RoleDetailPage roleId="role-1" />)
-    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Updated role' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save role' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/roles/role-1',
-        method: 'PATCH',
-        body: expect.objectContaining({ name: 'Updated role' }),
-      }),
-    )
+    renderWithQuery(<RoleDetailPage roleId="role-1" section="settings" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect((screen.getByLabelText('Key') as HTMLInputElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Updated role' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Updated description' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(requests[0]).toMatchObject({
+      url: '/api/roles/role-1',
+      method: 'PATCH',
+      body: { name: 'Updated role', description: 'Updated description' },
+    })
+    expect(requests[0]!.body).not.toHaveProperty('key')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(screen.getByText(/Permanently deletes this role and all active and historical assignments/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Delete role' }))
-    await waitFor(() => expect(requests).toContainEqual({ url: '/api/roles/role-1', method: 'DELETE', body: null }))
-
-    cleanup()
-    renderWithQuery(<RoleDetailPage roleId="role-1" section="scopes" />)
-    expect(await screen.findByText('Only resource roles can reference business API scopes.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Save scopes' })).toHaveProperty('disabled', true)
+    await waitFor(() => expect(deleted).toBe(true))
   })
 
-  it('updates organization settings and separates organization-owned Agents', async () => {
-    const requests: unknown[] = []
-    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
-      const request = requestParts(input, init)
-      if (request.url === '/api/organizations/org-1' && request.method === 'GET') {
-        return jsonResponse({
-          ...organization,
-          displayName: null,
-          disabled: true,
-          disabledReason: 'Paused by policy',
-        })
-      }
-      if (request.url === '/api/organizations' && request.method === 'GET') {
-        return jsonResponse({ organizations: [organization], pagination })
-      }
-      if (request.url === '/api/organizations/org-1' && request.method === 'PATCH') {
-        requests.push(await request.body)
-        return jsonResponse(organization)
-      }
-      if (request.url === '/api/agents') {
-        return jsonResponse({
-          items: [
-            {
-              id: 'agent-org',
-              issuer: 'https://auth.example.com',
-              subject: 'agt_org',
-              name: 'Organization Agent',
-              homeSpace: { type: 'organization', organizationId: 'org-1' },
-              status: 'active',
-              retiredAt: null,
-              createdAt: organization.createdAt,
-              updatedAt: organization.updatedAt,
-            },
-            {
-              id: 'agent-personal',
-              issuer: 'https://auth.example.com',
-              subject: 'agt_personal',
-              name: 'Personal Agent',
-              homeSpace: { type: 'personal', userId: 'user-1' },
-              status: 'active',
-              retiredAt: null,
-              createdAt: organization.createdAt,
-              updatedAt: organization.updatedAt,
-            },
-          ],
-          pagination,
-        })
-      }
-      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
-    })
-
-    renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
-    expect(await screen.findByText('Organization Agent')).toBeTruthy()
-    expect(screen.queryByText('Personal Agent')).toBeNull()
-    expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0)
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Updated organization' } })
-    fireEvent.change(screen.getByLabelText('Disabled reason'), { target: { value: '' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save organization' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual(
-        expect.objectContaining({
-          name: 'Updated organization',
-          displayName: null,
-          disabledReason: null,
-        }),
-      ),
-    )
-
-    cleanup()
-    renderWithQuery(<OrganizationDetailPage organizationId="org-1" section="authorization" />)
-    expect(await screen.findByText('Use organization-scoped roles from Console roles.')).toBeTruthy()
-
-    cleanup()
-    renderWithQuery(<OrganizationsPage />)
-    expect(await screen.findByText(organization.name)).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Search organizations'), { target: { value: 'missing' } })
-    expect(screen.getByText('No organizations found')).toBeTruthy()
-  })
-
-  it('retries organization details and renders the empty organization Agent state', async () => {
-    let failed = true
-    vi.spyOn(window, 'fetch').mockImplementation((input) => {
-      const { url } = requestParts(input)
-      if (url === '/api/organizations/org-1') {
-        return Promise.resolve(
-          failed ? jsonResponse({ error: 'Organization unavailable.' }, 503) : jsonResponse(organization),
-        )
-      }
-      if (url === '/api/agents') {
-        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
-      }
-      throw new Error(`Unexpected request: ${url}`)
-    })
-    renderWithQuery(<OrganizationDetailPage organizationId="org-1" />)
-    expect(await screen.findByText('Organization unavailable.')).toBeTruthy()
-    failed = false
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByText('No organization-owned Agent identities.')).toBeTruthy()
-  })
-
-  it('edits role scopes and routes every assignment subject type', async () => {
-    const resourceRole = { ...role, system: false, resourceId: 'resource-1' }
+  it('assigns a global role to a selected actor with an exact expiry date and time', async () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/roles/role-1' && request.method === 'GET') return jsonResponse(resourceRole)
-      if (request.url === '/api/roles/role-1/scopes' && request.method === 'GET') {
-        return jsonResponse({ roleId: 'role-1', scopes: ['projects:read'] })
-      }
-      if (request.method === 'PUT' || request.method === 'POST') {
+      if (request.url === '/api/role-assignments' && request.method === 'POST') {
         requests.push({ ...request, body: await request.body })
-        return jsonResponse(request.method === 'PUT' ? { roleId: 'role-1', scopes: ['projects:write'] } : {})
+        return jsonResponse({ id: 'assignment-1' }, 201)
+      }
+      if (request.url === '/api/role-assignments') {
+        return jsonResponse({ assignments: [], pagination: emptyPagination })
+      }
+      if (request.url === '/api/roles/role-1/permissions') {
+        return rolePermissionsResponse([])
+      }
+      if (request.url === '/api/roles/role-1') return jsonResponse({ ...role, system: false })
+      if (request.url === '/api/api-resources') return jsonResponse({ items: [], pagination: emptyPagination })
+      if (request.url === '/api/users') return jsonResponse({ users: [user], pagination })
+      if (request.url === '/api/applications') return jsonResponse({ applications: [application], pagination })
+      if (request.url === '/api/agents') return jsonResponse({ items: [], pagination: emptyPagination })
+      if (request.url === '/api/organizations') {
+        return jsonResponse({ organizations: [organization], pagination })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
-    renderWithQuery(<RoleDetailPage roleId="role-1" section="scopes" />)
-    expect(await screen.findByDisplayValue('projects:read')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'projects:read\n projects:write ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save scopes' }))
-    await waitFor(() =>
-      expect(requests).toContainEqual({
-        url: '/api/roles/role-1/scopes',
-        method: 'PUT',
-        body: { scopes: ['projects:read', 'projects:write'] },
-      }),
-    )
-
-    cleanup()
     renderWithQuery(<RoleDetailPage roleId="role-1" section="assignments" />)
-    expect(await screen.findByRole('heading', { name: 'Assignments' })).toBeTruthy()
-    for (const [type, endpoint] of [
-      ['user', 'users'],
-      ['agent', 'agents'],
-      ['application', 'applications'],
-      ['member', 'members'],
-    ]) {
-      fireEvent.change(screen.getByLabelText('Subject type'), { target: { value: type } })
-      fireEvent.change(screen.getByLabelText('Subject ID'), { target: { value: `${type}-1` } })
-      fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
-      await waitFor(() =>
-        expect(requests).toContainEqual({
-          url: `/api/roles/assignments/${endpoint}`,
-          method: 'POST',
-          body: { roleId: 'role-1', subjectId: `${type}-1` },
-        }),
-      )
-    }
+    fireEvent.click(await screen.findByRole('button', { name: 'Assign role' }))
+    await screen.findByRole('option', { name: 'Jane Doe' })
+    fireEvent.change(await screen.findByLabelText('Subject'), { target: { value: 'user-1' } })
+    fireEvent.change(screen.getByLabelText('Expires'), { target: { value: 'date' } })
+    fireEvent.change(screen.getByLabelText('Expiry date and time'), { target: { value: '2030-01-02T15:30' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign role' }))
+
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(requests[0]).toMatchObject({
+      url: '/api/role-assignments',
+      method: 'POST',
+      body: {
+        roleId: 'role-1',
+        subjectId: 'user-1',
+        subjectType: 'user',
+        organizationId: null,
+        expiresAt: expect.any(String),
+      },
+    })
+    expect(new Date((requests[0]!.body as { expiresAt: string }).expiresAt).toString()).not.toBe('Invalid Date')
   })
 })

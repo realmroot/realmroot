@@ -136,6 +136,7 @@ afterEach(() => {
 
 describe('hosted auth pages 6', () => {
   it('requests and verifies email with OTP through native auth endpoints [spec: hosted-auth/email-verification]', async () => {
+    window.history.pushState(null, '', '/auth/email-verification?email=jane%40example.com')
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -146,7 +147,7 @@ describe('hosted auth pages 6', () => {
 
     render(<EmailVerificationPage />)
 
-    fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'jane@example.com' } })
+    expect(await screen.findByLabelText('Email')).toHaveProperty('value', 'jane@example.com')
     fireEvent.click(screen.getByRole('button', { name: 'Send verification' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
@@ -163,6 +164,9 @@ describe('hosted auth pages 6', () => {
         body: { email: 'jane@example.com', otp: '654321' },
       })
     })
+    expect(await screen.findByRole('heading', { name: 'Email verified.' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Continue to sign in' }).getAttribute('href')).toBe('/auth/sign-in')
+    expect(screen.queryByLabelText('One-time code')).toBeNull()
   })
 
   it('verifies email token links through native auth', async () => {

@@ -29,7 +29,7 @@ describe('account security passkey routes', () => {
       headers,
       body: JSON.stringify({ password: 'password-1' }),
     })
-    await app.request('/api/account/security/mfa/totp-verification', {
+    const verification = await app.request('/api/account/security/mfa/totp-verification', {
       method: 'POST',
       headers,
       body: JSON.stringify({ code: '123456', trustDevice: true }),
@@ -48,11 +48,14 @@ describe('account security passkey routes', () => {
       },
     })
     expect(mfa.status).toBe(201)
+    expect(verification.status).toBe(200)
+    expect(verification.headers.get('set-cookie')).toContain('better-auth.session_token=rotated-session')
     expect(auth.api.enableTwoFactor).toHaveBeenCalledWith({
       body: { password: 'password-1' },
       headers: expect.any(Headers),
     })
     expect(auth.api.verifyTOTP).toHaveBeenCalledWith({
+      asResponse: true,
       body: { code: '123456', trustDevice: true },
       headers: expect.any(Headers),
     })
@@ -72,6 +75,11 @@ describe('account security passkey routes', () => {
       headers,
       body: JSON.stringify({ password: 'password-1' }),
     })
+    const disabled = await app.request('/api/account/security/mfa/totp', {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify({ password: 'password-1' }),
+    })
     const passkeys = await app.request('/api/account/security/passkeys?limit=3&offset=6', { headers })
     await app.request('/api/account/security/passkeys/passkey-1', {
       method: 'PATCH',
@@ -85,6 +93,7 @@ describe('account security passkey routes', () => {
       policy: { mode: 'optional' },
     })
     expect(backupCodes.status).toBe(201)
+    expect(disabled.headers.get('set-cookie')).toContain('better-auth.session_token=disabled-session')
     await expect(passkeys.json()).resolves.toEqual({
       passkeys: [],
       policy: securityPolicy().passkeys,
@@ -97,6 +106,11 @@ describe('account security passkey routes', () => {
       },
     })
     expect(auth.api.generateBackupCodes).toHaveBeenCalledWith({
+      body: { password: 'password-1' },
+      headers: expect.any(Headers),
+    })
+    expect(auth.api.disableTwoFactor).toHaveBeenCalledWith({
+      asResponse: true,
       body: { password: 'password-1' },
       headers: expect.any(Headers),
     })
@@ -245,8 +259,19 @@ function createAuthMock() {
         }
       }),
       enableTwoFactor: vi.fn().mockResolvedValue({ totpURI: 'otpauth://totp/Realmroot', backupCodes: [] }),
-      disableTwoFactor: vi.fn().mockResolvedValue({ status: true }),
-      verifyTOTP: vi.fn().mockResolvedValue({ status: true }),
+      disableTwoFactor: vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ status: true }), {
+          headers: { 'set-cookie': 'better-auth.session_token=disabled-session; Path=/; HttpOnly' },
+        }),
+      ),
+      verifyTOTP: vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ status: true }), {
+          headers: {
+            'content-type': 'application/json',
+            'set-cookie': 'better-auth.session_token=rotated-session; Path=/; HttpOnly',
+          },
+        }),
+      ),
       generateBackupCodes: vi.fn().mockResolvedValue({ status: true, backupCodes: [] }),
       listPasskeys: vi.fn().mockResolvedValue([]),
       deletePasskey: vi.fn().mockResolvedValue({ status: true }),
@@ -257,7 +282,7 @@ function createAuthMock() {
       revokeUserSession: vi.fn().mockResolvedValue({ success: true }),
       revokeUserSessions: vi.fn().mockResolvedValue({ success: true }),
       changeEmail: vi.fn().mockResolvedValue({ status: true }),
-      changePassword: vi.fn().mockResolvedValue({ status: true }),
+      changePassword: vi.fn().mockResolvedValue(Response.json({ status: true })),
     },
     handler: async () => new Response(null, { status: 204 }),
   }
@@ -381,7 +406,8 @@ function securityPolicy(overrides: Partial<SecurityPolicy> = {}): SecurityPolicy
       enabled: false,
       provider: 'turnstile',
       siteKey: '',
-      secretBinding: '',
+      projectId: null,
+      secretKey: '',
       ...overrides.captcha,
     },
     blocklist: {
@@ -407,7 +433,8 @@ function updatedSecurityPolicy(): SecurityPolicy {
       enabled: true,
       provider: 'turnstile',
       siteKey: 'site-key-1',
-      secretBinding: 'TURNSTILE_SECRET',
+      projectId: null,
+      secretKey: 'secret-1',
     },
     blocklist: {
       blockSubaddressing: true,

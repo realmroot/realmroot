@@ -36,7 +36,7 @@ import {
   updateManagementFederatedCredentialRequestSchema,
   updateManagementSignInSettingsRequestSchema,
 } from '@shared/api/management'
-import type { SecurityPolicy } from '@shared/api/security'
+import type { SecurityPolicyResponse as SecurityPolicy } from '@shared/api/security'
 import {
   createWebhookEndpointRequestSchema,
   type WebhookEndpoint,
@@ -81,9 +81,12 @@ import {
 } from 'react'
 import type { z } from 'zod'
 import { AuthCardFrame } from '@/components/layout/auth-layout'
+import { LinkButton } from '@/components/link-button'
+import { Field, SelectInput, TextArea, TextInput } from '@/components/product-form'
 import { ProviderIcon } from '@/components/provider-icon'
+import { TableEmptyRow } from '@/components/table-empty-row'
 import { Badge } from '@/components/ui/badge'
-import { Button, LinkButton } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -101,12 +104,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Field, SelectInput, TextArea, TextInput } from '@/components/ui/field'
 import { PageHeader } from '@/components/ui/page-header'
 import { SettingRow } from '@/components/ui/setting-row'
-import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
-import { Table, TableBody, TableCell, TableEmptyRow, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SignInCardBody, SignInMethodButtons } from '@/features/auth/pages/controls'
 import { SignUpCardBody, SignUpForm } from '@/features/auth/pages/sign-up'
@@ -131,12 +141,11 @@ type DetailTab = {
   value: string
   label: string
 }
-type ApplicationDetailSection = 'settings' | 'branding' | 'federated-credentials'
-type UserDetailSection = 'profile' | 'security' | 'sessions' | 'linked-accounts' | 'applications' | 'operations'
-type OrganizationDetailSection = 'settings' | 'authorization'
-type RoleDetailSection = 'settings' | 'scopes' | 'assignments'
-type ApiResourceDetailSection = 'settings'
-type OrganizationTemplateSection = 'organization-roles'
+type ApplicationDetailSection = 'overview' | 'oauth' | 'authorizations' | 'settings'
+type UserDetailSection = 'overview' | 'authentication' | 'sessions' | 'agents' | 'authorized-apps' | 'settings'
+type OrganizationDetailSection = 'overview' | 'members' | 'agents' | 'activity' | 'settings'
+type RoleDetailSection = 'overview' | 'permissions' | 'assignments' | 'settings'
+type ApiResourceDetailSection = 'overview' | 'resources' | 'authority' | 'settings'
 type WebhooksSection = 'endpoints' | 'requests'
 type SignInPreviewSurface = 'desktop' | 'mobile'
 type SignInMode = 'password' | 'otp'
@@ -232,7 +241,6 @@ export type {
   ManagementSignInSettingsResponse,
   ManagementUserResponse,
   OrganizationDetailSection,
-  OrganizationTemplateSection,
   ReactNode,
   RoleDetailSection,
   SecurityPolicy,
@@ -314,6 +322,7 @@ export {
   Sheet,
   SheetClose,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,

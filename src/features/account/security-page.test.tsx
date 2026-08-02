@@ -18,12 +18,6 @@ vi.mock('sonner', () => ({
   toast: { success: (...a: unknown[]) => success(...a), error: (...a: unknown[]) => errorToast(...a) },
 }))
 
-const signOut = vi.fn().mockResolvedValue({})
-vi.mock('@/lib/auth-client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/auth-client')>()
-  return { ...actual, signOut: () => signOut() }
-})
-
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, className, to }: { children: ReactNode; className?: string; to: string }) => (
     <a className={className} href={to}>
@@ -36,13 +30,16 @@ vi.mock('@tanstack/react-router', () => ({
 const store = createAccountStore()
 const server = createAccountServer(store)
 
+async function openSecurityTab(name: 'MFA' | 'Passkeys' | 'Sessions') {
+  fireEvent.mouseDown(await screen.findByRole('tab', { name }), { button: 0, ctrlKey: false })
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterEach(() => {
   cleanup()
   server.resetHandlers()
   success.mockClear()
   errorToast.mockClear()
-  signOut.mockClear()
   Object.assign(store, createAccountStore())
 })
 afterAll(() => server.close())
@@ -50,10 +47,14 @@ afterAll(() => server.close())
 describe('AccountSecurityPage', () => {
   it('renders the security panels with password, MFA, passkeys, and sessions', async () => {
     renderWithClient(<AccountSecurityPage />)
-    expect(await screen.findByRole('heading', { name: 'Multi-factor authentication' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Change password/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /Change password/ })).toBeTruthy()
+    await openSecurityTab('MFA')
+    expect(screen.getByText('Multi-factor authentication')).toBeTruthy()
     expect(screen.getByRole('button', { name: /Enroll authenticator app/ })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Active sessions' })).toBeTruthy()
+    await openSecurityTab('Passkeys')
+    expect(screen.getByText('No passkeys have been added yet.')).toBeTruthy()
+    await openSecurityTab('Sessions')
+    expect(screen.getByText('No active sessions.')).toBeTruthy()
   })
 
   it('renders an error state when a security request fails', async () => {
@@ -74,6 +75,7 @@ describe('AccountSecurityPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Change password/ }))
     fireEvent.change(await screen.findByLabelText('Current password'), { target: { value: 'old-password' } })
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password-1' } })
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'new-password-1' } })
     fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
     await waitFor(() => expect(success).toHaveBeenCalledWith('Password changed.'))
   })
@@ -96,8 +98,28 @@ describe('AccountSecurityPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Change password/ }))
     fireEvent.change(await screen.findByLabelText('Current password'), { target: { value: 'bad' } })
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password-1' } })
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'new-password-1' } })
     fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
     await waitFor(() => expect(screen.getByText('Wrong password.')).toBeTruthy())
+  })
+
+  it('rejects a mismatched password confirmation before submission', async () => {
+    let requests = 0
+    server.use(
+      http.post(`${base}/api/account/password/change`, () => {
+        requests += 1
+        return HttpResponse.json({ ok: true })
+      }),
+    )
+    renderWithClient(<AccountSecurityPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Change password/ }))
+    fireEvent.change(await screen.findByLabelText('Current password'), { target: { value: 'old-password' } })
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-password-1' } })
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'different-password' } })
+    fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
+
+    expect(await screen.findByText('New passwords do not match.')).toBeTruthy()
+    expect(requests).toBe(0)
   })
 
   it('enrolls TOTP then verifies the authenticator code', async () => {
@@ -108,15 +130,21 @@ describe('AccountSecurityPage', () => {
       http.post(`${base}/api/account/security/mfa/totp-verification`, () => HttpResponse.json({ ok: true })),
     )
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
     fireEvent.click(await screen.findByRole('button', { name: /Enroll authenticator app/ }))
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'pw' } })
     fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
 
     await waitFor(() => expect(success).toHaveBeenCalledWith('TOTP enrollment started.'))
+    expect(await screen.findByAltText('Authenticator app QR code')).toBeTruthy()
     expect(await screen.findByText('SEKRET')).toBeTruthy()
     fireEvent.change(await screen.findByLabelText('Authenticator code'), { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: 'Verify code' }))
     await waitFor(() => expect(success).toHaveBeenCalledWith('MFA enabled.'))
+    expect(await screen.findByRole('heading', { name: 'Save backup codes' })).toBeTruthy()
+    expect(screen.getByText('code-1')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   it('verifies an MFA challenge for an enrolled account', async () => {
@@ -125,6 +153,7 @@ describe('AccountSecurityPage', () => {
     Object.assign(store, enrolled)
     server.use(http.post(`${base}/api/account/security/mfa/totp-verification`, () => HttpResponse.json({ ok: true })))
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
     fireEvent.click(await screen.findByRole('button', { name: 'Verify code' }))
     fireEvent.change(await screen.findByLabelText('Authenticator code'), { target: { value: '654321' } })
     fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
@@ -137,6 +166,7 @@ describe('AccountSecurityPage', () => {
     Object.assign(store, enrolled)
     server.use(http.delete(`${base}/api/account/security/mfa/totp`, () => HttpResponse.json({ ok: true })))
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
     fireEvent.click(await screen.findByRole('button', { name: 'Disable MFA' }))
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'pw' } })
     fireEvent.click(screen.getByRole('button', { name: 'Disable authenticator app' }))
@@ -151,6 +181,7 @@ describe('AccountSecurityPage', () => {
     Object.assign(store, withPasskey)
     server.use(http.delete(`${base}/api/account/security/passkeys/:id`, () => HttpResponse.json({ ok: true })))
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Passkeys')
     expect(await screen.findByText('My Key')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Remove passkey' }))
@@ -177,6 +208,7 @@ describe('AccountSecurityPage', () => {
       http.post(`${base}/api/auth/passkey/verify-registration`, () => HttpResponse.json({ verified: true })),
     )
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Passkeys')
     fireEvent.click(await screen.findByRole('button', { name: /Add passkey/ }))
     fireEvent.change(await screen.findByLabelText('Passkey name'), { target: { value: 'Laptop' } })
     fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
@@ -198,33 +230,30 @@ describe('AccountSecurityPage', () => {
     Object.assign(store, withSession)
     server.use(http.delete(`${base}/api/account/security/sessions/:sessionId`, () => HttpResponse.json({ ok: true })))
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Sessions')
     expect(await screen.findByText('Chrome on macOS')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke session' }))
     await waitFor(() => expect(success).toHaveBeenCalledWith('Session revoked.'))
   })
 
-  it('revokes the current session and signs out', async () => {
-    const assign = vi.fn()
-    vi.stubGlobal('location', { ...window.location, assign })
+  it('marks the current session without presenting a duplicate revoke action', async () => {
     const withSession = createAccountStore()
     withSession.sessions = [
       { id: 'sess-current', userAgent: null, ipAddress: null, expiresAt: '2026-02-01T00:00:00.000Z', current: true },
     ]
     Object.assign(store, withSession)
-    server.use(http.delete(`${base}/api/account/security/sessions/:sessionId`, () => HttpResponse.json({ ok: true })))
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Sessions')
     expect(await screen.findByText('Unknown device')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Revoke session' }))
-    await waitFor(() => expect(signOut).toHaveBeenCalledOnce())
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('/auth/sign-in'))
-    vi.unstubAllGlobals()
+    expect(screen.getByText('Current')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull()
   })
 
   it('revokes all other sessions', async () => {
     server.use(http.delete(`${base}/api/account/security/sessions`, () => HttpResponse.json({ ok: true })))
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Sessions')
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke other sessions' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke sessions' }))
     await waitFor(() => expect(success).toHaveBeenCalledWith('Other sessions revoked.'))
@@ -240,6 +269,7 @@ describe('AccountSecurityPage', () => {
       ),
     )
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
     fireEvent.click(await screen.findByRole('button', { name: 'Verify code' }))
     fireEvent.change(await screen.findByLabelText('Authenticator code'), { target: { value: '000000' } })
     fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
@@ -257,6 +287,7 @@ describe('AccountSecurityPage', () => {
       ),
     )
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
     fireEvent.click(await screen.findByRole('button', { name: 'Disable MFA' }))
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'bad' } })
     fireEvent.click(screen.getByRole('button', { name: 'Disable authenticator app' }))
@@ -272,6 +303,7 @@ describe('AccountSecurityPage', () => {
       ),
     )
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
     fireEvent.click(await screen.findByRole('button', { name: /Enroll authenticator app/ }))
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'pw' } })
     fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
@@ -293,6 +325,7 @@ describe('AccountSecurityPage', () => {
       ),
     )
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Passkeys')
     fireEvent.click(await screen.findByRole('button', { name: /Add passkey/ }))
     fireEvent.change(await screen.findByLabelText('Passkey name'), { target: { value: 'Laptop' } })
     fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
@@ -308,11 +341,28 @@ describe('AccountSecurityPage', () => {
       ),
     )
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
     fireEvent.click(await screen.findByRole('button', { name: /Enroll authenticator app/ }))
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'pw' } })
     fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
     expect(await screen.findByAltText('Authenticator app QR code')).toBeTruthy()
     expect(screen.getByText('otpauth://abc')).toBeTruthy()
+  })
+
+  it('renders QR-only enrollment details when no manual setup value is returned', async () => {
+    server.use(
+      http.post(`${base}/api/account/security/mfa/totp-enrollment`, () =>
+        HttpResponse.json({ qrCode: 'data:image/png;base64,QR' }),
+      ),
+    )
+    renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
+    fireEvent.click(await screen.findByRole('button', { name: /Enroll authenticator app/ }))
+    fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'pw' } })
+    fireEvent.click(screen.getByRole('dialog').querySelector('button[type="submit"]') as HTMLElement)
+    expect(await screen.findByAltText('Authenticator app QR code')).toBeTruthy()
+    expect(screen.queryByText('Manual setup key')).toBeNull()
+    expect(screen.queryByText('Enrollment URI')).toBeNull()
   })
 
   it('cancels the TOTP enroll, verify, disable, and passkey dialogs', async () => {
@@ -321,6 +371,7 @@ describe('AccountSecurityPage', () => {
     Object.assign(store, enrolled)
     renderWithClient(<AccountSecurityPage />)
 
+    await openSecurityTab('MFA')
     fireEvent.click(await screen.findByRole('button', { name: 'Verify code' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByLabelText('Authenticator code')).toBeNull())
@@ -329,14 +380,48 @@ describe('AccountSecurityPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByLabelText('Password')).toBeNull())
 
+    await openSecurityTab('Passkeys')
     fireEvent.click(screen.getByRole('button', { name: /Add passkey/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByLabelText('Passkey name')).toBeNull())
     expect(success).not.toHaveBeenCalled()
   })
 
+  it('resets MFA and passkey editor state when dialogs are dismissed from their close control', async () => {
+    renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
+    fireEvent.click(await screen.findByRole('button', { name: /Enroll authenticator app/ }))
+    fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'temporary' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByLabelText('Password')).toBeNull())
+
+    await openSecurityTab('Passkeys')
+    fireEvent.click(screen.getByRole('button', { name: /Add passkey/ }))
+    fireEvent.change(await screen.findByLabelText('Passkey name'), { target: { value: 'Temporary key' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByLabelText('Passkey name')).toBeNull())
+  })
+
+  it('resets verify and disable credentials when enrolled MFA dialogs are dismissed', async () => {
+    const enrolled = createAccountStore()
+    enrolled.security.mfa.enabled = true
+    Object.assign(store, enrolled)
+    renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify code' }))
+    fireEvent.change(await screen.findByLabelText('Authenticator code'), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByLabelText('Authenticator code')).toBeNull())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disable MFA' }))
+    fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'temporary' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByLabelText('Password')).toBeNull())
+  })
+
   it('cancels the TOTP enroll dialog and clears enrollment', async () => {
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('MFA')
     fireEvent.click(await screen.findByRole('button', { name: /Enroll authenticator app/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByLabelText('Password')).toBeNull())
@@ -347,8 +432,8 @@ describe('AccountSecurityPage', () => {
     disabled.accountCenter = { ...disabled.accountCenter, sessionsViewEnabled: false }
     server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(disabled)))
     renderWithClient(<AccountSecurityPage />)
-    expect(await screen.findByRole('heading', { name: 'Multi-factor authentication' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Active sessions' })).toBeNull()
+    expect(await screen.findByRole('tab', { name: 'MFA' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Sessions' })).toBeNull()
   })
 
   it('hides the password panel when password change is disabled', async () => {
@@ -356,7 +441,7 @@ describe('AccountSecurityPage', () => {
     disabled.accountCenter = { ...disabled.accountCenter, passwordChangeEnabled: false }
     server.use(http.get(`${base}/api/configz`, () => HttpResponse.json(disabled)))
     renderWithClient(<AccountSecurityPage />)
-    expect(await screen.findByRole('heading', { name: 'Multi-factor authentication' })).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'MFA' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Change password/ })).toBeNull()
   })
 
@@ -368,7 +453,29 @@ describe('AccountSecurityPage', () => {
     ]
     Object.assign(store, withPasskeys)
     renderWithClient(<AccountSecurityPage />)
+    await openSecurityTab('Passkeys')
     expect(await screen.findByText('2 passkeys added for passwordless sign-in.')).toBeTruthy()
     expect(screen.getByText('Unnamed passkey')).toBeTruthy()
+  })
+
+  it('uses empty collection fallbacks when optional security payload fields are absent', async () => {
+    const sparseConfig = configz()
+    Object.assign(sparseConfig, {
+      identityProviders: undefined,
+      builtInProviders: { ...sparseConfig.builtInProviders, web3Wallet: undefined },
+    })
+    server.use(
+      http.get(`${base}/api/configz`, () => HttpResponse.json(sparseConfig)),
+      http.get(`${base}/api/account/security`, () => HttpResponse.json({})),
+      http.get(`${base}/api/account/security/passkeys`, () => HttpResponse.json({})),
+      http.get(`${base}/api/account/sessions`, () => HttpResponse.json({})),
+      http.get(`${base}/api/account/linked-accounts`, () => HttpResponse.json({})),
+    )
+    renderWithClient(<AccountSecurityPage />)
+    expect(await screen.findByText('No sign-in connectors are available.')).toBeTruthy()
+    await openSecurityTab('Passkeys')
+    expect(screen.getByText('No passkeys have been added yet.')).toBeTruthy()
+    await openSecurityTab('Sessions')
+    expect(screen.getByText('No active sessions.')).toBeTruthy()
   })
 })

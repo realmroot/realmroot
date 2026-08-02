@@ -20,6 +20,7 @@ export const adminUserListQuerySchema = z.object({
     .enum(['true', 'false'])
     .transform((value) => value === 'true')
     .optional(),
+  organizationId: z.string().min(1).optional(),
 })
 
 export const adminCreateUserSchema = z.object({

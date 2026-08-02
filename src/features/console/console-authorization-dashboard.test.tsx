@@ -5,11 +5,25 @@ import { ApplicationsPage } from '@/features/console/extracted/applications/appl
 import { ConnectorsPage } from '@/features/console/extracted/connectors'
 import { OrganizationsPage } from '@/features/console/extracted/organizations'
 import { RolesPage } from '@/features/console/extracted/roles'
-import { MfaPage } from '@/features/console/extracted/security-settings'
-import { SignInSettingsPage } from '@/features/console/extracted/sign-in-settings'
 import { UsersPage } from '@/features/console/extracted/users/users-list'
 import { ConsoleDashboardPage } from '@/features/console/pages/dashboard-page'
 import { queryClient } from '@/router'
+import {
+  apiResource,
+  application,
+  connector,
+  connectorTemplates,
+  consoleSharedFetch,
+  emptyPagination,
+  jsonResponse,
+  organization,
+  pagination,
+  renderWithQuery,
+  role,
+  securityPolicy,
+  signInSettings,
+  user,
+} from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
   disconnect() {}
@@ -25,118 +39,70 @@ afterEach(() => {
   window.history.pushState(null, '', '/')
 })
 
-import {
-  apiResource,
-  application,
-  brandingSettings,
-  connector,
-  connectorTemplates,
-  consoleSharedFetch,
-  emptyPagination,
-  jsonResponse,
-  organization,
-  pagination,
-  renderWithQuery,
-  role,
-  securityPolicy,
-  signInSettings,
-  user,
-} from './console.test-utils'
-
 const deviceCodeGrantType = 'urn:ietf:params:oauth:grant-type:device_code'
 
 describe('console authorization dashboard', () => {
-  it('renders admin variants for empty, disabled, and unset states', async () => {
-    const disabledApplication = { ...application, disabled: true, trusted: false }
-    const idOnlyUser = { ...user, email: null, name: null, role: ['admin', 'viewer'] }
-    const defaultConnector = { ...connector, enabled: false, scopes: [] }
-    const unsetSignInSettings = {
-      ...signInSettings,
-      signIn: { ...signInSettings.signIn, passwordEnabled: false },
-      links: { termsUri: null, privacyUri: null, supportEmail: null },
-    }
-    const passkeysDisabled = {
-      policy: {
-        ...securityPolicy.policy,
-        passkeys: { ...securityPolicy.policy.passkeys, enabled: false },
-      },
-    }
+  it('derives inventory and Realm readiness from current management configuration', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications') {
-        return Promise.resolve(jsonResponse({ applications: [disabledApplication], pagination }))
+        return Promise.resolve(jsonResponse({ applications: [{ ...application, disabled: true }], pagination }))
       }
-      if (url.startsWith('/api/users')) {
-        return Promise.resolve(jsonResponse({ users: [idOnlyUser], pagination }))
-      }
+      if (/^\/api\/users(?:\?|$)/.test(url)) return Promise.resolve(jsonResponse({ users: [user], pagination }))
       if (url === '/api/connectors') {
-        return Promise.resolve(jsonResponse({ connectors: [defaultConnector], pagination }))
+        return Promise.resolve(jsonResponse({ connectors: [{ ...connector, enabled: false }], pagination }))
       }
-      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       if (url === '/api/organizations') {
-        return Promise.resolve(jsonResponse({ organizations: [{ ...organization, displayName: null }], pagination }))
+        return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
       if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
       if (url === '/api/api-resources') {
-        return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
+        return Promise.resolve(jsonResponse({ items: [apiResource], pagination }))
       }
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(unsetSignInSettings))
-      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(passkeysDisabled))
+      if (url === '/api/sign-in-settings') {
+        return Promise.resolve(
+          jsonResponse({
+            ...signInSettings,
+            signIn: { ...signInSettings.signIn, passwordEnabled: false },
+          }),
+        )
+      }
+      if (url === '/api/security/policy') {
+        return Promise.resolve(
+          jsonResponse({
+            policy: {
+              ...securityPolicy.policy,
+              passkeys: { ...securityPolicy.policy.passkeys, enabled: false },
+            },
+          }),
+        )
+      }
       return consoleSharedFetch(input, init)
     })
 
     renderWithQuery(<ConsoleDashboardPage />)
 
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy()
-    expect(screen.getByText('Daily active users')).toBeTruthy()
-    expect(screen.getAllByText('Pending')).toHaveLength(4)
-
-    cleanup()
-    renderWithQuery(<ApplicationsPage />)
-    expect(await screen.findByText('Customer portal')).toBeTruthy()
-    fireEvent.click(screen.getByLabelText('Actions for Customer portal'))
-    expect(await screen.findByText('Enable')).toBeTruthy()
-
-    cleanup()
-    renderWithQuery(<UsersPage />)
-    expect(await screen.findAllByText('user-1')).toHaveLength(2)
-    expect(screen.getByText('admin, viewer')).toBeTruthy()
-    fireEvent.click(screen.getByLabelText('Actions for user-1'))
-    expect(await screen.findByText('Toggle admin role')).toBeTruthy()
-    expect(screen.queryByText('Send password reset')).toBeNull()
-
-    cleanup()
-    renderWithQuery(<ConnectorsPage />)
-    expect(await screen.findByText('Google')).toBeTruthy()
-
-    cleanup()
-    renderWithQuery(<SignInSettingsPage />)
-    expect(await screen.findByRole('switch', { name: 'Passwordless' })).toBeTruthy()
-    expect(screen.queryByLabelText('Product name')).toBeNull()
-
-    cleanup()
-    renderWithQuery(<MfaPage />)
-    expect(await screen.findByText('Authenticator app')).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'Passkeys' }).getAttribute('aria-checked')).toBe('false')
-
-    cleanup()
-    renderWithQuery(<OrganizationsPage />)
-    expect(await screen.findByText('Not set')).toBeTruthy()
+    expect(screen.getByText('Realm readiness')).toBeTruthy()
+    expect(screen.getByText('Configuration gaps')).toBeTruthy()
+    expect(screen.getByText('Not available')).toBeTruthy()
+    expect(screen.getByText('Applications').closest('[data-slot="card"]')?.textContent).toContain('1')
+    expect(screen.queryByText('Daily active users')).toBeNull()
   })
 
-  it('renders explicit empty states for admin collection pages', async () => {
+  it('renders current empty states and create entry points for management collections', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications') {
         return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/users')) {
+      if (/^\/api\/users(?:\?|$)/.test(url)) {
         return Promise.resolve(jsonResponse({ users: [], pagination: emptyPagination }))
       }
       if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
       }
+      if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
@@ -147,55 +113,36 @@ describe('console authorization dashboard', () => {
       return consoleSharedFetch(input, init)
     })
 
-    const { unmount } = renderWithQuery(<ApplicationsPage />)
+    renderWithQuery(<ApplicationsPage />)
     expect(await screen.findByText('No applications yet')).toBeTruthy()
-    expect(screen.getByRole('table')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'New application' }))
     expect(await screen.findByRole('heading', { name: 'Create application' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('heading', { name: 'Create application' })).toBeNull()
 
-    unmount()
+    cleanup()
     renderWithQuery(<UsersPage />)
     expect(await screen.findByText('No users yet')).toBeTruthy()
-    expect(screen.getByRole('table')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New user' }))
-    expect(await screen.findByRole('heading', { name: 'Create user' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('heading', { name: 'Create user' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'New user' })).toBeTruthy()
 
     cleanup()
     renderWithQuery(<ConnectorsPage />)
     expect(await screen.findByText('Email')).toBeTruthy()
-    expect(screen.getByText('Phone (SMS)')).toBeTruthy()
-    expect(screen.getAllByRole('table')).toHaveLength(2)
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OIDC connectors' }), { button: 0, ctrlKey: false })
+    expect(await screen.findByText('No OIDC connectors yet')).toBeTruthy()
 
     cleanup()
     renderWithQuery(<OrganizationsPage />)
     expect(await screen.findByText('No organizations yet')).toBeTruthy()
-    expect(screen.getByRole('table')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New organization' }))
-    expect(await screen.findByRole('heading', { name: 'Create organization' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('heading', { name: 'Create organization' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Provision organization' })).toBeTruthy()
 
     cleanup()
     renderWithQuery(<RolesPage />)
     expect(await screen.findByText('No roles yet')).toBeTruthy()
-    expect(screen.getByRole('table')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New role' }))
-    expect(await screen.findByRole('heading', { name: 'Create role' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('heading', { name: 'Create role' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'New role' })).toBeTruthy()
 
     cleanup()
     renderWithQuery(<ApiResourcesPage />)
-    expect(await screen.findByText('No API resources yet')).toBeTruthy()
-    expect(screen.getByRole('table')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'New API resource' }))
-    expect(await screen.findByRole('heading', { name: 'Create API resource' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('heading', { name: 'Create API resource' })).toBeNull()
+    expect(await screen.findByText('No resource servers yet')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New resource server' })).toBeTruthy()
   })
 
   it('creates native applications with device login enabled from the applications page [spec: admin-console/admin-create-application]', async () => {
@@ -236,7 +183,7 @@ describe('console authorization dashboard', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => {
+    await waitFor(() =>
       expect(requests).toEqual([
         {
           url: '/api/applications',
@@ -245,11 +192,13 @@ describe('console authorization dashboard', () => {
             slug: 'runner-cli',
             clientType: 'public_native',
             firstParty: true,
+            ownerOrganizationId: 'org-1',
+            audience: { mode: 'realm', organizationIds: [], userIds: [] },
             allowedGrantTypes: ['authorization_code', 'refresh_token', deviceCodeGrantType],
             redirectUris: ['com.example.runner:/callback'],
           },
         },
-      ])
-    })
+      ]),
+    )
   })
 })
