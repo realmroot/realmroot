@@ -4,6 +4,7 @@ import {
   createAccessRequest,
   createAccountConnection,
   createAgentAccessRequest,
+  createAgentResourceConnectionRequest,
   createResourceConnectionIntent,
   decideAccessRequest,
   decideAgentAccessRequest,
@@ -13,6 +14,7 @@ import {
   getAccountAccessRequest,
   getAccountAccessRequestByToken,
   getAccountConnection,
+  getAccountResourceConnectionApproval,
   getAgentAccessGrant,
   getAgentAccessRequest,
   getApiResource,
@@ -699,7 +701,7 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.createConnection).not.toHaveBeenCalled()
   })
 
-  it(`discovers an external resource and creates an exact request before any connection
+  it(`discovers an external resource and requests a connection before exact access
       [spec: agent-identity/agent-resource-discovery]
       [spec: agent-identity/external-resource-first-access]`, async () => {
     const deps = createTestDeps()
@@ -709,12 +711,6 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.listConnectionsByUser).mockResolvedValue([])
     vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
     vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
-    let pending: AgentAccessRequestRecord[] = []
-    vi.mocked(deps.externalResources.listPendingAccessRequestsByAgent).mockImplementation(async () => pending)
-    vi.mocked(deps.externalResources.createAccessRequest).mockImplementation(async (record) => {
-      pending = [record]
-      return record
-    })
 
     await expect(discoverAgentResources(deps, principal())).resolves.toMatchObject({
       resources: [
@@ -726,24 +722,40 @@ describe('external API resource authorization', () => {
         },
       ],
     })
-    const first = await createAgentAccessRequest(
+    const request = await createAgentResourceConnectionRequest(
       deps,
-      { resourceId: 'resource-1', connectionId: null, scopes: ['projects:read'], reason: 'Read projects' },
+      'resource-1',
+      { scopes: ['projects:read'], reason: 'Read projects' },
       principal(),
       'https://auth.example.com',
     )
-    const repeated = await createAgentAccessRequest(
-      deps,
-      { resourceId: 'resource-1', connectionId: null, scopes: ['projects:read'], reason: 'Repeated' },
-      principal(),
-      'https://auth.example.com',
+    expect(request).toMatchObject({ status: 'pending', accountConnectionId: null })
+    expect(request.approval?.url).toContain('/agent/resource-connection/approve#token=')
+    const sealedToken = decodeURIComponent(new URL(request.approval!.url).hash.slice('#token='.length))
+    await expect(getAccountResourceConnectionApproval(deps, sealedToken, 'user-1')).resolves.toMatchObject({
+      id: request.id,
+      status: 'pending',
+      agent: { id: 'identity-1' },
+      resource: { id: 'resource-1' },
+      accountConnection: null,
+    })
+    vi.mocked(deps.externalResources.createConnectionIntent).mockImplementation(async (record) => record)
+    await expect(
+      createAccountConnection(
+        deps,
+        { context: 'connection-request', approvalToken: sealedToken },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      apiResourceId: 'resource-1',
+      scopes: ['projects:read'],
+      status: 'pending_authorization',
+    })
+    expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ returnTo: 'connection-approval' }),
     )
-    expect(first.status).toBe('pending')
-    expect(first.approvalUrl).toContain('/agent/resource-access/approve#token=')
-    expect(repeated.id).toBe(first.id)
-    expect(deps.externalResources.createAccessRequest).toHaveBeenCalledOnce()
-    pending = []
-    vi.mocked(deps.externalResources.createAccessRequest).mockResolvedValueOnce(null)
+    expect(deps.externalResources.createGrant).not.toHaveBeenCalled()
     await expect(
       createAgentAccessRequest(
         deps,
@@ -751,7 +763,7 @@ describe('external API resource authorization', () => {
         principal(),
         'https://auth.example.com',
       ),
-    ).rejects.toThrow('Enabled API resource is required.')
+    ).rejects.toThrow('Active resource account connection was not found.')
   })
 
   it('lets the account controller approve an exact request once [spec: agent-identity/agent-resource-approval]', async () => {
@@ -890,6 +902,34 @@ describe('external API resource authorization', () => {
           resourceId: 'resource-1',
           connectionId: 'connection-1',
           scopes: ['projects:read'],
+          authorizationDetails: [{ type: 'project_access', actions: ['read'] }],
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
+          authorizationDetails: connection.authorizationDetails,
+        },
+        principal(),
+        'https://auth.example.com',
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
+
+    await expect(
+      createAgentAccessRequest(
+        deps,
+        {
+          resourceId: 'resource-1',
+          connectionId: 'connection-1',
+          scopes: ['projects:read'],
           authorizationDetails: [{ type: 'unknown_context', identifier: 'project-3' }],
         },
         principal(),
@@ -913,7 +953,7 @@ describe('external API resource authorization', () => {
         principal(),
         'https://auth.example.com',
       ),
-    ).resolves.toMatchObject({ status: 'pending', authorizationDetails: selected })
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
 
     const request = { ...requestRecord(), authorizationDetails: selected }
@@ -970,19 +1010,18 @@ describe('external API resource authorization', () => {
         'user-1',
       ),
     ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
-    await decideAgentAccessRequest(
-      deps,
-      genericRequest.id,
-      {
-        decision: 'approve',
-        mode: 'persistent',
-        authorizationDetails: [connection.authorizationDetails[0]!],
-      },
-      'user-1',
-    )
-    expect(deps.externalResources.createGrant).toHaveBeenLastCalledWith(
-      expect.objectContaining({ authorizationDetails: [connection.authorizationDetails[0]] }),
-    )
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        genericRequest.id,
+        {
+          decision: 'approve',
+          mode: 'persistent',
+          authorizationDetails: [connection.authorizationDetails[0]!],
+        },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ error: 'invalid_authorization_details' })
 
     vi.mocked(deps.authorization.findResource).mockResolvedValue(resource())
     vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
@@ -1115,6 +1154,7 @@ describe('external API resource authorization', () => {
         },
       ],
       pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
+      connectionRequired: false,
     })
   })
 
@@ -1213,7 +1253,11 @@ describe('external API resource authorization', () => {
       vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
       await expect(
         listAgentAuthorizationDetailCatalog(deps, 'resource-1', principal(), { limit: 10, offset: 0 }),
-      ).rejects.toThrow('Active resource account connection was not found.')
+      ).resolves.toEqual({
+        items: [],
+        pagination: { limit: 10, offset: 0, total: 0, hasMore: false, nextOffset: null },
+        connectionRequired: true,
+      })
     }
 
     const mismatchedRequest = authorizationCatalogDeps()

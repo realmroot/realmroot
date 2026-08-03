@@ -14,6 +14,9 @@ import type {
   ApiResource,
   CreateAccessRequest,
   CreateAccountConnection,
+  CreateResourceConnectionRequest,
+  ResourceConnectionApproval,
+  ResourceConnectionRequest,
 } from '@shared/api/agent-api'
 import {
   type AuthorizationDetail,
@@ -27,6 +30,7 @@ import type {
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
+import { z } from 'zod'
 import { getAgentRoleAuthorization } from './authorization'
 import { ensureDynamicConnectorScopes } from './connectors'
 import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
@@ -48,6 +52,19 @@ export interface AgentAssertionSigner {
 }
 
 type ResolvedExternalAuthorization = ExternalResourceAuthorizationRecord
+
+const resourceConnectionApprovalTokenSchema = z.object({
+  id: z.string(),
+  agentIdentityId: z.string(),
+  bindingId: z.string(),
+  resourceId: z.string(),
+  scopes: z.array(z.string()).min(1),
+  reason: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+})
+
+type ResourceConnectionApprovalToken = z.infer<typeof resourceConnectionApprovalTokenSchema>
 
 export async function getExternalResourceAuthorization(deps: Deps, resourceId: string) {
   await requireExternalResource(deps, resourceId)
@@ -281,6 +298,20 @@ export async function createAccountConnection(
   actorUserId: string,
   callbackOrigin: string,
 ): Promise<AccountConnection> {
+  if (input.context === 'connection-request') {
+    const approval = await resolveResourceConnectionApproval(deps, input.approvalToken, actorUserId)
+    const owner = approval.identity.identity.ownerOrganizationId
+      ? { type: 'organization' as const, organizationId: approval.identity.identity.ownerOrganizationId }
+      : { type: 'user' as const }
+    const pending = await createResourceConnectionIntent(
+      deps,
+      approval.token.resourceId,
+      { owner, scopes: approval.token.scopes, returnTo: 'connection-approval' },
+      actorUserId,
+      callbackOrigin,
+    )
+    return toPendingAccountConnection(pending, approval.token.scopes)
+  }
   if (input.context === 'access-request') {
     const request = await requirePendingAccessRequestByToken(deps, input.approvalToken)
     if (request.id !== input.accessRequestId) throw notFound('Agent access request was not found.')
@@ -524,9 +555,69 @@ export async function listAgentAuthorizationDetailCatalog(
     ownerOrganizationId: identity.identity.ownerOrganizationId,
   })
   if (!connection || connection.status !== 'active') {
-    throw notFound('Active resource account connection was not found.')
+    return {
+      items: [],
+      pagination: paginationMetadata({ ...pagination, total: 0 }),
+      connectionRequired: true,
+    }
   }
   return readAuthorizationDetailCatalog(deps, resource, connection, principal.identityId, pagination)
+}
+
+export async function createAgentResourceConnectionRequest(
+  deps: Deps,
+  resourceId: string,
+  input: CreateResourceConnectionRequest,
+  principal: AgentResourcePrincipal,
+  approvalOrigin: string,
+): Promise<ResourceConnectionRequest> {
+  const identity = await requireActiveIdentityAndBinding(deps, principal)
+  const resource = await requireEnabledResource(deps, resourceId)
+  if (resource.connectorId === null) throw badRequest('Native API resources do not use account connections.')
+  await validateRequestedScopes(deps, resource.resourceUrl, input.scopes)
+  await requireAgentScopeEligibility(
+    deps,
+    principal.identityId,
+    resource.id,
+    identity.identity.ownerOrganizationId,
+    input.scopes,
+  )
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
+  const token: ResourceConnectionApprovalToken = {
+    id: createId('resconnreq'),
+    agentIdentityId: principal.identityId,
+    bindingId: identity.bindings.find(
+      (candidate) => candidate.hostId === principal.hostId && candidate.protocolAgentId === principal.protocolAgentId,
+    )!.id,
+    resourceId: resource.id,
+    scopes: [...new Set(input.scopes)].sort(),
+    reason: input.reason ?? null,
+    createdAt: now.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+  }
+  const approvalToken = await deps.secrets.seal(JSON.stringify(token), resourceConnectionApprovalTokenContext)
+  return toResourceConnectionRequest(
+    token,
+    null,
+    `${approvalOrigin.replace(/\/$/, '')}/agent/resource-connection/approve#token=${encodeURIComponent(approvalToken)}`,
+  )
+}
+
+export async function getAccountResourceConnectionApproval(
+  deps: Deps,
+  approvalToken: string,
+  actorUserId: string,
+): Promise<ResourceConnectionApproval> {
+  const approval = await resolveResourceConnectionApproval(deps, approvalToken, actorUserId)
+  return {
+    ...toResourceConnectionRequest(approval.token, approval.connection?.id ?? null, null),
+    status: approval.connection?.status === 'active' ? 'connected' : 'pending',
+    approval: null,
+    agent: { id: approval.identity.identity.id, name: approval.identity.identity.name },
+    resource: { id: approval.resource.id, name: approval.resource.name },
+    accountConnection: approval.connection?.status === 'active' ? toAccountConnection(approval.connection) : null,
+  }
 }
 
 export async function listAccountAccessRequestAuthorizationDetailCatalog(
@@ -566,21 +657,16 @@ export async function createAgentAccessRequest(
   const resource = await requireEnabledResource(deps, input.resourceId)
   const connection = input.connectionId ? await deps.externalResources.findConnection(input.connectionId) : null
   if (resource.connectorId !== null) {
-    if (
-      input.connectionId &&
-      (!connection || connection.resourceId !== resource.id || connection.status !== 'active')
-    ) {
+    if (!input.connectionId || !connection || connection.resourceId !== resource.id || connection.status !== 'active') {
       throw notFound('Active resource account connection was not found.')
     }
-    if (connection) {
-      assertConnectionInHomeSpace(connection, identity.identity.ownerUserId, identity.identity.ownerOrganizationId)
-    }
+    assertConnectionInHomeSpace(connection, identity.identity.ownerUserId, identity.identity.ownerOrganizationId)
   } else if (connection) {
     throw badRequest('Native API resources do not use account connections.')
   }
   await validateRequestedScopes(deps, resource.resourceUrl, input.scopes)
   const authorizationDetails = input.authorizationDetails ?? []
-  assertAccessRequestAuthorizationDetails(resource, authorizationDetails)
+  assertAccessRequestAuthorizationDetails(resource, connection, authorizationDetails)
   await requireAgentScopeEligibility(
     deps,
     principal.identityId,
@@ -819,9 +905,7 @@ export async function decideAgentAccessRequest(
 
   const resource = await requireEnabledResource(deps, request.resourceId)
   const authorizationDetails = input.authorizationDetails ?? []
-  if (
-    !authorizationDetailsMatchRequest(authorizationDetails, request.authorizationDetails, resource.authorizationDetails)
-  ) {
+  if (!authorizationDetailsMatchRequest(authorizationDetails, request.authorizationDetails)) {
     throw invalidAuthorizationDetails('Approved authorization details do not match the pending access request.')
   }
   await validateRequestedScopes(deps, resource.resourceUrl, request.scopes)
@@ -935,13 +1019,7 @@ export async function issueTargetAccessToken(
     identity.identity.ownerOrganizationId,
     grant.scopes,
   )
-  if (
-    !authorizationDetailsMatchRequest(
-      grant.authorizationDetails,
-      request.authorizationDetails,
-      resource.authorizationDetails,
-    )
-  ) {
+  if (!authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails)) {
     throw forbidden('Agent access grant authorization details do not match the approved request.')
   }
   if (resource.connectorId === null) {
@@ -1334,6 +1412,7 @@ async function readAuthorizationDetailCatalog(
   return {
     items: items.slice(pagination.offset, pagination.offset + pagination.limit),
     pagination: paginationMetadata({ ...pagination, total: items.length }),
+    connectionRequired: false,
   }
 }
 
@@ -1429,6 +1508,38 @@ async function requirePendingAccessRequestByToken(deps: Deps, token: string) {
     throw notFound('Pending Agent access request was not found.')
   }
   return request
+}
+
+async function resolveResourceConnectionApproval(deps: Deps, sealedToken: string, actorUserId: string) {
+  let token: ResourceConnectionApprovalToken
+  try {
+    token = resourceConnectionApprovalTokenSchema.parse(
+      JSON.parse(await deps.secrets.open(sealedToken, resourceConnectionApprovalTokenContext)),
+    )
+  } catch {
+    throw notFound('Pending resource connection request was not found.')
+  }
+  if (new Date(token.expiresAt).getTime() <= Date.now()) {
+    throw notFound('Pending resource connection request was not found.')
+  }
+  const identity = await deps.agentIdentities.findIdentity(token.agentIdentityId)
+  const binding = identity?.bindings.find(
+    (candidate) => candidate.id === token.bindingId && candidate.status === 'active',
+  )
+  if (!identity || identity.identity.status !== 'active' || !binding) {
+    throw notFound('Pending resource connection request was not found.')
+  }
+  if (!(await controlsAgentIdentity(deps, token.agentIdentityId, actorUserId))) {
+    throw forbidden('Agent controller access is required.')
+  }
+  const resource = await requireEnabledResource(deps, token.resourceId)
+  if (resource.connectorId === null) throw badRequest('Native API resources do not use account connections.')
+  const connection = await deps.externalResources.findConnectionByOwnerResource({
+    resourceId: resource.id,
+    ownerUserId: identity.identity.ownerUserId,
+    ownerOrganizationId: identity.identity.ownerOrganizationId,
+  })
+  return { token, identity, resource, connection }
 }
 
 async function requireControlledAccessRequest(deps: Deps, requestId: string, actorUserId: string) {
@@ -1745,6 +1856,7 @@ function assertAuthorizationDetailsSelection(
 
 function assertAccessRequestAuthorizationDetails(
   resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  connection: ResourceAccountConnectionRecord | null,
   authorizationDetails: AuthorizationDetail[],
 ) {
   if (resource.connectorId === null) {
@@ -1760,11 +1872,17 @@ function assertAccessRequestAuthorizationDetails(
     }
     return
   }
-  if (authorizationDetails.length === 0) {
-    throw invalidAuthorizationDetails('Select at least one authorization detail entry.')
+  if (authorizationDetails.length !== 1) {
+    throw invalidAuthorizationDetails('Select exactly one concrete authorization detail entry.')
   }
   if (authorizationDetails.some((detail) => !supportedTypes.has(detail.type))) {
     throw invalidAuthorizationDetails('Requested authorization details contain an unsupported type.')
+  }
+  if (resource.authorizationDetails.some((template) => exactAuthorizationDetails([template], authorizationDetails))) {
+    throw invalidAuthorizationDetails('Requested authorization details must identify a concrete resource context.')
+  }
+  if (!connection || !isAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails)) {
+    throw invalidAuthorizationDetails('Requested authorization details exceed the connected account boundary.')
   }
 }
 
@@ -1795,26 +1913,8 @@ function exactAuthorizationDetails(left: AuthorizationDetail[], right: Authoriza
   return leftEntries.every((value, index) => value === rightEntries[index])
 }
 
-function authorizationDetailsMatchRequest(
-  approved: AuthorizationDetail[],
-  requested: AuthorizationDetail[],
-  configuredTemplates: AuthorizationDetail[],
-) {
-  if (approved.length !== requested.length || new Set(approved.map(canonicalJson)).size !== approved.length) {
-    return false
-  }
-  const remaining = [...approved]
-  for (const requirement of requested) {
-    const generic = configuredTemplates.some((template) => exactAuthorizationDetails([template], [requirement]))
-    const index = remaining.findIndex((detail) =>
-      generic
-        ? !exactAuthorizationDetails([detail], [requirement]) && authorizationDetailMatchesTemplate(detail, requirement)
-        : exactAuthorizationDetails([detail], [requirement]),
-    )
-    if (index === -1) return false
-    remaining.splice(index, 1)
-  }
-  return remaining.length === 0
+function authorizationDetailsMatchRequest(approved: AuthorizationDetail[], requested: AuthorizationDetail[]) {
+  return new Set(approved.map(canonicalJson)).size === approved.length && exactAuthorizationDetails(approved, requested)
 }
 
 function authorizationDetailMatchesTemplate(detail: AuthorizationDetail, template: AuthorizationDetail) {
@@ -2120,6 +2220,25 @@ function toAccountConnection(record: ResourceAccountConnectionRecord): AccountCo
   }
 }
 
+function toResourceConnectionRequest(
+  token: ResourceConnectionApprovalToken,
+  accountConnectionId: string | null,
+  approvalUrl: string | null,
+): ResourceConnectionRequest {
+  return {
+    id: token.id,
+    agentId: token.agentIdentityId,
+    apiResourceId: token.resourceId,
+    scopes: token.scopes,
+    reason: token.reason,
+    status: accountConnectionId ? 'connected' : 'pending',
+    accountConnectionId,
+    approval: approvalUrl ? { url: approvalUrl, expiresAt: token.expiresAt } : null,
+    createdAt: token.createdAt,
+    expiresAt: token.expiresAt,
+  }
+}
+
 function toPendingAccountConnection(
   pending: Awaited<ReturnType<typeof createResourceConnectionIntent>>,
   scopes: string[],
@@ -2213,6 +2332,8 @@ function tokenLeaseContext(leaseId: string) {
 function accessRequestTokenContext(requestId: string) {
   return `agent-access-request:${requestId}:approval-token`
 }
+
+const resourceConnectionApprovalTokenContext = 'agent-resource-connection-request:approval-token'
 
 function approvalUrl(origin: string, token: string) {
   return `${origin.replace(/\/$/, '')}/agent/resource-access/approve#token=${token}`

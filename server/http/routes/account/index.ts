@@ -20,6 +20,7 @@ import {
   getAccountAccessRequest,
   getAccountAccessRequestByToken,
   getAccountConnection,
+  getAccountResourceConnectionApproval,
   listAccessRequestConnections,
   listAccountAccessRequestAuthorizationDetailCatalog,
   listAccountAccessRequests,
@@ -49,6 +50,7 @@ import {
   createAccountConnectionSchema,
   decideAccessRequestSchema,
   decideAgentEnrollmentSchema,
+  resourceConnectionApprovalSchema,
 } from '@shared/api/agent-api'
 import { decideAgentApprovalResponseSchema } from '@shared/api/agents'
 import { linkAccountRequestSchema, unlinkAccountQuerySchema } from '@shared/api/connectors'
@@ -472,6 +474,15 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
     )
     c.header('Location', `/api/account/account-connections/${encodeURIComponent(result.id)}`)
     return c.json(accountConnectionSchema.parse(result), 201)
+  })
+
+  app.get('/resource-connection-requests/current', async (c) => {
+    const query = readQuery(c, z.object({ approvalToken: z.string().trim().min(1) }))
+    return c.json(
+      resourceConnectionApprovalSchema.parse(
+        await getAccountResourceConnectionApproval(getDeps(c), query.approvalToken, getPrincipal(c).user!.id),
+      ),
+    )
   })
 
   app.get('/account-connections/:connectionId', async (c) => {

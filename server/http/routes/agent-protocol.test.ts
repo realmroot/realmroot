@@ -277,6 +277,7 @@ describe('Agent protocol routes', () => {
         },
       ],
       pagination: { limit: 25, offset: 0, total: 1, hasMore: false, nextOffset: null },
+      connectionRequired: false,
     })
     const app = createRouteApp({ getAgentSession: vi.fn().mockResolvedValue(session()) })
 
@@ -298,6 +299,45 @@ describe('Agent protocol routes', () => {
       limit: 25,
       offset: 0,
     })
+  })
+
+  it('creates a controller-hosted account connection request without authorization details', async () => {
+    vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
+    const createRequest = vi.spyOn(externalResources, 'createAgentResourceConnectionRequest').mockResolvedValue({
+      id: 'connection-request-1',
+      agentId: 'identity-1',
+      apiResourceId: 'resource-1',
+      scopes: ['projects:read'],
+      reason: 'Connect the projects account',
+      status: 'pending',
+      accountConnectionId: null,
+      approval: {
+        url: 'https://auth.example.com/agent/resource-connection/approve#token=opaque',
+        expiresAt: '2026-08-01T00:10:00.000Z',
+      },
+      createdAt: '2026-08-01T00:00:00.000Z',
+      expiresAt: '2026-08-01T00:10:00.000Z',
+    })
+    const app = createRouteApp(
+      { getAgentSession: vi.fn().mockResolvedValue(session()) },
+      'https://auth.example.com/api/auth',
+    )
+
+    const response = await app.request('/api/agent/api-resources/resource-1/connections', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ scopes: ['projects:read'], reason: 'Connect the projects account' }),
+    })
+
+    expect(response.status).toBe(201)
+    await expect(response.json()).resolves.toMatchObject({ id: 'connection-request-1', status: 'pending' })
+    expect(createRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'resource-1',
+      { scopes: ['projects:read'], reason: 'Connect the projects account' },
+      expect.anything(),
+      'https://auth.example.com',
+    )
   })
 
   it('uses the unified grant token operation for native APIs [spec: agent-identity/native-api-resource-token]', async () => {

@@ -345,9 +345,9 @@ Feature: Agent identity and delegated API authorization
       And the authorization server advertises an account-scoped authorization detail catalog endpoint and required scope
       When the Agent discovers that catalog through Realmroot
       Then Realmroot returns every available detail with safe display metadata, connection authorization, and matching active Agent grant state
-      When the Agent requests generic authorization detail placeholders and an exact scope subset
-      Then the controller selects exactly one matching concrete detail for each generic placeholder
-      And fixed requested details remain fixed rather than becoming selectable
+      When the Agent requests an exact scope subset and one concrete connected authorization detail
+      Then Realmroot preserves that exact context through hosted approval
+      And rejects missing, generic, multiple, or unconnected authorization details
       And the pending request and controller approval preserve both authority dimensions
       And an ungranted entry or browser-tampered approval fails with invalid_authorization_details
       When the controller approves the request and the Agent exchanges a token
@@ -369,19 +369,20 @@ Feature: Agent identity and delegated API authorization
       Given an enabled external API resource has active authorization configuration
       And the Agent's home space has no account connection for that resource
       When the Agent discovers every target operation required by the current task
-      And requests their combined exact OpenAPI scope set once
-      Then Realmroot creates a pending access request without requiring a connection
-      When the controller opens the approval page
-      Then Realmroot shows the home space's single connected account without account-selection controls
-      Or requires the controller to connect that resource account before deciding the Agent request
-      And the new account authorization requests the pending Agent request's exact scope set
+      And requests a controller-managed account connection for their combined exact OpenAPI scope set
+      Then Realmroot creates a hosted connection request without authorization details or an Agent grant
+      When the controller opens the connection approval page
+      Then Realmroot requires the controller to connect that resource account
+      And the new account authorization requests the connection request's exact scope set
       When OAuth returns after connecting the account
-      Then Realmroot returns to the pending Agent approval with that account displayed
-      When the controller separately approves the exact Agent scopes and grant lifetime
+      Then Realmroot returns to the connection approval with that account displayed
       Then Realmroot records a resource account connection owned by the Agent's home space
       And stores its refresh credential encrypted
       And never exposes the refresh credential through an API, audit event, or error
-      And binds the account connection to the exact request and grant
+      And does not create an Agent access request, grant, or token
+      When the Agent discovers one connected authorization context and separately requests exact access
+      And the controller approves the exact Agent scopes and grant lifetime
+      Then Realmroot binds the account connection to the exact request and grant
       And the Agent can obtain a DPoP-bound target access token
 
     @entrypoint:product-ui @journey:resource-account-reauthorization

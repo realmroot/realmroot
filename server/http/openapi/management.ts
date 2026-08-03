@@ -11,6 +11,8 @@ import {
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
   createAgentInstallationEnrollmentSchema,
+  createResourceConnectionRequestSchema,
+  resourceConnectionRequestSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
@@ -133,6 +135,20 @@ const managementRoutes: ManagementRouteConfig[] = [
       query: paginationQuerySchema,
     },
     response: authorizationDetailCatalogResponseSchema,
+  },
+  {
+    method: 'post',
+    path: '/agent/api-resources/{resourceId}/connections',
+    operationId: 'createAgentResourceConnectionRequest',
+    summary: 'Request a controller-managed external resource connection',
+    cli: { group: 'access', name: 'connect' },
+    security: [{ agentAuth: [] }],
+    request: {
+      params: z.object({ resourceId: z.string() }),
+      body: jsonBody(createResourceConnectionRequestSchema),
+    },
+    response: resourceConnectionRequestSchema,
+    status: 201,
   },
   {
     method: 'post',

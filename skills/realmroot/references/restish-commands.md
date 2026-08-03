@@ -33,9 +33,9 @@ and scope descriptions for the required capability. Consider only resources
 whose status is `available`. Shortlist the exact `apiResourceId`,
 `connectorId` and `resourceUrl`; a null Connector means native authorization.
 Do not request access yet.
-An external resource may have no linked account yet; the controller can choose
-or connect one during hosted approval. A native resource has no account
-connection.
+An external resource may have no linked account yet. Connect it through the
+separate hosted connection workflow before requesting Agent access. A native
+resource has no account connection.
 
 When several resources satisfy the request and the catalog does not establish a
 single match, inspect each candidate's target contract before asking the user
@@ -118,8 +118,7 @@ restish "$API_NAME" access request --rsh-validate -o json <<'JSON'
 JSON
 ```
 
-For a `native` resource, or an `external` resource whose account must be chosen
-or connected during approval, use a request without an account:
+For a `native` resource, use a request without an account:
 
 ```bash
 restish "$API_NAME" access request --rsh-validate -o json <<'JSON'
@@ -138,6 +137,23 @@ Replace every example value with an exact discovered value and request only the
 scopes needed by the user's task. The adapter opens the controller approval
 page and keeps the request waiting.
 
+For an external resource without a connected account, request the connection
+first. This step accepts scopes but never accepts authorization details and
+never creates an Agent grant:
+
+```bash
+restish "$API_NAME" access connect resource_123 --rsh-validate -o json <<'JSON'
+{
+  "scopes": ["projects:read"],
+  "reason": "Connect the controller's project account"
+}
+JSON
+```
+
+Give the returned hosted approval URL to the controller. The controller signs
+in, connects or updates the provider account, and selects one or more workspaces
+at the provider. After they finish, query authorization contexts again.
+
 For a resource that advertises authorization contexts, inspect the account's
 live catalog before requesting access:
 
@@ -147,7 +163,10 @@ restish "$API_NAME" access contexts resource_123 -o json
 
 Follow `pagination.nextOffset` until `hasMore` is false. Each item reports the
 exact `authorizationDetail`, whether the connected account has authorized it,
-and matching active Agent grants. Use one exact detail in each access request;
+and matching active Agent grants. When the response has
+`connectionRequired: true`, run `access connect` and do not create an access
+request yet. Use one exact detail in each access request and never send a
+generic type-only template;
 if an active grant already covers the required scopes, issue credentials from
 that grant directly and do not create another approval request. If
 `connectionAuthorized` is false, request account reauthorization instead of
