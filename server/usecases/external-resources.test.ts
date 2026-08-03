@@ -19,6 +19,7 @@ import {
   getExternalResourceAuthorization,
   issueTargetAccessToken,
   listAccessRequestConnections,
+  listAccountAccessRequestAuthorizationDetailCatalog,
   listAccountAccessRequests,
   listAccountConnections,
   listAgentAccessGrants,
@@ -919,6 +920,58 @@ describe('external API resource authorization', () => {
     expect(deps.externalResources.createGrant).toHaveBeenLastCalledWith(
       expect.objectContaining({ authorizationDetails: [connection.authorizationDetails[0]] }),
     )
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(resource())
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue(request)
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'persistent', authorizationDetails: selected },
+        'user-1',
+      ),
+    ).rejects.toThrow('This external API resource does not use authorization details.')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue({
+      ...resource(),
+      authorizationDetails: [{ type: 'project_access', actions: ['read'] }],
+    })
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({ ...connection, authorizationDetails: [] })
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'persistent', authorizationDetails: selected },
+        'user-1',
+      ),
+    ).rejects.toThrow('The resource account must be explicitly reauthorized for authorization details.')
+
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({ ...request, authorizationDetails: [] })
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connection)
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'persistent', authorizationDetails: [] },
+        'user-1',
+      ),
+    ).rejects.toThrow('Select at least one granted authorization detail entry.')
+
+    vi.mocked(deps.authorization.findResource).mockResolvedValue(nativeResource())
+    mockResourceOpenApi(deps, nativeResource().resourceUrl)
+    vi.mocked(deps.externalResources.findAccessRequest).mockResolvedValue({
+      ...request,
+      connectionId: null,
+      authorizationDetails: selected,
+    })
+    await expect(
+      decideAgentAccessRequest(
+        deps,
+        request.id,
+        { decision: 'approve', mode: 'persistent', authorizationDetails: selected },
+        'user-1',
+      ),
+    ).rejects.toThrow('Native API resources do not accept authorization details.')
   })
 
   it('[spec: agent-identity/external-resource-contextual-delegation] lists every account detail with connection and Agent grant state', async () => {
@@ -950,6 +1003,19 @@ describe('external API resource authorization', () => {
     })
     vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([
       { ...grantRecord(), authorizationDetails: [connectedDetail], scopes: ['projects:read'] },
+      {
+        ...grantRecord(),
+        id: 'grant-future',
+        authorizationDetails: [connectedDetail],
+        scopes: ['projects:write'],
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+      {
+        ...grantRecord(),
+        id: 'grant-expired',
+        authorizationDetails: [connectedDetail],
+        expiresAt: new Date(Date.now() - 60_000),
+      },
     ])
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (fetchRequest) => {
       expect(fetchRequest.url).toBe('https://projects.example.com/authorization-details')
@@ -973,7 +1039,10 @@ describe('external API resource authorization', () => {
           authorizationDetail: connectedDetail,
           display: { label: 'Project One' },
           connectionAuthorized: true,
-          agentGrants: [{ id: 'grant-1', scopes: ['projects:read'], status: 'active' }],
+          agentGrants: [
+            { id: 'grant-1', scopes: ['projects:read'], status: 'active' },
+            { id: 'grant-future', scopes: ['projects:write'], status: 'active' },
+          ],
         },
         {
           authorizationDetail: availableDetail,
@@ -984,6 +1053,156 @@ describe('external API resource authorization', () => {
       ],
       pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
     })
+  })
+
+  it('rejects unavailable, unauthorized, and invalid authorization detail catalogs', async () => {
+    await expect(
+      listAgentAuthorizationDetailCatalog(
+        authorizationCatalogDeps({ providerMetadata: metadata() }),
+        'resource-1',
+        principal(),
+        { limit: 100, offset: 0 },
+      ),
+    ).rejects.toThrow('External API resource does not advertise an authorization detail catalog.')
+
+    await expect(
+      listAgentAuthorizationDetailCatalog(
+        authorizationCatalogDeps({ grantedScopes: connectionRecord().grantedScopes }),
+        'resource-1',
+        principal(),
+        { limit: 100, offset: 0 },
+      ),
+    ).rejects.toThrow('Resource account must be reauthorized for the authorization detail catalog scope.')
+
+    for (const [response, message] of [
+      [new Response(null, { status: 502 }), 'Authorization detail catalog request failed.'],
+      [new Response('not-json'), 'Authorization detail catalog response is invalid.'],
+      [
+        Response.json({
+          items: [
+            { authorizationDetail: { type: 'project_access', identifier: 'project-1' }, display: { label: 'One' } },
+            {
+              authorizationDetail: { type: 'project_access', identifier: 'project-1' },
+              display: { label: 'One again' },
+            },
+          ],
+        }),
+        'Authorization detail catalog contains duplicate details.',
+      ],
+      [
+        Response.json({
+          items: [
+            { authorizationDetail: { type: 'other_access', identifier: 'other-1' }, display: { label: 'Other' } },
+          ],
+        }),
+        'Authorization detail catalog contains a detail outside the resource templates.',
+      ],
+    ] as const) {
+      await expect(
+        listAgentAuthorizationDetailCatalog(
+          authorizationCatalogDeps({ fetchResponse: response }),
+          'resource-1',
+          principal(),
+          { limit: 100, offset: 0 },
+        ),
+      ).rejects.toThrow(message)
+    }
+
+    const unreachable = authorizationCatalogDeps()
+    vi.mocked(unreachable.externalHttp.fetch).mockRejectedValue(new Error('network unavailable'))
+    await expect(
+      listAgentAuthorizationDetailCatalog(unreachable, 'resource-1', principal(), { limit: 100, offset: 0 }),
+    ).rejects.toThrow('Authorization detail catalog could not be reached.')
+  })
+
+  it('lists the authorization detail catalog while approving an account-owned request', async () => {
+    const detail = { type: 'project_access', identifier: 'project-1', actions: ['read'] }
+    const deps = authorizationCatalogDeps({
+      fetchResponse: Response.json({ items: [{ authorizationDetail: detail, display: { label: 'Project One' } }] }),
+    })
+    vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(requestRecord())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
+      ...connectionRecord(),
+      grantedScopes: [...connectionRecord().grantedScopes, 'authorization-details:read'],
+    })
+    vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
+
+    await expect(
+      listAccountAccessRequestAuthorizationDetailCatalog(deps, 'request-1', 'approval-token', 'user-1', {
+        limit: 10,
+        offset: 0,
+      }),
+    ).resolves.toMatchObject({
+      items: [{ authorizationDetail: detail, connectionAuthorized: false, agentGrants: [] }],
+      pagination: { total: 1 },
+    })
+  })
+
+  it('rejects authorization detail catalog requests without a usable resource context', async () => {
+    const nativeAgent = authorizationCatalogDeps()
+    vi.mocked(nativeAgent.authorization.findResource).mockResolvedValue(nativeResource())
+    await expect(
+      listAgentAuthorizationDetailCatalog(nativeAgent, 'resource-1', principal(), { limit: 10, offset: 0 }),
+    ).rejects.toThrow('Native API resources do not have authorization detail catalogs.')
+
+    for (const connection of [null, { ...connectionRecord(), status: 'revoked' as const }]) {
+      const deps = authorizationCatalogDeps()
+      vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
+      await expect(
+        listAgentAuthorizationDetailCatalog(deps, 'resource-1', principal(), { limit: 10, offset: 0 }),
+      ).rejects.toThrow('Active resource account connection was not found.')
+    }
+
+    const mismatchedRequest = authorizationCatalogDeps()
+    vi.mocked(mismatchedRequest.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(
+      requestRecord(),
+    )
+    await expect(
+      listAccountAccessRequestAuthorizationDetailCatalog(
+        mismatchedRequest,
+        'another-request',
+        'approval-token',
+        'user-1',
+        { limit: 10, offset: 0 },
+      ),
+    ).rejects.toThrow('Agent access request was not found.')
+
+    const missingIdentity = authorizationCatalogDeps()
+    vi.mocked(missingIdentity.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(requestRecord())
+    vi.mocked(missingIdentity.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(missingIdentity.agentIdentities.findIdentity).mockResolvedValue(null)
+    await expect(
+      listAccountAccessRequestAuthorizationDetailCatalog(missingIdentity, 'request-1', 'approval-token', 'user-1', {
+        limit: 10,
+        offset: 0,
+      }),
+    ).rejects.toThrow('Active Agent identity was not found.')
+
+    const nativeAccount = authorizationCatalogDeps()
+    vi.mocked(nativeAccount.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(requestRecord())
+    vi.mocked(nativeAccount.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(nativeAccount.authorization.findResource).mockResolvedValue(nativeResource())
+    await expect(
+      listAccountAccessRequestAuthorizationDetailCatalog(nativeAccount, 'request-1', 'approval-token', 'user-1', {
+        limit: 10,
+        offset: 0,
+      }),
+    ).rejects.toThrow('Native API resources do not have authorization detail catalogs.')
+
+    for (const connection of [null, { ...connectionRecord(), status: 'revoked' as const }]) {
+      const deps = authorizationCatalogDeps()
+      vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue({
+        ...requestRecord(),
+        connectionId: null,
+      })
+      vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(connection)
+      await expect(
+        listAccountAccessRequestAuthorizationDetailCatalog(deps, 'request-1', 'approval-token', 'user-1', {
+          limit: 10,
+          offset: 0,
+        }),
+      ).rejects.toThrow('Active resource account connection was not found.')
+    }
   })
 
   it(`exchanges user and Agent authority for a target-issued DPoP token
@@ -1463,6 +1682,11 @@ describe('external API resource authorization', () => {
     await expect(
       listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
     ).rejects.toThrow('A resource home space cannot have more than one active account connection.')
+
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce(identityAggregate()).mockResolvedValueOnce(null)
+    await expect(
+      listAccessRequestConnections(deps, 'approval-token', 'user-1', { limit: 20, offset: 0 }),
+    ).rejects.toThrow('Active Agent identity was not found.')
 
     vi.mocked(deps.authorization.findResource).mockResolvedValue(nativeResource())
     await expect(
@@ -2666,6 +2890,48 @@ describe('external API resource authorization', () => {
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).rejects.toThrow(
       'Agent host binding was not found.',
     )
+
+    const uncontrolled = createTestDeps()
+    authorizationDeps(uncontrolled)
+    vi.mocked(uncontrolled.externalResources.listConnectionsByUser).mockResolvedValue([])
+    vi.mocked(uncontrolled.externalResources.listPendingAccessRequests).mockResolvedValue([
+      { ...requestRecord(), connectionId: null },
+    ])
+    vi.mocked(uncontrolled.agentIdentities.findIdentity).mockResolvedValue({
+      ...identityAggregate(),
+      identity: { ...identityAggregate().identity, ownerUserId: 'another-user' },
+    })
+    await expect(listControllerAccessRequests(uncontrolled, 'user-1')).resolves.toEqual({ requests: [] })
+
+    const mismatched = createTestDeps()
+    authorizationDeps(mismatched)
+    vi.mocked(mismatched.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(requestRecord())
+    vi.mocked(mismatched.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(mismatched.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    await expect(getAccountAccessRequest(mismatched, 'another-request', 'user-1', 'approval-token')).rejects.toThrow(
+      'Agent access request was not found.',
+    )
+
+    const missingIdentity = createTestDeps()
+    authorizationDeps(missingIdentity)
+    vi.mocked(missingIdentity.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(requestRecord())
+    vi.mocked(missingIdentity.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(missingIdentity.agentIdentities.findIdentity)
+      .mockResolvedValueOnce(identityAggregate())
+      .mockResolvedValueOnce(null)
+    await expect(getAccountAccessRequestByToken(missingIdentity, 'approval-token', 'user-1')).rejects.toThrow(
+      'Agent identity was not found.',
+    )
+
+    const missingResource = createTestDeps()
+    authorizationDeps(missingResource)
+    vi.mocked(missingResource.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(requestRecord())
+    vi.mocked(missingResource.externalResources.findConnection).mockResolvedValue(connectionRecord())
+    vi.mocked(missingResource.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(missingResource.authorization.findResource).mockResolvedValue(null)
+    await expect(getAccountAccessRequestByToken(missingResource, 'approval-token', 'user-1')).rejects.toThrow(
+      'API resource was not found.',
+    )
   })
 })
 
@@ -2742,6 +3008,38 @@ function metadata() {
     ],
     dpop_signing_alg_values_supported: ['ES256'],
   }
+}
+
+function authorizationCatalogDeps(
+  options: { providerMetadata?: Record<string, unknown>; grantedScopes?: string[]; fetchResponse?: Response } = {},
+) {
+  const deps = createTestDeps()
+  authorizationDeps(deps)
+  const template = { type: 'project_access', actions: ['read'] }
+  vi.mocked(deps.authorization.findResource).mockResolvedValue({
+    ...resource(),
+    authorizationDetails: [template],
+  })
+  vi.mocked(deps.connectors.findById).mockResolvedValue(
+    connectorRecord({
+      providerMetadata:
+        options.providerMetadata ??
+        ({
+          ...metadata(),
+          authorization_details_types_supported: ['project_access'],
+          authorization_details_catalog_endpoint: 'https://projects.example.com/authorization-details',
+          authorization_details_catalog_scope: 'authorization-details:read',
+        } as ConnectorRecord['providerMetadata']),
+    }),
+  )
+  vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+  vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue({
+    ...connectionRecord(),
+    grantedScopes: options.grantedScopes ?? [...connectionRecord().grantedScopes, 'authorization-details:read'],
+  })
+  vi.mocked(deps.externalResources.listActiveGrantsByAgent).mockResolvedValue([])
+  if (options.fetchResponse) vi.mocked(deps.externalHttp.fetch).mockResolvedValue(options.fetchResponse)
+  return deps
 }
 
 function connectorRecord(overrides: Partial<ConnectorRecord> = {}): ConnectorRecord {
