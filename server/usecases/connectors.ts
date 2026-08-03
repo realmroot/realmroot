@@ -470,7 +470,27 @@ export async function ensureDynamicConnectorScopes(
   if (!connector.issuer || !connector.registrationEndpoint || !connector.clientId || !connector.clientSecret) {
     throw badRequest('Dynamic OIDC connector is incomplete.')
   }
-  if (requiredScopes.every((scope) => connector.registeredScopes?.includes(scope))) return generation
+  if (requiredScopes.every((scope) => connector.registeredScopes?.includes(scope))) {
+    if (!connector.registrationClientUri || !connector.registrationAccessToken) return generation
+    const response = await deps.externalHttp.fetch(
+      new Request(requireNetworkUrl(connector.registrationClientUri, 'registration client URI'), {
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${connector.registrationAccessToken}`,
+        },
+      }),
+    )
+    if (response.ok) {
+      const body = await readObject(response, 'Dynamic OIDC client registration response is invalid.')
+      if (requiredString(body, 'client_id', 'Dynamic OIDC client registration response') !== connector.clientId) {
+        throw badRequest('Dynamic OIDC registration management changed the client identifier.')
+      }
+      const remoteScopes = typeof body.scope === 'string' ? scopeString(body.scope) : null
+      if (remoteScopes && requiredScopes.every((scope) => remoteScopes.includes(scope))) return generation
+    } else if (![401, 404, 405, 501].includes(response.status)) {
+      throw badRequest('Dynamic OIDC client registration read failed.')
+    }
+  }
 
   const metadata = await fetchOidcMetadata(deps, connector.issuer)
   const { scope: authorizationDetailsCatalogScope } = authorizationDetailsCatalogMetadata(metadata)

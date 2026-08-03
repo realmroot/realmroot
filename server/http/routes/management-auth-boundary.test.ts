@@ -272,6 +272,19 @@ describe('management routes 1', () => {
         findActiveByProtocolAgent: vi.fn().mockResolvedValue(identity),
       },
     })
+    const capabilityGrant = (capability: string) => ({
+      id: `grant-${capability}`,
+      agentId: 'protocol-agent-1',
+      capability,
+      deniedBy: null,
+      grantedBy: 'controller-1',
+      expiresAt: null,
+      createdAt: now,
+      updatedAt: now,
+      status: 'active',
+      reason: null,
+      constraints: null,
+    })
     const app = createApp(auth, deps)
     const headers = {
       'content-type': 'application/json',
@@ -300,6 +313,7 @@ describe('management routes 1', () => {
       },
       host: { id: 'host-1', userId: 'controller-1', status: 'active' },
     })
+    vi.mocked(deps.agents.listCapabilityGrantsForAgent).mockResolvedValue([capabilityGrant('users:read')])
     const allowed = await app.request('/api/users', { headers })
     expect(allowed.status).toBe(200)
 
@@ -316,6 +330,10 @@ describe('management routes 1', () => {
       },
       host: { id: 'host-1', userId: 'controller-1', status: 'active' },
     })
+    vi.mocked(deps.agents.listCapabilityGrantsForAgent).mockResolvedValue([
+      capabilityGrant('users:read'),
+      capabilityGrant('users:write'),
+    ])
     const created = await app.request('/api/users', {
       method: 'POST',
       headers,

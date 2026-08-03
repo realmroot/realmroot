@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/rest-sh/restish/v2/plugin"
@@ -20,8 +21,14 @@ func handleCapabilityApprovalResponse(
 	client httpDoer,
 ) (plugin.ResponseMiddlewareOutput, error) {
 	if input.Response.Status == http.StatusUnauthorized {
-		if err := removeRejectedTargetCredential(input.Request.URI, states); err != nil {
+		removed, err := removeRejectedTargetCredential(input.Request.URI, states)
+		if err != nil {
 			return plugin.ResponseMiddlewareOutput{}, err
+		}
+		if removed {
+			return plugin.ResponseMiddlewareOutput{}, errors.New(
+				"target API rejected the cached Agent credential; the credential was removed, so discover current access and issue a new target token before retrying",
+			)
 		}
 	}
 	if input.Response.Status < 200 || input.Response.Status >= 300 {
@@ -30,6 +37,15 @@ func handleCapabilityApprovalResponse(
 	requestURL, err := url.Parse(input.Request.URI)
 	if err != nil {
 		return plugin.ResponseMiddlewareOutput{}, nil
+	}
+	if body, ok := input.Response.Body.(map[string]any); ok && body["accessToken"] != nil {
+		if _, recognized := targetTokenGrantID(input.Request.Method, input.Request.URI); !recognized {
+			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf(
+				"refusing to expose an unrecognized token response for %s %s",
+				input.Request.Method,
+				requestURL.EscapedPath(),
+			)
+		}
 	}
 	if grantID, ok := targetTokenGrantID(input.Request.Method, input.Request.URI); ok {
 		store, ok := states.(targetTokenStore)
@@ -52,19 +68,18 @@ func handleCapabilityApprovalResponse(
 		if err := store.StoreTargetToken(requestOrigin, runtime, grantID, token); err != nil {
 			return plugin.ResponseMiddlewareOutput{}, err
 		}
-		body, ok := input.Response.Body.(map[string]any)
+		// Restish preserves the original wire bytes for its default non-TTY
+		// output. Replacing only the decoded body would still expose the token
+		// outside explicit structured formatters, so suppress the response after
+		// persisting the credential in protected plugin state.
+		return plugin.ResponseMiddlewareOutput{Drop: true}, nil
+	}
+	if resourceID, ok := resourceConnectionRequestResourceID(input.Request.Method, requestURL); ok {
+		finder, ok := states.(resourceStateFinder)
 		if !ok {
-			return plugin.ResponseMiddlewareOutput{}, errors.New("target API token response is not an object")
+			return plugin.ResponseMiddlewareOutput{}, errors.New("Agent state store cannot resolve resource connections")
 		}
-		safeBody := make(map[string]any, len(body)-1)
-		for key, value := range body {
-			if key != "accessToken" {
-				safeBody[key] = value
-			}
-		}
-		return plugin.ResponseMiddlewareOutput{
-			Response: &plugin.HookResponseUpdate{Body: safeBody},
-		}, nil
+		return handleResourceConnectionApproval(input, opener, finder, client, requestURL, resourceID)
 	}
 	if input.Request.Method == http.MethodPost && requestURL.Path == "/api/agent/access-requests" {
 		finder, ok := states.(resourceStateFinder)
@@ -145,26 +160,117 @@ func handleCapabilityApprovalResponse(
 	}, nil
 }
 
-func removeRejectedTargetCredential(requestURI string, states capabilityStateFinder) error {
+func handleResourceConnectionApproval(
+	input plugin.ResponseMiddlewareInput,
+	opener browserOpener,
+	states resourceStateFinder,
+	client httpDoer,
+	requestURL *url.URL,
+	resourceID string,
+) (plugin.ResponseMiddlewareOutput, error) {
+	body, ok := input.Response.Body.(map[string]any)
+	if !ok || body["status"] != "pending" {
+		return plugin.ResponseMiddlewareOutput{}, nil
+	}
+	agentID, _ := body["agentId"].(string)
+	approval, _ := body["approval"].(map[string]any)
+	verificationURI, _ := approval["url"].(string)
+	expiresRaw, _ := body["expiresAt"].(string)
+	if agentID == "" || verificationURI == "" || expiresRaw == "" {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("pending resource connection is missing approval data")
+	}
+	expiresAt, err := time.Parse(time.RFC3339, expiresRaw)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("resource connection approval expiry is invalid")
+	}
+	requestOrigin := requestURL.Scheme + "://" + requestURL.Host
+	configuration, err := discoverAgentConfiguration(context.Background(), client, requestOrigin)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	approvalURL, err := url.Parse(verificationURI)
+	if err != nil || !sameOrigin(verificationURI, requestOrigin) || approvalURL.Path != "/agent/resource-connection/approve" {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("resource connection approval URL must use the discovered issuer origin")
+	}
+	if err := opener.Open(verificationURI); err != nil {
+		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open resource connection approval: %w", err)
+	}
+	state, err := states.FindByOriginAndIdentityID(requestOrigin, agentID)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	statusURL := requestOrigin + "/api/agent/api-resources/" + url.PathEscape(resourceID) +
+		"/authorization-detail-catalog?limit=1&offset=0"
+	for time.Now().Before(expiresAt) {
+		var status struct {
+			AccountConnectionID string `json:"accountConnectionId"`
+			ConnectionRequired  bool   `json:"connectionRequired"`
+		}
+		if err := requestJSON(
+			context.Background(),
+			client,
+			http.MethodGet,
+			statusURL,
+			mustAgentJWT(state, configuration.Issuer),
+			nil,
+			&status,
+		); err != nil {
+			return plugin.ResponseMiddlewareOutput{}, err
+		}
+		if !status.ConnectionRequired && status.AccountConnectionID != "" {
+			resolved := make(map[string]any, len(body))
+			for key, value := range body {
+				resolved[key] = value
+			}
+			resolved["status"] = "connected"
+			resolved["accountConnectionId"] = status.AccountConnectionID
+			resolved["approval"] = nil
+			return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: resolved}}, nil
+		}
+		timer := time.NewTimer(2 * time.Second)
+		<-timer.C
+	}
+	return plugin.ResponseMiddlewareOutput{}, errors.New("controller resource connection approval expired; invoke the request again")
+}
+
+func resourceConnectionRequestResourceID(method string, requestURL *url.URL) (string, bool) {
+	if method != http.MethodPost {
+		return "", false
+	}
+	const prefix = "/api/agent/api-resources/"
+	const suffix = "/connections"
+	path := requestURL.EscapedPath()
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+		return "", false
+	}
+	encoded := strings.TrimSuffix(strings.TrimPrefix(path, prefix), suffix)
+	if encoded == "" || strings.Contains(encoded, "/") {
+		return "", false
+	}
+	resourceID, err := url.PathUnescape(encoded)
+	return resourceID, err == nil && resourceID != ""
+}
+
+func removeRejectedTargetCredential(requestURI string, states capabilityStateFinder) (bool, error) {
 	credentials, ok := states.(resourceCredentialStore)
 	if !ok {
-		return nil
+		return false, nil
 	}
 	runtime, err := agentRuntime()
 	if err != nil {
-		return err
+		return false, err
 	}
 	reference, err := credentials.FindByResourceURL(requestURI, runtime)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := credentials.DeleteCredential(reference); err != nil {
-		return fmt.Errorf("remove target credential rejected by resource server: %w", err)
+		return false, fmt.Errorf("remove target credential rejected by resource server: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
 func handleResourceAccessApproval(

@@ -17,10 +17,11 @@ prints one controller approval URL to the terminal, waits while the controller
 reviews it, creates the stable identity, signs the original request, and lets
 that same operation continue.
 
-The unified contract generates `auth whoami`, `capability request`,
-`access request`, and `access token`. Resource and grant reads use generic
-API-relative requests. When an exact resource request is pending, the response
-hook opens the hosted controller decision page and waits for approval.
+The unified contract generates `auth whoami`, `capability request`, resource
+connection, `access request`, and `access token` workflows. Resource and grant
+reads use generic API-relative requests. When a resource connection or exact
+resource access request is pending, the response hook opens the hosted
+controller decision page and waits for the terminal result.
 
 For the current access grant on each API Resource, the plugin creates a separate
 P-256 DPoP key. It discovers the proof target from RFC 9728 and RFC 8414 for
@@ -29,9 +30,10 @@ adds the standard `DPoP` header, and stores the resulting short-lived token with
 the protected Agent state. A newly approved grant for the same resource replaces
 the old local grant binding and DPoP key.
 
-The plugin stores issued target tokens in protected state and removes the raw
-token from Restish output. The API resource's `resourceUrl` can then be connected
-directly:
+The plugin stores issued target tokens in protected state and suppresses the
+entire token response. Token issuance must use an explicit structured formatter
+so Restish invokes response middleware instead of its redirected raw-output
+fast path. The API resource's `resourceUrl` can then be connected directly:
 
 ```bash
 restish api connect projects https://api.example.com --yes
@@ -42,6 +44,8 @@ An API name identifies one logical service. Keep the same API name across its
 environments, deployments, accounts, tenants, and credential contexts, and use
 Restish profiles for those contexts. Do not create environment-qualified names
 such as `projects-staging`; add `profiles.staging.base_url` to `projects`.
+The default profile is the canonical production deployment. Use explicit
+`local` and `staging` profiles for non-production deployments.
 
 Restish follows the resource's RFC 8631 `service-desc` link to its OpenAPI
 contract. The global auth hook recognizes the registered resource URL and adds
@@ -119,7 +123,8 @@ the Restish command surface.
 - The `auth` hook discovers endpoints, enrolls the Agent when needed, signs
   Realmroot requests, and authenticates matching target API requests.
 - The `response-middleware` hook opens and waits for controller approval when
-  a generated capability or API Resource access operation returns pending.
+  a generated capability, API Resource connection, or API Resource access
+  operation returns pending.
 - The Realmroot OpenAPI credential marker activates AgentAuth; registered target
   resource URLs activate DPoP authentication through the global hook.
 - Both hooks have a ten-minute deadline for their foreground approval flow.

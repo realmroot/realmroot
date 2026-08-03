@@ -250,11 +250,6 @@ export async function completeResourceConnectionIntent(
     revokedAt: null,
     updatedAt: now,
   }
-  const switchesClientGeneration =
-    existing !== null && (existing.clientGeneration ?? 1) !== (intent.clientGeneration ?? 1)
-  if (existing && switchesClientGeneration) {
-    await revokeConnectionGrants(deps, existing, intent.ownerUserId, now)
-  }
   const connection = existing
     ? await deps.externalResources.replaceConnectionAuthorization(existing.id, intent.resourceId, authorizationInput)
     : await deps.externalResources.createConnection({
@@ -266,7 +261,7 @@ export async function completeResourceConnectionIntent(
         createdAt: now,
       })
   if (!connection) throw badRequest('The API resource was archived while completing the connection.')
-  if (existing && !switchesClientGeneration) {
+  if (existing) {
     await revokeUncoveredGrants(deps, connection, intent.authorizationDetails.length > 0, intent.ownerUserId, now)
   }
   return {
@@ -1792,6 +1787,7 @@ async function revokeUncoveredGrants(
 ) {
   for (const grant of await deps.externalResources.listActiveGrantsByConnection(connection.id)) {
     const covered =
+      grant.scopes.every((scope) => connection.grantedScopes.includes(scope)) &&
       (!authorizationDetailsRequired || grant.authorizationDetails.length > 0) &&
       isAuthorizationDetailsSubset(grant.authorizationDetails, connection.authorizationDetails)
     if (covered) continue
@@ -1807,29 +1803,6 @@ async function revokeUncoveredGrants(
       scopes: grant.scopes,
       authorizationDetails: grant.authorizationDetails,
       reasonCode: 'connection_authorization_changed',
-    })
-  }
-}
-
-async function revokeConnectionGrants(
-  deps: Deps,
-  connection: ResourceAccountConnectionRecord,
-  controllerUserId: string,
-  now: Date,
-) {
-  for (const grant of await deps.externalResources.listActiveGrantsByConnection(connection.id)) {
-    await revokeGrantTokenLeases(deps, grant, now)
-    await deps.externalResources.revokeGrant(grant.id, now)
-    await appendResourceAudit(deps, {
-      action: 'api_resource.access_revoked',
-      result: 'allowed',
-      resourceId: grant.resourceId,
-      connection,
-      grantId: grant.id,
-      controllerUserId,
-      scopes: grant.scopes,
-      authorizationDetails: grant.authorizationDetails,
-      reasonCode: 'connection_client_generation_changed',
     })
   }
 }

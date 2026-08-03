@@ -276,7 +276,9 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord({ clientGeneration: 2 }))
     vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue(intent)
     vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(existing)
-    vi.mocked(deps.externalResources.listActiveGrantsByConnection).mockResolvedValue([grantRecord()])
+    const coveredGrant = grantRecord()
+    const uncoveredGrant = { ...grantRecord(), id: 'grant-write', scopes: ['projects:write'] }
+    vi.mocked(deps.externalResources.listActiveGrantsByConnection).mockResolvedValue([coveredGrant, uncoveredGrant])
     vi.mocked(deps.externalResources.revokeGrant).mockResolvedValue(true)
     vi.mocked(deps.externalResources.replaceConnectionAuthorization).mockImplementation(
       async (id, resourceId, input) => ({
@@ -309,7 +311,8 @@ describe('external API resource authorization', () => {
       existing.resourceId,
       expect.objectContaining({ clientGeneration: 2 }),
     )
-    expect(deps.externalResources.revokeGrant).toHaveBeenCalledWith('grant-1', expect.any(Date))
+    expect(deps.externalResources.revokeGrant).not.toHaveBeenCalledWith(coveredGrant.id, expect.any(Date))
+    expect(deps.externalResources.revokeGrant).toHaveBeenCalledWith(uncoveredGrant.id, expect.any(Date))
     expect(deps.externalResources.revokeConnection).not.toHaveBeenCalled()
   })
 

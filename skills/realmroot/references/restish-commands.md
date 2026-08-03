@@ -99,6 +99,12 @@ determine one, present their redacted labels for selection. Reuse an active
 grant only when its resource, account, and scope set exactly match the selected
 operation; otherwise create a new least-privilege request.
 
+Keep the target service's default Restish profile on its canonical production
+resource URL. Put non-production resource URLs under the explicit `local` or
+`staging` profile and use that profile for every target command. Never make a
+local discovery result the target API's default merely because the current
+task is local.
+
 ## Request Access
 
 When no exact active grant exists, request access. For an `external` resource
@@ -112,11 +118,23 @@ restish "$API_NAME" access request --rsh-validate -o json <<'JSON'
     "apiResourceId": "resource_123",
     "accountConnectionId": "connection_123"
   },
+  "authorizationDetails": [
+    {
+      "type": "https://api.example.com/authorization-details/project",
+      "identifier": "project_123"
+    }
+  ],
   "scopes": ["projects:read"],
   "reason": "List projects for the controller"
 }
 JSON
 ```
+
+Use the exact `authorizationDetail` object returned by `access contexts` as
+the single entry in the top-level `authorizationDetails` array. Do not place
+it inside `target`, rename the field to singular, or reconstruct it from its
+display label. Omit `authorizationDetails` only when the selected resource
+does not advertise authorization contexts.
 
 For a `native` resource, use a request without an account:
 
@@ -150,9 +168,12 @@ restish "$API_NAME" access connect resource_123 --rsh-validate -o json <<'JSON'
 JSON
 ```
 
-Give the returned hosted approval URL to the controller. The controller signs
-in, connects or updates the provider account, and selects one or more workspaces
-at the provider. After they finish, query authorization contexts again.
+The adapter validates and opens the returned hosted approval URL, keeps the
+command waiting, and replaces the pending response with `status: connected`
+after the controller finishes. The controller signs in, connects or updates
+the provider account, and selects one or more workspaces at the provider. A
+failed or expired connection exits with an error. Query authorization contexts
+only after the command returns connected.
 
 For a resource that advertises authorization contexts, inspect the account's
 live catalog before requesting access:
@@ -191,11 +212,17 @@ Issue credentials for the exact approved grant:
 restish "$API_NAME" access token grant_123 -o json
 ```
 
-Use only the safe metadata returned by Restish.
+Successful issuance exits with status zero and prints nothing. The adapter
+stores the credential in protected state and suppresses the full HTTP response
+because it contains the bearer token. Any token response printed to stdout is a
+security failure; do not parse or display it. The explicit structured formatter
+is mandatory because Restish's default redirected-output fast path bypasses
+response middleware.
 
-Credential issuance is complete when the response confirms the grant and exact
-`resourceUrl`. It is an intermediate result, not completion of the user's API
-task.
+Credential issuance is complete when the command exits successfully. Confirm
+the selected workspace by invoking the intended target operation and checking
+its resource data. Issuance is an intermediate result, not completion of the
+user's API task.
 
 ## Invoke The Target
 

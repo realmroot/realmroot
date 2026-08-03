@@ -63,7 +63,7 @@ func (s *targetTokenStateRecorder) StoreTargetToken(
 	return nil
 }
 
-func TestTargetTokenResponseStoresAndRedactsAccessToken(t *testing.T) {
+func TestTargetTokenResponseStoresAndSuppressesAccessToken(t *testing.T) {
 	states := &targetTokenStateRecorder{}
 	output, err := handleCapabilityApprovalResponse(
 		plugin.ResponseMiddlewareInput{
@@ -96,12 +96,26 @@ func TestTargetTokenResponseStoresAndRedactsAccessToken(t *testing.T) {
 	if states.token.AccessToken != "secret-token" {
 		t.Fatalf("stored token = %#v", states.token)
 	}
-	body := output.Response.Body.(map[string]any)
-	if _, ok := body["accessToken"]; ok {
-		t.Fatalf("response exposed access token: %#v", body)
+	if !output.Drop || output.Response != nil {
+		t.Fatalf("token response was not suppressed: %#v", output)
 	}
-	if body["tokenType"] != "DPoP" || body["resourceUrl"] != "https://api.example.com" {
-		t.Fatalf("redacted response = %#v", body)
+}
+
+func TestUnrecognizedTokenResponseFailsClosed(t *testing.T) {
+	_, err := handleCapabilityApprovalResponse(
+		plugin.ResponseMiddlewareInput{
+			Request: plugin.HookRequest{Method: http.MethodPost, URI: "https://auth.example.com/api/other"},
+			Response: plugin.HookResponse{
+				Status: http.StatusOK,
+				Body:   map[string]any{"accessToken": "secret-token", "tokenType": "DPoP"},
+			},
+		},
+		&browserRecorder{},
+		&targetTokenStateRecorder{},
+		roundTripFunc(nil),
+	)
+	if err == nil {
+		t.Fatal("expected an unrecognized token response to fail closed")
 	}
 }
 
@@ -200,6 +214,96 @@ func TestResourceApprovalResponseOpensAndWaitsForHostedApproval(t *testing.T) {
 	}
 }
 
+func TestResourceConnectionResponseOpensAndWaitsForConnectedAccount(t *testing.T) {
+	browser := &browserRecorder{}
+	state := capabilityTestState(t)
+	requests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return jsonResponse(200, testAgentConfiguration()), nil
+		}
+		want := "https://auth.example.com/api/agent/api-resources/resource-1/authorization-detail-catalog?limit=1&offset=0"
+		if request.URL.String() != want {
+			t.Fatalf("status URL = %q, want %q", request.URL, want)
+		}
+		return jsonResponse(200, map[string]any{
+			"items":               []any{},
+			"accountConnectionId": "connection-1",
+			"connectionRequired":  false,
+		}), nil
+	})
+	approvalURL := "https://auth.example.com/agent/resource-connection/approve#token=secret"
+	input := plugin.ResponseMiddlewareInput{
+		Request: plugin.HookRequest{
+			Method: "POST",
+			URI:    "https://auth.example.com/api/agent/api-resources/resource-1/connections",
+		},
+		Response: plugin.HookResponse{
+			Status: 201,
+			Body: map[string]any{
+				"id":                  "connection-request-1",
+				"agentId":             state.Identity.ID,
+				"apiResourceId":       "resource-1",
+				"status":              "pending",
+				"accountConnectionId": nil,
+				"approval":            map[string]any{"url": approvalURL},
+				"expiresAt":           time.Now().Add(time.Minute).Format(time.RFC3339),
+			},
+		},
+	}
+
+	output, err := handleCapabilityApprovalResponse(
+		input,
+		browser,
+		resourceStateRecorder{capabilityStateRecorder{state: state}},
+		client,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if browser.uri != approvalURL {
+		t.Fatalf("opened %q", browser.uri)
+	}
+	body := output.Response.Body.(map[string]any)
+	if body["status"] != "connected" || body["accountConnectionId"] != "connection-1" || body["approval"] != nil {
+		t.Fatalf("response body = %#v", body)
+	}
+}
+
+func TestResourceConnectionResponseRejectsCrossOriginApprovalURL(t *testing.T) {
+	state := capabilityTestState(t)
+	browser := &browserRecorder{}
+	_, err := handleCapabilityApprovalResponse(
+		plugin.ResponseMiddlewareInput{
+			Request: plugin.HookRequest{
+				Method: "POST",
+				URI:    "https://auth.example.com/api/agent/api-resources/resource-1/connections",
+			},
+			Response: plugin.HookResponse{
+				Status: 201,
+				Body: map[string]any{
+					"agentId":   state.Identity.ID,
+					"status":    "pending",
+					"approval":  map[string]any{"url": "https://attacker.example/agent/resource-connection/approve#token=secret"},
+					"expiresAt": time.Now().Add(time.Minute).Format(time.RFC3339),
+				},
+			},
+		},
+		browser,
+		resourceStateRecorder{capabilityStateRecorder{state: state}},
+		roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+			return jsonResponse(200, testAgentConfiguration()), nil
+		}),
+	)
+	if err == nil {
+		t.Fatal("expected cross-origin approval URL to fail")
+	}
+	if browser.uri != "" {
+		t.Fatalf("unexpected browser open %q", browser.uri)
+	}
+}
+
 func TestCapabilityApprovalResponseIgnoresOtherResponses(t *testing.T) {
 	browser := &browserRecorder{}
 	output, err := handleCapabilityApprovalResponse(plugin.ResponseMiddlewareInput{
@@ -246,8 +350,8 @@ func TestTargetUnauthorizedResponseRemovesCachedCredential(t *testing.T) {
 			roundTripFunc(nil),
 		)
 
-		if err != nil {
-			t.Fatal(err)
+		if err == nil || err.Error() != "target API rejected the cached Agent credential; the credential was removed, so discover current access and issue a new target token before retrying" {
+			t.Fatalf("unexpected rejection error: %v", err)
 		}
 		if len(states.state.DPoPCredentials) != 0 {
 			t.Fatalf("rejected target credential was retained: %#v", states.state.DPoPCredentials)

@@ -71,17 +71,19 @@ Preparation is complete when all three required versions are confirmed.
 
 ## Connect The API
 
-If the stable API name is not connected yet, connect the unified OpenAPI
-contract. The resulting `default` profile is a request context; it does not
-change the meaning of the API name:
+The `default` profile always means production. If the stable API name is not
+connected yet, connect the hosted production contract first, even when the
+current task selected a non-production deployment:
 
 ```bash
-restish api connect "$API_NAME" "$AUTH_ORIGIN/api" --yes
+PRODUCTION_AUTH_ORIGIN=https://id.realmroot.dev
+restish api connect "$API_NAME" "$PRODUCTION_AUTH_ORIGIN/api" --yes
 restish api set "$API_NAME" 'command_layout: tags'
 ```
 
-For an existing connection, inspect it before changing anything. If its default
-base URL already matches the resolved origin, refresh its contract:
+For an existing connection, inspect it before changing anything. The default
+base URL must remain the production API. Refresh that contract without
+retargeting it:
 
 ```bash
 restish api inspect "$API_NAME"
@@ -89,9 +91,10 @@ restish api sync "$API_NAME"
 restish api set "$API_NAME" 'command_layout: tags'
 ```
 
-If the resolved origin differs, keep the API name and existing default profile
-unchanged and add or select a profile for that origin. Never use `--replace` or
-another API name merely to switch environments.
+If the selected origin differs from production, keep the API name and default
+profile unchanged and add or select the explicit `local` or `staging` profile.
+Never use `--replace` or another API name merely to switch environments. Do not
+leave a local or staging origin in the default profile.
 
 Connection is complete when inspection shows the resolved origin as either the
 default base URL or the selected profile base URL.
@@ -99,7 +102,8 @@ default base URL or the selected profile base URL.
 ## Add A Profile
 
 Use a named profile whenever the resolved deployment or credential context
-differs from the API's existing default context:
+differs from production. Deployment profile names are `local` and `staging`;
+do not use `production`, because production is the default:
 
 ```bash
 PROFILE_NAME=staging

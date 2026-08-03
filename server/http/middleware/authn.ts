@@ -107,6 +107,9 @@ async function authenticateAgent(
   )
   if (!identity || !binding) throw forbidden('The Agent host is not bound to an active Agent identity.')
 
+  const now = new Date()
+  const capabilityGrants = await deps.agents.listCapabilityGrantsForAgent(session.agent.id)
+
   return {
     issuer: identity.identity.issuer,
     subject: identity.identity.subject,
@@ -115,8 +118,8 @@ async function authenticateAgent(
     hostId: session.agent.hostId,
     capabilities: [
       ...new Set(
-        (session.agent.capabilityGrants ?? [])
-          .filter((grant) => grant.status === 'active')
+        capabilityGrants
+          .filter((grant) => grant.status === 'active' && (!grant.expiresAt || grant.expiresAt > now))
           .map((grant) => grant.capability),
       ),
     ],
