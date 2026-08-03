@@ -15,6 +15,7 @@ const e2eWranglerConfig = process.env.E2E_WRANGLER_CONFIG ?? 'e2e/wrangler.toml'
 const e2ePersistStatePath = process.env.CF_PERSIST_STATE_PATH ?? 'e2e/.wrangler/state'
 const e2eD1Database = process.env.E2E_D1_DATABASE ?? 'realmroot-db-e2e'
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
+const commandOutputBufferBytes = 16 * 1024 * 1024
 
 export async function resetAndBootstrap() {
   resetState()
@@ -156,5 +157,6 @@ function run(command: string, args: string[]) {
   return execFileSync(command, args, {
     cwd: repoRoot,
     encoding: 'utf8',
+    maxBuffer: commandOutputBufferBytes,
   })
 }
