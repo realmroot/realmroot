@@ -316,6 +316,15 @@ Feature: Agent identity and delegated API authorization
       Then its login and resource-account redirect URIs and JWKS URI use the configured deployment origin
       And a later Account Center authorization request uses that same redirect URI
 
+    @entrypoint:agent-protocol @journey:external-resource-dynamic-client-scope-upgrade
+    Scenario: A dynamic OIDC connector upgrades its registered scope authority
+      Given an authorization server advertises scopes that were not registered by an existing dynamic connector
+      When a controller expands an external resource account for one of those scopes
+      Then Realmroot updates the existing client through its registration management endpoint when available
+      And otherwise Realmroot registers a new client generation without invalidating connections pinned to the previous generation
+      And the connection intent is pinned to the new client generation
+      And same-subject reauthorization preserves the selected account connection identity and switches only that connection to the new generation
+
     @entrypoint:product-ui @journey:external-resource-rich-authorization-connection
     Scenario: A controller connects one external subject to multiple target contexts
       Given an authorization server advertises RFC 9396 authorization detail types and an RFC 9126 pushed authorization request endpoint

@@ -421,6 +421,7 @@ function createRepository(
     countResourceReferences: vi.fn().mockResolvedValue(0),
     create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
     update: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
+    rotateClientGeneration: vi.fn().mockResolvedValue(overrides.updateResult ?? connector()),
     delete: vi.fn(),
   }
 }
@@ -446,8 +447,12 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     registrationEndpoint: null,
     revocationEndpoint: null,
     registrationMode: null,
+    registrationClientUri: null,
     registrationAccessToken: null,
     registrationAccessTokenContext: null,
+    registeredScopes: null,
+    clientGeneration: 1,
+    retiredClientGenerations: null,
     scopes: null,
     attributeMapping: null,
     providerMetadata: null,

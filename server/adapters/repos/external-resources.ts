@@ -30,6 +30,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
               authorizationDetails: sql<
                 typeof input.authorizationDetails
               >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
+              clientGeneration: sql<number>`${input.clientGeneration ?? 1}`.as('client_generation'),
               status: sql<string>`${input.status}`.as('status'),
               credentialExpiresAt: sql<Date | null>`${input.credentialExpiresAt?.getTime() ?? null}`.as(
                 'credential_expires_at',
@@ -132,6 +133,7 @@ export function createExternalResourceRepository(db: Database): ExternalResource
                 typeof input.authorizationDetails
               >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
               encryptedPkceVerifier: sql<string>`${input.encryptedPkceVerifier}`.as('encrypted_pkce_verifier'),
+              clientGeneration: sql<number>`${input.clientGeneration ?? 1}`.as('client_generation'),
               returnTo: sql<string>`${input.returnTo}`.as('return_to'),
               status: sql<string>`${input.status}`.as('status'),
               expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),

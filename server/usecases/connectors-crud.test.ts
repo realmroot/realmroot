@@ -3,6 +3,7 @@ import {
   connectorReadiness,
   createConnector,
   deleteConnector,
+  ensureDynamicConnectorScopes,
   getConnector,
   loadAuthConnectorConfig,
   updateConnector,
@@ -257,7 +258,7 @@ describe('service.test 2', () => {
       ],
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
       authorization_details_types: ['project_access'],
-      scope: 'openid profile email offline_access authorization-details:read',
+      scope: 'authorization-details:read email offline_access openid profile',
     })
     expect(deps.connectors.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -416,6 +417,7 @@ describe('service.test 2', () => {
     const discovery = discoveryMetadata({
       registration_endpoint: 'https://idp.example.com/register',
       revocation_endpoint: 'https://idp.example.com/revoke',
+      scopes_supported: ['openid', 'offline_access', 'projects:read', 'projects:write'],
     })
     const deps = {
       connectors: createRepository(),
@@ -427,7 +429,9 @@ describe('service.test 2', () => {
             Response.json({
               client_id: 'registered-client',
               client_secret: 'registered-secret',
+              registration_client_uri: 'https://idp.example.com/register/registered-client',
               registration_access_token: 'registration-token',
+              scope: 'openid profile email offline_access projects:read projects:write',
             }),
           ),
       },
@@ -448,9 +452,204 @@ describe('service.test 2', () => {
     expect(deps.connectors.create).toHaveBeenCalledWith(
       expect.objectContaining({
         revocationEndpoint: 'https://idp.example.com/revoke',
+        registrationClientUri: 'https://idp.example.com/register/registered-client',
         registrationAccessToken: 'registration-token',
+        registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read', 'projects:write'],
       }),
     )
+    const registrationRequest = vi.mocked(deps.externalHttp.fetch).mock.calls[1]![0] as Request
+    const registrationBody = (await registrationRequest.json()) as { scope: string }
+    expect(registrationBody.scope.split(' ')).toEqual([
+      'email',
+      'offline_access',
+      'openid',
+      'profile',
+      'projects:read',
+      'projects:write',
+    ])
+  })
+
+  it('[spec: agent-identity/external-resource-dynamic-client-scope-upgrade] upgrades a dynamic client in place through RFC 7592', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects',
+      issuer: 'https://idp.example.com',
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      jwksEndpoint: 'https://idp.example.com/jwks',
+      registrationEndpoint: 'https://idp.example.com/register',
+      revocationEndpoint: 'https://idp.example.com/revoke',
+      registrationMode: 'dynamic',
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'registration-token',
+      registeredScopes: ['openid', 'offline_access'],
+      scopes: ['openid'],
+    })
+    const repository = createRepository({ byId: current })
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json(discoveryMetadata({ scopes_supported: ['openid', 'offline_access', 'projects:read'] })),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          client_id: 'client-id',
+          client_secret: 'rotated-secret',
+          registration_client_uri: 'https://idp.example.com/register/client-id',
+          registration_access_token: 'rotated-registration-token',
+          scope: 'email offline_access openid profile projects:read',
+        }),
+      )
+    const deps = { connectors: repository, externalHttp: { fetch } } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['openid', 'projects:read'], 'https://auth.example.com'),
+    ).resolves.toBe(1)
+
+    const managementRequest = fetch.mock.calls[1]![0] as Request
+    expect(managementRequest.method).toBe('PUT')
+    expect(managementRequest.headers.get('authorization')).toBe('Bearer registration-token')
+    expect(repository.update).toHaveBeenCalledWith(
+      current.id,
+      expect.objectContaining({
+        clientSecret: 'rotated-secret',
+        registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'],
+      }),
+    )
+    expect(repository.rotateClientGeneration).not.toHaveBeenCalled()
+  })
+
+  it('falls back to a new generation only when registration management is terminally unavailable', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects',
+      issuer: 'https://idp.example.com',
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      jwksEndpoint: 'https://idp.example.com/jwks',
+      registrationEndpoint: 'https://idp.example.com/register',
+      revocationEndpoint: 'https://idp.example.com/revoke',
+      registrationMode: 'dynamic',
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'stale-token',
+      registeredScopes: ['openid', 'offline_access'],
+      clientGeneration: 1,
+    })
+    const repository = createRepository({ byId: current })
+    vi.mocked(repository.rotateClientGeneration).mockResolvedValue(connector({ clientGeneration: 2 }))
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json(discoveryMetadata({ scopes_supported: ['openid', 'offline_access', 'projects:read'] })),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          client_id: 'client-id-2',
+          client_secret: 'secret-2',
+          registration_client_uri: 'https://idp.example.com/register/client-id-2',
+          registration_access_token: 'registration-token-2',
+          scope: 'email offline_access openid profile projects:read',
+        }),
+      )
+    const deps = {
+      connectors: repository,
+      externalHttp: { fetch },
+      secrets: { seal: vi.fn(async (value: string, context: string) => `sealed:${context}:${value}`) },
+    } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).resolves.toBe(2)
+    expect(repository.rotateClientGeneration).toHaveBeenCalledWith(
+      current.id,
+      1,
+      expect.objectContaining({
+        clientId: 'client-id-2',
+        clientGeneration: 2,
+        retiredClientGenerations: [expect.objectContaining({ generation: 1, clientId: 'client-id' })],
+      }),
+    )
+  })
+
+  it('surfaces transient registration management failures without registering a replacement', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      issuer: 'https://idp.example.com',
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      jwksEndpoint: 'https://idp.example.com/jwks',
+      registrationEndpoint: 'https://idp.example.com/register',
+      revocationEndpoint: 'https://idp.example.com/revoke',
+      registrationMode: 'dynamic',
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'registration-token',
+      registeredScopes: ['openid'],
+    })
+    const repository = createRepository({ byId: current })
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(discoveryMetadata({ scopes_supported: ['openid', 'projects:read'] })))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+    const deps = { connectors: repository, externalHttp: { fetch } } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).rejects.toThrow('Dynamic OIDC client registration update failed.')
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(repository.rotateClientGeneration).not.toHaveBeenCalled()
+  })
+
+  it('reloads a concurrent generation winner instead of overwriting it', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      issuer: 'https://idp.example.com',
+      authorizationEndpoint: 'https://idp.example.com/authorize',
+      tokenEndpoint: 'https://idp.example.com/token',
+      userInfoEndpoint: 'https://idp.example.com/userinfo',
+      jwksEndpoint: 'https://idp.example.com/jwks',
+      registrationEndpoint: 'https://idp.example.com/register',
+      revocationEndpoint: 'https://idp.example.com/revoke',
+      registrationMode: 'dynamic',
+      registeredScopes: ['openid'],
+      clientGeneration: 1,
+    })
+    const winner = connector({
+      ...current,
+      clientId: 'winner-client',
+      registeredScopes: ['openid', 'projects:read'],
+      clientGeneration: 2,
+    })
+    const repository = createRepository({ byId: current })
+    vi.mocked(repository.findById).mockResolvedValueOnce(current).mockResolvedValueOnce(winner)
+    vi.mocked(repository.rotateClientGeneration).mockResolvedValue(null)
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(discoveryMetadata({ scopes_supported: ['openid', 'projects:read'] })))
+      .mockResolvedValueOnce(
+        Response.json({
+          client_id: 'losing-client',
+          client_secret: 'losing-secret',
+          scope: 'email offline_access openid profile projects:read',
+        }),
+      )
+    const deps = {
+      connectors: repository,
+      externalHttp: { fetch },
+      secrets: { seal: vi.fn(async (value: string) => `sealed:${value}`) },
+    } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).resolves.toBe(2)
+    expect(repository.rotateClientGeneration).toHaveBeenCalledWith(current.id, 1, expect.any(Object))
   })
 
   it('creates a manually registered OIDC connector from discovery metadata', async () => {
@@ -569,6 +768,9 @@ function createRepository(
     countResourceReferences: vi.fn().mockResolvedValue(overrides.resourceReferenceCount ?? 0),
     create: vi.fn().mockResolvedValue(overrides.createResult ?? connector()),
     update: vi.fn().mockResolvedValue(overrides.updateResult === undefined ? connector() : overrides.updateResult),
+    rotateClientGeneration: vi
+      .fn()
+      .mockResolvedValue(overrides.updateResult === undefined ? connector() : overrides.updateResult),
     delete: vi.fn(),
   }
 }
@@ -594,8 +796,12 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     registrationEndpoint: null,
     revocationEndpoint: null,
     registrationMode: null,
+    registrationClientUri: null,
     registrationAccessToken: null,
     registrationAccessTokenContext: null,
+    registeredScopes: null,
+    clientGeneration: 1,
+    retiredClientGenerations: null,
     scopes: null,
     attributeMapping: null,
     providerMetadata: null,

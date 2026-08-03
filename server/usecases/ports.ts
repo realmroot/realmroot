@@ -335,8 +335,12 @@ export interface ConnectorRecord {
   registrationEndpoint: string | null
   revocationEndpoint: string | null
   registrationMode: string | null
+  registrationClientUri?: string | null
   registrationAccessToken: string | null
   registrationAccessTokenContext: string | null
+  registeredScopes?: string[] | null
+  clientGeneration?: number
+  retiredClientGenerations?: RetiredOAuthClientGeneration[] | null
   scopes: string[] | null
   attributeMapping: Record<string, string> | null
   providerMetadata: Record<string, unknown> | null
@@ -363,13 +367,28 @@ export interface ConnectorRecordInput {
   registrationEndpoint?: string | null
   revocationEndpoint?: string | null
   registrationMode?: string | null
+  registrationClientUri?: string | null
   registrationAccessToken?: string | null
   registrationAccessTokenContext?: string | null
+  registeredScopes?: string[] | null
+  clientGeneration?: number
+  retiredClientGenerations?: RetiredOAuthClientGeneration[] | null
   scopes?: string[] | null
   attributeMapping?: Record<string, string> | null
   providerMetadata?: Record<string, unknown> | null
   createdAt?: Date
   updatedAt?: Date
+}
+
+export interface RetiredOAuthClientGeneration {
+  generation: number
+  clientId: string
+  encryptedClientSecret: string
+  clientSecretContext: string
+  registrationClientUri: string | null
+  encryptedRegistrationAccessToken: string | null
+  registrationAccessTokenContext: string | null
+  registeredScopes: string[]
 }
 
 export interface ConnectorRepository {
@@ -380,6 +399,11 @@ export interface ConnectorRepository {
   countResourceReferences(id: string): Promise<number>
   create(input: ConnectorRecordInput): Promise<ConnectorRecord>
   update(id: string, input: Partial<ConnectorRecordInput>): Promise<ConnectorRecord | null>
+  rotateClientGeneration(
+    id: string,
+    expectedGeneration: number,
+    input: Partial<ConnectorRecordInput>,
+  ): Promise<ConnectorRecord | null>
   delete(id: string): Promise<void>
 }
 
@@ -436,6 +460,7 @@ export interface ExternalResourceAuthorizationRecord {
   userInfoEndpoint: string | null
   registrationMode: string
   clientId: string
+  clientGeneration?: number
   encryptedClientSecret: string
   encryptedRegistrationAccessToken: string | null
   metadata: Record<string, unknown>
@@ -454,6 +479,7 @@ export interface ResourceAccountConnectionRecord {
   encryptedTokens: string
   grantedScopes: string[]
   authorizationDetails: AuthorizationDetail[]
+  clientGeneration?: number
   status: string
   credentialExpiresAt: Date | null
   revokedAt: Date | null
@@ -470,6 +496,7 @@ export interface ResourceConnectionIntentRecord {
   scopes: string[]
   authorizationDetails: AuthorizationDetail[]
   encryptedPkceVerifier: string
+  clientGeneration?: number
   returnTo: string
   status: string
   expiresAt: Date
@@ -554,6 +581,7 @@ export interface ExternalResourceRepository {
       encryptedTokens: string
       grantedScopes: string[]
       authorizationDetails: AuthorizationDetail[]
+      clientGeneration?: number
       status: 'active'
       credentialExpiresAt: Date | null
       revokedAt: null

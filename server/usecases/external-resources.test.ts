@@ -137,6 +137,7 @@ describe('external API resource authorization', () => {
       'https://auth.example.com',
     )
     const authorizationUrl = new URL(started.authorizationUrl)
+    expect(vi.mocked(deps.externalResources.createConnectionIntent).mock.calls[0]![0].clientGeneration).toBe(1)
     expect(authorizationUrl.searchParams.get('code_challenge_method')).toBe('S256')
     expect(authorizationUrl.searchParams.get('prompt')).toBe('consent')
     expect(authorizationUrl.searchParams.get('resource')).toBe('https://projects.example.com/api')
@@ -184,6 +185,7 @@ describe('external API resource authorization', () => {
       status: 'active',
     })
     const stored = vi.mocked(deps.externalResources.createConnection).mock.calls[0]![0]
+    expect(stored.clientGeneration).toBe(1)
     expect(stored.encryptedTokens).not.toContain('subject-refresh')
 
     intent = {
@@ -245,6 +247,67 @@ describe('external API resource authorization', () => {
         'https://auth.example.com/',
       ),
     ).rejects.toThrow('archived while completing the connection')
+  })
+
+  it('preserves a same-subject connection identity while switching only it to a new client generation', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const existing = { ...connectionRecord(), clientGeneration: 1 }
+    const intent: ResourceConnectionIntentRecord = {
+      id: 'intent-generation-2',
+      stateHash: 'state-hash',
+      resourceId: 'resource-1',
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+      scopes: ['openid', 'offline_access', 'projects:read'],
+      authorizationDetails: [],
+      encryptedPkceVerifier: 'sealed:verifier',
+      clientGeneration: 2,
+      returnTo: 'account-center',
+      status: 'completed',
+      expiresAt: new Date(Date.now() + 60_000),
+      completedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }
+    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord({ clientGeneration: 2 }))
+    vi.mocked(deps.externalResources.consumeConnectionIntent).mockResolvedValue(intent)
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(existing)
+    vi.mocked(deps.externalResources.listActiveGrantsByConnection).mockResolvedValue([grantRecord()])
+    vi.mocked(deps.externalResources.revokeGrant).mockResolvedValue(true)
+    vi.mocked(deps.externalResources.replaceConnectionAuthorization).mockImplementation(
+      async (id, resourceId, input) => ({
+        ...existing,
+        ...input,
+        id,
+        resourceId,
+      }),
+    )
+    vi.mocked(deps.externalHttp.fetch).mockImplementation(async (request) => {
+      if (request.url.endsWith('/token')) {
+        return Response.json({
+          access_token: 'generation-2-access',
+          refresh_token: 'generation-2-refresh',
+          token_type: 'Bearer',
+          scope: 'openid offline_access projects:read',
+        })
+      }
+      if (request.url.endsWith('/userinfo')) {
+        return Response.json({ sub: existing.externalSubject, name: existing.displayName })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    await expect(
+      completeResourceConnectionIntent(deps, { state: 'state', code: 'code' }, 'https://auth.example.com'),
+    ).resolves.toMatchObject({ id: existing.id, externalSubject: existing.externalSubject })
+    expect(deps.externalResources.replaceConnectionAuthorization).toHaveBeenCalledWith(
+      existing.id,
+      existing.resourceId,
+      expect.objectContaining({ clientGeneration: 2 }),
+    )
+    expect(deps.externalResources.revokeGrant).toHaveBeenCalledWith('grant-1', expect.any(Date))
+    expect(deps.externalResources.revokeConnection).not.toHaveBeenCalled()
   })
 
   it('[spec: agent-identity/external-resource-rich-authorization-connection] uses PAR and stores enriched authorization details', async () => {
@@ -1219,9 +1282,28 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findGrant).mockResolvedValue(grant)
     vi.mocked(deps.externalResources.findConnection).mockResolvedValue({
       ...connectionRecord(),
+      clientGeneration: 1,
       credentialExpiresAt: new Date(Date.now() - 1),
     })
-    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        clientId: 'realmroot-client-new',
+        clientSecret: 'target-secret-new',
+        clientGeneration: 2,
+        retiredClientGenerations: [
+          {
+            generation: 1,
+            clientId: 'realmroot-client',
+            encryptedClientSecret: 'sealed:target-secret',
+            clientSecretContext: 'connector:connector-1:client-generation:1:client-secret',
+            registrationClientUri: null,
+            encryptedRegistrationAccessToken: null,
+            registrationAccessTokenContext: null,
+            registeredScopes: ['openid', 'offline_access', 'projects:read'],
+          },
+        ],
+      }),
+    )
     vi.mocked(deps.externalResources.createTokenLease).mockImplementation(async (record) => record)
     vi.mocked(deps.externalResources.consumeAccessRequest).mockResolvedValue(true)
     vi.mocked(deps.externalResources.consumeGrant).mockResolvedValue(true)
@@ -1247,6 +1329,7 @@ describe('external API resource authorization', () => {
         return openApiFetch(outbound)
       }
       expect(outbound.url).toBe('https://projects.example.com/token')
+      expect(outbound.headers.get('authorization')).toBe(`Basic ${btoa('realmroot-client:target-secret')}`)
       const form = new URLSearchParams(await outbound.text())
       tokenRequests.push(form)
       if (form.get('grant_type') === 'refresh_token') {
@@ -1475,8 +1558,26 @@ describe('external API resource authorization', () => {
       status: 'approved',
       grantId: 'grant-1',
     })
-    vi.mocked(deps.externalResources.findConnection).mockResolvedValue(connectionRecord())
-    vi.mocked(deps.connectors.findById).mockResolvedValue(connectorRecord())
+    vi.mocked(deps.externalResources.findConnection).mockResolvedValue({ ...connectionRecord(), clientGeneration: 1 })
+    vi.mocked(deps.connectors.findById).mockResolvedValue(
+      connectorRecord({
+        clientId: 'realmroot-client-new',
+        clientSecret: 'target-secret-new',
+        clientGeneration: 2,
+        retiredClientGenerations: [
+          {
+            generation: 1,
+            clientId: 'realmroot-client',
+            encryptedClientSecret: 'sealed:target-secret',
+            clientSecretContext: 'connector:connector-1:client-generation:1:client-secret',
+            registrationClientUri: null,
+            encryptedRegistrationAccessToken: null,
+            registrationAccessTokenContext: null,
+            registeredScopes: ['openid', 'offline_access', 'projects:read'],
+          },
+        ],
+      }),
+    )
     vi.mocked(deps.externalResources.listActiveTokenLeasesByGrant).mockResolvedValue([
       {
         id: 'lease-1',
@@ -1497,6 +1598,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.revokeGrant).mockResolvedValue(true)
     vi.mocked(deps.externalHttp.fetch).mockImplementation(async (outbound) => {
       expect(outbound.url).toBe('https://projects.example.com/revoke')
+      expect(outbound.headers.get('authorization')).toBe(`Basic ${btoa('realmroot-client:target-secret')}`)
       expect(new URLSearchParams(await outbound.text()).get('token')).toBe('target-dpop-access')
       return new Response(null, { status: 200 })
     })
@@ -1719,6 +1821,15 @@ describe('external API resource authorization', () => {
     })
     vi.mocked(deps.connectors.findById).mockResolvedValue(
       connectorRecord({
+        registeredScopes: [
+          'authorization-details:read',
+          'objects:create',
+          'offline_access',
+          'openid',
+          'quota:purchase',
+          'shares:create',
+          'teams:read',
+        ],
         providerMetadata: {
           ...metadata(),
           authorization_details_types_supported: ['project_access'],
@@ -3043,6 +3154,11 @@ function authorizationCatalogDeps(
 }
 
 function connectorRecord(overrides: Partial<ConnectorRecord> = {}): ConnectorRecord {
+  const providerMetadata: Record<string, unknown> = overrides.providerMetadata ?? metadata()
+  const authorizationDetailsCatalogScope =
+    typeof providerMetadata.authorization_details_catalog_scope === 'string'
+      ? providerMetadata.authorization_details_catalog_scope
+      : null
   return {
     id: 'connector-1',
     slug: 'projects',
@@ -3062,11 +3178,23 @@ function connectorRecord(overrides: Partial<ConnectorRecord> = {}): ConnectorRec
     registrationEndpoint: 'https://projects.example.com/register',
     revocationEndpoint: 'https://projects.example.com/revoke',
     registrationMode: 'dynamic',
+    registrationClientUri: null,
     registrationAccessToken: null,
     registrationAccessTokenContext: null,
+    registeredScopes: [
+      'openid',
+      'profile',
+      'email',
+      'offline_access',
+      'projects:read',
+      'projects:write',
+      ...(authorizationDetailsCatalogScope ? [authorizationDetailsCatalogScope] : []),
+    ],
+    clientGeneration: 1,
+    retiredClientGenerations: null,
     scopes: ['openid', 'offline_access'],
     attributeMapping: null,
-    providerMetadata: metadata(),
+    providerMetadata,
     createdAt: now,
     updatedAt: now,
     ...overrides,

@@ -11,6 +11,8 @@ import type {
 } from '@shared/api/connectors'
 import { paginationMetadata } from '@shared/api/pagination'
 
+const oidcClientBaseScopes = ['openid', 'profile', 'email', 'offline_access']
+
 /**
  * Minimal mirror of better-auth's GenericOAuthProviderConfig, capturing only the
  * fields this usecase populates. Kept framework-free so usecases stay clear of
@@ -90,8 +92,12 @@ export async function createConnector(deps: Deps, input: CreateConnectorRequest,
     registrationEndpoint: oidc?.registrationEndpoint ?? null,
     revocationEndpoint: oidc?.revocationEndpoint ?? null,
     registrationMode: input.providerType === 'generic_oauth' ? (input.registrationMode ?? 'manual') : null,
+    registrationClientUri: oidc?.registrationClientUri ?? null,
     registrationAccessToken: oidc?.registrationAccessToken ?? null,
     registrationAccessTokenContext: null,
+    registeredScopes: oidc?.registeredScopes ?? null,
+    clientGeneration: 1,
+    retiredClientGenerations: null,
     scopes: input.scopes ?? null,
     attributeMapping: null,
     providerMetadata: oidc?.metadata ?? input.providerMetadata ?? null,
@@ -365,25 +371,8 @@ async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, c
     'authorization_details_types_supported',
     'OIDC discovery response',
   )
-  const authorizationDetailsCatalogEndpoint =
-    metadata.authorization_details_catalog_endpoint === undefined
-      ? null
-      : requireNetworkUrl(
-          requiredString(metadata, 'authorization_details_catalog_endpoint', 'OIDC discovery response'),
-          'authorization details catalog endpoint',
-        )
-  const authorizationDetailsCatalogScope =
-    metadata.authorization_details_catalog_scope === undefined
-      ? null
-      : requiredString(metadata, 'authorization_details_catalog_scope', 'OIDC discovery response')
-  if (Boolean(authorizationDetailsCatalogEndpoint) !== Boolean(authorizationDetailsCatalogScope)) {
-    throw badRequest(
-      'OIDC discovery response must advertise authorization_details_catalog_endpoint and authorization_details_catalog_scope together.',
-    )
-  }
-  if (authorizationDetailsCatalogScope?.match(/\s/)) {
-    throw badRequest('OIDC discovery response has invalid authorization_details_catalog_scope.')
-  }
+  const { scope: authorizationDetailsCatalogScope } = authorizationDetailsCatalogMetadata(metadata)
+  const registeredScopes = registrationScopes(metadata, authorizationDetailsCatalogScope)
 
   if ((input.registrationMode ?? 'manual') === 'manual') {
     if (!input.clientId || !input.clientSecret)
@@ -399,6 +388,8 @@ async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, c
       clientId: input.clientId,
       clientSecret: input.clientSecret,
       registrationAccessToken: null,
+      registrationClientUri: null,
+      registeredScopes: null,
       metadata,
     }
   }
@@ -412,7 +403,7 @@ async function prepareOidcConnector(deps: Deps, input: CreateConnectorRequest, c
     input.providerId,
     input.displayName,
     authorizationDetailsTypes,
-    authorizationDetailsCatalogScope,
+    registeredScopes,
   )
   return {
     issuer,
@@ -452,41 +443,265 @@ async function registerOidcClient(
   providerId: string,
   displayName: string,
   authorizationDetailsTypes: string[],
-  authorizationDetailsCatalogScope: string | null,
+  scopes: string[],
 ) {
   const response = await deps.externalHttp.fetch(
     new Request(endpoint, {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        client_name: `Realmroot ${displayName}`,
-        redirect_uris: [
-          `${origin}/api/auth/callback/${encodeURIComponent(providerId)}`,
-          `${origin}/api/account-connections/oauth/callback`,
-        ],
-        grant_types: [
-          'authorization_code',
-          'refresh_token',
-          'urn:ietf:params:oauth:grant-type:jwt-bearer',
-          'urn:ietf:params:oauth:grant-type:token-exchange',
-        ],
-        response_types: ['code'],
-        token_endpoint_auth_method: 'client_secret_basic',
-        scope: ['openid', 'profile', 'email', 'offline_access', authorizationDetailsCatalogScope]
-          .filter((scope): scope is string => Boolean(scope))
-          .join(' '),
-        jwks_uri: `${origin}/api/auth/jwks`,
-        ...(authorizationDetailsTypes.length > 0 ? { authorization_details_types: authorizationDetailsTypes } : {}),
-      }),
+      body: JSON.stringify(registrationRequest(origin, providerId, displayName, authorizationDetailsTypes, scopes)),
     }),
   )
   if (!response.ok) throw badRequest('Dynamic OIDC client registration failed.')
   const body = await readObject(response, 'Dynamic OIDC client registration response is invalid.')
+  return registrationResponse(body, scopes)
+}
+
+export async function ensureDynamicConnectorScopes(
+  deps: Deps,
+  connectorId: string,
+  requiredScopes: string[],
+  callbackOrigin: string,
+) {
+  const connector = await deps.connectors.findById(connectorId)
+  if (!connector) throw notFound('Connector not found.')
+  const generation = connector.clientGeneration ?? 1
+  if (connector.registrationMode !== 'dynamic') return generation
+  if (!connector.issuer || !connector.registrationEndpoint || !connector.clientId || !connector.clientSecret) {
+    throw badRequest('Dynamic OIDC connector is incomplete.')
+  }
+  if (requiredScopes.every((scope) => connector.registeredScopes?.includes(scope))) return generation
+
+  const metadata = await fetchOidcMetadata(deps, connector.issuer)
+  const { scope: authorizationDetailsCatalogScope } = authorizationDetailsCatalogMetadata(metadata)
+  const desiredScopes = registrationScopes(metadata, authorizationDetailsCatalogScope)
+  if (requiredScopes.some((scope) => !desiredScopes.includes(scope))) {
+    throw badRequest('The authorization server does not advertise every requested scope.')
+  }
+  const authorizationDetailsTypes = optionalStringArray(
+    metadata,
+    'authorization_details_types_supported',
+    'OIDC discovery response',
+  )
+  const origin = callbackOrigin.replace(/\/$/, '')
+  const requestBody = registrationRequest(
+    origin,
+    connector.providerId,
+    connector.displayName,
+    authorizationDetailsTypes,
+    desiredScopes,
+  )
+
+  if (connector.registrationClientUri && connector.registrationAccessToken) {
+    const response = await deps.externalHttp.fetch(
+      new Request(requireNetworkUrl(connector.registrationClientUri, 'registration client URI'), {
+        method: 'PUT',
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${connector.registrationAccessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ client_id: connector.clientId, ...requestBody }),
+      }),
+    )
+    if (response.ok) {
+      const updated = registrationResponse(
+        await readObject(response, 'Dynamic OIDC client registration update response is invalid.'),
+        desiredScopes,
+        {
+          clientSecret: connector.clientSecret,
+          registrationClientUri: connector.registrationClientUri,
+          registrationAccessToken: connector.registrationAccessToken,
+        },
+      )
+      if (updated.clientId !== connector.clientId) {
+        throw badRequest('Dynamic OIDC registration management changed the client identifier.')
+      }
+      await deps.connectors.update(connector.id, {
+        clientSecret: updated.clientSecret,
+        registrationClientUri: updated.registrationClientUri,
+        registrationAccessToken: updated.registrationAccessToken,
+        registeredScopes: updated.registeredScopes,
+        providerMetadata: metadata,
+        updatedAt: new Date(),
+      })
+      return generation
+    }
+    if (![401, 404, 405, 501].includes(response.status)) {
+      throw badRequest('Dynamic OIDC client registration update failed.')
+    }
+  }
+
+  const replacement = await registerOidcClient(
+    deps,
+    connector.registrationEndpoint,
+    origin,
+    connector.providerId,
+    connector.displayName,
+    authorizationDetailsTypes,
+    desiredScopes,
+  )
+  const retired = {
+    generation,
+    clientId: connector.clientId,
+    encryptedClientSecret: await deps.secrets.seal(
+      connector.clientSecret,
+      retiredClientSecretContext(connector.id, generation),
+    ),
+    clientSecretContext: retiredClientSecretContext(connector.id, generation),
+    registrationClientUri: connector.registrationClientUri ?? null,
+    encryptedRegistrationAccessToken: connector.registrationAccessToken
+      ? await deps.secrets.seal(
+          connector.registrationAccessToken,
+          retiredRegistrationTokenContext(connector.id, generation),
+        )
+      : null,
+    registrationAccessTokenContext: connector.registrationAccessToken
+      ? retiredRegistrationTokenContext(connector.id, generation)
+      : null,
+    registeredScopes: connector.registeredScopes ?? oidcClientBaseScopes,
+  }
+  const nextGeneration = generation + 1
+  const rotated = await deps.connectors.rotateClientGeneration(connector.id, generation, {
+    clientId: replacement.clientId,
+    clientSecret: replacement.clientSecret,
+    registrationClientUri: replacement.registrationClientUri,
+    registrationAccessToken: replacement.registrationAccessToken,
+    registeredScopes: replacement.registeredScopes,
+    clientGeneration: nextGeneration,
+    retiredClientGenerations: [...(connector.retiredClientGenerations ?? []), retired],
+    providerMetadata: metadata,
+    updatedAt: new Date(),
+  })
+  if (!rotated) {
+    const winner = await deps.connectors.findById(connector.id)
+    if (
+      winner &&
+      (winner.clientGeneration ?? 1) > generation &&
+      requiredScopes.every((scope) => winner.registeredScopes?.includes(scope))
+    ) {
+      return winner.clientGeneration ?? 1
+    }
+    throw badRequest('Dynamic OIDC client registration changed concurrently; retry the authorization request.')
+  }
+  return nextGeneration
+}
+
+function registrationRequest(
+  origin: string,
+  providerId: string,
+  displayName: string,
+  authorizationDetailsTypes: string[],
+  scopes: string[],
+) {
+  return {
+    client_name: `Realmroot ${displayName}`,
+    redirect_uris: [
+      `${origin}/api/auth/callback/${encodeURIComponent(providerId)}`,
+      `${origin}/api/account-connections/oauth/callback`,
+    ],
+    grant_types: [
+      'authorization_code',
+      'refresh_token',
+      'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      'urn:ietf:params:oauth:grant-type:token-exchange',
+    ],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'client_secret_basic',
+    scope: scopes.join(' '),
+    jwks_uri: `${origin}/api/auth/jwks`,
+    ...(authorizationDetailsTypes.length > 0 ? { authorization_details_types: authorizationDetailsTypes } : {}),
+  }
+}
+
+function registrationResponse(
+  body: Record<string, unknown>,
+  requestedScopes: string[],
+  previous?: { clientSecret: string; registrationClientUri: string; registrationAccessToken: string },
+) {
+  const returnedScopes = typeof body.scope === 'string' ? scopeString(body.scope) : null
+  if (returnedScopes && requestedScopes.some((scope) => !returnedScopes.includes(scope))) {
+    throw badRequest('Dynamic OIDC client registration omitted a requested scope.')
+  }
+  const registrationClientUri =
+    typeof body.registration_client_uri === 'string'
+      ? requireNetworkUrl(body.registration_client_uri, 'registration client URI')
+      : (previous?.registrationClientUri ?? null)
   return {
     clientId: requiredString(body, 'client_id', 'Dynamic OIDC client registration response'),
-    clientSecret: requiredString(body, 'client_secret', 'Dynamic OIDC client registration response'),
-    registrationAccessToken: typeof body.registration_access_token === 'string' ? body.registration_access_token : null,
+    clientSecret:
+      typeof body.client_secret === 'string' && body.client_secret.length > 0
+        ? body.client_secret
+        : (previous?.clientSecret ??
+          requiredString(body, 'client_secret', 'Dynamic OIDC client registration response')),
+    registrationClientUri,
+    registrationAccessToken:
+      typeof body.registration_access_token === 'string'
+        ? body.registration_access_token
+        : (previous?.registrationAccessToken ?? null),
+    registeredScopes: returnedScopes ?? requestedScopes,
   }
+}
+
+async function fetchOidcMetadata(deps: Deps, issuer: string) {
+  let response = await deps.externalHttp.fetch(
+    new Request(oidcDiscoveryUrl(issuer), { headers: { accept: 'application/json' } }),
+  )
+  if (!response.ok) {
+    response = await deps.externalHttp.fetch(
+      new Request(oauthAuthorizationServerDiscoveryUrl(issuer), { headers: { accept: 'application/json' } }),
+    )
+  }
+  if (!response.ok) throw badRequest('OAuth authorization server discovery failed.')
+  const metadata = await readObject(response, 'OIDC discovery response is invalid.')
+  if (metadata.issuer !== issuer) throw badRequest('OIDC discovery issuer does not match the configured issuer.')
+  return metadata
+}
+
+function registrationScopes(metadata: Record<string, unknown>, authorizationDetailsCatalogScope: string | null) {
+  return [
+    ...new Set([
+      ...oidcClientBaseScopes,
+      ...optionalStringArray(metadata, 'scopes_supported', 'OIDC discovery response'),
+      ...(authorizationDetailsCatalogScope ? [authorizationDetailsCatalogScope] : []),
+    ]),
+  ].sort()
+}
+
+function authorizationDetailsCatalogMetadata(metadata: Record<string, unknown>) {
+  const endpoint =
+    metadata.authorization_details_catalog_endpoint === undefined
+      ? null
+      : requireNetworkUrl(
+          requiredString(metadata, 'authorization_details_catalog_endpoint', 'OIDC discovery response'),
+          'authorization details catalog endpoint',
+        )
+  const scope =
+    metadata.authorization_details_catalog_scope === undefined
+      ? null
+      : requiredString(metadata, 'authorization_details_catalog_scope', 'OIDC discovery response')
+  if (Boolean(endpoint) !== Boolean(scope)) {
+    throw badRequest(
+      'OIDC discovery response must advertise authorization_details_catalog_endpoint and authorization_details_catalog_scope together.',
+    )
+  }
+  if (scope?.match(/\s/)) {
+    throw badRequest('OIDC discovery response has invalid authorization_details_catalog_scope.')
+  }
+  return { endpoint, scope }
+}
+
+function scopeString(value: string) {
+  const scopes = value.split(/\s+/).filter(Boolean)
+  return scopes.length > 0 ? [...new Set(scopes)].sort() : null
+}
+
+function retiredClientSecretContext(connectorId: string, generation: number) {
+  return `connector:${connectorId}:client-generation:${generation}:client-secret`
+}
+
+function retiredRegistrationTokenContext(connectorId: string, generation: number) {
+  return `connector:${connectorId}:client-generation:${generation}:registration-token`
 }
 
 async function readObject(response: Response, message: string) {

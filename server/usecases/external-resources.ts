@@ -28,6 +28,7 @@ import type {
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
 import { getAgentRoleAuthorization } from './authorization'
+import { ensureDynamicConnectorScopes } from './connectors'
 import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
@@ -82,7 +83,7 @@ export async function createResourceConnectionIntent(
 ) {
   const resource = await requireExternalResource(deps, resourceId)
   if (!resource.enabled || resource.archivedAt) throw notFound('Enabled external API resource was not found.')
-  const authorization = await requireActiveExternalAuthorization(deps, resourceId)
+  const currentAuthorization = await requireActiveExternalAuthorization(deps, resourceId)
   await requireConnectionOwnerControl(deps, input.owner, actorUserId)
   const scopes = input.scopes
   await validateRequestedScopes(deps, resource.resourceUrl, scopes)
@@ -91,9 +92,18 @@ export async function createResourceConnectionIntent(
       ...scopes,
       'openid',
       'offline_access',
-      ...(authorization.authorizationDetailsCatalogScope ? [authorization.authorizationDetailsCatalogScope] : []),
+      ...(currentAuthorization.authorizationDetailsCatalogScope
+        ? [currentAuthorization.authorizationDetailsCatalogScope]
+        : []),
     ]),
   ].sort()
+  const clientGeneration = await ensureDynamicConnectorScopes(
+    deps,
+    resource.connectorId!,
+    requestedScopes,
+    callbackOrigin,
+  )
+  const authorization = await requireActiveExternalAuthorization(deps, resourceId, clientGeneration)
   const authorizationDetails = resource.authorizationDetails
   assertAuthorizationDetailsSupported(authorizationDetails, authorization)
   const id = createId('resconnint')
@@ -144,6 +154,7 @@ export async function createResourceConnectionIntent(
     scopes: requestedScopes,
     authorizationDetails,
     encryptedPkceVerifier: await deps.secrets.seal(verifier, connectionIntentContext(id)),
+    clientGeneration,
     returnTo: input.returnTo ?? 'account-center',
     status: 'pending',
     expiresAt,
@@ -175,7 +186,7 @@ export async function completeResourceConnectionIntent(
   const now = new Date()
   const intent = await deps.externalResources.consumeConnectionIntent(await sha256(input.state), now)
   if (!intent) throw badRequest('Resource connection state is invalid, expired, or already used.')
-  const authorization = await requireActiveExternalAuthorization(deps, intent.resourceId)
+  const authorization = await requireActiveExternalAuthorization(deps, intent.resourceId, intent.clientGeneration ?? 1)
   const clientSecret = authorizationClientSecret(authorization)
   const verifier = await deps.secrets.open(intent.encryptedPkceVerifier, connectionIntentContext(intent.id))
   const token = await postForm(
@@ -228,10 +239,16 @@ export async function completeResourceConnectionIntent(
     ),
     grantedScopes,
     authorizationDetails,
+    clientGeneration: intent.clientGeneration ?? 1,
     status: 'active' as const,
     credentialExpiresAt: expiresAt,
     revokedAt: null,
     updatedAt: now,
+  }
+  const switchesClientGeneration =
+    existing !== null && (existing.clientGeneration ?? 1) !== (intent.clientGeneration ?? 1)
+  if (existing && switchesClientGeneration) {
+    await revokeConnectionGrants(deps, existing, intent.ownerUserId, now)
   }
   const connection = existing
     ? await deps.externalResources.replaceConnectionAuthorization(existing.id, intent.resourceId, authorizationInput)
@@ -244,7 +261,7 @@ export async function completeResourceConnectionIntent(
         createdAt: now,
       })
   if (!connection) throw badRequest('The API resource was archived while completing the connection.')
-  if (existing) {
+  if (existing && !switchesClientGeneration) {
     await revokeUncoveredGrants(deps, connection, intent.authorizationDetails.length > 0, intent.ownerUserId, now)
   }
   return {
@@ -939,10 +956,8 @@ export async function issueTargetAccessToken(
     )
   }
 
-  const [connection, authorization] = await Promise.all([
-    request.connectionId ? deps.externalResources.findConnection(request.connectionId) : null,
-    findExternalAuthorization(deps, request.resourceId),
-  ])
+  const connection = request.connectionId ? await deps.externalResources.findConnection(request.connectionId) : null
+  const authorization = await findExternalAuthorization(deps, request.resourceId, connection?.clientGeneration ?? 1)
   if (!connection || connection.status !== 'active' || authorization?.status !== 'active') {
     throw forbidden('Active external API resource grant is required.')
   }
@@ -1208,29 +1223,35 @@ export async function revokeAgentResourceLeasesForBinding(deps: Deps, bindingId:
   for (const lease of await deps.externalResources.listActiveTokenLeasesByBinding(bindingId, now)) {
     const grant = await deps.externalResources.findGrant(lease.grantId)
     if (!grant) continue
-    await revokeTokenLeaseAtTarget(deps, grant.resourceId, lease, now)
+    await revokeTokenLeaseAtTarget(deps, grant, lease, now)
   }
 }
 
 async function revokeGrantTokenLeases(deps: Deps, grant: AgentAccessGrantRecord, now: Date) {
   for (const lease of await deps.externalResources.listActiveTokenLeasesByGrant(grant.id, now)) {
-    await revokeTokenLeaseAtTarget(deps, grant.resourceId, lease, now)
+    await revokeTokenLeaseAtTarget(deps, grant, lease, now)
   }
 }
 
 async function revokeTokenLeaseAtTarget(
   deps: Deps,
-  resourceId: string,
+  grant: AgentAccessGrantRecord,
   lease: Awaited<ReturnType<Deps['externalResources']['listActiveTokenLeasesByGrant']>>[number],
   now: Date,
 ) {
-  const resource = await deps.authorization.findResource(resourceId)
+  const resource = await deps.authorization.findResource(grant.resourceId)
   if (!resource) throw notFound('API resource was not found.')
   if (resource.connectorId === null) {
     await deps.externalResources.revokeTokenLease(lease.id, now)
     return
   }
-  const authorization = await requireActiveExternalAuthorization(deps, resourceId)
+  const connection = grant.connectionId ? await deps.externalResources.findConnection(grant.connectionId) : null
+  if (!connection) throw notFound('Resource account connection was not found.')
+  const authorization = await requireActiveExternalAuthorization(
+    deps,
+    grant.resourceId,
+    connection.clientGeneration ?? 1,
+  )
   const clientSecret = authorizationClientSecret(authorization)
   const token = await deps.secrets.open(lease.encryptedAccessToken, tokenLeaseContext(lease.id))
   await postEmptyForm(
@@ -1250,7 +1271,7 @@ async function readAuthorizationDetailCatalog(
   agentIdentityId: string,
   pagination: PaginationInput,
 ) {
-  const authorization = await requireActiveExternalAuthorization(deps, resource.id)
+  const authorization = await requireActiveExternalAuthorization(deps, resource.id, connection.clientGeneration ?? 1)
   const endpoint = authorization.authorizationDetailsCatalogEndpoint
   const requiredScope = authorization.authorizationDetailsCatalogScope
   if (!endpoint || !requiredScope) {
@@ -1430,8 +1451,8 @@ async function requireExternalResource(deps: Deps, resourceId: string) {
   return resource
 }
 
-async function requireActiveExternalAuthorization(deps: Deps, resourceId: string) {
-  const authorization = await findExternalAuthorization(deps, resourceId)
+async function requireActiveExternalAuthorization(deps: Deps, resourceId: string, clientGeneration?: number) {
+  const authorization = await findExternalAuthorization(deps, resourceId, clientGeneration)
   if (!authorization || authorization.status !== 'active') {
     throw notFound('Active external API resource authorization was not found.')
   }
@@ -1441,6 +1462,7 @@ async function requireActiveExternalAuthorization(deps: Deps, resourceId: string
 async function findExternalAuthorization(
   deps: Deps,
   resourceId: string,
+  clientGeneration?: number,
 ): Promise<ResolvedExternalAuthorization | null> {
   const resource = await deps.authorization.findResource(resourceId)
   if (!resource?.connectorId) return null
@@ -1459,6 +1481,14 @@ async function findExternalAuthorization(
   ) {
     return null
   }
+  const currentGeneration = connector.clientGeneration ?? 1
+  const requestedGeneration = clientGeneration ?? currentGeneration
+  const retired = connector.retiredClientGenerations?.find((candidate) => candidate.generation === requestedGeneration)
+  if (requestedGeneration !== currentGeneration && !retired) return null
+  const clientId = retired?.clientId ?? connector.clientId
+  const clientSecret = retired
+    ? await deps.secrets.open(retired.encryptedClientSecret, retired.clientSecretContext)
+    : connector.clientSecret
   return {
     resourceId,
     connectorId: connector.id,
@@ -1486,8 +1516,9 @@ async function findExternalAuthorization(
     jwksUri: connector.jwksEndpoint,
     userInfoEndpoint: connector.userInfoEndpoint,
     registrationMode: connector.registrationMode ?? 'manual',
-    clientId: connector.clientId,
-    encryptedClientSecret: connector.clientSecret,
+    clientId,
+    clientGeneration: requestedGeneration,
+    encryptedClientSecret: clientSecret,
     encryptedRegistrationAccessToken: null,
     metadata: connector.providerMetadata ?? {},
     status: connector.enabled ? 'active' : 'invalid',
@@ -1646,6 +1677,29 @@ async function revokeUncoveredGrants(
       scopes: grant.scopes,
       authorizationDetails: grant.authorizationDetails,
       reasonCode: 'connection_authorization_changed',
+    })
+  }
+}
+
+async function revokeConnectionGrants(
+  deps: Deps,
+  connection: ResourceAccountConnectionRecord,
+  controllerUserId: string,
+  now: Date,
+) {
+  for (const grant of await deps.externalResources.listActiveGrantsByConnection(connection.id)) {
+    await revokeGrantTokenLeases(deps, grant, now)
+    await deps.externalResources.revokeGrant(grant.id, now)
+    await appendResourceAudit(deps, {
+      action: 'api_resource.access_revoked',
+      result: 'allowed',
+      resourceId: grant.resourceId,
+      connection,
+      grantId: grant.id,
+      controllerUserId,
+      scopes: grant.scopes,
+      authorizationDetails: grant.authorizationDetails,
+      reasonCode: 'connection_client_generation_changed',
     })
   }
 }
