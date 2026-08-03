@@ -226,6 +226,15 @@ describe('admin console Identity providers', () => {
     expect((await screen.findByRole('tab', { name: 'Builtin connectors' })).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByText('Email')).toBeTruthy()
     expect(screen.getByText('Google')).toBeTruthy()
+    expect(screen.getByText('Google').closest('tr')?.querySelector('.providerIcon img')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Builtin connectors' }).parentElement?.getAttribute('data-variant')).toBe(
+      'navigation',
+    )
+    expect(screen.getByRole('tablist').closest('.consoleResourceFrame')).toBeNull()
+    const listPanel = screen.getByRole('table').closest('.consoleDataTablePanel')
+    expect(listPanel).toBeTruthy()
+    expect(screen.getByLabelText('Search providers').closest('.consoleDataTablePanel')).toBe(listPanel)
+    expect(listPanel?.querySelector('.consoleDataTableToolbar')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Search providers'), { target: { value: 'google' } })
     expect(screen.queryByText('Email')).toBeNull()
     fireEvent.change(screen.getByLabelText('Filter provider type'), { target: { value: 'Built-in' } })

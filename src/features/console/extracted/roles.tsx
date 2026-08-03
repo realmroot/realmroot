@@ -97,7 +97,7 @@ export function RolesPage() {
       error={query.error}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
-      toolbar={
+      tableToolbar={
         <ListToolbar>
           <TextInput
             aria-label={tt('Search roles')}
@@ -606,7 +606,7 @@ function RoleEditSheet({
           </SheetDescription>
         </SheetHeader>
         <form
-          className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+          className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-4 py-5"
           id="role-edit"
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault()
@@ -692,7 +692,7 @@ function PermissionSheet({
             {tt('Select scopes from any Resource server. Filters change the view, not the current selection.')}
           </SheetDescription>
         </SheetHeader>
-        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 py-5">
+        <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-4 py-5">
           <InputGroup>
             <InputGroupAddon>
               <Search />
@@ -890,7 +890,7 @@ function RoleAssignmentDialog({
               {tt('Choose an actor and whether this authority applies Realm-wide or only in one Organization context.')}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-5 py-5">
+          <div className="grid gap-4 py-5">
             <Field label={tt('Subject type')}>
               <SelectInput
                 name="subjectType"

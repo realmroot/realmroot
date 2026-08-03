@@ -1,28 +1,20 @@
 import {
   AuthCardFrame,
-  Button,
   type CSSProperties,
-  cn,
-  Eye,
   type HostedAuthPreviewFlow,
   type HostedAuthPreviewState,
   KeyRound,
   SignInCardBody,
   SignInMethodButtons,
   type SignInMode,
-  type SignInPreviewSurface,
   SignUpCardBody,
   SignUpForm,
-  Tabs,
-  TabsList,
-  TabsTrigger,
   tt,
   useState,
 } from '../console-shared'
 import { customCssProperties } from './helpers-utils'
 
 export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState }) {
-  const [surface, setSurface] = useState<SignInPreviewSurface>('desktop')
   const [flow, setFlow] = useState<HostedAuthPreviewFlow>('sign-in')
   const [signupForm, setSignupForm] = useState({
     email: '',
@@ -48,28 +40,17 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
   const legalLinks = [
     preview.termsUri ? ['Terms', preview.termsUri] : null,
     preview.privacyUri ? ['Privacy', preview.privacyUri] : null,
-    preview.supportEmail ? ['Support', `mailto:${preview.supportEmail}`] : null,
+    preview.supportUri
+      ? ['Support', preview.supportUri]
+      : preview.supportEmail
+        ? ['Support', `mailto:${preview.supportEmail}`]
+        : null,
   ].filter((link): link is [string, string] => link !== null)
   const previewTitle =
     effectiveFlow === 'sign-up' ? tt('Create account') : localizedHostedCopy(preview.headline, 'Sign in to Realmroot')
   return (
     <div className="hostedPreviewShell">
-      <div className="hostedPreviewHeader">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{tt('Live preview')}</p>
-          <h2>{tt('Hosted sign-in')}</h2>
-        </div>
-        <Tabs onValueChange={(value) => setSurface(value as SignInPreviewSurface)} value={surface}>
-          <TabsList aria-label={tt('Preview viewport')}>
-            <TabsTrigger value="desktop">{tt('Desktop')}</TabsTrigger>
-            <TabsTrigger value="mobile">{tt('Mobile')}</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-      <div
-        className={cn('brandingPreview hostedAuthPreview', surface === 'mobile' && 'hostedAuthPreview-mobile')}
-        style={previewStyle}
-      >
+      <div className="brandingPreview hostedAuthPreview" style={previewStyle}>
         <AuthCardFrame
           ariaLabel={`${productName} hosted sign-in preview`}
           brand={
@@ -230,9 +211,6 @@ export function HostedAuthPreview({ preview }: { preview: HostedAuthPreviewState
           )}
         </AuthCardFrame>
       </div>
-      <Button onClick={() => window.open('/auth/sign-in', '_blank', 'noopener')} type="button" variant="secondary">
-        <Eye data-icon="inline-start" /> {tt('Open live hosted page')}{' '}
-      </Button>
     </div>
   )
 }

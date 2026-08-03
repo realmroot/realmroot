@@ -115,10 +115,20 @@ describe('management sign-in contracts', () => {
   it('accepts nullable or HTTPS legal links and rejects insecure URLs', () => {
     expect(
       updateManagementSignInSettingsRequestSchema.parse({
-        links: { termsUri: null, privacyUri: 'https://realm.example.com/privacy', supportEmail: null },
+        links: {
+          termsUri: null,
+          privacyUri: 'https://realm.example.com/privacy',
+          supportUri: 'https://realm.example.com/support',
+          supportEmail: null,
+        },
       }),
     ).toEqual({
-      links: { termsUri: null, privacyUri: 'https://realm.example.com/privacy', supportEmail: null },
+      links: {
+        termsUri: null,
+        privacyUri: 'https://realm.example.com/privacy',
+        supportUri: 'https://realm.example.com/support',
+        supportEmail: null,
+      },
     })
     expect(() =>
       updateManagementSignInSettingsRequestSchema.parse({ links: { termsUri: 'http://realm.example.com/terms' } }),

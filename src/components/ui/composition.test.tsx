@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Status } from '@/components/ui/status'
+import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -30,6 +31,16 @@ afterEach(() => {
 })
 
 describe('composed UI primitives', () => {
+  it('keeps the checked switch thumb distinct from the page background', () => {
+    render(<Switch aria-label="Enabled" defaultChecked />)
+
+    const control = screen.getByRole('switch', { name: 'Enabled' })
+    const thumb = control.querySelector('[data-slot="switch-thumb"]')
+    expect(control.getAttribute('data-state')).toBe('checked')
+    expect(thumb?.className).toContain('data-checked:bg-accent')
+    expect(thumb?.className).toContain('ring-foreground/15')
+  })
+
   it('applies compact button size classes across button and link variants', () => {
     render(
       <>

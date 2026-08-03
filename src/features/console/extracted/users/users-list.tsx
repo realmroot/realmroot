@@ -117,7 +117,7 @@ export function UsersPage() {
       emptyTitle={search ? 'No users found' : 'No users yet'}
       loading={query.isLoading}
       onRetry={() => query.refetch()}
-      toolbar={
+      tableToolbar={
         <ListToolbar>
           <TextInput
             aria-label={tt('Search users')}

@@ -264,7 +264,7 @@ describe('hosted auth pages 4', () => {
     expect(screen.queryByText('No sign-in methods are enabled. Contact the Realm operator.')).toBeNull()
   })
 
-  it('surfaces native auth submission failures', async () => {
+  it('shows credential failures with the active form before alternate methods [spec: hosted-auth/public-sign-in]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
@@ -277,7 +277,13 @@ describe('hosted auth pages 4', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wrong-password' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(await screen.findByText('Invalid credentials.')).toBeTruthy()
+    const alert = await screen.findByRole('alert')
+    const identifier = screen.getByLabelText('Email or username')
+    const alternateMethod = screen.getByRole('button', { name: 'Continue with Email' })
+
+    expect(alert.textContent).toBe('Invalid credentials.')
+    expect(alert.compareDocumentPosition(identifier) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(alert.compareDocumentPosition(alternateMethod) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('navigates after successful password sign-in', async () => {

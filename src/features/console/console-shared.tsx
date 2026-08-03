@@ -147,7 +147,6 @@ type OrganizationDetailSection = 'overview' | 'members' | 'agents' | 'activity' 
 type RoleDetailSection = 'overview' | 'permissions' | 'assignments' | 'settings'
 type ApiResourceDetailSection = 'overview' | 'resources' | 'authority' | 'settings'
 type WebhooksSection = 'endpoints' | 'requests'
-type SignInPreviewSurface = 'desktop' | 'mobile'
 type SignInMode = 'password' | 'otp'
 type HostedAuthPreviewFlow = 'sign-in' | 'email' | 'sign-up'
 type HostedAuthPreviewState = {
@@ -174,6 +173,7 @@ type HostedAuthPreviewState = {
     slug: string
   }>
   supportEmail?: string
+  supportUri?: string
   termsUri?: string
   usernameEnabled?: boolean
   web3WalletEnabled?: boolean
@@ -246,7 +246,6 @@ export type {
   SecurityPolicy,
   SetStateAction,
   SignInMode,
-  SignInPreviewSurface,
   SmsProviderId,
   UserDetailSection,
   WebhookEndpoint,

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { SelectInput } from '@/components/product-form'
 import { RealmrootWordmark } from '@/components/realmroot-brand'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -54,7 +55,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import type { UserProfile } from '@/features/account/types'
 import { signOut } from '@/lib/auth-client'
@@ -243,20 +243,20 @@ export function ConsoleShell({
               </Button>
               <label className="consoleContextSwitcher hidden sm:grid" htmlFor="console-context">
                 <span>{tt('Context')}</span>
-                <NativeSelect
+                <SelectInput
                   aria-label={tt('Console context')}
                   id="console-context"
                   name="console-context"
                   onChange={(event) => changeScope(event.target.value)}
                   value={scope}
                 >
-                  {access.realmOperator ? <NativeSelectOption value="realm">{tt('Realm')}</NativeSelectOption> : null}
+                  {access.realmOperator ? <option value="realm">{tt('Realm')}</option> : null}
                   {organizations.map((organization) => (
-                    <NativeSelectOption key={organization.id} value={organization.id}>
+                    <option key={organization.id} value={organization.id}>
                       {organization.displayName ?? organization.name}
-                    </NativeSelectOption>
+                    </option>
                   ))}
-                </NativeSelect>
+                </SelectInput>
               </label>
               <ConsoleAccountMenu profile={profile} />
             </div>
@@ -291,7 +291,10 @@ export function ConsoleShell({
             <ConsoleNavigation groups={groups} pathname={pathname} scope={scope} />
           </aside>
           <main className="consoleMain" id="console-content" tabIndex={-1}>
-            <div className="consoleContent">{children}</div>
+            <div className="consoleContent">
+              <ConsoleBreadcrumbs context={context} organizations={organizations} pathname={pathname} scope={scope} />
+              <div className="consolePage">{children}</div>
+            </div>
           </main>
         </div>
         {searchOpen ? <ConsoleSearch groups={groups} onOpenChange={setSearchOpen} open scope={scope} /> : null}
@@ -299,6 +302,135 @@ export function ConsoleShell({
     </ConsoleScopeProvider>
   )
 }
+
+function ConsoleBreadcrumbs({
+  context,
+  organizations,
+  pathname,
+  scope,
+}: {
+  context: ConsoleContext
+  organizations: OrganizationResponse[]
+  pathname: string
+  scope: string
+}) {
+  const contextName =
+    context === 'realm'
+      ? tt('Realm')
+      : (organizations.find((organization) => organization.id === scope)?.displayName ??
+        organizations.find((organization) => organization.id === scope)?.name ??
+        tt('Organization'))
+  const crumbs = consoleBreadcrumbSection(pathname)
+
+  return (
+    <nav aria-label={tt('Breadcrumb')} className="consoleBreadcrumbs">
+      <Link search={scope === 'realm' ? {} : { context: scope }} to="/console">
+        {contextName}
+      </Link>
+      {crumbs.map((crumb, index) => (
+        <span className="contents" key={crumb.label}>
+          <span aria-hidden="true">/</span>
+          {crumb.href ? (
+            <Link search={scope === 'realm' ? {} : { context: scope }} to={crumb.href}>
+              {tt(crumb.label)}
+            </Link>
+          ) : (
+            <span aria-current={index === crumbs.length - 1 ? 'page' : undefined}>{tt(crumb.label)}</span>
+          )}
+        </span>
+      ))}
+    </nav>
+  )
+}
+
+function consoleBreadcrumbSection(pathname: string): Array<{ href?: string; label: string }> {
+  if (pathname === '/console' || pathname === '/console/dashboard') return [{ label: 'Dashboard' }]
+
+  const route = consoleBreadcrumbRoutes.find(
+    (candidate) => pathname === candidate.href || pathname.startsWith(`${candidate.href}/`),
+  )
+  if (!route) return [{ label: 'Console' }]
+
+  const remainder = pathname.slice(route.href.length).split('/').filter(Boolean)
+  const nested = remainder.length > 0
+  return [
+    { label: route.label, ...(nested ? { href: route.href } : {}) },
+    ...(nested ? [{ label: breadcrumbSegmentLabel(route.href, remainder.at(-1) ?? '') }] : []),
+  ]
+}
+
+const breadcrumbRouteSegmentLabels: Record<string, Record<string, string>> = {
+  '/console/agents': {
+    hosts: 'Installations',
+    requests: 'Access requests',
+    grants: 'Access grants',
+  },
+}
+
+const breadcrumbSegmentLabels: Record<string, string> = {
+  overview: 'Overview',
+  profile: 'Overview',
+  authentication: 'Authentication',
+  'linked-accounts': 'Authentication',
+  security: 'Authentication',
+  sessions: 'Sessions',
+  agents: 'Agents',
+  'authorized-apps': 'Authorized apps',
+  applications: 'Authorized apps',
+  members: 'Members',
+  activity: 'Activity',
+  settings: 'Settings',
+  operations: 'Settings',
+  permissions: 'Permissions',
+  assignments: 'Assignments',
+  resources: 'Resources',
+  authority: 'Roles & grants',
+  oauth: 'OAuth',
+  authorizations: 'Authorizations',
+  roles: 'Roles',
+  connections: 'Connections',
+  theme: 'Color scheme',
+  assets: 'Brand assets',
+  legal: 'Legal & support',
+  general: 'General',
+  email: 'Email delivery',
+  developer: 'Developer',
+  deployment: 'Deployment',
+  endpoints: 'Endpoints',
+  requests: 'Requests',
+  'sign-in': 'Sign-in security',
+  mfa: 'MFA',
+  abuse: 'Abuse prevention',
+}
+
+function breadcrumbSegmentLabel(route: string, segment: string) {
+  return (
+    breadcrumbRouteSegmentLabels[route]?.[segment] ??
+    breadcrumbSegmentLabels[segment] ??
+    segment
+      .split('-')
+      .filter(Boolean)
+      .map((part, index) => (index === 0 ? `${part.charAt(0).toUpperCase()}${part.slice(1)}` : part))
+      .join(' ')
+  )
+}
+
+const consoleBreadcrumbRoutes: Array<{ href: string; label: string }> = [
+  { href: '/console/sign-in-experience/sign-up-and-sign-in', label: 'Sign-in & registration' },
+  { href: '/console/sign-in-experience/sign-in', label: 'Sign-in & registration' },
+  { href: '/console/sign-in-experience', label: 'Experience' },
+  { href: '/console/tenant-settings', label: 'Settings' },
+  { href: '/console/role-assignments', label: 'Role assignments' },
+  { href: '/console/api-resources', label: 'Resource servers' },
+  { href: '/console/webhooks', label: 'Webhooks' },
+  { href: '/console/organizations', label: 'Organizations' },
+  { href: '/console/applications', label: 'Applications' },
+  { href: '/console/connectors', label: 'Identity providers' },
+  { href: '/console/security', label: 'Security policies' },
+  { href: '/console/users', label: 'Users' },
+  { href: '/console/agents', label: 'Agents' },
+  { href: '/console/roles', label: 'Roles' },
+]
 
 function ConsoleNavigation({
   groups,

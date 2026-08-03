@@ -254,7 +254,11 @@ async function findBranding(db: Database, where: SQL) {
 
 function toSettingsPatch(input: UpdateConfigzSettingsInput, metadata: Record<string, unknown> | null) {
   const nextMetadata =
-    input.copy || input.builtInProviders || input.emailOtpEnabled !== undefined || input.usernameEnabled !== undefined
+    input.copy ||
+    input.builtInProviders ||
+    input.emailOtpEnabled !== undefined ||
+    input.usernameEnabled !== undefined ||
+    input.supportUri !== undefined
       ? {
           ...(metadata ?? {}),
           ...(input.copy ? { copy: { ...readCopyMetadata(metadata), ...input.copy } } : {}),
@@ -270,6 +274,7 @@ function toSettingsPatch(input: UpdateConfigzSettingsInput, metadata: Record<str
             : {}),
           ...(input.emailOtpEnabled !== undefined ? { emailOtpEnabled: input.emailOtpEnabled } : {}),
           ...(input.usernameEnabled !== undefined ? { usernameEnabled: input.usernameEnabled } : {}),
+          ...(input.supportUri !== undefined ? { supportUri: input.supportUri } : {}),
         }
       : undefined
 

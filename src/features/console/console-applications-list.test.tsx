@@ -44,6 +44,8 @@ describe('admin console applications-list', () => {
     renderWithQuery(<ApplicationsPage />)
 
     expect(await screen.findByText('Customer portal')).toBeTruthy()
+    const dataPanel = screen.getByRole('table').closest('.consoleDataTablePanel')
+    expect(screen.getByLabelText('Search applications').closest('.consoleDataTablePanel')).toBe(dataPanel)
     expect(screen.getByRole('columnheader', { name: 'Application' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Type' })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'Audience' })).toBeTruthy()

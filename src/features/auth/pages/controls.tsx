@@ -159,10 +159,10 @@ export function SignInCardBody({
 }) {
   return (
     <>
+      {footer}
       {children}
       {showDivider ? <AuthMethodDivider /> : null}
       {methodButtons}
-      {footer}
     </>
   )
 }

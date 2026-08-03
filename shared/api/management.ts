@@ -104,6 +104,7 @@ export const managementSignInSettingsResponseSchema = z.object({
   links: z.object({
     termsUri: z.string().nullable(),
     privacyUri: z.string().nullable(),
+    supportUri: z.string().nullable().optional(),
     supportEmail: z.string().nullable(),
   }),
   copy: z.object({
@@ -159,6 +160,7 @@ export const updateManagementSignInSettingsRequestSchema = z.object({
     .object({
       termsUri: nullableHttpsUrlSchema,
       privacyUri: nullableHttpsUrlSchema,
+      supportUri: nullableHttpsUrlSchema,
       supportEmail: nullableEmailSchema,
     })
     .partial()

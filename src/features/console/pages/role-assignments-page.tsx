@@ -29,7 +29,7 @@ import {
 import { useConsoleScope } from '@/lib/console-context'
 import { tt } from '@/lib/i18n'
 import { MutationError, StatusBadge } from '../helpers/helpers-dialogs'
-import { ListToolbar } from '../helpers/helpers-resource'
+import { DataTablePanel, ListToolbar } from '../helpers/helpers-resource'
 import { formatDate, useAdminMutation, userDisplayName } from '../helpers/helpers-utils'
 
 type SubjectType = 'user' | 'application' | 'agent'
@@ -116,60 +116,63 @@ export function RoleAssignmentsPage() {
         description={tt('Review reusable roles assigned to users, applications, and Agents across this Realm.')}
         title={tt('Role assignments')}
       />
-      <ListToolbar>
-        <TextInput
-          aria-label={tt('Search role assignments')}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={tt('Search subject, role, or context')}
-          value={search}
-        />
-        <SelectInput
-          aria-label={tt('Filter assignment subject type')}
-          onChange={(event) => setSubjectType(event.target.value)}
-          value={subjectType}
-        >
-          <option value="">{tt('Any subject type')}</option>
-          <option value="user">{tt('User')}</option>
-          <option value="workload">{tt('Workload')}</option>
-          <option value="agent">{tt('Agent')}</option>
-        </SelectInput>
-        <SelectInput
-          aria-label={tt('Filter assignments by role')}
-          onChange={(event) => setRoleId(event.target.value)}
-          value={roleId}
-        >
-          <option value="">{tt('Any role')}</option>
-          {(roles.data?.roles ?? []).map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name}
-            </option>
-          ))}
-        </SelectInput>
-        <SelectInput
-          aria-label={tt('Filter assignments by context')}
-          onChange={(event) => setOrganizationId(event.target.value)}
-          value={organizationId}
-        >
-          <option value="">{tt('Any context')}</option>
-          <option value="realm">{tt('Realm-wide')}</option>
-          {(organizations.data?.organizations ?? []).map((organization) => (
-            <option key={organization.id} value={organization.id}>
-              {organization.displayName ?? organization.name}
-            </option>
-          ))}
-        </SelectInput>
-        <SelectInput
-          aria-label={tt('Filter assignment status')}
-          onChange={(event) => setStatus(event.target.value)}
-          value={status}
-        >
-          <option value="">{tt('Any status')}</option>
-          <option value="active">{tt('Active')}</option>
-          <option value="expired">{tt('Expired')}</option>
-          <option value="revoked">{tt('Revoked')}</option>
-        </SelectInput>
-      </ListToolbar>
-      <div className="consoleResourceFrame overflow-hidden rounded-xl border bg-background">
+      <DataTablePanel
+        toolbar={
+          <ListToolbar>
+            <TextInput
+              aria-label={tt('Search role assignments')}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={tt('Search subject, role, or context')}
+              value={search}
+            />
+            <SelectInput
+              aria-label={tt('Filter assignment subject type')}
+              onChange={(event) => setSubjectType(event.target.value)}
+              value={subjectType}
+            >
+              <option value="">{tt('Any subject type')}</option>
+              <option value="user">{tt('User')}</option>
+              <option value="workload">{tt('Workload')}</option>
+              <option value="agent">{tt('Agent')}</option>
+            </SelectInput>
+            <SelectInput
+              aria-label={tt('Filter assignments by role')}
+              onChange={(event) => setRoleId(event.target.value)}
+              value={roleId}
+            >
+              <option value="">{tt('Any role')}</option>
+              {(roles.data?.roles ?? []).map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </SelectInput>
+            <SelectInput
+              aria-label={tt('Filter assignments by context')}
+              onChange={(event) => setOrganizationId(event.target.value)}
+              value={organizationId}
+            >
+              <option value="">{tt('Any context')}</option>
+              <option value="realm">{tt('Realm-wide')}</option>
+              {(organizations.data?.organizations ?? []).map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.displayName ?? organization.name}
+                </option>
+              ))}
+            </SelectInput>
+            <SelectInput
+              aria-label={tt('Filter assignment status')}
+              onChange={(event) => setStatus(event.target.value)}
+              value={status}
+            >
+              <option value="">{tt('Any status')}</option>
+              <option value="active">{tt('Active')}</option>
+              <option value="expired">{tt('Expired')}</option>
+              <option value="revoked">{tt('Revoked')}</option>
+            </SelectInput>
+          </ListToolbar>
+        }
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -250,7 +253,7 @@ export function RoleAssignmentsPage() {
             )}
           </TableBody>
         </Table>
-      </div>
+      </DataTablePanel>
       <AssignmentDialog context={context} key={context ?? 'realm'} onClose={() => setOpen(false)} open={open} />
       <DestructiveConfirmation
         confirmLabel={revokeMutation.isPending ? tt('Revoking…') : tt('Revoke assignment')}

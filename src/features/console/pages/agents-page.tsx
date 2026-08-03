@@ -42,7 +42,7 @@ export function AgentsPage() {
       loading={query.isLoading}
       onRetry={() => query.refetch()}
       title={tt('Agents')}
-      toolbar={
+      tableToolbar={
         <ListToolbar>
           <InputGroup className="w-full sm:w-72">
             <InputGroupAddon>

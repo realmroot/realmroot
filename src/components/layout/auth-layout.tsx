@@ -156,7 +156,11 @@ export function authLegalLinks(config: ConfigzConfigResponse | null) {
   return [
     config?.links.privacyUri ? ['Privacy', config.links.privacyUri] : null,
     config?.links.termsUri ? ['Terms', config.links.termsUri] : null,
-    config?.links.supportEmail ? ['Support', `mailto:${config.links.supportEmail}`] : null,
+    config?.links.supportUri
+      ? ['Support', config.links.supportUri]
+      : config?.links.supportEmail
+        ? ['Support', `mailto:${config.links.supportEmail}`]
+        : null,
   ].filter((link): link is [string, string] => link !== null)
 }
 function AuthPageFooter({ links }: { links: Array<[string, string]> }) {

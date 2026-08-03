@@ -84,6 +84,7 @@ export const configzConfigResponseSchema = z.object({
   links: z.object({
     termsUri: nullableUrlSchema,
     privacyUri: nullableUrlSchema,
+    supportUri: nullableUrlSchema.optional(),
     supportEmail: z.string().nullable(),
   }),
   copy: z.object({

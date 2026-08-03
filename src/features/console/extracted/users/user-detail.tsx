@@ -752,7 +752,7 @@ function UserEditSheet({
           <SheetDescription>{tt('Update profile identity and Realm-level operator access.')}</SheetDescription>
         </SheetHeader>
         <form
-          className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+          className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-4 py-5"
           id="user-edit"
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault()

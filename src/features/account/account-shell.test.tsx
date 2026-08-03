@@ -92,7 +92,7 @@ describe('AccountPageShell', () => {
 
     openAccountMenu()
 
-    await screen.findByText('jane@example.com')
+    expect((await screen.findAllByText('jane@example.com')).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: 'Console' })).toBeNull()
   })
 

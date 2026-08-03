@@ -219,14 +219,14 @@ export function SignInExperiencePage({
     </ResourcePage>
   )
 }
-export function SignInExperienceEditorLayout({ preview, settings }: { preview: ReactNode; settings: ReactNode }) {
+export function SignInExperienceEditorLayout({ settings }: { settings: ReactNode }) {
+  return <div className="signInExperienceSettings">{settings}</div>
+}
+export function SignInExperiencePreviewPanel({ children }: { children: ReactNode }) {
   return (
-    <div className="signInExperienceLayout">
-      <div className="signInExperienceSettings">{settings}</div>
-      <aside className="signInExperiencePreviewPanel" aria-label={tt('Hosted authentication preview')}>
-        {preview}
-      </aside>
-    </div>
+    <aside className="signInExperiencePreviewPanel" aria-label={tt('Hosted authentication preview')}>
+      {children}
+    </aside>
   )
 }
 export function SettingsSections({ children }: { children: ReactNode }) {

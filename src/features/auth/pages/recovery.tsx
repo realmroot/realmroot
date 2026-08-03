@@ -95,6 +95,7 @@ export function ForgotPasswordPage() {
           : (authContext.description ?? tt('Request a one-time code and set a new password for your account.'))
       }
     >
+      {!resetComplete ? <SubmitStatus state={submit} /> : null}
       {resetComplete ? (
         <LinkButton href={authPageHref('/auth/sign-in')}>{tt('Continue to sign in')}</LinkButton>
       ) : (
@@ -166,7 +167,6 @@ export function ForgotPasswordPage() {
           </Button>
         </form>
       )}
-      {!resetComplete ? <SubmitStatus state={submit} /> : null}
       {!resetComplete ? (
         <div className="authLinks">
           <a href={authPageHref('/auth/sign-in')}>{tt('Back to sign in')}</a>
@@ -224,6 +224,7 @@ export function EmailVerificationPage() {
         <LinkButton href={authPageHref('/auth/sign-in')}>{tt('Continue to sign in')}</LinkButton>
       ) : (
         <>
+          <SubmitStatus state={submit} />
           <div className="authCardHeader">
             <h2>{token ? tt('Verify this email link') : tt('Confirm your inbox')}</h2>
             <p>
@@ -260,7 +261,6 @@ export function EmailVerificationPage() {
               {token || otp ? tt('Verify email') : tt('Send verification')}
             </Button>
           </form>
-          <SubmitStatus state={submit} />
         </>
       )}
     </AuthLayout>

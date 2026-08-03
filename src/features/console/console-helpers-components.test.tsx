@@ -37,6 +37,7 @@ import {
   WebhookSecretDisclosureDialog,
 } from '@/features/console/helpers/helpers-preview'
 import {
+  DataTablePanel,
   DetailTabs,
   lines,
   ObjectHeader,
@@ -365,6 +366,20 @@ describe('helpers-forms', () => {
 })
 
 describe('helpers-resource', () => {
+  it('composes filters and a table in one data-list surface', () => {
+    render(
+      <DataTablePanel toolbar={<div>filters</div>}>
+        <Table>
+          <TableBody />
+        </Table>
+      </DataTablePanel>,
+    )
+    const panel = screen.getByRole('table').closest('.consoleDataTablePanel')
+    expect(panel).toBeTruthy()
+    expect(screen.getByText('filters').closest('.consoleDataTablePanel')).toBe(panel)
+    expect(panel?.querySelector('.consoleDataTableToolbar')).toBeTruthy()
+  })
+
   it('renders the resource page in loading, error, empty, framed, and unframed states', () => {
     const onRetry = vi.fn()
     const { rerender } = render(
@@ -397,6 +412,16 @@ describe('helpers-resource', () => {
     expect(screen.getByText('framed content')).toBeTruthy()
 
     rerender(
+      <ResourcePage description="desc" tableToolbar={<div>table filters</div>} title="Things">
+        <Table>
+          <TableBody />
+        </Table>
+      </ResourcePage>,
+    )
+    const dataPanel = screen.getByRole('table').closest('.consoleDataTablePanel')
+    expect(screen.getByText('table filters').closest('.consoleDataTablePanel')).toBe(dataPanel)
+
+    rerender(
       <ResourcePage
         description="desc"
         empty
@@ -417,6 +442,15 @@ describe('helpers-resource', () => {
     )
     expect(screen.getByText('toolbar')).toBeTruthy()
     expect(screen.getByText('unframed content')).toBeTruthy()
+
+    rerender(
+      <ResourcePage aside={<aside>preview</aside>} description="desc" framed={false} title="Things">
+        <div>settings</div>
+      </ResourcePage>,
+    )
+    const splitPage = screen.getByText('preview').closest('.consoleResourcePageWithAside')
+    expect(splitPage).toBeTruthy()
+    expect(screen.getByText('settings').closest('.consoleResourcePageMain')).toBe(splitPage?.firstElementChild)
   })
 
   it('renders object header and detail tabs', async () => {
@@ -650,10 +684,8 @@ describe('HostedAuthPreview', () => {
 
   it('walks sign-in, email, and sign-up flows and edits the sign-up form', () => {
     render(<HostedAuthPreview preview={basePreview} />)
-    expect(screen.getByText('Live preview')).toBeTruthy()
-
-    // switch to mobile surface
-    fireEvent.click(screen.getByRole('tab', { name: 'Mobile' }))
+    expect(screen.queryByText('Live preview')).toBeNull()
+    expect(document.querySelector('.hostedPreviewHeader')).toBeNull()
 
     // exercise the alternative sign-in method buttons (no-op preview handlers)
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Phone' }))
@@ -716,11 +748,9 @@ describe('HostedAuthPreview', () => {
     expect(screen.getByText('Send code')).toBeTruthy()
   })
 
-  it('opens the hosted sign-in window', () => {
-    const open = vi.fn()
-    vi.stubGlobal('open', open)
+  it('does not add editor-only viewport or open-page controls to the hosted preview', () => {
     render(<HostedAuthPreview preview={basePreview} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Open live hosted page' }))
-    expect(open).toHaveBeenCalledWith('/auth/sign-in', '_blank', 'noopener')
+    expect(screen.queryByRole('tab', { name: 'Mobile' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open live hosted page' })).toBeNull()
   })
 })

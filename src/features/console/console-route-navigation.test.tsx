@@ -128,8 +128,8 @@ describe('console route navigation', () => {
       expect((await screen.findAllByRole('heading', { name: 'Experience' })).length).toBeGreaterThan(0)
       expect(screen.getByRole('tab', { name: label }).getAttribute('aria-selected')).toBe('true')
     }
-    expect(screen.getByRole('tab', { name: 'Desktop' })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: 'Mobile' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Desktop' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Mobile' })).toBeNull()
   })
 
   it('keeps Sign-in & registration separate from Experience navigation', async () => {

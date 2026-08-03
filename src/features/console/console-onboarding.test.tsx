@@ -21,15 +21,10 @@ afterEach(() => {
 
 import {
   application,
-  brandingSettings,
-  configz,
-  consoleAccountAccess,
-  consoleAccountProfile,
   consoleSharedFetch,
   jsonResponse,
   readinessIncomplete,
   renderWithQuery,
-  uploadedAsset,
 } from './console.test-utils'
 
 const deviceCodeGrantType = 'urn:ietf:params:oauth:grant-type:device_code'
@@ -56,48 +51,17 @@ describe('console onboarding', () => {
     expect(screen.queryByText('First OIDC application')).toBeNull()
   })
 
-  it('uploads Realm branding and favicon assets', async () => {
-    const requests: Array<{ url: string; method: string; body: unknown }> = []
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
-      if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/onboarding/status') return Promise.resolve(jsonResponse({ required: false }))
-      if (url === '/api/account/profile')
-        return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
-      if (url === '/api/readiness') {
-        return Promise.resolve(
-          jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
-        )
-      }
-      if (init?.method === 'POST') {
-        requests.push({
-          url,
-          method: init.method,
-          body: init.body instanceof FormData ? '[form-data]' : init.body,
-        })
-        return Promise.resolve(jsonResponse({ asset: uploadedAsset }, 201))
-      }
-      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      return consoleSharedFetch(input, init)
-    })
+  it('exposes only the designed Realm brand asset URL fields [spec: admin-console/admin-branding]', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(consoleSharedFetch)
 
     renderWithQuery(<BrandingPage />)
     await userEvent.click(await screen.findByRole('tab', { name: 'Brand assets' }))
-    fireEvent.change(await screen.findByLabelText('Upload logo'), {
-      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
-    })
-    fireEvent.change(screen.getByLabelText('Upload favicon'), {
-      target: { files: [new File(['icon'], 'favicon.png', { type: 'image/png' })] },
-    })
 
-    await waitFor(() => {
-      expect(requests).toEqual(
-        expect.arrayContaining([
-          { url: '/api/branding/logo', method: 'POST', body: '[form-data]' },
-          { url: '/api/branding/favicon', method: 'POST', body: '[form-data]' },
-        ]),
-      )
-    })
+    expect(await screen.findByLabelText('Product name')).toBeTruthy()
+    expect(screen.getByLabelText('Logo URL')).toBeTruthy()
+    expect(screen.getByLabelText('Favicon URL')).toBeTruthy()
+    expect(screen.queryByLabelText('Upload logo')).toBeNull()
+    expect(screen.queryByLabelText('Upload favicon')).toBeNull()
   })
 
   it('creates the first OIDC client from admin onboarding and copies integration details [spec: admin-console/admin-onboarding]', async () => {

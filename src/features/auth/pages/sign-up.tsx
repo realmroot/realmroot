@@ -126,6 +126,7 @@ export function SignUpCardBody({
 }) {
   return (
     <>
+      {status}
       {created ? (
         <div className="authCardHeader">
           <h2>{tt('Check your inbox')}</h2>
@@ -140,7 +141,6 @@ export function SignUpCardBody({
           {socialButtons}
         </>
       ) : null}
-      {status}
       <div className="authLinks">{signInAction}</div>
     </>
   )

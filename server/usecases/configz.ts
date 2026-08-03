@@ -167,6 +167,7 @@ export async function getConfig(deps: Deps, options: ConfigzOptions): Promise<Co
     links: {
       termsUri: settings?.termsUri ?? null,
       privacyUri: settings?.privacyUri ?? null,
+      supportUri: readString(settings?.metadata ?? null, 'supportUri'),
       supportEmail: settings?.supportEmail ?? null,
     },
     copy,
@@ -234,6 +235,7 @@ export async function updateManagementSignInSettings(
     builtInProviders: input.builtInProviders,
     termsUri: input.links?.termsUri,
     privacyUri: input.links?.privacyUri,
+    supportUri: input.links?.supportUri,
     supportEmail: input.links?.supportEmail,
     copy: input.copy,
   })

@@ -85,6 +85,10 @@ describe('webhook endpoint and delivery operations', () => {
 
     renderWithQuery(<WebhooksPage />)
     expect(await screen.findByText(webhookEndpoint.url)).toBeTruthy()
+    const listPanel = screen.getByRole('table').closest('.consoleDataTablePanel')
+    expect(listPanel).toBeTruthy()
+    expect(screen.getByLabelText('Search webhooks').closest('.consoleDataTablePanel')).toBe(listPanel)
+    expect(screen.getByRole('navigation', { name: 'Webhook sections' }).closest('.consoleDataTablePanel')).toBeNull()
     expect(screen.getAllByText('Northwind').length).toBeGreaterThan(0)
     expect(screen.getByText('org-missing')).toBeTruthy()
     fireEvent.pointerDown(screen.getByLabelText('Actions for https://hooks.example.com/organization'), {
@@ -188,7 +192,7 @@ describe('webhook endpoint and delivery operations', () => {
 
     renderWithQuery(<WebhooksPage section="requests" />)
     expect(await screen.findByText('user.created')).toBeTruthy()
-    expect(screen.getAllByText('Acme Inc.')).toHaveLength(2)
+    expect(screen.getAllByText('Acme Inc.')).toHaveLength(1)
     expect(screen.getByText('missing-org')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Search webhooks'), { target: { value: 'agent' } })
     fireEvent.change(await screen.findByLabelText('Filter webhook status'), { target: { value: 'failed' } })

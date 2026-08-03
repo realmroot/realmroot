@@ -267,14 +267,9 @@ textarea {
 
 .preferencesControl {
   display: inline-flex;
-  min-height: 36px;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
   color: var(--foreground);
   font-size: 12px;
   font-weight: 650;
@@ -285,12 +280,9 @@ textarea {
   padding: 0;
 }
 
-.preferencesControl select {
-  min-height: 28px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
+.preferencesControl [data-slot='select-trigger'] {
+  width: auto;
+  min-width: 72px;
 }
 
 .consolePreferences {
@@ -601,6 +593,14 @@ textarea {
   background-color: transparent;
 }
 
+.consoleNavScroll > .grid {
+  gap: 9px;
+}
+
+.consoleNavScroll > .grid > .grid {
+  gap: 2px;
+}
+
 .consoleNavScroll:hover::-webkit-scrollbar-thumb {
   background-color: color-mix(in srgb, var(--muted) 38%, transparent);
 }
@@ -623,20 +623,54 @@ textarea {
   min-width: 560px;
   max-width: 1160px;
   flex-direction: column;
-  gap: 24px;
-  margin: 0 auto;
+  gap: 0;
+  margin: 0;
+  margin-left: max(0px, calc((100vw - 1410px) / 2));
   padding: 38px clamp(24px, 4vw, 58px) 60px;
 }
 
+.consoleContent:has(.consolePageHeader) {
+  padding-top: 28px;
+}
+
+.consoleBreadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.consoleContent:has(.consolePageHeader) .consoleBreadcrumbs {
+  margin-bottom: 12px;
+}
+
+.consoleBreadcrumbs [aria-current='page'],
+.consoleBreadcrumbs a {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.consolePage {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.consolePageHeader {
+  margin-bottom: 4px;
+}
+
+.consolePageHeader p {
+  font-size: 12px;
+}
+
 .consoleContextSwitcher {
-  height: 38px;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  padding-left: 11px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--background);
 }
 
 .consoleContextSwitcher > span {
@@ -647,17 +681,8 @@ textarea {
   text-transform: uppercase;
 }
 
-.consoleContextSwitcher [data-slot='native-select-wrapper'] {
+.consoleContextSwitcher [data-slot='select-trigger'] {
   width: 156px;
-}
-
-.consoleContextSwitcher [data-slot='native-select'] {
-  height: 36px;
-  border: 0;
-  border-radius: 0 7px 7px 0;
-  font-size: 12px;
-  font-weight: 650;
-  box-shadow: none;
 }
 
 .consoleNavGroupLabel {
@@ -672,7 +697,7 @@ textarea {
 
 .consoleNavItem {
   display: flex;
-  min-height: 36px;
+  min-height: 34px;
   align-items: center;
   gap: 9px;
   padding: 0 10px;
@@ -704,6 +729,7 @@ textarea {
 .consoleNavItem.is-active {
   background: var(--primary);
   color: var(--primary-foreground);
+  font-weight: 680;
 }
 
 .consoleNavFooter {
@@ -1237,20 +1263,27 @@ textarea {
 
 .brandingPreview h2 {
   margin: 0 0 8px;
-  color: var(--ink);
+  color: var(--auth-text-color, var(--ink));
   font-size: 28px;
   line-height: 1.2;
 }
 
 .brandingPreview p:not(.eyebrow) {
   max-width: 30rem;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--auth-text-color, var(--ink)) 62%, transparent);
   line-height: 1.6;
 }
 
-.signInExperienceLayout {
+.consoleResourcePageWithAside {
   display: grid;
   gap: 16px;
+}
+
+.consoleResourcePageMain {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .signInExperienceSettings {
@@ -1267,31 +1300,12 @@ textarea {
 
 .hostedPreviewShell {
   display: grid;
-  gap: 12px;
   align-content: start;
-}
-
-.hostedPreviewHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.hostedPreviewHeader h2 {
-  margin: 2px 0 0;
-  font-size: 16px;
-  line-height: 1.35;
 }
 
 .hostedAuthPreview {
   min-height: auto;
   padding: 18px;
-}
-
-.hostedAuthPreview-mobile {
-  max-width: 340px;
-  margin-inline: auto;
 }
 
 .hostedAuthPanel {
@@ -1300,14 +1314,11 @@ textarea {
   gap: 14px;
   margin-inline: auto;
   padding: 22px;
-  border: 1px solid color-mix(in srgb, var(--brand-primary) 10%, var(--line));
+  border: 1px solid var(--auth-border-color, color-mix(in srgb, var(--brand-primary) 10%, var(--line)));
   border-radius: var(--auth-panel-radius, 8px);
-  background: #ffffff;
+  background: var(--auth-surface-color, #ffffff);
+  color: var(--auth-text-color, var(--ink));
   box-shadow: 0 10px 26px rgb(24 24 27 / 7%);
-}
-
-.hostedAuthPreview-mobile .hostedAuthPanel {
-  padding: 18px;
 }
 
 .hostedAuthPanel .authBrandPanel h2 {
@@ -1884,6 +1895,10 @@ textarea {
   object-fit: contain;
 }
 
+.dark .providerIcon img {
+  filter: invert(1);
+}
+
 .providerIconLarge {
   width: 34px;
   height: 34px;
@@ -2019,7 +2034,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 26px;
+  padding: 0 22px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--background) 96%, transparent);
   backdrop-filter: blur(12px);
@@ -2050,7 +2065,7 @@ textarea {
 
 .accountContent {
   min-width: 0;
-  width: min(100%, 1000px);
+  width: min(100%, 990px);
   padding: 54px clamp(36px, 6vw, 76px) 80px;
   border: 0;
   border-radius: 0;
@@ -2104,7 +2119,7 @@ textarea {
 .accountShellLayout {
   display: grid;
   min-height: calc(100dvh - 64px);
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 236px minmax(0, 1fr);
 }
 
 .accountSidebar {
@@ -2113,10 +2128,62 @@ textarea {
   display: grid;
   height: calc(100dvh - 64px);
   min-width: 0;
-  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
   padding: 28px 18px 22px;
   border-right: 1px solid var(--border);
   background: var(--background);
+}
+
+.accountSidebarIdentity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 0 10px 26px;
+  border-bottom: 1px solid var(--border);
+}
+
+.accountSidebarIdentity > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.accountSidebarIdentity strong,
+.accountSidebarIdentity span,
+.accountSidebarRealm strong,
+.accountSidebarRealm span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountSidebarIdentity strong {
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.accountSidebarIdentity span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.accountSidebarRealm {
+  display: grid;
+  gap: 4px;
+  padding: 18px 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.accountSidebarRealm span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.accountSidebarRealm strong {
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .accountHero {
@@ -2230,15 +2297,18 @@ textarea {
 
 .accountNav {
   display: grid;
+  align-content: start;
   gap: 24px;
   padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
+  margin-top: 24px;
 }
 
 .accountNavGroup {
   display: grid;
+  align-content: start;
   gap: 5px;
 }
 
@@ -2284,7 +2354,7 @@ textarea {
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 38px;
+  margin-bottom: 42px;
 }
 
 .accountPageHeader h1 {
@@ -2306,6 +2376,21 @@ textarea {
 
 .accountRows {
   min-width: 0;
+}
+
+.accountEmptyState {
+  display: grid;
+  min-height: 112px;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted-color) 45%, transparent);
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
 }
 
 .accountRow {
@@ -2416,15 +2501,23 @@ textarea {
   letter-spacing: -0.04em;
 }
 
-.accountOverviewFlow,
-.accountEntityList {
+.accountOverviewFlow {
   display: grid;
   gap: 34px;
+}
+
+.accountEntityList {
+  display: grid;
+  gap: 0;
 }
 
 .accountOverviewFlow .accountObjectSection + .accountObjectSection,
 .accountEntityList .accountObjectSection + .accountObjectSection {
   margin-top: 0;
+}
+
+.accountEntityList .accountObjectSection + .accountObjectSection {
+  padding-top: 28px;
 }
 
 .accountBackLink {
@@ -2502,7 +2595,7 @@ textarea {
 }
 
 .settingsAction {
-  padding: 17px 20px;
+  padding: 13px 0;
   background: var(--panel);
 }
 
@@ -2510,8 +2603,8 @@ textarea {
   display: block;
   margin-bottom: 3px;
   color: var(--ink);
-  font-size: 16px;
-  line-height: 1.35;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .settingsAction .uiButton {
@@ -2697,7 +2790,25 @@ textarea {
 }
 
 .consoleListToolbar {
-  padding: 10px 12px;
+  padding: 0;
+}
+
+.consoleDataTableToolbar {
+  display: block;
+  padding: 12px 14px;
+  background: var(--card);
+}
+
+.consoleDataTableToolbar .consoleListToolbar {
+  width: 100%;
+}
+
+.consoleDataTableToolbar [data-slot='input'] {
+  width: 280px;
+}
+
+.consoleDataTablePanel [data-slot='table-header'] {
+  background: var(--muted-color);
 }
 
 .consoleResourceFrame,
@@ -2708,13 +2819,13 @@ textarea {
 }
 
 .consoleResourceFrame th {
-  height: 42px;
-  padding-inline: 12px;
+  height: 43px;
+  padding-inline: 14px;
 }
 
 .consoleResourceFrame td {
-  height: 48px;
-  padding: 8px 12px;
+  height: 62px;
+  padding: 9px 14px;
 }
 
 .consoleMetricCard {
@@ -2852,15 +2963,88 @@ textarea {
   padding: 22px 0 24px;
 }
 
-@media (min-width: 1280px) {
-  .signInExperienceLayout {
-    grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
-    align-items: start;
+@media (min-width: 1120px) {
+  .consoleContent:has(.consoleResourcePageWithAside) {
+    display: grid;
+    max-width: none;
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 420px);
+    grid-template-rows: auto minmax(0, 1fr);
+    column-gap: 16px;
+    height: 100%;
+    margin: 0;
+    padding: 28px 0 24px
+      calc(max(0px, (100vw - 1410px) / 2) + clamp(24px, 4vw, 58px));
+  }
+
+  .consoleContent:has(.consoleResourcePageWithAside) .consoleBreadcrumbs {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .consoleContent:has(.consoleResourcePageWithAside) .consolePage {
+    display: contents;
+  }
+
+  .consoleResourcePageWithAside {
+    display: contents;
+  }
+
+  .consoleResourcePageMain {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .consoleResourcePageMain > [data-slot='tabs'] {
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .signInExperienceSettings {
+    min-height: 0;
+    flex: 1;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 12px;
+    scrollbar-gutter: stable;
+  }
+
+  .signInExperienceSettings .settingsFormField {
+    grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.2fr);
+    gap: 16px;
+  }
+
+  .signInRegistrationForm .settingsFormField {
+    min-height: 60px;
+    grid-template-columns: minmax(0, 0.95fr) minmax(220px, 1.05fr);
+    padding-block: 10px;
+  }
+
+  .signInRegistrationForm > section + section {
+    margin-top: 20px;
+  }
+
+  .signInRegistrationForm > section > header {
+    margin-bottom: 10px;
+  }
+
+  .signInRegistrationForm > footer {
+    margin-top: 16px;
+    padding-top: 12px;
   }
 
   .signInExperiencePreviewPanel {
-    position: sticky;
-    top: 24px;
+    grid-column: 2;
+    grid-row: 1 / -1;
+    height: 100%;
+    min-height: 0;
+    align-self: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 }
 
@@ -3004,7 +3188,7 @@ textarea {
 }
 
 .consoleBackLink {
-  display: inline-flex;
+  display: none;
   align-items: center;
   gap: 8px;
   width: max-content;
@@ -3092,8 +3276,8 @@ textarea {
 
 .themePickerGrid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  padding-top: 18px;
 }
 
 .themeChoice {
@@ -3135,38 +3319,15 @@ textarea {
 }
 
 .themeSwatches {
-  display: grid;
-  grid-template-columns: repeat(2, 17px);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  display: flex;
+  gap: 3px;
 }
 
 .themeSwatches i {
-  width: 17px;
-  height: 17px;
-}
-
-.stickyChangesBar {
-  position: sticky;
-  bottom: 12px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 24px;
-  padding: 10px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  box-shadow: 0 10px 30px rgb(20 32 34 / 8%);
-  backdrop-filter: blur(12px);
-}
-
-.stickyChangesBar span {
-  color: var(--muted);
-  font-size: 12px;
+  width: 12px;
+  height: 24px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  border-radius: 3px;
 }
 
 .detailFlatRow {
@@ -3541,6 +3702,10 @@ textarea {
     padding: 16px;
   }
 
+  .consoleBackLink {
+    display: inline-flex;
+  }
+
   .consoleDetailHeader > div {
     min-width: 0;
   }
@@ -3626,6 +3791,7 @@ textarea {
   .accountMobileNavSheet .accountSidebar {
     position: static;
     display: grid;
+    min-height: 100%;
     height: auto;
     padding: 20px 16px;
     border: 0;
@@ -3633,6 +3799,10 @@ textarea {
 
   .accountMobileNavSheet .accountNav {
     grid-template-columns: 1fr;
+  }
+
+  .accountMobileNavSheet .accountSidebarRealm {
+    align-self: end;
   }
 
   .accountContent {
@@ -3863,16 +4033,35 @@ textarea {
   .accountPageHeader {
     align-items: stretch;
     flex-direction: column;
-    margin-bottom: 30px;
+    margin-bottom: 34px;
+  }
+
+  .accountPageHeader h1 {
+    font-size: 28px;
+  }
+
+  .accountPageHeader p {
+    font-size: 13px;
   }
 
   .accountRow {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+  }
+
+  .accountRowValue {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .accountRowAction {
-    justify-content: flex-start;
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: flex-end;
+  }
+
+  .accountContent {
+    padding: 36px 18px 54px;
   }
 
   .consentStack .buttonRow .uiButton-secondary {

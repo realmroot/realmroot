@@ -161,7 +161,7 @@ describe('AccountProfilePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save display name' }))
 
     await waitFor(() => expect(success).toHaveBeenCalledWith('Profile updated.'))
-    await waitFor(() => expect(screen.getByText('Jane Updated')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText('Jane Updated').length).toBeGreaterThan(0))
     expect(store.profile.displayName).toBe('Jane Updated')
   })
 

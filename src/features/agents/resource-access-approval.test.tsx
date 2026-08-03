@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
 
 vi.mock('@/lib/api/account', () => api)
 
+Element.prototype.scrollIntoView ??= () => {}
+
 const request = {
   id: 'request-1',
   agentId: 'agent-1',
@@ -170,8 +172,8 @@ describe('Agent resource access approval', () => {
     const approve = await screen.findByRole('button', { name: 'Approve exact access' })
     expect(approve.hasAttribute('disabled')).toBe(true)
     const select = screen.getByLabelText('Authorization context 1')
-    expect(screen.getByText('Project Two — already granted')).toBeTruthy()
-    fireEvent.change(select, { target: { value: '{"project_id":"project-2","type":"project"}' } })
+    fireEvent.click(select)
+    fireEvent.click(await screen.findByRole('option', { name: 'Project Two — already granted' }))
     expect(approve.hasAttribute('disabled')).toBe(false)
     fireEvent.click(approve)
     await waitFor(() =>
@@ -215,7 +217,8 @@ describe('Agent resource access approval', () => {
 
     render(<ResourceAccessApproval />)
 
-    expect(await screen.findByText('Project One Hundred One')).toBeTruthy()
+    fireEvent.click(await screen.findByLabelText('Authorization context 1'))
+    expect(await screen.findByRole('option', { name: 'Project One Hundred One' })).toBeTruthy()
     expect(api.listApprovalAuthorizationDetailCatalog).toHaveBeenNthCalledWith(1, 'request-1', 'approval token', {
       limit: 100,
       offset: 0,

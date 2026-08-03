@@ -8,6 +8,7 @@ globalThis.ResizeObserver ??= class ResizeObserver {
   observe() {}
   unobserve() {}
 }
+Element.prototype.scrollIntoView ??= () => {}
 
 afterEach(() => {
   cleanup()
@@ -188,10 +189,11 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(
       within(screen.getByRole('dialog', { name: 'Phone (SMS)' })).getByRole('switch', { name: 'Enabled' }),
     )
-    expect(
-      Array.from(screen.getByLabelText('SMS provider').querySelectorAll('option')).map((option) => option.value),
-    ).toEqual(['twilio', 'vonage', 'messagebird'])
-    fireEvent.change(screen.getByLabelText('SMS provider'), { target: { value: 'vonage' } })
+    fireEvent.click(screen.getByLabelText('SMS provider'))
+    expect(await screen.findByRole('option', { name: 'Twilio' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Vonage' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'MessageBird' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('option', { name: 'Vonage' }))
     expect(screen.getByLabelText('Vonage API key')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('SMS provider'), { target: { value: 'twilio' } })
     fireEvent.change(screen.getByLabelText('Twilio Account SID'), { target: { value: 'AC123' } })

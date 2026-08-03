@@ -73,7 +73,7 @@ import { formatDate, formatSessionDevice } from './utils'
 
 export function AccountOverviewPage() {
   const agentsQuery = useAccountAgents()
-  const applicationsQuery = useConsentedApplications(true)
+  const organizationsQuery = useAccountOrganizations()
   const requestsQuery = useAccountAccessRequests()
   const invitationsQuery = useAccountOrganizationInvitations()
   const securityQuery = useAccountSecurity()
@@ -81,7 +81,7 @@ export function AccountOverviewPage() {
   const mutate = useAccountMutation()
   const [request, setRequest] = useState<AccessRequestApproval | null>(null)
   const agents = agentsQuery.data?.items ?? []
-  const applications = applicationsQuery.data?.applications ?? []
+  const organizations = organizationsQuery.data ?? []
   const requests = requestsQuery.data?.items ?? []
   const invitations = (invitationsQuery.data ?? []).filter((invitation) => invitation.status === 'pending')
   const security = securityQuery.data?.security
@@ -114,9 +114,9 @@ export function AccountOverviewPage() {
               value={agentsQuery.isLoading ? '—' : String(agents.filter((agent) => agent.status === 'active').length)}
             />
             <AccountMetric
-              detail={tt('Applications currently authorized by you.')}
-              label={tt('Authorized apps')}
-              value={applicationsQuery.isLoading ? '—' : String(applications.length)}
+              detail={tt('Shared identity and authorization spaces you belong to.')}
+              label={tt('Organizations')}
+              value={organizationsQuery.isLoading ? '—' : String(organizations.length)}
             />
           </div>
           <div className="accountOverviewFlow">
@@ -234,6 +234,7 @@ export function AccountApplicationsPage() {
   const connectionsQuery = useAccountConnections()
   const mutate = useAccountMutation()
   const [selected, setSelected] = useState<ConsentedApplication | null>(null)
+  const [tab, setTab] = useState('authorized')
   const [confirmation, setConfirmation] = useDestructiveConfirmation()
   const applications = applicationsQuery.data?.applications ?? []
   return (
@@ -244,55 +245,66 @@ export function AccountApplicationsPage() {
             description={tt('Review applications you have authorized to act with your identity.')}
             title={tt('Applications')}
           />
-          {applicationsQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">{tt('Loading authorized applications…')}</p>
-          ) : null}
-          {applicationsQuery.error ? (
-            <p className="text-sm text-destructive" role="alert">
-              {applicationsQuery.error instanceof Error
-                ? applicationsQuery.error.message
-                : tt('Unable to load authorized applications.')}
-            </p>
-          ) : null}
-          {!applicationsQuery.isLoading && !applicationsQuery.error ? (
-            <AccountRows>
-              {applications.map((application) => (
-                <AccountRow
-                  action={
-                    <Button onClick={() => setSelected(application)} variant="outline">
-                      {tt('Review')}
-                    </Button>
-                  }
-                  description={tt('Authorized {{date}}', { date: formatDate(application.grantedAt) })}
-                  key={application.id}
-                  label={application.applicationName}
-                  value={<code>{application.scopes.join(' ')}</code>}
-                />
-              ))}
-              {!applications.length ? (
-                <p className="py-8 text-sm text-muted-foreground">
-                  {tt('No applications are authorized for this account.')}
+          <AccountTabs
+            onValueChange={setTab}
+            tabs={[
+              { value: 'authorized', label: tt('Authorized apps') },
+              { value: 'resources', label: tt('Resource accounts') },
+            ]}
+            value={tab}
+          >
+            <AccountTabContent value="authorized">
+              {applicationsQuery.isLoading ? (
+                <p className="text-sm text-muted-foreground">{tt('Loading authorized applications…')}</p>
+              ) : null}
+              {applicationsQuery.error ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {applicationsQuery.error instanceof Error
+                    ? applicationsQuery.error.message
+                    : tt('Unable to load authorized applications.')}
                 </p>
               ) : null}
-            </AccountRows>
-          ) : null}
-          <ResourceAccountConnections
-            connections={connectionsQuery.data?.items ?? []}
-            error={connectionsQuery.error ?? resourcesQuery.error}
-            loading={connectionsQuery.isLoading || resourcesQuery.isLoading}
-            onDisconnect={(connection) => {
-              setConfirmation({
-                title: tt('Disconnect resource account'),
-                description: tt('Active Agent grants and token leases for this account will be revoked.'),
-                actionLabel: tt('Disconnect'),
-                onConfirm: () =>
-                  mutate('Resource account disconnected.', () => revokeAccountConnection(connection.id), {
-                    invalidate: [accountQueryKeys.accountConnections],
-                  }),
-              })
-            }}
-            resources={resourcesQuery.data?.items ?? []}
-          />
+              {!applicationsQuery.isLoading && !applicationsQuery.error ? (
+                <AccountRows>
+                  {applications.map((application) => (
+                    <AccountRow
+                      action={
+                        <Button onClick={() => setSelected(application)} variant="outline">
+                          {tt('Review')}
+                        </Button>
+                      }
+                      description={tt('Authorized {{date}}', { date: formatDate(application.grantedAt) })}
+                      key={application.id}
+                      label={application.applicationName}
+                      value={<code>{application.scopes.join(' ')}</code>}
+                    />
+                  ))}
+                  {!applications.length ? (
+                    <p className="accountEmptyState">{tt('No applications are authorized for this account.')}</p>
+                  ) : null}
+                </AccountRows>
+              ) : null}
+            </AccountTabContent>
+            <AccountTabContent value="resources">
+              <ResourceAccountConnections
+                connections={connectionsQuery.data?.items ?? []}
+                error={connectionsQuery.error ?? resourcesQuery.error}
+                loading={connectionsQuery.isLoading || resourcesQuery.isLoading}
+                onDisconnect={(connection) => {
+                  setConfirmation({
+                    title: tt('Disconnect resource account'),
+                    description: tt('Active Agent grants and token leases for this account will be revoked.'),
+                    actionLabel: tt('Disconnect'),
+                    onConfirm: () =>
+                      mutate('Resource account disconnected.', () => revokeAccountConnection(connection.id), {
+                        invalidate: [accountQueryKeys.accountConnections],
+                      }),
+                  })
+                }}
+                resources={resourcesQuery.data?.items ?? []}
+              />
+            </AccountTabContent>
+          </AccountTabs>
           <ApplicationReviewDialog
             application={selected}
             onClose={() => setSelected(null)}
@@ -367,7 +379,7 @@ function ResourceAccountConnections({
             )
           })}
           {!activeConnections.length ? (
-            <p className="py-8 text-sm text-muted-foreground">{tt('No connected resource accounts.')}</p>
+            <p className="accountEmptyState">{tt('No connected resource accounts.')}</p>
           ) : null}
         </AccountRows>
       ) : null}
@@ -442,32 +454,36 @@ export function AccountAgentsPage() {
             tabs={[
               { value: 'identities', label: tt('My Agents') },
               { value: 'requests', label: tt('Requests · {{count}}', { count: requests.length }) },
+              { value: 'activity', label: tt('Activity') },
             ]}
             value={tab}
           >
             <AccountTabContent value="identities">
-              <AccountRows>
+              <div className="accountEntityList">
                 {agents.map((agent) => (
-                  <AccountRow
-                    action={
-                      <Button onClick={() => setSelected(agent)} variant="outline">
-                        {tt('Manage')}
-                      </Button>
-                    }
-                    description={agent.subject}
-                    key={agent.id}
-                    label={agent.name}
-                    value={
-                      <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>{tt(agent.status)}</Badge>
-                    }
-                  />
+                  <AccountObjectSection description={agent.subject} key={agent.id} title={agent.name}>
+                    <AccountRows>
+                      <AccountRow
+                        action={
+                          <Button onClick={() => setSelected(agent)} variant="outline">
+                            {tt('Manage')}
+                          </Button>
+                        }
+                        description={tt('Created {{date}}', { date: formatDate(agent.createdAt) })}
+                        label={tt('Lifecycle')}
+                        value={
+                          <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>
+                            {tt(agent.status)}
+                          </Badge>
+                        }
+                      />
+                    </AccountRows>
+                  </AccountObjectSection>
                 ))}
                 {!agentsQuery.isLoading && !agents.length ? (
-                  <p className="py-8 text-sm text-muted-foreground">
-                    {tt('No Agent identities belong to your account.')}
-                  </p>
+                  <p className="accountEmptyState">{tt('No Agent identities belong to your account.')}</p>
                 ) : null}
-              </AccountRows>
+              </div>
             </AccountTabContent>
             <AccountTabContent value="requests">
               <AccountRows>
@@ -488,11 +504,12 @@ export function AccountAgentsPage() {
                   />
                 ))}
                 {!requestsQuery.isLoading && !requests.length ? (
-                  <p className="py-8 text-sm text-muted-foreground">
-                    {tt('No Agent access requests need your review.')}
-                  </p>
+                  <p className="accountEmptyState">{tt('No Agent access requests need your review.')}</p>
                 ) : null}
               </AccountRows>
+            </AccountTabContent>
+            <AccountTabContent value="activity">
+              <p className="accountEmptyState">{tt('No Agent activity is available for this account.')}</p>
             </AccountTabContent>
           </AccountTabs>
           <AgentDialog
@@ -762,70 +779,36 @@ export function AccountOrganizationsPage() {
             </AccountObjectSection>
           ) : null}
           {organizations.length ? (
-            <>
-              <div className="hidden rounded-xl border md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{tt('Organization')}</TableHead>
-                      <TableHead>{tt('Slug')}</TableHead>
-                      <TableHead>{tt('Created')}</TableHead>
-                      <TableHead>
-                        <span className="sr-only">{tt('Actions')}</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {organizations.map((organization) => (
-                      <TableRow key={organization.id}>
-                        <TableCell>
-                          <OrganizationName
-                            active={activeOrganizationId === organization.id}
-                            id={organization.id}
-                            name={organization.name}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <code>{organization.slug}</code>
-                        </TableCell>
-                        <TableCell>{formatDate(organization.createdAt)}</TableCell>
-                        <TableCell className="text-right">
-                          <OrganizationActions
-                            active={activeOrganizationId === organization.id}
-                            id={organization.id}
-                            mutate={mutate}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <div className="divide-y rounded-xl border md:hidden">
-                {organizations.map((organization) => (
-                  <article className="space-y-4 p-4" key={organization.id}>
+            <div className="accountEntityList">
+              {organizations.map((organization) => (
+                <section className="accountObjectSection accountOrganizationCard" key={organization.id}>
+                  <header>
                     <OrganizationName
                       active={activeOrganizationId === organization.id}
                       id={organization.id}
                       name={organization.name}
                     />
-                    <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-                      <code className="min-w-0 truncate">{organization.slug}</code>
-                      <span className="shrink-0">{formatDate(organization.createdAt)}</span>
-                    </div>
-                    <OrganizationActions
-                      active={activeOrganizationId === organization.id}
-                      className="w-full"
-                      id={organization.id}
-                      mutate={mutate}
+                  </header>
+                  <AccountRows>
+                    <AccountRow label={tt('Slug')} value={<code>{organization.slug}</code>} />
+                    <AccountRow
+                      action={
+                        <OrganizationActions
+                          active={activeOrganizationId === organization.id}
+                          id={organization.id}
+                          mutate={mutate}
+                        />
+                      }
+                      label={tt('Created')}
+                      value={formatDate(organization.createdAt)}
                     />
-                  </article>
-                ))}
-              </div>
-            </>
+                  </AccountRows>
+                </section>
+              ))}
+            </div>
           ) : null}
           {!organizationsQuery.isLoading && !organizations.length ? (
-            <p className="py-8 text-sm text-muted-foreground">{tt('You do not belong to an Organization yet.')}</p>
+            <p className="accountEmptyState">{tt('You do not belong to an Organization yet.')}</p>
           ) : null}
           {access.canCreateOrganization ? (
             <NewOrganizationDialog

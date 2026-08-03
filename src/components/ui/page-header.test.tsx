@@ -14,7 +14,10 @@ describe('PageHeader', () => {
 
     const heading = screen.getByRole('heading', { level: 1, name: 'Applications' })
     expect(heading.tagName).toBe('H1')
-    expect(screen.getByText('Manage OIDC clients.').tagName).toBe('P')
+    expect(heading.className).toContain('text-2xl')
+    const description = screen.getByText('Manage OIDC clients.')
+    expect(description.tagName).toBe('P')
+    expect(description.className).toContain('mt-1')
     expect(screen.queryByText('Console')).toBeNull()
     expect(screen.getByRole('button', { name: 'Create' })).toBeTruthy()
   })

@@ -105,7 +105,7 @@ describe('ConsoleShell', () => {
   it('renders Console navigation and marks the exact dashboard route active', () => {
     render(<TestConsoleShell>Dashboard content</TestConsoleShell>)
 
-    expect(screen.getByText('Console')).toBeTruthy()
+    expect(screen.getAllByText('Console').length).toBeGreaterThan(0)
     expect(screen.getByRole('combobox', { name: 'Console context' })).toBeTruthy()
     expect(screen.getAllByRole('button', { name: 'Account menu' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Account center/i })).toBeNull()
@@ -220,6 +220,44 @@ describe('ConsoleShell', () => {
     rerender(<TestConsoleShell>Runtime settings</TestConsoleShell>)
 
     expect(screen.getAllByRole('link', { name: /Settings/ })[0].className).toContain('is-active')
+  })
+
+  it('renders a navigable breadcrumb hierarchy with a non-link current page', () => {
+    pathname = '/console/users/user-1/authentication'
+
+    const { rerender } = render(<TestConsoleShell>User authentication</TestConsoleShell>)
+
+    let breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByRole('link', { name: 'Realm' }).getAttribute('href')).toBe('/console')
+    expect(within(breadcrumb).queryByText('Identity')).toBeNull()
+    expect(within(breadcrumb).getByRole('link', { name: 'Users' }).getAttribute('href')).toBe('/console/users')
+    expect(within(breadcrumb).getByText('Authentication').getAttribute('aria-current')).toBe('page')
+
+    pathname = '/console/webhooks/requests'
+    rerender(<TestConsoleShell>Webhook requests</TestConsoleShell>)
+    breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByRole('link', { name: 'Webhooks' }).getAttribute('href')).toBe('/console/webhooks')
+    expect(within(breadcrumb).getByText('Requests').getAttribute('aria-current')).toBe('page')
+
+    pathname = '/console/agents/agent-1/requests'
+    rerender(<TestConsoleShell>Agent access requests</TestConsoleShell>)
+    breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByText('Access requests').getAttribute('aria-current')).toBe('page')
+
+    pathname = '/console/applications/application-1/oauth'
+    rerender(<TestConsoleShell>Application OAuth</TestConsoleShell>)
+    breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByText('OAuth').getAttribute('aria-current')).toBe('page')
+
+    pathname = '/console/users/user-1/linked-accounts'
+    rerender(<TestConsoleShell>User linked accounts</TestConsoleShell>)
+    breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByText('Authentication').getAttribute('aria-current')).toBe('page')
+
+    pathname = '/console/users/user-1/operations'
+    rerender(<TestConsoleShell>User operations</TestConsoleShell>)
+    breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByText('Settings').getAttribute('aria-current')).toBe('page')
   })
 
   it('opens responsive Console navigation without exposing onboarding as persistent navigation', () => {

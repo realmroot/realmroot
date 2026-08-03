@@ -6,6 +6,7 @@ import {
   Building2,
   Check,
   Gauge,
+  HelpCircle,
   Languages,
   LayoutDashboard,
   LoaderCircle,
@@ -121,17 +122,29 @@ export function AccountPageShell({
           </Link>
         </div>
         <div className="flex items-center gap-2">
-          <div className="accountDeploymentContext hidden sm:flex">
-            <Shield aria-hidden="true" />
-            <span>identity.acme.dev</span>
-          </div>
+          {access.realmOperator || access.consoleOrganizations.length ? (
+            <Button asChild className="hidden sm:inline-flex" variant="outline">
+              <Link to="/console">{tt('Open Realm Console')}</Link>
+            </Button>
+          ) : null}
+          <Button
+            asChild
+            aria-label={tt('Help & documentation')}
+            className="hidden sm:inline-flex"
+            size="icon"
+            variant="ghost"
+          >
+            <a href="https://github.com/realmroot/realmroot/tree/main/docs" rel="noreferrer" target="_blank">
+              <HelpCircle />
+            </a>
+          </Button>
           {profile ? (
             <AccountUserMenu access={access} profile={profile} onSignOut={() => void signOutFromAccount()} />
           ) : null}
         </div>
       </header>
       <div className="accountShellLayout">
-        <AccountSidebar access={access} section={section} />
+        <AccountSidebar access={access} profile={profile} section={section} />
         <section className="accountContent" id="account-content" tabIndex={-1}>
           {children}
         </section>
@@ -149,7 +162,12 @@ export function AccountPageShell({
             <SheetTitle>{tt('Account Center')}</SheetTitle>
             <SheetDescription className="sr-only">{tt('Navigate Account Center pages.')}</SheetDescription>
           </SheetHeader>
-          <AccountSidebar access={access} onNavigate={() => setNavigationOpen(false)} section={section} />
+          <AccountSidebar
+            access={access}
+            onNavigate={() => setNavigationOpen(false)}
+            profile={profile}
+            section={section}
+          />
         </SheetContent>
       </Sheet>
     </main>
@@ -194,14 +212,30 @@ export function AccountPageError({
 function AccountSidebar({
   access,
   onNavigate,
+  profile,
   section,
 }: {
   access: DeveloperConsoleAccessResponse
   onNavigate?: () => void
+  profile: UserProfile | null
   section: AccountCenterSection
 }) {
   return (
     <aside className="accountSidebar">
+      {profile ? (
+        <div className="accountSidebarIdentity">
+          <Avatar className="size-11">
+            {profile.image ? <AvatarImage alt="" src={profile.image} /> : null}
+            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+              {profile.displayName.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <strong>{profile.displayName}</strong>
+            <span>{profile.email}</span>
+          </div>
+        </div>
+      ) : null}
       <nav aria-label={tt('Account Center')} className="accountNav">
         {accountNavGroups.map((group) => (
           <div className="accountNavGroup" key={group.label}>
@@ -223,6 +257,10 @@ function AccountSidebar({
           </div>
         ))}
       </nav>
+      <div className="accountSidebarRealm">
+        <span>{tt('Default realm')}</span>
+        <strong>identity.acme.dev</strong>
+      </div>
     </aside>
   )
 }

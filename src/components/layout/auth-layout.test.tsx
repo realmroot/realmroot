@@ -165,6 +165,7 @@ describe('AuthLayout', () => {
           links: {
             termsUri: 'https://client.example.com/terms',
             privacyUri: 'https://client.example.com/privacy',
+            supportUri: 'https://client.example.com/support',
             supportEmail: 'support@client.example.com',
           },
         }}
@@ -180,7 +181,9 @@ describe('AuthLayout', () => {
     expect(screen.getByRole('link', { name: 'Privacy' }).getAttribute('href')).toBe(
       'https://client.example.com/privacy',
     )
-    expect(screen.getByRole('link', { name: 'Support' }).getAttribute('href')).toBe('mailto:support@client.example.com')
+    expect(screen.getByRole('link', { name: 'Support' }).getAttribute('href')).toBe(
+      'https://client.example.com/support',
+    )
   })
 
   it('renders compact message states with a back link and icon', () => {

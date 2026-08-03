@@ -774,7 +774,7 @@ function AuthorizationEditor({
   ]
   return (
     <form
-      className="grid gap-6 px-4 py-5"
+      className="grid gap-4 px-4 py-5"
       id="application-authorization"
       onSubmit={(event) => {
         event.preventDefault()
@@ -860,7 +860,7 @@ function AudienceEditor({
   const [userIds, setUserIds] = useState(application.audience.userIds)
   return (
     <form
-      className="grid gap-5 px-4 py-5"
+      className="grid gap-4 px-4 py-5"
       id="application-audience"
       onSubmit={(event) => {
         event.preventDefault()
@@ -920,7 +920,7 @@ function ConsentEditor({
   const consentId = useId()
   return (
     <form
-      className="grid gap-6 px-4 py-5"
+      className="grid gap-4 px-4 py-5"
       id="application-consent"
       onSubmit={(event) => {
         event.preventDefault()
@@ -971,7 +971,7 @@ function EditorForm({
 }) {
   return (
     <form
-      className="grid gap-5 px-4 py-5"
+      className="grid gap-4 px-4 py-5"
       id={id}
       onSubmit={(event: FormEvent<HTMLFormElement>) => {
         event.preventDefault()

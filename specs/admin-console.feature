@@ -42,6 +42,11 @@ Feature: Admin Console
   Scenario: Console navigation exposes persistent route-backed pages
     When I use Console navigation
     Then each visible product page has a canonical route
+    And breadcrumbs link to the current Console context and parent collection without repeating navigation groups
+    And breadcrumb labels match the actual route-backed page or selected tab
+    And the current page is identified without a redundant link
+    And primary Console pages use a compact page header before their navigation or data controls
+    And primary inventory filters form the header of the same surface as their table
 
   @entrypoint:product-ui @journey:admin-application-inventory
   Scenario: Applications page lists OIDC clients and status controls
@@ -99,19 +104,23 @@ Feature: Admin Console
   Scenario: Social connectors list provider settings and availability
     When I open social connector settings
     Then provider settings and availability are visible
+    And provider rows and hosted sign-in methods show a recognizable provider icon
 
   @entrypoint:product-ui @journey:admin-oidc-connector-inventory
   Scenario: Connectors page manages multiple standard OIDC clients
     Given multiple OIDC connectors are configured
     When I open connectors
     Then the existing sign-in provider inventory remains visible
-    And a separate OIDC connectors table appears below it
+    And standard page-level navigation tabs switch between built-in and OIDC connector inventories
+    And each active inventory renders below the tabs in a unified data-list surface
+    And inventory filters form the header of the same surface as their table
     And I can create, edit, enable for login, and delete each OIDC connector independently
 
   @entrypoint:product-ui @journey:admin-sign-in-settings
   Scenario: Sign-in settings persist registration and method availability
     When I update registration rules or hosted sign-in method availability
     Then hosted auth uses the saved availability settings
+    And the active settings tab saves atomically from its inline form
 
   @entrypoint:product-ui @journey:admin-sign-in-experience-routes
   Scenario: Sign-in experience tabs use canonical Console routes
@@ -126,12 +135,14 @@ Feature: Admin Console
   @entrypoint:product-ui @journey:admin-content-settings
   Scenario: Hosted legal and support destinations save through the management API
     When I update hosted legal and support destinations
-    Then the management API persists the links and the hosted preview footer uses them
+    Then the management API persists the Terms, Privacy, and Support URLs
+    And the hosted preview footer uses them
 
   @entrypoint:product-ui @journey:admin-security-policy
   Scenario: Security pages show policy, CAPTCHA, blocklist, and general settings
     When I open security settings
     Then MFA policy, CAPTCHA, blocklist, and general settings are visible
+    And the active settings tab is edited and saved inline without opening a drawer
     And session lifetimes can be managed without deployment environment variables
     And CAPTCHA can be configured with a supported provider and that provider's required credentials
     And CAPTCHA secrets are stored by the management plane without being returned to Console
@@ -207,10 +218,13 @@ Feature: Admin Console
 
   @entrypoint:product-ui @journey:admin-branding-settings
   Scenario: Color schemes and brand assets update hosted auth
-    When I choose a color scheme or update brand assets
+    When I choose a color scheme or update brand asset URLs
     Then the live preview updates before save
-    And uploaded brand assets are stored as deployment-independent managed asset paths
-    And clearing a brand asset detaches its managed upload from hosted surfaces
+    And each Experience tab uses the standard inline form actions to discard or save its changes
+    And save and discard actions remain disabled until the active tab changes
+    And the custom scheme exposes only Primary, Page background, Surface, Text, and Border
+    And the preview has no viewport switcher or separate open-page action
+    And the preview remains fixed in the right column without a separate preview header while only the form column scrolls
     And hosted auth renders the saved branding
 
   @entrypoint:product-ui @journey:admin-webhook-endpoint-lifecycle
@@ -220,6 +234,7 @@ Feature: Admin Console
     Then each endpoint change is persisted
     And each endpoint is explicitly Realm-wide or scoped to one Organization
     And Organization Console can list and manage only endpoints and deliveries scoped to its authorized Organization
+    And endpoint and request filters form the header of the same surface as their active table
     And invalid endpoint URLs remain actionable inside the form
 
   @entrypoint:product-ui @journey:webhook-event-delivery
@@ -242,6 +257,7 @@ Feature: Admin Console
   Scenario: General Realm settings persist through the management plane
     When I update the Realm name in General settings
     Then the management API persists it on the canonical Realm resource
+    And the setting is edited and saved directly in the General tab
     And hosted product surfaces use the saved Realm name
     And protocol endpoints remain derived from the canonical Realm origin
 

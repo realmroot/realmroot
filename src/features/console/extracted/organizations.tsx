@@ -109,7 +109,7 @@ export function OrganizationsPage() {
       emptyTitle="No organizations yet"
       loading={query.isLoading || agentsQuery.isLoading}
       onRetry={() => Promise.all([query.refetch(), agentsQuery.refetch()])}
-      toolbar={
+      tableToolbar={
         <ListToolbar>
           <TextInput
             aria-label={tt('Search organizations')}
@@ -890,7 +890,7 @@ function OrganizationEditSheet({
         </SheetHeader>
         {organization ? (
           <form
-            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-4 py-5"
             id="organization-edit"
             onSubmit={(event) => {
               event.preventDefault()
@@ -946,7 +946,7 @@ function OrganizationInviteDialog({
           </DialogDescription>
         </DialogHeader>
         <form
-          className="grid gap-5"
+          className="grid gap-4"
           id="organization-invite"
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault()

@@ -19,6 +19,7 @@ Feature: Hosted authentication
     When I open /auth/sign-in
     Then I see the hosted sign-in card
     And enabled tenant sign-in methods are visible
+    And credential errors appear with the active form before alternate sign-in methods
 
   @entrypoint:product-ui @journey:identifier-first-sign-in
   Scenario: Identifier-first sign-in carries the identifier into password auth

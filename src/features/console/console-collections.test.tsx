@@ -399,7 +399,7 @@ describe('console collections', () => {
     expect(screen.getByText('Cloudflare D1')).toBeTruthy()
   })
 
-  it('persists Realm identity from the General settings sheet [spec: admin-console/admin-general-settings]', async () => {
+  it('persists Realm identity from the inline General settings form [spec: admin-console/admin-general-settings]', async () => {
     let stored = generalSettings
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = input instanceof Request ? input : null
@@ -418,12 +418,11 @@ describe('console collections', () => {
 
     renderWithQuery(<SettingsPage section="general" />)
     expect(await screen.findByText('https://auth.example.com/api/auth')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Realm name'), { target: { value: 'Acme Identity' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Acme Identity')).toBeTruthy()
-    expect(stored.name).toBe('Acme Identity')
+    await waitFor(() => expect(stored.name).toBe('Acme Identity'))
+    expect(screen.getByLabelText('Realm name')).toHaveProperty('value', 'Acme Identity')
   })
 
   it('persists the Cloudflare sender and reply-to identity [spec: admin-console/admin-email-delivery-settings]', async () => {
@@ -442,14 +441,14 @@ describe('console collections', () => {
     })
 
     renderWithQuery(<SettingsPage section="email" />)
-    expect(await screen.findByText('Realmroot <noreply@example.com>')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Configure' }))
+    expect(await screen.findByLabelText('Sender name')).toHaveProperty('value', 'Realmroot')
     fireEvent.change(screen.getByLabelText('Sender name'), { target: { value: 'Acme Identity' } })
     fireEvent.change(screen.getByLabelText('Sender address'), { target: { value: 'auth@example.com' } })
     fireEvent.change(screen.getByLabelText('Reply-to address'), { target: { value: 'support@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Acme Identity <auth@example.com>')).toBeTruthy()
-    expect(screen.getByText('support@example.com')).toBeTruthy()
+    await waitFor(() => expect(stored.fromName).toBe('Acme Identity'))
+    expect(screen.getByLabelText('Sender address')).toHaveProperty('value', 'auth@example.com')
+    expect(screen.getByLabelText('Reply-to address')).toHaveProperty('value', 'support@example.com')
   })
 })

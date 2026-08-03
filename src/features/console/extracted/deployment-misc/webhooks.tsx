@@ -39,7 +39,7 @@ import { tt } from '@/lib/i18n'
 import type { WebhooksSection } from '../../console-shared'
 import { DangerConfirmDialog, StatusBadge } from '../../helpers/helpers-dialogs'
 import { WebhookRequestDialog, WebhookSecretDisclosureDialog } from '../../helpers/helpers-preview'
-import { ListToolbar, ResourcePage, RoutedSettingsTabs } from '../../helpers/helpers-resource'
+import { DataTablePanel, ListToolbar, ResourcePage, RoutedSettingsTabs } from '../../helpers/helpers-resource'
 import { formatDate, useAdminMutation } from '../../helpers/helpers-utils'
 
 export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSection }) {
@@ -151,188 +151,187 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
         />
       }
     >
-      <div className="grid gap-4">
-        <ListToolbar>
-          <TextInput
-            aria-label={tt('Search webhooks')}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={section === 'endpoints' ? tt('Search endpoints or events') : tt('Search requests or events')}
-            value={search}
-          />
-          <SelectInput
-            aria-label={tt('Filter webhook status')}
-            onChange={(event) => setStatus(event.target.value)}
-            value={status}
-          >
-            <option value="">{tt('Any status')}</option>
-            {section === 'endpoints' ? (
-              <>
-                <option value="enabled">{tt('Enabled')}</option>
-                <option value="disabled">{tt('Disabled')}</option>
-              </>
-            ) : (
-              <>
-                <option value="pending">{tt('Pending')}</option>
-                <option value="delivered">{tt('Delivered')}</option>
-                <option value="failed">{tt('Failed')}</option>
-              </>
-            )}
-          </SelectInput>
-          {realmOperator ? (
+      <DataTablePanel
+        toolbar={
+          <ListToolbar>
+            <TextInput
+              aria-label={tt('Search webhooks')}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={section === 'endpoints' ? tt('Search endpoints or events') : tt('Search requests or events')}
+              value={search}
+            />
             <SelectInput
-              aria-label={tt('Filter webhook scope')}
-              onChange={(event) => setOrganizationFilter(event.target.value)}
-              value={organizationFilter}
+              aria-label={tt('Filter webhook status')}
+              onChange={(event) => setStatus(event.target.value)}
+              value={status}
             >
-              <option value="">{tt('Any scope')}</option>
-              {organizations.data?.organizations.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.displayName ?? item.name}
-                </option>
-              ))}
+              <option value="">{tt('Any status')}</option>
+              {section === 'endpoints' ? (
+                <>
+                  <option value="enabled">{tt('Enabled')}</option>
+                  <option value="disabled">{tt('Disabled')}</option>
+                </>
+              ) : (
+                <>
+                  <option value="pending">{tt('Pending')}</option>
+                  <option value="delivered">{tt('Delivered')}</option>
+                  <option value="failed">{tt('Failed')}</option>
+                </>
+              )}
             </SelectInput>
-          ) : null}
-        </ListToolbar>
+            {realmOperator ? (
+              <SelectInput
+                aria-label={tt('Filter webhook scope')}
+                onChange={(event) => setOrganizationFilter(event.target.value)}
+                value={organizationFilter}
+              >
+                <option value="">{tt('Any scope')}</option>
+                {organizations.data?.organizations.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.displayName ?? item.name}
+                  </option>
+                ))}
+              </SelectInput>
+            ) : null}
+          </ListToolbar>
+        }
+      >
         {section === 'endpoints' ? (
-          <div className="overflow-x-auto rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{tt('Endpoint')}</TableHead>
-                  <TableHead>{tt('Events')}</TableHead>
-                  <TableHead>{tt('Scope')}</TableHead>
-                  <TableHead>{tt('Status')}</TableHead>
-                  <TableHead>{tt('Signing secret')}</TableHead>
-                  <TableHead>{tt('Updated')}</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {endpoints.data?.endpoints.length ? (
-                  endpoints.data.endpoints.map((endpoint) => (
-                    <TableRow key={endpoint.id}>
-                      <TableCell className="max-w-80">
-                        <span className="block truncate font-medium" title={endpoint.url}>
-                          {endpoint.url}
-                        </span>
-                        <span className="block truncate font-mono text-xs text-muted-foreground">{endpoint.id}</span>
-                      </TableCell>
-                      <TableCell className="max-w-72 truncate">{endpoint.events.join(', ')}</TableCell>
-                      <TableCell>
-                        {endpoint.organizationId
-                          ? (organizationNames.get(endpoint.organizationId) ?? endpoint.organizationId)
-                          : tt('Realm-wide')}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge active={endpoint.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
-                      </TableCell>
-                      <TableCell>
-                        <code>{endpoint.secretPrefix}••••</code>
-                      </TableCell>
-                      <TableCell>{formatDate(endpoint.updatedAt)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              aria-label={tt('Actions for {{endpoint}}', { endpoint: endpoint.url })}
-                              size="icon"
-                              variant="ghost"
-                            >
-                              <Ellipsis />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => setEditEndpoint(endpoint)}>
-                              {tt('Edit endpoint')}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => update.mutate({ id: endpoint.id, input: { enabled: !endpoint.enabled } })}
-                            >
-                              {endpoint.enabled ? tt('Disable') : tt('Enable')}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => rotate.mutate(endpoint.id)}>
-                              <RefreshCw />
-                              {tt('Rotate secret')}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDeleteId(endpoint.id)} variant="destructive">
-                              {tt('Delete endpoint')}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableEmptyRow
-                    colSpan={7}
-                    description={tt('Create an HTTPS endpoint to receive signed Realm events.')}
-                    title={tt('No webhook endpoints')}
-                  />
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{tt('Endpoint')}</TableHead>
+                <TableHead>{tt('Events')}</TableHead>
+                <TableHead>{tt('Scope')}</TableHead>
+                <TableHead>{tt('Status')}</TableHead>
+                <TableHead>{tt('Signing secret')}</TableHead>
+                <TableHead>{tt('Updated')}</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {endpoints.data?.endpoints.length ? (
+                endpoints.data.endpoints.map((endpoint) => (
+                  <TableRow key={endpoint.id}>
+                    <TableCell className="max-w-80">
+                      <span className="block truncate font-medium" title={endpoint.url}>
+                        {endpoint.url}
+                      </span>
+                      <span className="block truncate font-mono text-xs text-muted-foreground">{endpoint.id}</span>
+                    </TableCell>
+                    <TableCell className="max-w-72 truncate">{endpoint.events.join(', ')}</TableCell>
+                    <TableCell>
+                      {endpoint.organizationId
+                        ? (organizationNames.get(endpoint.organizationId) ?? endpoint.organizationId)
+                        : tt('Realm-wide')}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge active={endpoint.enabled} activeLabel="Enabled" inactiveLabel="Disabled" />
+                    </TableCell>
+                    <TableCell>
+                      <code>{endpoint.secretPrefix}••••</code>
+                    </TableCell>
+                    <TableCell>{formatDate(endpoint.updatedAt)}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            aria-label={tt('Actions for {{endpoint}}', { endpoint: endpoint.url })}
+                            size="icon"
+                            variant="ghost"
+                          >
+                            <Ellipsis />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => setEditEndpoint(endpoint)}>
+                            {tt('Edit endpoint')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => update.mutate({ id: endpoint.id, input: { enabled: !endpoint.enabled } })}
+                          >
+                            {endpoint.enabled ? tt('Disable') : tt('Enable')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => rotate.mutate(endpoint.id)}>
+                            <RefreshCw />
+                            {tt('Rotate secret')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setDeleteId(endpoint.id)} variant="destructive">
+                            {tt('Delete endpoint')}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableEmptyRow
+                  colSpan={7}
+                  description={tt('Create an HTTPS endpoint to receive signed Realm events.')}
+                  title={tt('No webhook endpoints')}
+                />
+              )}
+            </TableBody>
+          </Table>
         ) : null}
         {section === 'requests' ? (
-          <div className="overflow-hidden rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{tt('Request')}</TableHead>
-                  <TableHead>{tt('Endpoint')}</TableHead>
-                  <TableHead>{tt('Scope')}</TableHead>
-                  <TableHead>{tt('HTTP')}</TableHead>
-                  <TableHead>{tt('Status')}</TableHead>
-                  <TableHead>{tt('Created')}</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.data?.requests.length ? (
-                  requests.data.requests.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <button className="font-medium hover:underline" onClick={() => setRequest(item)} type="button">
-                          {item.event}
-                        </button>
-                        <span className="block font-mono text-xs text-muted-foreground">{item.id}</span>
-                      </TableCell>
-                      <TableCell className="max-w-72 truncate">{item.endpointUrl}</TableCell>
-                      <TableCell>
-                        {item.organizationId
-                          ? (organizationNames.get(item.organizationId) ?? item.organizationId)
-                          : tt('Realm-wide')}
-                      </TableCell>
-                      <TableCell>{item.httpStatus ?? '—'}</TableCell>
-                      <TableCell>
-                        <Badge variant={item.status === 'delivered' ? 'secondary' : 'outline'}>{item.status}</Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(item.createdAt)}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          disabled={item.status === 'delivered' || retry.isPending}
-                          onClick={() => retry.mutate({ id: item.id, idempotencyKey: crypto.randomUUID() })}
-                          size="sm"
-                          variant="ghost"
-                        >
-                          <RefreshCw />
-                          {tt('Retry')}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableEmptyRow
-                    colSpan={7}
-                    description={tt('Delivery attempts appear here after Realm events are dispatched.')}
-                    title={tt('No webhook requests')}
-                  />
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{tt('Request')}</TableHead>
+                <TableHead>{tt('Endpoint')}</TableHead>
+                <TableHead>{tt('Scope')}</TableHead>
+                <TableHead>{tt('HTTP')}</TableHead>
+                <TableHead>{tt('Status')}</TableHead>
+                <TableHead>{tt('Created')}</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {requests.data?.requests.length ? (
+                requests.data.requests.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      <button className="font-medium hover:underline" onClick={() => setRequest(item)} type="button">
+                        {item.event}
+                      </button>
+                      <span className="block font-mono text-xs text-muted-foreground">{item.id}</span>
+                    </TableCell>
+                    <TableCell className="max-w-72 truncate">{item.endpointUrl}</TableCell>
+                    <TableCell>
+                      {item.organizationId
+                        ? (organizationNames.get(item.organizationId) ?? item.organizationId)
+                        : tt('Realm-wide')}
+                    </TableCell>
+                    <TableCell>{item.httpStatus ?? '—'}</TableCell>
+                    <TableCell>
+                      <Badge variant={item.status === 'delivered' ? 'secondary' : 'outline'}>{item.status}</Badge>
+                    </TableCell>
+                    <TableCell>{formatDate(item.createdAt)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        disabled={item.status === 'delivered' || retry.isPending}
+                        onClick={() => retry.mutate({ id: item.id, idempotencyKey: crypto.randomUUID() })}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <RefreshCw />
+                        {tt('Retry')}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableEmptyRow
+                  colSpan={7}
+                  description={tt('Delivery attempts appear here after Realm events are dispatched.')}
+                  title={tt('No webhook requests')}
+                />
+              )}
+            </TableBody>
+          </Table>
         ) : null}
-      </div>
+      </DataTablePanel>
       {createOpen ? (
         <EndpointDialog
           error={create.errorMessage}
@@ -439,7 +438,7 @@ function EndpointDialog({
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-5 py-5">
+          <div className="grid gap-4 py-5">
             <Field label={tt('Endpoint URL')}>
               <TextInput
                 defaultValue={endpoint?.url}

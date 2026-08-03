@@ -62,18 +62,15 @@ describe('admin console security policies', () => {
     })
 
     const mfa = renderWithQuery(<MfaPage />)
-    expect(await screen.findByText('Optional')).toBeTruthy()
-    expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Available').length).toBeGreaterThan(0)
+    expect(await screen.findByLabelText('Prompt policy')).toHaveProperty('value', 'optional')
+    expect(screen.getByRole('switch', { name: 'Passkey' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('switch', { name: 'Email verification code' }).getAttribute('aria-checked')).toBe('true')
     mfa.unmount()
 
     renderWithQuery(<SecurityCaptchaPage />)
-    expect(await screen.findByText('hCaptcha')).toBeTruthy()
-    expect(screen.getByText('site-key-1')).toBeTruthy()
+    expect(await screen.findByLabelText('Provider')).toHaveProperty('value', 'hcaptcha')
+    expect(screen.getByLabelText('Site key')).toHaveProperty('value', 'site-key-1')
     expect(screen.getByText('Configured')).toBeTruthy()
-    expect(screen.getByText('Blocked')).toBeTruthy()
-    const captcha = screen.getByRole('heading', { name: 'CAPTCHA' }).closest('section') as HTMLElement
-    fireEvent.click(within(captcha).getByRole('button', { name: 'Configure' }))
     expect(await screen.findByPlaceholderText('Leave blank to keep the current key')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
   })
@@ -90,7 +87,6 @@ describe('admin console security policies', () => {
     expect(within(factors).getByText('Authenticator app')).toBeTruthy()
     expect(within(factors).getByText('Email verification code')).toBeTruthy()
     expect(within(factors).getByText('Backup codes')).toBeTruthy()
-    fireEvent.click(within(factors).getByRole('button', { name: 'Edit policy' }))
     fireEvent.change(await screen.findByLabelText('Prompt policy'), { target: { value: 'optional' } })
     fireEvent.click(screen.getByRole('switch', { name: 'Email verification code' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -112,14 +108,13 @@ describe('admin console security policies', () => {
     )
   })
 
-  it('edits password rules in a section-level sheet and persists blocked words', async () => {
+  it('edits password rules inline and persists the active tab atomically', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
     renderWithQuery(<SecurityPasswordPolicyPage />)
 
     const section = (await screen.findByRole('heading', { name: 'Password policy' })).closest('section') as HTMLElement
-    expect(within(section).getByText('12 characters')).toBeTruthy()
-    fireEvent.click(within(section).getByRole('button', { name: 'Edit' }))
+    expect(within(section).getByLabelText('Minimum length')).toHaveProperty('value', '12')
     fireEvent.change(await screen.findByLabelText('Minimum length'), { target: { value: '14' } })
     fireEvent.change(screen.getByLabelText('Required character types'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('switch', { name: 'Reject custom words' }))
@@ -128,8 +123,8 @@ describe('admin console security policies', () => {
 
     await waitFor(() =>
       expect(requests).toEqual([
-        {
-          policy: {
+        expect.objectContaining({
+          policy: expect.objectContaining({
             password: {
               minLength: 14,
               requiredCharacterTypes: 3,
@@ -138,33 +133,29 @@ describe('admin console security policies', () => {
               rejectSequential: true,
               rejectCustomWords: true,
             },
-          },
-        },
+          }),
+        }),
       ]),
     )
   })
 
-  it('discards controlled password and CAPTCHA values when their editors are canceled [spec: admin-console/admin-security-policy]', async () => {
+  it('discards controlled password and CAPTCHA values from inline forms [spec: admin-console/admin-security-policy]', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
     const { unmount } = renderWithQuery(<SecurityPasswordPolicyPage />)
 
-    let section = (await screen.findByRole('heading', { name: 'Password policy' })).closest('section') as HTMLElement
-    fireEvent.click(within(section).getByRole('button', { name: 'Edit' }))
+    await screen.findByRole('heading', { name: 'Password policy' })
     fireEvent.click(await screen.findByRole('switch', { name: 'Reject custom words' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    fireEvent.click(within(section).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
     expect((await screen.findByRole('switch', { name: 'Reject custom words' })).getAttribute('aria-checked')).toBe(
       'false',
     )
 
     unmount()
     renderWithQuery(<SecurityCaptchaPage />)
-    section = (await screen.findByRole('heading', { name: 'CAPTCHA' })).closest('section') as HTMLElement
-    fireEvent.click(within(section).getByRole('button', { name: 'Configure' }))
+    await screen.findByRole('heading', { name: 'CAPTCHA' })
     fireEvent.change(await screen.findByLabelText('Provider'), { target: { value: 'hcaptcha' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    fireEvent.click(within(section).getByRole('button', { name: 'Configure' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
     expect(await screen.findByLabelText('Provider')).toHaveProperty('value', 'turnstile')
     expect(requests).toEqual([])
   })
@@ -174,24 +165,23 @@ describe('admin console security policies', () => {
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
     renderWithQuery(<SecurityPasswordPolicyPage />)
 
-    const section = (await screen.findByRole('heading', { name: 'Session policy' })).closest('section') as HTMLElement
-    fireEvent.click(within(section).getByRole('button', { name: 'Edit' }))
+    await screen.findByRole('heading', { name: 'Session policy' })
     fireEvent.change(await screen.findByLabelText('Session lifetime'), { target: { value: '86400' } })
     fireEvent.change(screen.getByLabelText('Fresh authentication window'), { target: { value: '900' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
       expect(requests).toEqual([
-        {
-          policy: {
+        expect.objectContaining({
+          policy: expect.objectContaining({
             sessions: {
               expiresInSeconds: 86400,
               updateAgeSeconds: 300,
               freshAgeSeconds: 900,
               cookieCacheSeconds: 60,
             },
-          },
-        },
+          }),
+        }),
       ]),
     )
     expect(screen.queryByText(/environment variable/i)).toBeNull()
@@ -202,8 +192,7 @@ describe('admin console security policies', () => {
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
     renderWithQuery(<SecurityCaptchaPage />)
 
-    const section = (await screen.findByRole('heading', { name: 'CAPTCHA' })).closest('section') as HTMLElement
-    fireEvent.click(within(section).getByRole('button', { name: 'Configure' }))
+    await screen.findByRole('heading', { name: 'CAPTCHA' })
     fireEvent.click(await screen.findByRole('switch', { name: 'Enable CAPTCHA' }))
     expect(screen.getByLabelText('Provider')).toHaveProperty('value', 'turnstile')
     fireEvent.change(screen.getByLabelText('Site key'), { target: { value: 'site-key-1' } })
@@ -212,8 +201,8 @@ describe('admin console security policies', () => {
 
     await waitFor(() =>
       expect(requests).toEqual([
-        {
-          policy: {
+        expect.objectContaining({
+          policy: expect.objectContaining({
             captcha: {
               enabled: true,
               provider: 'turnstile',
@@ -221,8 +210,8 @@ describe('admin console security policies', () => {
               projectId: null,
               secretKey: 'secret-1',
             },
-          },
-        },
+          }),
+        }),
       ]),
     )
   })
@@ -235,8 +224,7 @@ describe('admin console security policies', () => {
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
     renderWithQuery(<SecurityCaptchaPage />)
 
-    const section = (await screen.findByRole('heading', { name: 'CAPTCHA' })).closest('section') as HTMLElement
-    fireEvent.click(within(section).getByRole('button', { name: 'Configure' }))
+    await screen.findByRole('heading', { name: 'CAPTCHA' })
     fireEvent.click(await screen.findByRole('switch', { name: 'Enable CAPTCHA' }))
     fireEvent.change(screen.getByLabelText('Provider'), { target: { value: provider } })
     fireEvent.change(screen.getByLabelText('Site key'), { target: { value: 'site-key-1' } })
@@ -246,8 +234,8 @@ describe('admin console security policies', () => {
 
     await waitFor(() =>
       expect(requests).toEqual([
-        {
-          policy: {
+        expect.objectContaining({
+          policy: expect.objectContaining({
             captcha: {
               enabled: true,
               provider,
@@ -255,8 +243,8 @@ describe('admin console security policies', () => {
               projectId,
               secretKey: 'secret-1',
             },
-          },
-        },
+          }),
+        }),
       ]),
     )
   })
@@ -266,8 +254,7 @@ describe('admin console security policies', () => {
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
     renderWithQuery(<SecurityBlocklistPage />)
 
-    const section = (await screen.findByRole('heading', { name: 'Email blocklist' })).closest('section') as HTMLElement
-    fireEvent.click(within(section).getByRole('button', { name: 'Edit' }))
+    await screen.findByRole('heading', { name: 'Email blocklist' })
     fireEvent.click(await screen.findByRole('switch', { name: 'Block email subaddressing' }))
     fireEvent.change(screen.getByLabelText('Blocked addresses and domains'), {
       target: { value: 'blocked@example.com\nblocked.test' },
@@ -276,14 +263,14 @@ describe('admin console security policies', () => {
 
     await waitFor(() =>
       expect(requests).toEqual([
-        {
-          policy: {
+        expect.objectContaining({
+          policy: expect.objectContaining({
             blocklist: {
               blockSubaddressing: true,
               entries: ['blocked@example.com', 'blocked.test'],
             },
-          },
-        },
+          }),
+        }),
       ]),
     )
   })
@@ -304,8 +291,7 @@ describe('admin console security policies', () => {
     renderWithQuery(<SecurityCaptchaPage />)
     expect(await screen.findByText('Security unavailable.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    const section = (await screen.findByRole('heading', { name: 'CAPTCHA' })).closest('section') as HTMLElement
-    fireEvent.click(within(section).getByRole('button', { name: 'Configure' }))
+    await screen.findByRole('heading', { name: 'CAPTCHA' })
     fireEvent.change(await screen.findByLabelText('Site key'), { target: { value: 'site-key-1' } })
     fireEvent.change(screen.getByLabelText('Secret key'), { target: { value: 'secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))

@@ -123,7 +123,7 @@ export function ApiResourcesPage() {
       error={query.error ?? organizationsQuery.error ?? connectorsQuery.error}
       loading={query.isLoading || organizationsQuery.isLoading || connectorsQuery.isLoading}
       onRetry={() => Promise.all([query.refetch(), organizationsQuery.refetch(), connectorsQuery.refetch()])}
-      toolbar={
+      tableToolbar={
         <ListToolbar>
           <TextInput
             aria-label={tt('Search resource servers')}
@@ -1028,7 +1028,7 @@ function ResourceEditorSheet({
         </SheetHeader>
         {editor === 'details' ? (
           <form
-            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-4 py-5"
             id={formId}
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault()
@@ -1059,7 +1059,7 @@ function ResourceEditorSheet({
         ) : null}
         {editor === 'connector' ? (
           <form
-            className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5"
+            className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-4 py-5"
             id={formId}
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault()
@@ -1101,7 +1101,7 @@ function ResourceEditorSheet({
         ) : null}
         {editor === 'eligibility' ? (
           <form
-            className="grid min-h-0 flex-1 gap-6 overflow-y-auto px-4 py-5"
+            className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto px-4 py-5"
             id={formId}
             onSubmit={(event) => {
               event.preventDefault()

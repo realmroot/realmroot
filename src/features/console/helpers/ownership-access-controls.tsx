@@ -104,55 +104,80 @@ export function IdentityMultiSelect({
   placeholder: string
   value: string[]
 }) {
-  const [open, setOpen] = useState(false)
   return (
     <Field help={value.length ? tt('{{count}} selected', { count: value.length }) : undefined} label={label}>
-      <Popover onOpenChange={setOpen} open={open}>
-        <PopoverTrigger asChild>
-          <Button
-            aria-label={label}
-            aria-expanded={open}
-            className="h-auto min-h-9 w-full justify-between whitespace-normal text-left font-normal"
-            role="combobox"
-            variant="outline"
-          >
-            <span className={value.length ? '' : 'text-muted-foreground'}>
-              {value.length ? selectionSummary(value, options) : placeholder}
-            </span>
-            <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
-          <Command>
-            <CommandInput placeholder={tt('Search…')} />
-            <CommandList>
-              <CommandEmpty>{emptyLabel}</CommandEmpty>
-              <CommandGroup>
-                {options.map((option) => {
-                  const checked = value.includes(option.id)
-                  return (
-                    <CommandItem
-                      data-checked={checked}
-                      key={option.id}
-                      onSelect={() =>
-                        onChange(checked ? value.filter((id) => id !== option.id) : [...value, option.id])
-                      }
-                      value={`${option.label} ${option.description ?? ''} ${option.id}`}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate">{option.label}</span>
-                        {option.description ? (
-                          <span className="block truncate text-xs text-muted-foreground">{option.description}</span>
-                        ) : null}
-                      </span>
-                    </CommandItem>
-                  )
-                })}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
+      <IdentityMultiSelectControl
+        emptyLabel={emptyLabel}
+        label={label}
+        onChange={onChange}
+        options={options}
+        placeholder={placeholder}
+        value={value}
+      />
     </Field>
+  )
+}
+
+export function IdentityMultiSelectControl({
+  emptyLabel,
+  label,
+  onChange,
+  options,
+  placeholder,
+  value,
+}: {
+  emptyLabel: string
+  label: string
+  onChange: (ids: string[]) => void
+  options: SelectableIdentity[]
+  placeholder: string
+  value: string[]
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover onOpenChange={setOpen} open={open}>
+      <PopoverTrigger asChild>
+        <Button
+          aria-label={label}
+          aria-expanded={open}
+          className="h-auto min-h-8 w-full justify-between whitespace-normal text-left font-normal"
+          role="combobox"
+          variant="outline"
+        >
+          <span className={value.length ? '' : 'text-muted-foreground'}>
+            {value.length ? selectionSummary(value, options) : placeholder}
+          </span>
+          <ChevronsUpDown className="size-4 shrink-0 opacity-50" data-icon="inline-end" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command>
+          <CommandInput placeholder={tt('Search…')} />
+          <CommandList>
+            <CommandEmpty>{emptyLabel}</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => {
+                const checked = value.includes(option.id)
+                return (
+                  <CommandItem
+                    data-checked={checked}
+                    key={option.id}
+                    onSelect={() => onChange(checked ? value.filter((id) => id !== option.id) : [...value, option.id])}
+                    value={`${option.label} ${option.description ?? ''} ${option.id}`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate">{option.label}</span>
+                      {option.description ? (
+                        <span className="block truncate text-xs text-muted-foreground">{option.description}</span>
+                      ) : null}
+                    </span>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }

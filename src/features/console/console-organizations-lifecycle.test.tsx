@@ -52,7 +52,8 @@ describe('console Organization lifecycle', () => {
     fireEvent.change(screen.getByLabelText('Filter access level'), { target: { value: 'admin' } })
     expect(screen.getByText('Alex Admin')).toBeTruthy()
     expect(screen.queryByText('Dana Developer')).toBeNull()
-    fireEvent.change(screen.getByLabelText('Filter access level'), { target: { value: '' } })
+    fireEvent.click(screen.getByLabelText('Filter access level'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Any access level' }))
 
     openMemberMenu('Alex Admin')
     fireEvent.click(screen.getByRole('menuitem', { name: 'Change to Member' }))

@@ -112,7 +112,7 @@ export function ApplicationsPage() {
       emptyTitle="No applications yet"
       loading={query.isLoading || organizationsQuery.isLoading || usersQuery.isLoading}
       onRetry={() => Promise.all([query.refetch(), organizationsQuery.refetch(), usersQuery.refetch()])}
-      toolbar={
+      tableToolbar={
         <ListToolbar>
           <TextInput
             aria-label={tt('Search applications')}

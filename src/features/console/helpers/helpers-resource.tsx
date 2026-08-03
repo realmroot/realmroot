@@ -4,6 +4,7 @@ import {
   Badge,
   Card,
   CardContent,
+  CardHeader,
   CheckCircle2,
   ConsoleToolbar,
   cn,
@@ -22,6 +23,7 @@ import { ErrorState, LoadingState } from './helpers-dialogs'
 
 export function ResourcePage({
   action,
+  aside,
   auxiliary,
   children,
   description,
@@ -32,10 +34,12 @@ export function ResourcePage({
   framed = true,
   loading,
   onRetry,
+  tableToolbar,
   title,
   toolbar,
 }: {
   action?: ReactNode
+  aside?: ReactNode
   auxiliary?: ReactNode
   children: ReactNode
   description: string
@@ -46,22 +50,30 @@ export function ResourcePage({
   framed?: boolean
   loading?: boolean
   onRetry?: () => void
+  tableToolbar?: ReactNode
   title: string
   toolbar?: ReactNode
 }) {
-  return (
+  const content = (
     <>
       <PageHeader action={action} description={description} title={title} />
       {toolbar ? <div>{toolbar}</div> : null}
-      {loading ? <LoadingState label={`Loading ${title.toLowerCase()}`} /> : null}
-      {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
+      {loading && !tableToolbar ? <LoadingState label={`Loading ${title.toLowerCase()}`} /> : null}
+      {error && !tableToolbar ? <ErrorState error={error} onRetry={onRetry} /> : null}
       {!loading && !error && empty && !framed ? (
         <EmptyState
           description={emptyDescription ?? `Create a ${title.toLowerCase()} item to populate this page.`}
           title={emptyTitle ?? `No ${title.toLowerCase()} yet`}
         />
       ) : null}
-      {!loading && !error && framed ? (
+      {framed && tableToolbar ? (
+        <DataTablePanel toolbar={tableToolbar}>
+          {loading ? <LoadingState label={`Loading ${title.toLowerCase()}`} /> : null}
+          {error ? <ErrorState error={error} onRetry={onRetry} /> : null}
+          {!loading && !error ? children : null}
+        </DataTablePanel>
+      ) : null}
+      {!loading && !error && framed && !tableToolbar ? (
         <Card className="consoleResourceFrame border py-0 shadow-none ring-0">
           <CardContent className="p-0">{children}</CardContent>
         </Card>
@@ -70,12 +82,29 @@ export function ResourcePage({
       {auxiliary}
     </>
   )
+
+  if (!aside || loading || error) return content
+
+  return (
+    <div className="consoleResourcePageWithAside">
+      <div className="consoleResourcePageMain">{content}</div>
+      {aside}
+    </div>
+  )
 }
 export function ListToolbar({ children }: { children: ReactNode }) {
   return (
     <ConsoleToolbar className="consoleListToolbar">
       <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col sm:auto-cols-max">{children}</div>
     </ConsoleToolbar>
+  )
+}
+export function DataTablePanel({ children, toolbar }: { children: ReactNode; toolbar?: ReactNode }) {
+  return (
+    <Card className="consoleDataTablePanel consoleResourceFrame gap-0 overflow-hidden border py-0 shadow-none ring-0">
+      {toolbar ? <CardHeader className="consoleDataTableToolbar border-b">{toolbar}</CardHeader> : null}
+      <CardContent className="overflow-x-auto p-0">{children}</CardContent>
+    </Card>
   )
 }
 export function ObjectHeader({ badge, id, title }: { badge: string; id: string; title: string }) {

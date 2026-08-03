@@ -61,10 +61,12 @@ describe('deployment settings operations', () => {
 
     renderWithQuery(<SettingsPage section="developer" />)
     expect(await screen.findByText('Organization creation')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }))
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Discard' })).toHaveProperty('disabled', true)
     fireEvent.change(await screen.findByLabelText('Organization creation'), {
       target: { value: 'Approved users' },
     })
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', false)
     fireEvent.click(await screen.findByRole('combobox', { name: 'Approved users' }))
     fireEvent.click(await screen.findByRole('option', { name: /Jane Doe/ }))
     fireEvent.change(screen.getByLabelText('Console access'), { target: { value: 'Selected organizations' } })
@@ -127,11 +129,7 @@ describe('deployment settings operations', () => {
 
     renderWithQuery(<SettingsPage section="email" />)
     expect(await screen.findByText('Binding unavailable')).toBeTruthy()
-    expect(screen.getByText('Not configured')).toBeTruthy()
-    expect(screen.getByText('Uses sender address')).toBeTruthy()
     expect(screen.getByText('Deployment fallback')).toBeTruthy()
-    expect(screen.getAllByText('Unavailable')).toHaveLength(4)
-    fireEvent.click(screen.getByRole('button', { name: 'Configure' }))
     expect(await screen.findByRole('switch', { name: 'Email delivery' })).toHaveProperty('disabled', true)
     fireEvent.change(screen.getByLabelText('Sender address'), { target: { value: 'sender@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -172,10 +170,10 @@ describe('deployment settings operations', () => {
     })
 
     const { unmount } = renderWithQuery(<SettingsPage section="developer" />)
-    expect(await screen.findByText('Acme Legal')).toBeTruthy()
-    expect(screen.getByText('Jane Display')).toBeTruthy()
-    expect(screen.getByText('Owner only')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }))
+    expect(await screen.findByRole('combobox', { name: 'Selected organizations' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Selected organizations' }).textContent).toContain('Acme Legal')
+    expect(screen.getByRole('combobox', { name: 'Approved users' }).textContent).toContain('Jane Display')
+    expect(screen.getByLabelText('Eligible access levels')).toHaveProperty('value', 'Owner only')
     fireEvent.change(await screen.findByLabelText('Organization creation'), {
       target: { value: 'Any verified user' },
     })
@@ -184,18 +182,16 @@ describe('deployment settings operations', () => {
     expect(screen.queryByRole('combobox', { name: 'Selected organizations' })).toBeNull()
     fireEvent.change(screen.getByLabelText('Eligible access levels'), { target: { value: 'Owner only' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Edit developer access' })).toBeNull())
 
     unmount()
     emptySelections = true
     queryClient.clear()
     renderWithQuery(<SettingsPage section="developer" />)
-    expect(await screen.findByText('Organizations')).toBeTruthy()
-    expect(screen.getByText('Users')).toBeTruthy()
-    expect(screen.getAllByText('None selected')).toHaveLength(2)
+    expect(await screen.findByText('missing-org')).toBeTruthy()
+    expect(screen.getByText('missing-user')).toBeTruthy()
   })
 
-  it('retries all settings resources after a failed query and closes the general editor', async () => {
+  it('retries all settings resources after a failed query and keeps General editing inline', async () => {
     let realmAttempts = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
@@ -215,9 +211,9 @@ describe('deployment settings operations', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText(generalSettings.issuer)).toBeTruthy()
     expect(realmAttempts).toBeGreaterThanOrEqual(2)
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     expect(await screen.findByLabelText('Realm name')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(screen.queryByLabelText('Realm name')).toBeNull())
+    fireEvent.change(screen.getByLabelText('Realm name'), { target: { value: 'Unsaved name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByLabelText('Realm name')).toHaveProperty('value', generalSettings.name)
   })
 })

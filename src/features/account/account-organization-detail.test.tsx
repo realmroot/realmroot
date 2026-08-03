@@ -58,7 +58,7 @@ describe('Account Organization detail', () => {
 
     fireEvent.click((await screen.findAllByRole('button', { name: 'Switch' }))[0])
     await waitFor(() => expect(selectedOrganizationId).toBe('org-family'))
-    expect((await screen.findAllByText('Current')).length).toBe(2)
+    expect((await screen.findAllByText('Current')).length).toBe(1)
     expect(screen.queryByRole('link', { name: 'Open Console' })).toBeNull()
   })
 

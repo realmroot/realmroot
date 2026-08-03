@@ -43,32 +43,55 @@ describe('admin console hosted experience', () => {
     renderWithQuery(<BrandingPage />)
 
     const preview = (await screen.findByLabelText('Acme Auth hosted sign-in preview')).closest('.brandingPreview')
-    fireEvent.click(screen.getByRole('button', { name: /Fresh Matcha/ }))
-    expect(preview?.getAttribute('style')).toContain('--brand-primary: #668a6a')
-    expect(preview?.getAttribute('style')).toContain('--brand-background: #fafcf8')
-    expect(preview?.getAttribute('style')).toContain('--auth-text-color: #1c2a20')
-    expect(preview?.getAttribute('style')).toContain('--auth-border-color: #dce6d8')
+    const save = screen.getByRole('button', { name: 'Save changes' })
+    const discard = screen.getByRole('button', { name: 'Discard' })
+    expect(save).toHaveProperty('disabled', true)
+    expect(discard).toHaveProperty('disabled', true)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Sage/ }))
+    expect(preview?.getAttribute('style')).toContain('--brand-primary: #4f7259')
+    expect(preview?.getAttribute('style')).toContain('--brand-background: #f5f8f4')
+    expect(preview?.getAttribute('style')).toContain('--auth-surface-color: #ffffff')
+    expect(preview?.getAttribute('style')).toContain('--auth-text-color: #1e2920')
+    expect(preview?.getAttribute('style')).toContain('--auth-border-color: #dde6dd')
+    expect(save).toHaveProperty('disabled', false)
+    expect(discard).toHaveProperty('disabled', false)
+
+    fireEvent.click(save)
     await waitFor(() => expect(patches).toHaveLength(1))
     expect(patches[0]).toMatchObject({
       branding: {
-        primaryColor: '#668a6a',
-        backgroundColor: '#fafcf8',
-        customCss: '--auth-text-color: #1c2a20; --auth-border-color: #dce6d8',
+        primaryColor: '#4f7259',
+        backgroundColor: '#f5f8f4',
+        customCss: '--auth-surface-color: #ffffff; --auth-text-color: #1e2920; --auth-border-color: #dde6dd',
       },
-      copy: { productName: 'Acme Auth' },
     })
   })
 
-  it('supports a four-color custom scheme and restores all saved theme colors', async () => {
+  it('discards unsaved Experience changes through the standard inline form actions', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(consoleSharedFetch)
+
+    renderWithQuery(<BrandingPage />)
+
+    const preview = (await screen.findByLabelText('Acme Auth hosted sign-in preview')).closest('.brandingPreview')
+    fireEvent.click(screen.getByRole('button', { name: /Sage/ }))
+    expect(preview?.getAttribute('style')).toContain('--brand-primary: #4f7259')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(preview?.getAttribute('style')).toContain(`--brand-primary: ${brandingSettings.branding.primaryColor}`)
+    expect(screen.getByRole('button', { name: 'Discard' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true)
+  })
+
+  it('supports the five-token custom scheme and restores every saved theme color', async () => {
     const customBranding = {
       ...brandingSettings,
       branding: {
         ...brandingSettings.branding,
         primaryColor: '#135f5a',
         backgroundColor: '#fbfefd',
-        customCss: '--auth-text-color: #18302d; --auth-border-color: #bdd7d2',
+        customCss: '--auth-surface-color: #ffffff; --auth-text-color: #18302d; --auth-border-color: #bdd7d2',
       },
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -80,12 +103,13 @@ describe('admin console hosted experience', () => {
 
     expect(await screen.findByLabelText('Primary')).toHaveProperty('value', '#135f5a')
     expect(screen.getByLabelText('Page background')).toHaveProperty('value', '#fbfefd')
+    expect(screen.getByLabelText('Surface')).toHaveProperty('value', '#ffffff')
     expect(screen.getByLabelText('Text')).toHaveProperty('value', '#18302d')
     expect(screen.getByLabelText('Border')).toHaveProperty('value', '#bdd7d2')
 
-    fireEvent.click(screen.getByRole('button', { name: /Clean Cobalt/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Indigo/ }))
     fireEvent.click(screen.getByRole('button', { name: /Custom/ }))
-    fireEvent.change(screen.getByLabelText('Primary color picker'), { target: { value: '#12524e' } })
+    fireEvent.change(screen.getByLabelText('Primary'), { target: { value: '#12524e' } })
     fireEvent.change(screen.getByLabelText('Page background'), { target: { value: '#f5fbf9' } })
     fireEvent.change(screen.getByLabelText('Text'), { target: { value: '#102724' } })
     fireEvent.change(screen.getByLabelText('Border'), { target: { value: '#aacbc5' } })
@@ -129,40 +153,6 @@ describe('admin console hosted experience', () => {
     expect(await screen.findByLabelText('Terms URL')).toHaveProperty('value', '')
   })
 
-  it('uploads and previews both hosted brand assets', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
-      if (url === '/api/branding/logo' && init?.method === 'POST') {
-        return Promise.resolve(jsonResponse({ asset: { id: 'logo-2', publicUrl: 'https://cdn.example.com/logo.svg' } }))
-      }
-      if (url === '/api/branding/favicon' && init?.method === 'POST') {
-        return Promise.resolve(
-          jsonResponse({ asset: { id: 'favicon-2', publicUrl: 'https://cdn.example.com/favicon.png' } }),
-        )
-      }
-      return consoleSharedFetch(input, init)
-    })
-
-    renderWithQuery(<BrandingPage />)
-    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Brand assets' }), { button: 0, ctrlKey: false })
-    fireEvent.change(await screen.findByLabelText('Favicon URL'), {
-      target: { value: 'https://cdn.example.com/manual-favicon.png' },
-    })
-    fireEvent.change(screen.getByLabelText('Upload logo'), {
-      target: { files: [new File(['logo'], 'logo.svg', { type: 'image/svg+xml' })] },
-    })
-    fireEvent.change(screen.getByLabelText('Upload favicon'), {
-      target: { files: [new File(['favicon'], 'favicon.png', { type: 'image/png' })] },
-    })
-
-    await waitFor(() =>
-      expect(screen.getByLabelText('Logo URL')).toHaveProperty('value', 'https://cdn.example.com/logo.svg'),
-    )
-    await waitFor(() =>
-      expect(screen.getByLabelText('Favicon URL')).toHaveProperty('value', 'https://cdn.example.com/favicon.png'),
-    )
-  })
-
   it('retries all hosted experience dependencies after a load failure', async () => {
     let attempts = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
@@ -181,14 +171,8 @@ describe('admin console hosted experience', () => {
     expect(attempts).toBe(2)
   })
 
-  it('updates brand assets in the preview, falls back cleanly, and surfaces upload errors', async () => {
-    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      const url = String(input)
-      if (url === '/api/branding/logo' && init?.method === 'POST') {
-        return Promise.resolve(jsonResponse({ error: { message: 'Logo upload failed.' } }, 500))
-      }
-      return consoleSharedFetch(input, init)
-    })
+  it('updates brand asset URLs in the preview and falls back cleanly', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation(consoleSharedFetch)
 
     renderWithQuery(<BrandingPage />)
     fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Brand assets' }), { button: 0, ctrlKey: false })
@@ -204,10 +188,8 @@ describe('admin console hosted experience', () => {
     await waitFor(() => expect(preview.querySelector('img.brandLogo')).toBeNull())
     expect(preview.querySelector('.brandMark')?.textContent).toBe('N')
 
-    fireEvent.change(screen.getByLabelText('Upload logo'), {
-      target: { files: [new File(['logo'], 'logo.png', { type: 'image/png' })] },
-    })
-    expect(await screen.findByText('Logo upload failed.')).toBeTruthy()
+    expect(screen.queryByLabelText('Upload logo')).toBeNull()
+    expect(screen.queryByLabelText('Upload favicon')).toBeNull()
   })
 
   it('keeps the preview consistent with unsaved sign-in method controls [spec: connectors-and-methods/hosted-preview-consistency]', async () => {
@@ -226,8 +208,6 @@ describe('admin console hosted experience', () => {
 
     renderWithQuery(<SignInSettingsPage />)
     const preview = await screen.findByLabelText('Acme Auth hosted sign-in preview')
-    const methods = screen.getByRole('heading', { name: 'Available sign-in methods' }).closest('section') as HTMLElement
-    fireEvent.click(within(methods).getByRole('button', { name: 'Edit' }))
     fireEvent.click(await screen.findByRole('switch', { name: 'Password' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Email code' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Social login' }))
@@ -272,8 +252,8 @@ describe('admin console hosted experience', () => {
     fireEvent.change(screen.getByLabelText('Privacy URL'), {
       target: { value: 'https://northstar.example.com/privacy' },
     })
-    fireEvent.change(screen.getByLabelText('Support email'), {
-      target: { value: 'support@northstar.example' },
+    fireEvent.change(screen.getByLabelText('Support URL'), {
+      target: { value: 'https://northstar.example.com/support' },
     })
 
     expect(screen.getByRole('link', { name: 'Terms' }).getAttribute('href')).toBe('https://northstar.example.com/terms')
@@ -284,7 +264,7 @@ describe('admin console hosted experience', () => {
           links: {
             termsUri: 'https://northstar.example.com/terms',
             privacyUri: 'https://northstar.example.com/privacy',
-            supportEmail: 'support@northstar.example',
+            supportUri: 'https://northstar.example.com/support',
           },
         },
       ]),

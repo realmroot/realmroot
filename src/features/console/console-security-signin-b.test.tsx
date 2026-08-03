@@ -42,8 +42,7 @@ describe('admin console sign-in and preview controls', () => {
     const registration = (await screen.findByRole('heading', { name: 'Registration and identifiers' })).closest(
       'section',
     ) as HTMLElement
-    fireEvent.click(within(registration).getByRole('button', { name: 'Edit' }))
-    fireEvent.click(await screen.findByRole('switch', { name: 'Public sign-up' }))
+    fireEvent.click(within(registration).getByRole('switch', { name: 'Public sign-up' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Username sign-in' }))
     fireEvent.change(screen.getByLabelText('Sign-in sequence'), { target: { value: 'identifier-first' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -61,23 +60,16 @@ describe('admin console sign-in and preview controls', () => {
     })
   })
 
-  it('cancels unsaved method changes and keeps the persisted summary', async () => {
+  it('discards unsaved method changes in the inline staged form', async () => {
     vi.spyOn(window, 'fetch').mockImplementation(consoleSharedFetch)
     renderWithQuery(<SignInSettingsPage />)
     const methods = (await screen.findByRole('heading', { name: 'Available sign-in methods' })).closest(
       'section',
     ) as HTMLElement
-    expect(within(methods).getAllByText('Enabled').length).toBeGreaterThan(0)
-    fireEvent.click(within(methods).getByRole('button', { name: 'Edit' }))
-    fireEvent.click(await screen.findByRole('switch', { name: 'Password' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-
-    await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: 'Available sign-in methods', hidden: true })).toBeTruthy(),
-    )
-    expect(within(methods).getAllByText('Enabled').length).toBeGreaterThan(0)
-    fireEvent.click(within(methods).getByRole('button', { name: 'Edit' }))
-    expect((await screen.findByRole('switch', { name: 'Password' })).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(methods).getByRole('switch', { name: 'Password' }))
+    expect(screen.getByRole('switch', { name: 'Password' }).getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByRole('switch', { name: 'Password' }).getAttribute('aria-checked')).toBe('true')
   })
 
   it('surfaces sign-in management errors inside the editor', async () => {
@@ -92,8 +84,7 @@ describe('admin console sign-in and preview controls', () => {
     const methods = (await screen.findByRole('heading', { name: 'Available sign-in methods' })).closest(
       'section',
     ) as HTMLElement
-    fireEvent.click(within(methods).getByRole('button', { name: 'Edit' }))
-    fireEvent.click(await screen.findByRole('switch', { name: 'Password' }))
+    fireEvent.click(within(methods).getByRole('switch', { name: 'Password' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Passkey' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Email code' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Social login' }))
@@ -127,16 +118,16 @@ describe('admin console sign-in and preview controls', () => {
     expect(screen.queryByLabelText('Terms URL')).toBeNull()
   })
 
-  it('switches the hosted preview between desktop and mobile viewports', async () => {
+  it('keeps the hosted preview focused without editor-only viewport or open-page controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       if (String(input) === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 
     renderWithQuery(<BrandingPage />)
-    const preview = (await screen.findByLabelText('Acme Auth hosted sign-in preview')).closest('.brandingPreview')
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Mobile' }), { button: 0, ctrlKey: false })
-    expect(screen.getByRole('tab', { name: 'Mobile' }).getAttribute('aria-selected')).toBe('true')
-    expect(preview?.className).toContain('hostedAuthPreview-mobile')
+    expect(await screen.findByLabelText('Acme Auth hosted sign-in preview')).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Mobile' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Desktop' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open live hosted page' })).toBeNull()
   })
 })

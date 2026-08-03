@@ -224,7 +224,7 @@ describe('management routes 3', () => {
       headers,
       body: JSON.stringify({
         signIn: { passwordEnabled: false, identifierFirst: true },
-        links: { supportEmail: 'help@example.com' },
+        links: { supportUri: 'https://example.com/support' },
         copy: { productName: 'Acme ID' },
       }),
     })
@@ -258,7 +258,7 @@ describe('management routes 3', () => {
     expect(accountCenterResponse.status).toBe(200)
     expect(updateSignIn).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
       signIn: { passwordEnabled: false, identifierFirst: true },
-      links: { supportEmail: 'help@example.com' },
+      links: { supportUri: 'https://example.com/support' },
       copy: { productName: 'Acme ID' },
     })
     expect(updateBranding).toHaveBeenCalledWith(expect.anything(), expect.anything(), {

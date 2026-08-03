@@ -67,6 +67,7 @@ describe('ConfigzService', () => {
       links: {
         termsUri: null,
         privacyUri: null,
+        supportUri: null,
         supportEmail: null,
       },
       copy: {
@@ -302,7 +303,7 @@ describe('ConfigzService', () => {
 
     const response = await updateManagementSignInSettings(deps, defaultOptions(), {
       signIn: { passwordEnabled: false, usernameEnabled: false, identifierFirst: true },
-      links: { supportEmail: 'support@example.com' },
+      links: { supportUri: 'https://example.com/support', supportEmail: 'support@example.com' },
       copy: { productName: 'Acme ID' },
     })
 
@@ -313,6 +314,7 @@ describe('ConfigzService', () => {
         identifierFirst: true,
         termsUri: undefined,
         privacyUri: undefined,
+        supportUri: 'https://example.com/support',
         supportEmail: 'support@example.com',
         copy: { productName: 'Acme ID' },
       },

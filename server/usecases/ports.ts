@@ -884,6 +884,7 @@ export type UpdateConfigzSettingsInput = {
   builtInProviders?: UpdateManagementSignInSettingsRequest['builtInProviders']
   termsUri?: string | null
   privacyUri?: string | null
+  supportUri?: string | null
   supportEmail?: string | null
   copy?: Partial<ConfigzConfigResponse['copy']>
 }

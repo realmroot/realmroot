@@ -289,6 +289,7 @@ describe('planned Account Center journeys', () => {
     )
 
     renderWithClient(<AccountApplicationsPage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Resource accounts' }), { button: 0, ctrlKey: false })
 
     expect(await screen.findByText('ZPan Local Dynamic Test')).toBeTruthy()
     expect(screen.getByText('agent-controller-0802@example.com')).toBeTruthy()
@@ -311,6 +312,7 @@ describe('planned Account Center journeys', () => {
     )
 
     const loading = renderWithClient(<AccountApplicationsPage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Resource accounts' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Loading connected resource accounts…')).toBeTruthy()
     loading.unmount()
 
@@ -320,6 +322,7 @@ describe('planned Account Center journeys', () => {
     )
 
     const failed = renderWithClient(<AccountApplicationsPage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Resource accounts' }), { button: 0, ctrlKey: false })
     expect((await screen.findByRole('alert')).textContent).toBe('Resources unavailable.')
     failed.unmount()
 
@@ -344,6 +347,7 @@ describe('planned Account Center journeys', () => {
     )
 
     renderWithClient(<AccountApplicationsPage />)
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Resource accounts' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('API resource')).toBeTruthy()
     expect(screen.getByText('••••hint')).toBeTruthy()
     expect(screen.getByText('Known API')).toBeTruthy()

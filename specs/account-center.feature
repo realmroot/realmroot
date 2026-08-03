@@ -125,7 +125,7 @@ Feature: Account Center
   @entrypoint:product-ui @journey:resource-account-connections
   Scenario: Connected API resource accounts appear with authorized applications
     Given I connected an external API resource account for Agent access
-    When I open /account/applications
+    When I open /account/applications and choose the Resource accounts tab
     Then I see the API resource and connected external account
     And I can disconnect it separately from OAuth application grants
 
@@ -157,7 +157,7 @@ Feature: Account Center
   Scenario: Delegated agent access can be managed from Account Center
     Given I have active delegated agents and capability grants
     When I open Account Center
-    Then I can inspect each stable Agent and its granted access
+    Then I can inspect each stable Agent, its granted access, and its activity
     And protocol registrations, hosts, and identity bindings remain internal
     When I retire an Agent or revoke a selected access grant
     Then that delegated access is no longer active for my account
