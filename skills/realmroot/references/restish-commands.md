@@ -79,9 +79,28 @@ TARGET_PROFILE=staging
 RESOURCE_URL=https://staging-api.example.com
 restish api set "$TARGET_API" \
   "profiles.${TARGET_PROFILE}.base_url: ${RESOURCE_URL}"
+
+# Bind the target's Realmroot-backed security scheme in the new profile.
+# Use the credential ID declared by the target OpenAPI document and the exact
+# space-separated scopes selected for this workflow.
+TARGET_CREDENTIAL_ID=oauth2
+TARGET_SCOPES="projects:read"
+restish api set "$TARGET_API" \
+  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.type: api-key" \
+  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.in: header" \
+  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.name: Authorization" \
+  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.provider: realmroot-target" \
+  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.value: DPoP" \
+  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.scopes: ${TARGET_SCOPES}"
 restish api inspect "$TARGET_API"
+restish -p "$TARGET_PROFILE" api auth inspect "$TARGET_API"
 restish -p "$TARGET_PROFILE" "$TARGET_API" --help
 ```
+
+Do not stop after adding only `base_url`: a profile without the security-scheme
+binding cannot use the target token even when Realmroot issued it successfully.
+The profile is ready when auth inspection reports the selected credential as
+configured and the intended operation as callable.
 
 Profiles also separate account, tenant, and credential contexts for the same
 logical target service. Create another API name only for a genuinely different
