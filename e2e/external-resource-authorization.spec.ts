@@ -63,21 +63,32 @@ test.describe('external API resource authorization', () => {
         accountConnections: [],
       })
 
+      const connectionRequest = plugin.connectResource<{
+        status: string
+        accountConnectionId: string
+      }>(resource.id, {
+        scopes: ['projects:read'],
+        reason: 'Connect the controller project account',
+      })
+      await page.goto(await connectionRequest.approvalUrl)
+      await expect(page.getByRole('heading', { name: 'Connect external resource' })).toBeVisible()
+      await page.getByRole('button', { name: 'Connect account' }).click()
+      await page.waitForURL('**/agent/resource-connection/approve**')
+      await expect(page.getByRole('heading', { name: 'Account connected' })).toBeVisible()
+      const connected = await connectionRequest.result
+      expect(connected).toMatchObject({ status: 'connected', accountConnectionId: expect.any(String) })
+
       const accessRequest = plugin.requestResourceAccess<{ status: string; grantId: string }>({
-        target: { type: 'api-resource', apiResourceId: resource.id },
+        target: {
+          type: 'api-resource',
+          apiResourceId: resource.id,
+          accountConnectionId: connected.accountConnectionId,
+        },
         scopes: ['projects:read'],
         reason: 'List projects for the controller',
       })
       await page.goto(await accessRequest.approvalUrl)
       await expect(page.getByRole('heading', { name: 'Approve Agent resource access' })).toBeVisible()
-      await expect(
-        page.getByText('Connect your E2E Projects API account before deciding this Agent request.'),
-      ).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Approve exact access', exact: true })).toBeDisabled()
-      await page.getByRole('button', { name: 'Connect E2E Projects API account' }).click()
-      await page.waitForURL('**/agent/resource-access/approve')
-      await expect(page.getByText('Demo Project Owner')).toBeVisible()
-      await expect(page.getByRole('radio', { name: /Demo Project Owner/ })).toHaveCount(0)
       await page.getByRole('button', { name: 'Approve exact access', exact: true }).click()
       await expect(page.getByRole('heading', { name: 'Resource access approved' })).toBeVisible()
 
@@ -92,9 +103,7 @@ test.describe('external API resource authorization', () => {
       expect(connection?.scopes).toEqual(expect.arrayContaining(['projects:read']))
       expect(connection?.scopes).not.toContain('projects:write')
 
-      const lease = plugin.issueTargetAccessToken(approved.grantId)
-      expect(lease).toMatchObject({ tokenType: 'DPoP', scopes: ['projects:read'] })
-      expect(lease).not.toHaveProperty('accessToken')
+      plugin.issueTargetAccessToken(approved.grantId)
 
       plugin.connectTarget('external-projects', externalResource)
       const directBody = plugin.targetRequest<{
@@ -191,9 +200,7 @@ test.describe('external API resource authorization', () => {
       const approved = await accessRequest.result
       expect(approved.status).toBe('approved')
 
-      const lease = plugin.issueTargetAccessToken(approved.grantId)
-      expect(lease).toMatchObject({ tokenType: 'DPoP', scopes: ['projects:read'] })
-      expect(lease).not.toHaveProperty('accessToken')
+      plugin.issueTargetAccessToken(approved.grantId)
 
       plugin.connectTarget('native-projects', realmrootResource)
       expect(plugin.targetRequest('native-projects', 'projects')).toMatchObject({

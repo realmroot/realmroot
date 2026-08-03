@@ -196,15 +196,22 @@ func handleResourceConnectionApproval(
 	if err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
-	statusURL := requestOrigin + "/api/agent/api-resources/" + url.PathEscape(resourceID) +
-		"/authorization-detail-catalog?limit=1&offset=0"
+	statusURL := requestOrigin + "/api/agent/api-resources?limit=100&offset=0"
 	type connectionStatus struct {
 		AccountConnectionID        string `json:"accountConnectionId"`
 		AccountConnectionUpdatedAt string `json:"accountConnectionUpdatedAt"`
 		ConnectionRequired         bool   `json:"connectionRequired"`
 	}
 	readStatus := func() (connectionStatus, error) {
-		var status connectionStatus
+		var resources struct {
+			Items []struct {
+				ID                 string `json:"id"`
+				AccountConnections []struct {
+					ID        string `json:"id"`
+					UpdatedAt string `json:"updatedAt"`
+				} `json:"accountConnections"`
+			} `json:"items"`
+		}
 		err := requestJSON(
 			context.Background(),
 			client,
@@ -212,9 +219,22 @@ func handleResourceConnectionApproval(
 			statusURL,
 			mustAgentJWT(state, configuration.Issuer),
 			nil,
-			&status,
+			&resources,
 		)
-		return status, err
+		if err != nil {
+			return connectionStatus{}, err
+		}
+		for _, resource := range resources.Items {
+			if resource.ID != resourceID || len(resource.AccountConnections) == 0 {
+				continue
+			}
+			connection := resource.AccountConnections[0]
+			return connectionStatus{
+				AccountConnectionID:        connection.ID,
+				AccountConnectionUpdatedAt: connection.UpdatedAt,
+			}, nil
+		}
+		return connectionStatus{ConnectionRequired: true}, nil
 	}
 	baseline, err := readStatus()
 	if err != nil {

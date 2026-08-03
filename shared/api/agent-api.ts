@@ -219,6 +219,7 @@ export const agentApiResourcesResponseSchema = z.object({
           subjectHint: z.string(),
           scopes: z.array(z.string()),
           authorizationDetails: authorizationDetailsSchema,
+          updatedAt: z.iso.datetime(),
         }),
       ),
       accessGrants: z.array(z.lazy(() => accessGrantSchema)),

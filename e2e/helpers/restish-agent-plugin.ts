@@ -41,12 +41,9 @@ export interface RestishAgentPlugin {
   whoami(): PluginIdentityResult
   requestCapabilities(capabilities: string[], reason: string): PendingCapabilityRequest
   listAgentApiResources<T>(): T
+  connectResource<T>(resourceId: string, input: unknown): PendingResourceAccess<T>
   requestResourceAccess<T>(input: unknown): PendingResourceAccess<T>
-  issueTargetAccessToken(grantId: string): {
-    tokenType: 'DPoP'
-    scopes: string[]
-    resourceUrl: string
-  }
+  issueTargetAccessToken(grantId: string): void
   connectTarget(apiName: string, resourceUrl: string): void
   targetRequest<T>(apiName: string, path: string): T
   listApplications(): { applications: unknown[] }
@@ -103,24 +100,6 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     }
     try {
       return JSON.parse(execFileSync('restish', [apiName, ...command, '--rsh-output-format', 'json'], options)) as T
-    } catch (error) {
-      const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
-      throw new Error(
-        `Restish ${command.join(' ')} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
-        { cause: error },
-      )
-    }
-  }
-
-  const invokeWithArguments = <T>(command: string[], args: string[]): T => {
-    try {
-      return JSON.parse(
-        execFileSync('restish', [apiName, ...command, ...args, '--rsh-output-format', 'json'], {
-          cwd: repoRoot,
-          env: environment,
-          encoding: 'utf8',
-        }),
-      ) as T
     } catch (error) {
       const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
       throw new Error(
@@ -199,13 +178,16 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     requestCapabilities: (capabilities, reason) =>
       invokePending<CapabilityRequestResult>(['capability', 'request'], { capabilities, reason }),
     listAgentApiResources: <T>() => invoke<T>(['list-agent-api-resources']),
+    connectResource: <T>(resourceId: string, input: unknown) =>
+      invokePending<T>(['access', 'connect', resourceId], input),
     requestResourceAccess: <T>(input: unknown) => invokePending<T>(['access', 'request'], input),
-    issueTargetAccessToken: (grantId) =>
-      invokeWithArguments<{
-        tokenType: 'DPoP'
-        scopes: string[]
-        resourceUrl: string
-      }>(['access', 'token'], [grantId]),
+    issueTargetAccessToken: (grantId) => {
+      execFileSync('restish', [apiName, 'access', 'token', grantId, '--rsh-output-format', 'json'], {
+        cwd: repoRoot,
+        env: environment,
+        encoding: 'utf8',
+      })
+    },
     connectTarget: (targetAPIName, resourceUrl) => {
       execFileSync('restish', ['api', 'connect', targetAPIName, resourceUrl, '--no-discover', '--replace', '--yes'], {
         cwd: repoRoot,

@@ -670,6 +670,131 @@ describe('service.test 2', () => {
     expect(repository.update).not.toHaveBeenCalled()
   })
 
+  it.each([
+    { registrationClientUri: null },
+    { registrationAccessToken: null },
+  ])('trusts cached scopes when RFC 7592 management credentials are incomplete', async (overrides) => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      issuer: 'https://idp.example.com',
+      registrationEndpoint: 'https://idp.example.com/register',
+      registrationMode: 'dynamic',
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'registration-token',
+      registeredScopes: ['openid', 'projects:read'],
+      ...overrides,
+    })
+    const repository = createRepository({ byId: current })
+    const fetch = vi.fn()
+    const deps = { connectors: repository, externalHttp: { fetch } } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).resolves.toBe(1)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('rejects an RFC 7592 response for a different client', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      issuer: 'https://idp.example.com',
+      registrationEndpoint: 'https://idp.example.com/register',
+      registrationMode: 'dynamic',
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'registration-token',
+      registeredScopes: ['openid', 'projects:read'],
+    })
+    const repository = createRepository({ byId: current })
+    const fetch = vi.fn().mockResolvedValue(Response.json({ client_id: 'other-client', scope: 'projects:read' }))
+    const deps = { connectors: repository, externalHttp: { fetch } } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).rejects.toThrow('Dynamic OIDC registration management changed the client identifier.')
+  })
+
+  it('surfaces transient RFC 7592 reads without changing registration', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      issuer: 'https://idp.example.com',
+      registrationEndpoint: 'https://idp.example.com/register',
+      registrationMode: 'dynamic',
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'registration-token',
+      registeredScopes: ['openid', 'projects:read'],
+    })
+    const repository = createRepository({ byId: current })
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 503 }))
+    const deps = { connectors: repository, externalHttp: { fetch } } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).rejects.toThrow('Dynamic OIDC client registration read failed.')
+    expect(repository.update).not.toHaveBeenCalled()
+    expect(repository.rotateClientGeneration).not.toHaveBeenCalled()
+  })
+
+  it('repairs a cached dynamic client when RFC 7592 omits its scope field', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      issuer: 'https://idp.example.com',
+      registrationEndpoint: 'https://idp.example.com/register',
+      registrationMode: 'dynamic',
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'registration-token',
+      registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'],
+    })
+    const repository = createRepository({ byId: current })
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ client_id: 'client-id' }))
+      .mockResolvedValueOnce(Response.json(discoveryMetadata({ scopes_supported: ['openid', 'projects:read'] })))
+      .mockResolvedValueOnce(
+        Response.json({
+          client_id: 'client-id',
+          scope: 'email offline_access openid profile projects:read',
+        }),
+      )
+    const deps = { connectors: repository, externalHttp: { fetch } } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).resolves.toBe(1)
+    expect(repository.update).toHaveBeenCalledWith(
+      current.id,
+      expect.objectContaining({ registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'] }),
+    )
+  })
+
+  it('repairs cached scopes after a terminal RFC 7592 read response', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      issuer: 'https://idp.example.com',
+      registrationEndpoint: 'https://idp.example.com/register',
+      registrationMode: 'dynamic',
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'registration-token',
+      registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'],
+    })
+    const repository = createRepository({ byId: current })
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(Response.json(discoveryMetadata({ scopes_supported: ['openid', 'projects:read'] })))
+      .mockResolvedValueOnce(
+        Response.json({
+          client_id: 'client-id',
+          scope: 'email offline_access openid profile projects:read',
+        }),
+      )
+    const deps = { connectors: repository, externalHttp: { fetch } } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).resolves.toBe(1)
+    expect(repository.update).toHaveBeenCalledOnce()
+  })
+
   it('repairs provider-side dynamic client scope drift in place', async () => {
     const current = connector({
       providerType: 'generic_oauth',

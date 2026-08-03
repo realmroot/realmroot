@@ -464,6 +464,7 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
                   (scope) => scope !== 'openid' && scope !== 'offline_access',
                 ),
                 authorizationDetails: connection.authorizationDetails,
+                updatedAt: connection.updatedAt,
               }))
           : [],
       grants: grants
@@ -504,6 +505,7 @@ export async function listAgentApiResources(
       subjectHint: connection.subjectHint,
       scopes: connection.grantedScopes,
       authorizationDetails: connection.authorizationDetails,
+      updatedAt: connection.updatedAt.toISOString(),
     })),
     accessGrants: resource.grants.map((grant) =>
       toAccessGrant({

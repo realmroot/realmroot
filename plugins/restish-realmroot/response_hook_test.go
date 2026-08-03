@@ -223,7 +223,7 @@ func TestResourceConnectionResponseOpensAndWaitsForConnectedAccount(t *testing.T
 		if requests == 1 {
 			return jsonResponse(200, testAgentConfiguration()), nil
 		}
-		want := "https://auth.example.com/api/agent/api-resources/resource-1/authorization-detail-catalog?limit=1&offset=0"
+		want := "https://auth.example.com/api/agent/api-resources?limit=100&offset=0"
 		if request.URL.String() != want {
 			t.Fatalf("status URL = %q, want %q", request.URL, want)
 		}
@@ -231,12 +231,13 @@ func TestResourceConnectionResponseOpensAndWaitsForConnectedAccount(t *testing.T
 		if requests == 2 {
 			updatedAt = "2026-08-03T07:00:00.000Z"
 		}
-		return jsonResponse(200, map[string]any{
-			"items":                      []any{},
-			"accountConnectionId":        "connection-1",
-			"accountConnectionUpdatedAt": updatedAt,
-			"connectionRequired":         false,
-		}), nil
+		return jsonResponse(200, map[string]any{"items": []any{map[string]any{
+			"id": "resource-1",
+			"accountConnections": []any{map[string]any{
+				"id":        "connection-1",
+				"updatedAt": updatedAt,
+			}},
+		}}}), nil
 	})
 	approvalURL := "https://auth.example.com/agent/resource-connection/approve#token=secret"
 	input := plugin.ResponseMiddlewareInput{
