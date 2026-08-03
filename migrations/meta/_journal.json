@@ -197,6 +197,13 @@
       "when": 1785675369281,
       "tag": "20260802125609_white_king_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1785722209665,
+      "tag": "20260803015649_oauth-client-generations",
+      "breakpoints": true
     }
   ]
 }

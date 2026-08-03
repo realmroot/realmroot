@@ -22,6 +22,7 @@ export const resourceAccountConnection = sqliteTable(
       .$type<AuthorizationDetail[]>()
       .notNull()
       .default(sql`'[]'`),
+    clientGeneration: integer('client_generation').default(1).notNull(),
     status: text('status').notNull().default('active'),
     credentialExpiresAt: integer('credential_expires_at', { mode: 'timestamp_ms' }),
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
@@ -68,6 +69,7 @@ export const resourceConnectionIntent = sqliteTable(
       .notNull()
       .default(sql`'[]'`),
     encryptedPkceVerifier: text('encrypted_pkce_verifier').notNull(),
+    clientGeneration: integer('client_generation').default(1).notNull(),
     returnTo: text('return_to').notNull().default('account-center'),
     status: text('status').notNull().default('pending'),
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),

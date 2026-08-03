@@ -89,6 +89,29 @@ export function createConnectorRepository(db: Database, secrets: SecretCipher): 
       return row ? decryptConnector(db, row, secrets) : null
     },
 
+    async rotateClientGeneration(id, expectedGeneration, input) {
+      const encryptedInput = { ...input }
+      if (typeof input.clientSecret === 'string') {
+        encryptedInput.clientSecretContext = connectorSecretContext(id)
+        encryptedInput.clientSecret = await secrets.seal(input.clientSecret, encryptedInput.clientSecretContext)
+      }
+      if (typeof input.registrationAccessToken === 'string') {
+        encryptedInput.registrationAccessTokenContext = connectorRegistrationTokenContext(id)
+        encryptedInput.registrationAccessToken = await secrets.seal(
+          input.registrationAccessToken,
+          encryptedInput.registrationAccessTokenContext,
+        )
+      }
+      const [row] = await db
+        .update(identityProviderConnector)
+        .set(encryptedInput)
+        .where(
+          and(eq(identityProviderConnector.id, id), eq(identityProviderConnector.clientGeneration, expectedGeneration)),
+        )
+        .returning()
+      return row ? decryptConnector(db, row, secrets) : null
+    },
+
     async delete(id) {
       await db.delete(identityProviderConnector).where(eq(identityProviderConnector.id, id))
     },

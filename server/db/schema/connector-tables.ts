@@ -22,8 +22,23 @@ export const identityProviderConnector = sqliteTable(
     registrationEndpoint: text('registration_endpoint'),
     revocationEndpoint: text('revocation_endpoint'),
     registrationMode: text('registration_mode'),
+    registrationClientUri: text('registration_client_uri'),
     registrationAccessToken: text('registration_access_token'),
     registrationAccessTokenContext: text('registration_access_token_context'),
+    registeredScopes: text('registered_scopes', { mode: 'json' }).$type<string[]>(),
+    clientGeneration: integer('client_generation').default(1).notNull(),
+    retiredClientGenerations: text('retired_client_generations', { mode: 'json' }).$type<
+      Array<{
+        generation: number
+        clientId: string
+        encryptedClientSecret: string
+        clientSecretContext: string
+        registrationClientUri: string | null
+        encryptedRegistrationAccessToken: string | null
+        registrationAccessTokenContext: string | null
+        registeredScopes: string[]
+      }>
+    >(),
     scopes: text('scopes', { mode: 'json' }).$type<string[]>(),
     attributeMapping: text('attribute_mapping', { mode: 'json' }).$type<Record<string, string>>(),
     providerMetadata: text('provider_metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
