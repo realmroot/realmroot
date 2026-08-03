@@ -7,6 +7,7 @@ deployment selection, Restish setup, profiles, and stable Agent identity.
 
 - [Resolve the deployment](#resolve-the-deployment)
 - [Prepare Restish](#prepare-restish)
+- [Isolate concurrent Agent runtimes](#isolate-concurrent-agent-runtimes)
 - [Connect the API](#connect-the-api)
 - [Add a profile](#add-a-profile)
 - [Establish identity](#establish-identity)
@@ -68,6 +69,29 @@ export REALMROOT_AGENT_NAME="Build Agent"
 ```
 
 Preparation is complete when all three required versions are confirmed.
+
+## Isolate Concurrent Agent Runtimes
+
+The adapter's protected state selects both the Realmroot identity and the
+current target credential. Normally use its default state directory. For an
+explicit cleanroom run, or when multiple Agent runtimes on the same machine may
+operate the same target concurrently, allocate one directory before the first
+command and export it for the entire shell session:
+
+```bash
+AGENT_STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/realmroot-agent.XXXXXX")"
+chmod 700 "$AGENT_STATE_DIR"
+export REALMROOT_PLUGIN_STATE_DIR="$AGENT_STATE_DIR"
+```
+
+Do not prefix only the Realmroot approval or token command with this variable.
+Every later Realmroot command and every target Restish command must inherit the
+same exported value; otherwise the target can silently use another runtime's
+workspace credential. Keep the directory for the duration of the workflow.
+
+Isolation is complete when `REALMROOT_PLUGIN_STATE_DIR` is exported once and
+the identity, access, token, and target-operation commands all run in that same
+shell environment.
 
 ## Connect The API
 
