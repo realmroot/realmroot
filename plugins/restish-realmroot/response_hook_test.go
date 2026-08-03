@@ -227,10 +227,15 @@ func TestResourceConnectionResponseOpensAndWaitsForConnectedAccount(t *testing.T
 		if request.URL.String() != want {
 			t.Fatalf("status URL = %q, want %q", request.URL, want)
 		}
+		updatedAt := "2026-08-03T08:00:00.000Z"
+		if requests == 2 {
+			updatedAt = "2026-08-03T07:00:00.000Z"
+		}
 		return jsonResponse(200, map[string]any{
-			"items":               []any{},
-			"accountConnectionId": "connection-1",
-			"connectionRequired":  false,
+			"items":                      []any{},
+			"accountConnectionId":        "connection-1",
+			"accountConnectionUpdatedAt": updatedAt,
+			"connectionRequired":         false,
 		}), nil
 	})
 	approvalURL := "https://auth.example.com/agent/resource-connection/approve#token=secret"

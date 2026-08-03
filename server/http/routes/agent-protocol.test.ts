@@ -278,6 +278,7 @@ describe('Agent protocol routes', () => {
       ],
       pagination: { limit: 25, offset: 0, total: 1, hasMore: false, nextOffset: null },
       accountConnectionId: 'connection-1',
+      accountConnectionUpdatedAt: '2026-08-01T00:00:00.000Z',
       connectionRequired: false,
     })
     const app = createRouteApp({ getAgentSession: vi.fn().mockResolvedValue(session()) })

@@ -1184,6 +1184,7 @@ describe('external API resource authorization', () => {
       ],
       pagination: { limit: 100, offset: 0, total: 2, hasMore: false, nextOffset: null },
       accountConnectionId: 'connection-1',
+      accountConnectionUpdatedAt: connectionRecord().updatedAt.toISOString(),
       connectionRequired: false,
     })
   })
@@ -1287,6 +1288,7 @@ describe('external API resource authorization', () => {
         items: [],
         pagination: { limit: 10, offset: 0, total: 0, hasMore: false, nextOffset: null },
         accountConnectionId: null,
+        accountConnectionUpdatedAt: null,
         connectionRequired: true,
       })
     }

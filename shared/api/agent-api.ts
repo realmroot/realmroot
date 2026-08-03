@@ -242,6 +242,7 @@ export const authorizationDetailCatalogResponseSchema = z.object({
   items: z.array(authorizationDetailCatalogEntrySchema),
   pagination: paginationMetadataSchema,
   accountConnectionId: z.string().nullable(),
+  accountConnectionUpdatedAt: z.string().datetime().nullable(),
   connectionRequired: z.boolean(),
 })
 

@@ -182,6 +182,14 @@ live catalog before requesting access:
 restish "$API_NAME" access contexts resource_123 -o json
 ```
 
+Each item reports whether the connected provider account already authorizes
+that exact context. If the selected item has `connectionAuthorized: false`,
+invoke `access connect` again with the required scopes before requesting Agent
+access. This is an account-authorization update, not a new account. The command
+must remain in the foreground until the controller finishes the provider
+consent; then read the catalog again and require the selected item to report
+`connectionAuthorized: true`.
+
 Follow `pagination.nextOffset` until `hasMore` is false. Each item reports the
 exact `authorizationDetail`, whether the connected account has authorized it,
 and matching active Agent grants. When the response has

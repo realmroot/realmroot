@@ -548,6 +548,7 @@ export async function listAgentAuthorizationDetailCatalog(
       items: [],
       pagination: paginationMetadata({ ...pagination, total: 0 }),
       accountConnectionId: null,
+      accountConnectionUpdatedAt: null,
       connectionRequired: true,
     }
   }
@@ -1426,6 +1427,7 @@ async function readAuthorizationDetailCatalog(
     items: items.slice(pagination.offset, pagination.offset + pagination.limit),
     pagination: paginationMetadata({ ...pagination, total: items.length }),
     accountConnectionId: connection.id,
+    accountConnectionUpdatedAt: connection.updatedAt.toISOString(),
     connectionRequired: false,
   }
 }

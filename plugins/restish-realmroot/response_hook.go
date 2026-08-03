@@ -192,21 +192,20 @@ func handleResourceConnectionApproval(
 	if err != nil || !sameOrigin(verificationURI, requestOrigin) || approvalURL.Path != "/agent/resource-connection/approve" {
 		return plugin.ResponseMiddlewareOutput{}, errors.New("resource connection approval URL must use the discovered issuer origin")
 	}
-	if err := opener.Open(verificationURI); err != nil {
-		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open resource connection approval: %w", err)
-	}
 	state, err := states.FindByOriginAndIdentityID(requestOrigin, agentID)
 	if err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
 	statusURL := requestOrigin + "/api/agent/api-resources/" + url.PathEscape(resourceID) +
 		"/authorization-detail-catalog?limit=1&offset=0"
-	for time.Now().Before(expiresAt) {
-		var status struct {
-			AccountConnectionID string `json:"accountConnectionId"`
-			ConnectionRequired  bool   `json:"connectionRequired"`
-		}
-		if err := requestJSON(
+	type connectionStatus struct {
+		AccountConnectionID        string `json:"accountConnectionId"`
+		AccountConnectionUpdatedAt string `json:"accountConnectionUpdatedAt"`
+		ConnectionRequired         bool   `json:"connectionRequired"`
+	}
+	readStatus := func() (connectionStatus, error) {
+		var status connectionStatus
+		err := requestJSON(
 			context.Background(),
 			client,
 			http.MethodGet,
@@ -214,10 +213,24 @@ func handleResourceConnectionApproval(
 			mustAgentJWT(state, configuration.Issuer),
 			nil,
 			&status,
-		); err != nil {
+		)
+		return status, err
+	}
+	baseline, err := readStatus()
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	if err := opener.Open(verificationURI); err != nil {
+		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open resource connection approval: %w", err)
+	}
+	for time.Now().Before(expiresAt) {
+		status, err := readStatus()
+		if err != nil {
 			return plugin.ResponseMiddlewareOutput{}, err
 		}
-		if !status.ConnectionRequired && status.AccountConnectionID != "" {
+		connectionChanged := status.AccountConnectionID != baseline.AccountConnectionID ||
+			status.AccountConnectionUpdatedAt != baseline.AccountConnectionUpdatedAt
+		if !status.ConnectionRequired && status.AccountConnectionID != "" && connectionChanged {
 			resolved := make(map[string]any, len(body))
 			for key, value := range body {
 				resolved[key] = value
