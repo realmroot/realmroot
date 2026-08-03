@@ -231,6 +231,12 @@ Access approval is complete only when the response contains an active
 `grantId`. Denial or expiry closes that request; a retry starts with a fresh
 access request.
 
+Grant lifetime remains a controller decision. A one-target-token grant becomes
+inactive after its credential is issued; do not expect it to support a later
+workspace switch. Recurring workflows need a reusable grant approved by the
+controller. When no active exact grant remains, create a fresh least-privilege
+request instead of treating the consumed grant as a provider failure.
+
 ## Issue Target Credentials
 
 Issue credentials for the exact approved grant:
@@ -268,6 +274,19 @@ refreshes reusable grants when needed.
 
 For collection requests, inspect the generated pagination arguments and fetch
 every page unless the user requested a bounded result.
+
+When an operation contract requires forwarding a response header to a later
+request, capture Restish's verbose output without printing it. Restish prefixes
+response headers with `< `, so match the complete line as
+`^< Header-Name:` rather than `^Header-Name:`. Keep credentials and protocol
+proofs in memory, forward them unchanged, and expose only non-sensitive status
+fields in progress output.
+
+For example, an x402 workflow uses the Wallet authorization response's
+`< Payment-Signature:` header on the paid target retry, then uses the target
+response's `< Payment-Response:` header to confirm settlement with the Wallet.
+Do not treat Wallet authorization alone as payment completion: require the paid
+target request to succeed and the Wallet confirmation to report settlement.
 
 ## Diagnostics
 
