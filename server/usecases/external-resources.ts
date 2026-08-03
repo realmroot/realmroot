@@ -292,14 +292,15 @@ export async function createAccountConnection(
     const owner = approval.identity.identity.ownerOrganizationId
       ? { type: 'organization' as const, organizationId: approval.identity.identity.ownerOrganizationId }
       : { type: 'user' as const }
+    const connectionScopes = expandedConnectionScopes(approval.connection, approval.token.scopes)
     const pending = await createResourceConnectionIntent(
       deps,
       approval.token.resourceId,
-      { owner, scopes: approval.token.scopes, returnTo: 'connection-approval' },
+      { owner, scopes: connectionScopes, returnTo: 'connection-approval' },
       actorUserId,
       callbackOrigin,
     )
-    return toPendingAccountConnection(pending, approval.token.scopes)
+    return toPendingAccountConnection(pending, connectionScopes)
   }
   if (input.context === 'access-request') {
     const request = await requirePendingAccessRequestByToken(deps, input.approvalToken)
@@ -319,15 +320,7 @@ export async function createAccountConnection(
       ownerUserId: identity.identity.ownerUserId,
       ownerOrganizationId: identity.identity.ownerOrganizationId,
     })
-    const existingConnection = controlledConnection ?? ownerConnection
-    const expandingConnection = existingConnection?.status === 'active' ? existingConnection : null
-    const connectionScopes = [
-      ...new Set([
-        ...(expandingConnection?.grantedScopes.filter((scope) => scope !== 'openid' && scope !== 'offline_access') ??
-          []),
-        ...request.scopes,
-      ]),
-    ].sort()
+    const connectionScopes = expandedConnectionScopes(controlledConnection ?? ownerConnection, request.scopes)
     const pending = await createResourceConnectionIntent(
       deps,
       request.resourceId,
@@ -345,6 +338,14 @@ export async function createAccountConnection(
     callbackOrigin,
   )
   return toPendingAccountConnection(pending, input.scopes)
+}
+
+function expandedConnectionScopes(connection: ResourceAccountConnectionRecord | null, requestedScopes: string[]) {
+  const existingScopes =
+    connection?.status === 'active'
+      ? connection.grantedScopes.filter((scope) => scope !== 'openid' && scope !== 'offline_access')
+      : []
+  return [...new Set([...existingScopes, ...requestedScopes])].sort()
 }
 
 export async function listAccountConnections(deps: Deps, actorUserId: string, pagination: PaginationInput) {

@@ -779,6 +779,49 @@ describe('external API resource authorization', () => {
     ).rejects.toThrow('Active resource account connection was not found.')
   })
 
+  it('[spec: agent-identity/resource-account-connection-expansion] preserves active account authority while connection expansion awaits OAuth', async () => {
+    const deps = createTestDeps()
+    authorizationDeps(deps)
+    const existingConnection = {
+      ...connectionRecord(),
+      grantedScopes: ['openid', 'offline_access', 'projects:read'],
+      authorizationDetails: [{ type: 'project_access', identifier: 'project-1', actions: ['read'] }],
+    }
+    mockResourceOpenApi(deps, resource().resourceUrl, ['projects:read', 'projects:write'])
+    vi.mocked(deps.authorization.listAgentRoleAssignments).mockResolvedValue([])
+    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(identityAggregate())
+    vi.mocked(deps.externalResources.findConnectionByOwnerResource).mockResolvedValue(existingConnection)
+    vi.mocked(deps.externalResources.createConnectionIntent).mockImplementation(async (record) => record)
+
+    const request = await createAgentResourceConnectionRequest(
+      deps,
+      'resource-1',
+      { scopes: ['projects:write'], reason: 'Update projects' },
+      principal(),
+      'https://auth.example.com',
+    )
+    const approvalToken = decodeURIComponent(new URL(request.approval!.url).hash.slice('#token='.length))
+
+    await expect(
+      createAccountConnection(
+        deps,
+        { context: 'connection-request', approvalToken },
+        'user-1',
+        'https://auth.example.com',
+      ),
+    ).resolves.toMatchObject({
+      scopes: ['projects:read', 'projects:write'],
+      status: 'pending_authorization',
+    })
+    expect(deps.externalResources.createConnectionIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scopes: ['offline_access', 'openid', 'projects:read', 'projects:write'],
+      }),
+    )
+    expect(deps.externalResources.replaceConnectionAuthorization).not.toHaveBeenCalled()
+    expect(deps.externalResources.revokeGrant).not.toHaveBeenCalled()
+  })
+
   it('rejects invalid resource connection approval contexts', async () => {
     const deps = createTestDeps()
     authorizationDeps(deps)

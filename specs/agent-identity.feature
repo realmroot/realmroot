@@ -403,6 +403,15 @@ Feature: Agent identity and delegated API authorization
       And restores the connection when it was previously revoked
       And returns to the pending Agent approval so the controller can decide it separately
 
+    @entrypoint:agent-protocol @journey:resource-account-connection-expansion
+    Scenario: An Agent requests additional authority from an existing resource account
+      Given the Agent's home space has an active resource account connection with covered persistent grants
+      When the Agent requests a controller-managed connection for an additional scope
+      Then Realmroot leaves the account connection revision, authorization details, and grants unchanged while approval is pending or interrupted
+      When the controller starts account reauthorization
+      Then Realmroot requests the union of the account's existing scopes and the Agent's additional scope
+      And only a successful OAuth callback may replace the account authorization and invalidate grants it no longer covers
+
     @entrypoint:agent-protocol @journey:agent-resource-discovery
     Scenario: An Agent discovers accounts and requests exact resource authority
       Given enabled native and externally authorized API resources exist
