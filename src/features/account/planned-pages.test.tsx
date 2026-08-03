@@ -513,8 +513,10 @@ describe('planned Account Center journeys', () => {
     fireEvent.change(screen.getByLabelText('Organization name'), { target: { value: 'Payments Team' } })
     expect((screen.getByLabelText('Slug') as HTMLInputElement).value).toBe('payments-team')
     fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'payments-platform' } })
+    fireEvent.change(screen.getByLabelText('Organization name'), { target: { value: 'Payments Platform' } })
+    expect((screen.getByLabelText('Slug') as HTMLInputElement).value).toBe('payments-platform')
     fireEvent.submit(screen.getByRole('button', { name: 'Create organization' }).closest('form')!)
-    await waitFor(() => expect(created).toMatchObject({ name: 'Payments Team', slug: 'payments-platform' }))
+    await waitFor(() => expect(created).toMatchObject({ name: 'Payments Platform', slug: 'payments-platform' }))
   })
 
   it('hides Organization creation and renders an empty collection when policy disallows it', async () => {

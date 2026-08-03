@@ -442,6 +442,10 @@ describe('console collections', () => {
 
     renderWithQuery(<SettingsPage section="email" />)
     expect(await screen.findByLabelText('Sender name')).toHaveProperty('value', 'Realmroot')
+    fireEvent.click(screen.getByRole('switch', { name: 'Email delivery' }))
+    expect(screen.getByRole('switch', { name: 'Email delivery' }).getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(screen.getByRole('switch', { name: 'Email delivery' }).getAttribute('aria-checked')).toBe('true')
     fireEvent.change(screen.getByLabelText('Sender name'), { target: { value: 'Acme Identity' } })
     fireEvent.change(screen.getByLabelText('Sender address'), { target: { value: 'auth@example.com' } })
     fireEvent.change(screen.getByLabelText('Reply-to address'), { target: { value: 'support@example.com' } })

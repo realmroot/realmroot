@@ -4,6 +4,7 @@ import {
   MfaPage,
   SecurityBlocklistPage,
   SecurityCaptchaPage,
+  SecurityGeneralPage,
   SecurityPasswordPolicyPage,
 } from '@/features/console/extracted/security-settings'
 import { queryClient } from '@/router'
@@ -88,7 +89,10 @@ describe('admin console security policies', () => {
     expect(within(factors).getByText('Email verification code')).toBeTruthy()
     expect(within(factors).getByText('Backup codes')).toBeTruthy()
     fireEvent.change(await screen.findByLabelText('Prompt policy'), { target: { value: 'optional' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Passkey' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Authenticator app' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Email verification code' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Backup codes' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
@@ -97,11 +101,11 @@ describe('admin console security policies', () => {
           policy: {
             mfa: {
               mode: 'optional',
-              authenticatorAppEnabled: true,
+              authenticatorAppEnabled: false,
               emailOtpEnabled: true,
-              backupCodesEnabled: true,
+              backupCodesEnabled: false,
             },
-            passkeys: { enabled: true },
+            passkeys: { enabled: false },
           },
         },
       ]),
@@ -111,12 +115,14 @@ describe('admin console security policies', () => {
   it('edits password rules inline and persists the active tab atomically', async () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(securityFetch(requests))
-    renderWithQuery(<SecurityPasswordPolicyPage />)
+    renderWithQuery(<SecurityGeneralPage />)
 
     const section = (await screen.findByRole('heading', { name: 'Password policy' })).closest('section') as HTMLElement
     expect(within(section).getByLabelText('Minimum length')).toHaveProperty('value', '12')
     fireEvent.change(await screen.findByLabelText('Minimum length'), { target: { value: '14' } })
     fireEvent.change(screen.getByLabelText('Required character types'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Reject user information' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Reject repetitive or sequential characters' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Reject custom words' }))
     fireEvent.change(screen.getByLabelText('Custom words'), { target: { value: 'tenant\ninternal' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -129,8 +135,8 @@ describe('admin console security policies', () => {
               minLength: 14,
               requiredCharacterTypes: 3,
               customWords: ['tenant', 'internal'],
-              rejectUserInfo: true,
-              rejectSequential: true,
+              rejectUserInfo: false,
+              rejectSequential: false,
               rejectCustomWords: true,
             },
           }),
@@ -167,7 +173,9 @@ describe('admin console security policies', () => {
 
     await screen.findByRole('heading', { name: 'Session policy' })
     fireEvent.change(await screen.findByLabelText('Session lifetime'), { target: { value: '86400' } })
+    fireEvent.change(screen.getByLabelText('Refresh interval'), { target: { value: '3600' } })
     fireEvent.change(screen.getByLabelText('Fresh authentication window'), { target: { value: '900' } })
+    fireEvent.change(screen.getByLabelText('Cookie cache'), { target: { value: '120' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
@@ -176,9 +184,9 @@ describe('admin console security policies', () => {
           policy: expect.objectContaining({
             sessions: {
               expiresInSeconds: 86400,
-              updateAgeSeconds: 300,
+              updateAgeSeconds: 3600,
               freshAgeSeconds: 900,
-              cookieCacheSeconds: 60,
+              cookieCacheSeconds: 120,
             },
           }),
         }),

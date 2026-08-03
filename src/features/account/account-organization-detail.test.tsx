@@ -74,7 +74,7 @@ describe('Account Organization detail', () => {
             {
               id: 'member-1',
               userId: store.profile.id,
-              role: 'owner',
+              role: 'member',
               user: { id: store.profile.id, name: store.profile.displayName, email: store.profile.email },
               createdAt: '2026-08-01T00:00:00.000Z',
             },
@@ -163,6 +163,10 @@ describe('Account Organization detail', () => {
     expect(await screen.findByRole('heading', { name: 'Family' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Open Console' })).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull()
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Members' }), { button: 0, ctrlKey: false })
+    expect((await screen.findAllByText(store.profile.email)).length).toBeGreaterThan(1)
+    expect(screen.queryByRole('button', { name: 'Invite member' })).toBeNull()
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agents' }), { button: 0, ctrlKey: false })
     expect(await screen.findByText('Family assistant')).toBeTruthy()
