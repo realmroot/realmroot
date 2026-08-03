@@ -237,6 +237,7 @@ describe('authorization CRUD and assignment policy', () => {
         authorization_details_types_supported: ['payment_initiation'],
         authorization_details_catalog_endpoint: `${resource.resourceUrl}/authorization-details`,
         authorization_details_catalog_scope: 'authorization-details:read',
+        authorization_details_catalog_version: 1,
         pushed_authorization_request_endpoint: `${resource.resourceUrl}/par`,
       },
     }

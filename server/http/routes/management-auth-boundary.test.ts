@@ -64,9 +64,6 @@ describe('management routes 1', () => {
                   provider: 'realmroot-agent',
                 },
               },
-              params: {
-                provider: 'realmroot-agent',
-              },
               satisfies: protectedResourceCapabilityNames,
             },
           },
@@ -132,7 +129,7 @@ describe('management routes 1', () => {
     expect(contract.headers.get('link')).toBeNull()
     await expect(contract.json()).resolves.toEqual(unifiedOpenApi)
 
-    const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /agent/access-requests')
+    const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /access-requests')
     const standaloneRequestSchema = requestBodyContent(accessRequest?.requestBody).schema
     expect(JSON.stringify(standaloneRequestSchema)).not.toContain('#/components/')
 
@@ -151,11 +148,9 @@ describe('management routes 1', () => {
 
     expect(generatedCommands).toEqual([
       { group: 'auth', name: 'whoami', operationId: 'getCurrentAgent' },
-      { group: 'access', name: 'contexts', operationId: 'listAgentAuthorizationDetailCatalog' },
-      { group: 'access', name: 'connect', operationId: 'createAgentResourceConnectionRequest' },
-      { group: 'access', name: 'request', operationId: 'createAgentAccessRequest' },
-      { group: 'access', name: 'token', operationId: 'issueTargetAccessToken' },
-      { group: 'capability', name: 'request', operationId: 'requestAgentCapabilities' },
+      { group: 'connection-request', name: 'connect', operationId: 'createConnectionRequest' },
+      { group: 'access-request', name: 'access', operationId: 'createAccessRequest' },
+      { group: 'capability', name: 'request-capabilities', operationId: 'requestAgentCapabilities' },
     ])
   })
 
@@ -291,7 +286,7 @@ describe('management routes 1', () => {
       authorization: 'Bearer eyJ0eXAiOiJhZ2VudCtqd3QifQ.e30.c2lnbmF0dXJl',
     }
 
-    const agent = await app.request('/api/agent', { headers })
+    const agent = await app.request('/api/agent-identities/current', { headers })
     expect(agent.status).toBe(200)
     await expect(agent.json()).resolves.toMatchObject({
       agent: { issuer: 'http://localhost', subject: 'agt_1' },
@@ -391,16 +386,34 @@ describe('management routes 1', () => {
         },
       })
     })
-    const app = createApp(
-      auth,
-      createTestDeps({
-        agentIdentities: {
-          findActiveByProtocolAgent: vi.fn().mockResolvedValue(agentIdentity()),
-        },
-      }),
-    )
+    const deps = createTestDeps({
+      agentIdentities: {
+        findActiveByProtocolAgent: vi.fn().mockResolvedValue(agentIdentity()),
+      },
+    })
+    vi.mocked(deps.agents.findApprovalRequest).mockResolvedValue({
+      id: 'approval-1',
+      method: 'device_authorization',
+      agentId: 'protocol-agent-1',
+      hostId: 'host-1',
+      userId: 'controller-1',
+      capabilities: 'applications:read applications:write',
+      status: 'pending',
+      userCodeHash: 'hash',
+      loginHint: null,
+      bindingMessage: null,
+      clientNotificationToken: null,
+      clientNotificationEndpoint: null,
+      deliveryMode: null,
+      interval: 5,
+      lastPolledAt: null,
+      expiresAt: new Date('2099-01-01T00:10:00.000Z'),
+      createdAt: new Date('2099-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2099-01-01T00:00:00.000Z'),
+    })
+    const app = createApp(auth, deps)
 
-    const response = await app.request('https://auth.example.com/api/agent/capability-requests', {
+    const response = await app.request('https://auth.example.com/api/capability-requests', {
       method: 'POST',
       headers: {
         authorization: 'Bearer agent-proof',
@@ -412,12 +425,11 @@ describe('management routes 1', () => {
       }),
     })
 
-    expect(response.status).toBe(200)
-    expect(auth.api.getAgentSession).not.toHaveBeenCalled()
-    const body = (await response.json()) as {
-      approval: { verification_uri_complete: string }
-    }
-    const approvalUrl = new URL(body.approval.verification_uri_complete)
+    expect(response.status).toBe(201)
+    expect(response.headers.get('location')).toBe('https://auth.example.com/api/capability-requests/approval-1')
+    expect(response.headers.get('link')).toContain('interactive-resource')
+    const body = (await response.json()) as { interaction: { url: string } }
+    const approvalUrl = new URL(body.interaction.url)
     expect(approvalUrl.pathname).toBe('/agent/approve')
     expect(approvalUrl.searchParams.getAll('capability')).toEqual(['applications:read', 'applications:write'])
   })

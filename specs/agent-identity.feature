@@ -24,15 +24,15 @@ Feature: Agent identity and delegated API authorization
     @e2e @entrypoint:agent-protocol @journey:agent-identity-enrollment
     Scenario: A new Agent establishes a stable identity on its first protected API operation
       Given a new Agent connects Restish to the Realmroot OpenAPI contract
-      When the Agent invokes auth whoami without a local Realmroot identity
+      When the Agent invokes whoami without a local Realmroot identity
       Then the transparent Restish authentication adapter registers locally generated host and Agent keys
-      And auth whoami waits while an authorized controller approves the Agent once from the hosted verification page
+      And whoami waits while an authorized controller approves the Agent once from the hosted verification page
       And the adapter creates a personal stable identity through the approved Agent session
       Then Realmroot creates an Agent with a stable issuer and subject
       And the Agent belongs to exactly one home space
       And users govern the Agent through roles in that space
       And the host registration is bound to that Agent identity
-      And the original auth whoami operation resumes and returns the stable issuer and subject
+      And the original whoami operation resumes and returns the stable issuer and subject
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
       And later OpenAPI operations reuse the Agent identity without another login command
       And enrollment alone grants no management or external API resource access
@@ -147,7 +147,38 @@ Feature: Agent identity and delegated API authorization
       But AgentInfo never returns controller, home space, Host, role, scope, grant, or authorization state
       And AgentInfo is never authoritative for authentication or authorization
 
-  Rule: Native API resources use the shared Agent access workflow
+  Rule: Resource Servers expose provider-owned Resources through one Agent access workflow
+
+    @entrypoint:agent-protocol @journey:agent-resource-server-model
+    Scenario: An Agent discovers Resource Servers before provider-owned Resources
+      Given Realmroot has registered native and external Resource Servers
+      When the Agent lists Resource Servers
+      Then each item identifies one protected API service, its service URL, OAuth resource indicator, availability, and account connection status
+      And the Agent-facing contract does not call a Resource Server an API Resource
+      When the Agent lists one Resource Server's Resources
+      Then each item identifies one provider-owned authorization target with safe display metadata
+      And each Resource separately reports account authorization, Agent-authorized scopes, and requestable scopes
+      And provider-specific RFC 9396 authorization details remain internal to Realmroot
+
+    @entrypoint:restish @journey:restish-generic-interactive-resource
+    Scenario: Restish handles every Realmroot controller interaction through one response profile
+      Given any Realmroot operation returns the interactive-resource profile with an approval URL and canonical self link
+      When the Restish response middleware receives the response
+      Then the plugin recognizes the profile without matching the request method, path, operation identifier, or business response shape
+      And opens the supplied same-issuer approval URL
+      And polls the supplied self link according to Retry-After
+      And returns the terminal resource representation
+      But the plugin never parses an approval secret or constructs a Realmroot polling endpoint
+
+    @entrypoint:restish @journey:restish-generic-resource-credential-offer
+    Scenario: Restish accepts a Resource credential without observing Realmroot grant internals
+      Given an approved access request returns a DPoP resource-credential offer
+      When the Restish response middleware handles that offer
+      Then the plugin creates and retains the DPoP private key locally
+      And signs the exact proof method and URI supplied by Realmroot
+      And submits the proof to the supplied credential endpoint
+      And stores but never prints the returned short-lived credential
+      But the plugin never reads a grant, chooses an authorization mode, discovers an authorization server, or constructs a token endpoint
 
     @entrypoint:product-ui @journey:native-api-resource-registration
     Scenario: An administrator registers a native API that trusts Realmroot
@@ -234,14 +265,14 @@ Feature: Agent identity and delegated API authorization
       And one-time, limited, persistent, revocation, and audit behavior is consistent across both modes
 
     @entrypoint:restish @journey:restish-resource-credential-lifecycle
-    Scenario: Restish replaces obsolete local resource credentials
-      Given Restish stores a DPoP credential for an Agent API resource
-      When the controller approves a new access grant for the same resource
-      Then the plugin replaces the old local grant binding with the new grant
-      And replacing the registered resource record at the same URL also removes the old record binding
-      And target requests use only the new DPoP credential
+    Scenario: Restish selects target credentials without discarding other authorization contexts
+      Given Restish stores DPoP credentials for Agent API resource grants
+      When the Agent issues a target token for another grant at the same resource URL
+      Then the plugin discovers the grant across every API resource page
+      And activates that exact grant without deleting credentials for other authorization contexts
+      And target requests use only the active DPoP credential
       When a one-time token expires or Realmroot rejects an inactive grant
-      Then the plugin removes that local resource credential
+      Then the plugin removes that local resource credential and its active binding
       And the Agent must request a new access grant
       When the target API rejects a cached DPoP credential with HTTP 401
       Then the plugin removes that local resource credential
@@ -339,16 +370,25 @@ Feature: Agent identity and delegated API authorization
       And refresh-token rotation preserves the granted authorization details
       And unknown types or malformed authorization details fail with invalid_authorization_details
 
+    @entrypoint:agent-protocol @journey:external-resource-rar-without-catalog
+    Scenario: Rich authorization does not require an enumerable resource catalog
+      Given an authorization server supports RFC 9396 authorization details and RFC 9126 pushed authorization requests
+      And it does not advertise Realmroot's optional authorization detail catalog extension
+      When an administrator registers an external API resource with supported authorization detail templates
+      Then Realmroot accepts the resource without inventing a catalog requirement
+      And Agents can request exact details already exposed by their connected account
+
     @entrypoint:agent-protocol @journey:external-resource-contextual-delegation
     Scenario: An Agent delegates an exact external-resource context alongside scopes
       Given one external account connection grants multiple opaque authorization detail entries
-      And the authorization server advertises an account-scoped authorization detail catalog endpoint and required scope
+      And the authorization server advertises Realmroot authorization detail catalog version 1 with an account-scoped endpoint and required scope
       When the Agent discovers that catalog through Realmroot
-      Then Realmroot returns the account connection identifier and every available detail with safe display metadata and connection authorization
-      And matching Agent grant state includes only active grants that remain issuable from their approved requests
-      When the Agent requests an exact scope subset and one concrete connected authorization detail
-      Then Realmroot preserves that exact context through hosted approval
-      And rejects missing, generic, multiple, or unconnected authorization details
+      Then Realmroot forwards pagination and returns each available detail with safe display metadata and connection authorization
+      And each detail reports only its Agent-authorized and requestable scope sets
+      And Realmroot does not expose account connection identifiers, grant identifiers, grants, or tokens
+      When the Agent requests an exact scope subset and one or more concrete connected authorization details
+      Then Realmroot preserves that exact authorization boundary through hosted approval
+      And rejects missing, generic, duplicate, or unconnected authorization details
       And the pending request and controller approval preserve both authority dimensions
       And an ungranted entry or browser-tampered approval fails with invalid_authorization_details
       When the controller approves the request and the Agent exchanges a token
@@ -413,11 +453,13 @@ Feature: Agent identity and delegated API authorization
       And only a successful OAuth callback may replace the account authorization and invalidate grants it no longer covers
 
     @entrypoint:agent-protocol @journey:agent-resource-discovery
-    Scenario: An Agent discovers accounts and requests exact resource authority
+    Scenario: An Agent discovers resource connection and scope status before requesting exact authority
       Given enabled native and externally authorized API resources exist
       When the Agent lists available resources
       Then Realmroot returns enabled resources even when an external resource has no connected account
-      And returns catalog descriptions, protected resource URLs, redacted accounts, and active grants
+      And returns each resource server with its protected URL, available scopes, and one connected, not-connected, or not-required account status
+      And a connected account reports only its safe display label and connection-authorized scopes
+      And Realmroot does not expose Connector, account connection, grant, or token identifiers
       When Restish connects directly to a candidate resource and reads the target OpenAPI operation
       And the Agent requests an account and its exact scope set without an applicable grant
       Then Realmroot validates that scope set against the current target OpenAPI contract
@@ -425,6 +467,26 @@ Feature: Agent identity and delegated API authorization
       And the connected account permits every requested scope
       Then Realmroot creates one pending access request and returns a hosted approval URL
       And it does not require a pre-existing Agent resource grant
+
+    @entrypoint:agent-protocol @journey:agent-resource-connection-ensure
+    Scenario: An Agent connects a resource without observing account connection internals
+      Given an Agent requests least-privilege scopes for an external API resource
+      When the controller completes the hosted resource connection approval
+      Then the Restish plugin resolves that exact request through a hidden adapter boundary
+      And the public connection response reports connected without an account connection identifier
+
+    @entrypoint:agent-protocol @journey:agent-resource-access-ensure
+    Scenario: An Agent ensures exact resource access without selecting grants or tokens
+      Given an Agent names an API resource, exact authorization details, and least-privilege scopes
+      When the Agent requests that exact access
+      Then Realmroot resolves the unique account connection from the Agent's home space and API resource
+      Then Realmroot reuses an exact active grant without controller approval when one exists
+      And otherwise creates or resumes one pending controller approval
+      And the public access-request contract never exposes grant identifiers or token operations
+      And the Restish plugin resolves approved access through a hidden adapter boundary
+      And the plugin obtains, protects, and activates a short-lived DPoP target token
+      And the Agent never selects a grant or invokes a token operation
+      And the plugin returns a safe ready receipt without grant identifiers or token material
 
     @entrypoint:product-ui @journey:agent-resource-approval
     Scenario: A controller decides an Agent resource request in one step
@@ -451,7 +513,7 @@ Feature: Agent identity and delegated API authorization
     @e2e @entrypoint:agent-protocol @journey:agent-direct-resource-access
     Scenario: An Agent calls an external API directly with a target-issued token
       Given a controller approved an exact external API resource request
-      When Restish requests a token from the Agent's access grant
+      When the Restish plugin completes the Agent's exact access request
       Then the Realmroot plugin creates and retains a separate DPoP key
       And the plugin sends a standard DPoP header bound to the target token endpoint
       Then Realmroot submits a signed Agent assertion with the RFC 7523 JWT bearer grant

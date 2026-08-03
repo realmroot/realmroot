@@ -1,307 +1,204 @@
-# Registered API Resource Requests
+# Resource Server Operations
 
-Use this reference after Step 1 in `SKILL.md`. Realmroot publishes its complete
-operation metadata from `AUTH_ORIGIN/api/openapi.json`. Routine single-request
-operations use Restish's generic HTTP commands; approval and credential
-workflows retain generated commands.
+Use this reference after completing identity setup. Realmroot exposes only the
+resources an Agent needs to choose and act:
 
-## Contents
+- a **Resource Server** is a registered service;
+- a **Resource** is a provider-owned object or context offered by that service;
+- a **connection** is whether the controller has linked the required account;
+- **scopes** are the authority the Agent has or may request.
 
-- [Discover the resource](#discover-the-resource)
-- [Inspect the target](#inspect-the-target)
-- [Request access](#request-access)
-- [Issue target credentials](#issue-target-credentials)
-- [Invoke the target](#invoke-the-target)
-- [Diagnostics](#diagnostics)
+Do not inspect or select account connections, authorization-detail payloads,
+grants, token endpoints, or tokens. Realmroot resolves those details.
 
-## Discover The Resource
+## 1. Discover Resource Servers
 
-Translate the user's goal into the required capability and operation before
-searching. Storage, wallets, payments, and paid APIs are capability patterns,
-not fixed resource names.
-
-Inspect pagination, then list every page of Agent-visible resources and
-existing grants:
+List all pages:
 
 ```bash
-restish get "$API_NAME/agent/api-resources?limit=100&offset=0" -o json
-restish get "$API_NAME/agent/access-grants?limit=100&offset=0" -o json
+restish get "$AUTH_ORIGIN/api/resource-servers?limit=100&offset=0" -o json
 ```
 
-Search the discovered identifiers, names, catalog descriptions, scope values,
-and scope descriptions for the required capability. Consider only resources
-whose status is `available`. Shortlist the exact `apiResourceId`,
-`connectorId` and `resourceUrl`; a null Connector means native authorization.
-Do not request access yet.
-An external resource may have no linked account yet. Connect it through the
-separate hosted connection workflow before requesting Agent access. A native
-resource has no account connection.
+Follow `pagination.nextOffset` while `pagination.hasMore` is true. Match the
+user's task against each server's `identifier`, `name`, `description`, and
+declared `scopes`. Use only a server whose `availability.status` is
+`available`.
 
-When several resources satisfy the request and the catalog does not establish a
-single match, inspect each candidate's target contract before asking the user
-to select. Present identifiers and labels only when the target contracts still
-leave multiple valid choices.
+The selected representation supplies all navigation values:
 
-Catalog discovery is complete when at least one candidate URL is available for
-target inspection, or every resource page has been checked and no registered
-resource provides the capability. In the latter case, report the missing
-capability without creating an access request. Tenant-management capabilities
-are outside this branch.
+- `id` identifies the Resource Server in Realmroot commands;
+- `serviceUrl` is the target API to call directly;
+- `connection.status` is `connected`, `not_connected`, or `not_required`;
+- `connection.authorizedScopes` is the authority already held by the linked
+  account;
+- `links.resources` is the provider-owned Resource collection;
+- `links.connectionRequests` is present when account connection is supported.
 
-## Inspect The Target
-
-Connect Restish directly to each shortlisted `resourceUrl` and inspect the
-target's generated operations before choosing scopes or requesting access:
+Read any returned `links.self` or collection link with Restish's generic GET
+when a generated command is unnecessary:
 
 ```bash
-TARGET_API=projects
-RESOURCE_URL=https://api.example.com
-restish api connect "$TARGET_API" "$RESOURCE_URL" --yes
+restish get "$RESOURCE_SERVER_SELF" -o json
+restish get "$RESOURCES_URL?limit=100&offset=0" -o json
+```
+
+## 2. Establish Or Expand The Connection
+
+Skip this step when `connection.status` is `connected` or `not_required`.
+Otherwise request only the scopes needed to discover or use the target:
+
+```bash
+restish "$API_NAME" connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<'JSON'
+{
+  "scopes": ["objects:read"],
+  "reason": "List files for the controller"
+}
+JSON
+```
+
+The plugin recognizes Realmroot's generic interactive-resource profile, opens
+the controller URL, and waits on the response's `links.self`. The command
+finishes only after the connection is established, denied, or expired. The
+Agent does not open a separate polling command and does not handle the OAuth
+callback.
+
+To expand an existing connection for a Resource whose
+`accountAuthorization.status` is `authorization_required`, repeat the same
+command with that Resource href:
+
+```bash
+restish "$API_NAME" connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<JSON
+{
+  "resources": [{"href": "$RESOURCE_HREF"}],
+  "scopes": ["objects:read"],
+  "reason": "Authorize this workspace for the controller"
+}
+JSON
+```
+
+After completion, read the Resource Server and its Resources again. Do not
+assume approval changed the requested state.
+
+## 3. Discover Provider-Owned Resources
+
+List all pages for the selected Resource Server:
+
+```bash
+restish get "$RESOURCES_URL?limit=100&offset=0" -o json
+```
+
+Each Resource supplies:
+
+- `links.self`: the canonical href used in an access request;
+- `name`, `description`, and `metadata`: selection information;
+- `accountAuthorization.status`: whether the controller's account covers it;
+- `agentAuthorization.authorizedScopes`: scopes already approved for this
+  Agent;
+- `agentAuthorization.requestableScopes`: additional scopes the Agent may ask
+  the controller to approve.
+
+Select an exact Resource from these responses. Never reconstruct its href from
+an ID or display label. If no Resource matches, report that result instead of
+inventing one. A native service normally exposes one `service` Resource.
+
+## 4. Inspect And Connect The Target API
+
+Use the selected Resource Server's `serviceUrl`. Reuse one semantic Restish API
+name for the logical target service; use profiles for local, staging, account,
+or tenant contexts.
+
+```bash
+TARGET_API=zpan
+restish api connect "$TARGET_API" "$SERVICE_URL" --yes
 restish "$TARGET_API" --help
-restish "$TARGET_API" list-projects --help
 ```
 
-`TARGET_API` identifies the target's logical service, not the selected resource
-URL or request context. Choose a user-supplied name or a stable semantic service
-name from the target contract. Never include an environment, deployment,
-hostname, account, tenant, profile, or credential context in it; names such as
-`projects-local`, `projects-staging`, and `projects-production` are invalid.
+The target's OpenAPI security requirements define the exact operation and
+scope. Do not infer scopes from prose when the operation contract is
+available.
 
-Before connecting, run `restish api list` and inspect the semantic service
-candidate with `restish api inspect`. If the logical service is already
-connected, reuse its API name. When the selected `resourceUrl` differs from its
-default base URL, add or select a profile instead of creating another API name
-or retargeting the existing one:
+Restish 2.3 does not configure `openIdConnect` security schemes. If it reports
+the target requirement as unsupported, bind that declared scheme to the generic
+Realmroot target provider. Derive the scheme ID and issuer from the target's
+OpenAPI document; do not guess them or add Resource-Server-specific logic:
 
 ```bash
-TARGET_API=projects
-TARGET_PROFILE=staging
-RESOURCE_URL=https://staging-api.example.com
+PROFILE=default
+SECURITY_SCHEME=realmrootOidc
+REALMROOT_ISSUER=https://id.realmroot.dev/api/auth
 restish api set "$TARGET_API" \
-  "profiles.${TARGET_PROFILE}.base_url: ${RESOURCE_URL}"
-
-# Bind the target's Realmroot-backed security scheme in the new profile.
-# Use the credential ID declared by the target OpenAPI document and the exact
-# space-separated scopes selected for this workflow.
-TARGET_CREDENTIAL_ID=oauth2
-TARGET_SCOPES="projects:read"
-restish api set "$TARGET_API" \
-  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.type: api-key" \
-  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.in: header" \
-  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.name: Authorization" \
-  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.provider: realmroot-target" \
-  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.value: DPoP" \
-  "profiles.${TARGET_PROFILE}.credentials.${TARGET_CREDENTIAL_ID}.auth.params.scopes: ${TARGET_SCOPES}"
-restish api inspect "$TARGET_API"
-restish -p "$TARGET_PROFILE" api auth inspect "$TARGET_API"
-restish -p "$TARGET_PROFILE" "$TARGET_API" --help
+  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.type: api-key" \
+  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.in: header" \
+  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.name: Authorization" \
+  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.provider: realmroot-target" \
+  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.value: DPoP" \
+  "profiles.${PROFILE}.credentials.${SECURITY_SCHEME}.auth.params.issuer: ${REALMROOT_ISSUER}"
 ```
 
-Do not stop after adding only `base_url`: a profile without the security-scheme
-binding cannot use the target token even when Realmroot issued it successfully.
-The profile is ready when auth inspection reports the selected credential as
-configured and the intended operation as callable.
+This temporary binding is tracked by Realmroot issue #138. The issuer selects
+the correct local identity when multiple Realmroot environments authorize the
+same target URL.
 
-Profiles also separate account, tenant, and credential contexts for the same
-logical target service. Create another API name only for a genuinely different
-logical service. Retarget an existing default with `--replace` only when the
-user explicitly asks to replace that service's default context.
+## 5. Request Exact Resource Access
 
-The target publishes its OpenAPI contract through a `service-desc` link. Treat
-that contract—not Realmroot—as the authority for operation names, arguments,
-and required scopes. Select the exact operation and its least-privilege scope
-set. Then select an `accountConnectionId` only when an `external` resource
-already has the required account.
-
-When several accounts satisfy the operation and the user's task does not
-determine one, present their redacted labels for selection. Reuse an active
-grant only when its resource, account, and scope set exactly match the selected
-operation; otherwise create a new least-privilege request.
-
-Keep the target service's default Restish profile on its canonical production
-resource URL. Put non-production resource URLs under the explicit `local` or
-`staging` profile and use that profile for every target command. Never make a
-local discovery result the target API's default merely because the current
-task is local.
-
-## Request Access
-
-When no exact active grant exists, request access. For an `external` resource
-with the required account already connected, include it:
+Before invoking the target, request one short-lived credential for the selected
+Resource and the complete current task. Include the union of scopes required by
+the task's known operations, but no unrelated scopes. For example, a file
+management task that will create, inspect, rename, and delete an object requests
+`objects:create`, `objects:read`, `objects:update`, and `objects:delete` once.
+This is task-level least privilege, not one access request per HTTP operation.
 
 ```bash
-restish "$API_NAME" access request --rsh-validate -o json <<'JSON'
+restish "$API_NAME" access --rsh-validate -o json <<JSON
 {
-  "target": {
-    "type": "api-resource",
-    "apiResourceId": "resource_123",
-    "accountConnectionId": "connection_123"
-  },
-  "authorizationDetails": [
-    {
-      "type": "https://api.example.com/authorization-details/project",
-      "identifier": "project_123"
-    }
-  ],
-  "scopes": ["projects:read"],
-  "reason": "List projects for the controller"
+  "resource": {"href": "$RESOURCE_HREF"},
+  "scopes": ["objects:create", "objects:read", "objects:update", "objects:delete"],
+  "reason": "Create, inspect, rename, and delete a file for the controller"
 }
 JSON
 ```
 
-Use the exact `authorizationDetail` object returned by `access contexts` as
-the single entry in the top-level `authorizationDetails` array. Do not place
-it inside `target`, rename the field to singular, or reconstruct it from its
-display label. Omit `authorizationDetails` only when the selected resource
-does not advertise authorization contexts.
+Realmroot decides whether existing controller authority can be reused. If a
+decision is needed, the generic interaction handler opens the hosted approval
+page and waits. When access is approved, Realmroot returns a generic credential
+offer; the plugin creates a local DPoP key, obtains a short-lived credential,
+stores it with the Resource href, and returns a safe receipt:
 
-For a `native` resource, use a request without an account:
-
-```bash
-restish "$API_NAME" access request --rsh-validate -o json <<'JSON'
+```json
 {
-  "target": {
-    "type": "api-resource",
-    "apiResourceId": "resource_123"
-  },
-  "scopes": ["projects:read"],
-  "reason": "List projects for the controller"
+  "status": "ready",
+  "resource": {"href": "https://id.realmroot.dev/api/resource-servers/zpan/resources/workspace-1"},
+  "resourceIndicator": "https://drive.zpan.space/api",
+  "scopes": ["objects:read"],
+  "tokenExpiresAt": "2026-08-03T16:30:00Z"
 }
-JSON
 ```
 
-Replace every example value with an exact discovered value and request only the
-scopes needed by the user's task. The adapter opens the controller approval
-page and keeps the request waiting.
+The Agent never chooses a grant and never sees a token. If the command is
+interrupted, repeat the same access request; Realmroot resumes pending work or
+reuses matching approved authority. Reuse the resulting cached credential for
+every operation in that task. Request access again only when switching to a
+different Resource, the credential expires or is rejected, or the task expands
+to require a scope the cached credential does not contain. Existing persistent
+controller authority may avoid another approval, but every issued credential
+remains short-lived and bound to one Resource.
 
-For an external resource without a connected account, request the connection
-first. This step accepts scopes but never accepts authorization details and
-never creates an Agent grant:
+## 6. Invoke The Target
+
+Run the target operation selected from its OpenAPI contract:
 
 ```bash
-restish "$API_NAME" access connect resource_123 --rsh-validate -o json <<'JSON'
-{
-  "scopes": ["projects:read"],
-  "reason": "Connect the controller's project account"
-}
-JSON
+restish "$TARGET_API" objects list-objects -o json
 ```
 
-The adapter validates and opens the returned hosted approval URL, keeps the
-command waiting, and replaces the pending response with `status: connected`
-after the controller finishes. The controller signs in, connects or updates
-the provider account, and selects one or more workspaces at the provider. A
-failed or expired connection exits with an error. Query authorization contexts
-only after the command returns connected.
+The plugin matches the request URL to the active Resource credential and adds
+`Authorization: DPoP ...` plus a fresh DPoP proof. Business traffic goes
+directly to the Resource Server, not through Realmroot.
 
-For a resource that advertises authorization contexts, inspect the account's
-live catalog before requesting access:
+On `401`, the plugin removes the rejected cached credential. Rediscover the
+Resource, repeat the access request, and retry only after it succeeds. On
+`403`, surface the target's authority error; do not broaden scopes without the
+user's task requiring them.
 
-```bash
-restish "$API_NAME" access contexts resource_123 -o json
-```
-
-Each item reports whether the connected provider account already authorizes
-that exact context. If the selected item has `connectionAuthorized: false`,
-invoke `access connect` again with the required scopes before requesting Agent
-access. This is an account-authorization update, not a new account. The command
-must remain in the foreground until the controller finishes the provider
-consent; then read the catalog again and require the selected item to report
-`connectionAuthorized: true`.
-
-Follow `pagination.nextOffset` until `hasMore` is false. Each item reports the
-exact `authorizationDetail`, whether the connected account has authorized it,
-and matching active Agent grants. When the response has
-`connectionRequired: true`, run `access connect` and do not create an access
-request yet. Use one exact detail in each access request and never send a
-generic type-only template;
-if an active grant already covers the required scopes, issue credentials from
-that grant directly and do not create another approval request. If
-`connectionAuthorized` is false, request account reauthorization instead of
-claiming that the workspace does not exist.
-
-If interrupted after request creation, resume inspection with the returned
-request ID:
-
-```bash
-restish get "$API_NAME/agent/access-requests/request_123" -o json
-```
-
-Access approval is complete only when the response contains an active
-`grantId`. Denial or expiry closes that request; a retry starts with a fresh
-access request.
-
-Grant lifetime remains a controller decision. A one-target-token grant becomes
-inactive after its credential is issued; do not expect it to support a later
-workspace switch. Recurring workflows need a reusable grant approved by the
-controller. When no active exact grant remains, create a fresh least-privilege
-request instead of treating the consumed grant as a provider failure.
-
-## Issue Target Credentials
-
-Issue credentials for the exact approved grant:
-
-```bash
-restish "$API_NAME" access token grant_123 -o json
-```
-
-Successful issuance exits with status zero and prints nothing. The adapter
-stores the credential in protected state and suppresses the full HTTP response
-because it contains the bearer token. Any token response printed to stdout is a
-security failure; do not parse or display it. The explicit structured formatter
-is mandatory because Restish's default redirected-output fast path bypasses
-response middleware.
-
-Credential issuance is complete when the command exits successfully. Confirm
-the selected workspace by invoking the intended target operation and checking
-its resource data. Issuance is an intermediate result, not completion of the
-user's API task.
-
-## Invoke The Target
-
-Run the target operation selected during inspection:
-
-```bash
-restish "$TARGET_API" list-projects -o json
-restish -p "$TARGET_PROFILE" "$TARGET_API" list-projects -o json
-```
-
-Use the first form for the default context and the second for a named profile.
-Keep the target profile selected with an explicit `-p "$TARGET_PROFILE"` or a
-matching `RSH_PROFILE` whenever the operation does not use the default context.
-The adapter authenticates requests matching the registered `resourceUrl` and
-refreshes reusable grants when needed.
-
-For collection requests, inspect the generated pagination arguments and fetch
-every page unless the user requested a bounded result.
-
-When an operation contract requires forwarding a response header to a later
-request, capture Restish's verbose output without printing it. Restish prefixes
-response headers with `< `, so match the complete line as
-`^< Header-Name:` rather than `^Header-Name:`. Keep credentials and protocol
-proofs in memory, forward them unchanged, and expose only non-sensitive status
-fields in progress output.
-
-For example, an x402 workflow uses the Wallet authorization response's
-`< Payment-Signature:` header on the paid target retry, then uses the target
-response's `< Payment-Response:` header to confirm settlement with the Wallet.
-Do not treat Wallet authorization alone as payment completion: require the paid
-target request to succeed and the Wallet confirmation to report settlement.
-
-## Diagnostics
-
-Inspect the focused workflow command surface:
-
-```bash
-restish "$API_NAME" --help
-restish doctor api "$API_NAME"
-```
-
-Diagnose discovery and authentication with redacted output:
-
-```bash
-restish doctor api "$API_NAME"
-restish api auth inspect "$API_NAME" --redact
-```
-
-Surface target OAuth or DPoP errors and stop at that boundary.
+Completion means the intended target operation succeeded. Resource discovery,
+connection, approval, or a ready receipt alone is not completion.

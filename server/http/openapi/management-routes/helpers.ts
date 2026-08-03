@@ -123,7 +123,7 @@ export interface ManagementRouteConfig {
   operationId: string
   summary: string
   cli?: {
-    group: 'access' | 'auth' | 'capability'
+    group: 'access-request' | 'auth' | 'capability' | 'connection-request' | 'resource' | 'resource-server'
     name: string
   }
   request?: {
@@ -186,6 +186,22 @@ export const idempotencyKeyHeader = z.object({
 })
 export const locationResponseHeader = {
   Location: { description: 'Canonical URI of the created resource.', schema: { type: 'string' } },
+}
+export const interactiveResourceResponseHeaders = {
+  Link: {
+    description: 'Profile link identifying the generic interactive-resource representation.',
+    schema: { type: 'string' },
+  },
+  'Retry-After': {
+    description: 'Suggested polling interval in seconds while controller interaction is pending.',
+    schema: { type: 'string' },
+  },
+}
+export const credentialOfferResponseHeader = {
+  Link: {
+    description: 'Profile link identifying the generic Resource credential representation.',
+    schema: { type: 'string' },
+  },
 }
 export const etagResponseHeader = {
   ETag: { description: 'Current strong entity tag for the representation.', schema: { type: 'string' } },

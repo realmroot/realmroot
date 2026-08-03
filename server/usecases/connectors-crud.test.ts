@@ -6,6 +6,7 @@ import {
   ensureDynamicConnectorScopes,
   getConnector,
   loadAuthConnectorConfig,
+  refreshDynamicConnectorMetadata,
   updateConnector,
 } from '@server/usecases/connectors'
 import type { Deps } from '@server/usecases/deps'
@@ -239,7 +240,8 @@ describe('service.test 2', () => {
         scopes_supported: ['projects:read'],
         authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
       }),
-      message: 'must advertise authorization_details_catalog_endpoint and authorization_details_catalog_scope together',
+      message:
+        'must advertise authorization_details_catalog_endpoint, authorization_details_catalog_scope, and authorization_details_catalog_version together',
     },
     {
       name: 'a whitespace-delimited authorization details catalog scope',
@@ -247,8 +249,19 @@ describe('service.test 2', () => {
         scopes_supported: ['projects:read'],
         authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
         authorization_details_catalog_scope: 'catalog read',
+        authorization_details_catalog_version: 1,
       }),
       message: 'has invalid authorization_details_catalog_scope',
+    },
+    {
+      name: 'an unsupported authorization details catalog version',
+      metadata: discoveryMetadata({
+        scopes_supported: ['projects:read'],
+        authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
+        authorization_details_catalog_scope: 'authorization-details:read',
+        authorization_details_catalog_version: 2,
+      }),
+      message: 'advertises an unsupported authorization_details_catalog_version',
     },
     {
       name: 'an invalid authorization details type list',
@@ -345,6 +358,7 @@ describe('service.test 2', () => {
           authorization_details_types_supported: ['project_access'],
           authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
           authorization_details_catalog_scope: 'authorization-details:read',
+          authorization_details_catalog_version: 1,
         }),
       )
       .mockResolvedValueOnce(
@@ -589,6 +603,42 @@ describe('service.test 2', () => {
     ])
   })
 
+  it('refreshes discovery metadata for an existing dynamic connector', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      issuer: 'https://idp.example.com',
+      registrationMode: 'dynamic',
+    })
+    const repository = createRepository({ byId: current })
+    const discovery = discoveryMetadata({
+      registration_endpoint: 'https://idp.example.com/register',
+      revocation_endpoint: 'https://idp.example.com/revoke',
+      authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
+      authorization_details_catalog_scope: 'authorization-details:read',
+      authorization_details_catalog_version: 1,
+    })
+    const deps = {
+      connectors: repository,
+      externalHttp: { fetch: vi.fn().mockResolvedValue(Response.json(discovery)) },
+    } as unknown as Deps
+
+    await refreshDynamicConnectorMetadata(deps, current.id)
+
+    expect(repository.update).toHaveBeenCalledWith(
+      current.id,
+      expect.objectContaining({
+        authorizationEndpoint: 'https://idp.example.com/authorize',
+        tokenEndpoint: 'https://idp.example.com/token',
+        userInfoEndpoint: 'https://idp.example.com/userinfo',
+        jwksEndpoint: 'https://idp.example.com/jwks',
+        registrationEndpoint: 'https://idp.example.com/register',
+        revocationEndpoint: 'https://idp.example.com/revoke',
+        providerMetadata: discovery,
+      }),
+    )
+  })
+
   it('[spec: agent-identity/external-resource-dynamic-client-scope-upgrade] upgrades a dynamic client in place through RFC 7592', async () => {
     const current = connector({
       providerType: 'generic_oauth',
@@ -644,6 +694,8 @@ describe('service.test 2', () => {
   it('verifies cached dynamic client scopes against RFC 7592 state', async () => {
     const current = connector({
       providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects',
       issuer: 'https://idp.example.com',
       registrationEndpoint: 'https://idp.example.com/register',
       registrationMode: 'dynamic',
@@ -655,6 +707,20 @@ describe('service.test 2', () => {
     const fetch = vi.fn().mockResolvedValueOnce(
       Response.json({
         client_id: 'client-id',
+        client_name: 'Realmroot Projects',
+        redirect_uris: [
+          'https://auth.example.com/api/auth/callback/projects',
+          'https://auth.example.com/api/account-connections/oauth/callback',
+        ],
+        grant_types: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          'urn:ietf:params:oauth:grant-type:token-exchange',
+        ],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_basic',
+        jwks_uri: 'https://auth.example.com/api/auth/jwks',
         scope: 'openid projects:read',
       }),
     )
@@ -668,6 +734,67 @@ describe('service.test 2', () => {
     expect(readRequest.method).toBe('GET')
     expect(readRequest.headers.get('authorization')).toBe('Bearer registration-token')
     expect(repository.update).not.toHaveBeenCalled()
+  })
+
+  it('repairs callback and JWKS metadata drift through RFC 7592', async () => {
+    const current = connector({
+      providerType: 'generic_oauth',
+      providerId: 'projects',
+      displayName: 'Projects',
+      issuer: 'https://idp.example.com',
+      registrationEndpoint: 'https://idp.example.com/register',
+      registrationMode: 'dynamic',
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'registration-token',
+      registeredScopes: ['email', 'offline_access', 'openid', 'profile', 'projects:read'],
+    })
+    const repository = createRepository({ byId: current })
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          client_id: 'client-id',
+          client_name: 'Realmroot Projects',
+          redirect_uris: [
+            'https://old-auth.example.com/api/auth/callback/projects',
+            'https://old-auth.example.com/api/account-connections/oauth/callback',
+          ],
+          grant_types: [
+            'authorization_code',
+            'refresh_token',
+            'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            'urn:ietf:params:oauth:grant-type:token-exchange',
+          ],
+          response_types: ['code'],
+          token_endpoint_auth_method: 'client_secret_basic',
+          jwks_uri: 'https://old-auth.example.com/api/auth/jwks',
+          scope: 'email offline_access openid profile projects:read',
+        }),
+      )
+      .mockResolvedValueOnce(Response.json(discoveryMetadata({ scopes_supported: ['openid', 'projects:read'] })))
+      .mockResolvedValueOnce(
+        Response.json({
+          client_id: 'client-id',
+          scope: 'email offline_access openid profile projects:read',
+        }),
+      )
+    const deps = { connectors: repository, externalHttp: { fetch } } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).resolves.toBe(1)
+
+    const updateRequest = fetch.mock.calls[2]![0] as Request
+    expect(updateRequest.method).toBe('PUT')
+    await expect(updateRequest.json()).resolves.toMatchObject({
+      redirect_uris: [
+        'https://auth.example.com/api/auth/callback/projects',
+        'https://auth.example.com/api/account-connections/oauth/callback',
+      ],
+      jwks_uri: 'https://auth.example.com/api/auth/jwks',
+    })
+    expect(repository.update).toHaveBeenCalledOnce()
+    expect(repository.rotateClientGeneration).not.toHaveBeenCalled()
   })
 
   it.each([

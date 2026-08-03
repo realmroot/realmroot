@@ -134,8 +134,8 @@ boundaries independent:
 
 - **Realmroot management capabilities** let an Agent operate specific resources
   in Realmroot's own Resource API.
-- **API Resource grants** let an Agent call one protected business API with an
-  exact scope set.
+- **Resource access approvals** let an Agent call one provider-owned Resource
+  through a Resource Server with an exact scope set.
 
 The controller's browser session decides the request but never becomes the
 Agent's CLI principal. Roles can group scopes and constrain eligibility; they do
@@ -156,7 +156,7 @@ display metadata only; it never participates in authorization.
 Realmroot supports two resource boundaries with the same request, approval,
 revocation, and audit model:
 
-| | Native API Resource | External API Resource |
+| | Native Resource Server | External Resource Server |
 | --- | --- | --- |
 | Token issuer | Realmroot | Target platform |
 | User resource | Realmroot user or organization home space | Connected target account |
@@ -171,7 +171,7 @@ Realmroot protects the connected user's refresh credential and uses standard
 PKCE, JWT bearer, token exchange, and DPoP flows to obtain narrowly delegated
 access.
 
-For each resource grant, the Restish adapter creates a separate P-256 DPoP key,
+For each Resource credential, the Restish adapter creates a separate P-256 DPoP key,
 stores the short-lived token in protected local state, and removes the raw token
 from command output. The Agent then calls the resource URL directly. The
 resource server validates issuer, audience, scope, expiry, key binding, request
@@ -265,7 +265,7 @@ they add Agent capabilities:
 - Account Center for profile, credentials, sessions, linked accounts,
   authorized apps, and personal Agents;
 - Admin Console for applications, users, organizations, roles, connectors,
-  API Resources, security, branding, webhooks, Agents, and audit;
+  Resource Servers, security, branding, webhooks, Agents, and audit;
 - one OpenAPI-described Resource API for administration and automation.
 
 Applications discover the issuer at:

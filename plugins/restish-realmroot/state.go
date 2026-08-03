@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 const (
 	stateDirectoryEnv = "REALMROOT_PLUGIN_STATE_DIR"
-	agentStateVersion = 4
+	agentStateVersion = 7
 	identityDirectory = "identities"
 )
 
@@ -38,31 +39,31 @@ type pendingApproval struct {
 }
 
 type dpopCredential struct {
-	GrantID           string     `json:"grant_id"`
-	GrantMode         string     `json:"grant_mode"`
-	ResourceID        string     `json:"resource_id"`
-	ResourceURL       string     `json:"resource_url"`
-	AuthorizationMode string     `json:"authorization_mode"`
-	PrivateKey        string     `json:"private_key"`
-	AccessToken       string     `json:"access_token,omitempty"`
-	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
+	ResourceHref       string     `json:"resource_href"`
+	ResourceIndicator  string     `json:"resource_indicator"`
+	CredentialEndpoint string     `json:"credential_endpoint"`
+	ProofTarget        string     `json:"proof_target"`
+	PrivateKey         string     `json:"private_key"`
+	AccessToken        string     `json:"access_token,omitempty"`
+	ExpiresAt          *time.Time `json:"expires_at,omitempty"`
 }
 
 type agentState struct {
-	Version              int                       `json:"version"`
-	Origin               string                    `json:"origin"`
-	Issuer               string                    `json:"issuer"`
-	Runtime              string                    `json:"runtime"`
-	Name                 string                    `json:"name"`
-	AgentID              string                    `json:"agent_id"`
-	HostID               string                    `json:"host_id"`
-	AgentKeyID           string                    `json:"agent_key_id"`
-	HostKeyID            string                    `json:"host_key_id"`
-	AgentPrivateKey      string                    `json:"agent_private_key"`
-	HostPrivateKey       string                    `json:"host_private_key"`
-	RegistrationApproval *pendingApproval          `json:"registration_approval,omitempty"`
-	Identity             *stableIdentity           `json:"identity,omitempty"`
-	DPoPCredentials      map[string]dpopCredential `json:"dpop_credentials,omitempty"`
+	Version               int                       `json:"version"`
+	Origin                string                    `json:"origin"`
+	Issuer                string                    `json:"issuer"`
+	Runtime               string                    `json:"runtime"`
+	Name                  string                    `json:"name"`
+	AgentID               string                    `json:"agent_id"`
+	HostID                string                    `json:"host_id"`
+	AgentKeyID            string                    `json:"agent_key_id"`
+	HostKeyID             string                    `json:"host_key_id"`
+	AgentPrivateKey       string                    `json:"agent_private_key"`
+	HostPrivateKey        string                    `json:"host_private_key"`
+	RegistrationApproval  *pendingApproval          `json:"registration_approval,omitempty"`
+	Identity              *stableIdentity           `json:"identity,omitempty"`
+	DPoPCredentials       map[string]dpopCredential `json:"dpop_credentials,omitempty"`
+	ActiveDPoPCredentials map[string]string         `json:"active_dpop_credentials,omitempty"`
 }
 
 type stateStore interface {
@@ -79,6 +80,16 @@ type resourceStateFinder interface {
 	FindByOriginAndIdentityID(origin string, identityID string) (agentState, error)
 }
 
+type agentStateReference struct {
+	path  string
+	state agentState
+}
+
+type resourceAccessStateStore interface {
+	FindReferenceByOriginIdentityRuntime(origin string, identityID string, runtime string) (agentStateReference, error)
+	UpdateStateReference(reference agentStateReference) error
+}
+
 type resourceCredentialReference struct {
 	path       string
 	state      agentState
@@ -86,13 +97,9 @@ type resourceCredentialReference struct {
 }
 
 type resourceCredentialStore interface {
-	FindByResourceURL(resourceURL string, runtime string) (resourceCredentialReference, error)
+	FindByResourceURL(resourceURL string, runtime string, issuer string) (resourceCredentialReference, error)
 	UpdateCredential(reference resourceCredentialReference, credential dpopCredential) error
 	DeleteCredential(reference resourceCredentialReference) error
-}
-
-type targetTokenStore interface {
-	StoreTargetToken(origin string, runtime string, grantID string, token targetTokenResponse) error
 }
 
 type fileStateStore struct {
@@ -182,15 +189,8 @@ func (s *fileStateStore) loadPath(path string) (agentState, error) {
 		return agentState{}, fmt.Errorf("decode Agent state: %w", err)
 	}
 	if state.Version > 0 && state.Version < agentStateVersion {
-		if state.Version < 3 {
-			state.DPoPCredentials = nil
-		} else {
-			for resourceID, credential := range state.DPoPCredentials {
-				if credential.AuthorizationMode != "native" && credential.AuthorizationMode != "external" {
-					delete(state.DPoPCredentials, resourceID)
-				}
-			}
-		}
+		state.DPoPCredentials = nil
+		state.ActiveDPoPCredentials = nil
 		state.Version = agentStateVersion
 		if err := s.updatePath(path, state); err != nil {
 			return agentState{}, fmt.Errorf("upgrade Agent state: %w", err)
@@ -341,22 +341,38 @@ func (s *fileStateStore) updatePath(path string, state agentState) error {
 	return nil
 }
 
-func (s *fileStateStore) FindByResourceURL(resourceURL string, runtime string) (resourceCredentialReference, error) {
+func (s *fileStateStore) FindByResourceURL(resourceURL string, runtime string, issuer string) (resourceCredentialReference, error) {
 	var matched *resourceCredentialReference
+	matchedPriority := 0
 	err := s.walkStates(func(path string, state agentState) error {
-		if state.Runtime != runtime {
+		if state.Runtime != runtime || (issuer != "" && strings.TrimSuffix(state.Issuer, "/") != issuer) {
 			return nil
 		}
-		for _, credential := range state.DPoPCredentials {
-			if !resourceURLMatches(credential.ResourceURL, resourceURL) {
+		for selectionKey, resourceHref := range state.ActiveDPoPCredentials {
+			registeredURL, priority, selected := selectedResourceURL(selectionKey)
+			if !selected {
 				continue
 			}
-			if matched != nil && len(matched.credential.ResourceURL) == len(credential.ResourceURL) {
-				return errors.New("multiple local DPoP credentials match the target API request")
+			if !resourceURLMatches(registeredURL, resourceURL) {
+				continue
 			}
-			if matched == nil || len(credential.ResourceURL) > len(matched.credential.ResourceURL) {
+			credential, ok := state.DPoPCredentials[resourceHref]
+			if !ok {
+				return errors.New("active target credential is missing its Resource state")
+			}
+			if matched != nil && len(matched.credential.ResourceIndicator) == len(registeredURL) {
+				if priority < matchedPriority || (priority == matchedPriority && credential.ResourceHref == matched.credential.ResourceHref) {
+					continue
+				}
+				if priority == matchedPriority {
+					return errors.New("multiple local DPoP credentials match the target API request")
+				}
+			}
+			if matched == nil || len(registeredURL) > len(matched.credential.ResourceIndicator) ||
+				(len(registeredURL) == len(matched.credential.ResourceIndicator) && priority > matchedPriority) {
 				value := resourceCredentialReference{path: path, state: state, credential: credential}
 				matched = &value
+				matchedPriority = priority
 			}
 		}
 		return nil
@@ -374,55 +390,18 @@ func (s *fileStateStore) UpdateCredential(reference resourceCredentialReference,
 	if reference.state.DPoPCredentials == nil {
 		reference.state.DPoPCredentials = make(map[string]dpopCredential)
 	}
-	reference.state.DPoPCredentials[credential.ResourceID] = credential
+	reference.state.DPoPCredentials[credential.ResourceHref] = credential
 	return s.updatePath(reference.path, reference.state)
 }
 
 func (s *fileStateStore) DeleteCredential(reference resourceCredentialReference) error {
-	delete(reference.state.DPoPCredentials, reference.credential.ResourceID)
+	delete(reference.state.DPoPCredentials, reference.credential.ResourceHref)
+	for key, resourceHref := range reference.state.ActiveDPoPCredentials {
+		if resourceHref == reference.credential.ResourceHref {
+			delete(reference.state.ActiveDPoPCredentials, key)
+		}
+	}
 	return s.updatePath(reference.path, reference.state)
-}
-
-func (s *fileStateStore) StoreTargetToken(
-	origin string,
-	runtime string,
-	grantID string,
-	token targetTokenResponse,
-) error {
-	var matchedPath string
-	var matchedState agentState
-	var matchedCredential dpopCredential
-	err := s.walkStates(func(path string, state agentState) error {
-		if state.Origin != origin || state.Runtime != runtime {
-			return nil
-		}
-		for _, credential := range state.DPoPCredentials {
-			if credential.GrantID != grantID {
-				continue
-			}
-			if matchedPath != "" {
-				return errors.New("multiple local DPoP credentials match the issued target token")
-			}
-			matchedPath = path
-			matchedState = state
-			matchedCredential = credential
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("find issued target token credential: %w", err)
-	}
-	if matchedPath == "" {
-		return errors.New("local DPoP credential was not found for the issued target token")
-	}
-	if token.TokenType != "DPoP" || token.AccessToken == "" || token.ResourceURL != matchedCredential.ResourceURL ||
-		!token.ExpiresAt.After(time.Now()) {
-		return errors.New("Realmroot returned an invalid target API access token")
-	}
-	matchedCredential.AccessToken = token.AccessToken
-	matchedCredential.ExpiresAt = &token.ExpiresAt
-	matchedState.DPoPCredentials[matchedCredential.ResourceID] = matchedCredential
-	return s.updatePath(matchedPath, matchedState)
 }
 
 func (s *fileStateStore) FindByOriginAndAgentID(origin string, agentID string) (agentState, error) {
@@ -435,6 +414,35 @@ func (s *fileStateStore) FindByOriginAndIdentityID(origin string, identityID str
 		func(state agentState) bool { return state.Identity != nil && state.Identity.ID == identityID },
 		"resource request",
 	)
+}
+
+func (s *fileStateStore) FindReferenceByOriginIdentityRuntime(
+	origin string,
+	identityID string,
+	runtime string,
+) (agentStateReference, error) {
+	var matched *agentStateReference
+	err := s.walkStates(func(path string, state agentState) error {
+		if state.Origin != origin || state.Runtime != runtime || state.Identity == nil || state.Identity.ID != identityID {
+			return nil
+		}
+		if matched != nil {
+			return errors.New("multiple Agent states match the resource request")
+		}
+		matched = &agentStateReference{path: path, state: state}
+		return nil
+	})
+	if err != nil {
+		return agentStateReference{}, fmt.Errorf("find Agent state for resource request: %w", err)
+	}
+	if matched == nil {
+		return agentStateReference{}, os.ErrNotExist
+	}
+	return *matched, nil
+}
+
+func (s *fileStateStore) UpdateStateReference(reference agentStateReference) error {
+	return s.updatePath(reference.path, reference.state)
 }
 
 func (s *fileStateStore) find(origin string, matches func(agentState) bool, label string) (agentState, error) {
@@ -551,14 +559,19 @@ func validateAgentStateCredentials(state agentState) error {
 			return fmt.Errorf("%s is invalid", label)
 		}
 	}
-	for resourceID, credential := range state.DPoPCredentials {
-		if resourceID == "" || credential.ResourceID != resourceID || credential.GrantID == "" ||
-			(credential.GrantMode != "once" && credential.GrantMode != "until" && credential.GrantMode != "persistent") ||
-			(credential.AuthorizationMode != "native" && credential.AuthorizationMode != "external") {
+	for resourceHref, credential := range state.DPoPCredentials {
+		if resourceHref == "" || credential.ResourceHref != resourceHref || credential.ResourceIndicator == "" ||
+			credential.CredentialEndpoint == "" || credential.ProofTarget == "" {
 			return errors.New("Agent state contains invalid DPoP credential metadata")
 		}
-		if _, err := validatedAbsoluteURL(credential.ResourceURL); err != nil {
+		if _, err := validatedAbsoluteURL(credential.ResourceIndicator); err != nil {
 			return fmt.Errorf("Agent state DPoP resource URL is invalid: %w", err)
+		}
+		if _, err := validatedAbsoluteURL(credential.CredentialEndpoint); err != nil {
+			return fmt.Errorf("Agent state credential endpoint is invalid: %w", err)
+		}
+		if _, err := validatedAbsoluteURL(credential.ProofTarget); err != nil {
+			return fmt.Errorf("Agent state credential proof target is invalid: %w", err)
 		}
 		if _, err := decodeDPoPPrivateKey(credential.PrivateKey); err != nil {
 			return err
@@ -567,5 +580,31 @@ func validateAgentStateCredentials(state agentState) error {
 			return errors.New("Agent state contains an incomplete target API token")
 		}
 	}
+	for selectionKey, resourceHref := range state.ActiveDPoPCredentials {
+		credential, ok := state.DPoPCredentials[resourceHref]
+		if !ok || credential.ResourceIndicator != resourceURLFromSelectionKey(selectionKey) {
+			return errors.New("Agent state contains an invalid active DPoP credential binding")
+		}
+	}
 	return nil
+}
+
+func credentialSelectionKey(resourceURL string) string {
+	return agentSession() + "\n" + resourceURL
+}
+
+func selectedResourceURL(selectionKey string) (string, int, bool) {
+	session, resourceURL, found := strings.Cut(selectionKey, "\n")
+	if !found {
+		return selectionKey, 1, true
+	}
+	return resourceURL, 2, session == agentSession()
+}
+
+func resourceURLFromSelectionKey(selectionKey string) string {
+	_, resourceURL, found := strings.Cut(selectionKey, "\n")
+	if found {
+		return resourceURL
+	}
+	return selectionKey
 }

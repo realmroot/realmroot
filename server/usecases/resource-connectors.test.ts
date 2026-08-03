@@ -187,14 +187,41 @@ describe('external resource connector validation', () => {
         providerMetadata: providerMetadata({
           authorization_details_types_supported: ['project_access'],
           pushed_authorization_request_endpoint: 'https://idp.example.com/par',
-          authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
-          authorization_details_catalog_scope: 'authorization-details:read',
         }),
       }),
     })
     await expect(
       validateExternalResourceConnector(complete, resourceUrl, 'connector-1', authorizationDetails),
     ).resolves.toBeUndefined()
+  })
+
+  it('[spec: agent-identity/external-resource-rar-without-catalog] treats the detail catalog as an optional paired extension', async () => {
+    const authorizationDetails = [{ type: 'project_access', actions: ['read'] }]
+    const withoutCatalog = createDeps({
+      connector: connector({
+        providerMetadata: providerMetadata({
+          authorization_details_types_supported: ['project_access'],
+          pushed_authorization_request_endpoint: 'https://idp.example.com/par',
+        }),
+      }),
+    })
+    await expect(
+      validateExternalResourceConnector(withoutCatalog, resourceUrl, 'connector-1', authorizationDetails),
+    ).resolves.toBeUndefined()
+
+    const incompleteCatalog = createDeps({
+      connector: connector({
+        providerMetadata: providerMetadata({
+          authorization_details_types_supported: ['project_access'],
+          pushed_authorization_request_endpoint: 'https://idp.example.com/par',
+          authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
+          authorization_details_catalog_version: 1,
+        }),
+      }),
+    })
+    await expect(
+      validateExternalResourceConnector(incompleteCatalog, resourceUrl, 'connector-1', authorizationDetails),
+    ).rejects.toThrow('must provide a valid endpoint, scope, and version 1 together')
   })
 })
 

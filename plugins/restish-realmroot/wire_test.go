@@ -37,10 +37,10 @@ func TestResponseMiddlewareDecodesDeepResourceDocument(t *testing.T) {
 		if err := responseMiddlewareDecMode.Unmarshal(raw, &decoded); err != nil {
 			t.Fatal(err)
 		}
-		output, err := handleCapabilityApprovalResponse(
+		output, err := handleProfiledResponse(
 			decoded,
 			&browserRecorder{},
-			capabilityStateRecorder{},
+			&memoryStateStore{},
 			roundTripFunc(nil),
 		)
 		if err != nil {

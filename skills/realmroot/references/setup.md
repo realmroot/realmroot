@@ -45,7 +45,7 @@ service alias.
 ## Prepare Restish
 
 Require Restish 2.3 or newer, Go 1.25.3 or newer, and the `realmroot` adapter
-0.3.0 or newer:
+0.8.0 or newer:
 
 ```bash
 restish --version
@@ -72,11 +72,11 @@ Preparation is complete when all three required versions are confirmed.
 
 ## Isolate Concurrent Agent Runtimes
 
-The adapter's protected state selects both the Realmroot identity and the
-current target credential. Normally use its default state directory. For an
-explicit cleanroom run, or when multiple Agent runtimes on the same machine may
-operate the same target concurrently, allocate one directory before the first
-command and export it for the entire shell session:
+The adapter keeps the Realmroot identity stable per Agent runtime and isolates
+the current target credential by Agent session when the runtime exposes a
+session identifier. Normally use its default state directory. For an explicit
+cleanroom run or a runtime without session identity, allocate one directory
+before the first command and export it for the entire shell session:
 
 ```bash
 AGENT_STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/realmroot-agent.XXXXXX")"
@@ -86,8 +86,8 @@ export REALMROOT_PLUGIN_STATE_DIR="$AGENT_STATE_DIR"
 
 Do not prefix only the Realmroot approval or token command with this variable.
 Every later Realmroot command and every target Restish command must inherit the
-same exported value; otherwise the target can silently use another runtime's
-workspace credential. Keep the directory for the duration of the workflow.
+same exported value; otherwise the target can use the wrong isolated
+credential. Keep the directory for the duration of the workflow.
 
 Isolation is complete when `REALMROOT_PLUGIN_STATE_DIR` is exported once and
 the identity, access, token, and target-operation commands all run in that same
@@ -122,12 +122,12 @@ live boundary for non-interactive runtimes.
 
 The `default` profile always means production. If the stable API name is not
 connected yet, connect the hosted production contract first, even when the
-current task selected a non-production deployment:
+current task selected a non-production deployment. Realmroot's OpenAPI contract
+owns the generated command layout; do not override it locally:
 
 ```bash
 PRODUCTION_AUTH_ORIGIN=https://id.realmroot.dev
 restish api connect "$API_NAME" "$PRODUCTION_AUTH_ORIGIN/api" --yes
-restish api set "$API_NAME" 'command_layout: tags'
 ```
 
 For an existing connection, inspect it before changing anything. The default
@@ -137,7 +137,6 @@ retargeting it:
 ```bash
 restish api inspect "$API_NAME"
 restish api sync "$API_NAME"
-restish api set "$API_NAME" 'command_layout: tags'
 ```
 
 If the selected origin differs from production, keep the API name and default
@@ -161,7 +160,7 @@ PROFILE_ORIGIN="${PROFILE_ORIGIN%/}"
 restish api set "$API_NAME" \
   "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
 restish api inspect "$API_NAME"
-restish -p "$PROFILE_NAME" "$API_NAME" auth whoami -o json
+restish -p "$PROFILE_NAME" "$API_NAME" whoami -o json
 AUTH_ORIGIN="$PROFILE_ORIGIN"
 export RSH_PROFILE="$PROFILE_NAME"
 ```
@@ -172,7 +171,7 @@ Profiles resolving to the same issuer may reuse the stable identity; a
 different issuer uses a separate identity.
 
 Profile setup is complete when inspection shows the exact profile base URL and
-its explicit `auth whoami` call succeeds. Keep the selected
+its explicit `whoami` call succeeds. Keep the selected
 `RSH_PROFILE` and matching `AUTH_ORIGIN` for every later branch command. Adding
 more Realmroot deployments or credential contexts always adds profiles, never
 API names.
@@ -182,7 +181,7 @@ API names.
 Invoke the generated identity operation in the selected profile:
 
 ```bash
-restish "$API_NAME" auth whoami -o json
+restish "$API_NAME" whoami -o json
 ```
 
 On first use, the adapter registers a stable Agent, opens the controller's
@@ -190,6 +189,6 @@ approval page, waits, and resumes the same operation after approval. The
 controller signs in and decides; the Agent remains the Restish request
 identity.
 
-Repeat `auth whoami` after interruption to resume enrollment. Use
+Repeat `whoami` after interruption to resume enrollment. Use
 `AUTH_ORIGIN/api/auth` as the returned OIDC issuer and consume its discovery
 metadata for OIDC endpoints.

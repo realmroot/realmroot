@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestFileStateStoreProtectsAndValidatesAgentKeys(t *testing.T) {
@@ -89,21 +90,16 @@ func TestFileStateStoreUpgradeDropsLegacyGrantCredentialCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := agentState{
-		Version:         1,
-		Origin:          target.Origin,
-		Name:            "Build Agent",
-		AgentID:         "agent-123",
-		HostID:          "host-123",
-		AgentKeyID:      "agent-key",
-		HostKeyID:       "host-key",
-		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
-		HostPrivateKey:  encodePrivateKey(hostPrivateKey),
-		DPoPCredentials: map[string]dpopCredential{
-			"grant-old": {GrantID: "grant-old", ResourceID: "resource-1"},
-		},
+	legacy := map[string]any{
+		"version": 6, "origin": target.Origin, "issuer": target.Issuer, "runtime": target.Runtime,
+		"name": "Build Agent", "agent_id": "agent-123", "host_id": "host-123",
+		"agent_key_id": "agent-key", "host_key_id": "host-key",
+		"agent_private_key": encodePrivateKey(agentPrivateKey), "host_private_key": encodePrivateKey(hostPrivateKey),
+		"dpop_credentials": map[string]any{"grant-old": map[string]any{
+			"grant_id": "grant-old", "resource_id": "resource-1", "resource_url": "https://api.example.com",
+		}},
 	}
-	legacyPath := store.legacyPath(target)
+	legacyPath := store.path(target)
 	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -129,12 +125,12 @@ func TestFileStateStoreUpgradeDropsLegacyGrantCredentialCache(t *testing.T) {
 	if reloaded.Version != agentStateVersion || len(reloaded.DPoPCredentials) != 0 {
 		t.Fatalf("upgraded state was not persisted: %#v", reloaded)
 	}
-	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
-		t.Fatalf("legacy state was not removed: %v", err)
+	if _, err := os.Stat(legacyPath); err != nil {
+		t.Fatalf("upgraded state was not persisted: %v", err)
 	}
 }
 
-func TestFileStateStoreCredentialLookupUpgradesVersionThreeState(t *testing.T) {
+func TestFileStateStoreFindsGenericCredentialByResourceIndicator(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
 		API:     "realmroot",
@@ -151,12 +147,9 @@ func TestFileStateStoreCredentialLookupUpgradesVersionThreeState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	validDPoPPrivateKey, err := newDPoPPrivateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stale := agentState{
-		Version:         3,
+	credential := testCredential(t, "short-lived-token", time.Now().Add(time.Minute))
+	state := agentState{
+		Version:         agentStateVersion,
 		Origin:          target.Origin,
 		Issuer:          target.Issuer,
 		Runtime:         target.Runtime,
@@ -167,29 +160,16 @@ func TestFileStateStoreCredentialLookupUpgradesVersionThreeState(t *testing.T) {
 		HostKeyID:       "host-key",
 		AgentPrivateKey: encodePrivateKey(agentPrivateKey),
 		HostPrivateKey:  encodePrivateKey(hostPrivateKey),
-		DPoPCredentials: map[string]dpopCredential{
-			"resource-1": {
-				GrantID:     "grant-1",
-				GrantMode:   "persistent",
-				ResourceID:  "resource-1",
-				ResourceURL: "https://api.example.com",
-				PrivateKey:  "stale-key",
-			},
-			"resource-2": {
-				GrantID:           "grant-2",
-				GrantMode:         "persistent",
-				ResourceID:        "resource-2",
-				ResourceURL:       "https://wallet.example.com",
-				AuthorizationMode: "native",
-				PrivateKey:        validDPoPPrivateKey,
-			},
+		DPoPCredentials: map[string]dpopCredential{credential.ResourceHref: credential},
+		ActiveDPoPCredentials: map[string]string{
+			credential.ResourceIndicator: credential.ResourceHref,
 		},
 	}
 	path := store.path(target)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := json.Marshal(stale)
+	encoded, err := json.Marshal(state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,23 +177,12 @@ func TestFileStateStoreCredentialLookupUpgradesVersionThreeState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reference, err := store.FindByResourceURL("https://wallet.example.com/accounts", target.Runtime)
+	reference, err := store.FindByResourceURL("https://api.example.com/v1/accounts", target.Runtime, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	upgraded := reference.state
-	if upgraded.Version != agentStateVersion || len(upgraded.DPoPCredentials) != 1 {
-		t.Fatalf("invalid version-three credential cache was retained: %#v", upgraded)
-	}
-	if _, ok := upgraded.DPoPCredentials["resource-2"]; !ok {
-		t.Fatalf("valid version-three credential cache was removed: %#v", upgraded)
-	}
-	reloaded, err := store.Load(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if reloaded.Version != agentStateVersion || len(reloaded.DPoPCredentials) != 1 {
-		t.Fatalf("upgraded state was not persisted: %#v", reloaded)
+	if reference.credential.ResourceHref != credential.ResourceHref {
+		t.Fatalf("credential = %#v", reference.credential)
 	}
 }
 

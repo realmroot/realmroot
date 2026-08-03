@@ -16,7 +16,10 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-const authProvider = "realmroot-agent"
+const (
+	authProvider       = "realmroot-agent"
+	targetAuthProvider = "realmroot-target"
+)
 
 type registrationResponse struct {
 	AgentID  string `json:"agent_id"`
@@ -42,35 +45,14 @@ type identityResponse struct {
 	Agent stableIdentity `json:"agent"`
 }
 
-type agentAPIResourcesResponse struct {
-	Items []struct {
-		ID           string  `json:"id"`
-		ResourceURL  string  `json:"resourceUrl"`
-		ConnectorID  *string `json:"connectorId"`
-		AccessGrants []struct {
-			ID     string `json:"id"`
-			Mode   string `json:"mode"`
-			Status string `json:"status"`
-		} `json:"accessGrants"`
-	} `json:"items"`
-}
-
 type targetTokenResponse struct {
-	AccessToken string    `json:"accessToken"`
-	TokenType   string    `json:"tokenType"`
-	ExpiresAt   time.Time `json:"expiresAt"`
-	ResourceURL string    `json:"resourceUrl"`
-}
-
-type protectedResourceMetadata struct {
-	Resource             string   `json:"resource"`
-	AuthorizationServers []string `json:"authorization_servers"`
-}
-
-type authorizationServerMetadata struct {
-	Issuer         string   `json:"issuer"`
-	TokenEndpoint  string   `json:"token_endpoint"`
-	DPoPAlgorithms []string `json:"dpop_signing_alg_values_supported"`
+	AccessToken       string    `json:"accessToken"`
+	TokenType         string    `json:"tokenType"`
+	ExpiresAt         time.Time `json:"expiresAt"`
+	ResourceIndicator string    `json:"resourceIndicator"`
+	Resource          struct {
+		Href string `json:"href"`
+	} `json:"resource"`
 }
 
 type agentConfiguration struct {
@@ -103,12 +85,16 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
-	if input.Params["provider"] != authProvider {
+	switch input.Params["provider"] {
+	case targetAuthProvider:
 		credentials, ok := states.(resourceCredentialStore)
 		if !ok {
 			return plugin.AuthHookOutput{}, nil
 		}
-		return authenticateTargetRequest(input, credentials, client, runtime)
+		return authenticateTargetRequest(input, credentials, client, runtime, strings.TrimSuffix(input.Params["issuer"], "/"))
+	case authProvider:
+	default:
+		return plugin.AuthHookOutput{}, nil
 	}
 	origin, err := realmrootOrigin(input.Request.URI)
 	if err != nil {
@@ -134,34 +120,6 @@ func authenticateRequest(
 		return plugin.AuthHookOutput{}, err
 	}
 	headers := map[string]any{"Authorization": "Bearer " + token}
-	if grantID, ok := targetTokenGrantID(input.Request.Method, input.Request.URI); ok {
-		credential, updatedState, err := ensureDPoPCredential(
-			context.Background(),
-			states,
-			client,
-			target,
-			state,
-			configuration,
-			grantID,
-		)
-		if err != nil {
-			return plugin.AuthHookOutput{}, err
-		}
-		state = updatedState
-		issuerOrigin, err := stableIssuerOrigin(state.Issuer)
-		if err != nil {
-			return plugin.AuthHookOutput{}, err
-		}
-		proofTarget, err := dpopTokenTarget(context.Background(), client, issuerOrigin, grantID, credential)
-		if err != nil {
-			return plugin.AuthHookOutput{}, err
-		}
-		proof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, proofTarget, "", time.Now())
-		if err != nil {
-			return plugin.AuthHookOutput{}, err
-		}
-		headers["DPoP"] = proof
-	}
 	return plugin.AuthHookOutput{
 		Request: &plugin.HookRequestHeaderUpdate{
 			Headers: headers,
@@ -174,23 +132,37 @@ func authenticateTargetRequest(
 	states resourceCredentialStore,
 	client httpDoer,
 	runtime string,
+	issuer string,
 ) (plugin.AuthHookOutput, error) {
-	reference, err := states.FindByResourceURL(input.Request.URI, runtime)
+	if issuer != "" {
+		parsed, err := validatedAbsoluteURL(issuer)
+		if err != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return plugin.AuthHookOutput{}, errors.New("Realmroot target issuer must be an absolute HTTPS URL without query or fragment")
+		}
+	}
+	reference, err := states.FindByResourceURL(input.Request.URI, runtime, issuer)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return plugin.AuthHookOutput{}, nil
+			if issuer != "" {
+				unfiltered, unfilteredErr := states.FindByResourceURL(input.Request.URI, runtime, "")
+				if unfilteredErr == nil {
+					return plugin.AuthHookOutput{}, fmt.Errorf(
+						"Realmroot target issuer %q does not match the active Resource credential issuer %q",
+						issuer,
+						unfiltered.state.Issuer,
+					)
+				}
+				if !errors.Is(unfilteredErr, os.ErrNotExist) {
+					return plugin.AuthHookOutput{}, unfilteredErr
+				}
+			}
+			return plugin.AuthHookOutput{}, errors.New(
+				"no active Realmroot Resource credential matches the target API request; request Resource access before retrying",
+			)
 		}
 		return plugin.AuthHookOutput{}, err
 	}
 	credential := reference.credential
-	if credential.GrantMode == "once" &&
-		credential.ExpiresAt != nil &&
-		!time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
-		if err := states.DeleteCredential(reference); err != nil {
-			return plugin.AuthHookOutput{}, fmt.Errorf("remove expired one-time target credential: %w", err)
-		}
-		return plugin.AuthHookOutput{}, errors.New("one-time target API access expired; request and approve a new access grant")
-	}
 	if credential.AccessToken == "" || credential.ExpiresAt == nil || !time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
 		credential, err = refreshTargetToken(context.Background(), client, reference.state, credential)
 		if err != nil {
@@ -200,7 +172,7 @@ func authenticateTargetRequest(
 					return plugin.AuthHookOutput{}, fmt.Errorf("remove inactive target credential: %w", deleteErr)
 				}
 				return plugin.AuthHookOutput{}, errors.New(
-					"target API access grant is no longer active; request and approve a new access grant",
+					"cached Resource credential can no longer be renewed; request current Resource access before retrying",
 				)
 			}
 			return plugin.AuthHookOutput{}, err
@@ -225,106 +197,19 @@ func authenticateTargetRequest(
 	}}}, nil
 }
 
-func ensureDPoPCredential(
-	ctx context.Context,
-	states stateStore,
-	client httpDoer,
-	target agentTarget,
-	state agentState,
-	configuration agentConfiguration,
-	grantID string,
-) (dpopCredential, agentState, error) {
-	for _, credential := range state.DPoPCredentials {
-		if credential.GrantID == grantID {
-			if removeStaleResourceBindings(state, credential) {
-				if err := states.Update(target, state); err != nil {
-					return dpopCredential{}, state, err
-				}
-			}
-			return credential, state, nil
-		}
-	}
-	var resources agentAPIResourcesResponse
-	if err := requestJSON(
-		ctx,
-		client,
-		http.MethodGet,
-		state.Origin+"/api/agent/api-resources?limit=100&offset=0",
-		mustAgentJWT(state, configuration.Issuer),
-		nil,
-		&resources,
-	); err != nil {
-		return dpopCredential{}, state, fmt.Errorf("discover Agent API resource grant: %w", err)
-	}
-	for _, resource := range resources.Items {
-		for _, grant := range resource.AccessGrants {
-			if grant.ID != grantID || grant.Status != "active" {
-				continue
-			}
-			privateKey, err := newDPoPPrivateKey()
-			if err != nil {
-				return dpopCredential{}, state, err
-			}
-			credential := dpopCredential{
-				GrantID:           grantID,
-				GrantMode:         grant.Mode,
-				ResourceID:        resource.ID,
-				ResourceURL:       resource.ResourceURL,
-				AuthorizationMode: authorizationMode(resource.ConnectorID),
-				PrivateKey:        privateKey,
-			}
-			if state.DPoPCredentials == nil {
-				state.DPoPCredentials = make(map[string]dpopCredential)
-			}
-			removeStaleResourceBindings(state, credential)
-			state.DPoPCredentials[resource.ID] = credential
-			if err := states.Update(target, state); err != nil {
-				return dpopCredential{}, state, err
-			}
-			return credential, state, nil
-		}
-	}
-	return dpopCredential{}, state, errors.New("active Agent access grant was not found in API resource discovery")
-}
-
-func removeStaleResourceBindings(state agentState, credential dpopCredential) bool {
-	changed := false
-	for resourceID, existing := range state.DPoPCredentials {
-		if resourceID != credential.ResourceID && existing.ResourceURL == credential.ResourceURL {
-			delete(state.DPoPCredentials, resourceID)
-			changed = true
-		}
-	}
-	return changed
-}
-
-func authorizationMode(connectorID *string) string {
-	if connectorID == nil {
-		return "native"
-	}
-	return "external"
-}
-
 func refreshTargetToken(
 	ctx context.Context,
 	client httpDoer,
 	state agentState,
 	credential dpopCredential,
 ) (dpopCredential, error) {
-	issuerOrigin, err := stableIssuerOrigin(state.Issuer)
-	if err != nil {
-		return dpopCredential{}, err
+	if credential.CredentialEndpoint == "" || credential.ProofTarget == "" {
+		return dpopCredential{}, errors.New("stored Resource credential is missing its renewal offer")
 	}
-	configuration, err := discoverAgentConfiguration(ctx, client, issuerOrigin)
-	if err != nil {
-		return dpopCredential{}, err
+	if !sameOrigin(credential.CredentialEndpoint, state.Origin) {
+		return dpopCredential{}, errors.New("stored Resource credential endpoint does not belong to its issuer")
 	}
-	tokenURL := issuerOrigin + "/api/agent/access-grants/" + url.PathEscape(credential.GrantID) + "/tokens"
-	proofTarget, err := dpopTokenTarget(ctx, client, issuerOrigin, credential.GrantID, credential)
-	if err != nil {
-		return dpopCredential{}, err
-	}
-	proof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, proofTarget, "", time.Now())
+	proof, err := signDPoPProof(credential.PrivateKey, http.MethodPost, credential.ProofTarget, "", time.Now())
 	if err != nil {
 		return dpopCredential{}, err
 	}
@@ -333,9 +218,9 @@ func refreshTargetToken(
 		ctx,
 		client,
 		http.MethodPost,
-		tokenURL,
+		credential.CredentialEndpoint,
 		map[string]string{
-			"Authorization": "Bearer " + mustAgentJWT(state, configuration.Issuer),
+			"Authorization": "Bearer " + mustAgentJWT(state, state.Issuer),
 			"DPoP":          proof,
 		},
 		nil,
@@ -343,86 +228,14 @@ func refreshTargetToken(
 	); err != nil {
 		return dpopCredential{}, fmt.Errorf("issue target API access token: %w", err)
 	}
-	if token.TokenType != "DPoP" || token.AccessToken == "" || token.ResourceURL != credential.ResourceURL ||
+	if token.TokenType != "DPoP" || token.AccessToken == "" || token.ResourceIndicator != credential.ResourceIndicator ||
+		token.Resource.Href != credential.ResourceHref ||
 		!token.ExpiresAt.After(time.Now()) {
 		return dpopCredential{}, errors.New("Realmroot returned an invalid target API access token")
 	}
 	credential.AccessToken = token.AccessToken
 	credential.ExpiresAt = &token.ExpiresAt
 	return credential, nil
-}
-
-func stableIssuerOrigin(issuer string) (string, error) {
-	parsed, err := validatedAbsoluteURL(issuer)
-	if err != nil {
-		return "", fmt.Errorf("Agent issuer is invalid: %w", err)
-	}
-	return parsed.Scheme + "://" + parsed.Host, nil
-}
-
-func dpopTokenTarget(
-	ctx context.Context,
-	client httpDoer,
-	realmrootOrigin string,
-	grantID string,
-	credential dpopCredential,
-) (string, error) {
-	if credential.AuthorizationMode == "native" {
-		return realmrootOrigin + "/api/agent/access-grants/" + url.PathEscape(grantID) + "/tokens", nil
-	}
-	resourceURL, err := validatedAbsoluteURL(credential.ResourceURL)
-	if err != nil {
-		return "", fmt.Errorf("external API resource URL is invalid: %w", err)
-	}
-	resourcePath := strings.TrimSuffix(resourceURL.EscapedPath(), "/")
-	metadataURL := resourceURL.Scheme + "://" + resourceURL.Host + "/.well-known/oauth-protected-resource" + resourcePath
-	var protected protectedResourceMetadata
-	if err := requestJSON(ctx, client, http.MethodGet, metadataURL, "", nil, &protected); err != nil {
-		return "", fmt.Errorf("discover external protected resource metadata: %w", err)
-	}
-	if protected.Resource != credential.ResourceURL || len(protected.AuthorizationServers) != 1 {
-		return "", errors.New("external protected resource metadata does not match the registered API resource")
-	}
-	issuer, err := validatedAbsoluteURL(protected.AuthorizationServers[0])
-	if err != nil {
-		return "", fmt.Errorf("external authorization server issuer is invalid: %w", err)
-	}
-	issuerPath := strings.TrimSuffix(issuer.EscapedPath(), "/")
-	authorizationMetadataURL := issuer.Scheme + "://" + issuer.Host + "/.well-known/oauth-authorization-server" + issuerPath
-	var metadata authorizationServerMetadata
-	if err := requestJSON(ctx, client, http.MethodGet, authorizationMetadataURL, "", nil, &metadata); err != nil {
-		return "", fmt.Errorf("discover external authorization server metadata: %w", err)
-	}
-	if metadata.Issuer != strings.TrimSuffix(issuer.String(), "/") ||
-		metadata.TokenEndpoint == "" ||
-		!contains(metadata.DPoPAlgorithms, "ES256") {
-		return "", errors.New("external authorization server metadata is incompatible with ES256 DPoP")
-	}
-	if _, err := validatedAbsoluteURL(metadata.TokenEndpoint); err != nil {
-		return "", fmt.Errorf("external token endpoint is invalid: %w", err)
-	}
-	return metadata.TokenEndpoint, nil
-}
-
-func targetTokenGrantID(method string, requestURI string) (string, bool) {
-	if method != http.MethodPost {
-		return "", false
-	}
-	parsed, err := url.Parse(requestURI)
-	if err != nil {
-		return "", false
-	}
-	const prefix = "/api/agent/access-grants/"
-	const suffix = "/tokens"
-	if !strings.HasPrefix(parsed.EscapedPath(), prefix) || !strings.HasSuffix(parsed.EscapedPath(), suffix) {
-		return "", false
-	}
-	encoded := strings.TrimSuffix(strings.TrimPrefix(parsed.EscapedPath(), prefix), suffix)
-	if encoded == "" || strings.Contains(encoded, "/") {
-		return "", false
-	}
-	grantID, err := url.PathUnescape(encoded)
-	return grantID, err == nil && grantID != ""
 }
 
 func ensureAgentIdentity(

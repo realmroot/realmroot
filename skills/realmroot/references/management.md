@@ -17,7 +17,7 @@ mutations, limited to the resources in the user's task.
 For application administration:
 
 ```bash
-restish "$API_NAME" capability request --rsh-validate -o json <<'JSON'
+restish "$API_NAME" request-capabilities --rsh-validate -o json <<'JSON'
 {
   "capabilities": ["applications:read", "applications:write"],
   "reason": "Administer Realmroot applications"

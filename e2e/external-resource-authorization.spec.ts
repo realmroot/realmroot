@@ -48,25 +48,22 @@ test.describe('external API resource authorization', () => {
       const resource = (await resourceResponse.json()) as { id: string }
       await grantAgentResourceScope(page, resource.id, identity.agent.id, 'e2e-projects-reader')
 
-      const discovered = plugin.listAgentApiResources<{
+      const discovered = plugin.listResourceServers<{
         items: Array<{
           id: string
-          resourceUrl: string
+          serviceUrl: string
           scopes: Array<{ value: string }>
-          accountConnections: Array<{ id: string; scopes: string[] }>
+          connection: { status: string; authorizedScopes: string[] }
         }>
       }>()
       const available = discovered.items.find((candidate) => candidate.id === resource.id)
       expect(available).toMatchObject({
-        resourceUrl: externalResource,
+        serviceUrl: externalResource,
         scopes: expect.arrayContaining([expect.objectContaining({ value: 'projects:read' })]),
-        accountConnections: [],
+        connection: { status: 'not_connected', authorizedScopes: [] },
       })
 
-      const connectionRequest = plugin.connectResource<{
-        status: string
-        accountConnectionId: string
-      }>(resource.id, {
+      const connectionRequest = plugin.connectResource<{ status: string }>(resource.id, {
         scopes: ['projects:read'],
         reason: 'Connect the controller project account',
       })
@@ -76,14 +73,24 @@ test.describe('external API resource authorization', () => {
       await page.waitForURL('**/agent/resource-connection/approve**')
       await expect(page.getByRole('heading', { name: 'Account connected' })).toBeVisible()
       const connected = await connectionRequest.result
-      expect(connected).toMatchObject({ status: 'connected', accountConnectionId: expect.any(String) })
+      expect(connected).toMatchObject({ status: 'connected' })
 
-      const accessRequest = plugin.requestResourceAccess<{ status: string; grantId: string }>({
-        target: {
-          type: 'api-resource',
-          apiResourceId: resource.id,
-          accountConnectionId: connected.accountConnectionId,
-        },
+      const providerResources = plugin.listResources<{
+        items: Array<{
+          links: { self: string }
+          accountAuthorization: { status: string }
+          agentAuthorization: { requestableScopes: string[] }
+        }>
+      }>(resource.id)
+      const providerResource = providerResources.items.find((candidate) =>
+        candidate.agentAuthorization.requestableScopes.includes('projects:read'),
+      )
+      expect(providerResource, JSON.stringify(providerResources.items, null, 2)).toMatchObject({
+        accountAuthorization: { status: 'authorized' },
+      })
+
+      const accessRequest = plugin.requestResourceAccess<{ status: string }>({
+        resource: { href: providerResource!.links.self },
         scopes: ['projects:read'],
         reason: 'List projects for the controller',
       })
@@ -93,7 +100,7 @@ test.describe('external API resource authorization', () => {
       await expect(page.getByRole('heading', { name: 'Resource access approved' })).toBeVisible()
 
       const approved = await accessRequest.result
-      expect(approved.status).toBe('approved')
+      expect(approved.status).toBe('ready')
       const connectionsResponse = await page.request.get('/api/account/account-connections')
       expect(connectionsResponse.status(), await connectionsResponse.text()).toBe(200)
       const connections = (await connectionsResponse.json()) as {
@@ -102,8 +109,6 @@ test.describe('external API resource authorization', () => {
       const connection = connections.items.find((candidate) => candidate.apiResourceId === resource.id)
       expect(connection?.scopes).toEqual(expect.arrayContaining(['projects:read']))
       expect(connection?.scopes).not.toContain('projects:write')
-
-      plugin.issueTargetAccessToken(approved.grantId)
 
       plugin.connectTarget('external-projects', externalResource)
       const directBody = plugin.targetRequest<{
@@ -128,9 +133,21 @@ test.describe('external API resource authorization', () => {
       })
       expect(directBody.authorization.act).not.toHaveProperty('host')
 
-      const revoked = await page.request.delete(`/api/account/access-grants/${approved.grantId}`)
+      const grantsResponse = await page.request.get(`/api/agent-access-grants?agentId=${identity.agent.id}`)
+      expect(grantsResponse.status(), await grantsResponse.text()).toBe(200)
+      const grants = (await grantsResponse.json()) as {
+        items: Array<{ id: string; resource: { id: string } }>
+      }
+      const grant = grants.items.find((candidate) => candidate.resource.id === resource.id)
+      expect(grant).toBeDefined()
+      const revoked = await page.request.delete(`/api/account/access-grants/${grant!.id}`)
       expect(revoked.status()).toBe(204)
-      expect(() => plugin.targetRequest('external-projects', 'projects')).toThrow()
+      const afterRevocation = plugin.listResources<{
+        items: Array<{ links: { self: string }; agentAuthorization: { authorizedScopes: string[] } }>
+      }>(resource.id)
+      expect(
+        afterRevocation.items.find((candidate) => candidate.links.self === providerResource!.links.self),
+      ).toMatchObject({ agentAuthorization: { authorizedScopes: [] } })
     } finally {
       plugin.dispose()
     }
@@ -160,27 +177,30 @@ test.describe('external API resource authorization', () => {
       const resource = (await resourceResponse.json()) as { id: string }
       await grantAgentResourceScope(page, resource.id, identity.agent.id, 'e2e-realmroot-projects-reader')
 
-      const discovered = plugin.listAgentApiResources<{
+      const discovered = plugin.listResourceServers<{
         items: Array<{
           id: string
-          connectorId: string | null
-          resourceUrl: string
+          serviceUrl: string
           scopes: Array<{ value: string }>
-          accountConnections: Array<{ id: string }>
+          connection: { status: string }
         }>
       }>()
       expect(discovered.items).toContainEqual(
         expect.objectContaining({
           id: resource.id,
-          connectorId: null,
-          resourceUrl: realmrootResource,
+          serviceUrl: realmrootResource,
           scopes: expect.arrayContaining([expect.objectContaining({ value: 'projects:read' })]),
-          accountConnections: [],
+          connection: { status: 'not_required', displayName: null, authorizedScopes: [] },
         }),
       )
 
-      const accessRequest = plugin.requestResourceAccess<{ status: string; grantId: string }>({
-        target: { type: 'api-resource', apiResourceId: resource.id },
+      const providerResources = plugin.listResources<{
+        items: Array<{ links: { self: string }; type: string }>
+      }>(resource.id)
+      expect(providerResources.items).toHaveLength(1)
+
+      const accessRequest = plugin.requestResourceAccess<{ status: string }>({
+        resource: { href: providerResources.items[0]!.links.self },
         scopes: ['projects:read'],
         reason: 'List projects for the controller',
       })
@@ -198,9 +218,7 @@ test.describe('external API resource authorization', () => {
       await expect(page.getByRole('heading', { name: 'Resource access approved' })).toBeVisible()
 
       const approved = await accessRequest.result
-      expect(approved.status).toBe('approved')
-
-      plugin.issueTargetAccessToken(approved.grantId)
+      expect(approved.status).toBe('ready')
 
       plugin.connectTarget('native-projects', realmrootResource)
       expect(plugin.targetRequest('native-projects', 'projects')).toMatchObject({

@@ -41,7 +41,7 @@ ordinary public resources.
 Read [references/setup.md](references/setup.md) and complete its setup and
 identity procedure.
 
-This step is complete only when `auth whoami` succeeds and returns both
+This step is complete only when `whoami` succeeds and returns both
 `agent.issuer` and `agent.subject`. If the user asked only for enrollment or
 identity, return those non-secret identifiers and stop.
 
@@ -52,10 +52,10 @@ identity, return those non-secret identifiers and stop.
 Read [references/restish-commands.md](references/restish-commands.md) when the
 task needs an authenticated private capability with no existing authorized
 tool, or when the user wants to discover, request access to, or call a known
-native or external API Resource.
+  native or external Resource Server.
 
 When a matching resource exists, this branch is complete only when the target's
-generated Restish operation succeeds. A resource listing, approval, grant, or
+  generated Restish operation succeeds. A resource listing, approval, or
 issued token alone is not completion. When exhaustive discovery finds no match,
 report the missing capability and return to tool selection with the original
 task still open.

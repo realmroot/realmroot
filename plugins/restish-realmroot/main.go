@@ -8,7 +8,7 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-const pluginVersion = "0.3.0"
+const pluginVersion = "0.8.0"
 
 func main() {
 	manifest := plugin.Manifest{
@@ -49,7 +49,7 @@ func main() {
 		if err := responseMiddlewareDecMode.Unmarshal(raw, &input); err != nil {
 			exitWithError(fmt.Errorf("decode response hook input: %w", err))
 		}
-		output, err := handleCapabilityApprovalResponse(
+		output, err := handleProfiledResponse(
 			input,
 			systemBrowserOpener{},
 			newFileStateStore(),

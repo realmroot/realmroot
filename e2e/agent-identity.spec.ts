@@ -70,14 +70,14 @@ test.describe('new Agent stable identity enrollment', () => {
         renewedPermissionRequest.result,
       ])
       for (const permissionRequest of permissionRequests) {
-        expect(permissionRequest.status).toBe('active')
-        expect(permissionRequest.agent_capability_grants).toEqual(
+        expect(permissionRequest.status).toBe('completed')
+        expect(permissionRequest.capabilities).toEqual(
           expect.arrayContaining([
-            expect.objectContaining({ capability: 'applications:read', status: 'active' }),
-            expect.objectContaining({ capability: 'applications:write', status: 'active' }),
+            expect.objectContaining({ value: 'applications:read', status: 'active' }),
+            expect.objectContaining({ value: 'applications:write', status: 'active' }),
           ]),
         )
-        expect(permissionRequest.agent_capability_grants).toHaveLength(2)
+        expect(permissionRequest.capabilities).toHaveLength(2)
       }
 
       expect(plugin.listApplications().applications).toEqual(expect.any(Array))
@@ -127,7 +127,7 @@ test.describe('new Agent stable identity enrollment', () => {
       await page.getByRole('button', { name: 'Deny' }).click()
       await expect(page.getByRole('heading', { name: 'Authorization denied' })).toBeVisible()
       await expect(capabilityResult).resolves.toMatchObject({
-        message: expect.stringContaining('controller denied the requested Agent capabilities'),
+        message: expect.stringContaining('controller interaction denied'),
       })
     } finally {
       deniedCapabilityPlugin.dispose()

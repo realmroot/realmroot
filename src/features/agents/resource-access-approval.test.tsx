@@ -19,24 +19,28 @@ const request = {
   id: 'request-1',
   agentId: 'agent-1',
   target: {
-    type: 'api-resource' as const,
-    apiResourceId: 'resource-1',
-    accountConnectionId: 'connection-1',
+    type: 'resource' as const,
+    resource: { href: 'https://identity.example.com/api/resource-servers/resource-1/resources/project-1' },
   },
   scopes: ['projects:read'],
   authorizationDetails: [{ type: 'project', project_id: 'project-1', actions: ['read'] }],
   reason: 'Read project status',
   status: 'pending' as const,
-  approval: null,
-  grantId: null,
+  interaction: { type: 'user-approval' as const, status: 'pending' as const, url: null, expiresAt: null },
+  links: { self: '/api/access-requests/request-1', credentials: null },
+  credentialOffer: null,
   expiresAt: '2026-08-01T01:00:00.000Z',
   decidedAt: null,
   createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-01T00:00:00.000Z',
   agent: { id: 'agent-1', name: 'Release helper' },
+  resourceServer: { id: 'resource-1', name: 'ZPan' },
   resource: {
-    id: 'resource-1',
-    name: 'ZPan',
+    id: 'project-1',
+    name: 'Project One',
+    type: 'project',
+    description: null,
+    metadata: {},
     authorizationDetailTemplates: [{ type: 'project' }],
   },
 }
@@ -73,8 +77,9 @@ describe('Agent resource access approval', () => {
         {
           authorizationDetail: { type: 'project', project_id: 'project-1', actions: ['read'] },
           display: { label: 'Project One' },
-          connectionAuthorized: true,
-          agentGrants: [],
+          connectionStatus: 'authorized',
+          authorizedScopes: [],
+          requestableScopes: [],
         },
       ],
       pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
@@ -109,27 +114,46 @@ describe('Agent resource access approval', () => {
 
     expect(await screen.findByText('Release helper')).toBeTruthy()
     expect(screen.getByText('agent-1')).toBeTruthy()
-    expect(screen.getByText('ZPan')).toBeTruthy()
-    expect(screen.getByText('resource-1')).toBeTruthy()
+    expect(screen.getByText('Project One')).toBeTruthy()
+    expect(screen.getByText(request.target.resource.href)).toBeTruthy()
     expect(screen.queryByText('connection-1')).toBeNull()
     expect(screen.getByText('ZPan Demo')).toBeTruthy()
     expect(screen.queryByRole('radio', { name: 'ZPan Demo' })).toBeNull()
     expect(screen.getAllByText('projects:read')).toHaveLength(2)
     expect(screen.getByText('Read project status')).toBeTruthy()
-    expect(screen.getByRole('region', { name: 'Requested authorization details' }).textContent).toContain(
-      '{"actions":["read"],"project_id":"project-1","type":"project"}',
-    )
+    expect(screen.queryByRole('region', { name: 'Requested authorization details' })).toBeNull()
+    expect(screen.queryByText('{"actions":["read"],"project_id":"project-1","type":"project"}')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
 
     await waitFor(() =>
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
         decision: 'approve',
         mode: 'once',
-        accountConnectionId: 'connection-1',
         authorizationDetails: [{ type: 'project', project_id: 'project-1', actions: ['read'] }],
       }),
     )
     expect(await screen.findByText('Resource access approved')).toBeTruthy()
+  })
+
+  it('loads a new approval when the browser reuses the page for another token', async () => {
+    api.getAgentResourceApproval.mockImplementation(async (token: string) =>
+      token === 'second approval token'
+        ? {
+            ...request,
+            id: 'request-2',
+            resource: { ...request.resource, id: 'project-2', name: 'Project Two' },
+          }
+        : request,
+    )
+
+    render(<ResourceAccessApproval />)
+    expect(await screen.findByText('Project One')).toBeTruthy()
+
+    window.location.hash = 'token=second%20approval%20token'
+    fireEvent(window, new HashChangeEvent('hashchange'))
+
+    expect(await screen.findByText('Project Two')).toBeTruthy()
+    await waitFor(() => expect(api.getAgentResourceApproval).toHaveBeenLastCalledWith('second approval token'))
   })
 
   it('shows a connection provider error and keeps account connection retryable', async () => {
@@ -171,14 +195,16 @@ describe('Agent resource access approval', () => {
         {
           authorizationDetail: { type: 'project', project_id: 'project-1' },
           display: { label: 'Project One' },
-          connectionAuthorized: true,
-          agentGrants: [],
+          connectionStatus: 'authorized',
+          authorizedScopes: [],
+          requestableScopes: [],
         },
         {
           authorizationDetail: { type: 'project', project_id: 'project-2' },
           display: { label: 'Project Two' },
-          connectionAuthorized: true,
-          agentGrants: [{ id: 'grant-2', scopes: ['projects:read'], status: 'active' }],
+          connectionStatus: 'authorized',
+          authorizedScopes: ['projects:read'],
+          requestableScopes: [],
         },
       ],
       pagination: { limit: 50, offset: 0, total: 2, hasMore: false, nextOffset: null },
@@ -188,17 +214,39 @@ describe('Agent resource access approval', () => {
 
     const approve = await screen.findByRole('button', { name: 'Approve exact access' })
     expect(approve.hasAttribute('disabled')).toBe(true)
-    const select = screen.getByLabelText('Authorization context 1')
+    const select = screen.getByLabelText('Authorization detail 1')
     fireEvent.click(select)
-    fireEvent.click(await screen.findByRole('option', { name: 'Project Two — already granted' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Project Two' }))
     expect(approve.hasAttribute('disabled')).toBe(false)
     fireEvent.click(approve)
     await waitFor(() =>
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
         decision: 'approve',
         mode: 'once',
-        accountConnectionId: 'connection-1',
         authorizationDetails: [{ type: 'project', project_id: 'project-2' }],
+      }),
+    )
+  })
+
+  it('preserves multiple concrete authorization details in one approval', async () => {
+    const authorizationDetails = [
+      { type: 'project', project_id: 'project-1', actions: ['read'] },
+      { type: 'project', project_id: 'project-2', actions: ['read'] },
+    ]
+    api.getAgentResourceApproval.mockResolvedValue({ ...request, authorizationDetails })
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [{ ...connection, authorizationDetails }],
+      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+
+    render(<ResourceAccessApproval />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve exact access' }))
+    await waitFor(() =>
+      expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
+        decision: 'approve',
+        mode: 'once',
+        authorizationDetails,
       }),
     )
   })
@@ -214,8 +262,9 @@ describe('Agent resource access approval', () => {
           {
             authorizationDetail: { type: 'project', project_id: 'project-1' },
             display: { label: 'Project One' },
-            connectionAuthorized: true,
-            agentGrants: [],
+            connectionStatus: 'authorized',
+            authorizedScopes: [],
+            requestableScopes: [],
           },
         ],
         pagination: { limit: 100, offset: 0, total: 101, hasMore: true, nextOffset: 100 },
@@ -225,8 +274,9 @@ describe('Agent resource access approval', () => {
           {
             authorizationDetail: { type: 'project', project_id: 'project-101' },
             display: { label: 'Project One Hundred One' },
-            connectionAuthorized: true,
-            agentGrants: [],
+            connectionStatus: 'authorized',
+            authorizedScopes: [],
+            requestableScopes: [],
           },
         ],
         pagination: { limit: 100, offset: 100, total: 101, hasMore: false, nextOffset: null },
@@ -234,7 +284,7 @@ describe('Agent resource access approval', () => {
 
     render(<ResourceAccessApproval />)
 
-    fireEvent.click(await screen.findByLabelText('Authorization context 1'))
+    fireEvent.click(await screen.findByLabelText('Authorization detail 1'))
     expect(await screen.findByRole('option', { name: 'Project One Hundred One' })).toBeTruthy()
     expect(api.listApprovalAuthorizationDetailCatalog).toHaveBeenNthCalledWith(1, 'request-1', 'approval token', {
       limit: 100,
@@ -249,9 +299,17 @@ describe('Agent resource access approval', () => {
   it('shows a native resource name without requiring an account connection', async () => {
     api.getAgentResourceApproval.mockResolvedValue({
       ...request,
-      target: { type: 'api-resource', apiResourceId: 'resource-1' },
+      target: { type: 'resource', resource: request.target.resource },
       authorizationDetails: [],
-      resource: { id: 'resource-1', name: 'Billing API', authorizationDetailTemplates: [] },
+      resourceServer: { id: 'resource-1', name: 'Billing API' },
+      resource: {
+        id: 'service',
+        name: 'Billing API',
+        type: 'service',
+        description: null,
+        metadata: {},
+        authorizationDetailTemplates: [],
+      },
     })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
@@ -272,7 +330,7 @@ describe('Agent resource access approval', () => {
   it('[spec: agent-identity/external-resource-first-access] connects an account before allowing a separate approval', async () => {
     api.getAgentResourceApproval.mockResolvedValue({
       ...request,
-      target: { type: 'api-resource', apiResourceId: 'resource-1' },
+      target: { type: 'resource', resource: request.target.resource },
     })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],
@@ -311,7 +369,7 @@ describe('Agent resource access approval', () => {
     window.sessionStorage.setItem('realmroot.resource-access-approval-token', 'approval token')
     api.getAgentResourceApproval.mockResolvedValue({
       ...request,
-      target: { type: 'api-resource', apiResourceId: 'resource-1' },
+      target: { type: 'resource', resource: request.target.resource },
     })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [{ ...connection, id: 'connection-2' }],
@@ -327,7 +385,6 @@ describe('Agent resource access approval', () => {
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
         decision: 'approve',
         mode: 'once',
-        accountConnectionId: 'connection-2',
         authorizationDetails: [{ type: 'project', project_id: 'project-1', actions: ['read'] }],
       }),
     )
@@ -373,7 +430,7 @@ describe('Agent resource access approval', () => {
   it('reports account connection failures from Error and unknown values', async () => {
     api.getAgentResourceApproval.mockResolvedValue({
       ...request,
-      target: { type: 'api-resource', apiResourceId: 'resource-1' },
+      target: { type: 'resource', resource: request.target.resource },
     })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDetectAgentRuntimeUsesExplicitAgentRuntime(t *testing.T) {
 	runtime, err := detectAgentRuntime(testEnvironment(map[string]string{
@@ -56,6 +59,38 @@ func TestDetectAgentRuntimeFallsBackToRestish(t *testing.T) {
 func TestDetectAgentRuntimeRejectsInvalidExplicitRuntime(t *testing.T) {
 	if _, err := detectAgentRuntime(testEnvironment(map[string]string{"AGENT": "../codex"})); err == nil {
 		t.Fatal("expected invalid AGENT runtime to fail")
+	}
+}
+
+func TestDetectAgentSessionIsolatesConcurrentSessionsWithoutPersistingRawIdentifiers(t *testing.T) {
+	first := detectAgentSession(testEnvironment(map[string]string{"CODEX_THREAD_ID": "thread-secret-1"}))
+	again := detectAgentSession(testEnvironment(map[string]string{"CODEX_THREAD_ID": "thread-secret-1"}))
+	second := detectAgentSession(testEnvironment(map[string]string{"CODEX_THREAD_ID": "thread-secret-2"}))
+	if first != again || first == second {
+		t.Fatalf("session keys are not stable and isolated: %q %q %q", first, again, second)
+	}
+	if strings.Contains(first, "thread-secret") {
+		t.Fatalf("session key contains the raw external identifier: %q", first)
+	}
+	if fallback := detectAgentSession(testEnvironment(nil)); fallback != "default" {
+		t.Fatalf("fallback session = %q", fallback)
+	}
+}
+
+func TestCredentialSelectionUsesOnlyTheCurrentAgentSession(t *testing.T) {
+	resourceURL := "https://api.example.com/v1"
+	t.Setenv("AGENT_SESSION_ID", "")
+	t.Setenv("HERMES_SESSION_KEY", "")
+	t.Setenv("CODEX_THREAD_ID", "thread-1")
+	firstKey := credentialSelectionKey(resourceURL)
+	t.Setenv("CODEX_THREAD_ID", "thread-2")
+	secondKey := credentialSelectionKey(resourceURL)
+	if _, _, selected := selectedResourceURL(firstKey); selected {
+		t.Fatal("credential from another Agent session was selected")
+	}
+	selectedURL, _, selected := selectedResourceURL(secondKey)
+	if !selected || selectedURL != resourceURL {
+		t.Fatalf("current session selection = %q, %v", selectedURL, selected)
 	}
 }
 

@@ -2,6 +2,7 @@ import { oauthProviderAuthServerMetadata, oauthProviderOpenIdConfigMetadata } fr
 import type { Auth } from '@server/auth'
 import { forbidden, notFound, oauthError } from '@server/domain/errors'
 import { handleApiError } from '@server/http/errors'
+import { getAgentIdentityByProtocolAgent } from '@server/usecases/agent-identities'
 import type { Deps } from '@server/usecases/deps'
 import {
   exchangeToken,
@@ -11,6 +12,7 @@ import {
   refreshTokenGrantType,
   tokenExchangeGrantType,
 } from '@server/usecases/token-exchange'
+import { capabilityRequestSchema, interactiveResourceProfile } from '@shared/api/agent-api'
 import { requestAgentCapabilitiesResponseSchema, requestAgentCapabilitiesSchema } from '@shared/api/agents'
 import { resourceByRoutePrefix } from '@shared/authz'
 import type { Context } from 'hono'
@@ -110,8 +112,8 @@ export function createApp(auth: AuthHandler, deps: Deps, config: AppConfig = {})
       return c.json({
         ...mounted,
         agent_identity_issuer: issuer,
-        agent_enrollment_endpoint: new URL('/api/agent/enrollments', issuer).toString(),
-        agent_endpoint: new URL('/api/agent', issuer).toString(),
+        agent_enrollment_endpoint: new URL('/api/agent-identities/current/enrollments', issuer).toString(),
+        agent_endpoint: new URL('/api/agent-identities/current', issuer).toString(),
         agentinfo_endpoint: `${issuer}/agentinfo`,
         agentinfo_claims_supported: agentInfoClaimsSupported,
         agent_token_endpoint: `${issuer}/oauth2/token`,
@@ -195,7 +197,7 @@ function mountApiRoutes(app: Hono, auth: AuthHandler, config: AppConfig) {
     .route('/api/account', accountRoutes(managementApi, config.securityPolicy, canonicalOrigin || undefined))
     .route('/api/account', createAccountAssetRoutes(config.securityPolicy))
     .route('/api/account-connections', createResourceConnectionRoutes(canonicalOrigin || undefined))
-    .route('/api/agent', createAgentProtocolRoutes(auth.api, issuer || undefined))
+    .route('/api', createAgentProtocolRoutes(auth.api, issuer || undefined))
 }
 
 export function protectResourceRoutes(app: Hono, auth: SessionReader) {
@@ -211,7 +213,7 @@ function createUnifiedApiRoutes(auth: AuthHandler, _config: AppConfig) {
   const app = new Hono()
 
   app.get('/openapi.json', (c) => c.json(unifiedOpenApi))
-  app.post('/agent/capability-requests', async (c) => {
+  app.post('/capability-requests', async (c) => {
     const body = await readJson(c, requestAgentCapabilitiesSchema)
     const headers = new Headers(c.req.raw.headers)
     headers.set('content-type', 'application/json')
@@ -230,22 +232,126 @@ function createUnifiedApiRoutes(auth: AuthHandler, _config: AppConfig) {
     if (!response.ok) return response
 
     const payload = requestAgentCapabilitiesResponseSchema.parse(await response.json())
+    const identity = await getAgentIdentityByProtocolAgent(c.get('deps'), payload.agent_id)
+    const binding = identity.bindings.find(
+      (candidate) => candidate.protocolAgentId === payload.agent_id && candidate.status === 'active',
+    )
+    if (!binding) throw forbidden('The authenticated Agent has no active stable identity binding.')
+    const now = new Date()
+    let request = payload.approval?.device_code
+      ? await c.get('deps').agents.findApprovalRequest(payload.approval.device_code)
+      : null
+    if (payload.approval?.device_code && !request) {
+      throw new Error('Agent capability approval was created without its canonical request resource.')
+    }
+    if (!request) {
+      request = await c.get('deps').agents.createApprovalRequest({
+        id: `capreq_${crypto.randomUUID().replaceAll('-', '')}`,
+        method: 'immediate',
+        agentId: payload.agent_id,
+        hostId: binding.hostId,
+        userId: identity.homeSpace.type === 'personal' ? identity.homeSpace.userId : null,
+        capabilities: body.capabilities.join(' '),
+        status: 'approved',
+        userCodeHash: null,
+        loginHint: null,
+        bindingMessage: null,
+        clientNotificationToken: null,
+        clientNotificationEndpoint: null,
+        deliveryMode: null,
+        interval: 0,
+        lastPolledAt: null,
+        expiresAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
     const approval = payload.approval
     if (approval?.verification_uri_complete) {
       const url = new URL(approval.verification_uri_complete)
       for (const capability of body.capabilities) url.searchParams.append('capability', capability)
       approval.verification_uri_complete = url.toString()
     }
-    return c.json(payload)
+    const result = await capabilityRequestRepresentation(
+      c.get('deps'),
+      request,
+      approval?.verification_uri_complete ?? null,
+      new URL(c.req.url).origin,
+    )
+    c.header('Location', result.links.self)
+    applyUnifiedInteractionHeaders(c, result)
+    return c.json(capabilityRequestSchema.parse(result), 201)
+  })
+  app.get('/capability-requests/:requestId', async (c) => {
+    const session = await requireUnifiedAgentSession(auth, c.req.raw.headers)
+    const request = await c.get('deps').agents.findApprovalRequest(c.req.param('requestId'))
+    if (!request || request.agentId !== session.agent.id) throw notFound('Capability request was not found.')
+    const result = await capabilityRequestRepresentation(c.get('deps'), request, null, new URL(c.req.url).origin)
+    applyUnifiedInteractionHeaders(c, result)
+    return c.json(capabilityRequestSchema.parse(result))
   })
   return app
+}
+
+async function requireUnifiedAgentSession(auth: AuthHandler, headers: Headers) {
+  const session = await auth.api.getAgentSession?.({ headers, asResponse: false })
+  if (!session) throw forbidden('An authenticated Agent is required.')
+  return session
+}
+
+async function capabilityRequestRepresentation(
+  deps: Deps,
+  request: Awaited<ReturnType<Deps['agents']['findApprovalRequest']>> & {},
+  approvalUrl: string | null,
+  apiOrigin: string,
+) {
+  const identity = await getAgentIdentityByProtocolAgent(deps, request.agentId!)
+  const capabilities = request.capabilities?.split(' ').filter(Boolean) ?? []
+  const now = Date.now()
+  const activeCapabilities = new Set(
+    (await deps.agents.listCapabilityGrantsForAgent(request.agentId!))
+      .filter((grant) => grant.status === 'active' && (!grant.expiresAt || grant.expiresAt.getTime() > now))
+      .map((grant) => grant.capability),
+  )
+  const authorityIsActive = capabilities.length > 0 && capabilities.every((value) => activeCapabilities.has(value))
+  let status: 'completed' | 'denied' | 'expired' | 'pending' | 'failed'
+  if (authorityIsActive || request.status === 'approved' || request.status === 'consumed') status = 'completed'
+  else if (request.status === 'pending' && request.expiresAt.getTime() <= now) status = 'expired'
+  else if (request.status === 'denied') status = 'denied'
+  else if (request.status === 'expired') status = 'expired'
+  else if (request.status === 'pending') status = 'pending'
+  else status = 'failed'
+  return {
+    id: request.id,
+    agentId: identity.id,
+    capabilities: capabilities.map((value) => ({
+      value,
+      status: status === 'completed' ? 'active' : status,
+    })),
+    status,
+    interaction: {
+      type: 'user-approval' as const,
+      status,
+      url: status === 'pending' ? approvalUrl : null,
+      expiresAt: status === 'pending' ? request.expiresAt.toISOString() : null,
+    },
+    links: { self: `${apiOrigin}/api/capability-requests/${encodeURIComponent(request.id)}` },
+    createdAt: request.createdAt.toISOString(),
+    expiresAt: request.expiresAt.toISOString(),
+  }
+}
+
+function applyUnifiedInteractionHeaders(c: Context, result: { interaction: { status: string } }) {
+  c.header('Link', `<${interactiveResourceProfile}>; rel="profile"`)
+  if (result.interaction.status === 'pending') c.header('Retry-After', '2')
 }
 
 function unifiedOpenApiDiscoveryHeader() {
   return async (c: Context, next: () => Promise<void>) => {
     await next()
     if (c.req.path === unifiedOpenApiPath) return
-    c.header('Link', unifiedOpenApiLinkHeader)
+    const existing = c.res.headers.get('Link')
+    c.header('Link', existing ? `${existing}, ${unifiedOpenApiLinkHeader}` : unifiedOpenApiLinkHeader)
   }
 }
 

@@ -30,8 +30,8 @@ describe('auth.test 2', () => {
     await expect(discovery.json()).resolves.toMatchObject({
       issuer: 'https://auth.example.com/api/auth',
       agent_identity_issuer: 'https://auth.example.com/api/auth',
-      agent_endpoint: 'https://auth.example.com/api/agent',
-      agent_enrollment_endpoint: 'https://auth.example.com/api/agent/enrollments',
+      agent_endpoint: 'https://auth.example.com/api/agent-identities/current',
+      agent_enrollment_endpoint: 'https://auth.example.com/api/agent-identities/current/enrollments',
       agent_token_endpoint: 'https://auth.example.com/api/auth/oauth2/token',
       agent_jwks_uri: 'https://auth.example.com/api/auth/jwks',
       default_location: 'https://auth.example.com/api/auth/capability/execute',

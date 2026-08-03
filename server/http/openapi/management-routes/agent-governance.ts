@@ -1,5 +1,6 @@
 import {
   auditEventsResponseSchema,
+  capabilityRequestSchema,
   listAgentAuditEventsQuerySchema,
   listAgentsQuerySchema,
   listManagementAgentAccessGrantsQuerySchema,
@@ -14,9 +15,10 @@ import {
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import {
+  interactiveResourceResponseHeaders,
   jsonBody,
+  locationResponseHeader,
   type ManagementRouteConfig,
-  requestAgentCapabilitiesResponseSchema,
   requestAgentCapabilitiesSchema,
   z,
 } from './helpers'
@@ -24,13 +26,25 @@ import {
 export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   {
     method: 'post',
-    path: '/agent/capability-requests',
+    path: '/capability-requests',
     operationId: 'requestAgentCapabilities',
     summary: 'Request Realmroot resource capabilities',
-    cli: { group: 'capability', name: 'request' },
+    cli: { group: 'capability', name: 'request-capabilities' },
     security: [{ agentAuth: [] }],
     request: { body: jsonBody(requestAgentCapabilitiesSchema) },
-    response: requestAgentCapabilitiesResponseSchema,
+    response: capabilityRequestSchema,
+    status: 201,
+    responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
+  },
+  {
+    method: 'get',
+    path: '/capability-requests/{requestId}',
+    operationId: 'getCapabilityRequest',
+    summary: 'Get a capability request',
+    security: [{ agentAuth: [] }],
+    request: { params: z.object({ requestId: z.string() }) },
+    response: capabilityRequestSchema,
+    responseHeaders: interactiveResourceResponseHeaders,
   },
   {
     method: 'get',

@@ -1,8 +1,9 @@
-import { badGateway, badRequest, forbidden, notFound, oauthError, unauthorized } from '@server/domain/errors'
+import { ApiError, badGateway, badRequest, forbidden, notFound, oauthError, unauthorized } from '@server/domain/errors'
 import type { Deps } from '@server/usecases/deps'
 import type {
   AgentAccessGrantRecord,
   AgentAccessRequestRecord,
+  AgentConnectionRequestRecord,
   ExternalResourceAuthorizationRecord,
   ResourceAccountConnectionRecord,
 } from '@server/usecases/ports'
@@ -16,10 +17,8 @@ import type {
   CreateAccountConnection,
   CreateResourceConnectionRequest,
   ResourceConnectionApproval,
-  ResourceConnectionApprovalToken,
   ResourceConnectionRequest,
 } from '@shared/api/agent-api'
-import { resourceConnectionApprovalTokenSchema } from '@shared/api/agent-api'
 import {
   type AuthorizationDetail,
   authorizationDetailCatalogSchema,
@@ -33,7 +32,7 @@ import type {
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
 import { getAgentRoleAuthorization } from './authorization'
-import { ensureDynamicConnectorScopes } from './connectors'
+import { ensureDynamicConnectorScopes, refreshDynamicConnectorMetadata } from './connectors'
 import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
 
 const tokenExchangeGrantType = 'urn:ietf:params:oauth:grant-type:token-exchange'
@@ -109,7 +108,7 @@ export async function createResourceConnectionIntent(
     callbackOrigin,
   )
   const authorization = await requireActiveExternalAuthorization(deps, resourceId, clientGeneration)
-  const authorizationDetails = resource.authorizationDetails
+  const authorizationDetails = input.authorizationDetails ?? resource.authorizationDetails
   assertAuthorizationDetailsSupported(authorizationDetails, authorization)
   const id = createId('resconnint')
   const state = randomToken()
@@ -128,7 +127,7 @@ export async function createResourceConnectionIntent(
     code_challenge_method: 'S256',
     ...(authorizationDetails.length > 0 ? { authorization_details: JSON.stringify(authorizationDetails) } : {}),
   }
-  let expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
+  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
   let authorizationUrl: string
   if (authorizationDetails.length > 0) {
     const pushed = await postPushedAuthorizationRequest(
@@ -139,8 +138,7 @@ export async function createResourceConnectionIntent(
       authorizationClientSecret(authorization),
     )
     const requestUri = requiredString(pushed, 'request_uri', 'Pushed authorization response')
-    const expiresIn = requiredPositiveInteger(pushed, 'expires_in', 'Pushed authorization response')
-    expiresAt = new Date(Math.min(expiresAt.getTime(), now.getTime() + expiresIn * 1000))
+    requiredPositiveInteger(pushed, 'expires_in', 'Pushed authorization response')
     const url = new URL(authorization.authorizationEndpoint)
     url.searchParams.set('client_id', authorization.clientId)
     url.searchParams.set('request_uri', requestUri)
@@ -292,11 +290,22 @@ export async function createAccountConnection(
     const owner = approval.identity.identity.ownerOrganizationId
       ? { type: 'organization' as const, organizationId: approval.identity.identity.ownerOrganizationId }
       : { type: 'user' as const }
-    const connectionScopes = expandedConnectionScopes(approval.connection, approval.token.scopes)
+    const connectionScopes = expandedConnectionScopes(approval.connection, approval.request.scopes)
     const pending = await createResourceConnectionIntent(
       deps,
-      approval.token.resourceId,
-      { owner, scopes: connectionScopes, returnTo: 'connection-approval' },
+      approval.request.resourceId,
+      {
+        owner,
+        scopes: connectionScopes,
+        authorizationDetails:
+          approval.request.authorizationDetails.length > 0
+            ? mergeAuthorizationDetails(
+                approval.connection?.authorizationDetails ?? [],
+                approval.request.authorizationDetails,
+              )
+            : undefined,
+        returnTo: 'connection-approval',
+      },
       actorUserId,
       callbackOrigin,
     )
@@ -426,7 +435,6 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
     ? await deps.externalResources.listConnectionsByUser(identity.identity.ownerUserId)
     : await deps.externalResources.listConnectionsByOrganizations([identity.identity.ownerOrganizationId!])
   const activeConnections = connections.filter((connection) => connection.status === 'active')
-  const grants = await deps.externalResources.listActiveGrantsByAgent(principal.identityId)
   const configuredResources = await deps.authorization.listEnabledResources()
   const visibleResourceIds = new Set([
     ...activeConnections.map((connection) => connection.resourceId),
@@ -444,35 +452,42 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
       continue
     }
     const scopes = await discoverAgentResourceScopes(deps, resource.resourceUrl)
+    const storedConnection = activeConnections.find((candidate) => candidate.resourceId === resourceId) ?? null
+    const connection =
+      storedConnection && (await isConnectionUsable(deps, resourceId, storedConnection)) ? storedConnection : null
     resources.push({
       id: resource.id,
       identifier: resource.identifier,
       name: resource.name,
       description: resource.description,
-      resourceUrl: resource.resourceUrl,
-      connectorId: resource.connectorId,
-      status: scopes ? 'available' : 'unavailable',
+      serviceUrl: resource.resourceUrl,
+      resourceIndicator: resource.resourceUrl,
+      availability: {
+        status: scopes ? ('available' as const) : ('unavailable' as const),
+        checkedAt: new Date().toISOString(),
+      },
       scopes: scopes ?? [],
-      connections:
-        resource.connectorId !== null
-          ? activeConnections
-              .filter((connection) => connection.resourceId === resourceId)
-              .map((connection) => ({
-                id: connection.id,
+      resourcesAvailable:
+        resource.connectorId === null ||
+        Boolean(
+          connection &&
+            (authorization?.authorizationDetailsCatalogEndpoint || connection.authorizationDetails.length > 0),
+        ),
+      connection:
+        resource.connectorId === null
+          ? { status: 'not_required' as const, displayName: null, authorizedScopes: [] }
+          : connection
+            ? {
+                status: 'connected' as const,
                 displayName: connection.displayName,
-                subjectHint: redactSubject(connection.externalSubject),
-                grantedScopes: connection.grantedScopes.filter(
-                  (scope) => scope !== 'openid' && scope !== 'offline_access',
+                authorizedScopes: connection.grantedScopes.filter(
+                  (scope) =>
+                    scope !== 'openid' &&
+                    scope !== 'offline_access' &&
+                    scope !== authorization?.authorizationDetailsCatalogScope,
                 ),
-                authorizationDetails: connection.authorizationDetails,
-                updatedAt: connection.updatedAt,
-              }))
-          : [],
-      grants: grants
-        .filter(
-          (grant) => grant.resourceId === resourceId && (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
-        )
-        .map(toAgentAccessGrant),
+              }
+            : { status: 'not_connected' as const, displayName: null, authorizedScopes: [] },
     })
   }
   return { resources }
@@ -486,88 +501,149 @@ async function discoverAgentResourceScopes(deps: Deps, resourceUrl: string) {
   }
 }
 
-export async function listAgentApiResources(
+export async function listAgentResourceServers(
   deps: Deps,
   principal: AgentResourcePrincipal,
   pagination: PaginationInput,
+  apiOrigin: string,
 ) {
-  const resources = (await discoverAgentResources(deps, principal)).resources.map((resource) => ({
-    id: resource.id,
-    identifier: resource.identifier,
-    name: resource.name,
-    description: resource.description,
-    resourceUrl: resource.resourceUrl,
-    connectorId: resource.connectorId,
-    status: resource.status,
-    scopes: resource.scopes,
-    accountConnections: resource.connections.map((connection) => ({
-      id: connection.id,
-      displayName: connection.displayName,
-      subjectHint: connection.subjectHint,
-      scopes: connection.grantedScopes,
-      authorizationDetails: connection.authorizationDetails,
-      updatedAt: connection.updatedAt.toISOString(),
-    })),
-    accessGrants: resource.grants.map((grant) =>
-      toAccessGrant({
-        id: grant.id,
-        resourceId: grant.resourceId,
-        connectionId: grant.connectionId,
-        agentIdentityId: grant.agentIdentityId,
-        scopes: grant.scopes,
-        authorizationDetails: grant.authorizationDetails,
-        mode: grant.mode,
-        status: grant.status,
-        grantedByUserId: grant.grantedByUserId,
-        expiresAt: grant.expiresAt ? new Date(grant.expiresAt) : null,
-        revokedAt: grant.revokedAt ? new Date(grant.revokedAt) : null,
-        createdAt: new Date(grant.createdAt),
-        updatedAt: new Date(grant.updatedAt),
-      }),
-    ),
-  }))
+  const origin = apiOrigin.replace(/\/$/, '')
+  const resources = (await discoverAgentResources(deps, principal)).resources.map((resource) =>
+    toResourceServer(resource, origin),
+  )
   return {
     items: resources.slice(pagination.offset, pagination.offset + pagination.limit),
     pagination: paginationMetadata({ ...pagination, total: resources.length }),
   }
 }
 
-export async function listAgentAuthorizationDetailCatalog(
+export async function getAgentResourceServer(
   deps: Deps,
-  resourceId: string,
+  resourceServerId: string,
+  principal: AgentResourcePrincipal,
+  apiOrigin: string,
+) {
+  const resource = (await discoverAgentResources(deps, principal)).resources.find(
+    (candidate) => candidate.id === resourceServerId,
+  )
+  if (!resource) throw notFound('Resource Server was not found.')
+  return toResourceServer(resource, apiOrigin.replace(/\/$/, ''))
+}
+
+export async function listAgentResourceServerResources(
+  deps: Deps,
+  resourceServerId: string,
   principal: AgentResourcePrincipal,
   pagination: PaginationInput,
+  apiOrigin: string,
 ) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
-  const resource = await requireEnabledResource(deps, resourceId)
-  if (resource.connectorId === null) throw badRequest('Native API resources do not have authorization detail catalogs.')
+  const resource = await requireEnabledResource(deps, resourceServerId)
+  const origin = apiOrigin.replace(/\/$/, '')
+  if (resource.connectorId === null) {
+    const item = await toResourceServerResource(
+      resourceServerId,
+      null,
+      {
+        label: resource.name,
+        description: resource.description,
+        metadata: {},
+        connectionStatus: 'not_required',
+        authorizedScopes: await activeResourceScopes(deps, principal.identityId, resourceServerId, []),
+        requestableScopes:
+          (await discoverAgentResourceScopes(deps, resource.resourceUrl))?.map((scope) => scope.value) ?? [],
+      },
+      origin,
+    )
+    return { items: pagination.offset === 0 ? [item] : [], pagination: paginationMetadata({ ...pagination, total: 1 }) }
+  }
   const connection = await deps.externalResources.findConnectionByOwnerResource({
-    resourceId,
+    resourceId: resourceServerId,
     ownerUserId: identity.identity.ownerUserId,
     ownerOrganizationId: identity.identity.ownerOrganizationId,
   })
   if (!connection || connection.status !== 'active') {
-    return {
-      items: [],
-      pagination: paginationMetadata({ ...pagination, total: 0 }),
-      accountConnectionId: null,
-      accountConnectionUpdatedAt: null,
-      connectionRequired: true,
-    }
+    return { items: [], pagination: paginationMetadata({ ...pagination, total: 0 }) }
   }
-  return readAuthorizationDetailCatalog(deps, resource, connection, principal.identityId, pagination)
+  const fallbackAuthorization = await serviceResourceFallbackAuthorization(deps, resource, connection)
+  if (fallbackAuthorization) {
+    const item = await toResourceServerResource(
+      resourceServerId,
+      null,
+      {
+        label: resource.name,
+        description: resource.description,
+        metadata: {},
+        connectionStatus: 'authorized',
+        authorizedScopes: await activeResourceScopes(deps, principal.identityId, resourceServerId, []),
+        requestableScopes: connection.grantedScopes.filter(
+          (scope) =>
+            scope !== 'openid' &&
+            scope !== 'offline_access' &&
+            scope !== fallbackAuthorization.authorizationDetailsCatalogScope,
+        ),
+      },
+      origin,
+    )
+    return { items: pagination.offset === 0 ? [item] : [], pagination: paginationMetadata({ ...pagination, total: 1 }) }
+  }
+  const catalog = await readResourceCatalog(deps, resource, connection, principal.identityId, pagination)
+  return {
+    items: await Promise.all(
+      catalog.items.map((item) =>
+        toResourceServerResource(
+          resourceServerId,
+          item.authorizationDetail,
+          {
+            label: item.display.label,
+            description: item.display.description ?? null,
+            metadata: item.display.metadata ?? {},
+            connectionStatus: item.connectionStatus,
+            authorizedScopes: item.authorizedScopes,
+            requestableScopes: item.requestableScopes,
+          },
+          origin,
+        ),
+      ),
+    ),
+    pagination: catalog.pagination,
+  }
 }
 
-export async function createAgentResourceConnectionRequest(
+export async function getAgentResourceServerResource(
   deps: Deps,
+  resourceServerId: string,
   resourceId: string,
+  principal: AgentResourcePrincipal,
+  apiOrigin: string,
+) {
+  for (let offset = 0; ; ) {
+    const page = await listAgentResourceServerResources(
+      deps,
+      resourceServerId,
+      principal,
+      { limit: 100, offset },
+      apiOrigin,
+    )
+    const resource = page.items.find((candidate) => candidate.id === resourceId)
+    if (resource) return resource
+    if (!page.pagination.hasMore || page.pagination.nextOffset === null) break
+    offset = page.pagination.nextOffset
+  }
+  throw notFound('Resource was not found.')
+}
+
+export async function createAgentConnectionRequest(
+  deps: Deps,
+  resourceServerId: string,
   input: CreateResourceConnectionRequest,
   principal: AgentResourcePrincipal,
-  approvalOrigin: string,
+  apiOrigin: string,
 ): Promise<ResourceConnectionRequest> {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
-  const resource = await requireEnabledResource(deps, resourceId)
-  if (resource.connectorId === null) throw badRequest('Native API resources do not use account connections.')
+  const resource = await requireEnabledResource(deps, resourceServerId)
+  if (resource.connectorId === null) throw badRequest('Native Resource Servers do not use account connections.')
+  await refreshDynamicConnectorMetadata(deps, resource.connectorId)
   await validateRequestedScopes(deps, resource.resourceUrl, input.scopes)
   await requireAgentScopeEligibility(
     deps,
@@ -576,26 +652,81 @@ export async function createAgentResourceConnectionRequest(
     identity.identity.ownerOrganizationId,
     input.scopes,
   )
+  const connection = await deps.externalResources.findConnectionByOwnerResource({
+    resourceId: resourceServerId,
+    ownerUserId: identity.identity.ownerUserId,
+    ownerOrganizationId: identity.identity.ownerOrganizationId,
+  })
+  const authorizationDetails = await resolveResourceReferences(
+    deps,
+    resource,
+    connection?.status === 'active' ? connection : null,
+    input.resources ?? [],
+    principal.identityId,
+    apiOrigin,
+  )
   const now = new Date()
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000)
-  const token: ResourceConnectionApprovalToken = {
-    id: createId('resconnreq'),
+  const requestId = createId('connectionreq')
+  const rawApprovalToken = randomToken()
+  const record: AgentConnectionRequestRecord = {
+    id: requestId,
+    resourceId: resource.id,
     agentIdentityId: principal.identityId,
     bindingId: identity.bindings.find(
       (candidate) => candidate.hostId === principal.hostId && candidate.protocolAgentId === principal.protocolAgentId,
     )!.id,
-    resourceId: resource.id,
     scopes: [...new Set(input.scopes)].sort(),
+    authorizationDetails,
     reason: input.reason ?? null,
-    createdAt: now.toISOString(),
-    expiresAt: expiresAt.toISOString(),
+    approvalTokenHash: await sha256(rawApprovalToken),
+    encryptedApprovalToken: await deps.secrets.seal(rawApprovalToken, connectionRequestTokenContext(requestId)),
+    expiresAt,
+    createdAt: now,
+    updatedAt: now,
   }
-  const approvalToken = await deps.secrets.seal(JSON.stringify(token), resourceConnectionApprovalTokenContext)
+  const created = await deps.externalResources.createAgentConnectionRequest(record)
+  if (!created) throw forbidden('Enabled Resource Server is required.')
+  const connected =
+    connectionCoversRequest(connection, created) &&
+    Boolean(connection && (await isConnectionUsable(deps, resource.id, connection)))
   return toResourceConnectionRequest(
-    token,
-    null,
-    `${approvalOrigin.replace(/\/$/, '')}/agent/resource-connection/approve#token=${encodeURIComponent(approvalToken)}`,
+    created,
+    connected,
+    apiOrigin,
+    connected
+      ? null
+      : `${apiOrigin.replace(/\/$/, '')}/agent/resource-connection/approve#token=${encodeURIComponent(rawApprovalToken)}`,
   )
+}
+
+export async function getAgentConnectionRequest(
+  deps: Deps,
+  requestId: string,
+  principal: AgentResourcePrincipal,
+  apiOrigin: string,
+) {
+  const identity = await requireActiveIdentityAndBinding(deps, principal)
+  const request = await deps.externalResources.findAgentConnectionRequest(requestId)
+  const binding = identity.bindings.find(
+    (candidate) =>
+      candidate.id === request?.bindingId &&
+      candidate.hostId === principal.hostId &&
+      candidate.protocolAgentId === principal.protocolAgentId &&
+      candidate.status === 'active',
+  )
+  if (!request || request.agentIdentityId !== principal.identityId || !binding) {
+    throw notFound('Connection request was not found.')
+  }
+  const connection = await deps.externalResources.findConnectionByOwnerResource({
+    resourceId: request.resourceId,
+    ownerUserId: identity.identity.ownerUserId,
+    ownerOrganizationId: identity.identity.ownerOrganizationId,
+  })
+  const connected =
+    connectionCoversRequest(connection, request) &&
+    Boolean(connection && (await isConnectionUsable(deps, request.resourceId, connection)))
+  return toResourceConnectionRequest(request, connected, apiOrigin, null)
 }
 
 export async function getAccountResourceConnectionApproval(
@@ -605,9 +736,12 @@ export async function getAccountResourceConnectionApproval(
 ): Promise<ResourceConnectionApproval> {
   const approval = await resolveResourceConnectionApproval(deps, approvalToken, actorUserId)
   return {
-    ...toResourceConnectionRequest(approval.token, approval.connection?.id ?? null, null),
-    status: approval.connection?.status === 'active' ? 'connected' : 'pending',
-    approval: null,
+    ...toResourceConnectionRequest(
+      approval.request,
+      connectionCoversRequest(approval.connection, approval.request),
+      '',
+      null,
+    ),
     agent: { id: approval.identity.identity.id, name: approval.identity.identity.name },
     resource: { id: approval.resource.id, name: approval.resource.name },
     accountConnection: approval.connection?.status === 'active' ? toAccountConnection(approval.connection) : null,
@@ -649,14 +783,18 @@ export async function createAgentAccessRequest(
 ) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const resource = await requireEnabledResource(deps, input.resourceId)
-  const connection = input.connectionId ? await deps.externalResources.findConnection(input.connectionId) : null
+  const connection =
+    resource.connectorId === null
+      ? null
+      : await deps.externalResources.findConnectionByOwnerResource({
+          resourceId: resource.id,
+          ownerUserId: identity.identity.ownerUserId,
+          ownerOrganizationId: identity.identity.ownerOrganizationId,
+        })
   if (resource.connectorId !== null) {
-    if (!input.connectionId || !connection || connection.resourceId !== resource.id || connection.status !== 'active') {
+    if (!connection || connection.status !== 'active') {
       throw notFound('Active resource account connection was not found.')
     }
-    assertConnectionInHomeSpace(connection, identity.identity.ownerUserId, identity.identity.ownerOrganizationId)
-  } else if (connection) {
-    throw badRequest('Native API resources do not use account connections.')
   }
   await validateRequestedScopes(deps, resource.resourceUrl, input.scopes)
   const authorizationDetails = input.authorizationDetails ?? []
@@ -673,7 +811,7 @@ export async function createAgentAccessRequest(
     (grant) =>
       grant.connectionId === (connection?.id ?? null) &&
       grant.resourceId === resource.id &&
-      exactScopes(grant.scopes, scopes) &&
+      (grant.mode === 'once' ? exactScopes(grant.scopes, scopes) : includesScopes(grant.scopes, scopes)) &&
       exactAuthorizationDetails(grant.authorizationDetails, authorizationDetails) &&
       (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
   )
@@ -725,7 +863,7 @@ export async function createAgentAccessRequest(
     updatedAt: now,
   }
   const created = await deps.externalResources.createAccessRequest(request)
-  if (!created) throw forbidden('Enabled API resource is required.')
+  if (!created) throw forbidden('Enabled Resource Server is required.')
   await appendResourceAudit(deps, {
     action: 'api_resource.access_requested',
     result: existingGrant ? 'allowed' : 'pending',
@@ -750,21 +888,37 @@ export async function createAccessRequest(
   principal: AgentResourcePrincipal,
   approvalOrigin: string,
 ): Promise<AccessRequest> {
-  if (input.target.type !== 'api-resource') throw badRequest('Unsupported access request target.')
-  return toAccessRequest(
-    await createAgentAccessRequest(
-      deps,
-      {
-        resourceId: input.target.apiResourceId,
-        connectionId: input.target.accountConnectionId ?? null,
-        scopes: input.scopes,
-        authorizationDetails: input.authorizationDetails ?? [],
-        reason: input.reason,
-      },
-      principal,
-      approvalOrigin,
-    ),
+  const reference = parseAnyResourceHref(input.resource.href, approvalOrigin)
+  const resourceServer = await requireEnabledResource(deps, reference.resourceServerId)
+  const identity = await requireActiveIdentityAndBinding(deps, principal)
+  const connection =
+    resourceServer.connectorId === null
+      ? null
+      : await deps.externalResources.findConnectionByOwnerResource({
+          resourceId: resourceServer.id,
+          ownerUserId: identity.identity.ownerUserId,
+          ownerOrganizationId: identity.identity.ownerOrganizationId,
+        })
+  const authorizationDetails = await resolveResourceReferences(
+    deps,
+    resourceServer,
+    connection?.status === 'active' ? connection : null,
+    [input.resource],
+    principal.identityId,
+    approvalOrigin,
   )
+  const request = await createAgentAccessRequest(
+    deps,
+    {
+      resourceId: resourceServer.id,
+      scopes: input.scopes,
+      authorizationDetails,
+      reason: input.reason,
+    },
+    principal,
+    approvalOrigin,
+  )
+  return agentAccessRequestRepresentation(deps, request, approvalOrigin)
 }
 
 export async function getAgentAccessRequest(deps: Deps, requestId: string, principal: AgentResourcePrincipal) {
@@ -779,8 +933,9 @@ export async function getAccessRequest(
   deps: Deps,
   requestId: string,
   principal: AgentResourcePrincipal,
+  apiOrigin: string,
 ): Promise<AccessRequest> {
-  return toAccessRequest(await getAgentAccessRequest(deps, requestId, principal))
+  return agentAccessRequestRepresentation(deps, await getAgentAccessRequest(deps, requestId, principal), apiOrigin)
 }
 
 export async function listControllerAccessRequests(deps: Deps, actorUserId: string) {
@@ -805,7 +960,9 @@ export async function listControllerAccessRequests(deps: Deps, actorUserId: stri
 }
 
 export async function listAccountAccessRequests(deps: Deps, actorUserId: string, pagination: PaginationInput) {
-  const requests = (await listControllerAccessRequests(deps, actorUserId)).requests.map(toAccessRequest)
+  const requests = (await listControllerAccessRequests(deps, actorUserId)).requests.map((request) =>
+    toAccessRequest(request),
+  )
   return {
     items: await Promise.all(
       requests
@@ -839,22 +996,66 @@ export async function getAccountAccessRequestByToken(
 }
 
 async function resolveAccessRequestApproval(deps: Deps, request: AccessRequest): Promise<AccessRequestApproval> {
-  if (request.target.type !== 'api-resource') throw notFound('Agent access request was not found.')
+  if (request.target.type !== 'resource') throw notFound('Agent access request was not found.')
+  const record = await deps.externalResources.findAccessRequest(request.id)
+  if (!record) throw notFound('Agent access request was not found.')
   const [identity, resource] = await Promise.all([
     deps.agentIdentities.findIdentity(request.agentId),
-    deps.authorization.findResource(request.target.apiResourceId),
+    deps.authorization.findResource(record.resourceId),
   ])
   if (!identity) throw notFound('Agent identity was not found.')
   if (!resource) throw notFound('API resource was not found.')
+  const targetResource = await resolveApprovalResource(deps, resource, record)
   return {
     ...request,
+    authorizationDetails: record.authorizationDetails,
     agent: { id: identity.identity.id, name: identity.identity.name },
+    resourceServer: { id: resource.id, name: resource.name },
     resource: {
-      id: resource.id,
-      name: resource.name,
+      ...targetResource,
       authorizationDetailTemplates: resource.authorizationDetails,
     },
   }
+}
+
+async function resolveApprovalResource(
+  deps: Deps,
+  resourceServer: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  request: AgentAccessRequestRecord,
+) {
+  const detail = request.authorizationDetails[0]
+  if (!detail) {
+    return {
+      id: 'service',
+      name: resourceServer.name,
+      type: 'service',
+      description: resourceServer.description,
+      metadata: {},
+    }
+  }
+  if (!request.connectionId) throw notFound('Resource account connection was not found.')
+  const connection = await deps.externalResources.findConnection(request.connectionId)
+  if (!connection || connection.status !== 'active') throw notFound('Active resource account connection was not found.')
+  const targetId = resourceIdentifier(detail)
+  for (let offset = 0; ; ) {
+    const catalog = await readResourceCatalog(deps, resourceServer, connection, request.agentIdentityId, {
+      limit: 100,
+      offset,
+    })
+    const match = catalog.items.find((item) => resourceIdentifier(item.authorizationDetail) === targetId)
+    if (match) {
+      return {
+        id: targetId,
+        name: match.display.label,
+        type: detail.type,
+        description: match.display.description ?? null,
+        metadata: match.display.metadata ?? {},
+      }
+    }
+    if (!catalog.pagination.hasMore || catalog.pagination.nextOffset === null) break
+    offset = catalog.pagination.nextOffset
+  }
+  throw notFound('Resource was not found.')
 }
 
 export async function getControllerAccessRequestByToken(deps: Deps, token: string, actorUserId: string) {
@@ -923,7 +1124,7 @@ export async function decideAgentAccessRequest(
     requestIdentity.identity.ownerOrganizationId,
     request.scopes,
   )
-  const connectionId = input.accountConnectionId ?? request.connectionId
+  const connectionId = request.connectionId
   let connection: ResourceAccountConnectionRecord | null = null
   if (resource.connectorId !== null) {
     if (!connectionId) throw badRequest('An account connection is required to approve external API access.')
@@ -1005,24 +1206,35 @@ export async function issueTargetAccessToken(
   tokenRequestUrl: string,
   principal: AgentResourcePrincipal,
   signer: AgentAssertionSigner,
+  accessRequestId?: string,
 ) {
   const identity = await requireActiveIdentityAndBinding(deps, principal)
   const grant = await deps.externalResources.findGrant(grantId)
   if (!grant || grant.agentIdentityId !== principal.identityId)
     throw forbidden('Active Agent access grant is required.')
-  const request = await deps.externalResources.findAccessRequestByGrant(grant.id)
-  if (!request) throw forbidden('Approved Agent access request is required.')
+  const request = accessRequestId
+    ? await deps.externalResources.findAccessRequest(accessRequestId)
+    : await deps.externalResources.findAccessRequestByGrant(grant.id)
+  if (
+    !request ||
+    request.agentIdentityId !== principal.identityId ||
+    (accessRequestId !== undefined && request.grantId !== grant.id) ||
+    (request.status !== 'approved' && request.status !== 'consumed')
+  ) {
+    throw forbidden('Approved Agent access request is required.')
+  }
   const resource = await deps.authorization.findResource(request.resourceId)
   if (grant.status !== 'active' || (grant.expiresAt && grant.expiresAt.getTime() <= Date.now()) || !resource?.enabled) {
     throw forbidden('Active Agent access grant is required.')
   }
-  await validateRequestedScopes(deps, resource.resourceUrl, grant.scopes)
+  assertScopeSubset(request.scopes, grant.scopes, 'Agent access grant')
+  await validateRequestedScopes(deps, resource.resourceUrl, request.scopes)
   const roleAuthorization = await requireAgentScopeEligibility(
     deps,
     principal.identityId,
     resource.id,
     identity.identity.ownerOrganizationId,
-    grant.scopes,
+    request.scopes,
   )
   if (!authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails)) {
     throw forbidden('Agent access grant authorization details do not match the approved request.')
@@ -1040,11 +1252,27 @@ export async function issueTargetAccessToken(
   }
 
   const connection = request.connectionId ? await deps.externalResources.findConnection(request.connectionId) : null
-  const authorization = await findExternalAuthorization(deps, request.resourceId, connection?.clientGeneration ?? 1)
-  if (!connection || connection.status !== 'active' || authorization?.status !== 'active') {
+  if (!connection || connection.status !== 'active') {
     throw forbidden('Active external API resource grant is required.')
   }
-  assertScopeSubset(grant.scopes, connection.grantedScopes, 'connected account')
+  const connectionClientGeneration = connection.clientGeneration ?? 1
+  const connector = await deps.connectors.findById(resource.connectorId)
+  if ((connector?.clientGeneration ?? 1) === connectionClientGeneration) {
+    const activeClientGeneration = await ensureDynamicConnectorScopes(
+      deps,
+      resource.connectorId,
+      connection.grantedScopes,
+      new URL(tokenRequestUrl).origin,
+    )
+    if (activeClientGeneration !== connectionClientGeneration) {
+      throw forbidden('The connected account must be reauthorized after OAuth client rotation.')
+    }
+  }
+  const authorization = await findExternalAuthorization(deps, request.resourceId, connectionClientGeneration)
+  if (authorization?.status !== 'active') {
+    throw forbidden('Active external API resource grant is required.')
+  }
+  assertScopeSubset(request.scopes, connection.grantedScopes, 'connected account')
   assertAuthorizationDetailsSelection(resource, connection, grant.authorizationDetails)
   assertAuthorizationDetailsSubset(grant.authorizationDetails, connection.authorizationDetails, 'connected account')
   const confirmationJkt = await dpopThumbprint(deps, dpopProof, authorization.tokenEndpoint)
@@ -1152,6 +1380,41 @@ export async function issueTargetAccessToken(
     scopes: request.scopes,
     authorizationDetails: grant.authorizationDetails,
     resourceUrl: resource.resourceUrl,
+  }
+}
+
+export async function createAccessRequestCredential(
+  deps: Deps,
+  requestId: string,
+  dpopProof: string,
+  credentialRequestUrl: string,
+  principal: AgentResourcePrincipal,
+  signer: AgentAssertionSigner,
+) {
+  const request = await getAgentAccessRequest(deps, requestId, principal)
+  if ((request.status !== 'approved' && request.status !== 'consumed') || !request.grantId) {
+    throw forbidden('Approved Resource access is required.')
+  }
+  const token = await issueTargetAccessToken(
+    deps,
+    request.grantId,
+    dpopProof,
+    credentialRequestUrl,
+    principal,
+    signer,
+    request.id,
+  )
+  const origin = new URL(credentialRequestUrl).origin
+  return {
+    ...token,
+    resourceIndicator: token.resourceUrl,
+    resource: {
+      href: resourceHref(
+        origin,
+        request.resourceId,
+        request.authorizationDetails[0] ? resourceIdentifier(request.authorizationDetails[0]) : 'service',
+      ),
+    },
   }
 }
 
@@ -1364,10 +1627,13 @@ async function readAuthorizationDetailCatalog(
     throw badRequest('Resource account must be reauthorized for the authorization detail catalog scope.')
   }
   const accessToken = await refreshConnectionToken(deps, connection, authorization)
+  const catalogUrl = new URL(endpoint)
+  catalogUrl.searchParams.set('limit', String(pagination.limit))
+  catalogUrl.searchParams.set('offset', String(pagination.offset))
   let response: Response
   try {
     response = await deps.externalHttp.fetch(
-      new Request(endpoint, {
+      new Request(catalogUrl, {
         headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
       }),
     )
@@ -1379,6 +1645,19 @@ async function readAuthorizationDetailCatalog(
   }
   const parsed = authorizationDetailCatalogSchema.safeParse(await response.json().catch(() => null))
   if (!parsed.success) throw badGateway('Authorization detail catalog response is invalid.', { url: endpoint })
+  if (parsed.data.pagination.limit !== pagination.limit || parsed.data.pagination.offset !== pagination.offset) {
+    throw badGateway('Authorization detail catalog returned mismatched pagination metadata.', { url: endpoint })
+  }
+  if (parsed.data.items.length > pagination.limit) {
+    throw badGateway('Authorization detail catalog returned more items than requested.', { url: endpoint })
+  }
+  if (
+    parsed.data.pagination.hasMore !== (parsed.data.pagination.nextOffset !== null) ||
+    (parsed.data.pagination.nextOffset !== null && parsed.data.pagination.nextOffset <= pagination.offset) ||
+    parsed.data.pagination.total < pagination.offset + parsed.data.items.length
+  ) {
+    throw badGateway('Authorization detail catalog returned inconsistent pagination metadata.', { url: endpoint })
+  }
   const catalogKeys = parsed.data.items.map((item) => canonicalJson(item.authorizationDetail))
   if (new Set(catalogKeys).size !== catalogKeys.length) {
     throw badGateway('Authorization detail catalog contains duplicate details.', { url: endpoint })
@@ -1415,24 +1694,293 @@ async function readAuthorizationDetailCatalog(
       request ? authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails) : false,
     )
     .map(({ grant }) => grant)
-  const items = parsed.data.items.map((item) => ({
-    ...item,
-    connectionAuthorized: connection.authorizationDetails.some((detail) =>
+  const items = parsed.data.items.map((item) => {
+    const connectionAuthorized = connection.authorizationDetails.some((detail) =>
       exactAuthorizationDetails([detail], [item.authorizationDetail]),
-    ),
-    agentGrants: grants
-      .filter((grant) =>
-        grant.authorizationDetails.some((detail) => exactAuthorizationDetails([detail], [item.authorizationDetail])),
-      )
-      .map((grant) => ({ id: grant.id, scopes: grant.scopes, status: 'active' as const })),
-  }))
+    )
+    const authorizedScopes = new Set(
+      grants
+        .filter((grant) =>
+          grant.authorizationDetails.some((detail) => exactAuthorizationDetails([detail], [item.authorizationDetail])),
+        )
+        .flatMap((grant) => grant.scopes),
+    )
+    return {
+      ...item,
+      connectionStatus: connectionAuthorized ? ('authorized' as const) : ('authorization_required' as const),
+      authorizedScopes: connectionAuthorized ? [...authorizedScopes].sort() : [],
+      requestableScopes: connectionAuthorized
+        ? connection.grantedScopes
+            .filter(
+              (scope) =>
+                scope !== 'openid' &&
+                scope !== 'offline_access' &&
+                scope !== requiredScope &&
+                !authorizedScopes.has(scope),
+            )
+            .sort()
+        : [],
+    }
+  })
   return {
-    items: items.slice(pagination.offset, pagination.offset + pagination.limit),
-    pagination: paginationMetadata({ ...pagination, total: items.length }),
-    accountConnectionId: connection.id,
-    accountConnectionUpdatedAt: connection.updatedAt.toISOString(),
-    connectionRequired: false,
+    items,
+    pagination: parsed.data.pagination,
+    connection: { status: 'connected' as const },
   }
+}
+
+async function readResourceCatalog(
+  deps: Deps,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  connection: ResourceAccountConnectionRecord,
+  agentIdentityId: string,
+  pagination: PaginationInput,
+) {
+  const authorization = await requireActiveExternalAuthorization(deps, resource.id, connection.clientGeneration ?? 1)
+  if (authorization.authorizationDetailsCatalogEndpoint && authorization.authorizationDetailsCatalogScope) {
+    return readAuthorizationDetailCatalog(deps, resource, connection, agentIdentityId, pagination)
+  }
+  const details = connection.authorizationDetails.slice(pagination.offset, pagination.offset + pagination.limit)
+  const grants = (await deps.externalResources.listActiveGrantsByAgent(agentIdentityId)).filter(
+    (grant) =>
+      grant.resourceId === resource.id &&
+      grant.connectionId === connection.id &&
+      grant.status === 'active' &&
+      (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
+  )
+  return {
+    items: details.map((authorizationDetail) => {
+      const authorizedScopes = [
+        ...new Set(
+          grants
+            .filter((grant) =>
+              grant.authorizationDetails.some((detail) => exactAuthorizationDetails([detail], [authorizationDetail])),
+            )
+            .flatMap((grant) => grant.scopes),
+        ),
+      ].sort()
+      return {
+        authorizationDetail,
+        display: authorizationDetailDisplay(authorizationDetail),
+        connectionStatus: 'authorized' as const,
+        authorizedScopes,
+        requestableScopes: connection.grantedScopes
+          .filter((scope) => scope !== 'openid' && scope !== 'offline_access' && !authorizedScopes.includes(scope))
+          .sort(),
+      }
+    }),
+    pagination: paginationMetadata({ ...pagination, total: connection.authorizationDetails.length }),
+  }
+}
+
+async function activeResourceScopes(
+  deps: Deps,
+  agentIdentityId: string,
+  resourceServerId: string,
+  authorizationDetails: AuthorizationDetail[],
+) {
+  const now = Date.now()
+  return [
+    ...new Set(
+      (await deps.externalResources.listActiveGrantsByAgent(agentIdentityId))
+        .filter(
+          (grant) =>
+            grant.resourceId === resourceServerId &&
+            grant.status === 'active' &&
+            (!grant.expiresAt || grant.expiresAt.getTime() > now) &&
+            exactAuthorizationDetails(grant.authorizationDetails, authorizationDetails),
+        )
+        .flatMap((grant) => grant.scopes),
+    ),
+  ].sort()
+}
+
+async function toResourceServerResource(
+  resourceServerId: string,
+  authorizationDetail: AuthorizationDetail | null,
+  input: {
+    label: string
+    description: string | null
+    metadata: Record<string, string>
+    connectionStatus: 'authorized' | 'authorization_required' | 'not_required'
+    authorizedScopes: string[]
+    requestableScopes: string[]
+  },
+  apiOrigin: string,
+) {
+  const id = authorizationDetail ? resourceIdentifier(authorizationDetail) : 'service'
+  return {
+    id,
+    type: authorizationDetail?.type ?? 'service',
+    name: input.label,
+    description: input.description,
+    metadata: input.metadata,
+    accountAuthorization: { status: input.connectionStatus },
+    agentAuthorization: {
+      authorizedScopes: input.authorizedScopes,
+      requestableScopes: input.requestableScopes.filter((scope) => !input.authorizedScopes.includes(scope)),
+    },
+    links: {
+      self: resourceHref(apiOrigin, resourceServerId, id),
+      accessRequests: `${apiOrigin.replace(/\/$/, '')}/api/access-requests`,
+    },
+  }
+}
+
+function toResourceServer(
+  resource: Awaited<ReturnType<typeof discoverAgentResources>>['resources'][number],
+  origin: string,
+) {
+  const self = `${origin}/api/resource-servers/${encodeURIComponent(resource.id)}`
+  return {
+    id: resource.id,
+    identifier: resource.identifier,
+    name: resource.name,
+    description: resource.description,
+    serviceUrl: resource.serviceUrl,
+    resourceIndicator: resource.resourceIndicator,
+    availability: resource.availability,
+    scopes: resource.scopes,
+    connection: resource.connection,
+    links: {
+      self,
+      resources: `${self}/resources`,
+      connectionRequests: resource.connection.status === 'not_required' ? null : `${self}/connection-requests`,
+    },
+  }
+}
+
+async function resolveResourceReferences(
+  deps: Deps,
+  resourceServer: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  connection: ResourceAccountConnectionRecord | null,
+  references: Array<{ href: string }>,
+  agentIdentityId: string,
+  apiOrigin: string,
+) {
+  if (references.length === 0) return []
+  const ids = references.map(({ href }) => parseResourceHref(href, resourceServer.id, apiOrigin))
+  if (new Set(ids).size !== ids.length) throw badRequest('Resources must be unique.')
+  if (resourceServer.connectorId === null) {
+    if (ids.length !== 1 || ids[0] !== 'service') throw notFound('Resource was not found.')
+    return []
+  }
+  if (!connection) throw badRequest('Connect the Resource Server before selecting Resources.')
+  if (await serviceResourceFallbackAuthorization(deps, resourceServer, connection)) {
+    if (ids.length !== 1 || ids[0] !== 'service') throw notFound('Resource was not found.')
+    return []
+  }
+  const available = new Map<string, AuthorizationDetail>()
+  for (let offset = 0; ; ) {
+    const catalog = await readResourceCatalog(deps, resourceServer, connection, agentIdentityId, { limit: 100, offset })
+    for (const item of catalog.items)
+      available.set(resourceIdentifier(item.authorizationDetail), item.authorizationDetail)
+    if (!catalog.pagination.hasMore || catalog.pagination.nextOffset === null) break
+    offset = catalog.pagination.nextOffset
+  }
+  return ids.map((id) => {
+    const detail = available.get(id)
+    if (!detail) throw notFound('Resource was not found.')
+    return detail
+  })
+}
+
+async function serviceResourceFallbackAuthorization(
+  deps: Deps,
+  resource: NonNullable<Awaited<ReturnType<Deps['authorization']['findResource']>>>,
+  connection: ResourceAccountConnectionRecord,
+) {
+  if (connection.authorizationDetails.length > 0) return null
+  const authorization = await requireActiveExternalAuthorization(deps, resource.id, connection.clientGeneration ?? 1)
+  return authorization.authorizationDetailsCatalogEndpoint ? null : authorization
+}
+
+function parseResourceHref(href: string, resourceServerId: string, apiOrigin: string) {
+  const base = apiOrigin || 'https://realmroot.invalid'
+  let parsed: URL
+  try {
+    parsed = new URL(href, base)
+  } catch {
+    throw badRequest('Resource href is invalid.')
+  }
+  if (apiOrigin && parsed.origin !== new URL(apiOrigin).origin)
+    throw badRequest('Resource href belongs to another Realmroot issuer.')
+  const prefix = `/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources/`
+  if (!parsed.pathname.startsWith(prefix))
+    throw badRequest('Resource href does not belong to the selected Resource Server.')
+  const id = decodeURIComponent(parsed.pathname.slice(prefix.length))
+  if (!id || id.includes('/')) throw badRequest('Resource href is invalid.')
+  return id
+}
+
+function parseAnyResourceHref(href: string, apiOrigin: string) {
+  let parsed: URL
+  try {
+    parsed = new URL(href, apiOrigin)
+  } catch {
+    throw badRequest('Resource href is invalid.')
+  }
+  if (parsed.origin !== new URL(apiOrigin).origin)
+    throw badRequest('Resource href belongs to another Realmroot issuer.')
+  const match = /^\/api\/resource-servers\/([^/]+)\/resources\/([^/]+)$/.exec(parsed.pathname)
+  if (!match) throw badRequest('Resource href is invalid.')
+  return { resourceServerId: decodeURIComponent(match[1]!), resourceId: decodeURIComponent(match[2]!) }
+}
+
+function resourceHref(apiOrigin: string, resourceServerId: string, resourceId: string) {
+  const origin = apiOrigin.replace(/\/$/, '')
+  return `${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources/${encodeURIComponent(resourceId)}`
+}
+
+function resourceIdentifier(detail: AuthorizationDetail) {
+  let hash = 0xcbf29ce484222325n
+  for (const byte of new TextEncoder().encode(canonicalJson(detail))) {
+    hash ^= BigInt(byte)
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n)
+  }
+  return `resource_${hash.toString(16).padStart(16, '0')}`
+}
+
+function authorizationDetailDisplay(detail: AuthorizationDetail) {
+  const identifier = Object.entries(detail).find(
+    ([key, value]) => key !== 'type' && (typeof value === 'string' || typeof value === 'number'),
+  )
+  const label = identifier ? String(identifier[1]) : detail.type
+  return { label, description: null, metadata: identifier ? { [identifier[0]]: label } : {} }
+}
+
+function connectionCoversRequest(
+  connection: ResourceAccountConnectionRecord | null,
+  request: AgentConnectionRequestRecord,
+) {
+  return Boolean(
+    connection?.status === 'active' &&
+      request.scopes.every((scope) => connection.grantedScopes.includes(scope)) &&
+      isAuthorizationDetailsSubset(request.authorizationDetails, connection.authorizationDetails),
+  )
+}
+
+async function isConnectionUsable(
+  deps: Deps,
+  resourceId: string,
+  connection: ResourceAccountConnectionRecord,
+): Promise<boolean> {
+  if (connection.status !== 'active') return false
+  try {
+    const authorization = await requireActiveExternalAuthorization(deps, resourceId, connection.clientGeneration ?? 1)
+    await refreshConnectionToken(deps, connection, authorization)
+    return true
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401) throw error
+    await deps.externalResources.revokeConnection(connection.id, new Date())
+    return false
+  }
+}
+
+function mergeAuthorizationDetails(current: AuthorizationDetail[], requested: AuthorizationDetail[]) {
+  const entries = new Map(current.map((detail) => [canonicalJson(detail), detail]))
+  for (const detail of requested) entries.set(canonicalJson(detail), detail)
+  return [...entries.values()]
 }
 
 async function refreshConnectionToken(
@@ -1529,36 +2077,31 @@ async function requirePendingAccessRequestByToken(deps: Deps, token: string) {
   return request
 }
 
-async function resolveResourceConnectionApproval(deps: Deps, sealedToken: string, actorUserId: string) {
-  let token: ResourceConnectionApprovalToken
-  try {
-    token = resourceConnectionApprovalTokenSchema.parse(
-      JSON.parse(await deps.secrets.open(sealedToken, resourceConnectionApprovalTokenContext)),
-    )
-  } catch {
-    throw notFound('Pending resource connection request was not found.')
+async function resolveResourceConnectionApproval(deps: Deps, approvalToken: string, actorUserId: string) {
+  const request = await deps.externalResources.findAgentConnectionRequestByApprovalTokenHash(
+    await sha256(approvalToken),
+  )
+  if (!request || request.expiresAt.getTime() <= Date.now()) {
+    throw notFound('Pending connection request was not found.')
   }
-  if (new Date(token.expiresAt).getTime() <= Date.now()) {
-    throw notFound('Pending resource connection request was not found.')
-  }
-  const identity = await deps.agentIdentities.findIdentity(token.agentIdentityId)
+  const identity = await deps.agentIdentities.findIdentity(request.agentIdentityId)
   const binding = identity?.bindings.find(
-    (candidate) => candidate.id === token.bindingId && candidate.status === 'active',
+    (candidate) => candidate.id === request.bindingId && candidate.status === 'active',
   )
   if (!identity || identity.identity.status !== 'active' || !binding) {
-    throw notFound('Pending resource connection request was not found.')
+    throw notFound('Pending connection request was not found.')
   }
-  if (!(await controlsAgentIdentity(deps, token.agentIdentityId, actorUserId))) {
+  if (!(await controlsAgentIdentity(deps, request.agentIdentityId, actorUserId))) {
     throw forbidden('Agent controller access is required.')
   }
-  const resource = await requireEnabledResource(deps, token.resourceId)
-  if (resource.connectorId === null) throw badRequest('Native API resources do not use account connections.')
+  const resource = await requireEnabledResource(deps, request.resourceId)
+  if (resource.connectorId === null) throw badRequest('Native Resource Servers do not use account connections.')
   const connection = await deps.externalResources.findConnectionByOwnerResource({
     resourceId: resource.id,
     ownerUserId: identity.identity.ownerUserId,
     ownerOrganizationId: identity.identity.ownerOrganizationId,
   })
-  return { token, identity, resource, connection }
+  return { request, identity, resource, connection }
 }
 
 async function requireControlledAccessRequest(deps: Deps, requestId: string, actorUserId: string) {
@@ -1663,7 +2206,7 @@ function authorizationClientSecret(authorization: ResolvedExternalAuthorization)
 
 async function requireEnabledResource(deps: Deps, resourceId: string) {
   const resource = await deps.authorization.findResource(resourceId)
-  if (!resource?.enabled || resource.archivedAt) throw notFound('Enabled API resource was not found.')
+  if (!resource?.enabled || resource.archivedAt) throw notFound('Enabled Resource Server was not found.')
   if (resource.connectorId !== null) {
     await requireActiveExternalAuthorization(deps, resourceId)
   }
@@ -1846,11 +2389,12 @@ function assertAuthorizationDetailsSelection(
   if (!connection || connection.authorizationDetails.length === 0) {
     throw invalidAuthorizationDetails('The resource account must be explicitly reauthorized for authorization details.')
   }
-  if (authorizationDetails.length !== 1) {
-    throw invalidAuthorizationDetails('Select exactly one concrete authorization detail entry.')
+  if (authorizationDetails.length === 0) {
+    throw invalidAuthorizationDetails('Select at least one concrete authorization detail entry.')
   }
-  if (resource.authorizationDetails.some((template) => exactAuthorizationDetails([template], authorizationDetails))) {
-    throw invalidAuthorizationDetails('Selected authorization details must identify a concrete resource context.')
+  assertConcreteAuthorizationDetails(resource.authorizationDetails, authorizationDetails, 'Selected')
+  if (hasDuplicateAuthorizationDetails(authorizationDetails)) {
+    throw invalidAuthorizationDetails('Selected authorization details contain duplicate entries.')
   }
 }
 
@@ -1872,14 +2416,15 @@ function assertAccessRequestAuthorizationDetails(
     }
     return
   }
-  if (authorizationDetails.length !== 1) {
-    throw invalidAuthorizationDetails('Select exactly one concrete authorization detail entry.')
+  if (authorizationDetails.length === 0) {
+    throw invalidAuthorizationDetails('Select at least one concrete authorization detail entry.')
   }
   if (authorizationDetails.some((detail) => !supportedTypes.has(detail.type))) {
     throw invalidAuthorizationDetails('Requested authorization details contain an unsupported type.')
   }
-  if (resource.authorizationDetails.some((template) => exactAuthorizationDetails([template], authorizationDetails))) {
-    throw invalidAuthorizationDetails('Requested authorization details must identify a concrete resource context.')
+  assertConcreteAuthorizationDetails(resource.authorizationDetails, authorizationDetails, 'Requested')
+  if (hasDuplicateAuthorizationDetails(authorizationDetails)) {
+    throw invalidAuthorizationDetails('Requested authorization details contain duplicate entries.')
   }
   if (!connection || !isAuthorizationDetailsSubset(authorizationDetails, connection.authorizationDetails)) {
     throw invalidAuthorizationDetails('Requested authorization details exceed the connected account boundary.')
@@ -1915,6 +2460,27 @@ function exactAuthorizationDetails(left: AuthorizationDetail[], right: Authoriza
 
 function authorizationDetailsMatchRequest(approved: AuthorizationDetail[], requested: AuthorizationDetail[]) {
   return new Set(approved.map(canonicalJson)).size === approved.length && exactAuthorizationDetails(approved, requested)
+}
+
+function assertConcreteAuthorizationDetails(
+  templates: AuthorizationDetail[],
+  authorizationDetails: AuthorizationDetail[],
+  label: string,
+) {
+  if (
+    authorizationDetails.some(
+      (detail) =>
+        !templates.some((template) => authorizationDetailMatchesTemplate(detail, template)) ||
+        templates.some((template) => canonicalJson(template) === canonicalJson(detail)),
+    )
+  ) {
+    throw invalidAuthorizationDetails(`${label} authorization details must identify concrete resource contexts.`)
+  }
+}
+
+function hasDuplicateAuthorizationDetails(authorizationDetails: AuthorizationDetail[]) {
+  const entries = authorizationDetails.map(canonicalJson)
+  return new Set(entries).size !== entries.length
 }
 
 function authorizationDetailMatchesTemplate(detail: AuthorizationDetail, template: AuthorizationDetail) {
@@ -2096,6 +2662,11 @@ function assertScopeSubset(requested: string[], allowed: string[], boundary: str
   }
 }
 
+function includesScopes(allowed: string[], requested: string[]) {
+  const allowedSet = new Set(allowed)
+  return requested.every((scope) => allowedSet.has(scope))
+}
+
 async function requireAgentScopeEligibility(
   deps: Deps,
   agentIdentityId: string,
@@ -2182,24 +2753,6 @@ function toAgentAccessRequest(record: AgentAccessRequestRecord, hostId: string, 
   }
 }
 
-function toAgentAccessGrant(record: AgentAccessGrantRecord) {
-  return {
-    id: record.id,
-    resourceId: record.resourceId,
-    connectionId: record.connectionId,
-    agentIdentityId: record.agentIdentityId,
-    scopes: record.scopes,
-    authorizationDetails: record.authorizationDetails,
-    mode: record.mode as 'once' | 'until' | 'persistent',
-    status: record.status as 'active' | 'revoked' | 'consumed' | 'expired',
-    grantedByUserId: record.grantedByUserId,
-    expiresAt: record.expiresAt?.toISOString() ?? null,
-    revokedAt: record.revokedAt?.toISOString() ?? null,
-    createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
-  }
-}
-
 function toAccountConnection(record: ResourceAccountConnectionRecord): AccountConnection {
   return {
     id: record.id,
@@ -2221,21 +2774,33 @@ function toAccountConnection(record: ResourceAccountConnectionRecord): AccountCo
 }
 
 function toResourceConnectionRequest(
-  token: ResourceConnectionApprovalToken,
-  accountConnectionId: string | null,
+  request: AgentConnectionRequestRecord,
+  connected: boolean,
+  apiOrigin: string,
   approvalUrl: string | null,
 ): ResourceConnectionRequest {
+  const origin = apiOrigin.replace(/\/$/, '')
+  const expired = !connected && request.expiresAt.getTime() <= Date.now()
+  const status = connected ? 'connected' : expired ? 'expired' : 'pending'
   return {
-    id: token.id,
-    agentId: token.agentIdentityId,
-    apiResourceId: token.resourceId,
-    scopes: token.scopes,
-    reason: token.reason,
-    status: accountConnectionId ? 'connected' : 'pending',
-    accountConnectionId,
-    approval: approvalUrl ? { url: approvalUrl, expiresAt: token.expiresAt } : null,
-    createdAt: token.createdAt,
-    expiresAt: token.expiresAt,
+    id: request.id,
+    agentId: request.agentIdentityId,
+    resourceServerId: request.resourceId,
+    resources: request.authorizationDetails.map((detail) => ({
+      href: resourceHref(origin, request.resourceId, resourceIdentifier(detail)),
+    })),
+    scopes: request.scopes,
+    reason: request.reason,
+    status,
+    interaction: {
+      type: 'user-approval',
+      status: connected ? 'completed' : expired ? 'expired' : 'pending',
+      url: status === 'pending' ? approvalUrl : null,
+      expiresAt: status === 'pending' ? request.expiresAt.toISOString() : null,
+    },
+    links: { self: `${origin}/api/connection-requests/${encodeURIComponent(request.id)}` },
+    createdAt: request.createdAt.toISOString(),
+    expiresAt: request.expiresAt.toISOString(),
   }
 }
 
@@ -2262,30 +2827,77 @@ function toPendingAccountConnection(
 
 function toAccessRequest(
   request: ReturnType<typeof toAgentAccessRequest> | Awaited<ReturnType<typeof getAgentAccessRequest>>,
+  apiOrigin = '',
 ): AccessRequest {
+  const origin = apiOrigin.replace(/\/$/, '')
+  const resourceId = request.authorizationDetails[0] ? resourceIdentifier(request.authorizationDetails[0]) : 'service'
+  const resource = { href: resourceHref(origin, request.resourceId, resourceId) }
+  const interactionStatus =
+    request.status === 'pending'
+      ? 'pending'
+      : request.status === 'denied'
+        ? 'denied'
+        : request.status === 'expired'
+          ? 'expired'
+          : 'completed'
+  const self = `${origin}/api/access-requests/${encodeURIComponent(request.id)}`
   return {
     id: request.id,
     agentId: request.agentIdentityId,
     target: {
-      type: 'api-resource',
-      apiResourceId: request.resourceId,
-      ...(request.connectionId ? { accountConnectionId: request.connectionId } : {}),
+      type: 'resource',
+      resource,
     },
     scopes: request.scopes,
-    authorizationDetails: request.authorizationDetails,
     reason: request.reason,
     status: request.status,
-    approval: request.approvalUrl
-      ? {
-          url: request.approvalUrl,
-          expiresAt: request.expiresAt,
-        }
-      : null,
-    grantId: request.grantId,
+    interaction: {
+      type: 'user-approval',
+      status: interactionStatus,
+      url: interactionStatus === 'pending' ? request.approvalUrl : null,
+      expiresAt: interactionStatus === 'pending' ? request.expiresAt : null,
+    },
+    links: { self, credentials: request.grantId ? `${self}/credentials` : null },
+    credentialOffer: null,
     expiresAt: request.expiresAt,
     decidedAt: request.decidedAt,
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,
+  }
+}
+
+async function agentAccessRequestRepresentation(
+  deps: Deps,
+  request: ReturnType<typeof toAgentAccessRequest> | Awaited<ReturnType<typeof getAgentAccessRequest>>,
+  apiOrigin: string,
+): Promise<AccessRequest> {
+  const representation = toAccessRequest(request, apiOrigin)
+  if ((request.status !== 'approved' && request.status !== 'consumed') || !request.grantId) return representation
+  const resourceServer = await requireEnabledResource(deps, request.resourceId)
+  const authorization =
+    resourceServer.connectorId === null
+      ? null
+      : await requireActiveExternalAuthorization(
+          deps,
+          request.resourceId,
+          request.connectionId
+            ? ((await deps.externalResources.findConnection(request.connectionId))?.clientGeneration ?? 1)
+            : 1,
+        )
+  const credentials = representation.links.credentials!
+  return {
+    ...representation,
+    credentialOffer: {
+      type: 'dpop',
+      resource: representation.target.type === 'resource' ? representation.target.resource : { href: '' },
+      resourceIndicator: resourceServer.resourceUrl,
+      endpoint: credentials,
+      proof: {
+        algorithm: 'ES256',
+        method: 'POST',
+        uri: authorization?.tokenEndpoint ?? credentials,
+      },
+    },
   }
 }
 
@@ -2333,7 +2945,9 @@ function accessRequestTokenContext(requestId: string) {
   return `agent-access-request:${requestId}:approval-token`
 }
 
-const resourceConnectionApprovalTokenContext = 'agent-resource-connection-request:approval-token'
+function connectionRequestTokenContext(requestId: string) {
+  return `agent-connection-request:${requestId}:approval-token`
+}
 
 function approvalUrl(origin: string, token: string) {
   return `${origin.replace(/\/$/, '')}/agent/resource-access/approve#token=${token}`

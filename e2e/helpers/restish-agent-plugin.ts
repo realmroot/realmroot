@@ -21,9 +21,9 @@ export interface PendingWhoami {
 }
 
 export interface CapabilityRequestResult {
-  agent_id: string
-  status: 'active'
-  agent_capability_grants: Array<{ capability: string; status: string }>
+  agentId: string
+  status: 'completed'
+  capabilities: Array<{ value: string; status: string }>
 }
 
 export interface PendingCapabilityRequest {
@@ -40,10 +40,10 @@ export interface RestishAgentPlugin {
   firstWhoami(name: string): PendingWhoami
   whoami(): PluginIdentityResult
   requestCapabilities(capabilities: string[], reason: string): PendingCapabilityRequest
-  listAgentApiResources<T>(): T
+  listResourceServers<T>(): T
+  listResources<T>(resourceServerId: string): T
   connectResource<T>(resourceId: string, input: unknown): PendingResourceAccess<T>
   requestResourceAccess<T>(input: unknown): PendingResourceAccess<T>
-  issueTargetAccessToken(grantId: string): void
   connectTarget(apiName: string, resourceUrl: string): void
   targetRequest<T>(apiName: string, path: string): T
   listApplications(): { applications: unknown[] }
@@ -85,12 +85,6 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     env: environment,
     encoding: 'utf8',
   })
-  execFileSync('restish', ['api', 'set', apiName, 'command_layout: tags'], {
-    cwd: repoRoot,
-    env: environment,
-    encoding: 'utf8',
-  })
-
   const invoke = <T>(command: string[], input?: unknown): T => {
     const options: ExecFileSyncOptionsWithStringEncoding = {
       cwd: repoRoot,
@@ -104,6 +98,24 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
       const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
       throw new Error(
         `Restish ${command.join(' ')} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
+        { cause: error },
+      )
+    }
+  }
+
+  const get = <T>(url: string): T => {
+    try {
+      return JSON.parse(
+        execFileSync('restish', ['get', url, '--rsh-output-format', 'json'], {
+          cwd: repoRoot,
+          env: environment,
+          encoding: 'utf8',
+        }),
+      ) as T
+    } catch (error) {
+      const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
+      throw new Error(
+        `Restish GET ${url} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
         { cause: error },
       )
     }
@@ -172,28 +184,36 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   }
 
   return {
-    firstWhoami: (name) =>
-      invokePending<PluginIdentityResult>(['auth', 'whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
-    whoami: () => invoke<PluginIdentityResult>(['auth', 'whoami']),
+    firstWhoami: (name) => invokePending<PluginIdentityResult>(['whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
+    whoami: () => invoke<PluginIdentityResult>(['whoami']),
     requestCapabilities: (capabilities, reason) =>
-      invokePending<CapabilityRequestResult>(['capability', 'request'], { capabilities, reason }),
-    listAgentApiResources: <T>() => invoke<T>(['list-agent-api-resources']),
-    connectResource: <T>(resourceId: string, input: unknown) =>
-      invokePending<T>(['access', 'connect', resourceId], input),
-    requestResourceAccess: <T>(input: unknown) => invokePending<T>(['access', 'request'], input),
-    issueTargetAccessToken: (grantId) => {
-      execFileSync('restish', [apiName, 'access', 'token', grantId, '--rsh-output-format', 'json'], {
-        cwd: repoRoot,
-        env: environment,
-        encoding: 'utf8',
-      })
-    },
+      invokePending<CapabilityRequestResult>(['request-capabilities'], { capabilities, reason }),
+    listResourceServers: <T>() => get<T>(`${origin}/api/resource-servers?limit=100&offset=0`),
+    listResources: <T>(resourceServerId: string) =>
+      get<T>(`${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources?limit=100&offset=0`),
+    connectResource: <T>(resourceId: string, input: unknown) => invokePending<T>(['connect', resourceId], input),
+    requestResourceAccess: <T>(input: unknown) => invokePending<T>(['access'], input),
     connectTarget: (targetAPIName, resourceUrl) => {
       execFileSync('restish', ['api', 'connect', targetAPIName, resourceUrl, '--no-discover', '--replace', '--yes'], {
         cwd: repoRoot,
         env: environment,
         encoding: 'utf8',
       })
+      execFileSync(
+        'restish',
+        [
+          'api',
+          'set',
+          targetAPIName,
+          'profiles.default.auth.type: api-key',
+          'profiles.default.auth.params.in: header',
+          'profiles.default.auth.params.name: Authorization',
+          'profiles.default.auth.params.provider: realmroot-target',
+          'profiles.default.auth.params.value: DPoP',
+          `profiles.default.auth.params.issuer: ${origin}/api/auth`,
+        ],
+        { cwd: repoRoot, env: environment, encoding: 'utf8' },
+      )
       targetURLs.set(targetAPIName, resourceUrl.replace(/\/$/, ''))
     },
     targetRequest: <T>(targetAPIName: string, path: string) => {

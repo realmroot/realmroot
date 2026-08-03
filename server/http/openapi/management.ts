@@ -1,18 +1,18 @@
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import {
-  accessGrantSchema,
-  accessGrantsResponseSchema,
   accessRequestSchema,
-  agentApiResourcesResponseSchema,
   agentInstallationEnrollmentResponseSchema,
   agentInstallationEnrollmentSchema,
   agentResponseSchema,
-  authorizationDetailCatalogResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
   createAgentInstallationEnrollmentSchema,
   createResourceConnectionRequestSchema,
   resourceConnectionRequestSchema,
+  resourceServerResourceSchema,
+  resourceServerResourcesResponseSchema,
+  resourceServerSchema,
+  resourceServersResponseSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
@@ -21,9 +21,11 @@ import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
 import {
+  credentialOfferResponseHeader,
   errorResponse,
   idempotencyKeyHeader,
   idempotencyReplayResponseHeader,
+  interactiveResourceResponseHeaders,
   jsonBody,
   jsonContentType,
   locationResponseHeader,
@@ -49,18 +51,16 @@ interface UnifiedOpenApiDocument {
   [key: string]: unknown
 }
 interface RestishCliConfig {
-  profiles: {
-    default: {
-      credentials: {
-        agentAuth: {
-          auth: {
-            type: string
-            params: Record<string, string>
-          }
-          params: Record<string, string>
-          satisfies: string[]
-        }
+  profiles: Record<'default', RestishAgentProfile>
+}
+interface RestishAgentProfile {
+  credentials: {
+    agentAuth: {
+      auth: {
+        type: string
+        params: Record<string, string>
       }
+      satisfies: string[]
     }
   }
 }
@@ -74,7 +74,7 @@ export const unifiedOpenApiLinkHeader = [
 const managementRoutes: ManagementRouteConfig[] = [
   {
     method: 'get',
-    path: '/agent',
+    path: '/agent-identities/current',
     operationId: 'getCurrentAgent',
     summary: 'Read the current Agent',
     cli: { group: 'auth', name: 'whoami' },
@@ -83,7 +83,7 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'post',
-    path: '/agent/enrollments',
+    path: '/agent-identities/current/enrollments',
     operationId: 'enrollAgent',
     summary: 'Create the current stable Agent',
     security: [{ agentAuth: [] }],
@@ -93,7 +93,7 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'post',
-    path: '/agent/installation-enrollments',
+    path: '/installation-enrollments',
     operationId: 'createAgentInstallationEnrollment',
     summary: 'Create an Agent installation enrollment',
     security: [{ agentAuth: [] }],
@@ -108,7 +108,7 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/agent/installation-enrollments/{enrollmentId}',
+    path: '/installation-enrollments/{enrollmentId}',
     operationId: 'getAgentInstallationEnrollment',
     summary: 'Read an Agent installation enrollment',
     security: [{ agentAuth: [] }],
@@ -117,85 +117,103 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/agent/api-resources',
-    operationId: 'listAgentApiResources',
-    summary: 'List API resources available to the Agent',
+    path: '/resource-servers',
+    operationId: 'listResourceServers',
+    summary: 'List Resource Servers available to the Agent',
     security: [{ agentAuth: [] }],
-    response: agentApiResourcesResponseSchema,
+    request: { query: paginationQuerySchema },
+    response: resourceServersResponseSchema,
   },
   {
     method: 'get',
-    path: '/agent/api-resources/{resourceId}/authorization-detail-catalog',
-    operationId: 'listAgentAuthorizationDetailCatalog',
-    summary: 'List available authorization contexts for an API resource',
-    cli: { group: 'access', name: 'contexts' },
+    path: '/resource-servers/{resourceServerId}',
+    operationId: 'getResourceServer',
+    summary: 'Read a Resource Server available to the Agent',
+    security: [{ agentAuth: [] }],
+    request: { params: z.object({ resourceServerId: z.string() }) },
+    response: resourceServerSchema,
+    errors: { 404: 'The Resource Server was not found.' },
+  },
+  {
+    method: 'get',
+    path: '/resource-servers/{resourceServerId}/resources',
+    operationId: 'listResourceServerResources',
+    summary: 'List provider-owned Resources available through a Resource Server',
     security: [{ agentAuth: [] }],
     request: {
-      params: z.object({ resourceId: z.string() }),
+      params: z.object({ resourceServerId: z.string() }),
       query: paginationQuerySchema,
     },
-    response: authorizationDetailCatalogResponseSchema,
+    response: resourceServerResourcesResponseSchema,
+  },
+  {
+    method: 'get',
+    path: '/resource-servers/{resourceServerId}/resources/{resourceId}',
+    operationId: 'getResourceServerResource',
+    summary: 'Read a provider-owned Resource',
+    security: [{ agentAuth: [] }],
+    request: {
+      params: z.object({ resourceServerId: z.string(), resourceId: z.string() }),
+    },
+    response: resourceServerResourceSchema,
+    errors: { 404: 'The Resource was not found.' },
   },
   {
     method: 'post',
-    path: '/agent/api-resources/{resourceId}/connections',
-    operationId: 'createAgentResourceConnectionRequest',
-    summary: 'Request a controller-managed external resource connection',
-    cli: { group: 'access', name: 'connect' },
+    path: '/resource-servers/{resourceServerId}/connection-requests',
+    operationId: 'createConnectionRequest',
+    summary: 'Request a controller-managed Resource Server connection',
+    cli: { group: 'connection-request', name: 'connect' },
     security: [{ agentAuth: [] }],
     request: {
-      params: z.object({ resourceId: z.string() }),
+      params: z.object({ resourceServerId: z.string() }),
       body: jsonBody(createResourceConnectionRequestSchema),
     },
     response: resourceConnectionRequestSchema,
     status: 201,
+    responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
+  },
+  {
+    method: 'get',
+    path: '/connection-requests/{requestId}',
+    operationId: 'getConnectionRequest',
+    summary: 'Read a Resource Server connection request',
+    security: [{ agentAuth: [] }],
+    request: { params: z.object({ requestId: z.string() }) },
+    response: resourceConnectionRequestSchema,
+    responseHeaders: interactiveResourceResponseHeaders,
   },
   {
     method: 'post',
-    path: '/agent/access-requests',
-    operationId: 'createAgentAccessRequest',
-    summary: 'Request exact API resource access',
-    cli: { group: 'access', name: 'request' },
+    path: '/access-requests',
+    operationId: 'createAccessRequest',
+    summary: 'Request exact Resource access',
+    cli: { group: 'access-request', name: 'access' },
     security: [{ agentAuth: [] }],
     request: { body: jsonBody(createAccessRequestSchema) },
     response: accessRequestSchema,
     status: 201,
+    responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
   },
   {
     method: 'get',
-    path: '/agent/access-requests/{requestId}',
-    operationId: 'getAgentAccessRequest',
-    summary: 'Get an Agent access request',
+    path: '/access-requests/{requestId}',
+    operationId: 'getAccessRequest',
+    summary: 'Read a Resource access request',
     security: [{ agentAuth: [] }],
     request: { params: z.object({ requestId: z.string() }) },
     response: accessRequestSchema,
-  },
-  {
-    method: 'get',
-    path: '/agent/access-grants',
-    operationId: 'listAgentAccessGrants',
-    summary: 'List active Agent access grants',
-    security: [{ agentAuth: [] }],
-    response: accessGrantsResponseSchema,
-  },
-  {
-    method: 'get',
-    path: '/agent/access-grants/{grantId}',
-    operationId: 'getAgentAccessGrant',
-    summary: 'Get an Agent access grant',
-    security: [{ agentAuth: [] }],
-    request: { params: z.object({ grantId: z.string() }) },
-    response: accessGrantSchema,
+    responseHeaders: interactiveResourceResponseHeaders,
   },
   {
     method: 'post',
-    path: '/agent/access-grants/{grantId}/tokens',
-    operationId: 'issueTargetAccessToken',
-    summary: 'Issue an API resource DPoP token',
-    cli: { group: 'access', name: 'token' },
+    path: '/access-requests/{requestId}/credentials',
+    operationId: 'createAccessRequestCredential',
+    summary: 'Create a short-lived DPoP Resource credential',
     security: [{ agentAuth: [] }],
-    request: { params: z.object({ grantId: z.string() }) },
+    request: { params: z.object({ requestId: z.string() }) },
     response: targetTokenSchema,
+    responseHeaders: credentialOfferResponseHeader,
   },
   ...agentGovernanceRoutes,
   ...applicationAuthorizationRoutes,
@@ -243,28 +261,29 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
     ...document,
     'x-cli-config': {
       profiles: {
-        default: {
-          credentials: {
-            agentAuth: {
-              auth: {
-                type: 'api-key',
-                params: {
-                  in: 'header',
-                  name: 'Authorization',
-                  value: 'AgentAuth',
-                  provider: 'realmroot-agent',
-                },
-              },
-              params: {
-                provider: 'realmroot-agent',
-              },
-              satisfies: protectedResourceCapabilityNames,
-            },
-          },
-        },
+        default: restishAgentProfile(),
       },
     },
   } as UnifiedOpenApiDocument
+}
+
+function restishAgentProfile(): RestishAgentProfile {
+  return {
+    credentials: {
+      agentAuth: {
+        auth: {
+          type: 'api-key',
+          params: {
+            in: 'header',
+            name: 'Authorization',
+            value: 'AgentAuth',
+            provider: 'realmroot-agent',
+          },
+        },
+        satisfies: protectedResourceCapabilityNames,
+      },
+    },
+  }
 }
 
 function createManagementRoute(routeConfig: ManagementRouteConfig) {

@@ -9,7 +9,11 @@ import {
 } from '@server/db/schema'
 import { createAdditionalAgentEnrollmentIntent, createAgentEnrollmentIntent } from '@server/usecases/agent-identities'
 import { assignAgentRole, createResource, createRole, replaceRolePermissions } from '@server/usecases/authorization'
-import { createAccessRequest, issueTargetAccessToken, listAgentApiResources } from '@server/usecases/external-resources'
+import {
+  createAccessRequest,
+  createAccessRequestCredential,
+  listAgentResourceServers,
+} from '@server/usecases/external-resources'
 import { eq } from 'drizzle-orm'
 import { decodeProtectedHeader, exportJWK, generateKeyPair, importJWK, type JWK, jwtVerify, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -227,7 +231,7 @@ describe('Agent identity enrollment over real D1', () => {
   it('rejects anonymous Agent enrollment', async () => {
     expect(
       (
-        await harness.request('/api/agent/enrollments', {
+        await harness.request('/api/agent-identities/current/enrollments', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name: 'No Session' }),
@@ -285,28 +289,35 @@ describe('Agent identity enrollment over real D1', () => {
       updated_at: expect.any(Number),
     })
 
-    const discovery = await listAgentApiResources(harness.deps, principal, { limit: 20, offset: 0 })
+    const discovery = await listAgentResourceServers(
+      harness.deps,
+      principal,
+      { limit: 20, offset: 0 },
+      'http://localhost',
+    )
     expect(discovery.items).toEqual([
       expect.objectContaining({
         id: resource.id,
         description: 'Read private code repositories',
-        connectorId: null,
-        accountConnections: [],
+        connection: { status: 'not_required', displayName: null, authorizedScopes: [] },
       }),
     ])
 
     const accessRequest = await createAccessRequest(
       harness.deps,
       {
-        target: { type: 'api-resource', apiResourceId: resource.id },
+        resource: { href: `/api/resource-servers/${resource.id}/resources/service` },
         scopes: ['repo:read'],
         reason: 'Read repositories',
       },
       principal,
       'http://localhost',
     )
-    expect(accessRequest.target).toEqual({ type: 'api-resource', apiResourceId: resource.id })
-    expect(accessRequest.grantId).toBeNull()
+    expect(accessRequest.target).toEqual({
+      type: 'resource',
+      resource: { href: `http://localhost/api/resource-servers/${resource.id}/resources/service` },
+    })
+    expect(accessRequest).not.toHaveProperty('grantId')
 
     const approval = await harness.request(`/api/account/access-requests/${accessRequest.id}/decision`, {
       method: 'PUT',
@@ -314,13 +325,12 @@ describe('Agent identity enrollment over real D1', () => {
       body: JSON.stringify({ decision: 'approve', mode: 'persistent' }),
     })
     expect(approval.status, await approval.clone().text()).toBe(200)
-    const approvedRequest = (await approval.json()) as { grantId: string }
-
-    const tokenUrl = `http://localhost/api/agent/access-grants/${approvedRequest.grantId}/tokens`
+    expect(await approval.json()).not.toHaveProperty('grantId')
+    const tokenUrl = `http://localhost/api/access-requests/${accessRequest.id}/credentials`
     const proof = await createDpopProof('POST', tokenUrl, 'native-token-proof')
-    const issued = await issueTargetAccessToken(
+    const issued = await createAccessRequestCredential(
       harness.deps,
-      approvedRequest.grantId,
+      accessRequest.id,
       proof.compact,
       tokenUrl,
       principal,
@@ -354,9 +364,9 @@ describe('Agent identity enrollment over real D1', () => {
       typ: 'at+jwt',
     })
     await expect(
-      issueTargetAccessToken(
+      createAccessRequestCredential(
         harness.deps,
-        approvedRequest.grantId,
+        accessRequest.id,
         proof.compact,
         tokenUrl,
         principal,

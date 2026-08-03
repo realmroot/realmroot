@@ -47,21 +47,25 @@ restish doctor api realmroot
 
 Generated commands are reserved for Agent identity, controller approval, and
 target credential workflows that span more than an ordinary resource request.
-With Restish tag layout enabled, the complete generated surface is:
+The complete generated workflow surface is:
 
 ```text
-auth whoami
-capability request
-access request
-access token <grant-id>
+whoami
+request-capabilities
+connect <resource-server-id>
+access
 ```
 
-The Agent-facing product model uses Agents, Agent installations, installation
-enrollments, API Resources, account connections, access requests, access grants,
-and audit events. An Agent installation is the stable, credential-free product
-projection of one runtime authorized to act as an Agent. Protocol registrations,
-Hosts, identity bindings, OAuth connection intents, client integration records,
-refresh credentials, and token leases remain internal security records.
+Resource Server and Resource representations are ordinary HTTP resources and
+are read with Restish's generic `get` command. This keeps local configuration
+logic out of the Realmroot plugin and avoids turning routine reads into custom
+commands.
+
+The Agent-facing product model uses Agents, Resource Servers, provider-owned
+Resources, connection requests, access requests, and short-lived credentials.
+It exposes connection and scope status without exposing account-connection IDs,
+provider authorization details, grants, refresh credentials, or token endpoints.
+Those remain internal security records.
 
 ## Authentication And Authorization
 
@@ -169,7 +173,7 @@ returns the same canonical resource and sets `Idempotency-Replayed: true`.
 Reusing an installation enrollment key for another stable Agent returns
 `409 Conflict`; retrying a webhook attempt never sends the webhook twice.
 
-API Resources identify protected business APIs. Their target OpenAPI documents
+Resource Server registrations identify protected business APIs. Their target OpenAPI documents
 are authoritative for available scope strings and operation requirements;
 Realmroot roles reference those strings rather than defining another scope
 catalog.

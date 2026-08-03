@@ -74,13 +74,18 @@ export async function validateExternalResourceConnector(
   requireNetworkUrl(pushedAuthorizationRequestEndpoint, 'pushed authorization request endpoint')
   const catalogEndpoint = connector.providerMetadata?.authorization_details_catalog_endpoint
   const catalogScope = connector.providerMetadata?.authorization_details_catalog_scope
+  const catalogVersion = connector.providerMetadata?.authorization_details_catalog_version
+  if (catalogEndpoint === undefined && catalogScope === undefined && catalogVersion === undefined) return
   if (
     typeof catalogEndpoint !== 'string' ||
     typeof catalogScope !== 'string' ||
     !catalogScope ||
-    /\s/.test(catalogScope)
+    /\s/.test(catalogScope) ||
+    catalogVersion !== 1
   ) {
-    throw badRequest('RAR-enabled external API resources require an authorization detail catalog endpoint and scope.')
+    throw badRequest(
+      'Authorization detail catalog metadata must provide a valid endpoint, scope, and version 1 together.',
+    )
   }
   requireNetworkUrl(catalogEndpoint, 'authorization detail catalog endpoint')
 }

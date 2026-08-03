@@ -76,7 +76,6 @@ describe('Agent resource schemas', () => {
     expect(
       createAgentAccessRequestSchema.parse({
         resourceId: 'resource-1',
-        connectionId: null,
         scopes: ['write', 'read', 'write'],
       }).scopes,
     ).toEqual(['read', 'write'])

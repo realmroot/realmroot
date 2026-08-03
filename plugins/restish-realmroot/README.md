@@ -1,66 +1,120 @@
 # Realmroot Restish Plugin
 
-`restish-realmroot` is the Restish v2 authentication adapter for Realmroot's
-unified OpenAPI contract. It contributes no commands. The contract retains
-generated commands only for identity, approval, and credential workflows;
-routine resource operations use Restish's generic HTTP commands. Run
-`restish doctor api realmroot` to enumerate their methods, paths, and operation
-IDs.
+`restish-realmroot` authenticates Realmroot and Resource Server requests for a
+stable Agent identity. It contributes no commands and contains no
+Resource-Server-specific business logic. Commands and schemas come from the
+OpenAPI contract.
 
-Registration and later Agent requests require Ed25519 possession proofs. The
-plugin discovers the issuer and Agent endpoints from
-`/.well-known/agent-configuration`, owns the proof keys locally, and adds a
-fresh AgentAuth proof before Restish sends each protected operation.
+## Responsibilities
 
-The first protected operation is a foreground device-style flow. The plugin
-prints one controller approval URL to the terminal, waits while the controller
-reviews it, creates the stable identity, signs the original request, and lets
-that same operation continue.
+The plugin performs only work that must happen on the Agent's machine:
 
-For a non-interactive process, set `REALMROOT_PLUGIN_APPROVAL_FILE` to a
-protected path before starting the command. The plugin writes the URL there
-with mode `0600` instead of launching a browser, while the original command
-continues waiting. Remove the handoff file before each new approval request;
-Restish may buffer plugin stderr until the response hook finishes.
+- generate and protect Agent, Host, and DPoP private keys;
+- enroll or reuse the stable Agent identity discovered from
+  `/.well-known/agent-configuration`;
+- add a fresh Agent possession proof to Realmroot requests;
+- recognize generic response profiles declared with `Link: ...; rel="profile"`;
+- open a `user-approval` interaction and poll its supplied `links.self`;
+- accept a generic DPoP credential offer, obtain and cache a short-lived
+  credential, and return a token-free receipt;
+- add `Authorization: DPoP ...` and a fresh proof to matching target requests.
 
-The unified contract generates `auth whoami`, `capability request`, resource
-connection, `access request`, and `access token` workflows. Resource and grant
-reads use generic API-relative requests. When a resource connection or exact
-resource access request is pending, the response hook opens the hosted
-controller decision page and waits for the terminal result.
+Target profiles identify this hook with `provider: realmroot-target`. They may
+also supply the discovered Realmroot `issuer`; the plugin uses it to select the
+right local identity when local, staging, or production authorize the same
+Resource Server URL.
 
-For the current access grant on each API Resource, the plugin creates a separate
-P-256 DPoP key. It discovers the proof target from RFC 9728 and RFC 8414 for
-external resources, uses the Realmroot token operation for native resources,
-adds the standard `DPoP` header, and stores the resulting short-lived token with
-the protected Agent state. A newly approved grant for the same resource replaces
-the old local grant binding and DPoP key.
+The plugin does not recognize Realmroot endpoint paths. It does not list or
+select account connections, grants, authorization details, token endpoints,
+native/external modes, or provider protocols. Realmroot resolves those on the
+server and supplies links and credential-offer metadata.
 
-The plugin stores issued target tokens in protected state and suppresses the
-entire token response. Token issuance must use an explicit structured formatter
-so Restish invokes response middleware instead of its redirected raw-output
-fast path. The API resource's `resourceUrl` can then be connected directly:
+## Generic Interaction Protocol
 
-```bash
-restish api connect projects https://api.example.com --yes
-restish projects list-projects -o json
+Any successful response is interactive when its `Link` header declares:
+
+```http
+Link: <https://realmroot.dev/profiles/interactive-resource>; rel="profile"
+Retry-After: 2
 ```
 
-An API name identifies one logical service. Keep the same API name across its
-environments, deployments, accounts, tenants, and credential contexts, and use
-Restish profiles for those contexts. Do not create environment-qualified names
-such as `projects-staging`; add `profiles.staging.base_url` to `projects`.
-The default profile is the canonical production deployment. Use explicit
-`local` and `staging` profiles for non-production deployments.
+The representation contains an Agent identity, an interaction, and a
+canonical polling link:
 
-Restish follows the resource's RFC 8631 `service-desc` link to its OpenAPI
-contract. The global auth hook recognizes the registered resource URL and adds
-`Authorization: DPoP ...` plus a fresh request proof. The token belongs to the
-target platform and target traffic never passes through Realmroot.
+```json
+{
+  "id": "request-1",
+  "agentId": "agent-identity-1",
+  "status": "pending",
+  "interaction": {
+    "type": "user-approval",
+    "status": "pending",
+    "url": "https://id.realmroot.dev/agent/approve#token=opaque",
+    "expiresAt": "2026-08-03T16:30:00Z"
+  },
+  "links": {
+    "self": "https://id.realmroot.dev/api/access-requests/request-1"
+  }
+}
+```
+
+The plugin validates same-origin control links, opens the supplied URL, and
+polls `links.self` using the current Agent proof until the interaction is
+completed, denied, failed, or expired. Capability, connection, and access
+requests all use this contract; adding another interactive resource requires
+no plugin path change.
+
+For a non-interactive process, set `REALMROOT_PLUGIN_APPROVAL_FILE` to a
+protected path. The plugin writes the approval URL with mode `0600` instead of
+launching a browser while the original command continues waiting.
+
+## Generic Credential Offer
+
+An approved access request may include:
+
+```json
+{
+  "credentialOffer": {
+    "type": "dpop",
+    "resource": {"href": "https://id.realmroot.dev/api/resource-servers/zpan/resources/workspace-1"},
+    "resourceIndicator": "https://drive.zpan.space/api",
+    "endpoint": "https://id.realmroot.dev/api/access-requests/request-1/credentials",
+    "proof": {
+      "algorithm": "ES256",
+      "method": "POST",
+      "uri": "https://drive.zpan.space/api/auth/token"
+    }
+  }
+}
+```
+
+The plugin creates a separate P-256 key, signs the requested proof locally,
+posts to the supplied same-origin credential endpoint, validates that the
+short-lived response is bound to the exact Resource href and indicator, and
+caches it. The visible result contains only status, Resource, scopes, and
+expiry. Target traffic then goes directly to the Resource Server.
+
+Expired credentials are renewed through the stored offer. If renewal is no
+longer authorized, or the Resource Server returns `401`, the local credential
+is removed and a new access request is required.
+
+## State
+
+Identity state is keyed by the discovered issuer and Agent runtime. Restish API
+aliases and profiles reuse that identity. Active Resource selection is isolated
+by a hashed Agent session identifier when the runtime exposes one, allowing
+concurrent sessions to use different Resources at the same service URL.
+
+State files contain private keys and short-lived credentials. They are regular
+files with mode `0600`; symlinks and files accessible to group or other users
+are rejected. Legacy grant-oriented credential caches are discarded during
+schema upgrade. Never commit, log, or copy state files.
+
+Set `AGENT` to override runtime detection. Set
+`REALMROOT_PLUGIN_STATE_DIR` only when an explicitly isolated cleanroom is
+required, and export it for both Realmroot and target commands.
 
 ## Development
-
-From the repository root:
 
 ```bash
 pnpm run plugin:test
@@ -74,65 +128,3 @@ Inspect the manifest:
 ```bash
 restish plugin debug restish-realmroot -- --rsh-plugin-manifest
 ```
-
-`plugin debug` resolves binaries from `PATH`; add Restish's plugin directory to
-`PATH` or pass a development binary already available there.
-
-## State
-
-State is keyed by the discovered Realmroot Agent issuer and the current Agent
-runtime. Restish API names, profiles, and individual runtime sessions do not
-change the identity. By default the plugin detects the runtime from the same
-tool environment markers used by Agent Kanban. Set `AGENT` to an explicit
-runtime name when a runtime needs to declare or override its identity key.
-
-Each runtime gets a separate Agent identity by default. Reusing the same
-`AGENT` value intentionally reuses that runtime identity across sessions.
-Existing API/profile-keyed state is migrated when it can be matched
-unambiguously to the discovered issuer.
-
-The state schema is upgraded in place. Identity and Host keys are preserved,
-while incompatible legacy or authorization-mode-less DPoP credential caches are
-discarded. The next resource access then requires a current active grant rather
-than reusing ambiguous credentials from an older authorization model.
-
-Expired persistent or limited credentials are refreshed through their active
-grant with the same DPoP key. An expired one-time credential, an inactive grant,
-or a replacement grant removes the obsolete local resource credential and
-requires the applicable current grant or a new controller decision.
-A `401` from a matching target resource also removes its cached credential.
-Discover the current resource and connection state, then invoke `access request`
-with the exact task scopes and without `accountConnectionId`. The hosted
-approval offers the controller a scoped account connection when none exists;
-after OAuth, the controller separately approves the Agent grant. Issue its
-target token before retrying. Restish's target API logout does not own or clear
-Realmroot plugin state.
-
-The default root is:
-
-```text
-<user-config>/restish/plugins/realmroot/agents
-```
-
-Set `REALMROOT_PLUGIN_STATE_DIR` to use an explicit protected directory. State
-files contain Agent, Host, and grant-specific DPoP private keys plus short-lived
-target tokens. They are created with mode `0600` and must not be committed or
-copied into logs. The plugin rejects state files that are symlinks or accessible
-to group/other users.
-
-The current filesystem backend is intentionally isolated behind `stateStore`.
-A platform keychain or hardware-backed signer can replace it without changing
-the Restish command surface.
-
-## Architecture
-
-- The `auth` hook discovers endpoints, enrolls the Agent when needed, signs
-  Realmroot requests, and authenticates matching target API requests.
-- The `response-middleware` hook opens and waits for controller approval when
-  a generated capability, API Resource connection, or API Resource access
-  operation returns pending.
-- The Realmroot OpenAPI credential marker activates AgentAuth; registered target
-  resource URLs activate DPoP authentication through the global hook.
-- Both hooks have a ten-minute deadline for their foreground approval flow.
-- The plugin never authenticates a CLI request as the approving user.
-- Business and governance commands remain owned by the OpenAPI contract.

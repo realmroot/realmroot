@@ -505,6 +505,21 @@ export interface ResourceConnectionIntentRecord {
   updatedAt: Date
 }
 
+export interface AgentConnectionRequestRecord {
+  id: string
+  resourceId: string
+  agentIdentityId: string
+  bindingId: string
+  scopes: string[]
+  authorizationDetails: AuthorizationDetail[]
+  reason: string | null
+  approvalTokenHash: string
+  encryptedApprovalToken: string
+  expiresAt: Date
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface AgentAccessRequestRecord {
   id: string
   resourceId: string
@@ -598,6 +613,9 @@ export interface ExternalResourceRepository {
   revokeConnection(id: string, now: Date): Promise<boolean>
   createConnectionIntent(input: ResourceConnectionIntentRecord): Promise<ResourceConnectionIntentRecord | null>
   consumeConnectionIntent(stateHash: string, now: Date): Promise<ResourceConnectionIntentRecord | null>
+  createAgentConnectionRequest(input: AgentConnectionRequestRecord): Promise<AgentConnectionRequestRecord | null>
+  findAgentConnectionRequest(id: string): Promise<AgentConnectionRequestRecord | null>
+  findAgentConnectionRequestByApprovalTokenHash(tokenHash: string): Promise<AgentConnectionRequestRecord | null>
   createAccessRequest(input: AgentAccessRequestRecord): Promise<AgentAccessRequestRecord | null>
   findAccessRequest(id: string): Promise<AgentAccessRequestRecord | null>
   findAccessRequestByGrant(grantId: string): Promise<AgentAccessRequestRecord | null>
@@ -725,6 +743,8 @@ export interface AgentRepository {
   listAgents(page: PaginationInput): Promise<PaginatedResult<AgentRecord>>
   listCapabilityGrants(page: PaginationInput): Promise<PaginatedResult<AgentCapabilityGrantRecord>>
   listApprovalRequests(page: PaginationInput): Promise<PaginatedResult<ApprovalRequestRecord>>
+  findApprovalRequest(id: string): Promise<ApprovalRequestRecord | null>
+  createApprovalRequest(record: ApprovalRequestRecord): Promise<ApprovalRequestRecord>
   listAgentsForUser(userId: string, page: PaginationInput): Promise<PaginatedResult<AgentRecord>>
   listHostsForAgents(hostIds: string[]): Promise<AgentHostRecord[]>
   listCapabilityGrantsForUser(userId: string): Promise<AgentCapabilityGrantRecord[]>

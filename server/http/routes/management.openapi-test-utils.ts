@@ -158,20 +158,15 @@ export function toManagementOperationKey(route: HonoRoute) {
   if (route.path === '/api/openapi.json') {
     return `${route.method} /openapi.json`
   }
-  if (
-    route.path === '/api/agent' ||
-    route.path === '/api/agent/enrollments' ||
-    route.path.startsWith('/api/agent/enrollments/:') ||
-    route.path === '/api/agent/installation-enrollments' ||
-    route.path.startsWith('/api/agent/installation-enrollments/:') ||
-    route.path === '/api/agent/api-resources' ||
-    route.path.startsWith('/api/agent/api-resources/:') ||
-    route.path === '/api/agent/access-grants' ||
-    route.path.startsWith('/api/agent/access-grants/:') ||
-    route.path === '/api/agent/access-requests' ||
-    route.path.startsWith('/api/agent/access-requests/:') ||
-    route.path === '/api/agent/capability-requests'
-  ) {
+  const agentResourcePaths = [
+    '/api/agent-identities',
+    '/api/installation-enrollments',
+    '/api/resource-servers',
+    '/api/connection-requests',
+    '/api/access-requests',
+    '/api/capability-requests',
+  ]
+  if (agentResourcePaths.some((path) => route.path === path || route.path.startsWith(`${path}/`))) {
     return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
   }
   const tenantPaths = [
@@ -362,7 +357,7 @@ export const operationsWithoutRequestBody = new Set([
   'POST /webhooks/requests/{param}/attempts',
   'PUT /application-authorizations/{param}/revocation',
   'PUT /role-assignments/{param}/revocation',
-  'POST /agent/access-grants/{param}/tokens',
+  'POST /access-requests/{param}/credentials',
 ])
 
 export interface HonoRoute {

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { paginationMetadataSchema } from './pagination'
 
 const nonEmptyString = z.string().trim().min(1)
 
@@ -28,6 +29,7 @@ export const authorizationDetailCatalogItemSchema = z
 export const authorizationDetailCatalogSchema = z
   .object({
     items: z.array(authorizationDetailCatalogItemSchema),
+    pagination: paginationMetadataSchema,
   })
   .strict()
 

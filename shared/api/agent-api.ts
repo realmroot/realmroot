@@ -201,54 +201,100 @@ export const apiResourcesResponseSchema = z.object({
 export const createApiResourceSchema = createApiResourceRequestSchema
 export const updateApiResourceSchema = updateApiResourceRequestSchema
 
-export const agentApiResourcesResponseSchema = z.object({
-  items: z.array(
-    z.object({
-      id: z.string(),
-      identifier: z.string(),
-      name: z.string(),
-      description: z.string().nullable(),
-      resourceUrl: z.url(),
-      connectorId: z.string().nullable(),
-      status: z.enum(['available', 'unavailable']),
-      scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
-      accountConnections: z.array(
-        z.object({
-          id: z.string(),
-          displayName: z.string(),
-          subjectHint: z.string(),
-          scopes: z.array(z.string()),
-          authorizationDetails: authorizationDetailsSchema,
-          updatedAt: z.iso.datetime(),
-        }),
-      ),
-      accessGrants: z.array(z.lazy(() => accessGrantSchema)),
-    }),
-  ),
+export const resourceServerConnectionSummarySchema = z.object({
+  status: z.enum(['connected', 'not_connected', 'not_required']),
+  displayName: z.string().nullable(),
+  authorizedScopes: z.array(z.string()),
+})
+
+export const resourceServerSchema = z.object({
+  id: z.string(),
+  identifier: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  serviceUrl: z.url(),
+  resourceIndicator: z.url(),
+  availability: z.object({
+    status: z.enum(['available', 'unavailable']),
+    checkedAt: z.iso.datetime(),
+  }),
+  scopes: z.array(z.object({ value: z.string(), description: z.string().nullable() })),
+  connection: resourceServerConnectionSummarySchema,
+  links: z.object({
+    self: z.url(),
+    resources: z.url(),
+    connectionRequests: z.url().nullable(),
+  }),
+})
+
+export const resourceServersResponseSchema = z.object({
+  items: z.array(resourceServerSchema),
   pagination: paginationMetadataSchema,
 })
 
-export const authorizationDetailCatalogEntrySchema = authorizationDetailCatalogItemSchema.extend({
-  connectionAuthorized: z.boolean(),
-  agentGrants: z.array(
-    z.object({
-      id: z.string(),
-      scopes: z.array(z.string()),
-      status: z.literal('active'),
-    }),
-  ),
+export const resourceReferenceSchema = z.object({ href: nonEmptyString })
+
+export const resourceServerResourceSchema = z.object({
+  id: z.string(),
+  type: nonEmptyString,
+  name: nonEmptyString,
+  description: z.string().nullable(),
+  metadata: z.record(nonEmptyString, z.string()),
+  accountAuthorization: z.object({
+    status: z.enum(['authorized', 'authorization_required', 'not_required']),
+  }),
+  agentAuthorization: z.object({
+    authorizedScopes: z.array(z.string()),
+    requestableScopes: z.array(z.string()),
+  }),
+  links: z.object({ self: z.url(), accessRequests: z.url() }),
 })
 
+export const resourceServerResourcesResponseSchema = z.object({
+  items: z.array(resourceServerResourceSchema),
+  pagination: paginationMetadataSchema,
+})
+
+// Controller-facing approval data keeps the provider protocol payload private
+// from Agents while allowing the hosted consent page to submit the exact RAR boundary.
+export const authorizationDetailCatalogEntrySchema = authorizationDetailCatalogItemSchema.extend({
+  connectionStatus: z.enum(['authorized', 'authorization_required']),
+  authorizedScopes: z.array(z.string()),
+  requestableScopes: z.array(z.string()),
+})
 export const authorizationDetailCatalogResponseSchema = z.object({
   items: z.array(authorizationDetailCatalogEntrySchema),
   pagination: paginationMetadataSchema,
-  accountConnectionId: z.string().nullable(),
-  accountConnectionUpdatedAt: z.string().datetime().nullable(),
-  connectionRequired: z.boolean(),
+  connection: z.object({ status: z.enum(['connected', 'not_connected']) }),
+})
+
+export const interactionStatusSchema = z.enum(['pending', 'completed', 'denied', 'expired', 'failed'])
+export const interactiveResourceProfile = 'https://realmroot.dev/profiles/interactive-resource'
+export const credentialOfferProfile = 'https://realmroot.dev/profiles/resource-credential-offer'
+
+export const interactionSchema = z.object({
+  type: z.literal('user-approval'),
+  status: interactionStatusSchema,
+  url: z.url().nullable(),
+  expiresAt: z.iso.datetime().nullable(),
+})
+
+export const resourceLinksSchema = z.object({ self: nonEmptyString })
+
+export const capabilityRequestSchema = z.object({
+  id: z.string(),
+  agentId: z.string(),
+  capabilities: z.array(z.object({ value: z.string(), status: z.string() })),
+  status: z.enum(['pending', 'completed', 'denied', 'expired', 'failed']),
+  interaction: interactionSchema,
+  links: resourceLinksSchema,
+  createdAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime().nullable(),
 })
 
 export const createResourceConnectionRequestSchema = z
   .object({
+    resources: z.array(resourceReferenceSchema).default([]),
     scopes: scopeListSchema,
     reason: z.string().trim().max(500).nullable().optional(),
   })
@@ -257,12 +303,13 @@ export const createResourceConnectionRequestSchema = z
 export const resourceConnectionRequestSchema = z.object({
   id: z.string(),
   agentId: z.string(),
-  apiResourceId: z.string(),
+  resourceServerId: z.string(),
+  resources: z.array(resourceReferenceSchema),
   scopes: z.array(z.string()),
   reason: z.string().nullable(),
-  status: z.enum(['pending', 'connected']),
-  accountConnectionId: z.string().nullable(),
-  approval: z.object({ url: z.url(), expiresAt: z.iso.datetime() }).nullable(),
+  status: z.enum(['pending', 'connected', 'denied', 'expired']),
+  interaction: interactionSchema,
+  links: resourceLinksSchema,
   createdAt: z.iso.datetime(),
   expiresAt: z.iso.datetime(),
 })
@@ -351,21 +398,23 @@ export const accountConnectionsResponseSchema = z.object({
 })
 
 export const accessTargetSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('api-resource'),
-    apiResourceId: z.string(),
-    accountConnectionId: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal('realmroot-management'),
-  }),
+  z
+    .object({
+      type: z.literal('resource'),
+      resource: resourceReferenceSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('realmroot-management'),
+    })
+    .strict(),
 ])
 
 export const createAccessRequestSchema = z
   .object({
-    target: accessTargetSchema,
+    resource: resourceReferenceSchema,
     scopes: scopeListSchema,
-    authorizationDetails: authorizationDetailsSchema.default([]),
     reason: z.string().trim().max(500).nullable().optional(),
   })
   .strict()
@@ -375,16 +424,19 @@ export const accessRequestSchema = z.object({
   agentId: z.string(),
   target: accessTargetSchema,
   scopes: z.array(z.string()),
-  authorizationDetails: authorizationDetailsSchema,
   reason: z.string().nullable(),
   status: agentAccessRequestStatusSchema,
-  approval: z
+  interaction: interactionSchema,
+  links: resourceLinksSchema.extend({ credentials: nonEmptyString.nullable() }),
+  credentialOffer: z
     .object({
-      url: z.url(),
-      expiresAt: z.iso.datetime(),
+      type: z.literal('dpop'),
+      resource: resourceReferenceSchema,
+      resourceIndicator: z.url(),
+      endpoint: z.url(),
+      proof: z.object({ algorithm: z.literal('ES256'), method: z.literal('POST'), uri: z.url() }),
     })
     .nullable(),
-  grantId: z.string().nullable(),
   expiresAt: z.iso.datetime(),
   decidedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
@@ -397,10 +449,15 @@ export const accessRequestsResponseSchema = z.object({
 })
 
 export const accessRequestApprovalSchema = accessRequestSchema.extend({
+  authorizationDetails: authorizationDetailsSchema,
   agent: z.object({ id: z.string(), name: z.string() }),
+  resourceServer: z.object({ id: z.string(), name: z.string() }),
   resource: z.object({
     id: z.string(),
     name: z.string(),
+    type: z.string(),
+    description: z.string().nullable(),
+    metadata: z.record(z.string(), z.string()),
     authorizationDetailTemplates: authorizationDetailsSchema,
   }),
 })
@@ -415,7 +472,6 @@ export const decideAccessRequestSchema = z
     decision: z.enum(['approve', 'deny']),
     mode: agentAccessGrantModeSchema.optional(),
     expiresAt: z.iso.datetime().optional(),
-    accountConnectionId: nonEmptyString.optional(),
     authorizationDetails: authorizationDetailsSchema.default([]),
     approvalToken: nonEmptyString.optional(),
   })
@@ -458,7 +514,8 @@ export const targetTokenSchema = z.object({
   expiresAt: z.iso.datetime(),
   scopes: z.array(z.string()),
   authorizationDetails: authorizationDetailsSchema,
-  resourceUrl: z.url(),
+  resourceIndicator: z.url(),
+  resource: resourceReferenceSchema,
 })
 
 export type Agent = z.infer<typeof agentSchema>
@@ -473,6 +530,7 @@ export type AgentEnrollment = z.infer<typeof agentEnrollmentSchema>
 export type ApiResource = z.infer<typeof apiResourceSchema>
 export type ConnectableApiResourcesResponse = z.infer<typeof connectableApiResourcesResponseSchema>
 export type AccountConnection = z.infer<typeof accountConnectionSchema>
+export type AuthorizationDetailCatalogEntry = z.infer<typeof authorizationDetailCatalogEntrySchema>
 export type CreateAccountConnection = z.infer<typeof createAccountConnectionSchema>
 export type CreateResourceConnectionRequest = z.input<typeof createResourceConnectionRequestSchema>
 export type ResourceConnectionRequest = z.infer<typeof resourceConnectionRequestSchema>
@@ -483,4 +541,5 @@ export type AccessRequest = z.infer<typeof accessRequestSchema>
 export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>
 export type DecideAccessRequest = z.input<typeof decideAccessRequestSchema>
 export type AccessGrant = z.infer<typeof accessGrantSchema>
-export type AuthorizationDetailCatalogEntry = z.infer<typeof authorizationDetailCatalogEntrySchema>
+export type ResourceServer = z.infer<typeof resourceServerSchema>
+export type ResourceServerResource = z.infer<typeof resourceServerResourceSchema>

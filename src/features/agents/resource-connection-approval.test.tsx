@@ -78,7 +78,7 @@ describe('Agent resource connection approval', () => {
     render(<ResourceConnectionApprovalPage />)
 
     expect(await screen.findByText('Account connected')).toBeTruthy()
-    expect(screen.getByText('No Agent access grant was created.')).toBeTruthy()
+    expect(screen.getByText('Resource access remains a separate approval.')).toBeTruthy()
   })
 
   it('does not treat a callback for another account connection as success', async () => {

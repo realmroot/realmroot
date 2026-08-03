@@ -69,7 +69,7 @@ export function ResourceConnectionApprovalPage() {
         title="Account connected"
         variant="message"
       >
-        <Status tone="success">No Agent access grant was created.</Status>
+        <Status tone="success">Resource access remains a separate approval.</Status>
       </AuthLayout>
     )
   }
@@ -93,7 +93,7 @@ export function ResourceConnectionApprovalPage() {
   return (
     <AuthLayout
       config={config}
-      description="Connect or update the provider account and choose the workspaces that this account may expose."
+      description="Connect or update the provider account and choose the resource contexts that this account may expose."
       eyebrow="Account connection"
       icon={<Link2 />}
       layout="decision"

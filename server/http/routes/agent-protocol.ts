@@ -11,33 +11,36 @@ import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import {
   createAccessRequest,
-  createAgentResourceConnectionRequest,
+  createAccessRequestCredential,
+  createAgentConnectionRequest,
   getAccessRequest,
-  getAgentAccessGrant,
-  issueTargetAccessToken,
-  listAgentAccessGrants,
-  listAgentApiResources,
-  listAgentAuthorizationDetailCatalog,
+  getAgentConnectionRequest,
+  getAgentResourceServer,
+  getAgentResourceServerResource,
+  listAgentResourceServerResources,
+  listAgentResourceServers,
 } from '@server/usecases/external-resources'
 import {
-  accessGrantSchema,
-  accessGrantsResponseSchema,
   accessRequestSchema,
-  agentApiResourcesResponseSchema,
   agentInstallationEnrollmentResponseSchema,
   agentInstallationEnrollmentSchema,
   agentResponseSchema,
-  authorizationDetailCatalogResponseSchema,
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
   createAgentInstallationEnrollmentSchema,
   createResourceConnectionRequestSchema,
+  credentialOfferProfile,
+  interactiveResourceProfile,
   resourceConnectionRequestSchema,
+  resourceServerResourceSchema,
+  resourceServerResourcesResponseSchema,
+  resourceServerSchema,
+  resourceServersResponseSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { idempotencyKeySchema } from '@shared/api/idempotency'
 import { paginationQuerySchema } from '@shared/api/pagination'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { getDeps } from '../middleware/deps'
 import { toBoundaryError } from './auth-api'
 import { readJson, readQuery } from './validation'
@@ -53,13 +56,13 @@ interface AgentSessionApi {
 export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?: string) {
   const app = new Hono()
 
-  app.get('/', async (c) => {
+  app.get('/agent-identities/current', async (c) => {
     const session = await requireAgentSession(authApi, c.req.raw.headers)
     const identity = await getAgentIdentityByProtocolAgent(getDeps(c), session.agent.id)
     return c.json(agentResponseSchema.parse({ agent: toAgent(identity) }))
   })
 
-  app.post('/enrollments', async (c) => {
+  app.post('/agent-identities/current/enrollments', async (c) => {
     const session = await requireAgentSession(authApi, c.req.raw.headers)
     if (!session.host?.userId) {
       throw forbidden('A controller-approved delegated Agent session is required.')
@@ -71,7 +74,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
       requireOidcIssuer(),
       session.host.userId,
     )
-    c.header('Location', '/api/agent')
+    c.header('Location', `${new URL(requireOidcIssuer()).origin}/api/agent-identities/current`)
     return c.json(agentResponseSchema.parse({ agent: toAgent(identity) }), 201)
   })
 
@@ -91,7 +94,10 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
       parsedKey.data,
     )
     const verificationUri = hostedEnrollmentUrl(intent.id)
-    c.header('Location', `/api/agent/installation-enrollments/${encodeURIComponent(intent.id)}`)
+    c.header(
+      'Location',
+      `${new URL(requireOidcIssuer()).origin}/api/installation-enrollments/${encodeURIComponent(intent.id)}`,
+    )
     if (replayed) c.header('Idempotency-Replayed', 'true')
     return c.json(
       agentInstallationEnrollmentResponseSchema.parse({
@@ -111,39 +117,88 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
   })
 
-  app.get('/api-resources', async (c) => {
+  app.get('/resource-servers', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
     return c.json(
-      agentApiResourcesResponseSchema.parse(
-        await listAgentApiResources(getDeps(c), principal, readQuery(c, paginationQuerySchema)),
-      ),
-    )
-  })
-
-  app.get('/api-resources/:resourceId/authorization-detail-catalog', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
-    return c.json(
-      authorizationDetailCatalogResponseSchema.parse(
-        await listAgentAuthorizationDetailCatalog(
+      resourceServersResponseSchema.parse(
+        await listAgentResourceServers(
           getDeps(c),
-          c.req.param('resourceId'),
           principal,
           readQuery(c, paginationQuerySchema),
+          new URL(requireOidcIssuer()).origin,
         ),
       ),
     )
   })
 
-  app.post('/api-resources/:resourceId/connections', async (c) => {
+  app.get('/resource-servers/:resourceServerId', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
-    const result = await createAgentResourceConnectionRequest(
+    return c.json(
+      resourceServerSchema.parse(
+        await getAgentResourceServer(
+          getDeps(c),
+          c.req.param('resourceServerId'),
+          principal,
+          new URL(requireOidcIssuer()).origin,
+        ),
+      ),
+    )
+  })
+
+  app.get('/resource-servers/:resourceServerId/resources', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    return c.json(
+      resourceServerResourcesResponseSchema.parse(
+        await listAgentResourceServerResources(
+          getDeps(c),
+          c.req.param('resourceServerId'),
+          principal,
+          readQuery(c, paginationQuerySchema),
+          new URL(requireOidcIssuer()).origin,
+        ),
+      ),
+    )
+  })
+
+  app.get('/resource-servers/:resourceServerId/resources/:resourceId', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    return c.json(
+      resourceServerResourceSchema.parse(
+        await getAgentResourceServerResource(
+          getDeps(c),
+          c.req.param('resourceServerId'),
+          c.req.param('resourceId'),
+          principal,
+          new URL(requireOidcIssuer()).origin,
+        ),
+      ),
+    )
+  })
+
+  app.post('/resource-servers/:resourceServerId/connection-requests', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const result = await createAgentConnectionRequest(
       getDeps(c),
-      c.req.param('resourceId'),
+      c.req.param('resourceServerId'),
       await readJson(c, createResourceConnectionRequestSchema),
       principal,
       new URL(requireOidcIssuer()).origin,
     )
+    c.header('Location', result.links.self)
+    applyInteractionHeaders(c, result)
     return c.json(resourceConnectionRequestSchema.parse(result), 201)
+  })
+
+  app.get('/connection-requests/:requestId', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const result = await getAgentConnectionRequest(
+      getDeps(c),
+      c.req.param('requestId'),
+      principal,
+      new URL(requireOidcIssuer()).origin,
+    )
+    applyInteractionHeaders(c, result)
+    return c.json(resourceConnectionRequestSchema.parse(result))
   })
 
   app.post('/access-requests', async (c) => {
@@ -154,39 +209,34 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
       principal,
       new URL(requireOidcIssuer()).origin,
     )
-    c.header('Location', `/api/agent/access-requests/${encodeURIComponent(result.id)}`)
+    c.header('Location', result.links.self)
+    applyInteractionHeaders(c, result)
     return c.json(accessRequestSchema.parse(result), 201)
   })
 
   app.get('/access-requests/:requestId', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
-    return c.json(accessRequestSchema.parse(await getAccessRequest(getDeps(c), c.req.param('requestId'), principal)))
-  })
-
-  app.get('/access-grants', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
-    return c.json(
-      accessGrantsResponseSchema.parse(
-        await listAgentAccessGrants(getDeps(c), principal, readQuery(c, paginationQuerySchema)),
-      ),
+    const result = await getAccessRequest(
+      getDeps(c),
+      c.req.param('requestId'),
+      principal,
+      new URL(requireOidcIssuer()).origin,
     )
+    applyInteractionHeaders(c, result)
+    return c.json(accessRequestSchema.parse(result))
   })
 
-  app.get('/access-grants/:grantId', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
-    return c.json(accessGrantSchema.parse(await getAgentAccessGrant(getDeps(c), c.req.param('grantId'), principal)))
-  })
-
-  app.post('/access-grants/:grantId/tokens', async (c) => {
+  app.post('/access-requests/:requestId/credentials', async (c) => {
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
     const dpopProof = c.req.header('DPoP')
     if (!dpopProof) throw unauthorized('A DPoP proof is required.')
-    const result = await issueTargetAccessToken(
+    const credentialUrl = `${new URL(requireOidcIssuer()).origin}/api/access-requests/${encodeURIComponent(c.req.param('requestId'))}/credentials`
+    const result = await createAccessRequestCredential(
       getDeps(c),
-      c.req.param('grantId'),
+      c.req.param('requestId'),
       dpopProof,
-      `${new URL(requireOidcIssuer()).origin}/api/agent/access-grants/${encodeURIComponent(c.req.param('grantId'))}/tokens`,
+      credentialUrl,
       principal,
       {
         issuer: requireOidcIssuer(),
@@ -196,6 +246,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
           ),
       },
     )
+    c.header('Link', `<${credentialOfferProfile}>; rel="profile"`)
     return c.json(targetTokenSchema.parse(result))
   })
 
@@ -210,6 +261,13 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     const url = new URL('/agent/enrollments/approve', new URL(requireOidcIssuer()).origin)
     url.searchParams.set('intent_id', intentId)
     return url.toString()
+  }
+
+  function applyInteractionHeaders(c: Context, result: { interaction: { status: string }; credentialOffer?: unknown }) {
+    const profiles = [`<${interactiveResourceProfile}>; rel="profile"`]
+    if (result.credentialOffer) profiles.push(`<${credentialOfferProfile}>; rel="profile"`)
+    c.header('Link', profiles.join(', '))
+    if (result.interaction.status === 'pending') c.header('Retry-After', '2')
   }
 }
 

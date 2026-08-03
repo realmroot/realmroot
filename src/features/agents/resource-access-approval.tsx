@@ -27,14 +27,7 @@ const approvalTokenStorageKey = 'realmroot.resource-access-approval-token'
 
 export function ResourceAccessApproval() {
   const { data: config } = useConfigz()
-  const token = useMemo(() => {
-    const hashToken = new URLSearchParams(window.location.hash.slice(1)).get('token')
-    if (hashToken) {
-      window.sessionStorage.setItem(approvalTokenStorageKey, hashToken)
-      return hashToken
-    }
-    return window.sessionStorage.getItem(approvalTokenStorageKey) ?? ''
-  }, [])
+  const [token, setToken] = useState(readApprovalToken)
   const callback = useMemo(() => new URLSearchParams(window.location.search), [])
   const callbackError =
     callback.get('resource_connection') === 'failed'
@@ -55,6 +48,22 @@ export function ResourceAccessApproval() {
   const [error, setError] = useState<string | null>(callbackError)
 
   useEffect(() => {
+    const readCurrentHash = () => setToken(readApprovalToken())
+    window.addEventListener('hashchange', readCurrentHash)
+    return () => window.removeEventListener('hashchange', readCurrentHash)
+  }, [])
+
+  useEffect(() => {
+    setRequest(null)
+    setConnection(null)
+    setAuthorizationDetailCatalog([])
+    setAuthorizationDetailSelections({})
+    setCatalogError(null)
+    setAgentName(null)
+    setResourceName(null)
+    setRequiresAccountConnection(false)
+    setDecision(null)
+    setError(callbackError)
     if (!token) {
       setError('This resource access request is incomplete. Start again from the requesting Agent.')
       return
@@ -73,7 +82,9 @@ export function ResourceAccessApproval() {
         setConnection(availableConnection)
         setAgentName(accessRequest.agent.name)
         setResourceName(accessRequest.resource.name)
-        setRequiresAccountConnection(resources.items.some((resource) => resource.id === accessRequest.resource.id))
+        setRequiresAccountConnection(
+          resources.items.some((resource) => resource.id === accessRequest.resourceServer.id),
+        )
         if (
           availableConnection &&
           accessRequest.authorizationDetails.length > 0 &&
@@ -90,7 +101,7 @@ export function ResourceAccessApproval() {
         setError(cause instanceof Error ? cause.message : 'Unable to load the Agent resource request.')
         setSubmitting(false)
       })
-  }, [token])
+  }, [callbackError, token])
 
   async function submit(nextDecision: 'approve' | 'deny') {
     if (nextDecision === 'approve' && mode === 'until' && !isFutureExpiry(expiresAt)) {
@@ -107,7 +118,6 @@ export function ResourceAccessApproval() {
               decision: 'approve',
               mode,
               authorizationDetails: approvedAuthorizationDetails!,
-              ...(connection ? { accountConnectionId: connection.id } : {}),
               ...(mode === 'until' ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
             }
       await decideAgentResourceApproval(request!.id, token, input)
@@ -199,18 +209,18 @@ export function ResourceAccessApproval() {
       title="Approve Agent resource access"
     >
       <div className="decisionStack">
-        {request?.target.type === 'api-resource' ? (
+        {request?.target.type === 'resource' ? (
           <dl className="decisionFacts">
             <RequestField id={request.agentId} label="Agent" name={agentName ?? request.agentId} />
             <RequestField
-              id={request.target.apiResourceId}
+              id={request.target.resource.href}
               label="Resource"
-              name={resourceName ?? request.target.apiResourceId}
+              name={resourceName ?? request.target.resource.href}
             />
             {request.reason ? <RequestField label="Reason" value={request.reason} /> : null}
           </dl>
         ) : null}
-        {request?.target.type === 'api-resource' ? (
+        {request?.target.type === 'resource' ? (
           <section className="decisionPermissions" aria-label="Requested permissions">
             <h2>Requested permissions</h2>
             <ul>
@@ -222,17 +232,13 @@ export function ResourceAccessApproval() {
             </ul>
           </section>
         ) : null}
-        {request?.target.type === 'api-resource' && request.authorizationDetails.length > 0 ? (
+        {request?.target.type === 'resource' &&
+        authorizationDetailResolution.requirements.some((requirement) => requirement.kind !== 'fixed') ? (
           <section className="decisionPermissions" aria-label="Requested authorization details">
-            <h2>Authorization context</h2>
+            <h2>Authorization details</h2>
             <div className="grid gap-4">
               {authorizationDetailResolution.requirements.map((requirement) =>
-                requirement.kind === 'fixed' ? (
-                  <div className="grid gap-1" key={requirement.index}>
-                    <strong className="text-sm">Fixed context</strong>
-                    <code className="break-all text-xs">{canonicalJson(requirement.requested)}</code>
-                  </div>
-                ) : (
+                requirement.kind === 'fixed' ? null : (
                   <Field
                     help={
                       requirement.options.length === 0
@@ -240,10 +246,10 @@ export function ResourceAccessApproval() {
                         : undefined
                     }
                     key={requirement.index}
-                    label={`Authorization context ${requirement.index + 1}`}
+                    label={`Authorization detail ${requirement.index + 1}`}
                   >
                     <SelectInput
-                      aria-label={`Authorization context ${requirement.index + 1}`}
+                      aria-label={`Authorization detail ${requirement.index + 1}`}
                       onChange={(event) =>
                         setAuthorizationDetailSelections((current) => ({
                           ...current,
@@ -252,16 +258,15 @@ export function ResourceAccessApproval() {
                       }
                       value={authorizationDetailSelections[requirement.index] ?? ''}
                     >
-                      <option value="">Select one context</option>
+                      <option value="">Select an authorization detail</option>
                       {requirement.options.map((option) => (
                         <option
-                          disabled={!option.connectionAuthorized}
+                          disabled={option.connectionStatus !== 'authorized'}
                           key={canonicalJson(option.authorizationDetail)}
                           value={canonicalJson(option.authorizationDetail)}
                         >
                           {option.display.label}
-                          {option.agentGrants.length > 0 ? ' — already granted' : ''}
-                          {!option.connectionAuthorized ? ' — reconnect account to authorize' : ''}
+                          {option.connectionStatus !== 'authorized' ? ' — reconnect account to authorize' : ''}
                         </option>
                       ))}
                     </SelectInput>
@@ -271,9 +276,9 @@ export function ResourceAccessApproval() {
             </div>
           </section>
         ) : null}
-        {request?.target.type === 'api-resource' && resourceName && requiresAccountConnection && connection ? (
+        {request?.target.type === 'resource' && resourceName && requiresAccountConnection && connection ? (
           <section className="decisionSection">
-            <h2>{resourceName} account</h2>
+            <h2>{request.resourceServer.name} account</h2>
             <div>
               <p className="font-medium">{connection.displayName}</p>
               <p className="text-xs text-muted-foreground">
@@ -285,7 +290,7 @@ export function ResourceAccessApproval() {
                 <p>This account needs expanded authorization before it can cover every requested scope.</p>
                 <Button disabled={submitting} onClick={() => void connectAccount()} type="button" variant="outline">
                   <Link2 data-icon="inline-start" />
-                  Expand {resourceName} account access
+                  Expand {request.resourceServer.name} account access
                 </Button>
                 <p>After OAuth, you will return here to approve the Agent’s exact scopes and lifetime separately.</p>
                 {catalogError ? <Status tone="error">{catalogError}</Status> : null}
@@ -293,13 +298,13 @@ export function ResourceAccessApproval() {
             ) : null}
           </section>
         ) : null}
-        {request?.target.type === 'api-resource' && resourceName && requiresAccountConnection && !connection ? (
+        {request?.target.type === 'resource' && resourceName && requiresAccountConnection && !connection ? (
           <section className="decisionSection">
-            <h2>{resourceName} account</h2>
-            <p>Connect your {resourceName} account before deciding this Agent request.</p>
+            <h2>{request.resourceServer.name} account</h2>
+            <p>Connect your {request.resourceServer.name} account before deciding this Agent request.</p>
             <Button disabled={submitting} onClick={() => void connectAccount()} type="button" variant="outline">
               <Link2 data-icon="inline-start" />
-              Connect {resourceName} account
+              Connect {request.resourceServer.name} account
             </Button>
             <p>
               The connection receives the resource’s current scope catalog. After OAuth, you will return here to approve
@@ -402,6 +407,15 @@ function clearStoredApproval() {
   window.sessionStorage.removeItem(approvalTokenStorageKey)
 }
 
+function readApprovalToken() {
+  const hashToken = new URLSearchParams(window.location.hash.slice(1)).get('token')
+  if (hashToken) {
+    window.sessionStorage.setItem(approvalTokenStorageKey, hashToken)
+    return hashToken
+  }
+  return window.sessionStorage.getItem(approvalTokenStorageKey) ?? ''
+}
+
 function resolveAuthorizationDetails(
   requested: AccessRequestApproval['authorizationDetails'],
   templates: AccessRequestApproval['resource']['authorizationDetailTemplates'],
@@ -430,11 +444,11 @@ function resolveAuthorizationDetails(
       if (requirement.authorized) approved.push(requirement.requested)
       continue
     }
-    accountAuthorized &&= requirement.options.some((option) => option.connectionAuthorized)
+    accountAuthorized &&= requirement.options.some((option) => option.connectionStatus === 'authorized')
     const selected = requirement.options.find(
       (option) => canonicalJson(option.authorizationDetail) === selections[requirement.index],
     )
-    if (selected?.connectionAuthorized) approved.push(selected.authorizationDetail)
+    if (selected?.connectionStatus === 'authorized') approved.push(selected.authorizationDetail)
   }
   return {
     requirements,

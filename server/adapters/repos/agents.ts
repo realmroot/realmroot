@@ -28,6 +28,16 @@ export function createDrizzleAgentRepository(db: Database): AgentRepository {
       return list(db, approvalRequest, page, desc(approvalRequest.createdAt))
     },
 
+    async findApprovalRequest(id) {
+      const [record] = await db.select().from(approvalRequest).where(eq(approvalRequest.id, id)).limit(1)
+      return record ?? null
+    },
+
+    async createApprovalRequest(record) {
+      await db.insert(approvalRequest).values(record)
+      return record
+    },
+
     async listAgentsForUser(userId, page) {
       return list(db, agent, page, desc(agent.createdAt), and(eq(agent.userId, userId), eq(agent.status, 'active')))
     },

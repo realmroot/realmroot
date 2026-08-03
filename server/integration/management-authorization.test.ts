@@ -484,6 +484,7 @@ describe('authorization management over real D1', () => {
         authorization_details_types_supported: ['project_access'],
         authorization_details_catalog_endpoint: 'https://projects.example.com/authorization-details',
         authorization_details_catalog_scope: 'authorization-details:read',
+        authorization_details_catalog_version: 1,
         pushed_authorization_request_endpoint: 'https://projects.example.com/par',
       },
       createdAt: now,

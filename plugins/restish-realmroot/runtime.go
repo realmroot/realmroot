@@ -1,12 +1,20 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"strings"
 )
 
 const defaultAgentRuntime = "restish"
+
+var sessionEnvironmentNames = []string{
+	"AGENT_SESSION_ID",
+	"CODEX_THREAD_ID",
+	"HERMES_SESSION_KEY",
+}
 
 type environmentLookup func(string) (string, bool)
 
@@ -32,6 +40,20 @@ var runtimeDetectors = []runtimeDetector{
 
 func agentRuntime() (string, error) {
 	return detectAgentRuntime(os.LookupEnv)
+}
+
+func agentSession() string {
+	return detectAgentSession(os.LookupEnv)
+}
+
+func detectAgentSession(lookup environmentLookup) string {
+	for _, name := range sessionEnvironmentNames {
+		if value, ok := lookup(name); ok && strings.TrimSpace(value) != "" {
+			digest := sha256.Sum256([]byte(name + "\x00" + value))
+			return strings.ToLower(name) + ":" + hex.EncodeToString(digest[:16])
+		}
+	}
+	return "default"
 }
 
 func detectAgentRuntime(lookup environmentLookup) (string, error) {

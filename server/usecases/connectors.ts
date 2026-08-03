@@ -472,6 +472,17 @@ export async function ensureDynamicConnectorScopes(
   }
   if (requiredScopes.every((scope) => connector.registeredScopes?.includes(scope))) {
     if (!connector.registrationClientUri || !connector.registrationAccessToken) return generation
+    const cachedRegistrationRequest = registrationRequest(
+      callbackOrigin.replace(/\/$/, ''),
+      connector.providerId,
+      connector.displayName,
+      optionalStringArray(
+        connector.providerMetadata ?? {},
+        'authorization_details_types_supported',
+        'OIDC discovery response',
+      ),
+      connector.registeredScopes ?? requiredScopes,
+    )
     const response = await deps.externalHttp.fetch(
       new Request(requireNetworkUrl(connector.registrationClientUri, 'registration client URI'), {
         headers: {
@@ -486,7 +497,13 @@ export async function ensureDynamicConnectorScopes(
         throw badRequest('Dynamic OIDC registration management changed the client identifier.')
       }
       const remoteScopes = typeof body.scope === 'string' ? scopeString(body.scope) : null
-      if (remoteScopes && requiredScopes.every((scope) => remoteScopes.includes(scope))) return generation
+      if (
+        remoteScopes &&
+        requiredScopes.every((scope) => remoteScopes.includes(scope)) &&
+        registrationMetadataMatches(body, cachedRegistrationRequest)
+      ) {
+        return generation
+      }
     } else if (![401, 404, 405, 501].includes(response.status)) {
       throw badRequest('Dynamic OIDC client registration read failed.')
     }
@@ -607,6 +624,64 @@ export async function ensureDynamicConnectorScopes(
   return nextGeneration
 }
 
+export async function refreshDynamicConnectorMetadata(deps: Deps, connectorId: string) {
+  const connector = await deps.connectors.findById(connectorId)
+  if (!connector) throw notFound('Connector not found.')
+  if (connector.registrationMode !== 'dynamic') return
+  if (!connector.issuer) throw badRequest('Dynamic OIDC connector is incomplete.')
+
+  const metadata = await fetchOidcMetadata(deps, connector.issuer)
+  const authorizationEndpoint = requiredMetadataUrl(metadata, 'authorization_endpoint')
+  const tokenEndpoint = requiredMetadataUrl(metadata, 'token_endpoint')
+  const userInfoEndpoint = requiredMetadataUrl(metadata, 'userinfo_endpoint')
+  const jwksEndpoint = requiredMetadataUrl(metadata, 'jwks_uri')
+  const registrationEndpoint =
+    typeof metadata.registration_endpoint === 'string'
+      ? requireNetworkUrl(metadata.registration_endpoint, 'registration endpoint')
+      : null
+  const revocationEndpoint =
+    typeof metadata.revocation_endpoint === 'string'
+      ? requireNetworkUrl(metadata.revocation_endpoint, 'revocation endpoint')
+      : null
+
+  await deps.connectors.update(connector.id, {
+    authorizationEndpoint,
+    tokenEndpoint,
+    userInfoEndpoint,
+    jwksEndpoint,
+    registrationEndpoint,
+    revocationEndpoint,
+    providerMetadata: metadata,
+    updatedAt: new Date(),
+  })
+}
+
+function registrationMetadataMatches(
+  actual: Record<string, unknown>,
+  expected: ReturnType<typeof registrationRequest>,
+) {
+  return (
+    actual.client_name === expected.client_name &&
+    actual.token_endpoint_auth_method === expected.token_endpoint_auth_method &&
+    actual.jwks_uri === expected.jwks_uri &&
+    sameStringSet(actual.redirect_uris, expected.redirect_uris) &&
+    sameStringSet(actual.grant_types, expected.grant_types) &&
+    sameStringSet(actual.response_types, expected.response_types) &&
+    sameStringSet(
+      actual.authorization_details_types,
+      'authorization_details_types' in expected ? expected.authorization_details_types : undefined,
+    )
+  )
+}
+
+function sameStringSet(actual: unknown, expected: string[] | undefined) {
+  if (expected === undefined) return actual === undefined
+  if (!Array.isArray(actual) || actual.some((value) => typeof value !== 'string')) return false
+  const left = [...new Set(actual as string[])].sort()
+  const right = [...new Set(expected)].sort()
+  return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
 function registrationRequest(
   origin: string,
   providerId: string,
@@ -700,10 +775,15 @@ function authorizationDetailsCatalogMetadata(metadata: Record<string, unknown>) 
     metadata.authorization_details_catalog_scope === undefined
       ? null
       : requiredString(metadata, 'authorization_details_catalog_scope', 'OIDC discovery response')
-  if (Boolean(endpoint) !== Boolean(scope)) {
+  const version =
+    metadata.authorization_details_catalog_version === undefined ? null : metadata.authorization_details_catalog_version
+  if (Boolean(endpoint) !== Boolean(scope) || Boolean(endpoint) !== Boolean(version)) {
     throw badRequest(
-      'OIDC discovery response must advertise authorization_details_catalog_endpoint and authorization_details_catalog_scope together.',
+      'OIDC discovery response must advertise authorization_details_catalog_endpoint, authorization_details_catalog_scope, and authorization_details_catalog_version together.',
     )
+  }
+  if (version !== null && version !== 1) {
+    throw badRequest('OIDC discovery response advertises an unsupported authorization_details_catalog_version.')
   }
   if (scope?.match(/\s/)) {
     throw badRequest('OIDC discovery response has invalid authorization_details_catalog_scope.')

@@ -67,8 +67,8 @@ Document-level `security` is also supported. A scope mentioned only in
 The resource URL and OpenAPI document must remain reachable because Realmroot
 revalidates scopes at request, approval, and token-issuance boundaries.
 
-An enabled resource whose contract is temporarily unavailable remains visible
-to Agents with `status: unavailable` and no requestable scopes; it does not
+An enabled Resource Server whose contract is temporarily unavailable remains visible
+to Agents with `availability.status: unavailable` and no requestable scopes; it does not
 block discovery of other resources. Access requests and token issuance still
 fail closed because Realmroot revalidates the selected resource contract. An
 administrator may save an unreachable resource only as a disabled draft.
@@ -189,7 +189,7 @@ Reject a missing or invalid token/proof with `401` and a DPoP
 ### Native Request Flow
 
 ```text
-Agent -> Realmroot: request token for approved grant + token-endpoint DPoP proof
+Agent plugin -> Realmroot: accept approved access request's credential offer + DPoP proof
 Realmroot -> Agent: short-lived Realmroot-signed DPoP access token
 Agent -> Resource API: Authorization: DPoP ... + request DPoP proof
 Resource API: validate JWT, scopes, cnf.jkt, proof target, ath, and replay state
@@ -341,6 +341,71 @@ different subject is rejected until the existing account is disconnected.
 After OAuth, the controller returns to the pending request and decides the
 Agent scopes and lifetime separately.
 
+### Support Rich Authorization And Resource Contexts
+
+An external resource may use RFC 9396 authorization details in addition to
+OpenAPI scopes. Configure the API Resource with opaque authorization-detail
+templates whose `type` values appear in the authorization server's
+`authorization_details_types_supported` metadata. Realmroot sends those
+templates through an RFC 9126 pushed authorization request when connecting the
+controller's provider account and stores the concrete details returned by the
+target token endpoint.
+
+An Agent access request may contain one or more concrete authorization details.
+Realmroot preserves the complete array through approval, grant storage, token
+exchange, refresh, revocation, and audit projection. Realmroot does not impose a
+single-detail policy; a Resource Server that requires one context per token
+must enforce that rule in its own authorization server.
+
+RFC 9396 does not define how a client enumerates available projects,
+repositories, workspaces, or other provider-owned contexts. Resource Servers
+may therefore implement Realmroot's optional, business-neutral authorization
+detail catalog extension. Advertise all three metadata members together:
+
+```json
+{
+  "authorization_details_catalog_endpoint": "https://accounts.example.com/authorization-details",
+  "authorization_details_catalog_scope": "authorization-details:read",
+  "authorization_details_catalog_version": 1
+}
+```
+
+Version 1 defines an account-authorized paginated `GET`. The endpoint receives
+`limit` and `offset` query parameters, authenticates the connected subject's
+Bearer access token, and requires the advertised catalog scope. It returns:
+
+```json
+{
+  "items": [
+    {
+      "authorizationDetail": {
+        "type": "https://api.example.com/authorization-details/project",
+        "identifier": "project_123"
+      },
+      "display": {
+        "label": "Release Project",
+        "description": "Optional controller-facing description",
+        "metadata": { "region": "ca-central-1" }
+      }
+    }
+  ],
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "total": 1,
+    "hasMore": false,
+    "nextOffset": null
+  }
+}
+```
+
+`authorizationDetail` is opaque JSON except for its required non-empty `type`.
+Display fields never grant authority. Realmroot validates every returned detail
+against the API Resource templates and decorates the page with connected-account
+and active-Agent-grant state. A resource using RFC 9396 does not have to
+implement this catalog; without it, Agents can select exact details already
+exposed by their connected account.
+
 ### Support Agent And Token Exchange Grants
 
 Realmroot first requests the Agent actor token using RFC 7523:
@@ -424,6 +489,8 @@ Before enabling a resource:
 - External mode publishes matching RFC 9728 and RFC 8414 metadata.
 - External authorization supports PKCE, refresh, JWT bearer, token exchange,
   DPoP, UserInfo, and revocation.
+- RFC 9396 resources support PAR and return the exact authorization details;
+  the optional Realmroot catalog extension is versioned and paginated.
 - External client redirect and JWKS URLs use Realmroot's stable canonical
   origin.
 

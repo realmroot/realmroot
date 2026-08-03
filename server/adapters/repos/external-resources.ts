@@ -4,6 +4,7 @@ import type { Database } from '../../db/client'
 import {
   agentAccessGrant,
   agentAccessRequest,
+  agentConnectionRequest,
   agentIdentity,
   apiResource,
   externalTokenLease,
@@ -160,6 +161,48 @@ export function createExternalResourceRepository(db: Database): ExternalResource
           ),
         )
         .returning()
+      return row ?? null
+    },
+
+    async createAgentConnectionRequest(input) {
+      const [row] = await db
+        .insert(agentConnectionRequest)
+        .select(
+          db
+            .select({
+              id: sql<string>`${input.id}`.as('id'),
+              resourceId: apiResource.id,
+              agentIdentityId: sql<string>`${input.agentIdentityId}`.as('agent_identity_id'),
+              bindingId: sql<string>`${input.bindingId}`.as('binding_id'),
+              scopes: sql<string[]>`${JSON.stringify(input.scopes)}`.as('scopes'),
+              authorizationDetails: sql<
+                typeof input.authorizationDetails
+              >`${JSON.stringify(input.authorizationDetails)}`.as('authorization_details'),
+              reason: sql<string | null>`${input.reason}`.as('reason'),
+              approvalTokenHash: sql<string>`${input.approvalTokenHash}`.as('approval_token_hash'),
+              encryptedApprovalToken: sql<string>`${input.encryptedApprovalToken}`.as('encrypted_approval_token'),
+              expiresAt: sql<Date>`${input.expiresAt.getTime()}`.as('expires_at'),
+              createdAt: sql<Date>`${input.createdAt.getTime()}`.as('created_at'),
+              updatedAt: sql<Date>`${input.updatedAt.getTime()}`.as('updated_at'),
+            })
+            .from(apiResource)
+            .where(activeResource(input.resourceId)),
+        )
+        .returning()
+      return row ?? null
+    },
+
+    async findAgentConnectionRequest(id) {
+      const [row] = await db.select().from(agentConnectionRequest).where(eq(agentConnectionRequest.id, id)).limit(1)
+      return row ?? null
+    },
+
+    async findAgentConnectionRequestByApprovalTokenHash(tokenHash) {
+      const [row] = await db
+        .select()
+        .from(agentConnectionRequest)
+        .where(eq(agentConnectionRequest.approvalTokenHash, tokenHash))
+        .limit(1)
       return row ?? null
     },
 

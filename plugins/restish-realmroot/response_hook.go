@@ -8,280 +8,256 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
-func handleCapabilityApprovalResponse(
+const (
+	interactiveResourceProfile = "https://realmroot.dev/profiles/interactive-resource"
+)
+
+type interactiveResponse struct {
+	ID          string   `json:"id"`
+	AgentID     string   `json:"agentId"`
+	Status      string   `json:"status"`
+	Scopes      []string `json:"scopes"`
+	Interaction struct {
+		Type      string     `json:"type"`
+		Status    string     `json:"status"`
+		URL       string     `json:"url"`
+		ExpiresAt *time.Time `json:"expiresAt"`
+	} `json:"interaction"`
+	Links struct {
+		Self string `json:"self"`
+	} `json:"links"`
+	CredentialOffer *credentialOffer `json:"credentialOffer"`
+}
+
+type credentialOffer struct {
+	Type     string `json:"type"`
+	Resource struct {
+		Href string `json:"href"`
+	} `json:"resource"`
+	ResourceIndicator string `json:"resourceIndicator"`
+	Endpoint          string `json:"endpoint"`
+	Proof             struct {
+		Algorithm string `json:"algorithm"`
+		Method    string `json:"method"`
+		URI       string `json:"uri"`
+	} `json:"proof"`
+}
+
+func handleProfiledResponse(
 	input plugin.ResponseMiddlewareInput,
 	opener browserOpener,
 	states capabilityStateFinder,
 	client httpDoer,
 ) (plugin.ResponseMiddlewareOutput, error) {
-	if input.Response.Status == http.StatusUnauthorized {
+	if input.Response.Status == http.StatusUnauthorized && requestUsedDPoP(input.Request.Headers) {
 		removed, err := removeRejectedTargetCredential(input.Request.URI, states)
 		if err != nil {
 			return plugin.ResponseMiddlewareOutput{}, err
 		}
 		if removed {
 			return plugin.ResponseMiddlewareOutput{}, errors.New(
-				"target API rejected the cached Agent credential; the credential was removed, so discover current access and issue a new target token before retrying",
+				"target API rejected the cached Agent credential; the credential was removed; request current Resource access before retrying",
 			)
 		}
 	}
-	if input.Response.Status < 200 || input.Response.Status >= 300 {
+	if input.Response.Status < 200 || input.Response.Status >= 300 || !hasProfile(input.Response.Headers, interactiveResourceProfile) {
 		return plugin.ResponseMiddlewareOutput{}, nil
+	}
+	representation, err := decodeHookBody[map[string]any](input.Response.Body)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("decode interactive Resource representation: %w", err)
+	}
+	body, err := decodeHookBody[interactiveResponse](representation)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("decode interactive Resource response: %w", err)
 	}
 	requestURL, err := url.Parse(input.Request.URI)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, nil
+	if err != nil || requestURL.Scheme == "" || requestURL.Host == "" {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("interactive Resource request URL is invalid")
 	}
-	if body, ok := input.Response.Body.(map[string]any); ok && body["accessToken"] != nil {
-		if _, recognized := targetTokenGrantID(input.Request.Method, input.Request.URI); !recognized {
-			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf(
-				"refusing to expose an unrecognized token response for %s %s",
-				input.Request.Method,
-				requestURL.EscapedPath(),
-			)
-		}
-	}
-	if grantID, ok := targetTokenGrantID(input.Request.Method, input.Request.URI); ok {
-		store, ok := states.(targetTokenStore)
-		if !ok {
-			return plugin.ResponseMiddlewareOutput{}, errors.New("Agent state store cannot persist target API tokens")
-		}
-		encoded, err := json.Marshal(input.Response.Body)
-		if err != nil {
-			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("encode target API token response: %w", err)
-		}
-		var token targetTokenResponse
-		if err := json.Unmarshal(encoded, &token); err != nil {
-			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("decode target API token response: %w", err)
-		}
-		runtime, err := agentRuntime()
-		if err != nil {
-			return plugin.ResponseMiddlewareOutput{}, err
-		}
-		requestOrigin := requestURL.Scheme + "://" + requestURL.Host
-		if err := store.StoreTargetToken(requestOrigin, runtime, grantID, token); err != nil {
-			return plugin.ResponseMiddlewareOutput{}, err
-		}
-		// Restish preserves the original wire bytes for its default non-TTY
-		// output. Replacing only the decoded body would still expose the token
-		// outside explicit structured formatters, so suppress the response after
-		// persisting the credential in protected plugin state.
-		return plugin.ResponseMiddlewareOutput{Drop: true}, nil
-	}
-	if resourceID, ok := resourceConnectionRequestResourceID(input.Request.Method, requestURL); ok {
-		finder, ok := states.(resourceStateFinder)
-		if !ok {
-			return plugin.ResponseMiddlewareOutput{}, errors.New("Agent state store cannot resolve resource connections")
-		}
-		return handleResourceConnectionApproval(input, opener, finder, client, requestURL, resourceID)
-	}
-	if input.Request.Method == http.MethodPost && requestURL.Path == "/api/agent/access-requests" {
-		finder, ok := states.(resourceStateFinder)
-		if !ok {
-			return plugin.ResponseMiddlewareOutput{}, errors.New("Agent state store cannot resolve resource requests")
-		}
-		return handleResourceAccessApproval(input, opener, finder, client, requestURL)
-	}
-	if input.Request.Method != http.MethodPost || requestURL.Path != "/api/agent/capability-requests" {
-		return plugin.ResponseMiddlewareOutput{}, nil
-	}
-	body, ok := input.Response.Body.(map[string]any)
-	if !ok || body["status"] != "pending" {
-		return plugin.ResponseMiddlewareOutput{}, nil
-	}
-	agentID, ok := body["agent_id"].(string)
-	if !ok || agentID == "" {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("capability response is missing agent_id")
-	}
-	capabilities, err := requestedCapabilities(body)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
-	}
-	approval, ok := body["approval"].(map[string]any)
-	if !ok {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("pending capability response is missing approval")
-	}
-	verificationURI, ok := approval["verification_uri_complete"].(string)
-	if !ok || verificationURI == "" {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("pending capability response is missing approval URL")
-	}
-	requestOrigin := requestURL.Scheme + "://" + requestURL.Host
-	configuration, err := discoverAgentConfiguration(context.Background(), client, requestOrigin)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
-	}
-	issuerURL, err := url.Parse(configuration.Issuer)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("Agent discovery issuer is invalid")
-	}
-	approvalURL, err := url.Parse(verificationURI)
-	if err != nil ||
-		approvalURL.Scheme != issuerURL.Scheme ||
-		approvalURL.Host != issuerURL.Host ||
-		approvalURL.Path != "/agent/approve" {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("capability approval URL must use the discovered issuer origin")
-	}
-	if err := opener.Open(verificationURI); err != nil {
-		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open capability approval: %w", err)
-	}
-
-	state, err := states.FindByOriginAndAgentID(requestOrigin, agentID)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
-	}
-	expiresIn, interval, err := approvalTiming(approval)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
-	}
-	status, err := waitForCapabilityDecision(
+	origin := requestURL.Scheme + "://" + requestURL.Host
+	return handleInteractiveResource(
 		context.Background(),
+		body,
+		representation,
+		retryAfter(input.Response.Headers),
+		origin,
+		opener,
+		states,
 		client,
-		state,
-		configuration,
-		capabilities,
-		time.Now().Add(expiresIn),
-		interval,
 	)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
-	}
-	return plugin.ResponseMiddlewareOutput{
-		Response: &plugin.HookResponseUpdate{Body: map[string]any{
-			"agent_id":                agentID,
-			"status":                  "active",
-			"agent_capability_grants": status.AgentCapabilityGrants,
-		}},
-	}, nil
 }
 
-func handleResourceConnectionApproval(
-	input plugin.ResponseMiddlewareInput,
+func requestUsedDPoP(headers map[string][]string) bool {
+	var authorization string
+	var proof string
+	for name, values := range headers {
+		switch {
+		case strings.EqualFold(name, "Authorization") && len(values) > 0:
+			authorization = values[0]
+		case strings.EqualFold(name, "DPoP") && len(values) > 0:
+			proof = values[0]
+		}
+	}
+	return strings.HasPrefix(authorization, "DPoP ") && proof != ""
+}
+
+func handleInteractiveResource(
+	ctx context.Context,
+	resource interactiveResponse,
+	representation map[string]any,
+	interval time.Duration,
+	origin string,
 	opener browserOpener,
-	states resourceStateFinder,
+	states capabilityStateFinder,
 	client httpDoer,
-	requestURL *url.URL,
-	resourceID string,
 ) (plugin.ResponseMiddlewareOutput, error) {
-	body, ok := input.Response.Body.(map[string]any)
-	if !ok || body["status"] != "pending" {
-		return plugin.ResponseMiddlewareOutput{}, nil
+	if resource.AgentID == "" || resource.Links.Self == "" || resource.Interaction.Type != "user-approval" {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("interactive Resource is missing its Agent, self link, or interaction type")
 	}
-	agentID, _ := body["agentId"].(string)
-	approval, _ := body["approval"].(map[string]any)
-	verificationURI, _ := approval["url"].(string)
-	expiresRaw, _ := body["expiresAt"].(string)
-	if agentID == "" || verificationURI == "" || expiresRaw == "" {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("pending resource connection is missing approval data")
+	if !sameOrigin(resource.Links.Self, origin) {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("interactive Resource self link must use the discovered issuer origin")
 	}
-	expiresAt, err := time.Parse(time.RFC3339, expiresRaw)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("resource connection approval expiry is invalid")
-	}
-	requestOrigin := requestURL.Scheme + "://" + requestURL.Host
-	configuration, err := discoverAgentConfiguration(context.Background(), client, requestOrigin)
+	state, err := stateForInteractiveResource(states, origin, resource.AgentID)
 	if err != nil {
 		return plugin.ResponseMiddlewareOutput{}, err
 	}
-	approvalURL, err := url.Parse(verificationURI)
-	if err != nil || !sameOrigin(verificationURI, requestOrigin) || approvalURL.Path != "/agent/resource-connection/approve" {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("resource connection approval URL must use the discovered issuer origin")
-	}
-	state, err := states.FindByOriginAndIdentityID(requestOrigin, agentID)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
-	}
-	statusURL := requestOrigin + "/api/agent/api-resources?limit=100&offset=0"
-	type connectionStatus struct {
-		AccountConnectionID        string `json:"accountConnectionId"`
-		AccountConnectionUpdatedAt string `json:"accountConnectionUpdatedAt"`
-		ConnectionRequired         bool   `json:"connectionRequired"`
-	}
-	readStatus := func() (connectionStatus, error) {
-		var resources struct {
-			Items []struct {
-				ID                 string `json:"id"`
-				AccountConnections []struct {
-					ID        string `json:"id"`
-					UpdatedAt string `json:"updatedAt"`
-				} `json:"accountConnections"`
-			} `json:"items"`
-		}
-		err := requestJSON(
-			context.Background(),
-			client,
-			http.MethodGet,
-			statusURL,
-			mustAgentJWT(state, configuration.Issuer),
-			nil,
-			&resources,
-		)
-		if err != nil {
-			return connectionStatus{}, err
-		}
-		for _, resource := range resources.Items {
-			if resource.ID != resourceID || len(resource.AccountConnections) == 0 {
-				continue
+	for {
+		switch resource.Interaction.Status {
+		case "completed":
+			if resource.CredentialOffer != nil {
+				return acceptCredentialOffer(ctx, resource, *resource.CredentialOffer, origin, state, states, client)
 			}
-			connection := resource.AccountConnections[0]
-			return connectionStatus{
-				AccountConnectionID:        connection.ID,
-				AccountConnectionUpdatedAt: connection.UpdatedAt,
-			}, nil
+			return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: representation}}, nil
+		case "denied", "expired", "failed":
+			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("controller interaction %s", resource.Interaction.Status)
+		case "pending":
+		default:
+			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("interactive Resource returned unsupported status %q", resource.Interaction.Status)
 		}
-		return connectionStatus{ConnectionRequired: true}, nil
-	}
-	baseline, err := readStatus()
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
-	}
-	if err := opener.Open(verificationURI); err != nil {
-		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open resource connection approval: %w", err)
-	}
-	for time.Now().Before(expiresAt) {
-		status, err := readStatus()
-		if err != nil {
-			return plugin.ResponseMiddlewareOutput{}, err
+		if resource.Interaction.URL == "" || resource.Interaction.ExpiresAt == nil {
+			return plugin.ResponseMiddlewareOutput{}, errors.New("pending interactive Resource is missing approval URL or expiry")
 		}
-		connectionChanged := status.AccountConnectionID != baseline.AccountConnectionID ||
-			status.AccountConnectionUpdatedAt != baseline.AccountConnectionUpdatedAt
-		if !status.ConnectionRequired && status.AccountConnectionID != "" && connectionChanged {
-			resolved := make(map[string]any, len(body))
-			for key, value := range body {
-				resolved[key] = value
+		if !sameOrigin(resource.Interaction.URL, origin) {
+			return plugin.ResponseMiddlewareOutput{}, errors.New("interactive Resource approval URL must use the discovered issuer origin")
+		}
+		if err := opener.Open(resource.Interaction.URL); err != nil {
+			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open controller interaction: %w", err)
+		}
+		for time.Now().Before(*resource.Interaction.ExpiresAt) {
+			timer := time.NewTimer(interval)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return plugin.ResponseMiddlewareOutput{}, ctx.Err()
+			case <-timer.C:
 			}
-			resolved["status"] = "connected"
-			resolved["accountConnectionId"] = status.AccountConnectionID
-			resolved["approval"] = nil
-			return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: resolved}}, nil
+			var polledRepresentation map[string]any
+			if err := requestJSON(
+				ctx,
+				client,
+				http.MethodGet,
+				resource.Links.Self,
+				mustAgentJWT(state, state.Issuer),
+				nil,
+				&polledRepresentation,
+			); err != nil {
+				return plugin.ResponseMiddlewareOutput{}, err
+			}
+			polledResource, err := decodeHookBody[interactiveResponse](polledRepresentation)
+			if err != nil {
+				return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("decode polled interactive Resource: %w", err)
+			}
+			resource = polledResource
+			representation = polledRepresentation
+			if resource.Interaction.Status != "pending" {
+				break
+			}
 		}
-		timer := time.NewTimer(2 * time.Second)
-		<-timer.C
+		if resource.Interaction.Status == "pending" {
+			return plugin.ResponseMiddlewareOutput{}, errors.New("controller interaction expired; invoke the request again")
+		}
 	}
-	return plugin.ResponseMiddlewareOutput{}, errors.New("controller resource connection approval expired; invoke the request again")
 }
 
-func resourceConnectionRequestResourceID(method string, requestURL *url.URL) (string, bool) {
-	if method != http.MethodPost {
-		return "", false
+func acceptCredentialOffer(
+	ctx context.Context,
+	resource interactiveResponse,
+	offer credentialOffer,
+	origin string,
+	state agentState,
+	states capabilityStateFinder,
+	client httpDoer,
+) (plugin.ResponseMiddlewareOutput, error) {
+	if offer.Type != "dpop" || offer.Proof.Algorithm != "ES256" || offer.Proof.Method != http.MethodPost ||
+		offer.Resource.Href == "" || offer.ResourceIndicator == "" || offer.Endpoint == "" || offer.Proof.URI == "" {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("Resource credential offer is invalid")
 	}
-	const prefix = "/api/agent/api-resources/"
-	const suffix = "/connections"
-	path := requestURL.EscapedPath()
-	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
-		return "", false
+	if !sameOrigin(offer.Endpoint, origin) {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("Resource credential endpoint must use the discovered issuer origin")
 	}
-	encoded := strings.TrimSuffix(strings.TrimPrefix(path, prefix), suffix)
-	if encoded == "" || strings.Contains(encoded, "/") {
-		return "", false
+	store, ok := states.(resourceAccessStateStore)
+	if !ok {
+		return plugin.ResponseMiddlewareOutput{}, errors.New("Agent state store cannot persist Resource credentials")
 	}
-	resourceID, err := url.PathUnescape(encoded)
-	return resourceID, err == nil && resourceID != ""
+	runtime, err := agentRuntime()
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	reference, err := store.FindReferenceByOriginIdentityRuntime(origin, resource.AgentID, runtime)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	privateKey, err := newDPoPPrivateKey()
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	credential := dpopCredential{
+		ResourceHref:       offer.Resource.Href,
+		ResourceIndicator:  offer.ResourceIndicator,
+		CredentialEndpoint: offer.Endpoint,
+		ProofTarget:        offer.Proof.URI,
+		PrivateKey:         privateKey,
+	}
+	credential, err = refreshTargetToken(ctx, client, state, credential)
+	if err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	if reference.state.DPoPCredentials == nil {
+		reference.state.DPoPCredentials = make(map[string]dpopCredential)
+	}
+	if reference.state.ActiveDPoPCredentials == nil {
+		reference.state.ActiveDPoPCredentials = make(map[string]string)
+	}
+	reference.state.DPoPCredentials[credential.ResourceHref] = credential
+	reference.state.ActiveDPoPCredentials[credentialSelectionKey(credential.ResourceIndicator)] = credential.ResourceHref
+	if err := store.UpdateStateReference(reference); err != nil {
+		return plugin.ResponseMiddlewareOutput{}, err
+	}
+	return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: map[string]any{
+		"status":            "ready",
+		"resource":          map[string]any{"href": credential.ResourceHref},
+		"resourceIndicator": credential.ResourceIndicator,
+		"scopes":            resource.Scopes,
+		"tokenExpiresAt":    credential.ExpiresAt.Format(time.RFC3339),
+	}}}, nil
+}
+
+func stateForInteractiveResource(states capabilityStateFinder, origin string, agentID string) (agentState, error) {
+	if finder, ok := states.(resourceStateFinder); ok {
+		state, err := finder.FindByOriginAndIdentityID(origin, agentID)
+		if err == nil {
+			return state, nil
+		}
+	}
+	return states.FindByOriginAndAgentID(origin, agentID)
 }
 
 func removeRejectedTargetCredential(requestURI string, states capabilityStateFinder) (bool, error) {
@@ -293,7 +269,7 @@ func removeRejectedTargetCredential(requestURI string, states capabilityStateFin
 	if err != nil {
 		return false, err
 	}
-	reference, err := credentials.FindByResourceURL(requestURI, runtime)
+	reference, err := credentials.FindByResourceURL(requestURI, runtime, "")
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
@@ -301,180 +277,45 @@ func removeRejectedTargetCredential(requestURI string, states capabilityStateFin
 		return false, err
 	}
 	if err := credentials.DeleteCredential(reference); err != nil {
-		return false, fmt.Errorf("remove target credential rejected by resource server: %w", err)
+		return false, fmt.Errorf("remove target credential rejected by Resource Server: %w", err)
 	}
 	return true, nil
 }
 
-func handleResourceAccessApproval(
-	input plugin.ResponseMiddlewareInput,
-	opener browserOpener,
-	states resourceStateFinder,
-	client httpDoer,
-	requestURL *url.URL,
-) (plugin.ResponseMiddlewareOutput, error) {
-	body, ok := input.Response.Body.(map[string]any)
-	if !ok || body["status"] != "pending" {
-		return plugin.ResponseMiddlewareOutput{}, nil
+func hasProfile(headers map[string][]string, expected string) bool {
+	for name, values := range headers {
+		if !strings.EqualFold(name, "Link") {
+			continue
+		}
+		for _, value := range values {
+			if strings.Contains(value, "<"+expected+">") && strings.Contains(value, `rel="profile"`) {
+				return true
+			}
+		}
 	}
-	requestID, _ := body["id"].(string)
-	agentID, _ := body["agentId"].(string)
-	approval, _ := body["approval"].(map[string]any)
-	verificationURI, _ := approval["url"].(string)
-	expiresRaw, _ := body["expiresAt"].(string)
-	if requestID == "" || agentID == "" || verificationURI == "" || expiresRaw == "" {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("pending resource request is missing approval data")
+	return false
+}
+
+func retryAfter(headers map[string][]string) time.Duration {
+	for name, values := range headers {
+		if strings.EqualFold(name, "Retry-After") && len(values) > 0 {
+			seconds, err := strconv.Atoi(values[0])
+			if err == nil && seconds > 0 && seconds <= 60 {
+				return time.Duration(seconds) * time.Second
+			}
+		}
 	}
-	expiresAt, err := time.Parse(time.RFC3339, expiresRaw)
+	return 2 * time.Second
+}
+
+func decodeHookBody[T any](body any) (T, error) {
+	var output T
+	encoded, err := json.Marshal(body)
 	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("resource approval expiry is invalid")
+		return output, err
 	}
-	requestOrigin := requestURL.Scheme + "://" + requestURL.Host
-	configuration, err := discoverAgentConfiguration(context.Background(), client, requestOrigin)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
+	if err := json.Unmarshal(encoded, &output); err != nil {
+		return output, err
 	}
-	approvalURL, err := url.Parse(verificationURI)
-	if err != nil || !sameOrigin(verificationURI, requestOrigin) || approvalURL.Path != "/agent/resource-access/approve" {
-		return plugin.ResponseMiddlewareOutput{}, errors.New("resource approval URL must use the discovered issuer origin")
-	}
-	if err := opener.Open(verificationURI); err != nil {
-		return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("open resource approval: %w", err)
-	}
-	state, err := states.FindByOriginAndIdentityID(requestOrigin, agentID)
-	if err != nil {
-		return plugin.ResponseMiddlewareOutput{}, err
-	}
-	for time.Now().Before(expiresAt) {
-		var resolved map[string]any
-		if err := requestJSON(
-			context.Background(),
-			client,
-			http.MethodGet,
-			requestOrigin+"/api/agent/access-requests/"+url.PathEscape(requestID),
-			mustAgentJWT(state, configuration.Issuer),
-			nil,
-			&resolved,
-		); err != nil {
-			return plugin.ResponseMiddlewareOutput{}, err
-		}
-		status, _ := resolved["status"].(string)
-		switch status {
-		case "approved", "consumed":
-			return plugin.ResponseMiddlewareOutput{Response: &plugin.HookResponseUpdate{Body: resolved}}, nil
-		case "denied", "expired":
-			return plugin.ResponseMiddlewareOutput{}, fmt.Errorf("controller %s the Agent resource request", status)
-		}
-		timer := time.NewTimer(2 * time.Second)
-		<-timer.C
-	}
-	return plugin.ResponseMiddlewareOutput{}, errors.New("controller resource approval expired; invoke the request again")
-}
-
-func waitForCapabilityDecision(
-	ctx context.Context,
-	client httpDoer,
-	state agentState,
-	configuration agentConfiguration,
-	capabilities []string,
-	expiresAt time.Time,
-	interval time.Duration,
-) (agentStatusResponse, error) {
-	for time.Now().Before(expiresAt) {
-		var status agentStatusResponse
-		if err := requestJSON(
-			ctx,
-			client,
-			http.MethodGet,
-			configuration.Endpoints["status"],
-			mustAgentJWT(state, configuration.Issuer),
-			nil,
-			&status,
-		); err != nil {
-			return agentStatusResponse{}, err
-		}
-		resolved := capabilityStatuses(status.AgentCapabilityGrants, capabilities)
-		if resolved == "active" {
-			return status, nil
-		}
-		if resolved == "denied" {
-			return agentStatusResponse{}, errors.New("controller denied the requested Agent capabilities")
-		}
-		timer := time.NewTimer(interval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return agentStatusResponse{}, ctx.Err()
-		case <-timer.C:
-		}
-	}
-	return agentStatusResponse{}, errors.New("controller capability approval expired; invoke the request again")
-}
-
-func requestedCapabilities(body map[string]any) ([]string, error) {
-	raw, ok := body["agent_capability_grants"].([]any)
-	if !ok || len(raw) == 0 {
-		return nil, errors.New("capability response is missing requested grants")
-	}
-	capabilities := make([]string, 0, len(raw))
-	for _, item := range raw {
-		grant, ok := item.(map[string]any)
-		if !ok {
-			return nil, errors.New("capability response contains an invalid grant")
-		}
-		capability, ok := grant["capability"].(string)
-		if !ok || capability == "" {
-			return nil, errors.New("capability response contains an unnamed grant")
-		}
-		capabilities = append(capabilities, capability)
-	}
-	return capabilities, nil
-}
-
-func approvalTiming(approval map[string]any) (time.Duration, time.Duration, error) {
-	expiresSeconds, ok := numberValue(approval["expires_in"])
-	if !ok || expiresSeconds <= 0 {
-		return 0, 0, errors.New("capability approval is missing a valid expiry")
-	}
-	intervalSeconds, ok := numberValue(approval["interval"])
-	if !ok || intervalSeconds <= 0 {
-		return 0, 0, errors.New("capability approval is missing a valid polling interval")
-	}
-	return time.Duration(expiresSeconds) * time.Second, time.Duration(intervalSeconds) * time.Second, nil
-}
-
-func capabilityStatuses(grants []capabilityGrantSummary, requested []string) string {
-	statuses := make(map[string]string, len(grants))
-	for _, grant := range grants {
-		statuses[grant.Capability] = grant.Status
-	}
-	allActive := true
-	for _, capability := range requested {
-		switch statuses[capability] {
-		case "active":
-		case "denied", "rejected", "revoked", "expired":
-			return "denied"
-		default:
-			allActive = false
-		}
-	}
-	if allActive {
-		return "active"
-	}
-	return "pending"
-}
-
-func numberValue(value any) (int64, bool) {
-	switch number := value.(type) {
-	case int:
-		return int64(number), true
-	case uint64:
-		return int64(number), true
-	case int64:
-		return number, true
-	case float64:
-		return int64(number), true
-	default:
-		return 0, false
-	}
+	return output, nil
 }
