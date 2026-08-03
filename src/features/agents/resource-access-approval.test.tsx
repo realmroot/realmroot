@@ -132,6 +132,23 @@ describe('Agent resource access approval', () => {
     expect(await screen.findByText('Resource access approved')).toBeTruthy()
   })
 
+  it('shows a connection provider error and keeps account connection retryable', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/agent/resource-access/approve?resource_connection=failed&error=invalid_target&error_description=The+requested+workspace+resource+is+not+configured#token=approval%20token',
+    )
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [],
+      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+    })
+
+    render(<ResourceAccessApproval />)
+
+    expect(await screen.findByText('The requested workspace resource is not configured')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Connect ZPan account' })).toBeTruthy()
+  })
+
   it('requires one explicit concrete selection for a generic authorization detail', async () => {
     api.getAgentResourceApproval.mockResolvedValue({
       ...request,

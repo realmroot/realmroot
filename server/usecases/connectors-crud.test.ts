@@ -208,6 +208,126 @@ describe('service.test 2', () => {
     expect(config.genericOAuthProviders).toEqual([expect.objectContaining({ providerId: 'login-oidc' })])
   })
 
+  it('rejects missing and incomplete dynamic connector scope upgrades', async () => {
+    const missing = { connectors: createRepository() } as unknown as Deps
+    await expect(
+      ensureDynamicConnectorScopes(missing, 'missing', ['projects:read'], 'https://auth.example.com'),
+    ).rejects.toThrow('Connector not found.')
+
+    const manual = dynamicConnector({ registrationMode: 'manual' })
+    const manualDeps = { connectors: createRepository({ byId: manual }) } as unknown as Deps
+    await expect(
+      ensureDynamicConnectorScopes(manualDeps, manual.id, ['projects:read'], 'https://auth.example.com'),
+    ).resolves.toBe(1)
+
+    const incomplete = dynamicConnector({ clientSecret: null })
+    const incompleteDeps = { connectors: createRepository({ byId: incomplete }) } as unknown as Deps
+    await expect(
+      ensureDynamicConnectorScopes(incompleteDeps, incomplete.id, ['projects:read'], 'https://auth.example.com'),
+    ).rejects.toThrow('Dynamic OIDC connector is incomplete.')
+  })
+
+  it.each([
+    {
+      name: 'an unadvertised requested scope',
+      metadata: discoveryMetadata({ scopes_supported: ['openid'] }),
+      message: 'does not advertise every requested scope',
+    },
+    {
+      name: 'an incomplete authorization details catalog',
+      metadata: discoveryMetadata({
+        scopes_supported: ['projects:read'],
+        authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
+      }),
+      message: 'must advertise authorization_details_catalog_endpoint and authorization_details_catalog_scope together',
+    },
+    {
+      name: 'a whitespace-delimited authorization details catalog scope',
+      metadata: discoveryMetadata({
+        scopes_supported: ['projects:read'],
+        authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
+        authorization_details_catalog_scope: 'catalog read',
+      }),
+      message: 'has invalid authorization_details_catalog_scope',
+    },
+    {
+      name: 'an invalid authorization details type list',
+      metadata: discoveryMetadata({
+        scopes_supported: ['projects:read'],
+        authorization_details_types_supported: [''],
+      }),
+      message: 'has invalid authorization_details_types_supported',
+    },
+  ])('rejects discovery metadata with $name', async ({ message, metadata }) => {
+    const current = dynamicConnector()
+    const deps = {
+      connectors: createRepository({ byId: current }),
+      externalHttp: { fetch: vi.fn().mockResolvedValue(Response.json(metadata)) },
+    } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).rejects.toThrow(message)
+  })
+
+  it('falls back to OAuth discovery when OIDC discovery is unavailable', async () => {
+    const current = dynamicConnector()
+    const deps = {
+      connectors: createRepository({ byId: current }),
+      externalHttp: {
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce(new Response(null, { status: 404 }))
+          .mockResolvedValueOnce(Response.json(discoveryMetadata({ scopes_supported: ['openid'] }))),
+      },
+    } as unknown as Deps
+
+    await expect(
+      ensureDynamicConnectorScopes(deps, current.id, ['projects:read'], 'https://auth.example.com'),
+    ).rejects.toThrow('does not advertise every requested scope')
+    expect(deps.externalHttp.fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects invalid dynamic registration update responses', async () => {
+    const managed = dynamicConnector({
+      registrationClientUri: 'https://idp.example.com/register/client-id',
+      registrationAccessToken: 'registration-token',
+    })
+    const managedDeps = {
+      connectors: createRepository({ byId: managed }),
+      externalHttp: {
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce(Response.json(discoveryMetadata({ scopes_supported: ['openid', 'projects:read'] })))
+          .mockResolvedValueOnce(
+            Response.json({
+              client_id: 'changed-client-id',
+              scope: 'email offline_access openid profile projects:read',
+            }),
+          ),
+      },
+    } as unknown as Deps
+    await expect(
+      ensureDynamicConnectorScopes(managedDeps, managed.id, ['projects:read'], 'https://auth.example.com'),
+    ).rejects.toThrow('changed the client identifier')
+
+    const registered = dynamicConnector()
+    const registeredDeps = {
+      connectors: createRepository({ byId: registered }),
+      externalHttp: {
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce(Response.json(discoveryMetadata({ scopes_supported: ['openid', 'projects:read'] })))
+          .mockResolvedValueOnce(
+            Response.json({ client_id: 'client-id-2', client_secret: 'secret-2', scope: 'openid' }),
+          ),
+      },
+    } as unknown as Deps
+    await expect(
+      ensureDynamicConnectorScopes(registeredDeps, registered.id, ['projects:read'], 'https://auth.example.com'),
+    ).rejects.toThrow('omitted a requested scope')
+  })
+
   it(`uses canonical callbacks and RAR types for dynamic OIDC registration
       [spec: agent-identity/external-api-resource-canonical-callback]
       [spec: agent-identity/external-resource-rich-authorization-connection]`, async () => {
@@ -809,4 +929,21 @@ function connector(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
     updatedAt: now,
     ...overrides,
   }
+}
+
+function dynamicConnector(overrides: Partial<ConnectorRow> = {}) {
+  return connector({
+    providerType: 'generic_oauth',
+    providerId: 'projects',
+    displayName: 'Projects',
+    issuer: 'https://idp.example.com',
+    authorizationEndpoint: 'https://idp.example.com/authorize',
+    tokenEndpoint: 'https://idp.example.com/token',
+    userInfoEndpoint: 'https://idp.example.com/userinfo',
+    jwksEndpoint: 'https://idp.example.com/jwks',
+    registrationEndpoint: 'https://idp.example.com/register',
+    registrationMode: 'dynamic',
+    registeredScopes: ['openid'],
+    ...overrides,
+  })
 }

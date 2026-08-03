@@ -35,6 +35,11 @@ export function ResourceAccessApproval() {
     }
     return window.sessionStorage.getItem(approvalTokenStorageKey) ?? ''
   }, [])
+  const callback = useMemo(() => new URLSearchParams(window.location.search), [])
+  const callbackError =
+    callback.get('resource_connection') === 'failed'
+      ? (callback.get('error_description') ?? callback.get('error') ?? 'The provider rejected the account connection.')
+      : null
   const [request, setRequest] = useState<AccessRequestApproval | null>(null)
   const [connection, setConnection] = useState<AccountConnection | null>(null)
   const [authorizationDetailCatalog, setAuthorizationDetailCatalog] = useState<AuthorizationDetailCatalogEntry[]>([])
@@ -47,7 +52,7 @@ export function ResourceAccessApproval() {
   const [expiresAt, setExpiresAt] = useState('')
   const [decision, setDecision] = useState<'approved' | 'denied' | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(callbackError)
 
   useEffect(() => {
     if (!token) {

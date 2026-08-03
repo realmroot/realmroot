@@ -344,7 +344,8 @@ Feature: Agent identity and delegated API authorization
       Given one external account connection grants multiple opaque authorization detail entries
       And the authorization server advertises an account-scoped authorization detail catalog endpoint and required scope
       When the Agent discovers that catalog through Realmroot
-      Then Realmroot returns every available detail with safe display metadata, connection authorization, and matching active Agent grant state
+      Then Realmroot returns the account connection identifier and every available detail with safe display metadata and connection authorization
+      And matching Agent grant state includes only active grants that remain issuable from their approved requests
       When the Agent requests an exact scope subset and one concrete connected authorization detail
       Then Realmroot preserves that exact context through hosted approval
       And rejects missing, generic, multiple, or unconnected authorization details
@@ -376,6 +377,8 @@ Feature: Agent identity and delegated API authorization
       And the new account authorization requests the connection request's exact scope set
       When OAuth returns after connecting the account
       Then Realmroot returns to the connection approval with that account displayed
+      When the authorization server instead returns an OAuth error
+      Then Realmroot consumes the failed attempt and returns to the connection approval with the provider error and a retry action
       Then Realmroot records a resource account connection owned by the Agent's home space
       And stores its refresh credential encrypted
       And never exposes the refresh credential through an API, audit event, or error

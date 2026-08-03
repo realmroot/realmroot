@@ -49,10 +49,18 @@ export const resourceConnectionIntentResponseSchema = z.object({
   expiresAt: z.iso.datetime(),
 })
 
-export const resourceConnectionCallbackQuerySchema = z.object({
-  state: nonEmptyString,
-  code: nonEmptyString,
-})
+export const resourceConnectionCallbackQuerySchema = z.union([
+  z.object({
+    state: nonEmptyString,
+    code: nonEmptyString,
+    error: z.never().optional(),
+  }),
+  z.object({
+    state: nonEmptyString,
+    error: nonEmptyString.max(128),
+    error_description: z.string().trim().min(1).max(1000).optional(),
+  }),
+])
 
 export const resourceAccountConnectionSchema = z.object({
   id: z.string(),

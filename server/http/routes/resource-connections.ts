@@ -1,4 +1,4 @@
-import { completeResourceConnectionIntent } from '@server/usecases/external-resources'
+import { completeResourceConnectionIntent, failResourceConnectionIntent } from '@server/usecases/external-resources'
 import { resourceConnectionCallbackQuerySchema } from '@shared/api/external-resources'
 import { Hono } from 'hono'
 import { getDeps } from '../middleware/deps'
@@ -8,20 +8,38 @@ export function createResourceConnectionRoutes(canonicalOrigin?: string) {
   const app = new Hono()
 
   app.get('/oauth/callback', async (c) => {
-    const connection = await completeResourceConnectionIntent(
-      getDeps(c),
-      readQuery(c, resourceConnectionCallbackQuerySchema),
-      canonicalOrigin ?? new URL(c.req.url).origin,
-    )
     const origin = canonicalOrigin ?? new URL(c.req.url).origin
+    const callback = readQuery(c, resourceConnectionCallbackQuerySchema)
+    if (callback.error !== undefined) {
+      const failed = await failResourceConnectionIntent(getDeps(c), callback.state)
+      const redirect = new URL(connectionApprovalPath(failed.returnTo), origin)
+      redirect.searchParams.set('resource_connection', 'failed')
+      redirect.searchParams.set('error', callback.error)
+      redirect.searchParams.set(
+        'error_description',
+        callback.error_description ?? 'The provider rejected the account connection request.',
+      )
+      return c.redirect(redirect.toString())
+    }
+
+    const connection = await completeResourceConnectionIntent(getDeps(c), callback, origin)
     if (connection.returnTo === 'access-approval') {
       return c.redirect(`${origin}/agent/resource-access/approve`)
     }
     if (connection.returnTo === 'connection-approval') {
-      return c.redirect(`${origin}/agent/resource-connection/approve?resource_connection=connected`)
+      const redirect = new URL('/agent/resource-connection/approve', origin)
+      redirect.searchParams.set('resource_connection', 'connected')
+      redirect.searchParams.set('account_connection_id', connection.id)
+      return c.redirect(redirect.toString())
     }
     return c.redirect(`${origin}/connections?resource_connection=connected`)
   })
 
   return app
+}
+
+function connectionApprovalPath(returnTo: string) {
+  if (returnTo === 'access-approval') return '/agent/resource-access/approve'
+  if (returnTo === 'connection-approval') return '/agent/resource-connection/approve'
+  return '/connections'
 }

@@ -241,6 +241,7 @@ export const authorizationDetailCatalogEntrySchema = authorizationDetailCatalogI
 export const authorizationDetailCatalogResponseSchema = z.object({
   items: z.array(authorizationDetailCatalogEntrySchema),
   pagination: paginationMetadataSchema,
+  accountConnectionId: z.string().nullable(),
   connectionRequired: z.boolean(),
 })
 
@@ -300,6 +301,17 @@ export const resourceConnectionApprovalSchema = resourceConnectionRequestSchema.
   agent: z.object({ id: z.string(), name: z.string() }),
   resource: z.object({ id: z.string(), name: z.string() }),
   accountConnection: accountConnectionSchema.nullable(),
+})
+
+export const resourceConnectionApprovalTokenSchema = z.object({
+  id: z.string(),
+  agentIdentityId: z.string(),
+  bindingId: z.string(),
+  resourceId: z.string(),
+  scopes: z.array(z.string()).min(1),
+  reason: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
 })
 
 export const createAccountConnectionSchema = z.discriminatedUnion('context', [
@@ -463,6 +475,7 @@ export type CreateAccountConnection = z.infer<typeof createAccountConnectionSche
 export type CreateResourceConnectionRequest = z.input<typeof createResourceConnectionRequestSchema>
 export type ResourceConnectionRequest = z.infer<typeof resourceConnectionRequestSchema>
 export type ResourceConnectionApproval = z.infer<typeof resourceConnectionApprovalSchema>
+export type ResourceConnectionApprovalToken = z.infer<typeof resourceConnectionApprovalTokenSchema>
 export type CreateAccessRequest = z.input<typeof createAccessRequestSchema>
 export type AccessRequest = z.infer<typeof accessRequestSchema>
 export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>

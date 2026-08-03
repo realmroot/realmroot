@@ -52,7 +52,7 @@ describe('Agent resource connection approval', () => {
     window.history.replaceState(
       null,
       '',
-      '/agent/resource-connection/approve?resource_connection=connected#token=approval%20token',
+      '/agent/resource-connection/approve?resource_connection=connected&account_connection_id=connection-1#token=approval%20token',
     )
     api.getResourceConnectionApproval.mockResolvedValue({
       ...approval,
@@ -79,5 +79,52 @@ describe('Agent resource connection approval', () => {
 
     expect(await screen.findByText('Account connected')).toBeTruthy()
     expect(screen.getByText('No Agent access grant was created.')).toBeTruthy()
+  })
+
+  it('does not treat a callback for another account connection as success', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/agent/resource-connection/approve?resource_connection=connected&account_connection_id=connection-other#token=approval%20token',
+    )
+    api.getResourceConnectionApproval.mockResolvedValue({
+      ...approval,
+      status: 'connected',
+      accountConnectionId: 'connection-1',
+      accountConnection: {
+        id: 'connection-1',
+        apiResourceId: 'resource-1',
+        owner: { type: 'user', userId: 'user-1' },
+        displayName: 'ZPan account',
+        subjectHint: '••••user',
+        scopes: ['projects:read'],
+        authorizationDetails: [{ type: 'workspace', identifier: 'workspace-1' }],
+        status: 'active',
+        credentialExpiresAt: null,
+        authorizationUrl: null,
+        expiresAt: null,
+        createdAt: '2026-08-03T00:00:00.000Z',
+        updatedAt: '2026-08-03T00:00:00.000Z',
+      },
+    })
+
+    render(<ResourceConnectionApprovalPage />)
+
+    expect(await screen.findByText('The completed account connection does not match this request.')).toBeTruthy()
+    expect(screen.queryByText('Account connected')).toBeNull()
+  })
+
+  it('shows the provider error and keeps the connection request retryable', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/agent/resource-connection/approve?resource_connection=failed&error=invalid_target&error_description=The+requested+workspace+resource+is+not+configured#token=approval%20token',
+    )
+
+    render(<ResourceConnectionApprovalPage />)
+
+    expect(await screen.findByText('The requested workspace resource is not configured')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Connect account' })).toBeTruthy()
+    expect(screen.queryByText('Invalid input: expected string, received undefined')).toBeNull()
   })
 })

@@ -19,12 +19,18 @@ export function ResourceConnectionApprovalPage() {
     }
     return window.sessionStorage.getItem(approvalTokenStorageKey) ?? ''
   }, [])
+  const callback = useMemo(() => new URLSearchParams(window.location.search), [])
+  const callbackError =
+    callback.get('resource_connection') === 'failed'
+      ? (callback.get('error_description') ?? callback.get('error') ?? 'The provider rejected the account connection.')
+      : null
   const [approval, setApproval] = useState<ResourceConnectionApproval | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const connected =
-    new URLSearchParams(window.location.search).get('resource_connection') === 'connected' &&
-    approval?.accountConnection !== null
+  const [error, setError] = useState<string | null>(callbackError)
+  const completedConnectionId = callback.get('account_connection_id')
+  const callbackCompleted = callback.get('resource_connection') === 'connected'
+  const connected = callbackCompleted && approval?.accountConnection?.id === completedConnectionId
+  const callbackMismatch = callbackCompleted && approval !== null && !connected
 
   useEffect(() => {
     if (!token) {
@@ -121,7 +127,11 @@ export function ResourceConnectionApprovalPage() {
               ))}
             </ul>
           </section>
-          {error ? <Status tone="error">{error}</Status> : null}
+          {callbackMismatch ? (
+            <Status tone="error">The completed account connection does not match this request.</Status>
+          ) : error ? (
+            <Status tone="error">{error}</Status>
+          ) : null}
           <Button disabled={submitting} onClick={() => void connect()} type="button">
             {approval.accountConnection ? 'Update account connection' : 'Connect account'}
           </Button>

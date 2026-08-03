@@ -16,8 +16,10 @@ import type {
   CreateAccountConnection,
   CreateResourceConnectionRequest,
   ResourceConnectionApproval,
+  ResourceConnectionApprovalToken,
   ResourceConnectionRequest,
 } from '@shared/api/agent-api'
+import { resourceConnectionApprovalTokenSchema } from '@shared/api/agent-api'
 import {
   type AuthorizationDetail,
   authorizationDetailCatalogSchema,
@@ -30,7 +32,6 @@ import type {
 } from '@shared/api/external-resources'
 import { type PaginationInput, paginationMetadata } from '@shared/api/pagination'
 import { calculateJwkThumbprint, compactVerify, decodeProtectedHeader, importJWK, type JWK } from 'jose'
-import { z } from 'zod'
 import { getAgentRoleAuthorization } from './authorization'
 import { ensureDynamicConnectorScopes } from './connectors'
 import { readDeclaredScopes, validateRequestedScopes } from './resource-openapi'
@@ -52,19 +53,6 @@ export interface AgentAssertionSigner {
 }
 
 type ResolvedExternalAuthorization = ExternalResourceAuthorizationRecord
-
-const resourceConnectionApprovalTokenSchema = z.object({
-  id: z.string(),
-  agentIdentityId: z.string(),
-  bindingId: z.string(),
-  resourceId: z.string(),
-  scopes: z.array(z.string()).min(1),
-  reason: z.string().nullable(),
-  createdAt: z.iso.datetime(),
-  expiresAt: z.iso.datetime(),
-})
-
-type ResourceConnectionApprovalToken = z.infer<typeof resourceConnectionApprovalTokenSchema>
 
 export async function getExternalResourceAuthorization(deps: Deps, resourceId: string) {
   await requireExternalResource(deps, resourceId)
@@ -285,6 +273,12 @@ export async function completeResourceConnectionIntent(
     ...toResourceConnection(connection),
     returnTo: intent.returnTo,
   }
+}
+
+export async function failResourceConnectionIntent(deps: Deps, state: string) {
+  const intent = await deps.externalResources.consumeConnectionIntent(await sha256(state), new Date())
+  if (!intent) throw badRequest('Resource connection state is invalid, expired, or already used.')
+  return { returnTo: intent.returnTo }
 }
 
 export async function listResourceConnections(deps: Deps, actorUserId: string) {
@@ -558,6 +552,7 @@ export async function listAgentAuthorizationDetailCatalog(
     return {
       items: [],
       pagination: paginationMetadata({ ...pagination, total: 0 }),
+      accountConnectionId: null,
       connectionRequired: true,
     }
   }
@@ -675,7 +670,7 @@ export async function createAgentAccessRequest(
     input.scopes,
   )
   const scopes = [...new Set(input.scopes)].sort()
-  const existingGrant = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).find(
+  const reusableGrants = (await deps.externalResources.listActiveGrantsByAgent(principal.identityId)).filter(
     (grant) =>
       grant.connectionId === (connection?.id ?? null) &&
       grant.resourceId === resource.id &&
@@ -683,6 +678,17 @@ export async function createAgentAccessRequest(
       exactAuthorizationDetails(grant.authorizationDetails, authorizationDetails) &&
       (!grant.expiresAt || grant.expiresAt.getTime() > Date.now()),
   )
+  let existingGrant: AgentAccessGrantRecord | undefined
+  for (const grant of reusableGrants) {
+    const approvedRequest = await deps.externalResources.findAccessRequestByGrant(grant.id)
+    if (
+      approvedRequest &&
+      authorizationDetailsMatchRequest(grant.authorizationDetails, approvedRequest.authorizationDetails)
+    ) {
+      existingGrant = grant
+      break
+    }
+  }
   const binding = identity.bindings.find(
     (candidate) => candidate.hostId === principal.hostId && candidate.protocolAgentId === principal.protocolAgentId,
   )!
@@ -1391,13 +1397,25 @@ async function readAuthorizationDetailCatalog(
     })
   }
   const now = Date.now()
-  const grants = (await deps.externalResources.listActiveGrantsByAgent(agentIdentityId)).filter(
+  const activeGrants = (await deps.externalResources.listActiveGrantsByAgent(agentIdentityId)).filter(
     (grant) =>
       grant.resourceId === resource.id &&
       grant.connectionId === connection.id &&
       grant.status === 'active' &&
       (!grant.expiresAt || grant.expiresAt.getTime() > now),
   )
+  const grants = (
+    await Promise.all(
+      activeGrants.map(async (grant) => ({
+        grant,
+        request: await deps.externalResources.findAccessRequestByGrant(grant.id),
+      })),
+    )
+  )
+    .filter(({ grant, request }) =>
+      request ? authorizationDetailsMatchRequest(grant.authorizationDetails, request.authorizationDetails) : false,
+    )
+    .map(({ grant }) => grant)
   const items = parsed.data.items.map((item) => ({
     ...item,
     connectionAuthorized: connection.authorizationDetails.some((detail) =>
@@ -1412,6 +1430,7 @@ async function readAuthorizationDetailCatalog(
   return {
     items: items.slice(pagination.offset, pagination.offset + pagination.limit),
     pagination: paginationMetadata({ ...pagination, total: items.length }),
+    accountConnectionId: connection.id,
     connectionRequired: false,
   }
 }
@@ -1849,8 +1868,11 @@ function assertAuthorizationDetailsSelection(
   if (!connection || connection.authorizationDetails.length === 0) {
     throw invalidAuthorizationDetails('The resource account must be explicitly reauthorized for authorization details.')
   }
-  if (authorizationDetails.length === 0) {
-    throw invalidAuthorizationDetails('Select at least one granted authorization detail entry.')
+  if (authorizationDetails.length !== 1) {
+    throw invalidAuthorizationDetails('Select exactly one concrete authorization detail entry.')
+  }
+  if (resource.authorizationDetails.some((template) => exactAuthorizationDetails([template], authorizationDetails))) {
+    throw invalidAuthorizationDetails('Selected authorization details must identify a concrete resource context.')
   }
 }
 
