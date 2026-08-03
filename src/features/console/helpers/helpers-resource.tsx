@@ -73,7 +73,7 @@ export function ResourcePage({
 }
 export function ListToolbar({ children }: { children: ReactNode }) {
   return (
-    <ConsoleToolbar className="consoleListToolbar rounded-xl border border-border bg-background">
+    <ConsoleToolbar className="consoleListToolbar">
       <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col sm:auto-cols-max">{children}</div>
     </ConsoleToolbar>
   )

@@ -19,6 +19,8 @@ export const externalResourceAuthorizationSchema = z.object({
   tokenEndpoint: z.url(),
   pushedAuthorizationRequestEndpoint: z.url().nullable(),
   authorizationDetailsTypesSupported: z.array(z.string()),
+  authorizationDetailsCatalogEndpoint: z.url().nullable(),
+  authorizationDetailsCatalogScope: z.string().nullable(),
   registrationEndpoint: z.url().nullable(),
   revocationEndpoint: z.url(),
   jwksUri: z.url(),

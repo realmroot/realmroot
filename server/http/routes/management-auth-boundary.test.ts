@@ -140,7 +140,7 @@ describe('management routes 1', () => {
     expect(protectedResponse.headers.get('link')).toContain('</api/openapi.json>; rel="service-desc"')
   })
 
-  it('limits generated Restish commands to approval and credential workflows [spec: management-api/management-restish-command-surface]', () => {
+  it('limits generated Restish commands to discovery, approval, and credential workflows [spec: management-api/management-restish-command-surface]', () => {
     const generatedCommands = openApiOperationObjects()
       .filter((operation) => operation.cliHidden !== true)
       .map((operation) => ({
@@ -151,6 +151,7 @@ describe('management routes 1', () => {
 
     expect(generatedCommands).toEqual([
       { group: 'auth', name: 'whoami', operationId: 'getCurrentAgent' },
+      { group: 'access', name: 'contexts', operationId: 'listAgentAuthorizationDetailCatalog' },
       { group: 'access', name: 'request', operationId: 'createAgentAccessRequest' },
       { group: 'access', name: 'token', operationId: 'issueTargetAccessToken' },
       { group: 'capability', name: 'request', operationId: 'requestAgentCapabilities' },

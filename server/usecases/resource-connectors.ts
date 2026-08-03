@@ -72,6 +72,17 @@ export async function validateExternalResourceConnector(
     throw badRequest('RAR-enabled external API resources require RFC 9126 pushed authorization requests.')
   }
   requireNetworkUrl(pushedAuthorizationRequestEndpoint, 'pushed authorization request endpoint')
+  const catalogEndpoint = connector.providerMetadata?.authorization_details_catalog_endpoint
+  const catalogScope = connector.providerMetadata?.authorization_details_catalog_scope
+  if (
+    typeof catalogEndpoint !== 'string' ||
+    typeof catalogScope !== 'string' ||
+    !catalogScope ||
+    /\s/.test(catalogScope)
+  ) {
+    throw badRequest('RAR-enabled external API resources require an authorization detail catalog endpoint and scope.')
+  }
+  requireNetworkUrl(catalogEndpoint, 'authorization detail catalog endpoint')
 }
 
 async function fetchObject(deps: Deps, url: string, message: string) {

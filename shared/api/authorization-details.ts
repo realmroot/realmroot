@@ -12,7 +12,27 @@ export const authorizationDetailSchema = z.object({ type: nonEmptyString }).catc
 
 export const authorizationDetailsSchema = z.array(authorizationDetailSchema)
 
+export const authorizationDetailCatalogItemSchema = z
+  .object({
+    authorizationDetail: authorizationDetailSchema,
+    display: z
+      .object({
+        label: nonEmptyString,
+        description: z.string().trim().min(1).nullable().optional(),
+        metadata: z.record(nonEmptyString, z.string()).optional(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const authorizationDetailCatalogSchema = z
+  .object({
+    items: z.array(authorizationDetailCatalogItemSchema),
+  })
+  .strict()
+
 export type AuthorizationDetail = z.infer<typeof authorizationDetailSchema>
+export type AuthorizationDetailCatalogItem = z.infer<typeof authorizationDetailCatalogItemSchema>
 
 function isJsonValue(value: unknown): value is JsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true

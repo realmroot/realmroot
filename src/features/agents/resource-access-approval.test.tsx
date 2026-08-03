@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   createAccountConnection: vi.fn(),
   decideAgentResourceApproval: vi.fn(),
   getAgentResourceApproval: vi.fn(),
+  listApprovalAuthorizationDetailCatalog: vi.fn(),
   listApprovalAccountConnections: vi.fn(),
   listExternalApiResources: vi.fn(),
 }))
@@ -31,7 +32,11 @@ const request = {
   createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-01T00:00:00.000Z',
   agent: { id: 'agent-1', name: 'Release helper' },
-  resource: { id: 'resource-1', name: 'ZPan' },
+  resource: {
+    id: 'resource-1',
+    name: 'ZPan',
+    authorizationDetailTemplates: [{ type: 'project' }],
+  },
 }
 
 const connection = {
@@ -59,6 +64,17 @@ describe('Agent resource access approval', () => {
     api.decideAgentResourceApproval.mockResolvedValue({ ...request, status: 'approved' })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [connection],
+      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+    api.listApprovalAuthorizationDetailCatalog.mockResolvedValue({
+      items: [
+        {
+          authorizationDetail: { type: 'project', project_id: 'project-1', actions: ['read'] },
+          display: { label: 'Project One' },
+          connectionAuthorized: true,
+          agentGrants: [],
+        },
+      ],
       pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
     })
     api.listExternalApiResources.mockResolvedValue({
@@ -114,7 +130,7 @@ describe('Agent resource access approval', () => {
     expect(await screen.findByText('Resource access approved')).toBeTruthy()
   })
 
-  it('resolves a generic request to every matching authorization detail on the connected account', async () => {
+  it('requires one explicit concrete selection for a generic authorization detail', async () => {
     api.getAgentResourceApproval.mockResolvedValue({
       ...request,
       authorizationDetails: [{ type: 'project' }],
@@ -131,26 +147,83 @@ describe('Agent resource access approval', () => {
       ],
       pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
     })
+    api.listApprovalAuthorizationDetailCatalog.mockResolvedValue({
+      items: [
+        {
+          authorizationDetail: { type: 'project', project_id: 'project-1' },
+          display: { label: 'Project One' },
+          connectionAuthorized: true,
+          agentGrants: [],
+        },
+        {
+          authorizationDetail: { type: 'project', project_id: 'project-2' },
+          display: { label: 'Project Two' },
+          connectionAuthorized: true,
+          agentGrants: [{ id: 'grant-2', scopes: ['projects:read'], status: 'active' }],
+        },
+      ],
+      pagination: { limit: 50, offset: 0, total: 2, hasMore: false, nextOffset: null },
+    })
 
     render(<ResourceAccessApproval />)
 
     const approve = await screen.findByRole('button', { name: 'Approve exact access' })
+    expect(approve.hasAttribute('disabled')).toBe(true)
+    const select = screen.getByLabelText('Authorization context 1')
+    expect(screen.getByText('Project Two — already granted')).toBeTruthy()
+    fireEvent.change(select, { target: { value: '{"project_id":"project-2","type":"project"}' } })
     expect(approve.hasAttribute('disabled')).toBe(false)
-    const context = screen.getByRole('region', { name: 'Requested authorization details' }).textContent
-    expect(context).toContain('{"project_id":"project-1","type":"project"}')
-    expect(context).toContain('{"project_id":"project-2","type":"project"}')
     fireEvent.click(approve)
     await waitFor(() =>
       expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
         decision: 'approve',
         mode: 'once',
         accountConnectionId: 'connection-1',
-        authorizationDetails: [
-          { type: 'project', project_id: 'project-1' },
-          { type: 'project', project_id: 'project-2' },
-        ],
+        authorizationDetails: [{ type: 'project', project_id: 'project-2' }],
       }),
     )
+  })
+
+  it('loads every catalog page before presenting generic authorization details', async () => {
+    api.getAgentResourceApproval.mockResolvedValue({
+      ...request,
+      authorizationDetails: [{ type: 'project' }],
+    })
+    api.listApprovalAuthorizationDetailCatalog
+      .mockResolvedValueOnce({
+        items: [
+          {
+            authorizationDetail: { type: 'project', project_id: 'project-1' },
+            display: { label: 'Project One' },
+            connectionAuthorized: true,
+            agentGrants: [],
+          },
+        ],
+        pagination: { limit: 100, offset: 0, total: 101, hasMore: true, nextOffset: 100 },
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            authorizationDetail: { type: 'project', project_id: 'project-101' },
+            display: { label: 'Project One Hundred One' },
+            connectionAuthorized: true,
+            agentGrants: [],
+          },
+        ],
+        pagination: { limit: 100, offset: 100, total: 101, hasMore: false, nextOffset: null },
+      })
+
+    render(<ResourceAccessApproval />)
+
+    expect(await screen.findByText('Project One Hundred One')).toBeTruthy()
+    expect(api.listApprovalAuthorizationDetailCatalog).toHaveBeenNthCalledWith(1, 'request-1', 'approval token', {
+      limit: 100,
+      offset: 0,
+    })
+    expect(api.listApprovalAuthorizationDetailCatalog).toHaveBeenNthCalledWith(2, 'request-1', 'approval token', {
+      limit: 100,
+      offset: 100,
+    })
   })
 
   it('shows a native resource name without requiring an account connection', async () => {
@@ -158,7 +231,7 @@ describe('Agent resource access approval', () => {
       ...request,
       target: { type: 'api-resource', apiResourceId: 'resource-1' },
       authorizationDetails: [],
-      resource: { id: 'resource-1', name: 'Billing API' },
+      resource: { id: 'resource-1', name: 'Billing API', authorizationDetailTemplates: [] },
     })
     api.listApprovalAccountConnections.mockResolvedValue({
       items: [],

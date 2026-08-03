@@ -187,6 +187,8 @@ describe('external resource connector validation', () => {
         providerMetadata: providerMetadata({
           authorization_details_types_supported: ['project_access'],
           pushed_authorization_request_endpoint: 'https://idp.example.com/par',
+          authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
+          authorization_details_catalog_scope: 'authorization-details:read',
         }),
       }),
     })

@@ -235,6 +235,8 @@ describe('authorization CRUD and assignment policy', () => {
         ],
         dpop_signing_alg_values_supported: ['ES256'],
         authorization_details_types_supported: ['payment_initiation'],
+        authorization_details_catalog_endpoint: `${resource.resourceUrl}/authorization-details`,
+        authorization_details_catalog_scope: 'authorization-details:read',
         pushed_authorization_request_endpoint: `${resource.resourceUrl}/par`,
       },
     }

@@ -222,6 +222,8 @@ describe('service.test 2', () => {
           registration_endpoint: 'https://idp.example.com/register',
           grant_types_supported: ['authorization_code'],
           authorization_details_types_supported: ['project_access'],
+          authorization_details_catalog_endpoint: 'https://idp.example.com/authorization-details',
+          authorization_details_catalog_scope: 'authorization-details:read',
         }),
       )
       .mockResolvedValueOnce(
@@ -255,6 +257,7 @@ describe('service.test 2', () => {
       ],
       jwks_uri: 'https://auth.example.com/api/auth/jwks',
       authorization_details_types: ['project_access'],
+      scope: 'openid profile email offline_access authorization-details:read',
     })
     expect(deps.connectors.create).toHaveBeenCalledWith(
       expect.objectContaining({

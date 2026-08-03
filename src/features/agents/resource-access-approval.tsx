@@ -1,8 +1,13 @@
-import type { AccessRequestApproval, AccountConnection, DecideAccessRequest } from '@shared/api/agent-api'
+import type {
+  AccessRequestApproval,
+  AccountConnection,
+  AuthorizationDetailCatalogEntry,
+  DecideAccessRequest,
+} from '@shared/api/agent-api'
 import { CheckCircle2, CircleAlert, Link2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { AuthLayout } from '@/components/layout/auth-layout'
-import { Field, TextInput } from '@/components/product-form'
+import { Field, SelectInput, TextInput } from '@/components/product-form'
 import { Button } from '@/components/ui/button'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Status } from '@/components/ui/status'
@@ -12,6 +17,7 @@ import {
   decideAgentResourceApproval,
   getAgentResourceApproval,
   listApprovalAccountConnections,
+  listApprovalAuthorizationDetailCatalog,
   listExternalApiResources,
 } from '@/lib/api/account'
 import { toLocalDateTimeValue } from '@/lib/date-time'
@@ -31,6 +37,9 @@ export function ResourceAccessApproval() {
   }, [])
   const [request, setRequest] = useState<AccessRequestApproval | null>(null)
   const [connection, setConnection] = useState<AccountConnection | null>(null)
+  const [authorizationDetailCatalog, setAuthorizationDetailCatalog] = useState<AuthorizationDetailCatalogEntry[]>([])
+  const [authorizationDetailSelections, setAuthorizationDetailSelections] = useState<Record<number, string>>({})
+  const [catalogError, setCatalogError] = useState<string | null>(null)
   const [agentName, setAgentName] = useState<string | null>(null)
   const [resourceName, setResourceName] = useState<string | null>(null)
   const [requiresAccountConnection, setRequiresAccountConnection] = useState(false)
@@ -54,11 +63,23 @@ export function ResourceAccessApproval() {
         if (availableConnections.items.length > 1) {
           throw new Error('This resource has more than one connected account.')
         }
+        const availableConnection = availableConnections.items[0] ?? null
         setRequest(accessRequest)
-        setConnection(availableConnections.items[0] ?? null)
+        setConnection(availableConnection)
         setAgentName(accessRequest.agent.name)
         setResourceName(accessRequest.resource.name)
         setRequiresAccountConnection(resources.items.some((resource) => resource.id === accessRequest.resource.id))
+        if (
+          availableConnection &&
+          accessRequest.authorizationDetails.length > 0 &&
+          accessRequest.scopes.every((scope) => availableConnection.scopes.includes(scope))
+        ) {
+          await loadApprovalAuthorizationDetailCatalog(accessRequest.id, token)
+            .then(setAuthorizationDetailCatalog)
+            .catch((cause: unknown) => {
+              setCatalogError(cause instanceof Error ? cause.message : 'Unable to load authorization contexts.')
+            })
+        }
       })
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : 'Unable to load the Agent resource request.')
@@ -111,15 +132,20 @@ export function ResourceAccessApproval() {
     }
   }
 
-  const approvedAuthorizationDetails =
-    request && connection
-      ? resolveAuthorizationDetails(request.authorizationDetails, connection.authorizationDetails)
-      : request?.authorizationDetails
+  const authorizationDetailResolution = resolveAuthorizationDetails(
+    request?.authorizationDetails ?? [],
+    request?.resource.authorizationDetailTemplates ?? [],
+    connection?.authorizationDetails ?? [],
+    authorizationDetailCatalog,
+    authorizationDetailSelections,
+  )
+  const approvedAuthorizationDetails = authorizationDetailResolution.approved
   const connectionCoversRequest =
     request !== null &&
     connection !== null &&
     request.scopes.every((scope) => connection.scopes.includes(scope)) &&
-    approvedAuthorizationDetails !== null
+    catalogError === null &&
+    authorizationDetailResolution.accountAuthorized
   const expiryIsValid = mode !== 'until' || isFutureExpiry(expiresAt)
 
   if (decision) {
@@ -194,11 +220,50 @@ export function ResourceAccessApproval() {
         {request?.target.type === 'api-resource' && request.authorizationDetails.length > 0 ? (
           <section className="decisionPermissions" aria-label="Requested authorization details">
             <h2>Authorization context</h2>
-            <pre className="whitespace-pre-wrap break-all text-xs">
-              <code>
-                {(approvedAuthorizationDetails ?? request.authorizationDetails).map(canonicalJson).join('\n')}
-              </code>
-            </pre>
+            <div className="grid gap-4">
+              {authorizationDetailResolution.requirements.map((requirement) =>
+                requirement.kind === 'fixed' ? (
+                  <div className="grid gap-1" key={requirement.index}>
+                    <strong className="text-sm">Fixed context</strong>
+                    <code className="break-all text-xs">{canonicalJson(requirement.requested)}</code>
+                  </div>
+                ) : (
+                  <Field
+                    help={
+                      requirement.options.length === 0
+                        ? 'No matching concrete context is available from this resource.'
+                        : undefined
+                    }
+                    key={requirement.index}
+                    label={`Authorization context ${requirement.index + 1}`}
+                  >
+                    <SelectInput
+                      aria-label={`Authorization context ${requirement.index + 1}`}
+                      onChange={(event) =>
+                        setAuthorizationDetailSelections((current) => ({
+                          ...current,
+                          [requirement.index]: event.target.value,
+                        }))
+                      }
+                      value={authorizationDetailSelections[requirement.index] ?? ''}
+                    >
+                      <option value="">Select one context</option>
+                      {requirement.options.map((option) => (
+                        <option
+                          disabled={!option.connectionAuthorized}
+                          key={canonicalJson(option.authorizationDetail)}
+                          value={canonicalJson(option.authorizationDetail)}
+                        >
+                          {option.display.label}
+                          {option.agentGrants.length > 0 ? ' — already granted' : ''}
+                          {!option.connectionAuthorized ? ' — reconnect account to authorize' : ''}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </Field>
+                ),
+              )}
+            </div>
           </section>
         ) : null}
         {request?.target.type === 'api-resource' && resourceName && requiresAccountConnection && connection ? (
@@ -218,6 +283,7 @@ export function ResourceAccessApproval() {
                   Expand {resourceName} account access
                 </Button>
                 <p>After OAuth, you will return here to approve the Agent’s exact scopes and lifetime separately.</p>
+                {catalogError ? <Status tone="error">{catalogError}</Status> : null}
               </>
             ) : null}
           </section>
@@ -297,7 +363,10 @@ export function ResourceAccessApproval() {
           </Button>
           <Button
             disabled={
-              !request || submitting || (requiresAccountConnection && !connectionCoversRequest) || !expiryIsValid
+              !request ||
+              submitting ||
+              (requiresAccountConnection && (!connectionCoversRequest || approvedAuthorizationDetails === null)) ||
+              !expiryIsValid
             }
             onClick={() => void submit('approve')}
           >
@@ -313,17 +382,60 @@ function isFutureExpiry(value: string) {
   return value.length > 0 && new Date(value).getTime() > Date.now()
 }
 
+async function loadApprovalAuthorizationDetailCatalog(requestId: string, token: string) {
+  const items: AuthorizationDetailCatalogEntry[] = []
+  let nextOffset: number | null = 0
+  while (nextOffset !== null) {
+    const page = await listApprovalAuthorizationDetailCatalog(requestId, token, { limit: 100, offset: nextOffset })
+    items.push(...page.items)
+    nextOffset = page.pagination.nextOffset
+  }
+  return items
+}
+
 function clearStoredApproval() {
   window.sessionStorage.removeItem(approvalTokenStorageKey)
 }
 
 function resolveAuthorizationDetails(
   requested: AccessRequestApproval['authorizationDetails'],
+  templates: AccessRequestApproval['resource']['authorizationDetailTemplates'],
   connected: AccountConnection['authorizationDetails'],
+  catalog: AuthorizationDetailCatalogEntry[],
+  selections: Record<number, string>,
 ) {
-  const matches = connected.filter((candidate) => requested.some((template) => matchesTemplate(candidate, template)))
-  if (requested.some((template) => !matches.some((candidate) => matchesTemplate(candidate, template)))) return null
-  return [...new Map(matches.map((detail) => [canonicalJson(detail), detail])).values()]
+  const requirements = requested.map((detail, index) => {
+    const exactConnected = connected.some((candidate) => canonicalJson(candidate) === canonicalJson(detail))
+    const generic = templates.some((template) => canonicalJson(template) === canonicalJson(detail))
+    if (!generic) {
+      return { index, kind: 'fixed' as const, requested: detail, authorized: exactConnected }
+    }
+    return {
+      index,
+      kind: 'selection' as const,
+      requested: detail,
+      options: catalog.filter((candidate) => matchesTemplate(candidate.authorizationDetail, detail)),
+    }
+  })
+  const approved: AccessRequestApproval['authorizationDetails'] = []
+  let accountAuthorized = true
+  for (const requirement of requirements) {
+    if (requirement.kind === 'fixed') {
+      accountAuthorized &&= requirement.authorized
+      if (requirement.authorized) approved.push(requirement.requested)
+      continue
+    }
+    accountAuthorized &&= requirement.options.some((option) => option.connectionAuthorized)
+    const selected = requirement.options.find(
+      (option) => canonicalJson(option.authorizationDetail) === selections[requirement.index],
+    )
+    if (selected?.connectionAuthorized) approved.push(selected.authorizationDetail)
+  }
+  return {
+    requirements,
+    accountAuthorized,
+    approved: approved.length === requested.length ? approved : null,
+  }
 }
 
 function matchesTemplate(candidate: Record<string, unknown>, template: Record<string, unknown>) {

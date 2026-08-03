@@ -743,6 +743,8 @@ describe('console API resources and roles', () => {
         tokenEndpoint: 'https://projects.example.com/token',
         pushedAuthorizationRequestEndpoint: null,
         authorizationDetailsTypesSupported: [],
+        authorizationDetailsCatalogEndpoint: null,
+        authorizationDetailsCatalogScope: null,
         registrationEndpoint: null,
         revocationEndpoint: 'https://projects.example.com/revoke',
         jwksUri: 'https://projects.example.com/jwks',

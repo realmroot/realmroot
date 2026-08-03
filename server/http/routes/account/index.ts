@@ -21,6 +21,7 @@ import {
   getAccountAccessRequestByToken,
   getAccountConnection,
   listAccessRequestConnections,
+  listAccountAccessRequestAuthorizationDetailCatalog,
   listAccountAccessRequests,
   listAccountConnections,
   listConnectableExternalResources,
@@ -43,6 +44,7 @@ import {
   agentEnrollmentSchema,
   agentResponseSchema,
   agentsResponseSchema,
+  authorizationDetailCatalogResponseSchema,
   connectableApiResourcesResponseSchema,
   createAccountConnectionSchema,
   decideAccessRequestSchema,
@@ -502,6 +504,21 @@ export function accountRoutes(authApi: ManagementAuthApi, securityPolicy?: Secur
           limit: query.limit,
           offset: query.offset,
         }),
+      ),
+    )
+  })
+
+  app.get('/access-requests/:requestId/authorization-detail-catalog', async (c) => {
+    const query = readQuery(c, paginationQuerySchema.extend({ approvalToken: z.string().trim().min(1) }))
+    return c.json(
+      authorizationDetailCatalogResponseSchema.parse(
+        await listAccountAccessRequestAuthorizationDetailCatalog(
+          getDeps(c),
+          c.req.param('requestId'),
+          query.approvalToken,
+          getPrincipal(c).user!.id,
+          query,
+        ),
       ),
     )
   })

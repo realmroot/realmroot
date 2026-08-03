@@ -333,8 +333,13 @@ Feature: Agent identity and delegated API authorization
     @entrypoint:agent-protocol @journey:external-resource-contextual-delegation
     Scenario: An Agent delegates an exact external-resource context alongside scopes
       Given one external account connection grants multiple opaque authorization detail entries
-      When the Agent discovers that resource and selects one exact entry and an exact scope subset
-      Then the pending request and controller approval preserve both authority dimensions
+      And the authorization server advertises an account-scoped authorization detail catalog endpoint and required scope
+      When the Agent discovers that catalog through Realmroot
+      Then Realmroot returns every available detail with safe display metadata, connection authorization, and matching active Agent grant state
+      When the Agent requests generic authorization detail placeholders and an exact scope subset
+      Then the controller selects exactly one matching concrete detail for each generic placeholder
+      And fixed requested details remain fixed rather than becoming selectable
+      And the pending request and controller approval preserve both authority dimensions
       And an ungranted entry or browser-tampered approval fails with invalid_authorization_details
       When the controller approves the request and the Agent exchanges a token
       Then Realmroot sends the approved scopes and authorization details to the target authorization server
@@ -377,10 +382,11 @@ Feature: Agent identity and delegated API authorization
       When the controller opens the approval page
       Then Realmroot displays the connected account as requiring expanded authorization
       And prevents approval until the account covers every requested scope
-      When the controller reauthorizes that account for the pending Agent request's exact scope set
+      When the controller reauthorizes that account for the union of its existing scopes and the pending Agent request's exact scope set
       And OAuth returns the same external subject with replacement credentials and scopes
       Then Realmroot preserves the account connection identity
       And replaces its encrypted credentials, scopes, display name, and expiry
+      And treats the callback authorization details as authoritative so removed details invalidate uncovered Agent grants
       And restores the connection when it was previously revoked
       And returns to the pending Agent approval so the controller can decide it separately
 
