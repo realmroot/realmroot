@@ -241,6 +241,27 @@ export const authorizationDetailCatalogEntrySchema = authorizationDetailCatalogI
 export const authorizationDetailCatalogResponseSchema = z.object({
   items: z.array(authorizationDetailCatalogEntrySchema),
   pagination: paginationMetadataSchema,
+  connectionRequired: z.boolean(),
+})
+
+export const createResourceConnectionRequestSchema = z
+  .object({
+    scopes: scopeListSchema,
+    reason: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict()
+
+export const resourceConnectionRequestSchema = z.object({
+  id: z.string(),
+  agentId: z.string(),
+  apiResourceId: z.string(),
+  scopes: z.array(z.string()),
+  reason: z.string().nullable(),
+  status: z.enum(['pending', 'connected']),
+  accountConnectionId: z.string().nullable(),
+  approval: z.object({ url: z.url(), expiresAt: z.iso.datetime() }).nullable(),
+  createdAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
 })
 
 export const connectableApiResourcesResponseSchema = z.object({
@@ -275,6 +296,12 @@ export const accountConnectionSchema = z.object({
   updatedAt: z.iso.datetime(),
 })
 
+export const resourceConnectionApprovalSchema = resourceConnectionRequestSchema.extend({
+  agent: z.object({ id: z.string(), name: z.string() }),
+  resource: z.object({ id: z.string(), name: z.string() }),
+  accountConnection: accountConnectionSchema.nullable(),
+})
+
 export const createAccountConnectionSchema = z.discriminatedUnion('context', [
   z
     .object({
@@ -293,6 +320,12 @@ export const createAccountConnectionSchema = z.discriminatedUnion('context', [
     .object({
       context: z.literal('access-request'),
       accessRequestId: nonEmptyString,
+      approvalToken: nonEmptyString,
+    })
+    .strict(),
+  z
+    .object({
+      context: z.literal('connection-request'),
       approvalToken: nonEmptyString,
     })
     .strict(),
@@ -427,6 +460,9 @@ export type ApiResource = z.infer<typeof apiResourceSchema>
 export type ConnectableApiResourcesResponse = z.infer<typeof connectableApiResourcesResponseSchema>
 export type AccountConnection = z.infer<typeof accountConnectionSchema>
 export type CreateAccountConnection = z.infer<typeof createAccountConnectionSchema>
+export type CreateResourceConnectionRequest = z.input<typeof createResourceConnectionRequestSchema>
+export type ResourceConnectionRequest = z.infer<typeof resourceConnectionRequestSchema>
+export type ResourceConnectionApproval = z.infer<typeof resourceConnectionApprovalSchema>
 export type CreateAccessRequest = z.input<typeof createAccessRequestSchema>
 export type AccessRequest = z.infer<typeof accessRequestSchema>
 export type AccessRequestApproval = z.infer<typeof accessRequestApprovalSchema>

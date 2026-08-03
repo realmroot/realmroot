@@ -7,6 +7,7 @@ import {
   decideAgentResourceApproval,
   getAccountProfile,
   getAgentResourceApproval,
+  getResourceConnectionApproval,
   linkAccount,
   listAccountAgents,
   listAccountConnections,
@@ -230,6 +231,10 @@ describe('account API client over the real network boundary', () => {
           pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
         })
       }),
+      http.get(`${base}/api/account/resource-connection-requests/current`, ({ request }) => {
+        requests.push({ url: new URL(request.url), method: request.method, body: null })
+        return HttpResponse.json({ id: 'connection-request-1', status: 'pending' })
+      }),
       http.get(`${base}/api/account/access-requests/:requestId/authorization-detail-catalog`, ({ request }) => {
         requests.push({ url: new URL(request.url), method: request.method, body: null })
         return HttpResponse.json({
@@ -256,6 +261,9 @@ describe('account API client over the real network boundary', () => {
     ).resolves.toMatchObject({ id: 'connection-1' })
     await expect(revokeAccountConnection('connection/1')).resolves.toBeUndefined()
     await expect(getAgentResourceApproval('approval token')).resolves.toMatchObject({ id: 'request-1' })
+    await expect(getResourceConnectionApproval('connection token')).resolves.toMatchObject({
+      id: 'connection-request-1',
+    })
     await expect(listApprovalAuthorizationDetailCatalog('request/1', 'approval token')).resolves.toMatchObject({
       items: [],
     })
@@ -275,6 +283,13 @@ describe('account API client over the real network boundary', () => {
       expect.objectContaining({
         method: 'GET',
         url: expect.objectContaining({ search: '?approvalToken=approval%20token' }),
+      }),
+      expect.objectContaining({
+        method: 'GET',
+        url: expect.objectContaining({
+          pathname: expect.stringContaining('resource-connection-requests/current'),
+          search: '?approvalToken=connection+token',
+        }),
       }),
       expect.objectContaining({
         method: 'GET',

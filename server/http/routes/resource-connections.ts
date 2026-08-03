@@ -17,6 +17,9 @@ export function createResourceConnectionRoutes(canonicalOrigin?: string) {
     if (connection.returnTo === 'access-approval') {
       return c.redirect(`${origin}/agent/resource-access/approve`)
     }
+    if (connection.returnTo === 'connection-approval') {
+      return c.redirect(`${origin}/agent/resource-connection/approve?resource_connection=connected`)
+    }
     return c.redirect(`${origin}/connections?resource_connection=connected`)
   })
 

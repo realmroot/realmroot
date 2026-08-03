@@ -41,7 +41,7 @@ export const resourceConnectionOwnerSchema = z.discriminatedUnion('type', [
 export const createResourceConnectionIntentRequestSchema = z.object({
   owner: resourceConnectionOwnerSchema.default({ type: 'user' }),
   scopes: scopeListSchema,
-  returnTo: z.enum(['account-center', 'access-approval']).optional(),
+  returnTo: z.enum(['account-center', 'access-approval', 'connection-approval']).optional(),
 })
 
 export const resourceConnectionIntentResponseSchema = z.object({

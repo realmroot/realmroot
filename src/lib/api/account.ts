@@ -18,6 +18,7 @@ import type {
   ConnectableApiResourcesResponse,
   CreateAccountConnection,
   DecideAccessRequest,
+  ResourceConnectionApproval,
 } from '@shared/api/agent-api'
 import type {
   SecurityPasskeyRegistrationOptionsInput,
@@ -316,6 +317,13 @@ export function createAccountConnection(input: CreateAccountConnection) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
   }).then((response) => readJsonResponse<AccountConnection>(response))
+}
+
+export function getResourceConnectionApproval(approvalToken: string) {
+  const query = new URLSearchParams({ approvalToken })
+  return fetch(`/api/account/resource-connection-requests/current?${query}`, { credentials: 'same-origin' }).then(
+    (response) => readJsonResponse<ResourceConnectionApproval>(response),
+  )
 }
 
 export function revokeAccountConnection(connectionId: string) {

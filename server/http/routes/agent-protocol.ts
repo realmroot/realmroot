@@ -11,6 +11,7 @@ import type { ProtocolAgentSession } from '@server/usecases/agent-session'
 import type { Deps } from '@server/usecases/deps'
 import {
   createAccessRequest,
+  createAgentResourceConnectionRequest,
   getAccessRequest,
   getAgentAccessGrant,
   issueTargetAccessToken,
@@ -30,6 +31,8 @@ import {
   createAccessRequestSchema,
   createAgentEnrollmentSchema,
   createAgentInstallationEnrollmentSchema,
+  createResourceConnectionRequestSchema,
+  resourceConnectionRequestSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { idempotencyKeySchema } from '@shared/api/idempotency'
@@ -129,6 +132,18 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
         ),
       ),
     )
+  })
+
+  app.post('/api-resources/:resourceId/connections', async (c) => {
+    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const result = await createAgentResourceConnectionRequest(
+      getDeps(c),
+      c.req.param('resourceId'),
+      await readJson(c, createResourceConnectionRequestSchema),
+      principal,
+      new URL(requireOidcIssuer()).origin,
+    )
+    return c.json(resourceConnectionRequestSchema.parse(result), 201)
   })
 
   app.post('/access-requests', async (c) => {

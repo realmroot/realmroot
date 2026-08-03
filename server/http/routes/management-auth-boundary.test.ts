@@ -152,6 +152,7 @@ describe('management routes 1', () => {
     expect(generatedCommands).toEqual([
       { group: 'auth', name: 'whoami', operationId: 'getCurrentAgent' },
       { group: 'access', name: 'contexts', operationId: 'listAgentAuthorizationDetailCatalog' },
+      { group: 'access', name: 'connect', operationId: 'createAgentResourceConnectionRequest' },
       { group: 'access', name: 'request', operationId: 'createAgentAccessRequest' },
       { group: 'access', name: 'token', operationId: 'issueTargetAccessToken' },
       { group: 'capability', name: 'request', operationId: 'requestAgentCapabilities' },
