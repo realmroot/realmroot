@@ -46,7 +46,7 @@ test.describe('password sign-in, session, and routing', () => {
     await page.goto('/')
     await expect(page).toHaveURL(/\/profile$/)
     await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
-    await expect(page.getByText(admin.name, { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Identity details').getByText(admin.name, { exact: true })).toBeVisible()
   })
 
   test('[spec: account-center/account-center] Account Center loads account navigation', async ({ page }) => {
@@ -54,6 +54,6 @@ test.describe('password sign-in, session, and routing', () => {
     await page.goto('/profile')
     await expect(page.getByRole('navigation', { name: 'Account center' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
-    await expect(page.getByText(admin.name, { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Identity details').getByText(admin.name, { exact: true })).toBeVisible()
   })
 })
