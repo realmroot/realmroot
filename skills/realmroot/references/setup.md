@@ -93,6 +93,31 @@ Isolation is complete when `REALMROOT_PLUGIN_STATE_DIR` is exported once and
 the identity, access, token, and target-operation commands all run in that same
 shell environment.
 
+## Hand Off Controller Approval In Non-Interactive Runtimes
+
+The adapter prints approval URLs directly to an interactive terminal. When the
+Agent process has no terminal, or a separate controller process must open the
+page, configure a protected handoff file before starting an approval-bearing
+foreground command:
+
+```bash
+APPROVAL_HANDOFF="$REALMROOT_PLUGIN_STATE_DIR/controller-approval.url"
+rm -f "$APPROVAL_HANDOFF"
+export REALMROOT_PLUGIN_APPROVAL_FILE="$APPROVAL_HANDOFF"
+```
+
+Start the Realmroot command in the foreground and keep it running. The adapter
+writes the hosted approval URL to this file with mode `0600` as soon as the
+pending response arrives instead of launching a system browser. The supervising
+controller reads that one URL, performs only the human approval, and leaves the
+original command waiting until its terminal result. Remove the file before each
+new approval-bearing command so stale URLs cannot be mistaken for the current
+request.
+
+Do not interrupt and retry merely because redirected command output is quiet.
+Restish buffers plugin stderr until the hook completes; the handoff file is the
+live boundary for non-interactive runtimes.
+
 ## Connect The API
 
 The `default` profile always means production. If the stable API name is not

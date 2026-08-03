@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -47,8 +48,13 @@ func (systemBrowserOpener) Open(rawURL string) error {
 func writeApprovalURLToTerminal(rawURL string) {
 	terminal, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
 	if err != nil {
+		writeApprovalURL(rawURL, os.Stderr)
 		return
 	}
 	defer terminal.Close()
-	_, _ = terminal.WriteString("Approval URL:\n" + rawURL + "\n")
+	writeApprovalURL(rawURL, terminal)
+}
+
+func writeApprovalURL(rawURL string, writer io.Writer) {
+	_, _ = fmt.Fprintln(writer, "Approval URL:\n"+rawURL)
 }

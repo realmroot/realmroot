@@ -17,6 +17,12 @@ prints one controller approval URL to the terminal, waits while the controller
 reviews it, creates the stable identity, signs the original request, and lets
 that same operation continue.
 
+For a non-interactive process, set `REALMROOT_PLUGIN_APPROVAL_FILE` to a
+protected path before starting the command. The plugin writes the URL there
+with mode `0600` instead of launching a browser, while the original command
+continues waiting. Remove the handoff file before each new approval request;
+Restish may buffer plugin stderr until the response hook finishes.
+
 The unified contract generates `auth whoami`, `capability request`, resource
 connection, `access request`, and `access token` workflows. Resource and grant
 reads use generic API-relative requests. When a resource connection or exact
