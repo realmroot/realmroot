@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 const requestedConfigs = process.argv.slice(2).filter((argument) => argument !== '--')
 const configs = requestedConfigs.length > 0 ? requestedConfigs : ['wrangler.toml']
 const requiredSnippets = [
+  '"global_fetch_strictly_public"',
   'binding = "ASSETS"',
   'directory = "./dist/client"',
   'name = "EMAIL"',
@@ -24,4 +25,4 @@ for (const config of configs) {
   }
 }
 
-console.log('Cloudflare config includes required Assets, Email, R2, D1, and Cron bindings.')
+console.log('Cloudflare config includes public fetch routing and required Assets, Email, R2, D1, and Cron bindings.')
