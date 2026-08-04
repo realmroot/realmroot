@@ -1,63 +1,45 @@
 # Realmroot Restish Plugin
 
 `restish-realmroot` authenticates Realmroot and Resource Server requests for a
-stable Agent identity. It contributes one plugin-local command group, `auth`,
-for local profile and identity lifecycle operations. Remote business resources
-and schemas still come from the OpenAPI contract.
+stable Agent identity. It contributes one local authentication command group
+and contains no Resource-Server-specific business logic.
+Business-resource commands and schemas continue to come from the OpenAPI contract.
 
-## Agent Identity Lifecycle
+## Authentication commands
 
-Restish 2.3 mounts the plugin command declaration at its root, so the exact
-surface is:
-
-```text
-restish auth status [--profile NAME]
-restish auth list
-restish auth login [NAME] [--api realmroot] [--api-profile default] [--agent-name NAME]
-restish auth use NAME
-restish auth logout [--profile NAME]
-restish auth revoke INSTALLATION_ID [--profile NAME]
-restish auth recover [--profile NAME] [--yes]
-restish auth retire [--profile NAME] [--confirm SUBJECT]
+```bash
+restish auth login [--hostname HOST] [--runtime RUNTIME]
+restish auth logout [--hostname HOST] [--runtime RUNTIME]
+restish auth status [--hostname HOST] [--runtime RUNTIME]
 ```
 
-`login` selects a configured Restish API/profile, enrolls or resumes its stable
-Agent identity, and records a named lifecycle profile. `use` switches the
-identity used by the authentication hook without environment-variable editing;
-its response includes the matching `--rsh-profile NAME` selector because the
-Restish 2.3 command-plugin protocol cannot rewrite an already resolved request
-URL. The hook fails instead of authenticating a request sent to a deployment
-that does not match the selected lifecycle profile. `status` reports the selected issuer,
-stable subject/name, local runtime and session context, and current installation
-without returning keys or tokens. `list` distinguishes local lifecycle profiles
-from the remote installations registered to the selected identity.
+`login` is the only command that performs discovery, registration, controller
+approval, or token acquisition. One Realmroot issuer and runtime pair always
+maps to one stable Agent identity. If runtime detection is unavailable, login
+prompts for a runtime; `--runtime` supplies the same value non-interactively.
 
-The destructive operations are deliberately distinct:
+`logout` removes only sensitive local credentials. It retains the non-secret
+issuer, runtime, and stable identity binding needed for the next login to
+enroll a fresh installation of the same identity. It never revokes or retires
+the remote Agent. It can also discard a registration or approval that was
+interrupted before login completed.
 
-- `logout` deletes only the selected local keys, credentials, and lifecycle
-  profile. The remote Agent and its installations are unchanged.
-- `revoke` replaces one remote installation's revocation. When it revokes the
-  installation executing the command, that installation's local state is also
-  removed; the stable identity is not recovered or retired.
-- `recover` confirms the loss event locally, rotates the local protocol keys,
-  and opens a dedicated hosted recovery approval. That page names the stable
-  Agent and explains that approval revokes every obsolete binding and freezes
-  Resource access. Only the controller's explicit recovery approval performs
-  those remote changes and enrolls a replacement installation while preserving
-  the stable issuer and subject. Its idempotency marker makes an interrupted
-  recovery resumable.
-- `retire` permanently retires the stable identity and then removes its local
-  state. It requires the exact stable subject, either interactively or through
-  `--confirm SUBJECT`; a mismatch cancels without mutation.
+`status` reads local files only. It lists every logged-in identity grouped by
+issuer and marks entries matching the current runtime. It never discovers a
+server, obtains or refreshes a token, or mutates remote state.
+
+The existing generated `whoami` command remains distinct: it reads the stable
+identity currently used by the automatically detected runtime and current
+issuer. It may use an existing unexpired token for that GET request, but it
+never registers, logs in, obtains, or refreshes a token. A logged-out runtime
+receives a clear instruction to run `restish auth login`.
 
 ## Responsibilities
 
 The plugin performs only work that must happen on the Agent's machine:
 
 - generate and protect Agent, Host, and DPoP private keys;
-- maintain named local lifecycle profiles and the currently selected profile;
-- enroll or reuse the stable Agent identity discovered from
-  `/.well-known/agent-configuration`;
+- explicitly enroll or restore a stable Agent identity during `auth login`;
 - exchange the Agent assertion at the OAuth token endpoint and add a
   short-lived DPoP access token to Realmroot requests;
 - recognize generic response profiles declared with `Link: ...; rel="profile"`;
@@ -69,10 +51,10 @@ The plugin performs only work that must happen on the Agent's machine:
 Target profiles identify this hook with `provider: realmroot-target`. They may
 also supply the discovered Realmroot `issuer`; the plugin uses it to select the
 right local identity when local, staging, or production authorize the same
-Resource Server URL. `auth use` governs this selection for subsequent target
-requests and rejects a target configured for another issuer.
+Resource Server URL.
 
-The plugin does not recognize Realmroot endpoint paths. It does not list or
+Apart from detecting the existing read-only Agent status operation so it cannot
+refresh credentials, the plugin does not recognize Realmroot business endpoint paths. It does not list or
 select account connections, grants, authorization details, token endpoints,
 native/external modes, or provider protocols. Realmroot resolves those on the
 server and supplies links and credential-offer metadata.
@@ -148,10 +130,10 @@ is removed and a new access request is required.
 ## State
 
 Identity state is keyed by the discovered issuer and Agent runtime. Restish API
-aliases and profiles reuse that identity. A lifecycle profile points to one
-Restish API/profile, issuer, and runtime; it never copies identity state. The
-same issuer/runtime cannot be aliased by two lifecycle names, and one lifecycle
-name cannot silently switch to a different identity. Active Resource selection is isolated
+aliases and profiles reuse that identity. A separate local file retains only
+the non-secret stable identity binding across logout. Full login is serialized
+per issuer/runtime so concurrent invocations cannot create two identities.
+Active Resource selection is isolated
 by a hashed Agent session identifier when the runtime exposes one, allowing
 concurrent sessions to use different Resources at the same service URL.
 
@@ -160,7 +142,9 @@ files with mode `0600`; symlinks and files accessible to group or other users
 are rejected. Legacy grant-oriented credential caches are discarded during
 schema upgrade. Never commit, log, or copy state files.
 
-Set `AGENT` to override runtime detection. Set
+Set `AGENT` to override runtime detection. When detection is unavailable, the
+runtime entered during login is retained as the local fallback; this is not an
+identity switch and does not allow multiple identities for one issuer/runtime. Set
 `REALMROOT_PLUGIN_STATE_DIR` only when an explicitly isolated cleanroom is
 required, and export it for both Realmroot and target commands.
 

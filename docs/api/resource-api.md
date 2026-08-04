@@ -45,45 +45,20 @@ resource paths, and operation IDs, with:
 restish doctor api realmroot
 ```
 
-Generated commands are reserved for controller approval and target credential
-workflows that span more than an ordinary resource request. The complete
-non-deprecated OpenAPI-generated workflow surface is:
+Generated commands are reserved for Agent identity, controller approval, and
+target credential workflows that span more than an ordinary resource request.
+The complete generated workflow surface is:
 
 ```text
+whoami
 connect <resource-server-id>
 access
 ```
 
-The deprecated generated `restish realmroot auth whoami` status alias remains
-available during the adapter 0.10 transition.
-
-The Realmroot Restish plugin separately owns one root command group for local
-Agent lifecycle state:
-
-```text
-auth status [--profile NAME]
-auth list
-auth login [NAME] [--api realmroot] [--api-profile default] [--agent-name NAME]
-auth use NAME
-auth logout [--profile NAME]
-auth revoke <installation-id> [--profile NAME]
-auth recover [--profile NAME] [--yes]
-auth retire [--profile NAME] [--confirm SUBJECT]
-```
-
-These are invoked as `restish auth ...`; they are not nested under a Restish
-API alias. Login still resolves the configured `realmroot` API and its selected
-API profile. `auth use` selects the authentication identity and returns its
-matching `--rsh-profile NAME` flag; pass that flag to a generated API command
-so Restish 2.3 resolves the same deployment URL without editing `RSH_PROFILE`.
-This avoids a command collision with generated OpenAPI groups and keeps local
-state operations in the plugin.
-
-`auth recover` has two deliberately separate confirmations: the local command
-confirms the operator's intent, then a dedicated hosted approval names the
-stable Agent and states that approval revokes all previous installations and
-freezes external Resource access. No remote recovery mutation occurs before the
-controller approves that page.
+The plugin separately contributes `restish auth login`, `restish auth logout`,
+and `restish auth status`. Login is the only identity-establishing command;
+status is a zero-network local inventory. The generated `whoami` operation is a
+read-only current-identity query and never initiates login or token refresh.
 
 Resource Server and Resource representations are ordinary HTTP resources and
 are read with Restish's generic `get` command. This keeps local configuration

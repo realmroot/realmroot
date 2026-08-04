@@ -19,17 +19,20 @@ implementation details. They are never choices in the Agent workflow.
 
 ## 1. Establish The Agent
 
-The first protected Restish operation starts a foreground enrollment:
+Start foreground enrollment explicitly with `restish auth login`:
 
 1. The plugin generates Host and Agent proof keys locally.
 2. Realmroot returns a controller interaction.
 3. The plugin opens the supplied approval URL and waits.
 4. Approval creates or binds the stable Agent.
-5. The original operation resumes and returns the Agent issuer and subject.
+5. Login resumes and returns the Agent issuer and subject.
 
 The browser controller approves the relationship but never becomes the CLI
 principal. State is keyed by Realmroot issuer and Agent runtime; profiles and
 API aliases do not create additional identities.
+Protected operations never start enrollment implicitly. Use `restish auth
+status` for the all-host local inventory and the generated `whoami` operation
+for the current issuer/runtime identity; neither command creates an identity.
 
 ## 2. Discover Resource Servers
 
