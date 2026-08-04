@@ -3,6 +3,7 @@ import type { Deps } from '@server/usecases/deps'
 import { parse as parseYaml } from 'yaml'
 
 const operationMethods = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const
+const discoveryTimeoutMs = 5_000
 
 export interface ResourceScopeDefinition {
   value: string
@@ -86,10 +87,19 @@ async function fetchForDiscovery(
   stage: 'resource' | 'openapi_document',
   message: string,
 ) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), discoveryTimeoutMs)
   try {
-    return await deps.externalHttp.fetch(request)
+    return await Promise.race([
+      deps.externalHttp.fetch(new Request(request, { signal: controller.signal })),
+      new Promise<never>((_, reject) => {
+        controller.signal.addEventListener('abort', () => reject(new Error('discovery timeout')), { once: true })
+      }),
+    ])
   } catch {
     throw badGateway(message, { stage, url: request.url })
+  } finally {
+    clearTimeout(timeout)
   }
 }
 

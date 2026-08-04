@@ -273,6 +273,27 @@ paths:
     })
   })
 
+  it('bounds an unresponsive Resource Server discovery request', async () => {
+    vi.useFakeTimers()
+    try {
+      const deps = createTestDeps()
+      vi.mocked(deps.externalHttp.fetch).mockReturnValue(new Promise<Response>(() => {}))
+
+      const result = readDeclaredScopes(deps, 'https://orders.example.com/api')
+      const rejection = expect(result).rejects.toMatchObject({
+        status: 502,
+        code: 'bad_gateway',
+        details: { stage: 'resource', url: 'https://orders.example.com/api' },
+      })
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await rejection
+      expect(vi.mocked(deps.externalHttp.fetch).mock.calls[0]?.[0].signal.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it.each([
     ['https://api.example.com', true],
     ['http://localhost:4100/api', true],

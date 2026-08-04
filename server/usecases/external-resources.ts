@@ -442,57 +442,58 @@ export async function discoverAgentResources(deps: Deps, principal: AgentResourc
     ...activeConnections.map((connection) => connection.resourceId),
     ...configuredResources.map((resource) => resource.id),
   ])
-  const resources = []
-  for (const resourceId of visibleResourceIds) {
-    const resource = await deps.authorization.findResource(resourceId)
-    const authorization = await findExternalAuthorization(deps, resourceId)
-    if (
-      !resource?.enabled ||
-      resource.archivedAt ||
-      (resource.connectorId !== null && authorization?.status !== 'active')
-    ) {
-      continue
-    }
-    const scopes = await discoverAgentResourceScopes(deps, resource)
-    const storedConnection = activeConnections.find((candidate) => candidate.resourceId === resourceId) ?? null
-    const connection =
-      storedConnection && (await isConnectionUsable(deps, resourceId, storedConnection)) ? storedConnection : null
-    resources.push({
-      id: resource.id,
-      identifier: resource.identifier,
-      name: resource.name,
-      description: resource.description,
-      serviceUrl: resource.resourceUrl,
-      resourceIndicator: resource.resourceUrl,
-      availability: {
-        status: scopes ? ('available' as const) : ('unavailable' as const),
-        checkedAt: new Date().toISOString(),
-      },
-      scopes: scopes ?? [],
-      resourcesAvailable:
-        resource.connectorId === null ||
-        Boolean(
-          connection &&
-            (authorization?.authorizationDetailsCatalogEndpoint || connection.authorizationDetails.length > 0),
-        ),
-      connection:
-        resource.connectorId === null
-          ? { status: 'not_required' as const, displayName: null, authorizedScopes: [] }
-          : connection
-            ? {
-                status: 'connected' as const,
-                displayName: connection.displayName,
-                authorizedScopes: connection.grantedScopes.filter(
-                  (scope) =>
-                    scope !== 'openid' &&
-                    scope !== 'offline_access' &&
-                    scope !== authorization?.authorizationDetailsCatalogScope,
-                ),
-              }
-            : { status: 'not_connected' as const, displayName: null, authorizedScopes: [] },
-    })
-  }
-  return { resources }
+  const resources = await Promise.all(
+    [...visibleResourceIds].map(async (resourceId) => {
+      const resource = await deps.authorization.findResource(resourceId)
+      const authorization = await findExternalAuthorization(deps, resourceId)
+      if (
+        !resource?.enabled ||
+        resource.archivedAt ||
+        (resource.connectorId !== null && authorization?.status !== 'active')
+      ) {
+        return null
+      }
+      const scopes = await discoverAgentResourceScopes(deps, resource)
+      const storedConnection = activeConnections.find((candidate) => candidate.resourceId === resourceId) ?? null
+      const connection =
+        storedConnection && (await isConnectionUsable(deps, resourceId, storedConnection)) ? storedConnection : null
+      return {
+        id: resource.id,
+        identifier: resource.identifier,
+        name: resource.name,
+        description: resource.description,
+        serviceUrl: resource.resourceUrl,
+        resourceIndicator: resource.resourceUrl,
+        availability: {
+          status: scopes ? ('available' as const) : ('unavailable' as const),
+          checkedAt: new Date().toISOString(),
+        },
+        scopes: scopes ?? [],
+        resourcesAvailable:
+          resource.connectorId === null ||
+          Boolean(
+            connection &&
+              (authorization?.authorizationDetailsCatalogEndpoint || connection.authorizationDetails.length > 0),
+          ),
+        connection:
+          resource.connectorId === null
+            ? { status: 'not_required' as const, displayName: null, authorizedScopes: [] }
+            : connection
+              ? {
+                  status: 'connected' as const,
+                  displayName: connection.displayName,
+                  authorizedScopes: connection.grantedScopes.filter(
+                    (scope) =>
+                      scope !== 'openid' &&
+                      scope !== 'offline_access' &&
+                      scope !== authorization?.authorizationDetailsCatalogScope,
+                  ),
+                }
+              : { status: 'not_connected' as const, displayName: null, authorizedScopes: [] },
+      }
+    }),
+  )
+  return { resources: resources.filter((resource) => resource !== null) }
 }
 
 async function discoverAgentResourceScopes(
