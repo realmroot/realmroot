@@ -26,13 +26,14 @@ func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
 }
 
 func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
+	t.Setenv("REALMROOT_AGENT_NAME", "Build Agent")
 	requests := 0
 	states := &memoryStateStore{}
 	prompt := &promptRecorder{}
 	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		requests++
 		switch requests {
-		case 1, 5:
+		case 1, 6:
 			return jsonResponse(200, testAgentConfiguration()), nil
 		case 2:
 			return jsonResponse(200, map[string]any{
@@ -45,6 +46,21 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 		case 3:
 			return jsonResponse(200, map[string]any{"status": "active"}), nil
 		case 4:
+			if request.Method != http.MethodPost || request.URL.String() != "https://auth.example.com/api/agent/enrollments" {
+				t.Fatalf("enrollment request = %s %s", request.Method, request.URL)
+			}
+			var body map[string]any
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["kind"] != "new_identity" || body["name"] != "Build Agent" {
+				t.Fatalf("enrollment body = %#v", body)
+			}
+			return jsonResponse(201, map[string]any{"id": "enrollment-1", "kind": "new_identity"}), nil
+		case 5:
+			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/agent/status" {
+				t.Fatalf("status request = %s %s", request.Method, request.URL)
+			}
 			return jsonResponse(201, map[string]any{"agent": map[string]any{
 				"id": "agent-identity-1", "issuer": "https://auth.example.com/api/auth", "subject": "agt_123",
 			}}), nil
@@ -74,7 +90,7 @@ func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
 	if _, err := authenticateRequest(input, states, client, prompt); err != nil {
 		t.Fatal(err)
 	}
-	if requests != 5 {
+	if requests != 6 {
 		t.Fatalf("second request repeated enrollment; requests = %d", requests)
 	}
 }
@@ -232,8 +248,8 @@ func testAgentConfiguration() map[string]any {
 	return map[string]any{
 		"version": "1.0-draft", "issuer": "https://auth.example.com/api/auth", "algorithms": []string{"Ed25519"},
 		"agent_identity_issuer":     "https://auth.example.com/api/auth",
-		"agent_enrollment_endpoint": "https://auth.example.com/api/agent-identities/current/enrollments",
-		"agent_endpoint":            "https://auth.example.com/api/agent-identities/current",
+		"agent_enrollment_endpoint": "https://auth.example.com/api/agent/enrollments",
+		"agent_endpoint":            "https://auth.example.com/api/agent/status",
 		"endpoints": map[string]any{
 			"register": "https://auth.example.com/api/auth/agent/register",
 			"status":   "https://auth.example.com/api/auth/agent/status",

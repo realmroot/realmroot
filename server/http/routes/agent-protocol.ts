@@ -38,6 +38,7 @@ import {
 import { idempotencyKeySchema } from '@shared/api/idempotency'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import { type Context, Hono } from 'hono'
+import { getPrincipal } from '../middleware/authn'
 import { getDeps } from '../middleware/deps'
 import { toBoundaryError } from './auth-api'
 import { readJson, readQuery } from './validation'
@@ -124,7 +125,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.get('/resource-servers/:resourceServerId/resources', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
     return c.json(
       resourceServerResourcesResponseSchema.parse(
         await listAgentResourceServerResources(
@@ -139,7 +140,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.get('/resource-servers/:resourceServerId/resources/:resourceId', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
     return c.json(
       resourceServerResourceSchema.parse(
         await getAgentResourceServerResource(
@@ -154,7 +155,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.post('/resource-servers/:resourceServerId/connection-requests', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await createAgentConnectionRequest(
       getDeps(c),
       c.req.param('resourceServerId'),
@@ -168,7 +169,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.get('/resource-servers/:resourceServerId/connection-requests/:requestId', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await getAgentConnectionRequest(
       getDeps(c),
       c.req.param('requestId'),
@@ -183,7 +184,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.post('/access/requests', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await createAccessRequest(
       getDeps(c),
       await readJson(c, createAccessRequestSchema),
@@ -196,7 +197,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   })
 
   app.get('/access/requests/:requestId', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const result = await getAccessRequest(
       getDeps(c),
       c.req.param('requestId'),
@@ -209,7 +210,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
 
   app.post('/access/authorizations/:authorizationId/credentials', async (c) => {
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
+    const principal = await resourcePrincipal(authApi, getDeps(c), c)
     const dpopProof = c.req.header('DPoP')
     if (!dpopProof) throw unauthorized('A DPoP proof is required.')
     const grant = await getDeps(c).externalResources.findGrant(c.req.param('authorizationId'))
@@ -251,8 +252,18 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
   }
 }
 
-async function resourcePrincipal(authApi: AgentSessionApi, deps: Deps, headers: Headers) {
-  const session = await requireAgentSession(authApi, headers)
+async function resourcePrincipal(authApi: AgentSessionApi, deps: Deps, c: Context) {
+  const authenticated = getPrincipal(c).agent
+  if (authenticated) {
+    return {
+      issuer: authenticated.issuer,
+      subject: authenticated.subject,
+      identityId: authenticated.identityId,
+      protocolAgentId: authenticated.protocolAgentId,
+      hostId: authenticated.hostId,
+    }
+  }
+  const session = await requireAgentSession(authApi, c.req.raw.headers)
   const identity = await getAgentIdentityByProtocolAgent(deps, session.agent.id)
   return {
     issuer: identity.issuer,

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { baseURL, expirePendingAgentApprovals, resetAndBootstrap, signIn } from './helpers/real-app'
+import { baseURL, resetAndBootstrap, signIn } from './helpers/real-app'
 import { createRestishAgentPlugin } from './helpers/restish-agent-plugin'
 
 // Hermetic: the repository's Restish plugin generates independent keys, uses
@@ -11,7 +11,7 @@ test.describe('new Agent stable identity enrollment', () => {
     await resetAndBootstrap()
   })
 
-  test('[spec: agent-identity/agent-identity-enrollment] [spec: agent-identity/agent-management-authority] [spec: agent-identity/agent-capability-approval-renewal] a new Agent establishes its identity and gains approved resource access', async ({
+  test('[spec: agent-identity/agent-identity-enrollment] [spec: agent-identity/agent-management-authority] a new Agent establishes its stable identity', async ({
     page,
   }) => {
     await signIn(page)
@@ -36,52 +36,6 @@ test.describe('new Agent stable identity enrollment', () => {
         subject: result.agent.subject,
       })
 
-      const firstPermissionRequest = plugin.requestCapabilities(
-        ['applications:read', 'applications:write'],
-        'E2E tenant administration',
-      )
-      const firstApprovalUrl = await firstPermissionRequest.approvalUrl
-      const repeatedPermissionRequest = plugin.requestCapabilities(
-        ['applications:read', 'applications:write'],
-        'E2E tenant administration retry',
-      )
-      const repeatedApprovalUrl = await repeatedPermissionRequest.approvalUrl
-      expect(repeatedApprovalUrl).not.toBe(firstApprovalUrl)
-
-      expirePendingAgentApprovals(result.local_agent)
-      const renewedPermissionRequest = plugin.requestCapabilities(
-        ['applications:read', 'applications:write'],
-        'E2E tenant administration after expiry',
-      )
-      const renewedApprovalUrl = await renewedPermissionRequest.approvalUrl
-      expect(renewedApprovalUrl).not.toBe(repeatedApprovalUrl)
-
-      await page.goto(renewedApprovalUrl)
-      await expect(page.getByRole('heading', { name: 'Approve Agent permissions' })).toBeVisible()
-      await expect(page.getByText('applications:read', { exact: true })).toBeVisible()
-      await expect(page.getByText('applications:write', { exact: true })).toBeVisible()
-      await page.getByRole('button', { name: 'Approve permissions' }).click()
-      await expect(page.getByRole('heading', { name: 'Authorization successful' })).toBeVisible()
-      await expect(page.getByText('You can safely close this page.')).toBeVisible()
-
-      const permissionRequests = await Promise.all([
-        firstPermissionRequest.result,
-        repeatedPermissionRequest.result,
-        renewedPermissionRequest.result,
-      ])
-      for (const permissionRequest of permissionRequests) {
-        expect(permissionRequest.status).toBe('completed')
-        expect(permissionRequest.capabilities).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ value: 'applications:read', status: 'active' }),
-            expect.objectContaining({ value: 'applications:write', status: 'active' }),
-          ]),
-        )
-        expect(permissionRequest.capabilities).toHaveLength(2)
-      }
-
-      expect(plugin.listApplications().applications).toEqual(expect.any(Array))
-
       await page.goto('/account/agents')
       await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
       await expect(page.getByText('E2E Build Agent', { exact: true })).toBeVisible()
@@ -91,9 +45,7 @@ test.describe('new Agent stable identity enrollment', () => {
     }
   })
 
-  test('[spec: agent-identity/agent-capability-denial] a controller can deny enrollment and capability requests', async ({
-    page,
-  }) => {
+  test('[spec: agent-identity/agent-capability-denial] a controller can deny Agent enrollment', async ({ page }) => {
     await signIn(page)
 
     const deniedEnrollmentPlugin = createRestishAgentPlugin(baseURL)
@@ -109,28 +61,6 @@ test.describe('new Agent stable identity enrollment', () => {
       })
     } finally {
       deniedEnrollmentPlugin.dispose()
-    }
-
-    const deniedCapabilityPlugin = createRestishAgentPlugin(baseURL)
-    try {
-      const whoami = deniedCapabilityPlugin.firstWhoami('Denied Capability Agent')
-      await page.goto(await whoami.approvalUrl)
-      await page.getByRole('button', { name: 'Approve login' }).click()
-      await whoami.result
-
-      const capabilityRequest = deniedCapabilityPlugin.requestCapabilities(
-        ['applications:read'],
-        'Verify explicit controller denial',
-      )
-      const capabilityResult = capabilityRequest.result.catch((error: unknown) => error)
-      await page.goto(await capabilityRequest.approvalUrl)
-      await page.getByRole('button', { name: 'Deny' }).click()
-      await expect(page.getByRole('heading', { name: 'Authorization denied' })).toBeVisible()
-      await expect(capabilityResult).resolves.toMatchObject({
-        message: expect.stringContaining('controller interaction denied'),
-      })
-    } finally {
-      deniedCapabilityPlugin.dispose()
     }
   })
 })

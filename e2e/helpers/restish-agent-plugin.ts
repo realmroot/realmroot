@@ -20,17 +20,6 @@ export interface PendingWhoami {
   result: Promise<PluginIdentityResult>
 }
 
-export interface CapabilityRequestResult {
-  agentId: string
-  status: 'completed'
-  capabilities: Array<{ value: string; status: string }>
-}
-
-export interface PendingCapabilityRequest {
-  approvalUrl: Promise<string>
-  result: Promise<CapabilityRequestResult>
-}
-
 export interface PendingResourceAccess<T> {
   approvalUrl: Promise<string>
   result: Promise<T>
@@ -39,14 +28,12 @@ export interface PendingResourceAccess<T> {
 export interface RestishAgentPlugin {
   firstWhoami(name: string): PendingWhoami
   whoami(): PluginIdentityResult
-  requestCapabilities(capabilities: string[], reason: string): PendingCapabilityRequest
   listResourceServers<T>(): T
   listResources<T>(resourceServerId: string): T
   connectResource<T>(resourceId: string, input: unknown): PendingResourceAccess<T>
   requestResourceAccess<T>(input: unknown): PendingResourceAccess<T>
   connectTarget(apiName: string, resourceUrl: string): void
   targetRequest<T>(apiName: string, path: string): T
-  listApplications(): { applications: unknown[] }
   dispose(): void
 }
 
@@ -186,8 +173,6 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   return {
     firstWhoami: (name) => invokePending<PluginIdentityResult>(['whoami'], undefined, { REALMROOT_AGENT_NAME: name }),
     whoami: () => invoke<PluginIdentityResult>(['whoami']),
-    requestCapabilities: (capabilities, reason) =>
-      invokePending<CapabilityRequestResult>(['request-capabilities'], { capabilities, reason }),
     listResourceServers: <T>() => get<T>(`${origin}/api/resource-servers?limit=100&offset=0`),
     listResources: <T>(resourceServerId: string) =>
       get<T>(`${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources?limit=100&offset=0`),
@@ -235,7 +220,6 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
         )
       }
     },
-    listApplications: () => invoke<{ applications: unknown[] }>(['list-applications']),
     dispose: () => rmSync(root, { recursive: true, force: true }),
   }
 }

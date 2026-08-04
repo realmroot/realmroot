@@ -41,8 +41,8 @@ type capabilityGrantSummary struct {
 	Status     string `json:"status"`
 }
 
-type identityResponse struct {
-	Agent stableIdentity `json:"agent"`
+type agentSelfStatusResponse struct {
+	Agent *stableIdentity `json:"agent"`
 }
 
 type targetTokenResponse struct {
@@ -274,22 +274,34 @@ func ensureAgentIdentity(
 		return agentState{}, err
 	}
 
-	var identity identityResponse
+	var enrollment map[string]any
 	if err := requestJSON(
 		ctx,
 		client,
 		http.MethodPost,
 		configuration.AgentEnrollmentEndpoint,
 		mustAgentJWT(state, configuration.Issuer),
-		map[string]any{"name": state.Name},
-		&identity,
+		map[string]any{"kind": "new_identity", "name": state.Name},
+		&enrollment,
 	); err != nil {
 		return agentState{}, err
 	}
-	if identity.Agent.ID == "" || identity.Agent.Issuer != configuration.AgentIdentityIssuer || identity.Agent.Subject == "" {
+	var status agentSelfStatusResponse
+	if err := requestJSON(
+		ctx,
+		client,
+		http.MethodGet,
+		configuration.AgentEndpoint,
+		mustAgentJWT(state, configuration.Issuer),
+		nil,
+		&status,
+	); err != nil {
+		return agentState{}, err
+	}
+	if status.Agent == nil || status.Agent.ID == "" || status.Agent.Issuer != configuration.AgentIdentityIssuer || status.Agent.Subject == "" {
 		return agentState{}, errors.New("Agent identity response is missing issuer or subject")
 	}
-	state.Identity = &identity.Agent
+	state.Identity = status.Agent
 	state.RegistrationApproval = nil
 	if err := states.Update(target, state); err != nil {
 		return agentState{}, err
