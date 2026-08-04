@@ -195,6 +195,20 @@ The plugin matches the request URL to the active Resource credential and adds
 `Authorization: DPoP ...` plus a fresh DPoP proof. Business traffic goes
 directly to the Resource Server, not through Realmroot.
 
+When an operation's OpenAPI response declares a header that must be forwarded
+to a later request, capture that header explicitly. Restish changes its default
+display when stdout is piped, so a header visible in an interactive terminal is
+not guaranteed to be present in command substitution:
+
+```bash
+RESPONSE_HEADERS=$(restish "$TARGET_API" operation-name --rsh-print h -o json)
+```
+
+Read the declared header from `RESPONSE_HEADERS` and forward it unchanged. Do
+not reconstruct a protocol header from the JSON response body. Use
+`--rsh-print b` separately when the response body is also needed; replay only
+when the operation contract guarantees idempotency.
+
 On `401`, the plugin removes the rejected cached credential. Rediscover the
 Resource, repeat the access request, and retry only after it succeeds. On
 `403`, surface the target's authority error; do not broaden scopes without the
