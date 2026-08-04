@@ -1,6 +1,6 @@
 ---
 name: realmroot
-description: Discover and use private Agent capabilities through Realmroot, an identity-backed toolbox for registered Resource Servers. Use when a task needs authenticated storage, wallet/payment, a paid or private API, another registered capability, Realmroot Agent identity and resource access, tenant administration, or product OIDC clients.
+description: Discover and use private Agent capabilities through Realmroot, an identity-backed toolbox for registered Resource Servers. Use when a task needs an authenticated or paid private API, another registered capability, Realmroot Agent identity and resource access, tenant administration, or product OIDC clients.
 ---
 
 # Realmroot

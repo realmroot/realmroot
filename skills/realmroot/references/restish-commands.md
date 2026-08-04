@@ -51,8 +51,8 @@ Otherwise request only the scopes needed to discover or use the target:
 ```bash
 restish "$API_NAME" connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<'JSON'
 {
-  "scopes": ["objects:read"],
-  "reason": "List files for the controller"
+  "scopes": ["<required-scope>"],
+  "reason": "Use the requested capability for the controller"
 }
 JSON
 ```
@@ -69,8 +69,8 @@ command with that Resource href:
 restish "$API_NAME" connect "$RESOURCE_SERVER_ID" --rsh-validate -o json <<JSON
 {
   "resources": [{"href": "$RESOURCE_HREF"}],
-  "scopes": ["objects:read"],
-  "reason": "Authorize this workspace for the controller"
+  "scopes": ["$REQUIRED_SCOPE"],
+  "reason": "Authorize the selected resource for the controller"
 }
 JSON
 ```
@@ -104,13 +104,37 @@ Resource matches, report that result. A native service normally exposes one
 
 Use the selected Resource Server's `serviceUrl`. Reuse one semantic Restish API
 name for the logical target service; use profiles for local, staging, account,
-or tenant contexts.
+or tenant contexts. An environment is never a separate API.
 
 ```bash
-TARGET_API=zpan
-restish api connect "$TARGET_API" "$SERVICE_URL" --yes
+TARGET_API=target-service
+restish api list
+restish api inspect "$TARGET_API"
 restish "$TARGET_API" --help
 ```
+
+If the stable API entry is absent, connect its production service URL once:
+
+```bash
+restish api connect "$TARGET_API" "$PRODUCTION_SERVICE_URL" --yes
+```
+
+If the entry exists and this task explicitly targets another deployment, add
+or update a profile on it instead of reconnecting under a new name:
+
+```bash
+TARGET_PROFILE=staging
+restish api set "$TARGET_API" \
+  "profiles.${TARGET_PROFILE}.base_url: ${SERVICE_URL}"
+restish api inspect "$TARGET_API"
+export RSH_PROFILE="$TARGET_PROFILE"
+```
+
+The `default` profile remains production. Do not pre-create non-production
+profiles for external users; profiles are local configuration added only when
+that environment is actually selected. Explicit cleanroom validation must use
+the isolated `RSH_CONFIG_DIR` from the setup reference so temporary target
+connections never appear in the operator's normal `restish api list`.
 
 The target's OpenAPI security requirements define the exact operation and
 scope. Bind its declared OIDC security scheme to the generic Realmroot target
@@ -135,17 +159,17 @@ deployment can authorize the same target URL.
 
 Before invoking the target, request one short-lived credential for the selected
 Resource and the complete current task. Include the union of scopes required by
-the task's known operations, but no unrelated scopes. For example, a file
-management task that will create, inspect, rename, and delete an object requests
-`objects:create`, `objects:read`, `objects:update`, and `objects:delete` once.
-This is task-level least privilege, not one access request per HTTP operation.
+the task's known operations, but no unrelated scopes. This is task-level least
+privilege, not one access request per HTTP operation. Derive every scope from
+the selected Resource Server's published contract; do not assume scope names
+from another service.
 
 ```bash
 restish "$API_NAME" access --rsh-validate -o json <<JSON
 {
   "resource": {"href": "$RESOURCE_HREF"},
-  "scopes": ["objects:create", "objects:read", "objects:update", "objects:delete"],
-  "reason": "Create, inspect, rename, and delete a file for the controller"
+  "scopes": ["$REQUIRED_SCOPE"],
+  "reason": "Perform the requested operation on the selected resource"
 }
 JSON
 ```
@@ -159,9 +183,9 @@ stores it with the Resource href, and returns a safe receipt:
 ```json
 {
   "status": "ready",
-  "resource": {"href": "https://id.realmroot.dev/api/resource-servers/zpan/resources/workspace-1"},
-  "resourceIndicator": "https://drive.zpan.space/api",
-  "scopes": ["objects:read"],
+  "resource": {"href": "https://id.realmroot.dev/api/resource-servers/service-id/resources/resource-id"},
+  "resourceIndicator": "https://api.example.com",
+  "scopes": ["<required-scope>"],
   "tokenExpiresAt": "2026-08-03T16:30:00Z"
 }
 ```

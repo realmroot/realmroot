@@ -70,22 +70,29 @@ Preparation is complete when all three required versions are confirmed.
 The adapter keeps the Realmroot identity stable per Agent runtime and isolates
 the current target credential by Agent session when the runtime exposes a
 session identifier. Normally use its default state directory. For an explicit
-cleanroom run or a runtime without session identity, allocate one directory
-before the first command and export it for the entire shell session:
+cleanroom run, isolate both the Restish registry and the adapter state before
+the first command. This prevents temporary API connections, profiles, tokens,
+and plugin state from polluting the operator's normal Restish configuration:
 
 ```bash
+RESTISH_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/realmroot-restish.XXXXXX")"
 AGENT_STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/realmroot-agent.XXXXXX")"
+chmod 700 "$RESTISH_CONFIG_DIR"
 chmod 700 "$AGENT_STATE_DIR"
+export RSH_CONFIG_DIR="$RESTISH_CONFIG_DIR"
 export REALMROOT_PLUGIN_STATE_DIR="$AGENT_STATE_DIR"
 ```
 
-Export this variable once for the whole workflow. Every Realmroot and target
-Restish command must inherit it. Keep the directory for the duration of the
-workflow.
+Export both variables once for the whole cleanroom workflow. Every Realmroot
+and target Restish command must inherit them. Keep both directories for the
+duration of the workflow. Do not use an isolated Restish registry for an
+ordinary persistent setup: its stable service connections belong in the
+normal config.
 
-Isolation is complete when `REALMROOT_PLUGIN_STATE_DIR` is exported once and
-the identity, access, token, and target-operation commands all run in that same
-shell environment.
+Isolation is complete when `RSH_CONFIG_DIR` and
+`REALMROOT_PLUGIN_STATE_DIR` are exported once and the connect, identity,
+access, token, and target-operation commands all run in that same shell
+environment.
 
 ## Hand Off Controller Approval In Non-Interactive Runtimes
 
@@ -107,8 +114,16 @@ its terminal result. Remove the file before each new approval-bearing command.
 
 ## Connect The API
 
-The `default` profile is production. Connect the hosted production contract to
-the stable API name:
+The `default` profile is production. First inspect the registry. There must be
+at most one entry for the logical Realmroot service, named `realmroot`; never
+create an environment-specific API alias:
+
+```bash
+restish api list
+restish api inspect "$API_NAME"
+```
+
+Only when the stable entry is absent, connect the hosted production contract:
 
 ```bash
 PRODUCTION_AUTH_ORIGIN=https://id.realmroot.dev
@@ -122,8 +137,9 @@ restish api inspect "$API_NAME"
 restish api sync "$API_NAME"
 ```
 
-Represent a non-production deployment with the `local` or `staging` profile
-under the same API name.
+Represent an explicitly requested non-production deployment with a `local` or
+`staging` profile under the same API name. External users need only the
+`default` production profile unless they intentionally use another deployment.
 
 Connection is complete when inspection shows the resolved origin as either the
 default base URL or the selected profile base URL.
