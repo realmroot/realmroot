@@ -18,7 +18,6 @@ import {
   getAgentResourceApproval,
   listApprovalAccountConnections,
   listApprovalAuthorizationDetailCatalog,
-  listExternalApiResources,
 } from '@/lib/api/account'
 import { toLocalDateTimeValue } from '@/lib/date-time'
 
@@ -40,7 +39,6 @@ export function ResourceAccessApproval() {
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [agentName, setAgentName] = useState<string | null>(null)
   const [resourceName, setResourceName] = useState<string | null>(null)
-  const [requiresAccountConnection, setRequiresAccountConnection] = useState(false)
   const [mode, setMode] = useState<ApprovalMode>('once')
   const [expiresAt, setExpiresAt] = useState('')
   const [decision, setDecision] = useState<'approved' | 'denied' | null>(null)
@@ -61,7 +59,6 @@ export function ResourceAccessApproval() {
     setCatalogError(null)
     setAgentName(null)
     setResourceName(null)
-    setRequiresAccountConnection(false)
     setDecision(null)
     setError(callbackError)
     if (!token) {
@@ -70,10 +67,7 @@ export function ResourceAccessApproval() {
     }
     void getAgentResourceApproval(token)
       .then(async (accessRequest) => {
-        const [availableConnections, resources] = await Promise.all([
-          listApprovalAccountConnections(token),
-          listExternalApiResources(),
-        ])
+        const availableConnections = await listApprovalAccountConnections(token)
         if (availableConnections.items.length > 1) {
           throw new Error('This resource has more than one connected account.')
         }
@@ -82,9 +76,6 @@ export function ResourceAccessApproval() {
         setConnection(availableConnection)
         setAgentName(accessRequest.agent.name)
         setResourceName(accessRequest.resource.name)
-        setRequiresAccountConnection(
-          resources.items.some((resource) => resource.id === accessRequest.resourceServer.id),
-        )
         if (
           availableConnection &&
           accessRequest.authorizationDetails.length > 0 &&
@@ -104,23 +95,33 @@ export function ResourceAccessApproval() {
   }, [callbackError, token])
 
   async function submit(nextDecision: 'approve' | 'deny') {
+    if (!request) {
+      setError('This resource access request is not ready.')
+      return
+    }
     if (nextDecision === 'approve' && mode === 'until' && !isFutureExpiry(expiresAt)) {
       setError('Choose a future expiry date and time.')
       return
     }
+    let input: DecideAccessRequest
+    if (nextDecision === 'deny') {
+      input = { decision: 'deny' }
+    } else {
+      if (approvedAuthorizationDetails === null) {
+        setError('Resolve every authorization detail before approving.')
+        return
+      }
+      input = {
+        decision: 'approve',
+        mode,
+        authorizationDetails: approvedAuthorizationDetails,
+        ...(mode === 'until' ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
+      }
+    }
     setSubmitting(true)
     setError(null)
     try {
-      const input: DecideAccessRequest =
-        nextDecision === 'deny'
-          ? { decision: 'deny' }
-          : {
-              decision: 'approve',
-              mode,
-              authorizationDetails: approvedAuthorizationDetails!,
-              ...(mode === 'until' ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
-            }
-      await decideAgentResourceApproval(request!.id, token, input)
+      await decideAgentResourceApproval(request.id, token, input)
       clearStoredApproval()
       setDecision(nextDecision === 'approve' ? 'approved' : 'denied')
     } catch (cause) {
@@ -147,12 +148,14 @@ export function ResourceAccessApproval() {
     }
   }
 
+  const requiresAccountConnection = request?.requiresAccountConnection ?? true
   const authorizationDetailResolution = resolveAuthorizationDetails(
     request?.authorizationDetails ?? [],
     request?.resource.authorizationDetailTemplates ?? [],
     connection?.authorizationDetails ?? [],
     authorizationDetailCatalog,
     authorizationDetailSelections,
+    requiresAccountConnection,
   )
   const approvedAuthorizationDetails = authorizationDetailResolution.approved
   const connectionCoversRequest =
@@ -375,7 +378,8 @@ export function ResourceAccessApproval() {
             disabled={
               !request ||
               submitting ||
-              (requiresAccountConnection && (!connectionCoversRequest || approvedAuthorizationDetails === null)) ||
+              approvedAuthorizationDetails === null ||
+              (requiresAccountConnection && !connectionCoversRequest) ||
               !expiryIsValid
             }
             onClick={() => void submit('approve')}
@@ -422,7 +426,20 @@ function resolveAuthorizationDetails(
   connected: AccountConnection['authorizationDetails'],
   catalog: AuthorizationDetailCatalogEntry[],
   selections: Record<number, string>,
+  requiresAccountConnection: boolean,
 ) {
+  if (!requiresAccountConnection) {
+    return {
+      requirements: requested.map((detail, index) => ({
+        index,
+        kind: 'fixed' as const,
+        requested: detail,
+        authorized: true,
+      })),
+      accountAuthorized: true,
+      approved: requested,
+    }
+  }
   const requirements = requested.map((detail, index) => {
     const exactConnected = connected.some((candidate) => canonicalJson(candidate) === canonicalJson(detail))
     const generic = templates.some((template) => canonicalJson(template) === canonicalJson(detail))

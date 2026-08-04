@@ -8,7 +8,6 @@ const api = vi.hoisted(() => ({
   getAgentResourceApproval: vi.fn(),
   listApprovalAuthorizationDetailCatalog: vi.fn(),
   listApprovalAccountConnections: vi.fn(),
-  listExternalApiResources: vi.fn(),
 }))
 
 vi.mock('@/lib/api/account', () => api)
@@ -24,6 +23,7 @@ const request = {
   },
   scopes: ['projects:read'],
   authorizationDetails: [{ type: 'project', project_id: 'project-1', actions: ['read'] }],
+  requiresAccountConnection: true,
   reason: 'Read project status',
   status: 'pending' as const,
   interaction: { type: 'user-approval' as const, status: 'pending' as const, url: null, expiresAt: null },
@@ -61,6 +61,24 @@ const connection = {
   updatedAt: '2026-08-01T00:00:00.000Z',
 }
 
+const nativeAuthorizationDetails = [{ type: 'realmroot_authority', authority: 'account', id: 'user-1' }]
+
+const nativeRequest = {
+  ...request,
+  scopes: ['account:read'],
+  authorizationDetails: nativeAuthorizationDetails,
+  requiresAccountConnection: false,
+  resourceServer: { id: 'resource-1', name: 'Realmroot' },
+  resource: {
+    id: 'user-1',
+    name: 'Example User',
+    type: 'realmroot_authority',
+    description: null,
+    metadata: { authority: 'account', userId: 'user-1' },
+    authorizationDetailTemplates: [{ type: 'realmroot_authority', authority: 'account' }],
+  },
+}
+
 describe('Agent resource access approval', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/agent/resource-access/approve')
@@ -80,17 +98,6 @@ describe('Agent resource access approval', () => {
           connectionStatus: 'authorized',
           authorizedScopes: [],
           requestableScopes: [],
-        },
-      ],
-      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
-    })
-    api.listExternalApiResources.mockResolvedValue({
-      items: [
-        {
-          id: 'resource-1',
-          name: 'ZPan',
-          identifier: 'zpan',
-          resourceUrl: 'https://zpan.test/api',
         },
       ],
       pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
@@ -301,6 +308,7 @@ describe('Agent resource access approval', () => {
       ...request,
       target: { type: 'resource', resource: request.target.resource },
       authorizationDetails: [],
+      requiresAccountConnection: false,
       resourceServer: { id: 'resource-1', name: 'Billing API' },
       resource: {
         id: 'service',
@@ -315,16 +323,63 @@ describe('Agent resource access approval', () => {
       items: [],
       pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
     })
-    api.listExternalApiResources.mockResolvedValue({
-      items: [],
-      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
-    })
-
     render(<ResourceAccessApproval />)
 
     expect(await screen.findByText('Billing API')).toBeTruthy()
     expect(screen.queryByText(/Connect your Billing API account/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Approve exact access' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('[spec: agent-identity/native-api-resource-access-request] approves exact native Account authority once without an account connection', async () => {
+    api.getAgentResourceApproval.mockResolvedValue(nativeRequest)
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [],
+      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+    })
+    render(<ResourceAccessApproval />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve exact access' }))
+    await waitFor(() =>
+      expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
+        decision: 'approve',
+        mode: 'once',
+        authorizationDetails: nativeAuthorizationDetails,
+      }),
+    )
+  })
+
+  it('approves exact native Account authority persistently without an account connection', async () => {
+    api.getAgentResourceApproval.mockResolvedValue(nativeRequest)
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [],
+      pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },
+    })
+    render(<ResourceAccessApproval />)
+
+    await screen.findByText('Example User')
+    fireEvent.click(screen.getByRole('radio', { name: 'Persistent until revoked' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve exact access' }))
+    await waitFor(() =>
+      expect(api.decideAgentResourceApproval).toHaveBeenCalledWith('request-1', 'approval token', {
+        decision: 'approve',
+        mode: 'persistent',
+        authorizationDetails: nativeAuthorizationDetails,
+      }),
+    )
+  })
+
+  it('does not submit external access while authorization details are unresolved', async () => {
+    api.listApprovalAccountConnections.mockResolvedValue({
+      items: [{ ...connection, authorizationDetails: [] }],
+      pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
+    })
+
+    render(<ResourceAccessApproval />)
+
+    const approve = await screen.findByRole('button', { name: 'Approve exact access' })
+    expect(approve.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(approve)
+    expect(api.decideAgentResourceApproval).not.toHaveBeenCalled()
   })
 
   it('[spec: agent-identity/external-resource-first-access] connects an account before allowing a separate approval', async () => {
@@ -354,7 +409,6 @@ describe('Agent resource access approval', () => {
   it('shows that the controller request is still loading before enabling decisions', () => {
     api.getAgentResourceApproval.mockReturnValue(new Promise(() => {}))
     api.listApprovalAccountConnections.mockReturnValue(new Promise(() => {}))
-    api.listExternalApiResources.mockReturnValue(new Promise(() => {}))
 
     render(<ResourceAccessApproval />)
 

@@ -725,6 +725,7 @@ function accessRequest(): AccessRequestApproval {
     },
     scopes: ['projects:read'],
     authorizationDetails: [],
+    requiresAccountConnection: true,
     reason: 'Read projects',
     status: 'pending',
     interaction: {

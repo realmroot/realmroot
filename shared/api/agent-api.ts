@@ -479,6 +479,7 @@ export const accessRequestsResponseSchema = z.object({
 
 export const accessRequestApprovalSchema = accessRequestSchema.extend({
   authorizationDetails: authorizationDetailsSchema,
+  requiresAccountConnection: z.boolean(),
   agent: z.object({ id: z.string(), name: z.string() }),
   resourceServer: z.object({ id: z.string(), name: z.string() }),
   resource: z.object({
