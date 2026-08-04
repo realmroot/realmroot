@@ -325,6 +325,13 @@ describe('Agent identity enrollment over real D1', () => {
     })
     expect(accessRequest).not.toHaveProperty('grantId')
 
+    const invalidApproval = await harness.request(`/api/account/access-requests/${accessRequest.id}/decision`, {
+      method: 'PUT',
+      headers: jsonHeaders(ownerCookie),
+      body: JSON.stringify({ decision: 'approve', mode: 'persistent', authorizationDetails: null }),
+    })
+    expect(invalidApproval.status).toBe(400)
+
     const approval = await harness.request(`/api/account/access-requests/${accessRequest.id}/decision`, {
       method: 'PUT',
       headers: jsonHeaders(ownerCookie),

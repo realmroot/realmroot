@@ -51,6 +51,13 @@ describe('Agent resource schemas', () => {
 
   it('requires approval mode and expiry for limited access decisions', () => {
     expect(decideAccessRequestSchema.safeParse({ decision: 'approve' }).success).toBe(false)
+    expect(
+      decideAccessRequestSchema.safeParse({
+        decision: 'approve',
+        mode: 'once',
+        authorizationDetails: null,
+      }).success,
+    ).toBe(false)
     expect(decideAccessRequestSchema.safeParse({ decision: 'approve', mode: 'until' }).success).toBe(false)
     expect(
       decideAccessRequestSchema.safeParse({

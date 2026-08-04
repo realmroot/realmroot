@@ -1038,6 +1038,7 @@ async function resolveAccessRequestApproval(deps: Deps, request: AccessRequest):
   return {
     ...request,
     authorizationDetails: record.authorizationDetails,
+    requiresAccountConnection: resource.connectorId !== null,
     agent: { id: identity.identity.id, name: identity.identity.name },
     resourceServer: { id: resource.id, name: resource.name },
     resource: {

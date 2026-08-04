@@ -3045,6 +3045,7 @@ describe('external API resource authorization', () => {
     vi.mocked(deps.externalResources.findAccessRequestByApprovalTokenHash).mockResolvedValue(pending)
 
     await expect(getAccountAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
+      requiresAccountConnection: false,
       resource: { name: 'User Display', type: 'realmroot_authority' },
     })
     await expect(getControllerAccessRequestByToken(deps, 'approval-token', 'user-1')).resolves.toMatchObject({
@@ -3575,6 +3576,7 @@ describe('external API resource authorization', () => {
       items: [
         {
           id: 'request-2',
+          requiresAccountConnection: true,
           agent: { id: 'identity-1', name: 'Project Agent' },
           resource: {
             id: 'service',

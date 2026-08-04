@@ -198,6 +198,7 @@ Feature: Agent identity and delegated API authorization
       And Realmroot creates the same pending access-request resource used for external APIs
       And it does not require a user-created authority grant or grant identifier
       When an authorized controller approves the request
+      Then the approval preserves the exact requested authorization details without an Account Connection
       Then Realmroot creates the same access-grant resource used for external APIs
 
     @entrypoint:agent-protocol @journey:agent-resource-discovery-isolation
