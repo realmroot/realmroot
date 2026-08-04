@@ -5,6 +5,10 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = true
 
+[[routes]]
+pattern = "id.realmroot.dev"
+custom_domain = true
+
 [vars]
 BETTER_AUTH_URL = "https://id.realmroot.dev"
 TRUSTED_ORIGINS = "https://id.realmroot.dev"
