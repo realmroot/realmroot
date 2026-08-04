@@ -1,1 +1,0 @@
-ALTER TABLE `agent_enrollment_intent` ADD `recovery` integer DEFAULT false NOT NULL;

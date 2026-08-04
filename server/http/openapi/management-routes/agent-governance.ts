@@ -1,7 +1,5 @@
 import {
   accessRequestSchema,
-  agentInstallationRevocationSchema,
-  agentRecoverySchema,
   auditEventsResponseSchema,
   decideAccessRequestSchema,
   listAgentAuditEventsQuerySchema,
@@ -19,7 +17,7 @@ import {
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
-import { jsonBody, type ManagementRouteConfig, managementErrorResponseSchema, z } from './helpers'
+import { jsonBody, type ManagementRouteConfig, z } from './helpers'
 
 export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   {
@@ -56,7 +54,6 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     summary: 'Get a stable Agent',
     request: { params: z.object({ agentId: z.string() }) },
     response: managementAgentResponseSchema,
-    security: [{ dpop: ['agents:read'] }, { sessionCookie: ['agents:read'] }],
   },
   {
     method: 'get',
@@ -65,26 +62,7 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     summary: 'List installations authorized for a stable Agent',
     request: { params: z.object({ agentId: z.string() }), query: paginationQuerySchema },
     response: managementAgentInstallationsResponseSchema,
-    security: [{ dpop: ['agent:read'] }, { dpop: ['agents:read'] }, { sessionCookie: ['agents:read'] }],
     errors: { 400: 'The pagination query is invalid.', 404: 'The Agent was not found.' },
-  },
-  {
-    method: 'get',
-    path: '/agents/{agentId}/installations/{installationId}/revocation',
-    operationId: 'getAgentInstallationRevocation',
-    summary: 'Get an Agent installation revocation',
-    request: { params: z.object({ agentId: z.string(), installationId: z.string() }) },
-    response: agentInstallationRevocationSchema,
-    security: [{ dpop: ['agent:read'] }, { dpop: ['agents:read'] }, { sessionCookie: ['agents:read'] }],
-  },
-  {
-    method: 'put',
-    path: '/agents/{agentId}/installations/{installationId}/revocation',
-    operationId: 'replaceAgentInstallationRevocation',
-    summary: 'Create or replace an Agent installation revocation',
-    request: { params: z.object({ agentId: z.string(), installationId: z.string() }) },
-    response: agentInstallationRevocationSchema,
-    security: [{ dpop: ['agent:write'] }, { dpop: ['agents:write'] }, { sessionCookie: ['agents:write'] }],
   },
   {
     method: 'get',
@@ -152,30 +130,11 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/agents/{agentId}/recovery',
-    operationId: 'getAgentRecovery',
-    summary: 'Get an Agent recovery',
-    request: { params: z.object({ agentId: z.string() }) },
-    response: agentRecoverySchema,
-    security: [{ dpop: ['agent:read'] }, { dpop: ['agents:read'] }, { sessionCookie: ['agents:read'] }],
-  },
-  {
-    method: 'put',
-    path: '/agents/{agentId}/recovery',
-    operationId: 'replaceAgentRecovery',
-    summary: 'Create or replace an Agent recovery',
-    request: { params: z.object({ agentId: z.string() }) },
-    response: agentRecoverySchema,
-    security: [{ dpop: ['agent:write'] }, { dpop: ['agents:write'] }, { sessionCookie: ['agents:write'] }],
-  },
-  {
-    method: 'get',
     path: '/agents/{agentId}/retirement',
     operationId: 'getAgentRetirement',
     summary: 'Get an Agent retirement',
     request: { params: z.object({ agentId: z.string() }) },
     response: z.object({ agentId: z.string(), status: z.string(), retiredAt: z.string().nullable() }),
-    security: [{ dpop: ['agent:read'] }, { dpop: ['agents:read'] }, { sessionCookie: ['agents:read'] }],
   },
   {
     method: 'put',
@@ -184,17 +143,14 @@ export const agentGovernanceRoutes: ManagementRouteConfig[] = [
     summary: 'Create or replace an Agent retirement',
     request: { params: z.object({ agentId: z.string() }) },
     noBody: true,
-    security: [{ dpop: ['agent:write'] }, { dpop: ['agents:write'] }, { sessionCookie: ['agents:write'] }],
   },
   {
     method: 'delete',
     path: '/agents/{agentId}/retirement',
     operationId: 'deleteAgentRetirement',
-    summary: 'Unsupported legacy retirement deletion',
-    deprecated: true,
+    summary: 'Delete an Agent retirement',
     request: { params: z.object({ agentId: z.string() }) },
-    status: 410,
-    response: managementErrorResponseSchema,
+    noBody: true,
   },
   {
     method: 'get',

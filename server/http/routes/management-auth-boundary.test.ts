@@ -84,8 +84,7 @@ describe('management routes 1', () => {
       }
       expect(operation.declaredPathParameters, operation.key).toEqual(operation.pathParameters)
       const requiredScope = requiredProtectedScope(operation.method, operation.key.slice(operation.method.length + 1))
-      const serializedSecurity = JSON.stringify(operation.security)
-      if (requiredScope && !serializedSecurity.includes('"agent:') && serializedSecurity.includes('sessionCookie')) {
+      if (requiredScope && JSON.stringify(operation.security).includes('sessionCookie')) {
         expect(operation.security, operation.key).toEqual([
           { dpop: [requiredScope] },
           { sessionCookie: [requiredScope] },
@@ -140,7 +139,7 @@ describe('management routes 1', () => {
     expect(protectedResponse.headers.get('link')).toContain('</api/openapi.json>; rel="service-desc"')
   })
 
-  it('reserves Agent lifecycle commands for the plugin and generates only remote workflows [spec: management-api/management-restish-command-surface]', () => {
+  it('limits generated Restish commands to discovery, approval, and credential workflows [spec: management-api/management-restish-command-surface]', () => {
     const generatedCommands = openApiOperationObjects()
       .filter((operation) => operation.cliHidden !== true)
       .map((operation) => ({
@@ -288,24 +287,6 @@ describe('management routes 1', () => {
     await expect(agent.json()).resolves.toMatchObject({
       agent: { issuer: 'http://localhost/api/auth', subject: 'agt_1' },
     })
-
-    const selfRetirement = await app.request('/api/agents/identity-1/retirement', {
-      headers: await headers('GET', '/api/agents/identity-1/retirement'),
-    })
-    const otherRetirement = await app.request('/api/agents/identity-2/retirement', {
-      headers: await headers('GET', '/api/agents/identity-2/retirement'),
-    })
-    expect(selfRetirement.status).toBe(200)
-    expect(otherRetirement.status).toBe(403)
-
-    scopes = ['agent:write']
-    vi.mocked(deps.agentIdentities.recoverIdentity).mockResolvedValue(true)
-    const recovery = await app.request('/api/agents/identity-1/recovery', {
-      method: 'PUT',
-      headers: await headers('PUT', '/api/agents/identity-1/recovery'),
-    })
-    expect(recovery.status, await recovery.clone().text()).toBe(200)
-    await expect(recovery.json()).resolves.toMatchObject({ agentId: 'identity-1', status: 'recovering' })
 
     scopes = ['resource-servers:read']
     const discovery = await app.request('/api/resource-servers', {

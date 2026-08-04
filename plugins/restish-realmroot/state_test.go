@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -131,32 +130,6 @@ func TestFileStateStoreUpgradeDropsLegacyGrantCredentialCache(t *testing.T) {
 	}
 }
 
-func TestFileStateStoreUpgradeRefreshesPreWriteScopePlatformCredential(t *testing.T) {
-	store := &fileStateStore{root: t.TempDir()}
-	target := agentTarget{API: "realmroot", Profile: "default", Runtime: defaultAgentRuntime,
-		Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth"}
-	state := newCredentialState(t, testCredential(t, "target-token", time.Now().Add(time.Minute))).state
-	state.Version = 8
-	path := store.path(target)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	encoded, err := json.Marshal(state)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, encoded, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	upgraded, err := store.Load(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if upgraded.Version != agentStateVersion || upgraded.PlatformCredential != nil {
-		t.Fatalf("pre-agent:write platform credential survived upgrade: %#v", upgraded.PlatformCredential)
-	}
-}
-
 func TestFileStateStoreFindsGenericCredentialByResourceIndicator(t *testing.T) {
 	store := &fileStateStore{root: t.TempDir()}
 	target := agentTarget{
@@ -263,65 +236,4 @@ func TestFileStateStoreKeysIdentityByIssuerAndRuntime(t *testing.T) {
 			t.Fatal("different Realmroot issuers shared an Agent identity path")
 		}
 	})
-}
-
-func TestFileStateStoreDoesNotResurrectDeletedStateFromStaleWriter(t *testing.T) {
-	store := &fileStateStore{root: t.TempDir()}
-	target := agentTarget{
-		API: "realmroot", Profile: "default", Runtime: defaultAgentRuntime,
-		Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
-	}
-	state := newCredentialState(t, testCredential(t, "target-token", time.Now().Add(time.Minute))).state
-	if _, err := store.Create(target, state); err != nil {
-		t.Fatal(err)
-	}
-	stale, err := store.Load(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Delete(target); err != nil {
-		t.Fatal(err)
-	}
-	stale.Name = "stale writer"
-	if err := store.Update(target, stale); err == nil {
-		t.Fatal("stale writer recreated deleted Agent state")
-	}
-	if _, err := os.Stat(store.path(target)); !os.IsNotExist(err) {
-		t.Fatalf("deleted Agent state exists: %v", err)
-	}
-}
-
-func TestFileStateStoreRejectsStaleConcurrentUpdate(t *testing.T) {
-	store := &fileStateStore{root: t.TempDir()}
-	target := agentTarget{
-		API: "realmroot", Profile: "default", Runtime: defaultAgentRuntime,
-		Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
-	}
-	state := newCredentialState(t, testCredential(t, "target-token", time.Now().Add(time.Minute))).state
-	if _, err := store.Create(target, state); err != nil {
-		t.Fatal(err)
-	}
-	first, err := store.Load(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	stale, err := store.Load(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first.RecoveryIdentity = first.Identity
-	if err := store.Update(target, first); err != nil {
-		t.Fatal(err)
-	}
-	stale.Name = "stale writer"
-	if err := store.Update(target, stale); err == nil || !strings.Contains(err.Error(), "changed concurrently") {
-		t.Fatalf("stale update error = %v", err)
-	}
-	current, err := store.Load(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if current.RecoveryIdentity == nil || current.Name == "stale writer" {
-		t.Fatalf("stale update replaced current state: %#v", current)
-	}
 }

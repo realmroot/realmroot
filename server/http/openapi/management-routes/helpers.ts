@@ -123,7 +123,6 @@ export interface ManagementRouteConfig {
   path: string
   operationId: string
   summary: string
-  deprecated?: boolean
   cli?: {
     group?: 'auth'
     name: string
@@ -138,7 +137,7 @@ export interface ManagementRouteConfig {
   response?: ZodType
   noBody?: boolean
   responseHeaders?: Record<string, { description: string; schema: Record<string, unknown> }>
-  errors?: Partial<Record<400 | 404 | 409 | 410 | 412 | 422 | 428 | 429 | 502, string>>
+  errors?: Partial<Record<400 | 404 | 409 | 412 | 422 | 428 | 429 | 502, string>>
   security?: Array<Record<string, string[]>>
 }
 export const jsonContentType = 'application/json'

@@ -806,7 +806,6 @@ export interface AgentEnrollmentIntentRecord {
   ownerOrganizationId: string | null
   protocolAgentId: string
   idempotencyKey: string | null
-  recovery: boolean
   status: string
   createdByUserId: string
   approvedByUserId: string | null

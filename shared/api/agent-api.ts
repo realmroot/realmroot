@@ -56,10 +56,6 @@ export const createAgentSelfEnrollmentSchema = z.discriminatedUnion('kind', [
     kind: z.literal('additional_installation'),
     agentId: nonEmptyString,
   }),
-  z.object({
-    kind: z.literal('recovery_installation'),
-    agentId: nonEmptyString,
-  }),
 ])
 export const managementAgentSchema = agentSchema.extend({
   owner: z.object({
@@ -118,17 +114,7 @@ export const managementAgentInstallationsResponseSchema = z.object({
   items: z.array(managementAgentInstallationSchema),
   pagination: paginationMetadataSchema,
 })
-export const agentInstallationRevocationSchema = z.object({
-  agentId: z.string(),
-  installationId: z.string(),
-  status: z.literal('revoked'),
-  revokedAt: z.iso.datetime(),
-})
-export const agentRecoverySchema = z.object({
-  agentId: z.string(),
-  status: z.literal('recovering'),
-  startedAt: z.iso.datetime(),
-})
+
 const managementAgentResourceSchema = z.object({
   id: z.string(),
   identifier: z.string(),
@@ -184,7 +170,7 @@ export const agentEnrollmentSchema = z.object({
   id: z.string(),
   agentId: z.string().nullable(),
   name: z.string(),
-  kind: z.enum(['new_identity', 'additional_host', 'recovery']),
+  kind: z.enum(['new_identity', 'additional_host']),
   homeSpace: agentHomeSpaceSchema,
   status: agentEnrollmentStatusSchema,
   expiresAt: z.iso.datetime(),
@@ -203,7 +189,7 @@ export const createAgentInstallationEnrollmentSchema = z.object({
 })
 
 export const agentInstallationEnrollmentSchema = agentEnrollmentSchema.extend({
-  kind: z.enum(['additional_host', 'recovery']),
+  kind: z.literal('additional_host'),
 })
 
 export const agentInstallationEnrollmentResponseSchema = z.object({

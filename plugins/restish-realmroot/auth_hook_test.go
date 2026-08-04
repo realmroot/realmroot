@@ -25,76 +25,80 @@ func TestAuthHookIgnoresUnmarkedProfiles(t *testing.T) {
 	}
 }
 
-func TestAuthHookEnrollsOnceThenSignsOriginalRequest(t *testing.T) {
-	t.Setenv("REALMROOT_AGENT_NAME", "Build Agent")
+func TestAuthHookDoesNotImplicitlyEnroll(t *testing.T) {
+	t.Log("[spec: management-api/management-restish-agent-auth]")
+	t.Setenv("AGENT", "codex")
 	requests := 0
-	states := &memoryStateStore{}
-	prompt := &promptRecorder{}
-	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+	client := roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		requests++
-		switch requests {
-		case 1, 6:
-			return jsonResponse(200, testAgentConfiguration()), nil
-		case 2:
-			return jsonResponse(200, map[string]any{
-				"agent_id": "agent-123", "host_id": "host-123",
-				"approval": map[string]any{
-					"verification_uri_complete": "https://auth.example.com/agent/approve?code=abc",
-					"expires_in":                600, "interval": 1,
-				},
-			}), nil
-		case 3:
-			return jsonResponse(200, map[string]any{"status": "active"}), nil
-		case 4:
-			if request.Method != http.MethodPost || request.URL.String() != "https://auth.example.com/api/auth/oauth2/token" {
-				t.Fatalf("token request = %s %s", request.Method, request.URL)
-			}
-			if err := request.ParseForm(); err != nil {
-				t.Fatal(err)
-			}
-			if request.Form.Get("grant_type") != "urn:ietf:params:oauth:grant-type:jwt-bearer" ||
-				request.Form.Get("resource") != "https://auth.example.com/api" || request.Form.Get("scope") != platformScopes ||
-				request.Header.Get("DPoP") == "" {
-				t.Fatalf("token request form = %#v", request.Form)
-			}
-			return jsonResponse(200, map[string]any{
-				"access_token": "platform-token", "token_type": "DPoP", "expires_in": 300,
-			}), nil
-		case 5:
-			if request.Method != http.MethodGet || request.URL.String() != "https://auth.example.com/api/agent/status" {
-				t.Fatalf("status request = %s %s", request.Method, request.URL)
-			}
-			return jsonResponse(201, map[string]any{"agent": map[string]any{
-				"id": "agent-identity-1", "issuer": "https://auth.example.com/api/auth", "subject": "agt_123",
-			}}), nil
-		default:
-			t.Fatalf("unexpected request: %s %s", request.Method, request.URL)
-			return nil, nil
-		}
+		return jsonResponse(200, testAgentConfiguration()), nil
 	})
 	input := plugin.AuthHookInput{
 		API: "realmroot", Profile: "default", Params: map[string]string{"provider": authProvider},
 		Request: plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent-identities/current"},
 	}
+	_, err := authenticateRequest(input, &memoryStateStore{}, client, &promptRecorder{})
+	if err == nil || !strings.Contains(err.Error(), "not logged in") {
+		t.Fatalf("error = %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("unexpected network requests = %d", requests)
+	}
+}
 
-	output, err := authenticateRequest(input, states, client, prompt)
+func TestWhoamiNeverRefreshesAnExpiredLocalToken(t *testing.T) {
+	t.Log("[spec: agent-identity/restish-agent-whoami]")
+	t.Setenv("AGENT", "codex")
+	states := newCredentialState(t, testCredential(t, "resource-token", time.Now().Add(time.Minute)))
+	expired := time.Now().Add(-time.Minute)
+	states.state.PlatformCredential.ExpiresAt = &expired
+	requests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if request.URL.String() != "https://auth.example.com/.well-known/agent-configuration" {
+			t.Fatalf("whoami attempted %s %s", request.Method, request.URL)
+		}
+		return jsonResponse(200, testAgentConfiguration()), nil
+	})
+	input := plugin.AuthHookInput{
+		API: "realmroot", Profile: "default", Params: map[string]string{"provider": authProvider},
+		Request: plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent/status"},
+	}
+	_, err := authenticateRequest(input, states, client, &promptRecorder{})
+	if err == nil || !strings.Contains(err.Error(), "valid local token") {
+		t.Fatalf("error = %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("whoami network requests = %d", requests)
+	}
+}
+
+func TestWhoamiNeverSelectsOrRefreshesResourceCredential(t *testing.T) {
+	t.Log("[spec: agent-identity/restish-agent-whoami]")
+	credential := testCredential(t, "expired-resource-token", time.Now().Add(-time.Minute))
+	credential.ResourceIndicator = "https://auth.example.com/api"
+	states := newCredentialState(t, credential)
+	requests := 0
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if request.URL.String() != "https://auth.example.com/.well-known/agent-configuration" {
+			t.Fatalf("whoami attempted %s %s", request.Method, request.URL)
+		}
+		return jsonResponse(200, testAgentConfiguration()), nil
+	})
+	input := plugin.AuthHookInput{
+		API: "realmroot", Profile: "default", Params: map[string]string{"provider": authProvider},
+		Request: plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent/status"},
+	}
+	output, err := authenticateRequest(input, states, client, &promptRecorder{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if authorization, _ := output.Request.Headers["Authorization"].(string); authorization != "DPoP platform-token" {
-		t.Fatalf("missing OAuth DPoP token: %q", authorization)
+	if output.Request.Headers["Authorization"] != "DPoP platform-token" {
+		t.Fatalf("authorization = %#v", output.Request.Headers["Authorization"])
 	}
-	if prompt.uri != "https://auth.example.com/agent/approve?code=abc" {
-		t.Fatalf("approval URI = %q", prompt.uri)
-	}
-	if states.state.Identity == nil || states.state.Identity.Subject != "agt_123" {
-		t.Fatalf("identity was not persisted: %#v", states.state.Identity)
-	}
-	if _, err := authenticateRequest(input, states, client, prompt); err != nil {
-		t.Fatal(err)
-	}
-	if requests != 6 {
-		t.Fatalf("second request repeated enrollment; requests = %d", requests)
+	if requests != 1 {
+		t.Fatalf("whoami network requests = %d", requests)
 	}
 }
 
@@ -126,73 +130,6 @@ func TestAuthHookUsesConfiguredIssuerToSelectTargetIdentity(t *testing.T) {
 	_, err := authenticateRequest(input, states, roundTripFunc(nil), &promptRecorder{})
 	if err == nil || !strings.Contains(err.Error(), "does not match the active Resource credential issuer") {
 		t.Fatalf("issuer mismatch error = %v", err)
-	}
-}
-
-func TestAuthUseSelectsOperationalTargetIdentity(t *testing.T) {
-	t.Setenv(stateDirectoryEnv, t.TempDir())
-	t.Setenv("AGENT", defaultAgentRuntime)
-	states := newFileStateStore()
-	profiles := newLifecycleProfileStore(states)
-	credential := testCredential(t, "work-token", time.Now().Add(time.Minute))
-	workState := newCredentialState(t, credential).state
-	workTarget := agentTarget{API: "realmroot", Profile: "default", Runtime: defaultAgentRuntime,
-		Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth"}
-	if _, err := states.Create(workTarget, workState); err != nil {
-		t.Fatal(err)
-	}
-	stagingCredential := credential
-	stagingCredential.AccessToken = "staging-token"
-	stagingState := newCredentialState(t, stagingCredential).state
-	stagingState.Identity.Issuer = "https://staging.example.com/api/auth"
-	stagingTarget := agentTarget{API: "realmroot", Profile: "staging", Runtime: "other-runtime",
-		Origin: "https://staging.example.com", Issuer: "https://staging.example.com/api/auth"}
-	if _, err := states.Create(stagingTarget, stagingState); err != nil {
-		t.Fatal(err)
-	}
-	if err := profiles.Put(lifecycleProfile{Name: "work", API: "realmroot", APIProfile: "default",
-		Origin: workTarget.Origin, Issuer: workTarget.Issuer, Runtime: defaultAgentRuntime}); err != nil {
-		t.Fatal(err)
-	}
-	if err := profiles.Put(lifecycleProfile{Name: "staging", API: "realmroot", APIProfile: "staging",
-		Origin: stagingTarget.Origin, Issuer: stagingTarget.Issuer, Runtime: stagingTarget.Runtime}); err != nil {
-		t.Fatal(err)
-	}
-	input := targetHookInput()
-	input.Params["issuer"] = stagingTarget.Issuer
-	output, err := authenticateRequest(input, states, roundTripFunc(nil), &promptRecorder{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if output.Request.Headers["Authorization"] != "DPoP staging-token" {
-		t.Fatalf("authorization = %#v", output.Request.Headers["Authorization"])
-	}
-}
-
-func TestAuthUseRejectsMismatchedRealmrootAPIAlias(t *testing.T) {
-	t.Setenv(stateDirectoryEnv, t.TempDir())
-	t.Setenv("AGENT", defaultAgentRuntime)
-	states := newFileStateStore()
-	profiles := newLifecycleProfileStore(states)
-	if err := profiles.Put(lifecycleProfile{
-		Name: "staging", API: "realmroot-staging", APIProfile: "default", Runtime: defaultAgentRuntime,
-		Origin: "https://staging.example.com", Issuer: "https://staging.example.com/api/auth",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() != "https://auth.example.com/.well-known/agent-configuration" {
-			t.Fatalf("discovery request = %s", request.URL)
-		}
-		return jsonResponse(http.StatusOK, testAgentConfiguration()), nil
-	})
-	input := plugin.AuthHookInput{
-		API: "realmroot", Profile: "default", Params: map[string]string{"provider": authProvider},
-		Request: plugin.HookRequest{Method: http.MethodGet, URI: "https://auth.example.com/api/agent/status"},
-	}
-	_, err := authenticateRequest(input, states, client, &promptRecorder{})
-	if err == nil || !strings.Contains(err.Error(), "--rsh-profile default") {
-		t.Fatalf("alias mismatch error = %v", err)
 	}
 }
 
@@ -298,6 +235,7 @@ func testCredential(t *testing.T, accessToken string, expiresAt time.Time) dpopC
 
 func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateStore {
 	t.Helper()
+	t.Setenv("AGENT", "codex")
 	agentPublic, agentPrivate, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -314,7 +252,7 @@ func newCredentialState(t *testing.T, credential dpopCredential) *memoryStateSto
 	}
 	return &memoryStateStore{exists: true, state: agentState{
 		Version: agentStateVersion, Origin: "https://auth.example.com", Issuer: "https://auth.example.com/api/auth",
-		Runtime: defaultAgentRuntime, AgentID: "agent-123", HostID: "host-123", AgentKeyID: "agent-key", HostKeyID: "host-key",
+		Runtime: "codex", AgentID: "agent-123", HostID: "host-123", AgentKeyID: "agent-key", HostKeyID: "host-key",
 		AgentPrivateKey: encodePrivateKey(agentPrivate), HostPrivateKey: encodePrivateKey(hostPrivate),
 		Identity:              &stableIdentity{ID: "identity-1", Issuer: "https://auth.example.com/api/auth", Subject: "agt_123"},
 		DPoPCredentials:       map[string]dpopCredential{credential.ResourceHref: credential},

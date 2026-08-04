@@ -66,7 +66,6 @@ type agentState struct {
 	HostPrivateKey        string                    `json:"host_private_key"`
 	RegistrationApproval  *pendingApproval          `json:"registration_approval,omitempty"`
 	Identity              *stableIdentity           `json:"identity,omitempty"`
-	RecoveryIdentity      *stableIdentity           `json:"recovery_identity,omitempty"`
 	DPoPCredentials       map[string]dpopCredential `json:"dpop_credentials,omitempty"`
 	ActiveDPoPCredentials map[string]string         `json:"active_dpop_credentials,omitempty"`
 	PlatformCredential    *dpopCredential           `json:"platform_credential,omitempty"`
@@ -234,7 +233,10 @@ func (s *fileStateStore) Update(target agentTarget, state agentState) error {
 }
 
 func (s *fileStateStore) Delete(target agentTarget) error {
-	path := s.path(target)
+	return s.deletePath(s.path(target))
+}
+
+func (s *fileStateStore) deletePath(path string) error {
 	return withStateFileLock(path, func() error {
 		if err := os.Remove(path); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -335,8 +337,7 @@ func (s *fileStateStore) legacyStates() ([]legacyState, error) {
 			}
 			return nil
 		}
-		if path == filepath.Join(s.root, lifecycleProfilesFilename) ||
-			path == filepath.Join(s.root, identityDirectory, lifecycleProfilesFilename) {
+		if path == filepath.Join(s.root, identityDirectory, authBindingsFilename) {
 			return nil
 		}
 		if filepath.Ext(path) != ".json" {
@@ -361,13 +362,29 @@ func (s *fileStateStore) legacyStates() ([]legacyState, error) {
 	return states, nil
 }
 
-func (s *fileStateStore) updatePath(path string, state agentState) error {
+func (s *fileStateStore) updatePath(path string, state agentState) (result error) {
+	if err := os.MkdirAll(s.root, 0o700); err != nil {
+		return fmt.Errorf("create Agent state root: %w", err)
+	}
+	writeLock := flock.New(filepath.Join(s.root, ".state-write.lock"))
+	if err := writeLock.Lock(); err != nil {
+		return fmt.Errorf("lock Agent state write: %w", err)
+	}
+	defer func() {
+		if err := writeLock.Unlock(); err != nil {
+			result = errors.Join(result, fmt.Errorf("unlock Agent state write: %w", err))
+		}
+	}()
+	return s.updatePathLocked(path, state)
+}
+
+func (s *fileStateStore) updatePathLocked(path string, state agentState) error {
 	state.snapshot = [sha256.Size]byte{}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode Agent state: %w", err)
 	}
-	temp, err := os.CreateTemp(filepath.Dir(path), ".agent-*.json")
+	temp, err := os.CreateTemp(filepath.Dir(path), ".agent-*")
 	if err != nil {
 		return fmt.Errorf("create temporary Agent state: %w", err)
 	}
@@ -388,6 +405,42 @@ func (s *fileStateStore) updatePath(path string, state agentState) error {
 		return fmt.Errorf("replace Agent state: %w", err)
 	}
 	return nil
+}
+
+func (s *fileStateStore) cleanupStateTemps() (result error) {
+	if _, err := os.Stat(s.root); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("read Agent state root: %w", err)
+	}
+	writeLock := flock.New(filepath.Join(s.root, ".state-write.lock"))
+	if err := writeLock.Lock(); err != nil {
+		return fmt.Errorf("lock Agent state cleanup: %w", err)
+	}
+	defer func() {
+		if err := writeLock.Unlock(); err != nil {
+			result = errors.Join(result, fmt.Errorf("unlock Agent state cleanup: %w", err))
+		}
+	}()
+	return filepath.WalkDir(s.root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), ".agent-") {
+			return nil
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return fmt.Errorf("read temporary Agent state metadata: %w", err)
+		}
+		if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+			return fmt.Errorf("temporary Agent state %s must be a private regular file", path)
+		}
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("remove temporary Agent state: %w", err)
+		}
+		return nil
+	})
 }
 
 func (s *fileStateStore) updateExistingPath(path string, state agentState) error {
@@ -560,11 +613,10 @@ func (s *fileStateStore) walkStates(visit func(path string, state agentState) er
 			}
 			return walkErr
 		}
-		if entry.IsDir() || filepath.Ext(path) != ".json" {
+		if entry.IsDir() || filepath.Ext(path) != ".json" || strings.HasPrefix(entry.Name(), ".") {
 			return nil
 		}
-		if path == filepath.Join(s.root, lifecycleProfilesFilename) ||
-			path == filepath.Join(s.root, identityDirectory, lifecycleProfilesFilename) {
+		if path == filepath.Join(s.root, identityDirectory, authBindingsFilename) {
 			return nil
 		}
 		info, err := entry.Info()
@@ -572,7 +624,7 @@ func (s *fileStateStore) walkStates(visit func(path string, state agentState) er
 			return err
 		}
 		if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-			return nil
+			return fmt.Errorf("Agent state %s must be a private regular file", path)
 		}
 		state, err := s.loadPathWithLock(path)
 		if err != nil {
@@ -620,21 +672,9 @@ func validateAgentState(state agentState, target agentTarget) error {
 	if state.Runtime != target.Runtime {
 		return fmt.Errorf("Agent state runtime %q does not match current runtime %q", state.Runtime, target.Runtime)
 	}
-	for label, identity := range map[string]*stableIdentity{
-		"Agent identity": state.Identity, "Agent recovery identity": state.RecoveryIdentity,
-	} {
-		if identity == nil {
-			continue
-		}
-		if identity.ID == "" || identity.Subject == "" || identity.Issuer != target.Issuer {
-			return fmt.Errorf("%s does not match the selected issuer", label)
-		}
-	}
-	if state.Identity != nil && state.RecoveryIdentity != nil &&
-		(state.Identity.ID != state.RecoveryIdentity.ID ||
-			state.Identity.Subject != state.RecoveryIdentity.Subject ||
-			state.Identity.Issuer != state.RecoveryIdentity.Issuer) {
-		return errors.New("Agent recovery identity does not match the stable Agent identity")
+	if state.Identity != nil &&
+		(state.Identity.ID == "" || state.Identity.Subject == "" || state.Identity.Issuer != target.Issuer) {
+		return errors.New("Agent identity does not match the selected issuer")
 	}
 	return validateAgentStateCredentials(state)
 }

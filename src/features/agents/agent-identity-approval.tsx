@@ -49,7 +49,6 @@ export function AgentIdentityApproval() {
 
   const canApprove = Boolean(intent && intent.status === 'pending' && !agent)
   const isAdditionalHost = intent?.kind === 'additional_host'
-  const isRecovery = intent?.kind === 'recovery'
 
   if (!loading && !intent && !agent) {
     return (
@@ -73,23 +72,13 @@ export function AgentIdentityApproval() {
       description={
         agent
           ? 'The Agent can now continue. You can close this page.'
-          : isRecovery
-            ? 'Approve recovery only if every previous installation should be revoked and external Resource access frozen.'
-            : isAdditionalHost
-              ? 'Review the Agent before trusting this new host.'
-              : 'Review the request before creating this Agent identity.'
+          : isAdditionalHost
+            ? 'Review the Agent before trusting this new host.'
+            : 'Review the request before creating this Agent identity.'
       }
       eyebrow="Agent enrollment"
       layout={agent ? 'focused' : 'decision'}
-      title={
-        agent
-          ? 'Agent enrollment approved.'
-          : isRecovery
-            ? 'Recover Agent identity'
-            : isAdditionalHost
-              ? 'Add trusted host'
-              : 'Approve Agent identity'
-      }
+      title={agent ? 'Agent enrollment approved.' : isAdditionalHost ? 'Add trusted host' : 'Approve Agent identity'}
     >
       <div className="decisionStack">
         {loading ? <Status>Loading Agent enrollment…</Status> : null}
@@ -108,13 +97,7 @@ export function AgentIdentityApproval() {
             </div>
             <div>
               <dt>Request</dt>
-              <dd>
-                {isRecovery
-                  ? 'Revoke old installations and recover access'
-                  : isAdditionalHost
-                    ? 'Add a trusted host'
-                    : 'Create a stable identity'}
-              </dd>
+              <dd>{isAdditionalHost ? 'Add a trusted host' : 'Create a stable identity'}</dd>
             </div>
             <div>
               <dt>Owner</dt>
@@ -128,13 +111,7 @@ export function AgentIdentityApproval() {
         {!agent ? (
           <div className="decisionActions decisionActions-single">
             <Button disabled={!canApprove || submitting} onClick={() => void approve()} type="button">
-              {submitting
-                ? 'Approving…'
-                : isRecovery
-                  ? 'Recover Agent'
-                  : isAdditionalHost
-                    ? 'Add trusted host'
-                    : 'Approve Agent identity'}
+              {submitting ? 'Approving…' : isAdditionalHost ? 'Add trusted host' : 'Approve Agent identity'}
             </Button>
           </div>
         ) : null}

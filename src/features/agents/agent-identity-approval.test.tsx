@@ -81,27 +81,6 @@ describe('Agent stable identity approval', () => {
     expect(screen.getByRole('button', { name: 'Add trusted host' }).hasAttribute('disabled')).toBe(true)
   })
 
-  it('shows the destructive recovery consequences before approval [spec: agent-identity/restish-agent-recovery]', async () => {
-    api.getAgentEnrollment.mockResolvedValue({
-      id: 'intent-1',
-      agentId: 'identity-1',
-      name: 'Build Agent',
-      kind: 'recovery',
-      homeSpace: { type: 'personal', userId: 'user-1' },
-      status: 'pending',
-      expiresAt: '2026-08-01T00:10:00.000Z',
-      decidedAt: null,
-      createdAt: '2026-08-01T00:00:00.000Z',
-      updatedAt: '2026-08-01T00:00:00.000Z',
-    })
-    render(<AgentIdentityApproval />)
-
-    expect(await screen.findByRole('heading', { name: 'Recover Agent identity' })).toBeTruthy()
-    expect(screen.getByText(/every previous installation should be revoked/)).toBeTruthy()
-    expect(screen.getByText('Revoke old installations and recover access')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Recover Agent' })).toBeTruthy()
-  })
-
   it('surfaces load and approval errors from Error and unknown failures', async () => {
     api.getAgentEnrollment.mockRejectedValue(new Error('Enrollment expired'))
     render(<AgentIdentityApproval />)

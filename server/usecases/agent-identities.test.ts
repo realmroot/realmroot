@@ -4,13 +4,10 @@ import {
   createAdditionalAgentEnrollmentIntent,
   createAgentEnrollmentIntent,
   createAgentLoginIdentity,
-  createRecoveryAgentEnrollmentIntent,
   emergencyRetireAgentIdentity,
   getAgent,
   getAgentEnrollmentIntent,
   getAgentIdentityByProtocolAgent,
-  getAgentIdentityInstallationRevocation,
-  getAgentIdentityRecovery,
   getAgentInfo,
   getManagementAgent,
   getManagementAgentAccessGrant,
@@ -27,9 +24,6 @@ import {
   listPersonalAgentIdentities,
   listPersonalAgents,
   recoverAgentIdentity,
-  replaceAgentIdentityInstallationRevocation,
-  replaceAgentIdentityRecovery,
-  replaceAgentIdentityRetirement,
   requireActiveAgentIdentity,
   retireAgentIdentity,
   revokeAgentIdentityHost,
@@ -225,7 +219,6 @@ describe('Agent identity lifecycle', () => {
         agentIdentityId: 'identity-1',
         protocolAgentId: 'protocol-agent-1',
         requestedName: null,
-        recovery: false,
         homeSpace: { type: 'personal', userId: 'user-1' },
         status: 'approved',
         expiresAt: '2026-08-01T01:00:00.000Z',
@@ -605,17 +598,6 @@ describe('Agent identity lifecycle', () => {
     await expect(
       createAdditionalAgentEnrollmentIntent(deps, 'other-identity', 'protocol-agent-1', 'user-1', 'enrollment-key-1'),
     ).rejects.toMatchObject({ status: 409 })
-    vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
-      intent({
-        agentIdentityId: 'identity-1',
-        requestedName: null,
-        idempotencyKey: 'enrollment-key-1',
-        recovery: true,
-      }),
-    )
-    await expect(
-      createAdditionalAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1', 'enrollment-key-1'),
-    ).rejects.toMatchObject({ status: 409 })
 
     vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
       intent({
@@ -666,27 +648,6 @@ describe('Agent identity lifecycle', () => {
       {
         identity: { id: 'identity-1' },
       },
-    )
-  })
-
-  it('performs destructive recovery only inside the dedicated enrollment approval', async () => {
-    const deps = enrollmentDeps()
-    vi.mocked(deps.agentIdentities.findIntent).mockResolvedValue(
-      intent({ agentIdentityId: 'identity-1', requestedName: null, recovery: true }),
-    )
-    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate())
-    vi.mocked(deps.agentIdentities.recoverIdentity).mockResolvedValue(true)
-    vi.mocked(deps.agentIdentities.approveIntent).mockImplementation(async ({ binding }) => ({
-      ...aggregate(),
-      bindings: [{ ...binding, hostId: 'host-1' }],
-    }))
-
-    await expect(approveAgentEnrollment(deps, 'intent-1', 'https://auth.example.com', 'user-1')).resolves.toMatchObject(
-      { identity: { id: 'identity-1' } },
-    )
-    expect(deps.agentIdentities.recoverIdentity).toHaveBeenCalledOnce()
-    expect(vi.mocked(deps.agentIdentities.recoverIdentity).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(deps.agentIdentities.approveIntent).mock.invocationCallOrder[0]!,
     )
   })
 
@@ -760,213 +721,13 @@ describe('Agent identity lifecycle', () => {
     await expect(revokeAgentIdentityHost(deps, 'identity-1', 'protocol-agent-1', 'user-1')).resolves.toBeUndefined()
   })
 
-  it('replaces one installation revocation idempotently [spec: agent-identity/restish-agent-installation-revocation]', async () => {
-    const deps = createTestDeps()
-    const active = aggregate()
-    const revokedAt = new Date('2026-08-04T12:00:00.000Z')
-    const revoked = aggregate()
-    revoked.bindings[0] = { ...revoked.bindings[0]!, status: 'revoked', revokedAt }
-    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce(active).mockResolvedValue(revoked)
-    vi.mocked(deps.agentIdentities.revokeBinding).mockResolvedValue(true)
-
-    const first = await replaceAgentIdentityInstallationRevocation(deps, 'identity-1', 'binding-1', null)
-    expect(first).toMatchObject({ agentId: 'identity-1', installationId: 'binding-1', status: 'revoked' })
-    expect(deps.agentIdentities.revokeBinding).toHaveBeenCalledTimes(1)
-
-    await expect(replaceAgentIdentityInstallationRevocation(deps, 'identity-1', 'binding-1', null)).resolves.toEqual({
-      agentId: 'identity-1',
-      installationId: 'binding-1',
-      status: 'revoked',
-      revokedAt: revokedAt.toISOString(),
-    })
-    await expect(getAgentIdentityInstallationRevocation(deps, 'identity-1', 'binding-1')).resolves.toMatchObject({
-      status: 'revoked',
-    })
-    expect(deps.agentIdentities.revokeBinding).toHaveBeenCalledTimes(1)
-    expect(deps.externalResources.listActiveTokenLeasesByBinding).toHaveBeenCalledTimes(2)
-  })
-
-  it('starts recovery once and idempotently enrolls a replacement installation [spec: agent-identity/restish-agent-recovery]', async () => {
-    const deps = enrollmentDeps()
-    const recovering = aggregate({ status: 'recovering', updatedAt: new Date('2026-08-04T12:00:00.000Z') })
-    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValueOnce(aggregate()).mockResolvedValue(recovering)
-    vi.mocked(deps.agentIdentities.recoverIdentity).mockResolvedValue(true)
-
-    await expect(replaceAgentIdentityRecovery(deps, 'identity-1', null)).resolves.toMatchObject({
-      agentId: 'identity-1',
-      status: 'recovering',
-    })
-    await expect(replaceAgentIdentityRecovery(deps, 'identity-1', null)).resolves.toEqual({
-      agentId: 'identity-1',
-      status: 'recovering',
-      startedAt: '2026-08-04T12:00:00.000Z',
-    })
-    expect(deps.agentIdentities.recoverIdentity).toHaveBeenCalledTimes(1)
-    expect(deps.externalResources.listActiveGrantsByAgent).toHaveBeenCalledTimes(2)
-    await expect(getAgentIdentityRecovery(deps, 'identity-1')).resolves.toMatchObject({ status: 'recovering' })
-
-    vi.mocked(deps.agentIdentities.createIntentIdempotently).mockImplementation(async (record) => ({
-      intent: record,
-      created: true,
-    }))
-    await expect(
-      createRecoveryAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1', 'recovery-key'),
-    ).resolves.toMatchObject({ intent: { agentIdentityId: 'identity-1' } })
-    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(aggregate())
-    vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValueOnce(null)
-    await expect(
-      createRecoveryAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1', 'other-key'),
-    ).resolves.toMatchObject({ intent: { agentIdentityId: 'identity-1' } })
-
-    vi.mocked(deps.agentIdentities.findIdentity).mockClear()
-    vi.mocked(deps.agentIdentities.recoverIdentity).mockClear()
-    vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
-      intent({
-        agentIdentityId: 'identity-1',
-        idempotencyKey: 'recovery-key',
-        recovery: true,
-        status: 'approved',
-        approvedAt: new Date(),
-      }),
-    )
-    await expect(
-      createRecoveryAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1', 'recovery-key'),
-    ).resolves.toMatchObject({ replayed: true, intent: { status: 'approved' } })
-    expect(deps.agentIdentities.findIdentity).not.toHaveBeenCalled()
-    expect(deps.agentIdentities.recoverIdentity).not.toHaveBeenCalled()
-  })
-
-  it('re-authorizes a pending recovery replay before changing identity state', async () => {
-    const deps = enrollmentDeps()
-    vi.mocked(deps.agentIdentities.findIntentByIdempotencyKey).mockResolvedValue(
-      intent({
-        agentIdentityId: 'identity-1',
-        idempotencyKey: 'recovery-key',
-        recovery: true,
-        ownerUserId: null,
-        ownerOrganizationId: 'org-1',
-      }),
-    )
-    vi.mocked(deps.agentIdentities.findIdentity).mockResolvedValue(
-      aggregate({ ownerUserId: null, ownerOrganizationId: 'org-1' }),
-    )
-    vi.mocked(deps.authorization.findMemberByOrganizationUser).mockResolvedValue(null)
-
-    await expect(
-      createRecoveryAgentEnrollmentIntent(deps, 'identity-1', 'protocol-agent-1', 'user-1', 'recovery-key'),
-    ).rejects.toMatchObject({ status: 403 })
-    expect(deps.agentIdentities.recoverIdentity).not.toHaveBeenCalled()
-  })
-
-  it('replaces retirement idempotently while keeping recovery distinct [spec: agent-identity/restish-agent-retirement]', async () => {
-    const deps = createTestDeps()
-    const retiredAt = new Date('2026-08-04T12:00:00.000Z')
-    vi.mocked(deps.agentIdentities.findIdentity)
-      .mockResolvedValueOnce(aggregate())
-      .mockResolvedValue(aggregate({ status: 'retired', retiredAt }))
-    vi.mocked(deps.agentIdentities.retireIdentity).mockResolvedValue(true)
-
-    await expect(replaceAgentIdentityRetirement(deps, 'identity-1', null)).resolves.toMatchObject({
-      agentId: 'identity-1',
-      status: 'retired',
-    })
-    await expect(replaceAgentIdentityRetirement(deps, 'identity-1', null)).resolves.toEqual({
-      agentId: 'identity-1',
-      status: 'retired',
-      retiredAt: retiredAt.toISOString(),
-    })
-    expect(deps.agentIdentities.retireIdentity).toHaveBeenCalledTimes(1)
-    expect(deps.agentIdentities.recoverIdentity).not.toHaveBeenCalled()
-    expect(deps.externalResources.listActiveGrantsByAgent).toHaveBeenCalledTimes(2)
-  })
-
-  it('surfaces lifecycle resource state and transition conflicts', async () => {
-    const revocation = createTestDeps()
-    vi.mocked(revocation.agentIdentities.findIdentity).mockResolvedValue(aggregate())
-    await expect(getAgentIdentityInstallationRevocation(revocation, 'identity-1', 'binding-1')).rejects.toMatchObject({
-      status: 404,
-    })
-    await expect(getAgentIdentityInstallationRevocation(revocation, 'identity-1', 'missing')).rejects.toMatchObject({
-      status: 404,
-    })
-    await expect(getAgentIdentityRecovery(revocation, 'identity-1')).rejects.toMatchObject({ status: 404 })
-
-    const retiredRevocation = createTestDeps()
-    vi.mocked(retiredRevocation.agentIdentities.findIdentity).mockResolvedValue(aggregate({ status: 'retired' }))
-    await expect(
-      replaceAgentIdentityInstallationRevocation(retiredRevocation, 'identity-1', 'binding-1', null),
-    ).rejects.toMatchObject({ status: 400 })
-
-    const missingInstallation = createTestDeps()
-    vi.mocked(missingInstallation.agentIdentities.findIdentity).mockResolvedValue({ ...aggregate(), bindings: [] })
-    await expect(
-      replaceAgentIdentityInstallationRevocation(missingInstallation, 'identity-1', 'missing', null),
-    ).rejects.toMatchObject({ status: 404 })
-
-    const changedInstallation = createTestDeps()
-    vi.mocked(changedInstallation.agentIdentities.findIdentity).mockResolvedValue(aggregate())
-    vi.mocked(changedInstallation.agentIdentities.revokeBinding).mockResolvedValue(false)
-    await expect(
-      replaceAgentIdentityInstallationRevocation(changedInstallation, 'identity-1', 'binding-1', null),
-    ).rejects.toMatchObject({ status: 409 })
-
-    const retiredRecovery = createTestDeps()
-    vi.mocked(retiredRecovery.agentIdentities.findIdentity).mockResolvedValue(aggregate({ status: 'retired' }))
-    await expect(replaceAgentIdentityRecovery(retiredRecovery, 'identity-1', null)).rejects.toMatchObject({
-      status: 400,
-    })
-
-    const changedRecovery = createTestDeps()
-    vi.mocked(changedRecovery.agentIdentities.findIdentity).mockResolvedValue(aggregate())
-    vi.mocked(changedRecovery.agentIdentities.recoverIdentity).mockResolvedValue(false)
-    await expect(replaceAgentIdentityRecovery(changedRecovery, 'identity-1', null)).rejects.toMatchObject({
-      status: 409,
-    })
-
-    const changedRetirement = createTestDeps()
-    vi.mocked(changedRetirement.agentIdentities.findIdentity).mockResolvedValue(aggregate())
-    vi.mocked(changedRetirement.agentIdentities.retireIdentity).mockResolvedValue(false)
-    await expect(replaceAgentIdentityRetirement(changedRetirement, 'identity-1', null)).rejects.toMatchObject({
-      status: 409,
-    })
-
-    const emergencyRetirement = createTestDeps()
-    vi.mocked(emergencyRetirement.agentIdentities.findIdentity).mockResolvedValue(aggregate())
-    vi.mocked(emergencyRetirement.agentIdentities.retireIdentity).mockResolvedValue(true)
-    await expect(replaceAgentIdentityRetirement(emergencyRetirement, 'identity-1', null, true)).resolves.toMatchObject({
-      status: 'retired',
-    })
-    expect(emergencyRetirement.agentAudit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ metadata: { emergency: true } }),
-    )
-  })
-
   it('rejects enrollment projections that cannot resolve a display name', async () => {
-    expect(
-      toAgentEnrollment(
-        {
-          id: 'recovery-intent',
-          agentIdentityId: 'identity-1',
-          protocolAgentId: 'protocol-agent-1',
-          requestedName: null,
-          recovery: true,
-          homeSpace: { type: 'personal', userId: 'user-1' },
-          status: 'pending',
-          expiresAt: new Date(),
-          approvedAt: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        'Build Agent',
-      ).kind,
-    ).toBe('recovery')
     expect(() =>
       toAgentEnrollment({
         id: 'intent-without-name',
         agentIdentityId: null,
         protocolAgentId: 'protocol-agent-1',
         requestedName: null,
-        recovery: false,
         homeSpace: { type: 'personal', userId: 'user-1' },
         status: 'pending',
         expiresAt: new Date(),
@@ -1101,7 +862,6 @@ function intent(overrides: Partial<AgentEnrollmentIntentRecord> = {}): AgentEnro
     ownerOrganizationId: null,
     protocolAgentId: 'protocol-agent-1',
     idempotencyKey: null,
-    recovery: false,
     status: 'pending',
     createdByUserId: 'user-1',
     approvedByUserId: null,

@@ -3,7 +3,6 @@ import {
   badGateway,
   badRequest,
   forbidden,
-  gone,
   notFound,
   oauthError,
   resourceInUse,
@@ -19,7 +18,6 @@ describe('API error boundary helpers', () => {
     expect(unauthorized()).toMatchObject({ status: 401, code: 'unauthorized', message: 'Authentication is required.' })
     expect(forbidden()).toMatchObject({ status: 403, code: 'forbidden', message: 'Admin access is required.' })
     expect(notFound()).toMatchObject({ status: 404, code: 'not_found', message: 'Resource not found.' })
-    expect(gone('Removed.')).toMatchObject({ status: 410, code: 'gone', message: 'Removed.' })
     expect(resourceInUse('In use.', { agentAccessGrants: 1 })).toMatchObject({
       status: 409,
       code: 'resource_in_use',

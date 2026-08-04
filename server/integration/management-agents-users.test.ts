@@ -1,7 +1,5 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test'
-import { agentIdentityBinding } from '@server/db/schema'
 import { createAgentLoginIdentity } from '@server/usecases/agent-identities'
-import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createHarness,
@@ -30,7 +28,7 @@ describe('agent protocol management over real D1', () => {
     expect((await harness.request('/api/agents')).status).toBe(401)
   })
 
-  it('lists, revokes, recovers, and retires stable Agents through real SQL [spec: agent-identity/restish-agent-installation-revocation] [spec: agent-identity/restish-agent-recovery] [spec: agent-identity/restish-agent-retirement]', async () => {
+  it('lists and retires stable Agents through real SQL', async () => {
     const cookie = await signInAdmin(harness)
     const userId = await createUser(harness, cookie, {
       email: 'agent-owner@example.com',
@@ -51,37 +49,10 @@ describe('agent protocol management over real D1', () => {
     const body = (await inventory.json()) as { items: Array<{ id: string }> }
     expect(body.items).toEqual([expect.objectContaining({ id: stableAgent.id })])
 
-    const [installation] = await harness.db
-      .select()
-      .from(agentIdentityBinding)
-      .where(eq(agentIdentityBinding.agentIdentityId, stableAgent.id))
-    const installationId = installation!.id
-
-    const legacyRetirementDeletion = await harness.request(`/api/agents/${stableAgent.id}/retirement`, {
-      method: 'DELETE',
-      headers: { cookie },
-    })
-    expect(legacyRetirementDeletion.status).toBe(410)
-
-    const revocation = await harness.request(
-      `/api/agents/${stableAgent.id}/installations/${installationId}/revocation`,
-      { method: 'PUT', headers: { cookie } },
-    )
-    expect(revocation.status).toBe(200)
-    await expect(revocation.json()).resolves.toMatchObject({ installationId, status: 'revoked' })
-
-    const recovery = await harness.request(`/api/agents/${stableAgent.id}/recovery`, {
-      method: 'PUT',
-      headers: { cookie },
-    })
-    expect(recovery.status).toBe(200)
-    await expect(recovery.json()).resolves.toMatchObject({ agentId: stableAgent.id, status: 'recovering' })
-
-    const retirement = await harness.request(`/api/agents/${stableAgent.id}/retirement`, {
-      method: 'PUT',
-      headers: { cookie },
-    })
-    expect(retirement.status).toBe(204)
+    expect(
+      (await harness.request(`/api/agents/${stableAgent.id}/retirement`, { method: 'PUT', headers: { cookie } }))
+        .status,
+    ).toBe(204)
   })
 
   it('lists and revokes an account agent through real SQL', async () => {

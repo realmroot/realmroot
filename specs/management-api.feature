@@ -30,20 +30,20 @@ Feature: Unified Realmroot resource API
     And Resource Server and Resource discovery use Restish's generic get command
     And only connection approval and access approval retain non-deprecated generated API workflow commands
     And those workflows are exposed as connect and access
-    And the deprecated realmroot auth whoami status alias remains available during the adapter 0.10 transition
-    And the Realmroot plugin contributes one top-level auth command group for local Agent identity lifecycle operations
+    And the existing generated auth whoami command reads the current issuer and runtime identity
+    And the Realmroot plugin contributes one top-level auth command group containing only login, logout, and status
     And polling and short-lived credential issuance remain hidden behind the plugin's generic response protocols
 
 
   @entrypoint:restish @journey:management-restish-agent-auth
-  Scenario: Restish transparently authenticates as an Agent
+  Scenario: Restish authenticates as an Agent only after explicit login
     Given Restish is connected to the unified Realmroot API
     When a new Agent invokes its first protected OpenAPI operation
-    Then the Restish authentication adapter starts Agent enrollment without requiring an explicit login command
-    And the Agent can instead start or resume enrollment explicitly with auth login
+    Then the Restish authentication adapter fails without starting Agent enrollment or obtaining a token
+    When the Agent starts or resumes enrollment explicitly with auth login
     And the adapter uses the endpoints and issuer published by AgentAuth discovery
     And Realmroot does not provision a shared CLI OAuth application
-    And the original operation waits for one controller approval
+    And auth login waits for one controller approval
     And the adapter exchanges the Agent identity assertion only at the OAuth token endpoint
     And every later command-line request uses a short-lived audience-restricted DPoP access token
     And every protected Realmroot operation authenticates the same Agent issuer and subject from that token

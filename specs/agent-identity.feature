@@ -21,8 +21,8 @@ Feature: Agent identity and delegated API authorization
 
   Rule: Agent identities remain stable across hosts and credentials
 
-    @e2e @entrypoint:agent-protocol @journey:agent-identity-enrollment
-    Scenario: A new Agent establishes a stable identity on its first protected API operation
+    @e2e @entrypoint:restish @journey:agent-identity-enrollment
+    Scenario: A new runtime establishes a stable identity through explicit login
       Given a new Agent connects Restish to the Realmroot OpenAPI contract
       When the Agent invokes auth login without a local Realmroot identity
       Then the transparent Restish authentication adapter registers locally generated host and Agent keys
@@ -32,9 +32,9 @@ Feature: Agent identity and delegated API authorization
       And the Agent belongs to exactly one home space
       And users govern the Agent through roles in that space
       And the host registration is bound to that Agent identity
-      And the original auth login operation resumes and returns the stable issuer and subject
+      And auth login resumes and returns the stable issuer and subject
       And the hosted approval page replaces the request with a clear completion state that says it can be closed
-      And later OpenAPI operations reuse the Agent identity without another login command
+      And later OpenAPI operations reuse the Agent identity without another registration
       And enrollment alone grants no management or external API resource access
       And an unbound protocol registration cannot exercise Agent identity capabilities
 
@@ -47,65 +47,48 @@ Feature: Agent identity and delegated API authorization
       And the controller's browser session is used only to approve enrollment or authority
 
     @entrypoint:restish @journey:agent-runtime-identity-continuity
-    Scenario: Restish API aliases and sessions reuse the runtime Agent identity
-      Given the plugin detects the current Agent runtime or reads an explicit runtime declaration
+    Scenario: Realmroot issuer and runtime select one stable local identity
+      Given the plugin detects the current Agent runtime or receives an explicit runtime from auth login
       And one Realmroot issuer is connected through multiple Restish API names or profiles
-      When the Agent invokes Realmroot operations across those connections and later runtime sessions
+      When the Agent logs in and invokes Realmroot operations across those connections and later runtime sessions
       Then the plugin reuses one host registration and stable Agent issuer and subject for that runtime
       And Restish API names, profiles, and runtime session identifiers do not create another Agent identity
       And another runtime uses a separately secured local identity
       And another Realmroot issuer uses a separately secured local identity
-      And an explicitly supplied AGENT runtime selects that runtime identity instead of the detected runtime
+      And an explicitly supplied runtime selects that runtime identity instead of the detected runtime
 
-    @entrypoint:restish @journey:restish-agent-auth-profiles
-    Scenario: Restish exposes one discoverable Agent identity lifecycle command group
-      Given Realmroot is connected through named Restish API profiles
-      When the Agent opens auth help or explicitly logs in to a named local lifecycle profile
-      Then status reports the selected API profile, issuer, stable Agent subject and name, local runtime and session, and active installation without exposing credentials
-      And list distinguishes local lifecycle profiles from the selected identity's remotely registered installations
-      And use switches the selected named profile without requiring environment-variable editing
-      And subsequent authentication uses that profile's issuer and rejects a mismatched deployment or target issuer
-      And Restish selects the matching deployment URL with the profile flag returned by use
-      And first login enrolls once while an interrupted login resumes the same pending enrollment
-      And profiles for different Realmroot issuers never share local identity or credential state
-
-    @entrypoint:restish @journey:restish-agent-local-logout
-    Scenario: Restish logout forgets only local Agent credentials
-      Given a named local lifecycle profile contains an active Agent installation credential
-      When the Agent invokes auth logout for that profile
-      Then the plugin removes only its protected local credential, token, and session state
+    @entrypoint:restish @journey:restish-agent-auth-accounts
+    Scenario: Restish exposes a narrow local auth lifecycle and identity inventory
+      Given multiple runtimes have authenticated stable identities across Realmroot hosts
+      When the Agent opens auth help or invokes auth status
+      Then only login, logout, and status are exposed by the plugin auth command group
+      And status lists every locally authenticated runtime identity grouped by issuer and marks identities matching the current runtime without contacting Realmroot or exposing credentials
+      When the Agent invokes auth logout for the current or explicitly named runtime
+      Then only that local identity's protected credential and session state are removed
       And the remote installation and stable Agent identity remain active
-      And another local profile and another Realmroot issuer remain unchanged
+      And the plugin retains only the non-secret issuer, runtime, and stable identity binding needed for a later login
+      And another local runtime identity and another Realmroot issuer remain unchanged
 
-    @entrypoint:restish @journey:restish-agent-installation-revocation
-    Scenario: Restish revokes one selected remote installation
-      Given the selected stable Agent identity has two remotely registered installations
-      When the Agent invokes auth revoke with one installation identifier
-      Then Realmroot revokes only that installation and its resource leases
-      And the other installation and stable Agent identity remain active
-      And the plugin removes local state only when the revoked installation is the selected local installation
+    @entrypoint:restish @journey:restish-agent-whoami
+    Scenario: Restish whoami reads only the current identity
+      Given the current runtime is authenticated to the current Realmroot issuer
+      When the Agent invokes the existing whoami command
+      Then Realmroot returns only the stable identity used by that issuer and runtime
+      And the plugin uses only an existing unexpired local token without registering, logging in, obtaining, or refreshing a token
+      And an unauthenticated runtime receives a clear not-logged-in error
+      And whoami remains distinct from the all-host local status inventory
 
-    @e2e @entrypoint:restish @journey:restish-agent-recovery
-    Scenario: Restish recovers the selected stable Agent identity
-      Given the selected Agent's local installation may be obsolete or compromised
-      When the Agent confirms auth recover
-      Then Realmroot presents a dedicated hosted recovery approval naming the stable Agent identity
-      And the approval explains that every previous installation will be revoked and external Resource access frozen
-      When the controller explicitly approves that recovery
-      Then Realmroot revokes every previous installation and freezes external Resource access through the existing recovery lifecycle
-      And the plugin enrolls a fresh controller-approved installation for the same stable Agent issuer and subject
-      And an interrupted recovery resumes without creating another stable Agent identity
-
-    @e2e @entrypoint:restish @journey:restish-agent-retirement
-    Scenario: Restish permanently retires the selected stable Agent identity
-      Given the selected Agent has a stable issuer and subject
-      When the Agent invokes auth retire without typing the exact stable subject
-      Then the plugin cancels without changing local or remote state
-      When the Agent repeats auth retire and types the exact stable subject
-      Then Realmroot permanently retires the Agent through its retirement resource
-      And the plugin removes the retired identity's local credential state
-      And logout, installation revocation, recovery, and retirement remain distinct operations
-      And deleting a retirement is rejected and never starts recovery
+    @entrypoint:restish @journey:restish-agent-login-boundaries
+    Scenario: Login is the only command that can establish remote authentication
+      Given the current runtime has no local identity for the selected Realmroot host
+      When the Agent invokes auth status or auth logout
+      Then the plugin performs no network request, registration, token exchange, or remote mutation
+      When the Agent invokes auth login and the runtime cannot be detected
+      Then the plugin requires an interactive runtime name or an explicit runtime flag and never guesses
+      When registration or polling is interrupted by a network failure
+      Then login fails with the network error while preserving resumable pending local state when one exists
+      And retrying login for the same issuer and runtime resumes that registration instead of creating another stable identity
+      And auth logout can discard that pending local state without changing any remote identity
 
     @e2e @entrypoint:product-ui @journey:agent-enrollment-denial
     Scenario: A controller can deny Agent enrollment

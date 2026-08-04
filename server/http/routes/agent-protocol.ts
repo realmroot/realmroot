@@ -3,7 +3,6 @@ import {
   approveAgentEnrollment,
   createAdditionalAgentEnrollmentIntent,
   createAgentEnrollmentIntent,
-  createRecoveryAgentEnrollmentIntent,
   getAgentIdentityByProtocolAgent,
   getProtocolAgentEnrollment,
   getPublicAgentEnrollment,
@@ -99,11 +98,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     }
     const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
     if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
-    const createIntent =
-      body.kind === 'recovery_installation'
-        ? createRecoveryAgentEnrollmentIntent
-        : createAdditionalAgentEnrollmentIntent
-    const { intent, replayed } = await createIntent(
+    const { intent, replayed } = await createAdditionalAgentEnrollmentIntent(
       getDeps(c),
       body.agentId,
       session.agent.id,

@@ -97,7 +97,6 @@ export function requiredResourceScope(method: string, resource: ProtectedResourc
 
 export const agentBootstrapScopes = [
   'agent:read',
-  'agent:write',
   'resource-servers:read',
   'resources:read',
   'connection-requests:read',
@@ -115,17 +114,6 @@ export const realmrootOAuthScopes = [...new Set([...agentBootstrapScopes, ...pro
 export function requiredAgentSelfServiceScope(method: string, path: string): AgentBootstrapScope | null {
   const normalized = path.replace(/^\/api\/?/, '')
   if (normalized === 'agent/status' && method === 'GET') return 'agent:read'
-  if (/^agents\/[^/]+\/installations$/.test(normalized) && (method === 'GET' || method === 'HEAD')) {
-    return 'agent:read'
-  }
-  if (/^agents\/[^/]+\/(?:recovery|retirement)$/.test(normalized)) {
-    if (method === 'GET' || method === 'HEAD') return 'agent:read'
-    if (method === 'PUT') return 'agent:write'
-  }
-  if (/^agents\/[^/]+\/installations\/[^/]+\/revocation$/.test(normalized)) {
-    if (method === 'GET' || method === 'HEAD') return 'agent:read'
-    if (method === 'PUT') return 'agent:write'
-  }
   if (/^resource-servers(?:\/[^/]+)?$/.test(normalized) && (method === 'GET' || method === 'HEAD')) {
     return 'resource-servers:read'
   }

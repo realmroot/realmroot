@@ -1,31 +1,24 @@
-import { execFileSync, spawn } from 'node:child_process'
+import { type ExecFileSyncOptionsWithStringEncoding, execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export interface PluginIdentityResult {
+  authenticated?: boolean
   agent: {
     id: string
     issuer: string
     subject: string
     name: string
   }
-  local: {
-    status: string
-    runtime: string
-    session: string
-    resourceCredentialCount: number
-  }
+  local_agent: string
 }
 
-export interface PendingLogin {
+export interface PendingWhoami {
   approvalUrl: Promise<string>
-  result: Promise<PluginIdentityResult>
-}
-
-export interface PendingRecovery extends PendingLogin {
   nextApprovalUrl(): Promise<string>
+  result: Promise<PluginIdentityResult>
 }
 
 export interface PendingResourceAccess<T> {
@@ -34,11 +27,10 @@ export interface PendingResourceAccess<T> {
 }
 
 export interface RestishAgentPlugin {
-  firstLogin(name: string): PendingLogin
-  status(): PluginIdentityResult
-  listAuth<T>(): T
-  recover(): PendingRecovery
-  retire(subject: string): { agentId: string; status: 'retired'; localState: 'removed' }
+  login(name: string): PendingWhoami
+  logout(): { loggedIn: boolean; remoteIdentityChanged: boolean }
+  status(): { hosts: Array<{ accounts: Array<{ runtime: string; current: boolean; loggedIn: boolean }> }> }
+  whoami(): PluginIdentityResult
   listResourceServers<T>(): T
   listResources<T>(resourceServerId: string): T
   connectResource<T>(resourceId: string, input: unknown): PendingResourceAccess<T>
@@ -56,7 +48,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
   const configDir = join(root, 'config')
   const stateDir = join(root, 'state')
   const binary = join(root, 'restish-realmroot')
-  const apiName = 'realmroot-e2e-plugin'
+  const apiName = 'realmroot'
   const approvalFile = join(root, 'approval-url')
   const targetURLs = new Map<string, string>()
   mkdirSync(configDir)
@@ -72,6 +64,7 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     RSH_CONFIG_DIR: configDir,
     REALMROOT_PLUGIN_STATE_DIR: stateDir,
     REALMROOT_PLUGIN_APPROVAL_FILE: approvalFile,
+    AGENT: 'e2e',
   }
   execFileSync('restish', ['plugin', 'install', binary, '--yes'], {
     cwd: repoRoot,
@@ -83,15 +76,15 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     env: environment,
     encoding: 'utf8',
   })
-  const invokeRoot = <T>(command: string[]): T => {
+  const invoke = <T>(command: string[], input?: unknown): T => {
+    const options: ExecFileSyncOptionsWithStringEncoding = {
+      cwd: repoRoot,
+      env: environment,
+      encoding: 'utf8',
+      ...(input === undefined ? {} : { input: JSON.stringify(input) }),
+    }
     try {
-      return JSON.parse(
-        execFileSync('restish', [...command, '--rsh-output-format', 'json'], {
-          cwd: repoRoot,
-          env: environment,
-          encoding: 'utf8',
-        }),
-      ) as T
+      return JSON.parse(execFileSync('restish', [apiName, ...command, '--rsh-output-format', 'json'], options)) as T
     } catch (error) {
       const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
       throw new Error(
@@ -119,9 +112,9 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
     }
   }
 
-  const invokePending = <T>(command: string[], input?: unknown, env?: Record<string, string>, rootCommand = false) => {
+  const invokePending = <T>(command: string[], input?: unknown, env?: Record<string, string>) => {
     rmSync(approvalFile, { force: true })
-    const child = spawn('restish', [...(rootCommand ? [] : [apiName]), ...command, '--rsh-output-format', 'json'], {
+    const child = spawn('restish', [apiName, ...command, '--rsh-output-format', 'json'], {
       cwd: repoRoot,
       env: { ...environment, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -189,33 +182,87 @@ export function createRestishAgentPlugin(origin: string): RestishAgentPlugin {
               clearInterval(timer)
               resolve(value)
             }, 50)
-            child.once('close', (code) => {
+            result.catch((error) => {
               clearInterval(timer)
-              reject(new Error(`Realmroot ${command.join(' ')} exited with ${code} before the next approval`))
+              reject(error)
             })
           }),
       )
     return { approvalUrl, nextApprovalUrl, result }
   }
 
+  const invokeAuth = <T>(command: string[]): T => {
+    try {
+      return JSON.parse(
+        execFileSync('restish', ['auth', ...command, '--rsh-output-format', 'json'], {
+          cwd: repoRoot,
+          env: environment,
+          encoding: 'utf8',
+        }),
+      ) as T
+    } catch (error) {
+      const failed = error as Error & { stdout?: string; stderr?: string; status?: number }
+      throw new Error(
+        `Restish auth ${command.join(' ')} exited with ${failed.status ?? 'unknown'}: ${failed.stderr ?? ''}${failed.stdout ?? ''}`,
+        { cause: error },
+      )
+    }
+  }
+
+  const invokePendingAuth = <T>(command: string[], env?: Record<string, string>) => {
+    rmSync(approvalFile, { force: true })
+    const child = spawn('restish', ['auth', ...command, '--rsh-output-format', 'json'], {
+      cwd: repoRoot,
+      env: { ...environment, ...env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => (stdout += chunk))
+    child.stderr.on('data', (chunk: string) => (stderr += chunk))
+    let previous = ''
+    const nextApproval = () =>
+      new Promise<string>((resolve, reject) => {
+        const timer = setInterval(() => {
+          if (!existsSync(approvalFile)) return
+          const value = readFileSync(approvalFile, 'utf8').trim()
+          if (!value || value === previous) return
+          previous = value
+          clearInterval(timer)
+          resolve(value)
+        }, 50)
+        child.once('close', (code) => {
+          clearInterval(timer)
+          if (code !== 0)
+            reject(new Error(`Realmroot auth ${command.join(' ')} exited with ${code}: ${stderr}${stdout}`))
+        })
+      })
+    const approvalUrl = nextApproval()
+    const result = new Promise<T>((resolve, reject) => {
+      child.on('error', reject)
+      child.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Realmroot auth ${command.join(' ')} exited with ${code}: ${stderr}${stdout}`))
+          return
+        }
+        try {
+          resolve(JSON.parse(stdout) as T)
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    return { approvalUrl, nextApprovalUrl: nextApproval, result }
+  }
+
   return {
-    firstLogin: (name) =>
-      invokePending<PluginIdentityResult>(
-        ['auth', 'login', 'default', '--api', apiName, '--api-profile', 'default', '--agent-name', name],
-        undefined,
-        undefined,
-        true,
-      ),
-    status: () => invokeRoot<PluginIdentityResult>(['auth', 'status']),
-    listAuth: <T>() => invokeRoot<T>(['auth', 'list']),
-    recover: () => invokePending<PluginIdentityResult>(['auth', 'recover', '--yes'], undefined, undefined, true),
-    retire: (subject) =>
-      invokeRoot<{ agentId: string; status: 'retired'; localState: 'removed' }>([
-        'auth',
-        'retire',
-        '--confirm',
-        subject,
-      ]),
+    login: (name) =>
+      invokePendingAuth<PluginIdentityResult>(['login', '--runtime', 'e2e'], { REALMROOT_AGENT_NAME: name }),
+    logout: () => invokeAuth(['logout', '--runtime', 'e2e']),
+    status: () => invokeAuth(['status', '--runtime', 'e2e']),
+    whoami: () => invoke<PluginIdentityResult>(['whoami']),
     listResourceServers: <T>() => get<T>(`${origin}/api/resource-servers?limit=100&offset=0`),
     listResources: <T>(resourceServerId: string) =>
       get<T>(`${origin}/api/resource-servers/${encodeURIComponent(resourceServerId)}/resources?limit=100&offset=0`),

@@ -19,7 +19,7 @@ import (
 const (
 	authProvider       = "realmroot-agent"
 	targetAuthProvider = "realmroot-target"
-	platformScopes     = "agent:read agent:write resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write access-authorizations:read access-authorizations:issue"
+	platformScopes     = "agent:read resource-servers:read resources:read connection-requests:read connection-requests:write access-requests:read access-requests:write access-authorizations:read access-authorizations:issue"
 )
 
 type terminalAgentApprovalError struct {
@@ -89,25 +89,18 @@ func authenticateRequest(
 	client httpDoer,
 	prompt approvalPrompt,
 ) (plugin.AuthHookOutput, error) {
-	runtime, err := agentRuntime()
-	if err != nil {
-		return plugin.AuthHookOutput{}, err
-	}
+	detectedRuntime, detectionErr := agentRuntimeForStateStore(states)
 	switch input.Params["provider"] {
 	case targetAuthProvider:
 		credentials, ok := states.(resourceCredentialStore)
 		if !ok {
 			return plugin.AuthHookOutput{}, nil
 		}
-		issuer, selectedRuntime, err := selectedLifecycleCredentialContext(
-			states,
-			strings.TrimSuffix(input.Params["issuer"], "/"),
-			runtime,
-		)
-		if err != nil {
-			return plugin.AuthHookOutput{}, err
+		issuer := strings.TrimSuffix(input.Params["issuer"], "/")
+		if detectionErr != nil {
+			return plugin.AuthHookOutput{}, detectionErr
 		}
-		return authenticateTargetRequest(input, credentials, client, selectedRuntime, issuer)
+		return authenticateTargetRequest(input, credentials, client, detectedRuntime, issuer)
 	case authProvider:
 	default:
 		return plugin.AuthHookOutput{}, nil
@@ -120,6 +113,10 @@ func authenticateRequest(
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
 	}
+	if detectionErr != nil {
+		return plugin.AuthHookOutput{}, detectionErr
+	}
+	runtime := detectedRuntime
 	target := agentTarget{
 		API:     input.API,
 		Profile: input.Profile,
@@ -127,44 +124,50 @@ func authenticateRequest(
 		Origin:  origin,
 		Issuer:  configuration.AgentIdentityIssuer,
 	}
-	if fileStates, ok := states.(*fileStateStore); ok {
-		selected, selectionErr := newLifecycleProfileStore(fileStates).Active()
-		if selectionErr != nil {
-			return plugin.AuthHookOutput{}, selectionErr
-		}
-		if selected != nil {
-			if selected.Completion != nil {
-				return plugin.AuthHookOutput{}, errors.New("active Agent lifecycle profile has completed a destructive operation and requires local cleanup")
-			}
-			if selected.Origin != origin {
-				return plugin.AuthHookOutput{}, fmt.Errorf(
-					"active Agent lifecycle profile %q uses %s; invoke this Restish API with --rsh-profile %s",
-					selected.Name,
-					selected.Origin,
-					selected.APIProfile,
-				)
-			}
-			if selected.Issuer != configuration.AgentIdentityIssuer {
-				return plugin.AuthHookOutput{}, errors.New("active Agent lifecycle profile does not match the discovered issuer")
-			}
-			target = selected.target()
-		}
-	}
-	state, err := ensureAgentIdentity(context.Background(), states, client, prompt, target, configuration)
+	state, err := states.Load(target)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return plugin.AuthHookOutput{}, fmt.Errorf(
+				"runtime %q is not logged in to %s; run `restish auth login`",
+				runtime,
+				originHostname(origin),
+			)
+		}
 		return plugin.AuthHookOutput{}, err
 	}
-	state, credential, err := ensurePlatformCredential(context.Background(), states, client, target, state, configuration)
-	if err != nil {
-		return plugin.AuthHookOutput{}, err
+	if state.Identity == nil || state.PlatformCredential == nil {
+		return plugin.AuthHookOutput{}, fmt.Errorf(
+			"runtime %q has not completed login to %s; run `restish auth login` to resume",
+			runtime,
+			originHostname(origin),
+		)
 	}
-	if credentials, ok := states.(resourceCredentialStore); ok {
+	credential := *state.PlatformCredential
+	readOnlyWhoami := input.Request.Method == http.MethodGet && sameRequestEndpoint(input.Request.URI, configuration.AgentEndpoint)
+	if credential.AccessToken == "" || credential.ExpiresAt == nil || !time.Now().Add(5*time.Second).Before(*credential.ExpiresAt) {
+		if readOnlyWhoami {
+			return plugin.AuthHookOutput{}, errors.New("current Realmroot login cannot be read without a valid local token; run `restish auth login`")
+		}
+		state, credential, err = ensurePlatformCredential(context.Background(), states, client, target, state, configuration)
+		if err != nil {
+			return plugin.AuthHookOutput{}, err
+		}
+	}
+	if !readOnlyWhoami {
+		credentials, ok := states.(resourceCredentialStore)
+		if !ok {
+			return signAuthenticatedRequest(input, credential)
+		}
 		if _, lookupErr := credentials.FindByResourceURL(input.Request.URI, runtime, state.Issuer); lookupErr == nil {
 			return authenticateTargetRequest(input, credentials, client, runtime, state.Issuer)
 		} else if !errors.Is(lookupErr, os.ErrNotExist) {
 			return plugin.AuthHookOutput{}, lookupErr
 		}
 	}
+	return signAuthenticatedRequest(input, credential)
+}
+
+func signAuthenticatedRequest(input plugin.AuthHookInput, credential dpopCredential) (plugin.AuthHookOutput, error) {
 	proof, err := signDPoPProof(credential.PrivateKey, input.Request.Method, input.Request.URI, credential.AccessToken, time.Now())
 	if err != nil {
 		return plugin.AuthHookOutput{}, err
@@ -177,34 +180,33 @@ func authenticateRequest(
 	}, nil
 }
 
-func selectedLifecycleCredentialContext(
-	states stateStore,
-	configuredIssuer string,
-	detectedRuntime string,
-) (string, string, error) {
+func sameRequestEndpoint(requestURI string, endpoint string) bool {
+	requestURL, requestErr := url.Parse(requestURI)
+	endpointURL, endpointErr := url.Parse(endpoint)
+	if requestErr != nil || endpointErr != nil {
+		return false
+	}
+	return requestURL.Scheme == endpointURL.Scheme && requestURL.Host == endpointURL.Host &&
+		strings.TrimSuffix(requestURL.EscapedPath(), "/") == strings.TrimSuffix(endpointURL.EscapedPath(), "/")
+}
+
+func agentRuntimeForStateStore(states any) (string, error) {
+	runtime, err := agentRuntime()
+	if err == nil || !errors.Is(err, errUnknownAgentRuntime) {
+		return runtime, err
+	}
 	fileStates, ok := states.(*fileStateStore)
 	if !ok {
-		return configuredIssuer, detectedRuntime, nil
+		return "", err
 	}
-	selected, err := newLifecycleProfileStore(fileStates).Active()
-	if err != nil {
-		return "", "", err
+	fallback, fallbackErr := newAuthBindingStore(fileStates).RuntimeFallback()
+	if fallbackErr != nil {
+		return "", fallbackErr
 	}
-	if selected == nil {
-		return configuredIssuer, detectedRuntime, nil
+	if fallback == "" {
+		return "", err
 	}
-	if selected.Completion != nil {
-		return "", "", errors.New("active Agent lifecycle profile has completed a destructive operation and requires local cleanup")
-	}
-	if configuredIssuer != "" && configuredIssuer != strings.TrimSuffix(selected.Issuer, "/") {
-		return "", "", fmt.Errorf(
-			"target API issuer %q does not match active Agent lifecycle profile %q issuer %q",
-			configuredIssuer,
-			selected.Name,
-			selected.Issuer,
-		)
-	}
-	return strings.TrimSuffix(selected.Issuer, "/"), selected.Runtime, nil
+	return fallback, nil
 }
 
 func authenticateTargetRequest(
@@ -643,13 +645,10 @@ func registerAgent(
 	}
 	if replace {
 		previous, loadErr := states.Load(target)
-		if loadErr != nil && !errors.Is(loadErr, os.ErrNotExist) {
+		if loadErr != nil {
 			return agentState{}, loadErr
 		}
-		if loadErr == nil {
-			state.RecoveryIdentity = previous.RecoveryIdentity
-			state.snapshot = previous.snapshot
-		}
+		state.snapshot = previous.snapshot
 		err = states.Update(target, state)
 	} else {
 		_, err = states.Create(target, state)

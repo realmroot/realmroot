@@ -12,7 +12,7 @@ const pluginVersion = "0.10.0"
 
 var commands = []plugin.CommandDecl{{
 	Name:  "auth",
-	Short: "Manage Realmroot Agent identity lifecycle",
+	Short: "Authenticate Realmroot Agent identities",
 	Long:  authCommandHelp,
 }}
 
@@ -47,7 +47,7 @@ func main() {
 		// first request, so a fresh decoder cannot lose buffered reply bytes.
 		client := plugin.NewCommandClient(os.Stdin, os.Stdout)
 		states := newFileStateStore()
-		err := runAuthCommand(input.Args, client, states, newLifecycleProfileStore(states))
+		err := runAuthCommand(input.Args, client, states, newAuthBindingStore(states))
 		if err != nil {
 			if writeErr := client.WriteStderr([]byte(err.Error() + "\n")); writeErr != nil {
 				exitWithError(writeErr)

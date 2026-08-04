@@ -6,281 +6,190 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/gofrs/flock"
 )
 
 const (
-	lifecycleProfilesVersion  = 1
-	lifecycleProfilesFilename = "profiles.json"
+	authBindingsVersion  = 1
+	authBindingsFilename = "bindings.json"
 )
 
-type lifecycleProfile struct {
-	Name       string               `json:"name"`
-	API        string               `json:"api"`
-	APIProfile string               `json:"api_profile"`
-	Origin     string               `json:"origin"`
-	Issuer     string               `json:"issuer"`
-	Runtime    string               `json:"runtime"`
-	Completion *lifecycleCompletion `json:"completion,omitempty"`
+type rememberedIdentity struct {
+	Origin   string         `json:"origin"`
+	Issuer   string         `json:"issuer"`
+	Runtime  string         `json:"runtime"`
+	Identity stableIdentity `json:"identity"`
 }
 
-type lifecycleCompletion struct {
-	Kind         string `json:"kind"`
-	ResourceID   string `json:"resource_id"`
-	Installation string `json:"installation_id,omitempty"`
+func (b rememberedIdentity) target() agentTarget {
+	return agentTarget{Runtime: b.Runtime, Origin: b.Origin, Issuer: b.Issuer}
 }
 
-func (p lifecycleProfile) target() agentTarget {
-	return agentTarget{
-		API: p.API, Profile: p.APIProfile, Runtime: p.Runtime, Origin: p.Origin, Issuer: p.Issuer,
-	}
+type authBindings struct {
+	Version         int                           `json:"version"`
+	FallbackRuntime string                        `json:"fallback_runtime,omitempty"`
+	Accounts        map[string]rememberedIdentity `json:"accounts"`
 }
 
-type lifecycleProfiles struct {
-	Version  int                         `json:"version"`
-	Active   string                      `json:"active,omitempty"`
-	Profiles map[string]lifecycleProfile `json:"profiles"`
-}
-
-type lifecycleProfileStore struct {
+type authBindingStore struct {
 	path string
 }
 
-func newLifecycleProfileStore(states *fileStateStore) *lifecycleProfileStore {
-	// Older adapters skip the identities directory while scanning legacy state.
-	// Keep non-credential metadata there so a downgrade fails on v9 identity
-	// state instead of trying to decode profiles.json as an Agent identity.
-	return &lifecycleProfileStore{path: filepath.Join(states.root, identityDirectory, lifecycleProfilesFilename)}
+func newAuthBindingStore(states *fileStateStore) *authBindingStore {
+	return &authBindingStore{path: filepath.Join(states.root, identityDirectory, authBindingsFilename)}
 }
 
-func (s *lifecycleProfileStore) Load() (lifecycleProfiles, error) {
+func authBindingKey(issuer string, runtime string) string {
+	return issuer + "\n" + runtime
+}
+
+func (s *authBindingStore) Load() (authBindings, error) {
 	data, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
-		return lifecycleProfiles{Version: lifecycleProfilesVersion, Profiles: map[string]lifecycleProfile{}}, nil
+		return authBindings{Version: authBindingsVersion, Accounts: map[string]rememberedIdentity{}}, nil
 	}
 	if err != nil {
-		return lifecycleProfiles{}, fmt.Errorf("read Agent lifecycle profiles: %w", err)
+		return authBindings{}, fmt.Errorf("read local Agent identity bindings: %w", err)
 	}
 	info, err := os.Lstat(s.path)
 	if err != nil {
-		return lifecycleProfiles{}, fmt.Errorf("read Agent lifecycle profile metadata: %w", err)
+		return authBindings{}, fmt.Errorf("read local Agent identity binding metadata: %w", err)
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return lifecycleProfiles{}, errors.New("Agent lifecycle profiles must be a private regular file")
+		return authBindings{}, errors.New("local Agent identity bindings must be a private regular file")
 	}
-	var profiles lifecycleProfiles
-	if err := json.Unmarshal(data, &profiles); err != nil {
-		return lifecycleProfiles{}, fmt.Errorf("decode Agent lifecycle profiles: %w", err)
+	var bindings authBindings
+	if err := json.Unmarshal(data, &bindings); err != nil {
+		return authBindings{}, fmt.Errorf("decode local Agent identity bindings: %w", err)
 	}
-	if profiles.Version != lifecycleProfilesVersion {
-		return lifecycleProfiles{}, fmt.Errorf("unsupported Agent lifecycle profile version %d", profiles.Version)
+	if bindings.Version != authBindingsVersion {
+		return authBindings{}, fmt.Errorf("unsupported local Agent identity binding version %d", bindings.Version)
 	}
-	if profiles.Profiles == nil {
-		profiles.Profiles = map[string]lifecycleProfile{}
+	if bindings.Accounts == nil {
+		bindings.Accounts = map[string]rememberedIdentity{}
 	}
-	for name, profile := range profiles.Profiles {
-		if name != profile.Name {
-			return lifecycleProfiles{}, errors.New("Agent lifecycle profile key does not match its name")
-		}
-		if err := validateLifecycleProfile(profile); err != nil {
-			return lifecycleProfiles{}, err
+	if bindings.FallbackRuntime != "" {
+		if normalized, err := normalizeAgentRuntime(bindings.FallbackRuntime); err != nil || normalized != bindings.FallbackRuntime {
+			return authBindings{}, errors.New("local Agent identity bindings contain an invalid fallback runtime")
 		}
 	}
-	if profiles.Active != "" {
-		if _, ok := profiles.Profiles[profiles.Active]; !ok {
-			return lifecycleProfiles{}, errors.New("active Agent lifecycle profile does not exist")
+	for key, binding := range bindings.Accounts {
+		if key != authBindingKey(binding.Issuer, binding.Runtime) {
+			return authBindings{}, errors.New("local Agent identity binding key is invalid")
+		}
+		if err := validateRememberedIdentity(binding); err != nil {
+			return authBindings{}, err
 		}
 	}
-	return profiles, nil
+	return bindings, nil
 }
 
-func (s *lifecycleProfileStore) save(profiles lifecycleProfiles) error {
-	profiles.Version = lifecycleProfilesVersion
+func (s *authBindingStore) RuntimeFallback() (string, error) {
+	bindings, err := s.Load()
+	if err != nil {
+		return "", err
+	}
+	return bindings.FallbackRuntime, nil
+}
+
+func (s *authBindingStore) SetRuntimeFallback(runtime string) error {
+	normalized, err := normalizeAgentRuntime(runtime)
+	if err != nil {
+		return err
+	}
+	return s.mutate(func(bindings *authBindings) error {
+		bindings.FallbackRuntime = normalized
+		return nil
+	})
+}
+
+func (s *authBindingStore) Find(issuer string, runtime string) (*rememberedIdentity, error) {
+	bindings, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+	binding, ok := bindings.Accounts[authBindingKey(issuer, runtime)]
+	if !ok {
+		return nil, nil
+	}
+	return &binding, nil
+}
+
+func (s *authBindingStore) Put(binding rememberedIdentity) error {
+	if err := validateRememberedIdentity(binding); err != nil {
+		return err
+	}
+	return s.mutate(func(bindings *authBindings) error {
+		key := authBindingKey(binding.Issuer, binding.Runtime)
+		if existing, ok := bindings.Accounts[key]; ok &&
+			(existing.Identity.ID != binding.Identity.ID || existing.Identity.Subject != binding.Identity.Subject) {
+			return errors.New("Realmroot issuer and runtime are already bound to another stable Agent identity")
+		}
+		bindings.Accounts[key] = binding
+		return nil
+	})
+}
+
+func validateRememberedIdentity(binding rememberedIdentity) error {
+	if _, err := validatedAbsoluteURL(binding.Origin); err != nil {
+		return errors.New("local Agent identity binding origin is invalid")
+	}
+	if _, err := validatedAbsoluteURL(binding.Issuer); err != nil {
+		return errors.New("local Agent identity binding issuer is invalid")
+	}
+	if normalized, err := normalizeAgentRuntime(binding.Runtime); err != nil || normalized != binding.Runtime {
+		return errors.New("local Agent identity binding runtime is invalid")
+	}
+	if binding.Identity.ID == "" || binding.Identity.Subject == "" || binding.Identity.Issuer != binding.Issuer {
+		return errors.New("local Agent identity binding identity is invalid")
+	}
+	return nil
+}
+
+func (s *authBindingStore) mutate(change func(*authBindings) error) (result error) {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("create Agent lifecycle profile directory: %w", err)
+		return fmt.Errorf("create local Agent identity binding directory: %w", err)
 	}
-	data, err := json.MarshalIndent(profiles, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode Agent lifecycle profiles: %w", err)
+	lock := flock.New(s.path + ".lock")
+	if err := lock.Lock(); err != nil {
+		return fmt.Errorf("lock local Agent identity bindings: %w", err)
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(s.path), ".profiles-*.json")
+	defer func() {
+		if err := lock.Unlock(); err != nil {
+			result = errors.Join(result, fmt.Errorf("unlock local Agent identity bindings: %w", err))
+		}
+	}()
+	bindings, err := s.Load()
 	if err != nil {
-		return fmt.Errorf("create temporary Agent lifecycle profiles: %w", err)
+		return err
+	}
+	if err := change(&bindings); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(bindings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode local Agent identity bindings: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(s.path), ".bindings-*")
+	if err != nil {
+		return fmt.Errorf("create temporary local Agent identity bindings: %w", err)
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
-		return fmt.Errorf("protect temporary Agent lifecycle profiles: %w", err)
+		return fmt.Errorf("protect temporary local Agent identity bindings: %w", err)
 	}
 	if _, err := temporary.Write(append(data, '\n')); err != nil {
 		_ = temporary.Close()
-		return fmt.Errorf("write Agent lifecycle profiles: %w", err)
+		return fmt.Errorf("write local Agent identity bindings: %w", err)
 	}
 	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close Agent lifecycle profiles: %w", err)
+		return fmt.Errorf("close local Agent identity bindings: %w", err)
 	}
 	if err := os.Rename(temporaryPath, s.path); err != nil {
-		return fmt.Errorf("replace Agent lifecycle profiles: %w", err)
+		return fmt.Errorf("replace local Agent identity bindings: %w", err)
 	}
 	return nil
-}
-
-func (s *lifecycleProfileStore) Put(profile lifecycleProfile) error {
-	if err := validateLifecycleProfile(profile); err != nil {
-		return err
-	}
-	return s.mutate(func(profiles *lifecycleProfiles) error {
-		for name, existing := range profiles.Profiles {
-			if name != profile.Name && existing.Issuer == profile.Issuer && existing.Runtime == profile.Runtime {
-				return fmt.Errorf("issuer and runtime are already selected by lifecycle profile %q", name)
-			}
-		}
-		if existing, ok := profiles.Profiles[profile.Name]; ok &&
-			(existing.Issuer != profile.Issuer || existing.Runtime != profile.Runtime) {
-			return fmt.Errorf("lifecycle profile %q already selects another Agent identity", profile.Name)
-		}
-		profile.Completion = nil
-		profiles.Profiles[profile.Name] = profile
-		profiles.Active = profile.Name
-		return nil
-	})
-}
-
-func (s *lifecycleProfileStore) Complete(name string, completion lifecycleCompletion) error {
-	if err := validateLifecycleCompletion(completion); err != nil {
-		return err
-	}
-	return s.mutate(func(profiles *lifecycleProfiles) error {
-		profile, ok := profiles.Profiles[name]
-		if !ok {
-			return fmt.Errorf("Agent lifecycle profile %q was not found", name)
-		}
-		profile.Completion = &completion
-		profiles.Profiles[name] = profile
-		return nil
-	})
-}
-
-func validateLifecycleProfile(profile lifecycleProfile) error {
-	if err := validateLifecycleProfileName(profile.Name); err != nil {
-		return err
-	}
-	if profile.API == "" || profile.APIProfile == "" {
-		return errors.New("Agent lifecycle profile must select a Restish API and API profile")
-	}
-	origin, err := validatedAbsoluteURL(profile.Origin)
-	if err != nil || (origin.Path != "" && origin.Path != "/") || origin.RawQuery != "" || origin.Fragment != "" {
-		return errors.New("Agent lifecycle profile origin must be an absolute origin")
-	}
-	if _, err := validatedAbsoluteURL(profile.Issuer); err != nil || !sameOrigin(profile.Issuer, profile.Origin) {
-		return errors.New("Agent lifecycle profile issuer must belong to its origin")
-	}
-	runtime, err := normalizeAgentRuntime(profile.Runtime)
-	if err != nil || runtime != profile.Runtime {
-		return errors.New("Agent lifecycle profile runtime is invalid")
-	}
-	if profile.Completion != nil {
-		return validateLifecycleCompletion(*profile.Completion)
-	}
-	return nil
-}
-
-func validateLifecycleCompletion(completion lifecycleCompletion) error {
-	if completion.ResourceID == "" ||
-		(completion.Kind != "installation_revocation" && completion.Kind != "identity_retirement") ||
-		(completion.Kind == "installation_revocation" && completion.Installation == "") {
-		return errors.New("Agent lifecycle completion marker is invalid")
-	}
-	return nil
-}
-
-func (s *lifecycleProfileStore) Use(name string) (lifecycleProfile, error) {
-	var selected lifecycleProfile
-	err := s.mutate(func(profiles *lifecycleProfiles) error {
-		profile, ok := profiles.Profiles[name]
-		if !ok {
-			return fmt.Errorf("Agent lifecycle profile %q was not found", name)
-		}
-		profiles.Active = name
-		selected = profile
-		return nil
-	})
-	return selected, err
-}
-
-func (s *lifecycleProfileStore) Selected(name string) (lifecycleProfile, error) {
-	profiles, err := s.Load()
-	if err != nil {
-		return lifecycleProfile{}, err
-	}
-	if name == "" {
-		name = profiles.Active
-	}
-	if name == "" {
-		return lifecycleProfile{}, errors.New("no Agent lifecycle profile is selected; run `restish auth login NAME`")
-	}
-	profile, ok := profiles.Profiles[name]
-	if !ok {
-		return lifecycleProfile{}, fmt.Errorf("Agent lifecycle profile %q was not found", name)
-	}
-	return profile, nil
-}
-
-func (s *lifecycleProfileStore) Active() (*lifecycleProfile, error) {
-	profiles, err := s.Load()
-	if err != nil {
-		return nil, err
-	}
-	if profiles.Active == "" {
-		return nil, nil
-	}
-	profile := profiles.Profiles[profiles.Active]
-	return &profile, nil
-}
-
-func (s *lifecycleProfileStore) Delete(name string) error {
-	return s.mutate(func(profiles *lifecycleProfiles) error {
-		if _, ok := profiles.Profiles[name]; !ok {
-			return nil
-		}
-		delete(profiles.Profiles, name)
-		if profiles.Active == name {
-			profiles.Active = ""
-			names := make([]string, 0, len(profiles.Profiles))
-			for candidate := range profiles.Profiles {
-				names = append(names, candidate)
-			}
-			sort.Strings(names)
-			if len(names) > 0 {
-				profiles.Active = names[0]
-			}
-		}
-		return nil
-	})
-}
-
-func (s *lifecycleProfileStore) mutate(change func(*lifecycleProfiles) error) (result error) {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("create Agent lifecycle profile directory: %w", err)
-	}
-	lock := flock.New(s.path + ".lock")
-	if err := lock.Lock(); err != nil {
-		return fmt.Errorf("lock Agent lifecycle profiles: %w", err)
-	}
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			result = errors.Join(result, fmt.Errorf("unlock Agent lifecycle profiles: %w", err))
-		}
-	}()
-	profiles, err := s.Load()
-	if err != nil {
-		return err
-	}
-	if err := change(&profiles); err != nil {
-		return err
-	}
-	return s.save(profiles)
 }

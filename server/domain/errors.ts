@@ -3,7 +3,6 @@ export type ErrorCode =
   | 'unauthorized'
   | 'forbidden'
   | 'not_found'
-  | 'gone'
   | 'conflict'
   | 'resource_in_use'
   | 'precondition_failed'
@@ -40,7 +39,6 @@ export const badRequest = (message: string) => new ApiError(400, 'bad_request', 
 export const unauthorized = (message = 'Authentication is required.') => new ApiError(401, 'unauthorized', message)
 export const forbidden = (message = 'Admin access is required.') => new ApiError(403, 'forbidden', message)
 export const notFound = (message = 'Resource not found.') => new ApiError(404, 'not_found', message)
-export const gone = (message: string) => new ApiError(410, 'gone', message)
 export const conflict = (message: string) => new ApiError(409, 'conflict', message)
 export const resourceInUse = (message: string, details: Record<string, unknown>) =>
   new ApiError(409, 'resource_in_use', message, details)
