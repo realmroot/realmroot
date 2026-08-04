@@ -26,14 +26,20 @@ export const createOrganizationRequestSchema = z.object({
   slug: slugSchema,
   name: nonEmptyString,
   displayName: z.string().trim().max(200).nullable().optional(),
-  logo: z.url().nullable().optional(),
+  logo: z
+    .union([z.url(), z.string().regex(/^\/api\/assets\/[A-Za-z0-9_-]+$/)])
+    .nullable()
+    .optional(),
 })
 
 export const updateOrganizationRequestSchema = z.object({
   slug: slugSchema.optional(),
   name: nonEmptyString.optional(),
   displayName: z.string().trim().max(200).nullable().optional(),
-  logo: z.url().nullable().optional(),
+  logo: z
+    .union([z.url(), z.string().regex(/^\/api\/assets\/[A-Za-z0-9_-]+$/)])
+    .nullable()
+    .optional(),
   disabled: z.boolean().optional(),
   disabledReason: z.string().trim().max(500).nullable().optional(),
 })
@@ -181,6 +187,14 @@ export const replaceRolePermissionsRequestSchema = z.object({
         ).values(),
       ].sort((left, right) => left.resourceId.localeCompare(right.resourceId) || left.scope.localeCompare(right.scope)),
     ),
+})
+
+export const roleScopesResponseSchema = z.object({
+  scopes: z.array(rolePermissionSchema),
+})
+
+export const replaceRoleScopesRequestSchema = z.object({
+  scopes: replaceRolePermissionsRequestSchema.shape.permissions,
 })
 
 export const roleAssignmentSubjectTypeSchema = z.enum(['user', 'agent', 'workload'])

@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { consoleQueryKeys, createUser, listUsers, requestPasswordReset, updateUser } from '@/lib/api/management'
+import { consoleQueryKeys, createUser, listUsers, requestUserPasswordReset, updateUser } from '@/lib/api/management'
 import { useConsoleScope } from '@/lib/console-context'
 import {
   Button,
@@ -204,7 +204,7 @@ export function UsersPage() {
                         <DropdownMenuContent>
                           <DropdownMenuGroup>
                             {user.email ? (
-                              <DropdownMenuItem onClick={() => requestPasswordReset(user.email ?? '')}>
+                              <DropdownMenuItem onClick={() => requestUserPasswordReset(user.id)}>
                                 {' '}
                                 {tt('Send password reset')}{' '}
                               </DropdownMenuItem>

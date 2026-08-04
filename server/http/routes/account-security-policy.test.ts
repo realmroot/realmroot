@@ -196,8 +196,7 @@ describe('account security policy routes', () => {
       securityPolicy: securityPolicy({ mfa: { mode: 'required' } }),
     })
 
-    const policy = await app.request('/api/security/policy', { headers: adminHeaders() })
-    const state = await app.request('/api/users/user-2/security', { headers: adminHeaders() })
+    const policy = await app.request('/api/realm/security-policy', { headers: adminHeaders() })
     await app.request('/api/users/user-2/passkeys/passkey-1', {
       method: 'DELETE',
       headers: adminHeaders(),
@@ -212,11 +211,6 @@ describe('account security policy routes', () => {
         mfa: {
           mode: 'required',
         },
-      },
-    })
-    await expect(state.json()).resolves.toMatchObject({
-      security: {
-        userId: 'user-2',
       },
     })
     expect(security.deletePasskey).toHaveBeenCalledWith('user-2', 'passkey-1')

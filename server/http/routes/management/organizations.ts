@@ -86,6 +86,14 @@ managementOrganizationsRoute.post('/:organizationId/members', async (c) => {
   return c.json(member, 201)
 })
 
+managementOrganizationsRoute.get('/:organizationId/members/:memberId', async (c) => {
+  const organizationId = c.req.param('organizationId')
+  requireConsoleOrganizationAccess(c, organizationId)
+  const member = await getDeps(c).authorization.findMember(c.req.param('memberId'))
+  if (!member || member.organizationId !== organizationId) return c.notFound()
+  return c.json(memberResponseSchema.parse(member))
+})
+
 managementOrganizationsRoute.patch('/:organizationId/members/:memberId', async (c) =>
   c.json(
     await updateMember(
@@ -122,6 +130,14 @@ managementOrganizationsRoute.post('/:organizationId/invitations', async (c) => {
     `/api/organizations/${encodeURIComponent(organizationId)}/invitations/${encodeURIComponent(invitation.id)}`,
   )
   return c.json(invitation, 201)
+})
+
+managementOrganizationsRoute.get('/:organizationId/invitations/:invitationId', async (c) => {
+  const organizationId = c.req.param('organizationId')
+  requireConsoleOrganizationAccess(c, organizationId)
+  const invitation = await getDeps(c).authorization.findInvitation(c.req.param('invitationId'))
+  if (!invitation || invitation.organizationId !== organizationId) return c.notFound()
+  return c.json(invitationResponseSchema.parse(invitation))
 })
 
 managementOrganizationsRoute.delete('/:organizationId/invitations/:invitationId', async (c) => {

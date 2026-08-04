@@ -29,13 +29,13 @@ describe('console Role lifecycle', () => {
     const mutations: Array<{ method: string; path: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestDetails(input, init)
-      if (request.method === 'PUT' && request.url.pathname === '/api/roles/role-1/permissions') {
+      if (request.method === 'PUT' && request.url.pathname === '/api/access/roles/role-1/scopes') {
         const body = await readBody(request.request, init?.body)
-        permissions = (body as { permissions: typeof permissions }).permissions
+        permissions = (body as { scopes: typeof permissions }).scopes
         mutations.push({ method: request.method, path: request.url.pathname, body })
         return rolePermissions(permissions)
       }
-      if (request.method === 'POST' && request.url.pathname === '/api/role-assignments') {
+      if (request.method === 'POST' && request.url.pathname === '/api/access/assignments') {
         const body = await readBody(request.request, init?.body)
         mutations.push({ method: request.method, path: request.url.pathname, body })
         return jsonResponse({ id: 'assignment-new' }, 201)
@@ -73,9 +73,9 @@ describe('console Role lifecycle', () => {
     await waitFor(() =>
       expect(mutations).toContainEqual({
         method: 'PUT',
-        path: '/api/roles/role-1/permissions',
+        path: '/api/access/roles/role-1/scopes',
         body: {
-          permissions: [
+          scopes: [
             { resourceId: 'resource-1', scope: 'projects:write' },
             { resourceId: 'resource-missing', scope: 'legacy:read' },
           ],
@@ -107,7 +107,7 @@ describe('console Role lifecycle', () => {
     await waitFor(() =>
       expect(mutations).toContainEqual({
         method: 'POST',
-        path: '/api/role-assignments',
+        path: '/api/access/assignments',
         body: {
           roleId: 'role-1',
           subjectId: 'app-1',
@@ -128,7 +128,7 @@ describe('console Role lifecycle', () => {
     let listMode = false
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
-      if (request.url.pathname === '/api/roles') {
+      if (request.url.pathname === '/api/access/roles') {
         return Promise.resolve(
           jsonResponse({
             roles: [{ ...role, description: 'Realm administrator.', system: true }],
@@ -136,16 +136,16 @@ describe('console Role lifecycle', () => {
           }),
         )
       }
-      if (request.url.pathname === '/api/roles/role-1') {
+      if (request.url.pathname === '/api/access/roles/role-1') {
         return Promise.resolve(jsonResponse({ ...role, description: 'Realm administrator.', system: true }))
       }
-      if (request.url.pathname === '/api/roles/role-1/permissions') {
+      if (request.url.pathname === '/api/access/roles/role-1/scopes') {
         return Promise.resolve(listMode ? jsonResponse(null) : rolePermissions([]))
       }
-      if (request.url.pathname === '/api/api-resources') {
+      if (request.url.pathname === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: page(0) }))
       }
-      if (request.url.pathname === '/api/role-assignments') {
+      if (request.url.pathname === '/api/access/assignments') {
         return Promise.resolve(jsonResponse({ assignments: [], pagination: page(0) }))
       }
       if (
@@ -197,14 +197,14 @@ describe('console Role lifecycle', () => {
     let assignmentFailure = false
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
-      if (request.url.pathname === '/api/roles/role-1/permissions') {
+      if (request.url.pathname === '/api/access/roles/role-1/scopes') {
         return Promise.resolve(
           assignmentFailure
             ? rolePermissions([{ resourceId: 'resource-1', scope: 'projects:read' }])
-            : jsonResponse({ roleId: 'role-1', permissions: [{ resourceId: 'resource-1', scope: 'projects:read' }] }),
+            : jsonResponse({ roleId: 'role-1', scopes: [{ resourceId: 'resource-1', scope: 'projects:read' }] }),
         )
       }
-      if (assignmentFailure && request.url.pathname === '/api/role-assignments') {
+      if (assignmentFailure && request.url.pathname === '/api/access/assignments') {
         return Promise.resolve(jsonResponse({ message: 'Assignments unavailable.' }, 500))
       }
       return Promise.resolve(roleResponse(request.url, [{ resourceId: 'resource-1', scope: 'projects:read' }]))
@@ -257,7 +257,7 @@ describe('console Role lifecycle', () => {
     let fail = true
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
-      if (fail && request.url.pathname === '/api/roles/role-1') {
+      if (fail && request.url.pathname === '/api/access/roles/role-1') {
         return Promise.resolve(jsonResponse({ message: 'Role unavailable.' }, 500))
       }
       return Promise.resolve(roleResponse(request.url, []))
@@ -271,7 +271,7 @@ describe('console Role lifecycle', () => {
 
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
-      if (request.url.pathname === '/api/roles/role-1') return Promise.resolve(jsonResponse(null))
+      if (request.url.pathname === '/api/access/roles/role-1') return Promise.resolve(jsonResponse(null))
       return Promise.resolve(roleResponse(request.url, []))
     })
     const missing = renderWithQuery(<RoleDetailPage roleId="role-1" />)
@@ -280,12 +280,12 @@ describe('console Role lifecycle', () => {
 
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
-      if (request.url.pathname === '/api/roles') {
+      if (request.url.pathname === '/api/access/roles') {
         return Promise.resolve(
           jsonResponse({ roles: [customRole, { ...role, id: 'role-system' }], pagination: page(2) }),
         )
       }
-      if (request.url.pathname.endsWith('/permissions')) {
+      if (request.url.pathname.endsWith('/scopes')) {
         return Promise.resolve(jsonResponse({ message: 'Permissions unavailable.' }, 500))
       }
       throw new Error(`Unexpected Role list request: ${request.method} ${request.url}`)
@@ -321,14 +321,14 @@ async function readBody(request: Request | null, body?: BodyInit | null) {
 }
 
 function roleResponse(url: URL, permissions: Array<{ resourceId: string; scope: string }>) {
-  if (url.pathname === '/api/roles/role-1') return jsonResponse(customRole)
-  if (url.pathname === '/api/roles/role-1/permissions') return rolePermissions(permissions)
-  if (url.pathname === '/api/api-resources') {
+  if (url.pathname === '/api/access/roles/role-1') return jsonResponse(customRole)
+  if (url.pathname === '/api/access/roles/role-1/scopes') return rolePermissions(permissions)
+  if (url.pathname === '/api/resource-servers') {
     return jsonResponse({ items: [apiResource, secondResource], pagination: page(2) })
   }
-  if (url.pathname === '/api/api-resources/resource-1/contract') return jsonResponse(projectContract)
-  if (url.pathname === '/api/api-resources/resource-2/contract') return jsonResponse(billingContract)
-  if (url.pathname === '/api/role-assignments') {
+  if (url.pathname === '/api/resource-servers/resource-1/contract') return jsonResponse(projectContract)
+  if (url.pathname === '/api/resource-servers/resource-2/contract') return jsonResponse(billingContract)
+  if (url.pathname === '/api/access/assignments') {
     return jsonResponse({ assignments, pagination: page(assignments.length) })
   }
   if (url.pathname === '/api/users') return jsonResponse({ users: [user], pagination: page(1) })
@@ -341,7 +341,7 @@ function roleResponse(url: URL, permissions: Array<{ resourceId: string; scope: 
 }
 
 function rolePermissions(permissions: Array<{ resourceId: string; scope: string }>) {
-  return jsonResponse({ roleId: 'role-1', permissions }, 200, { etag: '"permissions-v1"' })
+  return jsonResponse({ roleId: 'role-1', scopes: permissions }, 200, { etag: '"permissions-v1"' })
 }
 
 const timestamp = '2026-01-01T00:00:00.000Z'

@@ -71,7 +71,7 @@ describe('OAuth token claim building over real D1', () => {
 
     const audience = 'https://api.example.com/contacts'
     const resource = (await (
-      await postJson(harness, cookie, '/api/api-resources', {
+      await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'contacts-api',
         name: 'Contacts API',
         resourceUrl: audience,
@@ -100,7 +100,7 @@ describe('OAuth token claim building over real D1', () => {
     // Distinct roles per subject so each assignment read is independently proven.
     const roleId = async (key: string, name: string) =>
       (
-        (await (await postJson(harness, cookie, '/api/roles', { key, name })).json()) as {
+        (await (await postJson(harness, cookie, '/api/access/roles', { key, name })).json()) as {
           id: string
         }
       ).id
@@ -109,27 +109,27 @@ describe('OAuth token claim building over real D1', () => {
     const memberRole = await roleId('contacts-member-role', 'Contacts Member')
 
     for (const roleId of [userRole, appRole, memberRole]) {
-      const current = await harness.request(`/api/roles/${roleId}/permissions`, { headers: { cookie } })
+      const current = await harness.request(`/api/access/roles/${roleId}/scopes`, { headers: { cookie } })
       const etag = current.headers.get('etag')
       expect(etag).toBeTruthy()
-      const replaced = await harness.request(`/api/roles/${roleId}/permissions`, {
+      const replaced = await harness.request(`/api/access/roles/${roleId}/scopes`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json', cookie, 'if-match': etag! },
-        body: JSON.stringify({ permissions: [{ resourceId: resource.id, scope: 'contacts:read' }] }),
+        body: JSON.stringify({ scopes: [{ resourceId: resource.id, scope: 'contacts:read' }] }),
       })
       expect(replaced.status, await replaced.clone().text()).toBe(200)
     }
-    await postJson(harness, cookie, '/api/role-assignments', {
+    await postJson(harness, cookie, '/api/access/assignments', {
       roleId: userRole,
       subjectType: 'user',
       subjectId: userId,
     })
-    await postJson(harness, cookie, '/api/role-assignments', {
+    await postJson(harness, cookie, '/api/access/assignments', {
       roleId: appRole,
       subjectType: 'workload',
       subjectId: application.id,
     })
-    await postJson(harness, cookie, '/api/role-assignments', {
+    await postJson(harness, cookie, '/api/access/assignments', {
       roleId: memberRole,
       subjectType: 'user',
       subjectId: userId,

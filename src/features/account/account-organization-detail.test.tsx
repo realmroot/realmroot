@@ -100,7 +100,7 @@ describe('Account Organization detail', () => {
           pagination: { limit: 50, offset: 0, total: 1, hasMore: false, nextOffset: null },
         }),
       ),
-      http.get(`${base}/api/role-assignments`, ({ request }) => {
+      http.get(`${base}/api/access/assignments`, ({ request }) => {
         const realm = new URL(request.url).searchParams.get('context') === 'realm'
         return json({
           assignments: realm
@@ -122,7 +122,7 @@ describe('Account Organization detail', () => {
           pagination: { limit: 100, offset: 0, total: realm ? 0 : 1, hasMore: false, nextOffset: null },
         })
       }),
-      http.get(`${base}/api/roles/role-viewer`, () =>
+      http.get(`${base}/api/access/roles/role-viewer`, () =>
         json({
           id: 'role-viewer',
           key: 'household.viewer',
@@ -133,13 +133,13 @@ describe('Account Organization detail', () => {
           updatedAt: '2026-08-01T00:00:00.000Z',
         }),
       ),
-      http.get(`${base}/api/roles/role-viewer/permissions`, () =>
+      http.get(`${base}/api/access/roles/role-viewer/scopes`, () =>
         HttpResponse.json(
-          { permissions: [{ resourceId: 'household-api', scope: 'household:read' }] },
+          { scopes: [{ resourceId: 'household-api', scope: 'household:read' }] },
           { headers: { ETag: '"role-viewer"' } },
         ),
       ),
-      http.get(`${base}/api/agent-access-grants`, () =>
+      http.get(`${base}/api/access/authorizations`, () =>
         json({
           items: [
             {

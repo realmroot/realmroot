@@ -97,12 +97,12 @@ describe('management security user routes', () => {
       },
     }
 
-    const adminResponse = await app.request('/api/security/policy', {
+    const adminResponse = await app.request('/api/realm/security-policy', {
       method: 'PATCH',
       headers: adminHeaders(),
       body: JSON.stringify(body),
     })
-    const managementResponse = await app.request('/api/security/policy', {
+    const managementResponse = await app.request('/api/realm/security-policy', {
       method: 'PATCH',
       headers: adminHeaders(),
       body: JSON.stringify(body),

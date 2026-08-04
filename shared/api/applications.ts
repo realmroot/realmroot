@@ -33,7 +33,8 @@ export const userConfigurableApplicationScopeSchema = z.union([
 ])
 
 const nonEmptyString = z.string().trim().min(1)
-const optionalUrl = z.url().optional()
+const managedAssetUrlSchema = z.union([z.url(), z.string().regex(/^\/api\/assets\/[A-Za-z0-9_-]+$/)])
+const optionalUrl = managedAssetUrlSchema.optional()
 const customDataSchema = z.record(z.string(), z.unknown())
 
 export const applicationAudienceModeSchema = z.enum(['realm', 'organizations', 'users', 'public'])

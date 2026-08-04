@@ -44,7 +44,6 @@ describe('management API client', () => {
     await management.updateUser('user-1', { role: 'admin' })
     await management.getUser('user-1')
     await management.deleteUser('user-1')
-    await management.requestPasswordReset('jane@example.com')
     await management.requestUserPasswordReset('user-1')
     await management.banUser('user-1', { reason: 'abuse', expiresInSeconds: 3600 })
     await management.unbanUser('user-1')
@@ -52,8 +51,6 @@ describe('management API client', () => {
     await management.revokeUserSessions('user-1')
     await management.revokeUserSession('user-1', 'session-1')
     await management.listUserLinkedAccounts('user-1', { limit: 5 })
-    await management.listUserApplications('user-1', { offset: 30 })
-    await management.getUserSecurity('user-1')
     await management.listUserPasskeys('user-1', { limit: 2 })
     await management.deleteUserPasskey('user-1', 'passkey-1')
     await management.listConnectors()
@@ -119,8 +116,8 @@ describe('management API client', () => {
     await management.deleteWebhookEndpoint('wh_1')
     await management.rotateWebhookEndpointSecret('wh_1')
     await management.listWebhookRequests({ endpointId: 'wh_1', status: 'failed' })
-    await management.getWebhookRequest('whr_1')
-    await management.createWebhookDeliveryAttempt('whr_1', 'retry-whr-1')
+    await management.getWebhookRequest('wh_1', 'whr_1')
+    await management.createWebhookDeliveryAttempt('wh_1', 'whr_1', 'retry-whr-1')
 
     expect(calls).toEqual([
       ['applications.get'],
@@ -166,13 +163,13 @@ describe('management API client', () => {
       ['clientSecrets.post', { param: { id: 'app-1' } }],
       ['applicationAuthorizations.get', { query: { applicationId: 'app-1', limit: '25', offset: '50' } }],
       ['applicationAuthorizationRevocation.put', { param: { authorizationId: 'authorization-1' } }],
-      ['upload', '/api/applications/app-1/logo', expect.any(File)],
+      ['uploadAsset', 'application_logo', expect.any(File)],
+      ['applications.patch', { param: { id: 'app-1' }, json: { iconUrl: '/api/assets/asset-1' } }],
       ['users.get', { query: { search: 'jane', limit: '50' } }],
       ['users.post', { json: { email: 'jane@example.com', displayName: 'Jane Doe' } }],
       ['users.patch', { param: { id: 'user-1' }, json: { role: 'admin' } }],
       ['user.get', { param: { id: 'user-1' } }],
       ['users.delete', { param: { id: 'user-1' } }],
-      ['passwordReset.post', { json: { email: 'jane@example.com' } }],
       ['userPasswordReset.post', { param: { id: 'user-1' }, json: {} }],
       ['userBan.put', { param: { id: 'user-1' }, json: { reason: 'abuse', expiresInSeconds: 3600 } }],
       ['userBan.delete', { param: { id: 'user-1' } }],
@@ -180,8 +177,6 @@ describe('management API client', () => {
       ['userSessions.delete', { param: { id: 'user-1' } }],
       ['userSession.delete', { param: { id: 'user-1', sessionId: 'session-1' } }],
       ['userLinkedAccounts.get', { param: { id: 'user-1' }, query: { limit: '5' } }],
-      ['userApplications.get', { param: { id: 'user-1' }, query: { offset: '30' } }],
-      ['userSecurity.get', { param: { id: 'user-1' } }],
       ['userPasskeys.get', { param: { id: 'user-1' }, query: { limit: '2' } }],
       ['userPasskey.delete', { param: { id: 'user-1', passkeyId: 'passkey-1' } }],
       ['connectors.get'],
@@ -214,23 +209,26 @@ describe('management API client', () => {
       ['organizations.get'],
       ['organizations.post', { json: { slug: 'acme', name: 'Acme' } }],
       ['organizations.patch', { param: { id: 'org-1' }, json: { disabled: true } }],
-      ['upload', '/api/organizations/org-1/logo', expect.any(File)],
-      ['upload', '/api/branding/logo', expect.any(File)],
-      ['upload', '/api/branding/favicon', expect.any(File)],
+      ['uploadAsset', 'organization_logo', expect.any(File)],
+      ['organizations.patch', { param: { id: 'org-1' }, json: { logo: '/api/assets/asset-1' } }],
+      ['uploadAsset', 'branding_logo', expect.any(File)],
+      ['branding.patch', { json: { branding: { logoUrl: '/api/assets/asset-1' } } }],
+      ['uploadAsset', 'favicon', expect.any(File)],
+      ['branding.patch', { json: { branding: { faviconUrl: '/api/assets/asset-1' } } }],
       ['roles.get'],
       ['role.get', { param: { id: 'role-1' } }],
       ['roles.post', { json: { key: 'admin', name: 'Admin' } }],
       ['roles.patch', { param: { id: 'role-1' }, json: { description: 'Tenant admin' } }],
       ['roles.delete', { param: { id: 'role-1' } }],
-      ['fetch', '/api/roles/role-1/permissions', { credentials: 'same-origin' }],
+      ['fetch', '/api/access/roles/role-1/scopes', { credentials: 'same-origin' }],
       [
         'fetch',
-        '/api/roles/role-1/permissions',
+        '/api/access/roles/role-1/scopes',
         {
           method: 'PUT',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json', 'if-match': '"permissions-v1"' },
-          body: JSON.stringify({ permissions: [{ resourceId: 'resource-1', scope: 'orders.read' }] }),
+          body: JSON.stringify({ scopes: [{ resourceId: 'resource-1', scope: 'orders.read' }] }),
         },
       ],
       ['roleAssignments.get', { query: { roleId: 'role-1', status: 'active' } }],
@@ -266,9 +264,12 @@ describe('management API client', () => {
       ['webhookEndpoint.patch', { param: { id: 'wh_1' }, json: { enabled: false } }],
       ['webhookEndpoint.delete', { param: { id: 'wh_1' } }],
       ['webhookEndpointSecret.post', { param: { id: 'wh_1' } }],
-      ['webhookRequests.get', { query: { endpointId: 'wh_1', status: 'failed' } }],
-      ['webhookRequest.get', { param: { id: 'whr_1' } }],
-      ['webhookDeliveryAttempt.post', { param: { id: 'whr_1' }, header: { 'Idempotency-Key': 'retry-whr-1' } }],
+      ['webhookRequests.get', { param: { id: 'wh_1' }, query: { status: 'failed' } }],
+      ['webhookRequest.get', { param: { id: 'wh_1', deliveryId: 'whr_1' } }],
+      [
+        'webhookDeliveryAttempt.post',
+        { param: { id: 'wh_1', deliveryId: 'whr_1' }, header: { 'Idempotency-Key': 'retry-whr-1' } },
+      ],
     ])
   })
 
@@ -295,7 +296,7 @@ async function loadManagementApi() {
     vi.fn((input: string | URL | Request, init?: RequestInit) => {
       calls.push(['fetch', String(input), init])
       return Promise.resolve(
-        new Response(JSON.stringify({ permissions: [] }), {
+        new Response(JSON.stringify({ scopes: [] }), {
           status: 200,
           headers: { 'content-type': 'application/json', etag: '"permissions-v1"' },
         }),
@@ -315,6 +316,49 @@ async function loadManagementApi() {
   vi.doMock('@/lib/api', () => ({
     apiClient: {
       api: {
+        access: {
+          consents: {
+            $get: endpoint('applicationAuthorizations.get'),
+            ':authorizationId': {
+              revocation: { $put: endpoint('applicationAuthorizationRevocation.put') },
+            },
+          },
+          requests: { $get: endpoint('agentAccessRequests.get') },
+          authorizations: { $get: endpoint('agentAccessGrants.get') },
+          roles: {
+            $get: endpoint('roles.get'),
+            $post: endpoint('roles.post'),
+            ':id': {
+              $get: endpoint('role.get'),
+              $patch: endpoint('roles.patch'),
+              $delete: endpoint('roles.delete'),
+            },
+          },
+          assignments: {
+            $get: endpoint('roleAssignments.get'),
+            $post: endpoint('roleAssignments.post'),
+            ':id': { revocation: { $put: endpoint('roleAssignmentRevocation.put') } },
+          },
+        },
+        realm: {
+          $get: endpoint('realm.get'),
+          $patch: endpoint('realm.patch'),
+          'sign-in-policy': { $get: endpoint('signIn.get'), $patch: endpoint('signIn.patch') },
+          branding: { $get: endpoint('branding.get'), $patch: endpoint('branding.patch') },
+          'account-management-policy': { $get: endpoint('accountCenter.get'), $patch: endpoint('accountCenter.patch') },
+          'organization-creation-policy': {
+            $get: endpoint('organizationCreation.get'),
+            $put: endpoint('organizationCreation.put'),
+          },
+          'developer-console-access-policy': {
+            $get: endpoint('developerConsole.get'),
+            $put: endpoint('developerConsole.put'),
+          },
+          'email-delivery-configuration': { $get: endpoint('email.get'), $put: endpoint('email.put') },
+          'configuration-status': { $get: endpoint('readiness.get') },
+          'audit-events': { $get: endpoint('agentAudit.get') },
+          'security-policy': { $get: endpoint('security.get'), $patch: endpoint('security.patch') },
+        },
         applications: {
           $get: endpoint('applications.get'),
           $post: endpoint('applications.post'),
@@ -356,7 +400,7 @@ async function loadManagementApi() {
             $patch: endpoint('users.patch'),
             $delete: endpoint('users.delete'),
             'password-reset-requests': { $post: endpoint('userPasswordReset.post') },
-            ban: {
+            suspension: {
               $put: endpoint('userBan.put'),
               $delete: endpoint('userBan.delete'),
             },
@@ -391,7 +435,7 @@ async function loadManagementApi() {
         readiness: { $get: endpoint('readiness.get') },
         agents: {
           $get: endpoint('agentInventory.get'),
-          ':agentId': { $delete: endpoint('agent.delete') },
+          ':agentId': { retirement: { $put: endpoint('agent.delete') } },
         },
         'audit-events': { $get: endpoint('agentAudit.get') },
         security: { policy: { $get: endpoint('security.get'), $patch: endpoint('security.patch') } },
@@ -418,30 +462,33 @@ async function loadManagementApi() {
           $post: endpoint('roleAssignments.post'),
           ':id': { revocation: { $put: endpoint('roleAssignmentRevocation.put') } },
         },
-        'api-resources': {
+        'resource-servers': {
           $get: endpoint('apiResources.get'),
           $post: endpoint('apiResources.post'),
           ':id': {
             $get: endpoint('apiResource.get'),
             $patch: endpoint('apiResources.patch'),
             $delete: endpoint('apiResources.delete'),
+            contract: { $get: endpoint('apiResourceContract.get') },
+            archival: {
+              $put: endpoint('apiResourceArchival.put'),
+              $delete: endpoint('apiResourceArchival.delete'),
+            },
           },
         },
         webhooks: {
-          endpoints: {
-            $get: endpoint('webhookEndpoints.get'),
-            $post: endpoint('webhookEndpoints.post'),
-            ':id': {
-              $patch: endpoint('webhookEndpoint.patch'),
-              $delete: endpoint('webhookEndpoint.delete'),
-              secrets: { $post: endpoint('webhookEndpointSecret.post') },
-            },
-          },
-          requests: {
-            $get: endpoint('webhookRequests.get'),
-            ':id': {
-              $get: endpoint('webhookRequest.get'),
-              attempts: { $post: endpoint('webhookDeliveryAttempt.post') },
+          $get: endpoint('webhookEndpoints.get'),
+          $post: endpoint('webhookEndpoints.post'),
+          ':id': {
+            $patch: endpoint('webhookEndpoint.patch'),
+            $delete: endpoint('webhookEndpoint.delete'),
+            secrets: { $post: endpoint('webhookEndpointSecret.post') },
+            deliveries: {
+              $get: endpoint('webhookRequests.get'),
+              ':deliveryId': {
+                $get: endpoint('webhookRequest.get'),
+                attempts: { $post: endpoint('webhookDeliveryAttempt.post') },
+              },
             },
           },
         },
@@ -455,6 +502,10 @@ async function loadManagementApi() {
     uploadApiFile: (path: string, file: File) => {
       calls.push(['upload', path, file])
       return Promise.resolve({ asset: { publicUrl: `/uploaded/${file.name}` } })
+    },
+    uploadAsset: (purpose: string, file: File) => {
+      calls.push(['uploadAsset', purpose, file])
+      return Promise.resolve({ asset: { id: 'asset-1', purpose, publicUrl: '/api/assets/asset-1' } })
     },
   }))
 

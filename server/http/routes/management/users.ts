@@ -1,7 +1,11 @@
-import { badRequest } from '@server/domain/errors'
+import { badRequest, notFound } from '@server/domain/errors'
 import { validateEmailPolicy, validatePasswordPolicy } from '@server/domain/security/policy'
 import { publishWebhookEvent } from '@server/usecases/webhooks'
-import { listManagementUsersResponseSchema } from '@shared/api/management'
+import {
+  listManagementUsersResponseSchema,
+  managementUserDetailResponseSchema,
+  passwordResetRequestResponseSchema,
+} from '@shared/api/management'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import {
   adminBanUserSchema,
@@ -15,6 +19,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { getPrincipal, isAutomationPrincipal } from '../../middleware/authn'
 import {
+  getConsoleOrganizationScope,
   requireConsoleUserAccess,
   requireRealmConsoleAccess,
   resolveOrganizationInventoryScope,
@@ -113,29 +118,14 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     }
   })
 
-  const requestPasswordReset = async (c: Context) => {
-    const body = await readJson(c, adminPasswordResetSchema)
-
-    try {
-      return c.json(
-        await authApi.requestPasswordReset({
-          body: {
-            email: body.email,
-            redirectTo: body.redirectTo,
-          },
-          headers: c.req.raw.headers,
-        }),
-      )
-    } catch (error) {
-      throw toBoundaryError(error)
-    }
-  }
-
-  app.post('/password-reset-requests', requestPasswordReset)
-
   app.get('/:id', async (c) => {
     await requireConsoleUserAccess(c, c.req.param('id'))
-    return c.json({ user: await getDeps(c).users.getUser(c.req.param('id')) })
+    const deps = getDeps(c)
+    const user = await deps.users.getUser(c.req.param('id'))
+    if (getConsoleOrganizationScope(c)) return c.json(managementUserDetailResponseSchema.parse({ user }))
+    return c.json(
+      managementUserDetailResponseSchema.parse({ user, security: await deps.security.getSecurityState(user.id) }),
+    )
   })
 
   app.post('/:id/password-reset-requests', async (c) => {
@@ -143,38 +133,54 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     const user = await getDeps(c).users.getUser(c.req.param('id'))
 
     try {
+      await authApi.requestPasswordReset({
+        body: {
+          email: user.email,
+          redirectTo: body.redirectTo,
+        },
+        headers: c.req.raw.headers,
+      })
+      const request = await getDeps(c).users.createPasswordResetRequest!({
+        id: `prr_${crypto.randomUUID()}`,
+        userId: user.id,
+        status: 'accepted',
+        createdAt: new Date(),
+      })
+      c.header(
+        'Location',
+        `/api/users/${encodeURIComponent(user.id)}/password-reset-requests/${encodeURIComponent(request.id)}`,
+      )
       return c.json(
-        await authApi.requestPasswordReset({
-          body: {
-            email: user.email,
-            redirectTo: body.redirectTo,
-          },
-          headers: c.req.raw.headers,
-        }),
+        passwordResetRequestResponseSchema.parse({ ...request, createdAt: request.createdAt.toISOString() }),
+        201,
       )
     } catch (error) {
       throw toBoundaryError(error)
     }
   })
 
+  app.get('/:id/password-reset-requests/:requestId', async (c) => {
+    await requireConsoleUserAccess(c, c.req.param('id'))
+    const request = await getDeps(c).users.findPasswordResetRequest!(c.req.param('id'), c.req.param('requestId'))
+    if (!request) throw notFound('Password reset request was not found.')
+    return c.json(passwordResetRequestResponseSchema.parse({ ...request, createdAt: request.createdAt.toISOString() }))
+  })
+
+  app.get('/:id/suspension', async (c) => {
+    await requireConsoleUserAccess(c, c.req.param('id'))
+    const user = await getDeps(c).users.getUser(c.req.param('id'))
+    return c.json({
+      userId: user.id,
+      suspended: Boolean(user.banned),
+      reason: user.banReason ?? null,
+      expiresAt: user.banExpires instanceof Date ? user.banExpires.toISOString() : (user.banExpires ?? null),
+    })
+  })
+
   app.get('/:id/linked-accounts', async (c) => {
     requireRealmConsoleAccess(c)
     const page = await getDeps(c).users.listLinkedAccounts(c.req.param('id'), readQuery(c, paginationQuerySchema))
     return c.json({ accounts: page.items, pagination: paginationMetadata(page) })
-  })
-
-  app.get('/:id/applications', async (c) => {
-    requireRealmConsoleAccess(c)
-    const page = await getDeps(c).users.listConsentedApplications(
-      c.req.param('id'),
-      readQuery(c, paginationQuerySchema),
-    )
-    return c.json({ applications: page.items, pagination: paginationMetadata(page) })
-  })
-
-  app.get('/:id/security', async (c) => {
-    requireRealmConsoleAccess(c)
-    return c.json({ security: await getDeps(c).security.getSecurityState(c.req.param('id')) })
   })
 
   app.get('/:id/passkeys', async (c) => {
@@ -240,7 +246,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     }
   }
 
-  app.put('/:id/ban', banUser)
+  app.put('/:id/suspension', banUser)
 
   const unbanUser = async (c: Context) => {
     try {
@@ -250,7 +256,7 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     }
   }
 
-  app.delete('/:id/ban', unbanUser)
+  app.delete('/:id/suspension', unbanUser)
 
   app.delete('/:id', async (c) => {
     const userId = c.req.param('id')
@@ -286,6 +292,14 @@ export function managementUserRoutes(authApi: ManagementAuthApi, options: Manage
     } catch (error) {
       throw toBoundaryError(error)
     }
+  })
+
+  app.get('/:id/sessions/:sessionId', async (c) => {
+    requireRealmConsoleAccess(c)
+    const page = await getDeps(c).users.listSessions(c.req.param('id'), { limit: 100, offset: 0 })
+    const session = page.items.find(({ id }) => id === c.req.param('sessionId'))
+    if (!session) throw notFound('User session was not found.')
+    return c.json(session)
   })
 
   app.delete('/:id/sessions/:sessionId', async (c) => {

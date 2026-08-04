@@ -649,10 +649,10 @@ describe('planned Account Center journeys', () => {
       http.get(`${base}/api/account/organizations/org-family/agents`, () =>
         json({ message: 'Agents unavailable.' }, { status: 500 }),
       ),
-      http.get(`${base}/api/role-assignments`, () =>
+      http.get(`${base}/api/access/assignments`, () =>
         json({ message: 'Role assignments unavailable.' }, { status: 500 }),
       ),
-      http.get(`${base}/api/agent-access-grants`, () =>
+      http.get(`${base}/api/access/authorizations`, () =>
         json({ message: 'Agent grants unavailable.' }, { status: 500 }),
       ),
       ...organizationDetailHandlers('member'),
@@ -674,8 +674,8 @@ describe('planned Account Center journeys', () => {
       http.get(`${base}/api/account/organizations/org-family/agents`, () =>
         json({ items: [], pagination: pagination(0) }),
       ),
-      http.get(`${base}/api/role-assignments`, () => json({ assignments: [], pagination: pagination(0) })),
-      http.get(`${base}/api/agent-access-grants`, () => json({ items: [], pagination: pagination(0) })),
+      http.get(`${base}/api/access/assignments`, () => json({ assignments: [], pagination: pagination(0) })),
+      http.get(`${base}/api/access/authorizations`, () => json({ items: [], pagination: pagination(0) })),
     )
     renderWithClient(<AccountOrganizationDetailPage organizationId="org-family" />)
     expect((await screen.findByRole('alert')).textContent).toContain('Organization unavailable')
@@ -820,7 +820,7 @@ function organizationDetailHandlers(role: string, options: { empty?: boolean } =
     http.get(`${base}/api/account/organizations/org-family/agents`, () =>
       json({ items: agents, pagination: pagination(agents.length) }),
     ),
-    http.get(`${base}/api/role-assignments`, ({ request }) => {
+    http.get(`${base}/api/access/assignments`, ({ request }) => {
       if (options.empty || new URL(request.url).searchParams.get('context') === 'realm') {
         return json({ assignments: [], pagination: pagination(0) })
       }
@@ -842,7 +842,7 @@ function organizationDetailHandlers(role: string, options: { empty?: boolean } =
         pagination: pagination(1),
       })
     }),
-    http.get(`${base}/api/roles/role-1`, () =>
+    http.get(`${base}/api/access/roles/role-1`, () =>
       json({
         id: 'role-1',
         key: 'family.viewer',
@@ -853,8 +853,8 @@ function organizationDetailHandlers(role: string, options: { empty?: boolean } =
         updatedAt: '2026-08-01T00:00:00.000Z',
       }),
     ),
-    http.get(`${base}/api/roles/role-1/permissions`, () => json({ permissions: [] })),
-    http.get(`${base}/api/agent-access-grants`, () =>
+    http.get(`${base}/api/access/roles/role-1/scopes`, () => json({ scopes: [] })),
+    http.get(`${base}/api/access/authorizations`, () =>
       json({
         items: options.empty
           ? []

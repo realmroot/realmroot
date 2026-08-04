@@ -223,8 +223,8 @@ describe('app.test 2', () => {
     const app = createApp(createAuthMock(), createTestDeps())
 
     const organizations = await app.request('/api/organizations')
-    const resources = await app.request('/api/api-resources')
-    const roles = await app.request('/api/roles')
+    const resources = await app.request('/api/resource-servers')
+    const roles = await app.request('/api/access/roles')
 
     expect(organizations.status).toBe(401)
     expect(resources.status).toBe(401)

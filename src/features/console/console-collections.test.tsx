@@ -65,8 +65,8 @@ describe('console collections', () => {
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
-      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/api-resources') {
+      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -114,7 +114,7 @@ describe('console collections', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       requests.push({ method: init?.method ?? 'GET', url })
-      if (url.startsWith('/api/webhooks/endpoints')) {
+      if (url.startsWith('/api/webhooks')) {
         return Promise.resolve(jsonResponse({ endpoints: [], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -178,14 +178,14 @@ describe('console collections', () => {
         return Promise.resolve(jsonResponse({ connectors: [connector, githubConnector], pagination }))
       }
       if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization, northwindOrganization], pagination }))
       }
-      if (url === '/api/roles') {
+      if (url === '/api/access/roles') {
         return Promise.resolve(jsonResponse({ roles: [role, billingManagerRole, ordersReaderRole], pagination }))
       }
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return Promise.resolve(
           jsonResponse({
             items: [
@@ -306,31 +306,31 @@ describe('console collections', () => {
       },
       {
         component: <ConsoleOnboardingPage />,
-        matches: (url: string) => url === '/api/readiness',
+        matches: (url: string) => url === '/api/realm/configuration-status',
         success: readinessIncomplete,
         text: 'Setup checklist',
       },
       {
         component: <SignInSettingsPage />,
-        matches: (url: string) => url === '/api/sign-in-settings',
+        matches: (url: string) => url === '/api/realm/sign-in-policy',
         success: signInSettings,
         text: 'Registration and identifiers',
       },
       {
         component: <ContentSettingsPage />,
-        matches: (url: string) => url === '/api/sign-in-settings',
+        matches: (url: string) => url === '/api/realm/sign-in-policy',
         success: signInSettings,
         text: 'Legal & support',
       },
       {
         component: <BrandingPage />,
-        matches: (url: string) => url === '/api/branding-settings',
+        matches: (url: string) => url === '/api/realm/branding',
         success: brandingSettings,
         text: 'Color scheme',
       },
       {
         component: <MfaPage />,
-        matches: (url: string) => url === '/api/security/policy',
+        matches: (url: string) => url === '/api/realm/security-policy',
         success: securityPolicy,
         text: 'Available factors',
       },
@@ -342,13 +342,13 @@ describe('console collections', () => {
       },
       {
         component: <RolesPage />,
-        matches: (url: string) => url === '/api/roles',
+        matches: (url: string) => url === '/api/access/roles',
         success: { roles: [role], pagination },
         text: 'Admin',
       },
       {
         component: <ApiResourcesPage />,
-        matches: (url: string) => url === '/api/api-resources',
+        matches: (url: string) => url === '/api/resource-servers',
         success: { items: [{ ...apiResource, authorization: null }], pagination },
         text: 'Management API',
       },
@@ -363,7 +363,7 @@ describe('console collections', () => {
             : Promise.resolve(jsonResponse(scenario.success))
         }
         if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-        if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
+        if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
         return consoleSharedFetch(input, _init)
       })
 
@@ -381,8 +381,8 @@ describe('console collections', () => {
   it('renders editable branding and tenant settings pages [spec: admin-console/admin-deployment-settings]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
     const { unmount } = renderWithQuery(<BrandingPage />)
@@ -430,7 +430,7 @@ describe('console collections', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = input instanceof Request ? input : null
       const url = new URL(request?.url ?? String(input), window.location.origin).pathname
-      if (url === '/api/email-delivery-configuration') {
+      if (url === '/api/realm/email-delivery-configuration') {
         if ((request?.method ?? init?.method) === 'PUT') {
           const body = (request ? await request.clone().json() : JSON.parse(String(init?.body))) as typeof emailSettings
           stored = { ...stored, ...body, source: 'database' }

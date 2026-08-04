@@ -55,11 +55,11 @@ describe('console authorization dashboard', () => {
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
-      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/api-resources') {
+      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [apiResource], pagination }))
       }
-      if (url === '/api/sign-in-settings') {
+      if (url === '/api/realm/sign-in-policy') {
         return Promise.resolve(
           jsonResponse({
             ...signInSettings,
@@ -67,7 +67,7 @@ describe('console authorization dashboard', () => {
           }),
         )
       }
-      if (url === '/api/security/policy') {
+      if (url === '/api/realm/security-policy') {
         return Promise.resolve(
           jsonResponse({
             policy: {
@@ -106,8 +106,8 @@ describe('console authorization dashboard', () => {
       if (url === '/api/organizations') {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
-      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
-      if (url === '/api/api-resources') {
+      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)

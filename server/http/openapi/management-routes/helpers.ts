@@ -47,11 +47,11 @@ export {
   listRolesResponseSchema,
   memberResponseSchema,
   organizationResponseSchema,
-  replaceRolePermissionsRequestSchema,
+  replaceRoleScopesRequestSchema,
   roleAssignmentResponseSchema,
   roleAssignmentRevocationSchema,
-  rolePermissionsResponseSchema,
   roleResponseSchema,
+  roleScopesResponseSchema,
   updateApiResourceRequestSchema,
   updateMemberRequestSchema,
   updateOrganizationRequestSchema,
@@ -87,6 +87,7 @@ export {
   managementUserSecurityResponseSchema,
   organizationCreationPolicyResponseSchema,
   paginationQuerySchema,
+  passwordResetRequestResponseSchema,
   replaceDeveloperConsoleAccessPolicyRequestSchema,
   replaceEmailDeliveryConfigurationRequestSchema,
   replaceOrganizationCreationPolicyRequestSchema,
@@ -123,7 +124,7 @@ export interface ManagementRouteConfig {
   operationId: string
   summary: string
   cli?: {
-    group: 'access-request' | 'auth' | 'capability' | 'connection-request' | 'resource' | 'resource-server'
+    group?: 'auth'
     name: string
   }
   request?: {
@@ -166,14 +167,17 @@ export function params(...names: string[]) {
 export const idParam = params('id')
 export const applicationIdParam = params('applicationId')
 export const applicationAuthorizationParam = params('applicationId', 'authorizationId')
-export const authorizationIdParam = params('authorizationId')
+export const authorizationIdParam = params('consentId')
 export const federatedCredentialParam = params('applicationId', 'credentialId')
 export const organizationIdParam = params('organizationId')
-export const userIdParam = params('id')
-export const userSessionParam = params('id', 'sessionId')
-export const userPasskeyParam = params('id', 'passkeyId')
-export const memberParam = params('id', 'memberId')
-export const invitationParam = params('id', 'invitationId')
+export const resourceServerIdParam = params('resourceServerId')
+export const roleIdParam = params('roleId')
+export const assignmentIdParam = params('assignmentId')
+export const userIdParam = params('userId')
+export const userSessionParam = params('userId', 'sessionId')
+export const userPasskeyParam = params('userId', 'passkeyId')
+export const memberParam = params('organizationId', 'memberId')
+export const invitationParam = params('organizationId', 'invitationId')
 export const agentIdentityParam = params('identityId')
 export const ifMatchHeader = z.object({
   'If-Match': z.string().openapi({ param: { name: 'If-Match', in: 'header' }, example: '"resource-version"' }),

@@ -31,7 +31,7 @@ describe('admin console account center and deferred configuration', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/account-center-settings' && init?.method === 'PATCH') {
+      if (url === '/api/realm/account-management-policy' && init?.method === 'PATCH') {
         requests.push(JSON.parse(String(init.body)))
         return Promise.resolve(jsonResponse(accountCenterSettings))
       }
@@ -79,7 +79,7 @@ describe('admin console account center and deferred configuration', () => {
   it('discards Account Center edits and surfaces management boundary errors', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/account-center-settings' && init?.method === 'PATCH') {
+      if (url === '/api/realm/account-management-policy' && init?.method === 'PATCH') {
         return Promise.resolve(jsonResponse({ error: { message: 'Account center save failed.' } }, 500))
       }
       return consoleSharedFetch(input, init)
@@ -102,7 +102,7 @@ describe('admin console account center and deferred configuration', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     let attempts = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      if (String(input) === '/api/account-center-settings') {
+      if (String(input) === '/api/realm/account-management-policy') {
         attempts += 1
         return attempts === 1
           ? Promise.resolve(jsonResponse({ error: { message: 'Account center unavailable.' } }, 503))

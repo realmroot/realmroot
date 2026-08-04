@@ -379,8 +379,32 @@ export const managementUserResponseSchema = z.object({
   updatedAt: z.union([z.string(), z.date()]).optional(),
 })
 
+export const managementUserSecurityStateSchema = z.object({
+  userId: z.string(),
+  mfa: z.object({
+    enabled: z.boolean(),
+    factors: z.array(z.object({ id: z.string(), type: z.string(), verified: z.boolean().nullable() })),
+  }),
+  passkeys: z.object({
+    enabled: z.boolean(),
+    count: z.number().int().min(0),
+  }),
+  policy: z.object({
+    mfa: z.object({ mode: z.enum(['optional', 'required']) }),
+    passkeys: z.object({ enabled: z.boolean(), rpName: z.string() }).passthrough(),
+  }),
+})
+
 export const managementUserDetailResponseSchema = z.object({
   user: managementUserResponseSchema,
+  security: managementUserSecurityStateSchema.optional(),
+})
+
+export const passwordResetRequestResponseSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  status: z.literal('accepted'),
+  createdAt: z.iso.datetime(),
 })
 
 export const listManagementUsersResponseSchema = z.object({
@@ -434,21 +458,7 @@ export const listManagementUserApplicationsResponseSchema = z.object({
 })
 
 export const managementUserSecurityResponseSchema = z.object({
-  security: z.object({
-    userId: z.string(),
-    mfa: z.object({
-      enabled: z.boolean(),
-      factors: z.array(z.object({ id: z.string(), type: z.string(), verified: z.boolean().nullable() })),
-    }),
-    passkeys: z.object({
-      enabled: z.boolean(),
-      count: z.number().int().min(0),
-    }),
-    policy: z.object({
-      mfa: z.object({ mode: z.enum(['optional', 'required']) }),
-      passkeys: z.object({ enabled: z.boolean(), rpName: z.string() }).passthrough(),
-    }),
-  }),
+  security: managementUserSecurityStateSchema,
 })
 
 export const managementUserPasskeySchema = z.object({
@@ -497,16 +507,16 @@ export const managementPasswordResetRequestSchema = adminPasswordResetSchema
 
 export const protectedResourceCollectionRoutes = [
   '/applications',
-  '/application-authorizations',
+  '/access/consents',
   '/users',
   '/organizations',
-  '/roles',
-  '/role-assignments',
-  '/api-resources',
+  '/access/roles',
+  '/access/assignments',
+  '/resource-servers',
   '/connectors',
   '/agents',
-  '/agent-access-requests',
-  '/agent-access-grants',
+  '/access/requests',
+  '/access/authorizations',
 ] as const
 
 export { paginationQuerySchema }

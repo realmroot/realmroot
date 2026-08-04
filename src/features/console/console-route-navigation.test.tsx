@@ -47,9 +47,9 @@ describe('console route navigation', () => {
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile')
         return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({
             admin: { setupRequired: true, setupHref: '/console/onboarding', missing: ['oidc_application'] },
@@ -155,9 +155,9 @@ describe('console route navigation', () => {
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile')
         return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
@@ -184,21 +184,21 @@ describe('console route navigation', () => {
       if (url.startsWith('/api/users/user-1/passkeys')) {
         return Promise.resolve(jsonResponse({ passkeys: [consolePasskey], pagination }))
       }
-      if (url === '/api/roles/role-1') {
+      if (url === '/api/access/roles/role-1') {
         return Promise.resolve(jsonResponse({ ...role, resourceId: 'resource-1' }))
       }
-      if (url === '/api/roles/role-1/permissions') {
+      if (url === '/api/access/roles/role-1/scopes') {
         return Promise.resolve(
-          new Response(JSON.stringify({ permissions: [{ resourceId: 'resource-1', scope: 'orders.read' }] }), {
+          new Response(JSON.stringify({ scopes: [{ resourceId: 'resource-1', scope: 'orders.read' }] }), {
             headers: { 'content-type': 'application/json', etag: '"permissions-v1"' },
           }),
         )
       }
-      if (url.startsWith('/api/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/api-resources') {
+      if (url.startsWith('/api/access/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
-      if (url === '/api/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
       if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
       if (url.startsWith('/api/organizations/org-1/members')) {
         return Promise.resolve(jsonResponse({ members: [], pagination: emptyPagination }))
@@ -233,18 +233,18 @@ describe('console route navigation', () => {
       }
       if (
         url.startsWith('/api/agents/agent-1/installations') ||
-        url.startsWith('/api/agent-access-requests?agentId=agent-1') ||
-        url.startsWith('/api/agent-access-grants?agentId=agent-1')
+        url.startsWith('/api/access/requests?agentId=agent-1') ||
+        url.startsWith('/api/access/authorizations?agentId=agent-1')
       ) {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/role-assignments?') && url.includes('subjectId=agent-1')) {
+      if (url.startsWith('/api/access/assignments?') && url.includes('subjectId=agent-1')) {
         return Promise.resolve(jsonResponse({ assignments: [], pagination: emptyPagination }))
       }
-      if (url === '/api/roles') {
+      if (url === '/api/access/roles') {
         return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/audit-events?')) {
+      if (url.startsWith('/api/realm/audit-events?')) {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)

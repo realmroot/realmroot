@@ -207,7 +207,7 @@ describe('admin console users-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/users/password-reset-requests') {
+      if (url === '/api/users/user-1/password-reset-requests') {
         requests.push({ url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ accepted: true }))
       }
@@ -227,7 +227,7 @@ describe('admin console users-list', () => {
     fireEvent.click(await screen.findByText('Send password reset'))
 
     await waitFor(() => {
-      expect(requests).toEqual([{ url: '/api/users/password-reset-requests', body: { email: 'jane@example.com' } }])
+      expect(requests).toEqual([{ url: '/api/users/user-1/password-reset-requests', body: {} }])
     })
   })
 

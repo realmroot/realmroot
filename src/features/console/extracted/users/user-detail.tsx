@@ -17,7 +17,6 @@ import {
   deleteUserPasskey,
   getAgentInventory,
   getUser,
-  getUserSecurity,
   listUserApplications,
   listUserLinkedAccounts,
   listUserPasskeys,
@@ -72,11 +71,6 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
     enabled: realmIdentityAccess,
     queryKey: [...consoleQueryKeys.users, userId, 'applications'],
     queryFn: () => listUserApplications(userId),
-  })
-  const security = useQuery({
-    enabled: realmIdentityAccess,
-    queryKey: [...consoleQueryKeys.users, userId, 'security'],
-    queryFn: () => getUserSecurity(userId),
   })
   const passkeys = useQuery({
     enabled: realmIdentityAccess,
@@ -144,7 +138,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
     mutationFn: (id: string) => deleteUserPasskey(userId, id),
     onSuccess: async () => {
       setPasskeyToDelete(null)
-      await Promise.all([passkeys.refetch(), security.refetch()])
+      await Promise.all([passkeys.refetch(), userQuery.refetch()])
     },
   })
   useEffect(() => {
@@ -155,17 +149,9 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
     }
     setActive(section)
   }, [context, navigate, realmIdentityAccess, section, userId])
-  const loading = [userQuery, sessions, linkedAccounts, applications, security, passkeys, agents].some(
-    (item) => item.isLoading,
-  )
+  const loading = [userQuery, sessions, linkedAccounts, applications, passkeys, agents].some((item) => item.isLoading)
   const error =
-    userQuery.error ??
-    sessions.error ??
-    linkedAccounts.error ??
-    applications.error ??
-    security.error ??
-    passkeys.error ??
-    agents.error
+    userQuery.error ?? sessions.error ?? linkedAccounts.error ?? applications.error ?? passkeys.error ?? agents.error
   if (loading) return <LoadingState label={tt('Loading user')} />
   if (error)
     return (
@@ -177,7 +163,6 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
             sessions.refetch(),
             linkedAccounts.refetch(),
             applications.refetch(),
-            security.refetch(),
             passkeys.refetch(),
             agents.refetch(),
           ])
@@ -254,7 +239,7 @@ export function UserDetailPage({ userId, section = 'overview' }: { userId: strin
               accounts={linkedAccounts.data?.accounts ?? []}
               onDeletePasskey={setPasskeyToDelete}
               passkeys={passkeys.data?.passkeys ?? []}
-              security={security.data?.security}
+              security={userQuery.data?.security}
             />
           </TabsContent>
           <TabsContent className="mt-5" value="sessions">
@@ -398,7 +383,7 @@ function UserAuthentication({
   accounts: Awaited<ReturnType<typeof listUserLinkedAccounts>>['accounts']
   onDeletePasskey: (id: string) => void
   passkeys: Awaited<ReturnType<typeof listUserPasskeys>>['passkeys']
-  security?: Awaited<ReturnType<typeof getUserSecurity>>['security']
+  security?: Awaited<ReturnType<typeof getUser>>['security']
 }) {
   return (
     <div className="detailSections">

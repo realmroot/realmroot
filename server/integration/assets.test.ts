@@ -12,10 +12,22 @@ function pngBytes(): Uint8Array {
   return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00])
 }
 
-function pngForm(): FormData {
+function pngForm(purpose?: string): FormData {
   const form = new FormData()
   form.set('file', new File([pngBytes() as BlobPart], 'logo.png', { type: 'image/png' }))
+  if (purpose) form.set('purpose', purpose)
   return form
+}
+
+async function uploadManagedAsset(harness: Harness, cookie: string, purpose: string) {
+  const response = await harness.request('/api/assets', {
+    method: 'POST',
+    headers: { cookie, origin: 'http://localhost' },
+    body: pngForm(purpose),
+  })
+  expect(response.status, await response.clone().text()).toBe(201)
+  const { asset } = (await response.json()) as { asset: { id: string } }
+  return `/api/assets/${asset.id}`
 }
 
 describe('asset upload + read over real D1 and an in-memory bucket', () => {
@@ -96,47 +108,44 @@ describe('asset upload + read over real D1 and an in-memory bucket', () => {
       })
     ).json()) as { id: string }
 
-    const appLogo = await harness.request(`/api/applications/${application.id}/logo`, {
-      method: 'POST',
-      headers: { cookie, origin: 'http://localhost' },
-      body: pngForm(),
+    const applicationLogoUrl = await uploadManagedAsset(harness, cookie, 'application_logo')
+    const appLogo = await harness.request(`/api/applications/${application.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ iconUrl: applicationLogoUrl }),
     })
-    expect(appLogo.status, await appLogo.clone().text()).toBe(201)
+    expect(appLogo.status, await appLogo.clone().text()).toBe(200)
 
-    const orgLogo = await harness.request(`/api/organizations/${organization.id}/logo`, {
-      method: 'POST',
-      headers: { cookie, origin: 'http://localhost' },
-      body: pngForm(),
+    const organizationLogoUrl = await uploadManagedAsset(harness, cookie, 'organization_logo')
+    const orgLogo = await harness.request(`/api/organizations/${organization.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ logo: organizationLogoUrl }),
     })
-    expect(orgLogo.status, await orgLogo.clone().text()).toBe(201)
+    expect(orgLogo.status, await orgLogo.clone().text()).toBe(200)
 
-    const brandingLogo = await harness.request('/api/branding/logo', {
-      method: 'POST',
-      headers: { cookie, origin: 'http://localhost' },
-      body: pngForm(),
+    const logoUrl = await uploadManagedAsset(harness, cookie, 'branding_logo')
+    const faviconUrl = await uploadManagedAsset(harness, cookie, 'favicon')
+    const branding = await harness.request('/api/realm/branding', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ branding: { logoUrl, faviconUrl } }),
     })
-    expect(brandingLogo.status, await brandingLogo.clone().text()).toBe(201)
-
-    const favicon = await harness.request('/api/branding/favicon', {
-      method: 'POST',
-      headers: { cookie, origin: 'http://localhost' },
-      body: pngForm(),
-    })
-    expect(favicon.status, await favicon.clone().text()).toBe(201)
+    expect(branding.status, await branding.clone().text()).toBe(200)
   })
 
   it('detaches managed brand assets when Console clears them [spec: admin-console/admin-branding-settings]', async () => {
     const cookie = await signInAdmin(harness)
-    for (const path of ['/api/branding/logo', '/api/branding/favicon']) {
-      const upload = await harness.request(path, {
-        method: 'POST',
-        headers: { cookie, origin: 'http://localhost' },
-        body: pngForm(),
-      })
-      expect(upload.status, await upload.clone().text()).toBe(201)
-    }
+    const logoUrl = await uploadManagedAsset(harness, cookie, 'branding_logo')
+    const faviconUrl = await uploadManagedAsset(harness, cookie, 'favicon')
+    const attach = await harness.request('/api/realm/branding', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ branding: { logoUrl, faviconUrl } }),
+    })
+    expect(attach.status, await attach.clone().text()).toBe(200)
 
-    const before = await harness.request('/api/branding-settings', { headers: { cookie } })
+    const before = await harness.request('/api/realm/branding', { headers: { cookie } })
     expect(before.status).toBe(200)
     await expect(before.json()).resolves.toMatchObject({
       branding: {
@@ -145,7 +154,7 @@ describe('asset upload + read over real D1 and an in-memory bucket', () => {
       },
     })
 
-    const cleared = await harness.request('/api/branding-settings', {
+    const cleared = await harness.request('/api/realm/branding', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ branding: { logoUrl: null, faviconUrl: null } }),

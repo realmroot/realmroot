@@ -41,43 +41,43 @@ import { readJson } from '../validation'
 export function createManagementSettingsRoutes(securityPolicy?: SecurityPolicy) {
   const app = new Hono()
 
-  app.get('/sign-in-settings', async (c) => {
+  app.get('/realm/sign-in-policy', async (c) => {
     const response = await getManagementSignInSettings(getDeps(c), configzOptions(c, securityPolicy))
     return c.json(managementSignInSettingsResponseSchema.parse(response))
   })
-  app.patch('/sign-in-settings', async (c) => {
+  app.patch('/realm/sign-in-policy', async (c) => {
     const input = await readJson(c, updateManagementSignInSettingsRequestSchema)
     const response = await updateManagementSignInSettings(getDeps(c), configzOptions(c, securityPolicy), input)
     return c.json(managementSignInSettingsResponseSchema.parse(response))
   })
 
-  app.get('/branding-settings', async (c) => {
+  app.get('/realm/branding', async (c) => {
     const response = await getManagementBrandingSettings(getDeps(c), configzOptions(c, securityPolicy))
     return c.json(managementBrandingSettingsResponseSchema.parse(response))
   })
-  app.patch('/branding-settings', async (c) => {
+  app.patch('/realm/branding', async (c) => {
     const input = await readJson(c, updateManagementBrandingSettingsRequestSchema)
     const response = await updateManagementBrandingSettings(getDeps(c), configzOptions(c, securityPolicy), input)
     return c.json(managementBrandingSettingsResponseSchema.parse(response))
   })
 
-  app.get('/account-center-settings', async (c) => {
+  app.get('/realm/account-management-policy', async (c) => {
     const response = await getManagementAccountCenterSettings(getDeps(c), configzOptions(c, securityPolicy))
     return c.json(managementAccountCenterSettingsResponseSchema.parse(response))
   })
-  app.patch('/account-center-settings', async (c) => {
+  app.patch('/realm/account-management-policy', async (c) => {
     const input = await readJson(c, updateManagementAccountCenterSettingsRequestSchema)
     const response = await updateManagementAccountCenterSettings(getDeps(c), configzOptions(c, securityPolicy), input)
     return c.json(managementAccountCenterSettingsResponseSchema.parse(response))
   })
 
-  app.get('/organization-creation-policy', async (c) =>
+  app.get('/realm/organization-creation-policy', async (c) =>
     versionedResponse(
       c,
       organizationCreationPolicyResponseSchema.parse(await getOrganizationCreationPolicy(getDeps(c))),
     ),
   )
-  app.put('/organization-creation-policy', async (c) => {
+  app.put('/realm/organization-creation-policy', async (c) => {
     const current = await representationWithEtag(
       organizationCreationPolicyResponseSchema.parse(await getOrganizationCreationPolicy(getDeps(c))),
     )
@@ -89,13 +89,13 @@ export function createManagementSettingsRoutes(securityPolicy?: SecurityPolicy) 
     )
   })
 
-  app.get('/developer-console-access-policy', async (c) =>
+  app.get('/realm/developer-console-access-policy', async (c) =>
     versionedResponse(
       c,
       developerConsoleAccessPolicyResponseSchema.parse(await getDeveloperConsoleAccessPolicy(getDeps(c))),
     ),
   )
-  app.put('/developer-console-access-policy', async (c) => {
+  app.put('/realm/developer-console-access-policy', async (c) => {
     const current = await representationWithEtag(
       developerConsoleAccessPolicyResponseSchema.parse(await getDeveloperConsoleAccessPolicy(getDeps(c))),
     )
@@ -127,7 +127,7 @@ export function createManagementSettingsRoutes(securityPolicy?: SecurityPolicy) 
     )
   })
 
-  app.get('/email-delivery-configuration', async (c) =>
+  app.get('/realm/email-delivery-configuration', async (c) =>
     versionedResponse(
       c,
       emailDeliveryConfigurationResponseSchema.parse(
@@ -135,7 +135,7 @@ export function createManagementSettingsRoutes(securityPolicy?: SecurityPolicy) 
       ),
     ),
   )
-  app.put('/email-delivery-configuration', async (c) => {
+  app.put('/realm/email-delivery-configuration', async (c) => {
     const current = await representationWithEtag(
       emailDeliveryConfigurationResponseSchema.parse(
         await getEmailDeliveryConfiguration(getDeps(c), configzOptions(c, securityPolicy)),

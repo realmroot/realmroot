@@ -43,8 +43,8 @@ describe('admin console users-detail-a', () => {
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile')
         return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
@@ -65,7 +65,7 @@ describe('admin console users-detail-a', () => {
           }),
         )
       }
-      if (url === '/api/users/user-1/ban' && method === 'DELETE') {
+      if (url === '/api/users/user-1/suspension' && method === 'DELETE') {
         requests.push({ method, url, body: null })
         return Promise.resolve(jsonResponse({ user: { ...profile, role: 'user', banned: false, banReason: null } }))
       }
@@ -102,7 +102,9 @@ describe('admin console users-detail-a', () => {
     await ui.click(screen.getByRole('tab', { name: 'Settings' }))
     expect(screen.getByText(/Banned · abuse/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Unban user' }))
-    await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', url: '/api/users/user-1/ban', body: null }))
+    await waitFor(() =>
+      expect(requests).toContainEqual({ method: 'DELETE', url: '/api/users/user-1/suspension', body: null }),
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete user' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -124,8 +126,8 @@ describe('admin console users-detail-a', () => {
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile')
         return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
@@ -187,8 +189,8 @@ describe('admin console users-detail-a', () => {
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile')
         return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
@@ -208,7 +210,7 @@ describe('admin console users-detail-a', () => {
           }),
         )
       }
-      if (url === '/api/users/user-1/ban' && method === 'PUT') {
+      if (url === '/api/users/user-1/suspension' && method === 'PUT') {
         requests.push({ method, url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse({ user: { ...profile, role: ['admin', 'support'], banned: true } }))
       }
@@ -252,7 +254,7 @@ describe('admin console users-detail-a', () => {
     expect(await screen.findByRole('heading', { name: 'user-1' })).toBeTruthy()
     expect(screen.getByText('Realm administrator')).toBeTruthy()
     await ui.click(screen.getByRole('tab', { name: 'Authentication' }))
-    expect(await screen.findByText('sms')).toBeTruthy()
+    expect(await screen.findByText('Enrolled factors')).toBeTruthy()
     expect(screen.getByText('Not enabled')).toBeTruthy()
     expect(await screen.findByText('passkey-1')).toBeTruthy()
     expect(screen.getByText('Device only')).toBeTruthy()
@@ -263,7 +265,7 @@ describe('admin console users-detail-a', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' })[0]!)
     fireEvent.click(screen.getAllByRole('button', { name: 'Ban user' }).at(-1)!)
     await waitFor(() => {
-      expect(requests).toEqual([{ method: 'PUT', url: '/api/users/user-1/ban', body: {} }])
+      expect(requests).toEqual([{ method: 'PUT', url: '/api/users/user-1/suspension', body: {} }])
     })
   })
 
@@ -275,8 +277,8 @@ describe('admin console users-detail-a', () => {
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile')
         return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )

@@ -1822,7 +1822,7 @@ async function toResourceServerResource(
     },
     links: {
       self: resourceHref(apiOrigin, resourceServerId, id),
-      accessRequests: `${apiOrigin.replace(/\/$/, '')}/api/access-requests`,
+      accessRequests: `${apiOrigin.replace(/\/$/, '')}/api/access/requests`,
     },
   }
 }
@@ -2798,7 +2798,9 @@ function toResourceConnectionRequest(
       url: status === 'pending' ? approvalUrl : null,
       expiresAt: status === 'pending' ? request.expiresAt.toISOString() : null,
     },
-    links: { self: `${origin}/api/connection-requests/${encodeURIComponent(request.id)}` },
+    links: {
+      self: `${origin}/api/resource-servers/${encodeURIComponent(request.resourceId)}/connection-requests/${encodeURIComponent(request.id)}`,
+    },
     createdAt: request.createdAt.toISOString(),
     expiresAt: request.expiresAt.toISOString(),
   }
@@ -2840,7 +2842,7 @@ function toAccessRequest(
         : request.status === 'expired'
           ? 'expired'
           : 'completed'
-  const self = `${origin}/api/access-requests/${encodeURIComponent(request.id)}`
+  const self = `${origin}/api/access/requests/${encodeURIComponent(request.id)}`
   return {
     id: request.id,
     agentId: request.agentIdentityId,
@@ -2857,7 +2859,12 @@ function toAccessRequest(
       url: interactionStatus === 'pending' ? request.approvalUrl : null,
       expiresAt: interactionStatus === 'pending' ? request.expiresAt : null,
     },
-    links: { self, credentials: request.grantId ? `${self}/credentials` : null },
+    links: {
+      self,
+      credentials: request.grantId
+        ? `${origin}/api/access/authorizations/${encodeURIComponent(request.grantId)}/credentials`
+        : null,
+    },
     credentialOffer: null,
     expiresAt: request.expiresAt,
     decidedAt: request.decidedAt,

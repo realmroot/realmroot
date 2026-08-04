@@ -1,6 +1,6 @@
 import { forbidden, unauthorized } from '@server/domain/errors'
 import { resolveDeveloperAccess } from '@server/usecases/developer-access'
-import { type ProtectedResource, requiredResourceCapability } from '@shared/authz'
+import { type ProtectedResource, protectedResourceForPath, requiredResourceCapability } from '@shared/authz'
 import type { MiddlewareHandler } from 'hono'
 import { getPrincipal } from './authn'
 import { getDeps } from './deps'
@@ -50,6 +50,10 @@ export function authz(resource: ProtectedResource): MiddlewareHandler {
       return
     }
 
+    if (agentSelfServiceAllowed(c.req.method, c.req.path)) {
+      await next()
+      return
+    }
     const required = requiredResourceCapability(c.req.method, resource)
     if (!required || !agent!.capabilities.includes(required)) {
       throw forbidden(required ? `Agent capability "${required}" is required.` : 'This resource is read-only.')
@@ -59,6 +63,33 @@ export function authz(resource: ProtectedResource): MiddlewareHandler {
     c.set('managementAccessScope', { kind: 'realm' })
     await next()
   }
+}
+
+export function authzForProtectedPath(): MiddlewareHandler {
+  return async (c, next) => {
+    if ((c.req.method === 'GET' || c.req.method === 'HEAD') && /^\/api\/assets\/[^/]+$/.test(c.req.path)) {
+      await next()
+      return
+    }
+    const resource = protectedResourceForPath(c.req.path.replace(/^\/api\/?/, ''))
+    if (!resource) {
+      await next()
+      return
+    }
+    return authz(resource)(c, next)
+  }
+}
+
+function agentSelfServiceAllowed(method: string, path: string) {
+  if (path.startsWith('/api/resource-servers')) {
+    return method === 'GET' || (method === 'POST' && /\/connection-requests$/.test(path))
+  }
+  if (path === '/api/access/requests') return method === 'GET' || method === 'POST'
+  if (/^\/api\/access\/requests\/[^/]+$/.test(path)) return method === 'GET'
+  if (path === '/api/access/authorizations' || /^\/api\/access\/authorizations\/[^/]+$/.test(path)) {
+    return method === 'GET'
+  }
+  return method === 'POST' && /^\/api\/access\/authorizations\/[^/]+\/credentials$/.test(path)
 }
 
 export function getManagementAccessScope(c: Parameters<typeof getPrincipal>[0]) {
@@ -119,17 +150,17 @@ function developerResourceAllowed(method: string, path: string, resource: Protec
     ].includes(resource)
   }
   if (resource === 'applications' || resource === 'apiResources' || resource === 'webhooks') return true
-  return resource === 'roles' && path.startsWith('/api/role-assignments')
+  return resource === 'roles' && path.startsWith('/api/access/assignments')
 }
 
 function accountAuthorityReadAllowed(method: string, path: string) {
   if (method !== 'GET' && method !== 'HEAD') return false
   return (
-    path === '/api/role-assignments' ||
-    /^\/api\/role-assignments\/[^/]+$/.test(path) ||
-    /^\/api\/roles\/[^/]+(?:\/permissions)?$/.test(path) ||
-    path === '/api/agent-access-grants' ||
-    /^\/api\/agent-access-grants\/[^/]+$/.test(path)
+    path === '/api/access/assignments' ||
+    /^\/api\/access\/assignments\/[^/]+$/.test(path) ||
+    /^\/api\/access\/roles\/[^/]+(?:\/scopes)?$/.test(path) ||
+    path === '/api/access/authorizations' ||
+    /^\/api\/access\/authorizations\/[^/]+$/.test(path)
   )
 }
 

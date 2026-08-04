@@ -9,6 +9,7 @@ import {
   pagination,
   profile,
   renderWithQuery,
+  securityPolicy,
 } from './console.test-utils'
 
 globalThis.ResizeObserver ??= class ResizeObserver {
@@ -104,35 +105,49 @@ describe('admin console user detail lifecycle', () => {
           }),
         )
       }
-      if (url === '/api/users/user-1/applications') {
+      if (url.startsWith('/api/access/consents')) {
         return Promise.resolve(
           jsonResponse({
-            applications: [
+            authorizations: [
               {
                 id: 'consent-1',
                 applicationId: 'app-1',
-                applicationName: 'Customer portal',
-                applicationSlug: 'customer-portal',
+                user: { id: 'user-1', email: profile.email, displayName: profile.displayName },
                 scopes: ['openid', 'profile'],
                 permissions: [],
                 grantedAt: '2026-01-01T00:00:00.000Z',
                 expiresAt: null,
+                revokedAt: null,
+                status: 'active',
               },
               {
                 id: 'consent-2',
                 applicationId: 'app-2',
-                applicationName: 'Reports',
-                applicationSlug: 'reports',
+                user: { id: 'user-1', email: profile.email, displayName: profile.displayName },
                 scopes: ['openid'],
                 permissions: [],
                 grantedAt: '2026-01-02T00:00:00.000Z',
                 expiresAt: '2027-01-01T00:00:00.000Z',
+                revokedAt: null,
+                status: 'active',
               },
             ],
             pagination,
           }),
         )
       }
+      if (url === '/api/applications' || url.startsWith('/api/applications?')) {
+        return Promise.resolve(
+          jsonResponse({
+            applications: [
+              { id: 'app-1', name: 'Customer portal', slug: 'customer-portal' },
+              { id: 'app-2', name: 'Reports', slug: 'reports' },
+            ],
+            pagination,
+          }),
+        )
+      }
+      if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
       if (url === '/api/users/user-1/security') {
         return Promise.resolve(
           jsonResponse({
@@ -173,7 +188,7 @@ describe('admin console user detail lifecycle', () => {
         requests.push({ method, url })
         return Promise.resolve(jsonResponse({ status: true }))
       }
-      if (url === '/api/users/user-1/ban' && method === 'PUT') {
+      if (url === '/api/users/user-1/suspension' && method === 'PUT') {
         const body = JSON.parse(String(init?.body))
         requests.push({ method, url, body })
         currentUser = { ...currentUser, banned: true, banReason: body.reason }
@@ -188,7 +203,7 @@ describe('admin console user detail lifecycle', () => {
     expect(screen.getAllByText('2', { selector: '.detailFlatRow > span' }).length).toBeGreaterThan(0)
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Authentication' }), { button: 0, ctrlKey: false })
-    expect(await screen.findByText('totp')).toBeTruthy()
+    expect(await screen.findByText('Enrolled factors')).toBeTruthy()
     expect(screen.getByText('Backed up')).toBeTruthy()
     expect(screen.getByText('Local password credential')).toBeTruthy()
     expect(screen.getByText('github')).toBeTruthy()
@@ -229,7 +244,7 @@ describe('admin console user detail lifecycle', () => {
     await waitFor(() =>
       expect(requests).toContainEqual({
         method: 'PUT',
-        url: '/api/users/user-1/ban',
+        url: '/api/users/user-1/suspension',
         body: { reason: 'Policy violation' },
       }),
     )

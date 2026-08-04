@@ -240,6 +240,15 @@ export interface UserRepository {
   listConsentedApplications(userId: string, page: PaginationInput): Promise<PaginatedResult<ConsentedApplication>>
   listSessions(userId: string, page: PaginationInput): Promise<PaginatedResult<UserSessionDevice>>
   getSessionToken(userId: string, sessionId: string): Promise<string>
+  createPasswordResetRequest?(input: PasswordResetRequest): Promise<PasswordResetRequest>
+  findPasswordResetRequest?(userId: string, requestId: string): Promise<PasswordResetRequest | null>
+}
+
+export interface PasswordResetRequest {
+  id: string
+  userId: string
+  status: 'accepted'
+  createdAt: Date
 }
 
 // --- security ---------------------------------------------------------------

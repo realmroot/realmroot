@@ -18,7 +18,7 @@ interface ReadinessBindings {
 export function createManagementReadinessRoute({ securityPolicy }: { securityPolicy?: SecurityPolicy }) {
   const app = new Hono<{ Bindings: ReadinessBindings }>()
 
-  app.get('/readiness', async (c) => {
+  app.get('/realm/configuration-status', async (c) => {
     const deps = getDeps(c)
     const options = configzOptions(c, securityPolicy)
     const [applications, config, emailSettings] = await Promise.all([

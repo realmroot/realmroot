@@ -50,7 +50,8 @@ describe('agent protocol management over real D1', () => {
     expect(body.items).toEqual([expect.objectContaining({ id: stableAgent.id })])
 
     expect(
-      (await harness.request(`/api/agents/${stableAgent.id}`, { method: 'DELETE', headers: { cookie } })).status,
+      (await harness.request(`/api/agents/${stableAgent.id}/retirement`, { method: 'PUT', headers: { cookie } }))
+        .status,
     ).toBe(204)
   })
 
@@ -193,16 +194,6 @@ describe('user management over real D1', () => {
       headers: { cookie: adminCookie },
     })
     expect(passkeys.status).toBe(200)
-
-    const security = await harness.request(`/api/users/${userId}/security`, {
-      headers: { cookie: adminCookie },
-    })
-    expect(security.status).toBe(200)
-
-    const apps = await harness.request(`/api/users/${userId}/applications`, {
-      headers: { cookie: adminCookie },
-    })
-    expect(apps.status).toBe(200)
   })
 
   it('bans and unbans a user through Better Auth admin (real SQL)', async () => {
@@ -214,14 +205,14 @@ describe('user management over real D1', () => {
       password: 'bannable-password-2026',
     })
 
-    const banned = await harness.request(`/api/users/${userId}/ban`, {
+    const banned = await harness.request(`/api/users/${userId}/suspension`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ reason: 'policy violation' }),
     })
     expect(banned.status, await banned.clone().text()).toBe(200)
 
-    const unbanned = await harness.request(`/api/users/${userId}/ban`, {
+    const unbanned = await harness.request(`/api/users/${userId}/suspension`, {
       method: 'DELETE',
       headers: { cookie },
     })
@@ -250,7 +241,7 @@ describe('federated credential management over real D1', () => {
       }),
     })
     const application = (await createApp.json()) as { id: string }
-    const createResource = await harness.request('/api/api-resources', {
+    const createResource = await harness.request('/api/resource-servers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({

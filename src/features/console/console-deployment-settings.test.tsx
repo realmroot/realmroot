@@ -46,12 +46,12 @@ describe('deployment settings operations', () => {
         return jsonResponse({ organizations: [organization], pagination })
       }
       if (request.path === '/api/users') return jsonResponse({ users: [user], pagination })
-      if (request.path === '/api/organization-creation-policy' && request.method === 'PUT') {
+      if (request.path === '/api/realm/organization-creation-policy' && request.method === 'PUT') {
         const body = await request.body
         writes.push({ path: request.path, body })
         return jsonResponse(body, 200, { ETag: '"organization-creation-v2"' })
       }
-      if (request.path === '/api/developer-console-access-policy' && request.method === 'PUT') {
+      if (request.path === '/api/realm/developer-console-access-policy' && request.method === 'PUT') {
         const body = await request.body
         writes.push({ path: request.path, body })
         return jsonResponse(body, 200, { ETag: '"developer-console-v2"' })
@@ -80,11 +80,11 @@ describe('deployment settings operations', () => {
     await waitFor(() => expect(writes).toHaveLength(2))
     expect(writes).toEqual([
       {
-        path: '/api/organization-creation-policy',
+        path: '/api/realm/organization-creation-policy',
         body: { mode: 'approved_users', approvedUserIds: ['user-1'] },
       },
       {
-        path: '/api/developer-console-access-policy',
+        path: '/api/realm/developer-console-access-policy',
         body: {
           mode: 'selected_organizations',
           eligibleAccessLevels: ['owner', 'admin', 'developer'],
@@ -100,7 +100,7 @@ describe('deployment settings operations', () => {
   it('shows deployment fallbacks and prevents enabling email without a binding', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
-      if (request.path === '/api/email-delivery-configuration') {
+      if (request.path === '/api/realm/email-delivery-configuration') {
         if (request.method === 'PUT') {
           return request.body.then((body) =>
             jsonResponse({ ...(body as object), bindingAvailable: false, source: 'database' }, 200, {
@@ -146,7 +146,7 @@ describe('deployment settings operations', () => {
         return jsonResponse({ organizations: [nameOnlyOrganization], pagination })
       }
       if (request.path === '/api/users') return jsonResponse({ users: [displayNameUser], pagination })
-      if (request.path === '/api/organization-creation-policy') {
+      if (request.path === '/api/realm/organization-creation-policy') {
         if (request.method === 'PUT') return jsonResponse(await request.body, 200, { ETag: '"org-policy-v2"' })
         return jsonResponse(
           { mode: 'approved_users', approvedUserIds: [emptySelections ? 'missing-user' : 'user-1'] },
@@ -154,7 +154,7 @@ describe('deployment settings operations', () => {
           { ETag: '"org-policy-v1"' },
         )
       }
-      if (request.path === '/api/developer-console-access-policy') {
+      if (request.path === '/api/realm/developer-console-access-policy') {
         if (request.method === 'PUT') return jsonResponse(await request.body, 200, { ETag: '"console-policy-v2"' })
         return jsonResponse(
           {

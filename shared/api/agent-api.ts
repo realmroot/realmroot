@@ -32,6 +32,31 @@ export const agentSchema = z.object({
 })
 
 export const agentResponseSchema = z.object({ agent: agentSchema })
+export const agentStatusSchema = z.object({
+  enrollment: z.object({
+    state: z.enum(['unenrolled', 'enrolled']),
+    pending: z.null(),
+  }),
+  agent: agentSchema.nullable(),
+  installation: z
+    .object({
+      id: z.string(),
+      status: z.enum(['active', 'revoked']),
+    })
+    .nullable(),
+})
+
+export const createAgentSelfEnrollmentSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('new_identity'),
+    name: z.string().trim().min(1).max(100),
+    organizationId: nonEmptyString.optional(),
+  }),
+  z.object({
+    kind: z.literal('additional_installation'),
+    agentId: nonEmptyString,
+  }),
+])
 export const managementAgentSchema = agentSchema.extend({
   owner: z.object({
     id: z.string(),

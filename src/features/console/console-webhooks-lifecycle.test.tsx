@@ -61,22 +61,22 @@ describe('webhook endpoint and delivery operations', () => {
       if (request.path === '/api/organizations') {
         return jsonResponse({ organizations: [organization, nameOnlyOrganization], pagination })
       }
-      if (request.path.startsWith('/api/webhooks/endpoints') && request.method === 'GET') {
+      if (request.path.startsWith('/api/webhooks') && request.method === 'GET') {
         return jsonResponse({ endpoints: endpointRows, pagination })
       }
-      if (request.path === '/api/webhooks/endpoints' && request.method === 'POST') {
+      if (request.path === '/api/webhooks' && request.method === 'POST') {
         mutations.push({ ...request, body: await request.body })
         return jsonResponse({ ...webhookEndpoint, signingSecret: 'whsec_created' }, 201)
       }
-      if (request.path === '/api/webhooks/endpoints/wh_1' && request.method === 'PATCH') {
+      if (request.path === '/api/webhooks/wh_1' && request.method === 'PATCH') {
         mutations.push({ ...request, body: await request.body })
         return jsonResponse(webhookEndpoint)
       }
-      if (request.path === '/api/webhooks/endpoints/wh_1/secrets' && request.method === 'POST') {
+      if (request.path === '/api/webhooks/wh_1/secrets' && request.method === 'POST') {
         mutations.push({ ...request, body: await request.body })
         return jsonResponse({ signingSecret: 'whsec_rotated' }, 201)
       }
-      if (request.path === '/api/webhooks/endpoints/wh_1' && request.method === 'DELETE') {
+      if (request.path === '/api/webhooks/wh_1' && request.method === 'DELETE') {
         mutations.push({ ...request, body: await request.body })
         return new Response(null, { status: 204 })
       }
@@ -180,10 +180,13 @@ describe('webhook endpoint and delivery operations', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestDetails(input, init)
       if (request.path === '/api/organizations') return jsonResponse({ organizations: [organization], pagination })
-      if (request.path.startsWith('/api/webhooks/requests') && request.method === 'GET') {
+      if (request.path.startsWith('/api/webhooks?')) {
+        return jsonResponse({ endpoints: [webhookEndpoint], pagination: { ...pagination, total: 1 } })
+      }
+      if (request.path.startsWith('/api/webhooks/wh_1/deliveries') && request.method === 'GET') {
         return jsonResponse({ requests, pagination: { ...pagination, total: requests.length } })
       }
-      if (request.path === '/api/webhooks/requests/whr_1/attempts' && request.method === 'POST') {
+      if (request.path === '/api/webhooks/wh_1/deliveries/whr_1/attempts' && request.method === 'POST') {
         retries.push(await request.body)
         return jsonResponse({ request: webhookRequest }, 201)
       }
@@ -215,18 +218,20 @@ describe('webhook endpoint and delivery operations', () => {
 
   it('uses the fixed Organization scope and renders empty and failed collections', async () => {
     let fail = false
+    let failRequests = false
     const nameOnlyOrganization = { ...organization, id: 'org-2', displayName: null, name: 'Northwind' }
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestDetails(input, init)
       if (request.path === '/api/organizations') {
         return jsonResponse({ organizations: [organization, nameOnlyOrganization], pagination })
       }
-      if (request.path.startsWith('/api/webhooks/endpoints')) {
-        if (fail) return jsonResponse({ error: 'Webhook inventory unavailable.' }, 500)
-        return jsonResponse({ endpoints: [], pagination: emptyPagination })
-      }
-      if (request.path.startsWith('/api/webhooks/requests')) {
+      if (request.path.startsWith('/api/webhooks/wh_1/deliveries')) {
         return jsonResponse({ error: 'Webhook requests unavailable.' }, 500)
+      }
+      if (request.path.startsWith('/api/webhooks')) {
+        if (fail) return jsonResponse({ error: 'Webhook inventory unavailable.' }, 500)
+        const endpoints = failRequests ? [webhookEndpoint] : []
+        return jsonResponse({ endpoints, pagination: { ...emptyPagination, total: endpoints.length } })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.path}`)
     })
@@ -261,6 +266,8 @@ describe('webhook endpoint and delivery operations', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     failedEndpoints.unmount()
 
+    fail = false
+    failRequests = true
     queryClient.clear()
     renderWithQuery(<WebhooksPage section="requests" />)
     expect(await screen.findByText('Webhook requests unavailable.')).toBeTruthy()

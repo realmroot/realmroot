@@ -41,8 +41,8 @@ describe('admin console users-detail-b', () => {
         return Promise.resolve(jsonResponse(connector, 201))
       }
       if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
       if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination }))
       }
@@ -116,7 +116,7 @@ describe('admin console users-detail-b', () => {
       const method = init?.method ?? 'GET'
       if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
       if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
-      if (url === '/api/sign-in-settings' && method === 'GET') {
+      if (url === '/api/realm/sign-in-policy' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             ...signInSettings,
@@ -128,20 +128,20 @@ describe('admin console users-detail-b', () => {
           }),
         )
       }
-      if (url === '/api/sign-in-settings' && method === 'PATCH') {
+      if (url === '/api/realm/sign-in-policy' && method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(
           jsonResponse({ ...signInSettings, signIn: { ...signInSettings.signIn, emailOtpEnabled: true } }),
         )
       }
-      if (url === '/api/security/policy' && method === 'GET') {
+      if (url === '/api/realm/security-policy' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             policy: { ...securityPolicy.policy, passkeys: { ...securityPolicy.policy.passkeys, enabled: false } },
           }),
         )
       }
-      if (url === '/api/security/policy' && method === 'PATCH') {
+      if (url === '/api/realm/security-policy' && method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init?.body)) })
         return Promise.resolve(jsonResponse(securityPolicy))
       }
@@ -157,7 +157,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/sign-in-settings',
+        url: '/api/realm/sign-in-policy',
         body: { builtInProviders: { email: { enabled: true, otpLength: 8, expiresInSeconds: 600 } } },
       })
     })
@@ -168,7 +168,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/security/policy',
+        url: '/api/realm/security-policy',
         body: {
           policy: {
             passkeys: {
@@ -202,7 +202,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/sign-in-settings',
+        url: '/api/realm/sign-in-policy',
         body: {
           builtInProviders: {
             phone: expect.objectContaining({
@@ -230,7 +230,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/sign-in-settings',
+        url: '/api/realm/sign-in-policy',
         body: {
           builtInProviders: {
             web3Wallet: expect.objectContaining({
@@ -251,7 +251,7 @@ describe('admin console users-detail-b', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/sign-in-settings',
+        url: '/api/realm/sign-in-policy',
         body: {
           builtInProviders: {
             oneTap: expect.objectContaining({
@@ -270,8 +270,8 @@ describe('admin console users-detail-b', () => {
       const url = String(input)
       const method = init?.method ?? 'GET'
       if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
       if (url === '/api/connectors/connector-1' && method === 'GET') {
         return Promise.resolve(jsonResponse(connector))
       }

@@ -6,7 +6,12 @@ import {
   restoreResource,
   updateResource,
 } from '@server/usecases/authorization'
-import { getApiResource, listApiResources } from '@server/usecases/external-resources'
+import {
+  getAgentResourceServer,
+  getApiResource,
+  listAgentResourceServers,
+  listApiResources,
+} from '@server/usecases/external-resources'
 import {
   apiResourceSchema,
   apiResourcesResponseSchema,
@@ -28,6 +33,17 @@ export function createManagementApiResourcesRoute() {
   const app = new Hono()
 
   app.get('/', async (c) => {
+    const principal = getPrincipal(c).agent
+    if (principal) {
+      return c.json(
+        await listAgentResourceServers(
+          getDeps(c),
+          principal,
+          readQuery(c, listApiResourcesQuerySchema.pick({ limit: true, offset: true })),
+          new URL(c.req.url).origin,
+        ),
+      )
+    }
     const query = readQuery(c, listApiResourcesQuerySchema)
     return c.json(
       apiResourcesResponseSchema.parse(
@@ -40,11 +56,19 @@ export function createManagementApiResourcesRoute() {
     const input = await readJson(c, createApiResourceSchema)
     requireConsoleOwnedOrganization(c, input.ownerOrganizationId)
     const resource = await createResource(getDeps(c), input)
-    c.header('Location', `/api/api-resources/${encodeURIComponent(resource.id)}`)
+    c.header('Location', `/api/resource-servers/${encodeURIComponent(resource.id)}`)
     return c.json(apiResourceSchema.parse(await getApiResource(getDeps(c), resource.id)), 201)
   })
 
-  app.get('/:resourceId', async (c) => c.json(apiResourceSchema.parse(await requireResourceAccess(c))))
+  app.get('/:resourceId', async (c) => {
+    const principal = getPrincipal(c).agent
+    if (principal) {
+      return c.json(
+        await getAgentResourceServer(getDeps(c), c.req.param('resourceId'), principal, new URL(c.req.url).origin),
+      )
+    }
+    return c.json(apiResourceSchema.parse(await requireResourceAccess(c)))
+  })
 
   app.get('/:resourceId/contract', async (c) => {
     await requireResourceAccess(c)
@@ -68,6 +92,10 @@ export function createManagementApiResourcesRoute() {
   })
 
   return app
+    .get('/:resourceId/archival', async (c) => {
+      const resource = await requireResourceAccess(c)
+      return c.json({ resourceServerId: resource.id, archivedAt: resource.archivedAt })
+    })
     .put('/:resourceId/archival', async (c) => {
       await requireResourceAccess(c)
       await archiveResource(getDeps(c), c.req.param('resourceId'), resourceMutationActor(c))

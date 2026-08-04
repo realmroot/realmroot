@@ -231,7 +231,7 @@ describe('Agent identity enrollment over real D1', () => {
   it('rejects anonymous Agent enrollment', async () => {
     expect(
       (
-        await harness.request('/api/agent-identities/current/enrollments', {
+        await harness.request('/api/agent/enrollments', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ name: 'No Session' }),

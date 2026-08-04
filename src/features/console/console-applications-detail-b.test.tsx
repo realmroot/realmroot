@@ -42,8 +42,8 @@ describe('admin console applications-detail-b', () => {
       const url = String(input)
       requests.push(url)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
@@ -73,8 +73,8 @@ describe('admin console applications-detail-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
@@ -108,8 +108,8 @@ describe('admin console applications-detail-b', () => {
       if (url === '/api/configz') return Promise.resolve(jsonResponse(configz))
       if (url === '/api/account/profile')
         return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/readiness') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/configuration-status') {
         return Promise.resolve(
           jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
         )
@@ -148,7 +148,7 @@ describe('admin console applications-detail-b', () => {
       if (url === '/api/applications/app-1/federated-credentials') {
         return Promise.resolve(jsonResponse({ credentials: [] }))
       }
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
@@ -210,7 +210,7 @@ describe('admin console applications-detail-b', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === '/api/applications/app-1') return Promise.resolve(jsonResponse(application))
-      if (url === '/api/application-authorizations?applicationId=app-1&limit=50&offset=0') {
+      if (url === '/api/access/consents?applicationId=app-1&limit=50&offset=0') {
         attempts += 1
         if (attempts === 1) {
           return Promise.resolve(jsonResponse({ error: { message: 'Authorizations unavailable.' } }, 503))
@@ -237,7 +237,7 @@ describe('admin console applications-detail-b', () => {
           }),
         )
       }
-      if (url === '/api/application-authorizations/authorization-1/revocation' && init?.method === 'PUT') {
+      if (url === '/api/access/consents/authorization-1/revocation' && init?.method === 'PUT') {
         active = false
         return Promise.resolve(
           jsonResponse({ applicationAuthorizationId: 'authorization-1', revokedAt: '2026-07-02T00:00:00.000Z' }),

@@ -59,7 +59,7 @@ managementRoleAssignmentsRoute.post('/', async (c) => {
   const body = await readJson(c, createRoleAssignmentRequestSchema)
   requireConsoleOwnedOrganization(c, body.organizationId)
   const assignment = roleAssignmentResponseSchema.parse(await createRoleAssignment(getDeps(c), body, getActorUserId(c)))
-  c.header('Location', `/api/role-assignments/${encodeURIComponent(assignment.id)}`)
+  c.header('Location', `/api/access/assignments/${encodeURIComponent(assignment.id)}`)
   return c.json(assignment, 201)
 })
 
@@ -75,6 +75,12 @@ managementRoleAssignmentsRoute.put('/:assignmentId/revocation', async (c) => {
   return c.json(
     roleAssignmentRevocationSchema.parse(await putRoleAssignmentRevocation(getDeps(c), c.req.param('assignmentId'))),
   )
+})
+
+managementRoleAssignmentsRoute.get('/:assignmentId/revocation', async (c) => {
+  const assignment = await getRoleAssignment(getDeps(c), c.req.param('assignmentId'))
+  requireRoleAssignmentAccess(c, assignment)
+  return c.json({ roleAssignmentId: assignment.id, revokedAt: assignment.revokedAt })
 })
 
 function requireRoleAssignmentAccess(

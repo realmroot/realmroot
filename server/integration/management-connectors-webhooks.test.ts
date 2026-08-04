@@ -129,12 +129,12 @@ describe('webhook management over real D1', () => {
   })
 
   it('rejects anonymous reads with 401', async () => {
-    expect((await harness.request('/api/webhooks/endpoints')).status).toBe(401)
+    expect((await harness.request('/api/webhooks')).status).toBe(401)
   })
 
   it('rejects an invalid endpoint payload with 400', async () => {
     const cookie = await signInAdmin(harness)
-    const response = await harness.request('/api/webhooks/endpoints', {
+    const response = await harness.request('/api/webhooks', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       // http URL is rejected (https required) and events is empty.
@@ -146,7 +146,7 @@ describe('webhook management over real D1', () => {
   it('runs the endpoint lifecycle and secret rotation through real SQL [spec: management-api/management-restish-webhook-crud]', async () => {
     const cookie = await signInAdmin(harness)
 
-    const created = await harness.request('/api/webhooks/endpoints', {
+    const created = await harness.request('/api/webhooks', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ url: 'https://example.com/hook', events: ['user.created'], organizationId: null }),
@@ -154,27 +154,27 @@ describe('webhook management over real D1', () => {
     expect(created.status, await created.clone().text()).toBe(201)
     const endpoint = ((await created.json()) as { endpoint: { id: string; secretPrefix: string } }).endpoint
 
-    const list = await harness.request('/api/webhooks/endpoints', { headers: { cookie } })
+    const list = await harness.request('/api/webhooks', { headers: { cookie } })
     expect(((await list.json()) as { endpoints: unknown[] }).endpoints.length).toBe(1)
 
-    const fetched = await harness.request(`/api/webhooks/endpoints/${endpoint.id}`, { headers: { cookie } })
+    const fetched = await harness.request(`/api/webhooks/${endpoint.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
 
-    const patched = await harness.request(`/api/webhooks/endpoints/${endpoint.id}`, {
+    const patched = await harness.request(`/api/webhooks/${endpoint.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ events: ['user.created', 'user.deleted'] }),
     })
     expect(patched.status).toBe(200)
 
-    const rotated = await harness.request(`/api/webhooks/endpoints/${endpoint.id}/secrets`, {
+    const rotated = await harness.request(`/api/webhooks/${endpoint.id}/secrets`, {
       method: 'POST',
       headers: { cookie },
     })
     expect(rotated.status).toBe(201)
     expect(((await rotated.json()) as { signingSecret: string }).signingSecret).toBeTruthy()
 
-    const removed = await harness.request(`/api/webhooks/endpoints/${endpoint.id}`, {
+    const removed = await harness.request(`/api/webhooks/${endpoint.id}`, {
       method: 'DELETE',
       headers: { cookie },
     })
@@ -190,7 +190,7 @@ describe('webhook management over real D1', () => {
       return new Response(outboundStatus === 204 ? null : 'temporarily unavailable', { status: outboundStatus })
     }
 
-    const created = await harness.request('/api/webhooks/endpoints', {
+    const created = await harness.request('/api/webhooks', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ url: 'https://example.com/hook', events: ['user.created'], organizationId: null }),
@@ -216,7 +216,7 @@ describe('webhook management over real D1', () => {
     expect(createdUser.status, await createdUser.clone().text()).toBe(201)
     expect(outbound).toHaveLength(1)
 
-    const list = await harness.request('/api/webhooks/requests', { headers: { cookie } })
+    const list = await harness.request(`/api/webhooks/${endpoint.id}/deliveries`, { headers: { cookie } })
     expect(list.status).toBe(200)
     const [request] = (
       (await list.json()) as {
@@ -234,16 +234,18 @@ describe('webhook management over real D1', () => {
       await webhookSignature(secretResponse.signingSecret, timestamp, body),
     )
 
-    const filtered = await harness.request(`/api/webhooks/requests?endpointId=${endpoint.id}&status=failed`, {
+    const filtered = await harness.request(`/api/webhooks/${endpoint.id}/deliveries?status=failed`, {
       headers: { cookie },
     })
     expect(((await filtered.json()) as { requests: unknown[] }).requests.length).toBe(1)
 
-    const fetched = await harness.request(`/api/webhooks/requests/${request.id}`, { headers: { cookie } })
+    const fetched = await harness.request(`/api/webhooks/${endpoint.id}/deliveries/${request.id}`, {
+      headers: { cookie },
+    })
     expect(fetched.status).toBe(200)
 
     outboundStatus = 204
-    const retried = await harness.request(`/api/webhooks/requests/${request.id}/attempts`, {
+    const retried = await harness.request(`/api/webhooks/${endpoint.id}/deliveries/${request.id}/attempts`, {
       method: 'POST',
       headers: { cookie, 'Idempotency-Key': `retry-${request.id}` },
     })
@@ -252,14 +254,16 @@ describe('webhook management over real D1', () => {
     expect(retriedAttempt).toEqual(
       expect.objectContaining({ requestId: request.id, status: 'delivered', sequence: 2, httpStatus: 204 }),
     )
-    const replayed = await harness.request(`/api/webhooks/requests/${request.id}/attempts`, {
+    const replayed = await harness.request(`/api/webhooks/${endpoint.id}/deliveries/${request.id}/attempts`, {
       method: 'POST',
       headers: { cookie, 'Idempotency-Key': `retry-${request.id}` },
     })
     expect(replayed.status).toBe(201)
     expect(replayed.headers.get('Idempotency-Replayed')).toBe('true')
     await expect(replayed.json()).resolves.toEqual(expect.objectContaining({ id: retriedAttempt.id }))
-    const deliveredRequest = await harness.request(`/api/webhooks/requests/${request.id}`, { headers: { cookie } })
+    const deliveredRequest = await harness.request(`/api/webhooks/${endpoint.id}/deliveries/${request.id}`, {
+      headers: { cookie },
+    })
     await expect(deliveredRequest.json()).resolves.toEqual(
       expect.objectContaining({ status: 'delivered', attemptCount: 2, httpStatus: 204 }),
     )

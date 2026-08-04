@@ -9,8 +9,20 @@ import {
   listManagementAgentAccessGrants,
   listManagementAgentAccessRequests,
   listManagementAgentInstallations,
+  recoverAgentIdentity,
 } from '@server/usecases/agent-identities'
 import {
+  decideAccessRequest,
+  getAccessRequest,
+  getAgentAccessGrant,
+  listAgentAccessGrants,
+  revokeAgentAccessGrant,
+} from '@server/usecases/external-resources'
+import {
+  accessGrantSchema,
+  accessGrantsResponseSchema,
+  accessRequestSchema,
+  decideAccessRequestSchema,
   listAgentAuditEventsQuerySchema,
   listAgentsQuerySchema,
   listManagementAgentAccessGrantsQuerySchema,
@@ -26,7 +38,7 @@ import {
 import { agentAuditEventSchema } from '@shared/api/agents'
 import { paginationMetadata, paginationQuerySchema } from '@shared/api/pagination'
 import { Hono } from 'hono'
-import { getActorUserId } from '../../middleware/authn'
+import { getActorUserId, getPrincipal } from '../../middleware/authn'
 import {
   getManagementAccessScope,
   requireConsoleOrganizationAccess,
@@ -34,7 +46,7 @@ import {
   resolveOrganizationInventoryScope,
 } from '../../middleware/authz'
 import { getDeps } from '../../middleware/deps'
-import { readQuery } from '../validation'
+import { readJson, readQuery } from '../validation'
 
 export const managementAgentsRoute = new Hono()
 
@@ -62,22 +74,61 @@ managementAgentsRoute.get('/agents/:agentId/installations', async (c) => {
   )
 })
 
-managementAgentsRoute.get('/agent-access-requests', async (c) => {
+managementAgentsRoute.get('/access/requests', async (c) => {
   const query = readQuery(c, listManagementAgentAccessRequestsQuerySchema)
+  const principal = getPrincipal(c).agent
   return c.json(
     managementAgentAccessRequestsResponseSchema.parse(
-      await listManagementAgentAccessRequests(getDeps(c), query, authorityInventoryScope(c, query.organizationId)),
+      await listManagementAgentAccessRequests(
+        getDeps(c),
+        principal ? { ...query, agentId: principal.identityId } : query,
+        principal ? undefined : authorityInventoryScope(c, query.organizationId),
+      ),
     ),
   )
 })
 
-managementAgentsRoute.get('/agent-access-requests/:requestId', async (c) => {
+managementAgentsRoute.get('/access/requests/:requestId', async (c) => {
+  const principal = getPrincipal(c).agent
+  if (principal) {
+    return c.json(
+      accessRequestSchema.parse(
+        await getAccessRequest(getDeps(c), c.req.param('requestId'), principal, new URL(c.req.url).origin),
+      ),
+    )
+  }
   const request = await getManagementAgentAccessRequest(getDeps(c), c.req.param('requestId'))
   await requireAgentByIdAccess(c, request.agentId)
   return c.json(managementAgentAccessRequestSchema.parse(request))
 })
 
-managementAgentsRoute.get('/agent-access-grants', async (c) => {
+managementAgentsRoute.get('/access/requests/:requestId/decision', async (c) => {
+  const request = await getManagementAgentAccessRequest(getDeps(c), c.req.param('requestId'))
+  await requireAgentByIdAccess(c, request.agentId)
+  return c.json({ accessRequestId: request.id, status: request.status, decidedAt: request.decidedAt })
+})
+
+managementAgentsRoute.put('/access/requests/:requestId/decision', async (c) => {
+  const request = await getManagementAgentAccessRequest(getDeps(c), c.req.param('requestId'))
+  await requireAgentByIdAccess(c, request.agentId)
+  const decided = await decideAccessRequest(
+    getDeps(c),
+    request.id,
+    await readJson(c, decideAccessRequestSchema),
+    getActorUserId(c)!,
+  )
+  return c.json({ accessRequestId: decided.id, status: decided.status, decidedAt: decided.decidedAt })
+})
+
+managementAgentsRoute.get('/access/authorizations', async (c) => {
+  const principal = getPrincipal(c).agent
+  if (principal) {
+    return c.json(
+      accessGrantsResponseSchema.parse(
+        await listAgentAccessGrants(getDeps(c), principal, readQuery(c, paginationQuerySchema)),
+      ),
+    )
+  }
   const query = readQuery(c, listManagementAgentAccessGrantsQuerySchema)
   return c.json(
     managementAgentAccessGrantsResponseSchema.parse(
@@ -86,18 +137,48 @@ managementAgentsRoute.get('/agent-access-grants', async (c) => {
   )
 })
 
-managementAgentsRoute.get('/agent-access-grants/:grantId', async (c) => {
-  const grant = await getManagementAgentAccessGrant(getDeps(c), c.req.param('grantId'))
+managementAgentsRoute.get('/access/authorizations/:authorizationId', async (c) => {
+  const principal = getPrincipal(c).agent
+  if (principal) {
+    return c.json(
+      accessGrantSchema.parse(await getAgentAccessGrant(getDeps(c), c.req.param('authorizationId'), principal)),
+    )
+  }
+  const grant = await getManagementAgentAccessGrant(getDeps(c), c.req.param('authorizationId'))
   await requireAgentByIdAccess(c, grant.agentId)
   return c.json(managementAgentAccessGrantSchema.parse(grant))
 })
 
-managementAgentsRoute.delete('/agents/:agentId', async (c) => {
+managementAgentsRoute.get('/access/authorizations/:authorizationId/revocation', async (c) => {
+  const grant = await getManagementAgentAccessGrant(getDeps(c), c.req.param('authorizationId'))
+  await requireAgentByIdAccess(c, grant.agentId)
+  return c.json({ authorizationId: grant.id, status: grant.status })
+})
+
+managementAgentsRoute.put('/access/authorizations/:authorizationId/revocation', async (c) => {
+  const grant = await getManagementAgentAccessGrant(getDeps(c), c.req.param('authorizationId'))
+  await requireAgentByIdAccess(c, grant.agentId)
+  await revokeAgentAccessGrant(getDeps(c), grant.id, getActorUserId(c)!)
+  return c.json({ authorizationId: grant.id, status: 'revoked' as const })
+})
+
+managementAgentsRoute.get('/agents/:agentId/retirement', async (c) => {
+  const result = await getManagementAgent(getDeps(c), c.req.param('agentId'))
+  requireAgentConsoleAccess(c, result.agent)
+  return c.json({ agentId: result.agent.id, status: result.agent.status, retiredAt: result.agent.retiredAt })
+})
+
+managementAgentsRoute.put('/agents/:agentId/retirement', async (c) => {
   await emergencyRetireAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c))
   return c.body(null, 204)
 })
 
-managementAgentsRoute.get('/audit-events', async (c) => {
+managementAgentsRoute.delete('/agents/:agentId/retirement', async (c) => {
+  await recoverAgentIdentity(getDeps(c), c.req.param('agentId'), getActorUserId(c)!)
+  return c.body(null, 204)
+})
+
+managementAgentsRoute.get('/realm/audit-events', async (c) => {
   const query = readQuery(c, listAgentAuditEventsQuerySchema)
   const organizationIds = resolveOrganizationInventoryScope(c, query.organizationId)
   if (query.agentId) {

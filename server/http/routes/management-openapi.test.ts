@@ -270,10 +270,10 @@ describe('management routes 4', () => {
     const app = createApp(createAuthMock(), createTestDeps())
     const headers = adminHeaders()
 
-    const list = await app.request('/api/webhooks/endpoints?limit=10&offset=5&search=auth&status=enabled', {
+    const list = await app.request('/api/webhooks?limit=10&offset=5&search=auth&status=enabled', {
       headers,
     })
-    const created = await app.request('/api/webhooks/endpoints', {
+    const created = await app.request('/api/webhooks', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -283,24 +283,24 @@ describe('management routes 4', () => {
         organizationId: null,
       }),
     })
-    const detail = await app.request('/api/webhooks/endpoints/wh_1', { headers })
-    const updated = await app.request('/api/webhooks/endpoints/wh_1', {
+    const detail = await app.request('/api/webhooks/wh_1', { headers })
+    const updated = await app.request('/api/webhooks/wh_1', {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ enabled: false }),
     })
-    const rotated = await app.request('/api/webhooks/endpoints/wh_1/secrets', { method: 'POST', headers })
-    const requests = await app.request('/api/webhooks/requests?limit=2&offset=4&status=failed', {
+    const rotated = await app.request('/api/webhooks/wh_1/secrets', { method: 'POST', headers })
+    const requests = await app.request('/api/webhooks/wh_1/deliveries?limit=2&offset=4&status=failed', {
       headers,
     })
-    const requestDetail = await app.request('/api/webhooks/requests/whr_1', { headers })
-    const attempts = await app.request('/api/webhooks/requests/whr_1/attempts', { headers })
-    const attemptDetail = await app.request('/api/webhooks/requests/whr_1/attempts/wha_1', { headers })
-    const createdAttempt = await app.request('/api/webhooks/requests/whr_1/attempts', {
+    const requestDetail = await app.request('/api/webhooks/wh_1/deliveries/whr_1', { headers })
+    const attempts = await app.request('/api/webhooks/wh_1/deliveries/whr_1/attempts', { headers })
+    const attemptDetail = await app.request('/api/webhooks/wh_1/deliveries/whr_1/attempts/wha_1', { headers })
+    const createdAttempt = await app.request('/api/webhooks/wh_1/deliveries/whr_1/attempts', {
       method: 'POST',
       headers: { ...headers, 'Idempotency-Key': 'retry-whr-1' },
     })
-    const deleted = await app.request('/api/webhooks/endpoints/wh_1', { method: 'DELETE', headers })
+    const deleted = await app.request('/api/webhooks/wh_1', { method: 'DELETE', headers })
 
     expect(list.status).toBe(200)
     await expect(list.json()).resolves.toEqual({
@@ -358,7 +358,7 @@ describe('management routes 4', () => {
     expect(webhooks.rotateSecret).toHaveBeenCalledWith(expect.anything(), 'wh_1')
     expect(webhooks.listRequests).toHaveBeenCalledWith(
       expect.anything(),
-      { limit: 2, offset: 4, status: 'failed' },
+      { endpointId: 'wh_1', limit: 2, offset: 4, status: 'failed' },
       undefined,
     )
     expect(webhooks.getRequest).toHaveBeenCalledWith(expect.anything(), 'whr_1')
@@ -372,14 +372,14 @@ describe('management routes 4', () => {
     const webhooks = spyWebhooks()
     const app = createApp(createAuthMock(), createTestDeps())
 
-    const unauthenticated = await app.request('/api/webhooks/endpoints')
-    const nonAdmin = await app.request('/api/webhooks/endpoints', { headers: userHeaders() })
-    const invalid = await app.request('/api/webhooks/endpoints', {
+    const unauthenticated = await app.request('/api/webhooks')
+    const nonAdmin = await app.request('/api/webhooks', { headers: userHeaders() })
+    const invalid = await app.request('/api/webhooks', {
       method: 'POST',
       headers: adminHeaders(),
       body: JSON.stringify({ url: 'http://events.example.com/realmroot', events: [] }),
     })
-    const missingIdempotencyKey = await app.request('/api/webhooks/requests/whr_1/attempts', {
+    const missingIdempotencyKey = await app.request('/api/webhooks/wh_1/deliveries/whr_1/attempts', {
       method: 'POST',
       headers: adminHeaders(),
     })

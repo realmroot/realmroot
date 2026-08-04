@@ -1454,7 +1454,7 @@ describe('external API resource authorization', () => {
           },
           links: {
             self: expect.stringContaining('/api/resource-servers/resource-1/resources/'),
-            accessRequests: 'https://auth.example.com/api/access-requests',
+            accessRequests: 'https://auth.example.com/api/access/requests',
           },
         },
         {
@@ -1467,7 +1467,7 @@ describe('external API resource authorization', () => {
           agentAuthorization: { authorizedScopes: [], requestableScopes: [] },
           links: {
             self: expect.stringContaining('/api/resource-servers/resource-1/resources/'),
-            accessRequests: 'https://auth.example.com/api/access-requests',
+            accessRequests: 'https://auth.example.com/api/access/requests',
           },
         },
       ],

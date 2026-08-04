@@ -38,7 +38,7 @@ describe('management settings over real D1', () => {
   })
 
   it('rejects anonymous reads with 401', async () => {
-    expect((await harness.request('/api/sign-in-settings')).status).toBe(401)
+    expect((await harness.request('/api/realm/sign-in-policy')).status).toBe(401)
   })
 
   it('rejects a signed-in non-admin with 403', async () => {
@@ -50,33 +50,33 @@ describe('management settings over real D1', () => {
       password: 'member-password-2026',
     })
     const memberCookie = await signIn(harness, 'member@example.com', 'member-password-2026')
-    expect((await harness.request('/api/branding-settings', { headers: { cookie: memberCookie } })).status).toBe(403)
+    expect((await harness.request('/api/realm/branding', { headers: { cookie: memberCookie } })).status).toBe(403)
   })
 
   it('reads and writes sign-in, branding, and account-center settings through real SQL [spec: management-api/management-restish-settings-update]', async () => {
     const cookie = await signInAdmin(harness)
 
-    const signInRead = await harness.request('/api/sign-in-settings', { headers: { cookie } })
+    const signInRead = await harness.request('/api/realm/sign-in-policy', { headers: { cookie } })
     expect(signInRead.status).toBe(200)
-    const signInWrite = await harness.request('/api/sign-in-settings', {
+    const signInWrite = await harness.request('/api/realm/sign-in-policy', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ builtInProviders: { email: { enabled: true } } }),
     })
     expect(signInWrite.status, await signInWrite.clone().text()).toBe(200)
 
-    const brandingRead = await harness.request('/api/branding-settings', { headers: { cookie } })
+    const brandingRead = await harness.request('/api/realm/branding', { headers: { cookie } })
     expect(brandingRead.status).toBe(200)
-    const brandingWrite = await harness.request('/api/branding-settings', {
+    const brandingWrite = await harness.request('/api/realm/branding', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ branding: { primaryColor: '#1144ff' } }),
     })
     expect(brandingWrite.status, await brandingWrite.clone().text()).toBe(200)
 
-    const accountCenterRead = await harness.request('/api/account-center-settings', { headers: { cookie } })
+    const accountCenterRead = await harness.request('/api/realm/account-management-policy', { headers: { cookie } })
     expect(accountCenterRead.status).toBe(200)
-    const accountCenterWrite = await harness.request('/api/account-center-settings', {
+    const accountCenterWrite = await harness.request('/api/realm/account-management-policy', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ accountCenter: { profileEditingEnabled: false } }),
@@ -92,7 +92,7 @@ describe('management settings over real D1', () => {
 
   it('rejects an invalid branding payload with 400', async () => {
     const cookie = await signInAdmin(harness)
-    const response = await harness.request('/api/branding-settings', {
+    const response = await harness.request('/api/realm/branding', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ branding: { primaryColor: 'not-a-hex-color' } }),
@@ -121,8 +121,8 @@ describe('management settings over real D1', () => {
 
   it('persists Email delivery through real SQL [spec: admin-console/admin-email-delivery-settings]', async () => {
     const cookie = await signInAdmin(harness)
-    const current = await harness.request('/api/email-delivery-configuration', { headers: { cookie } })
-    const update = await harness.request('/api/email-delivery-configuration', {
+    const current = await harness.request('/api/realm/email-delivery-configuration', { headers: { cookie } })
+    const update = await harness.request('/api/realm/email-delivery-configuration', {
       method: 'PUT',
       headers: { 'content-type': 'application/json', cookie, 'If-Match': current.headers.get('ETag')! },
       body: JSON.stringify({
@@ -134,7 +134,7 @@ describe('management settings over real D1', () => {
       }),
     })
     expect(update.status, await update.clone().text()).toBe(200)
-    const read = await harness.request('/api/email-delivery-configuration', { headers: { cookie } })
+    const read = await harness.request('/api/realm/email-delivery-configuration', { headers: { cookie } })
     await expect(read.json()).resolves.toMatchObject({
       enabled: true,
       fromEmail: 'auth@example.com',
@@ -147,7 +147,7 @@ describe('management settings over real D1', () => {
 
   it('exposes the readiness summary built from real SQL', async () => {
     const cookie = await signInAdmin(harness)
-    const response = await harness.request('/api/readiness', { headers: { cookie } })
+    const response = await harness.request('/api/realm/configuration-status', { headers: { cookie } })
     expect(response.status).toBe(200)
   })
 })
@@ -160,7 +160,7 @@ describe('security policy and per-user security over real D1', () => {
   })
 
   it('rejects anonymous policy reads with 401', async () => {
-    expect((await harness.request('/api/security/policy')).status).toBe(401)
+    expect((await harness.request('/api/realm/security-policy')).status).toBe(401)
   })
 
   it('reads and updates the security policy through real SQL', async () => {
@@ -169,11 +169,11 @@ describe('security policy and per-user security over real D1', () => {
     const adminUserId = ((await profile.json()) as { user: { id: string } }).user.id
     await harness.db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, adminUserId))
 
-    const read = await harness.request('/api/security/policy', { headers: { cookie } })
+    const read = await harness.request('/api/realm/security-policy', { headers: { cookie } })
     expect(read.status).toBe(200)
     expect(((await read.json()) as { policy: { mfa: { mode: string } } }).policy.mfa.mode).toBeTruthy()
 
-    const updated = await harness.request('/api/security/policy', {
+    const updated = await harness.request('/api/realm/security-policy', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ policy: { mfa: { mode: 'required' } } }),
@@ -184,7 +184,7 @@ describe('security policy and per-user security over real D1', () => {
 
   it('rejects an invalid policy payload with 400', async () => {
     const cookie = await signInAdmin(harness)
-    const response = await harness.request('/api/security/policy', {
+    const response = await harness.request('/api/realm/security-policy', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ policy: { mfa: { mode: 'not-a-mode' } } }),
@@ -200,10 +200,6 @@ describe('security policy and per-user security over real D1', () => {
       displayName: 'Secured',
       password: 'secured-password-2026',
     })
-
-    const state = await harness.request(`/api/users/${userId}/security`, { headers: { cookie } })
-    expect(state.status).toBe(200)
-    expect(((await state.json()) as { security: { passkeys: { count: number } } }).security.passkeys.count).toBe(0)
 
     const passkeys = await harness.request(`/api/users/${userId}/passkeys`, { headers: { cookie } })
     expect(passkeys.status).toBe(200)

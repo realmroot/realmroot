@@ -16,8 +16,8 @@ describe('console Agent detail', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
       requests.push({ method: request.method, path: request.url.pathname })
-      if (request.method === 'DELETE' && request.url.pathname === '/api/agents/agent-1') {
-        return Promise.resolve(jsonResponse({ agent: { ...agent, status: 'retired' } }))
+      if (request.method === 'PUT' && request.url.pathname === '/api/agents/agent-1/retirement') {
+        return Promise.resolve(new Response(null, { status: 204 }))
       }
       return Promise.resolve(agentDetailResponse(request.url, populatedCollections))
     })
@@ -70,7 +70,7 @@ describe('console Agent detail', () => {
     openTab('Settings')
     fireEvent.click(screen.getByRole('button', { name: 'Retire' }))
     fireEvent.click(screen.getByRole('button', { name: 'Retire Agent' }))
-    await waitFor(() => expect(requests).toContainEqual({ method: 'DELETE', path: '/api/agents/agent-1' }))
+    await waitFor(() => expect(requests).toContainEqual({ method: 'PUT', path: '/api/agents/agent-1/retirement' }))
   })
 
   it('shows empty collections and protects Realm settings in Organization context', async () => {
@@ -124,7 +124,7 @@ describe('console Agent detail', () => {
       if (failLoad && request.url.pathname === '/api/agents/agent-1') {
         return Promise.resolve(jsonResponse({ message: 'Agent inventory unavailable.' }, 500))
       }
-      if (request.method === 'DELETE') {
+      if (request.method === 'PUT' && request.url.pathname.endsWith('/retirement')) {
         return Promise.resolve(jsonResponse({ message: 'Retirement unavailable.' }, 500))
       }
       return Promise.resolve(agentDetailResponse(request.url, populatedCollections))
@@ -148,7 +148,7 @@ describe('console Agent detail', () => {
 
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestDetails(input, init)
-      if (request.method === 'DELETE') {
+      if (request.method === 'PUT' && request.url.pathname.endsWith('/retirement')) {
         return Promise.resolve(jsonResponse({ message: 'Retirement unavailable.' }, 500))
       }
       return Promise.resolve(agentDetailResponse(request.url, populatedCollections))
@@ -182,18 +182,18 @@ function agentDetailResponse(url: URL, collections: AgentCollections) {
   if (path === '/api/agents/agent-1/installations') {
     return jsonResponse({ items: collections.installations, pagination: page(collections.installations.length) })
   }
-  if (path === '/api/role-assignments') {
+  if (path === '/api/access/assignments') {
     return jsonResponse({ assignments: collections.assignments, pagination: page(collections.assignments.length) })
   }
-  if (path === '/api/roles')
+  if (path === '/api/access/roles')
     return jsonResponse({ roles: collections.roles, pagination: page(collections.roles.length) })
-  if (path === '/api/agent-access-requests') {
+  if (path === '/api/access/requests') {
     return jsonResponse({ items: collections.requests, pagination: page(collections.requests.length) })
   }
-  if (path === '/api/agent-access-grants') {
+  if (path === '/api/access/authorizations') {
     return jsonResponse({ items: collections.grants, pagination: page(collections.grants.length) })
   }
-  if (path === '/api/audit-events') {
+  if (path === '/api/realm/audit-events') {
     return jsonResponse({ items: collections.events, pagination: page(collections.events.length) })
   }
   throw new Error(`Unexpected Agent detail request: ${url}`)

@@ -15,6 +15,7 @@ import type { FederatedCredentialRecord } from '@server/usecases/ports'
 import {
   createFederatedCredential,
   deleteFederatedCredential,
+  getFederatedCredential,
   listFederatedCredentials,
   updateFederatedCredential,
 } from '@server/usecases/token-exchange'
@@ -75,6 +76,15 @@ managementApplicationAuthorizationsRoute.put('/:authorizationId/revocation', asy
       await putApplicationAuthorizationRevocation(getDeps(c), c.req.param('authorizationId')),
     ),
   )
+})
+
+managementApplicationAuthorizationsRoute.get('/:authorizationId/revocation', async (c) => {
+  const authorization = await getApplicationAuthorization(getDeps(c), c.req.param('authorizationId'))
+  await requireApplicationAccess(c, authorization.applicationId)
+  return c.json({
+    applicationAuthorizationId: authorization.id,
+    revokedAt: authorization.revokedAt,
+  })
 })
 
 managementApplicationsRoute.get('/', async (c) => {
@@ -196,6 +206,14 @@ managementApplicationsRoute.post('/:applicationId/federated-credentials', async 
   return c.json(
     createManagementFederatedCredentialResponseSchema.parse({ credential: federatedCredentialResponse(credential) }),
     201,
+  )
+})
+
+managementApplicationsRoute.get('/:applicationId/federated-credentials/:credentialId', async (c) => {
+  await requireApplicationAccess(c)
+  const credential = await getFederatedCredential(getDeps(c), c.req.param('applicationId'), c.req.param('credentialId'))
+  return c.json(
+    createManagementFederatedCredentialResponseSchema.parse({ credential: federatedCredentialResponse(credential) }),
   )
 })
 

@@ -172,31 +172,39 @@ describe('asset routes', () => {
     const app = createRouteTestApp(assets)
     const response = await requestWithFile(
       app,
-      '/api/applications/app-1/logo',
+      '/api/assets',
       userHeaders(),
       'logo.png',
       'image/png',
       'logo',
+      undefined,
+      'application_logo',
     )
 
     expect(response.status).toBe(403)
     expect(assets.upload).not.toHaveBeenCalled()
   })
 
-  it('updates application, organization, branding, and favicon owners after admin uploads', async () => {
+  it('creates generic assets for each supported management purpose', async () => {
     const assets = createAssetServiceMock()
     const app = createRouteTestApp(assets)
     const headers = adminHeaders()
 
-    await requestWithFile(app, '/api/applications/app-1/logo', headers, 'logo.png', 'image/png', 'logo')
-    await requestWithFile(app, '/api/organizations/org-1/logo', headers, 'logo.png', 'image/png', 'logo')
-    await requestWithFile(app, '/api/branding/logo', headers, 'logo.png', 'image/png', 'logo')
-    await requestWithFile(app, '/api/branding/favicon', headers, 'favicon.png', 'image/png', 'icon')
+    for (const purpose of ['application_logo', 'organization_logo', 'branding_logo', 'favicon'] as const) {
+      const response = await requestWithFile(
+        app,
+        '/api/assets',
+        headers,
+        'logo.png',
+        'image/png',
+        'logo',
+        undefined,
+        purpose,
+      )
+      expect(response.status).toBe(201)
+    }
 
-    expect(assets.updateApplicationLogo).toHaveBeenCalledWith('app-1', assetFixture())
-    expect(assets.updateOrganizationLogo).toHaveBeenCalledWith('org-1', assetFixture())
-    expect(assets.updateBrandingAsset).toHaveBeenCalledWith('logo', assetFixture())
-    expect(assets.updateBrandingAsset).toHaveBeenCalledWith('favicon', assetFixture())
+    expect(assets.upload).toHaveBeenCalledTimes(4)
   })
 
   it('serves stored R2 asset objects from the public asset route', async () => {
@@ -317,19 +325,22 @@ function requestWithFile(
   contentType: string,
   content: string,
   env?: object,
+  purpose?: string,
 ) {
   const request = new Request(`https://auth.example.com${path}`, { method: 'POST', headers })
   Object.defineProperty(request, 'formData', {
     value: async () => ({
       get: (key: string) =>
-        key === 'file'
-          ? {
-              name: filename,
-              type: contentType,
-              size: content.length,
-              arrayBuffer: async () => new TextEncoder().encode(content).buffer,
-            }
-          : null,
+        key === 'purpose'
+          ? (purpose ?? null)
+          : key === 'file'
+            ? {
+                name: filename,
+                type: contentType,
+                size: content.length,
+                arrayBuffer: async () => new TextEncoder().encode(content).buffer,
+              }
+            : null,
     }),
   })
   return app.fetch(request, env)

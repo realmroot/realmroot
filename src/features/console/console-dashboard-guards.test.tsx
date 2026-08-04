@@ -57,13 +57,13 @@ describe('console dashboard guards', () => {
       if (url.pathname === '/api/users') {
         return Promise.resolve(jsonResponse({ users: items, pagination: contextualPagination }))
       }
-      if (url.pathname === '/api/api-resources') {
+      if (url.pathname === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items, pagination: contextualPagination }))
       }
       if (url.pathname === '/api/agents') {
         return Promise.resolve(jsonResponse({ items, pagination: contextualPagination }))
       }
-      if (url.pathname === '/api/role-assignments') {
+      if (url.pathname === '/api/access/assignments') {
         return Promise.resolve(jsonResponse({ assignments: items, pagination: contextualPagination }))
       }
       throw new Error(`Unexpected Organization dashboard request: ${request?.method ?? init?.method ?? 'GET'} ${url}`)
@@ -109,13 +109,13 @@ describe('console dashboard guards', () => {
       if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
       }
-      if (url.startsWith('/api/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/api-resources') {
+      if (url.startsWith('/api/access/roles')) return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
+      if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
       return consoleSharedFetch(input, init)
     })
 
@@ -147,12 +147,12 @@ describe('console dashboard guards', () => {
       if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
-      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
-      if (url === '/api/api-resources') {
+      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/security/policy') {
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/security-policy') {
         return Promise.resolve(
           jsonResponse({
             policy: {
@@ -198,10 +198,10 @@ describe('console dashboard guards', () => {
       if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/roles')) {
+      if (url.startsWith('/api/access/roles')) {
         return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       }
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)
@@ -233,10 +233,10 @@ describe('console dashboard guards', () => {
       if (url.startsWith('/api/organizations')) {
         return Promise.resolve(jsonResponse({ organizations: [], pagination: emptyPagination }))
       }
-      if (url.startsWith('/api/roles')) {
+      if (url.startsWith('/api/access/roles')) {
         return Promise.resolve(jsonResponse({ roles: [], pagination: emptyPagination }))
       }
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       }
       return consoleSharedFetch(input, init)

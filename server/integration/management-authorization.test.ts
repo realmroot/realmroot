@@ -44,7 +44,7 @@ describe('authorization management over real D1', () => {
   })
 
   it('rejects anonymous reads with 401', async () => {
-    const response = await harness.request('/api/api-resources')
+    const response = await harness.request('/api/resource-servers')
     expect(response.status).toBe(401)
   })
 
@@ -58,7 +58,7 @@ describe('authorization management over real D1', () => {
     })
     const memberCookie = await signIn(harness, 'member@example.com', 'member-password-2026')
 
-    const response = await harness.request('/api/roles', { headers: { cookie: memberCookie } })
+    const response = await harness.request('/api/access/roles', { headers: { cookie: memberCookie } })
     expect(response.status).toBe(403)
   })
 
@@ -80,10 +80,10 @@ describe('authorization management over real D1', () => {
       userId: developerId,
       role: 'developer',
     })
-    const currentConsolePolicy = await harness.request('/api/developer-console-access-policy', {
+    const currentConsolePolicy = await harness.request('/api/realm/developer-console-access-policy', {
       headers: { cookie: adminCookie },
     })
-    await harness.request('/api/developer-console-access-policy', {
+    await harness.request('/api/realm/developer-console-access-policy', {
       method: 'PUT',
       headers: {
         'content-type': 'application/json',
@@ -97,7 +97,7 @@ describe('authorization management over real D1', () => {
       }),
     })
     const ownedWebhook = (await (
-      await postJson(harness, adminCookie, '/api/webhooks/endpoints', {
+      await postJson(harness, adminCookie, '/api/webhooks', {
         url: 'https://owned.example.com/webhooks',
         events: ['session.revoked'],
         enabled: true,
@@ -105,7 +105,7 @@ describe('authorization management over real D1', () => {
       })
     ).json()) as { endpoint: { id: string } }
     const otherWebhook = (await (
-      await postJson(harness, adminCookie, '/api/webhooks/endpoints', {
+      await postJson(harness, adminCookie, '/api/webhooks', {
         url: 'https://other.example.com/webhooks',
         events: ['session.revoked'],
         enabled: true,
@@ -130,7 +130,7 @@ describe('authorization management over real D1', () => {
       })
     ).json()) as { id: string }
     const ownedResource = (await (
-      await postJson(harness, adminCookie, '/api/api-resources', {
+      await postJson(harness, adminCookie, '/api/resource-servers', {
         identifier: 'owned-api',
         name: 'Owned API',
         resourceUrl: 'https://owned.example.com/api',
@@ -139,7 +139,7 @@ describe('authorization management over real D1', () => {
       })
     ).json()) as { id: string }
     const otherResource = (await (
-      await postJson(harness, adminCookie, '/api/api-resources', {
+      await postJson(harness, adminCookie, '/api/resource-servers', {
         identifier: 'other-api',
         name: 'Other API',
         resourceUrl: 'https://other.example.com/api',
@@ -251,12 +251,12 @@ describe('authorization management over real D1', () => {
       updatedAt: now,
     })
     const agentRole = (await (
-      await postJson(harness, adminCookie, '/api/roles', {
+      await postJson(harness, adminCookie, '/api/access/roles', {
         key: 'report.reader',
         name: 'Report reader',
       })
     ).json()) as { id: string }
-    await postJson(harness, adminCookie, '/api/role-assignments', {
+    await postJson(harness, adminCookie, '/api/access/assignments', {
       roleId: agentRole.id,
       subjectType: 'agent',
       subjectId: 'owned-agent',
@@ -280,7 +280,7 @@ describe('authorization management over real D1', () => {
     ])
     const developerCookie = await signIn(harness, 'developer@example.com', 'developer-password-2026')
 
-    const webhookInventory = await harness.request('/api/webhooks/endpoints', {
+    const webhookInventory = await harness.request('/api/webhooks', {
       headers: { cookie: developerCookie },
     })
     expect(webhookInventory.status).toBe(200)
@@ -288,7 +288,7 @@ describe('authorization management over real D1', () => {
       endpoints: [{ id: ownedWebhook.endpoint.id, organizationId: ownedOrganization.id }],
       pagination: { total: 1 },
     })
-    const webhookRequests = await harness.request('/api/webhooks/requests', {
+    const webhookRequests = await harness.request(`/api/webhooks/${ownedWebhook.endpoint.id}/deliveries`, {
       headers: { cookie: developerCookie },
     })
     await expect(webhookRequests.json()).resolves.toMatchObject({
@@ -297,14 +297,14 @@ describe('authorization management over real D1', () => {
     })
     expect(
       (
-        await harness.request(`/api/webhooks/endpoints/${otherWebhook.endpoint.id}`, {
+        await harness.request(`/api/webhooks/${otherWebhook.endpoint.id}`, {
           headers: { cookie: developerCookie },
         })
       ).status,
     ).toBe(403)
     expect(
       (
-        await harness.request('/api/webhooks/endpoints', {
+        await harness.request('/api/webhooks', {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie: developerCookie },
           body: JSON.stringify({
@@ -323,7 +323,7 @@ describe('authorization management over real D1', () => {
       applications: [{ id: ownedApplication.id, ownerOrganizationId: ownedOrganization.id }],
       pagination: { total: 1 },
     })
-    const resourcesResponse = await harness.request('/api/api-resources', { headers: { cookie: developerCookie } })
+    const resourcesResponse = await harness.request('/api/resource-servers', { headers: { cookie: developerCookie } })
     expect(resourcesResponse.status).toBe(200)
     await expect(resourcesResponse.json()).resolves.toMatchObject({
       items: [{ id: ownedResource.id, ownerOrganizationId: ownedOrganization.id }],
@@ -366,12 +366,12 @@ describe('authorization management over real D1', () => {
     expect(hostInventory.items[0]).not.toHaveProperty('publicKey')
     await expect(
       (
-        await harness.request('/api/role-assignments?subjectType=agent&subjectId=owned-agent&status=active', {
+        await harness.request('/api/access/assignments?subjectType=agent&subjectId=owned-agent&status=active', {
           headers: { cookie: developerCookie },
         })
       ).json(),
     ).resolves.toMatchObject({ assignments: [{ roleId: agentRole.id, subjectId: 'owned-agent' }] })
-    const accessRequestsResponse = await harness.request('/api/agent-access-requests?agentId=owned-agent', {
+    const accessRequestsResponse = await harness.request('/api/access/requests?agentId=owned-agent', {
       headers: { cookie: developerCookie },
     })
     const accessRequests = (await accessRequestsResponse.json()) as { items: Array<Record<string, unknown>> }
@@ -379,33 +379,34 @@ describe('authorization management over real D1', () => {
       expect.objectContaining({ id: 'owned-access-request', scopes: ['orders:read'], status: 'pending' }),
     ])
     await expect(
-      (await harness.request('/api/agent-access-requests', { headers: { cookie: developerCookie } })).json(),
+      (await harness.request('/api/access/requests', { headers: { cookie: developerCookie } })).json(),
     ).resolves.toMatchObject({ items: [{ id: 'owned-access-request' }], pagination: { total: 1 } })
     expect(accessRequests.items[0]).not.toHaveProperty('approvalTokenHash')
     await expect(
       (
-        await harness.request('/api/agent-access-grants?agentId=owned-agent', {
+        await harness.request('/api/access/authorizations?agentId=owned-agent', {
           headers: { cookie: developerCookie },
         })
       ).json(),
     ).resolves.toMatchObject({ items: [{ id: 'owned-access-grant', scopes: ['orders:read'], status: 'active' }] })
     await expect(
-      (await harness.request('/api/agent-access-grants', { headers: { cookie: developerCookie } })).json(),
+      (await harness.request('/api/access/authorizations', { headers: { cookie: developerCookie } })).json(),
     ).resolves.toMatchObject({ items: [{ id: 'owned-access-grant' }], pagination: { total: 1 } })
-    const auditResponse = await harness.request('/api/audit-events', { headers: { cookie: developerCookie } })
+    const auditResponse = await harness.request('/api/realm/audit-events', { headers: { cookie: developerCookie } })
     expect(auditResponse.status).toBe(200)
     await expect(auditResponse.json()).resolves.toMatchObject({
       items: [{ id: 'owned-agent-event', agentIdentityId: 'owned-agent' }],
       pagination: { total: 1 },
     })
     expect(
-      (await harness.request('/api/audit-events?agentId=other-agent', { headers: { cookie: developerCookie } })).status,
+      (await harness.request('/api/realm/audit-events?agentId=other-agent', { headers: { cookie: developerCookie } }))
+        .status,
     ).toBe(403)
     expect((await harness.request(`/api/users/${developerId}`, { headers: { cookie: developerCookie } })).status).toBe(
       200,
     )
     expect(
-      (await harness.request(`/api/users/${developerId}/security`, { headers: { cookie: developerCookie } })).status,
+      (await harness.request(`/api/users/${developerId}/passkeys`, { headers: { cookie: developerCookie } })).status,
     ).toBe(403)
 
     expect(
@@ -414,7 +415,7 @@ describe('authorization management over real D1', () => {
     ).toBe(403)
     expect(
       (
-        await harness.request(`/api/api-resources/${otherResource.id}`, {
+        await harness.request(`/api/resource-servers/${otherResource.id}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json', cookie: developerCookie },
           body: JSON.stringify({ name: 'Forbidden rename' }),
@@ -433,13 +434,13 @@ describe('authorization management over real D1', () => {
 
     const realmInventory = await harness.request('/api/applications', { headers: { cookie: adminCookie } })
     await expect(realmInventory.json()).resolves.toMatchObject({ pagination: { total: 2 } })
-    const realmAudit = await harness.request('/api/audit-events', { headers: { cookie: adminCookie } })
+    const realmAudit = await harness.request('/api/realm/audit-events', { headers: { cookie: adminCookie } })
     await expect(realmAudit.json()).resolves.toMatchObject({ pagination: { total: 2 } })
   })
 
   it('rejects an invalid api-resource payload with 400', async () => {
     const cookie = await signInAdmin(harness)
-    const response = await harness.request('/api/api-resources', {
+    const response = await harness.request('/api/resource-servers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ name: 'missing identifier' }),
@@ -503,7 +504,7 @@ describe('authorization management over real D1', () => {
       { type: 'project_access', actions: ['read'], project_id: 'project-1', tenant: { id: 'tenant-1' } },
     ]
 
-    const created = await postJson(harness, cookie, '/api/api-resources', {
+    const created = await postJson(harness, cookie, '/api/resource-servers', {
       identifier: 'rar-projects-api',
       name: 'RAR Projects API',
       resourceUrl: 'https://projects.example.com/api',
@@ -519,7 +520,7 @@ describe('authorization management over real D1', () => {
     const updatedAuthorizationDetails = [
       { type: 'project_access', actions: ['read', 'comment'], project_id: 'project-1' },
     ]
-    const updated = await harness.request(`/api/api-resources/${resource.id}`, {
+    const updated = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ authorizationDetails: updatedAuthorizationDetails }),
@@ -527,7 +528,7 @@ describe('authorization management over real D1', () => {
     expect(updated.status, await updated.clone().text()).toBe(200)
     await expect(updated.json()).resolves.toMatchObject({ authorizationDetails: updatedAuthorizationDetails })
 
-    const unsupported = await harness.request(`/api/api-resources/${resource.id}`, {
+    const unsupported = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ authorizationDetails: [{ type: 'unknown_context' }] }),
@@ -544,18 +545,18 @@ describe('authorization management over real D1', () => {
       resourceUrl: 'https://projects.example.com/api',
     }
 
-    const enabled = await harness.request('/api/api-resources', {
+    const enabled = await harness.request('/api/resource-servers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify(input),
     })
     expect(enabled.status).toBe(400)
 
-    const draft = await postJson(harness, cookie, '/api/api-resources', { ...input, enabled: false })
+    const draft = await postJson(harness, cookie, '/api/resource-servers', { ...input, enabled: false })
     const resource = (await draft.json()) as { id: string; enabled: boolean }
     expect(resource.enabled).toBe(false)
 
-    const enable = await harness.request(`/api/api-resources/${resource.id}`, {
+    const enable = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ enabled: true }),
@@ -621,7 +622,7 @@ describe('authorization management over real D1', () => {
       connectorId: connector.id,
     })
 
-    const response = await harness.request(`/api/api-resources/${resource.id}`, {
+    const response = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ resourceUrl: 'https://new-projects.example.com/api' }),
@@ -637,20 +638,20 @@ describe('authorization management over real D1', () => {
     const cookie = await signInAdmin(harness)
 
     const resource = (await (
-      await postJson(harness, cookie, '/api/api-resources', {
+      await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'https://api.example.com',
         name: 'Example API',
         resourceUrl: 'https://api.example.com',
       })
     ).json()) as { id: string }
 
-    const list = await harness.request('/api/api-resources', { headers: { cookie } })
+    const list = await harness.request('/api/resource-servers', { headers: { cookie } })
     expect(((await list.json()) as { items: unknown[] }).items.length).toBe(1)
 
-    const fetched = await harness.request(`/api/api-resources/${resource.id}`, { headers: { cookie } })
+    const fetched = await harness.request(`/api/resource-servers/${resource.id}`, { headers: { cookie } })
     expect(fetched.status).toBe(200)
 
-    const patched = await harness.request(`/api/api-resources/${resource.id}`, {
+    const patched = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ name: 'Renamed API' }),
@@ -659,7 +660,7 @@ describe('authorization management over real D1', () => {
 
     expect(
       (
-        await harness.request(`/api/api-resources/${resource.id}`, {
+        await harness.request(`/api/resource-servers/${resource.id}`, {
           method: 'DELETE',
           headers: { cookie },
         })
@@ -670,7 +671,7 @@ describe('authorization management over real D1', () => {
   it('[spec: management-api/management-api-resource-delete-conflict] preserves resources with authorization history', async () => {
     const cookie = await signInAdmin(harness)
     const resource = (await (
-      await postJson(harness, cookie, '/api/api-resources', {
+      await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'history-api',
         name: 'History API',
         resourceUrl: 'https://history.example.com/api',
@@ -690,7 +691,7 @@ describe('authorization management over real D1', () => {
       updatedAt: now,
     })
 
-    const response = await harness.request(`/api/api-resources/${resource.id}`, {
+    const response = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'DELETE',
       headers: { cookie },
     })
@@ -775,12 +776,12 @@ describe('authorization management over real D1', () => {
       connectorId: connector.id,
     })
 
-    const archived = await harness.request(`/api/api-resources/${resource.id}/archival`, {
+    const archived = await harness.request(`/api/resource-servers/${resource.id}/archival`, {
       method: 'PUT',
       headers: { cookie },
     })
     expect(archived.status).toBe(200)
-    const lateAssociation = await harness.request(`/api/api-resources/${resource.id}`, {
+    const lateAssociation = await harness.request(`/api/resource-servers/${resource.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ connectorId: connector.id }),
@@ -795,7 +796,7 @@ describe('authorization management over real D1', () => {
   it('[spec: management-api/management-api-resource-archival] archives and restores without reviving authorization', async () => {
     const cookie = await signInAdmin(harness)
     const resource = (await (
-      await postJson(harness, cookie, '/api/api-resources', {
+      await postJson(harness, cookie, '/api/resource-servers', {
         identifier: 'archived-api',
         name: 'Archived API',
         resourceUrl: 'https://archived.example.com/api',
@@ -904,7 +905,7 @@ describe('authorization management over real D1', () => {
       createdAt: now,
     })
 
-    const archived = await harness.request(`/api/api-resources/${resource.id}/archival`, {
+    const archived = await harness.request(`/api/resource-servers/${resource.id}/archival`, {
       method: 'PUT',
       headers: { cookie },
     })
@@ -1002,7 +1003,7 @@ describe('authorization management over real D1', () => {
       }),
     ).resolves.toBeNull()
 
-    const restored = await harness.request(`/api/api-resources/${resource.id}/archival`, {
+    const restored = await harness.request(`/api/resource-servers/${resource.id}/archival`, {
       method: 'DELETE',
       headers: { cookie },
     })
@@ -1038,7 +1039,7 @@ describe('authorization management over real D1', () => {
 
     expect(
       (
-        await postJson(harness, cookie, '/api/api-resources', {
+        await postJson(harness, cookie, '/api/resource-servers', {
           identifier: 'https://roles.example.com',
           name: 'Roles API',
           resourceUrl: 'https://roles.example.com',
@@ -1046,13 +1047,13 @@ describe('authorization management over real D1', () => {
       ).status,
     ).toBe(201)
     const role = (await (
-      await postJson(harness, cookie, '/api/roles', {
+      await postJson(harness, cookie, '/api/access/roles', {
         key: 'editor',
         name: 'Editor',
       })
     ).json()) as { id: string }
 
-    const duplicateRole = await harness.request('/api/roles', {
+    const duplicateRole = await harness.request('/api/access/roles', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ key: 'editor', name: 'Duplicate editor' }),
@@ -1065,56 +1066,58 @@ describe('authorization management over real D1', () => {
       },
     })
 
-    const changedKey = await harness.request(`/api/roles/${role.id}`, {
+    const changedKey = await harness.request(`/api/access/roles/${role.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ key: 'renamed-editor' }),
     })
     expect(changedKey.status).toBe(400)
 
-    const roles = await harness.request('/api/roles', { headers: { cookie } })
+    const roles = await harness.request('/api/access/roles', { headers: { cookie } })
     expect(((await roles.json()) as { roles: unknown[] }).roles.length).toBeGreaterThanOrEqual(1)
 
-    expect((await harness.request(`/api/roles/${role.id}`, { headers: { cookie } })).status).toBe(200)
+    expect((await harness.request(`/api/access/roles/${role.id}`, { headers: { cookie } })).status).toBe(200)
 
-    const patched = await harness.request(`/api/roles/${role.id}`, {
+    const patched = await harness.request(`/api/access/roles/${role.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ name: 'Lead Editor' }),
     })
     expect(((await patched.json()) as { name: string }).name).toBe('Lead Editor')
 
-    const currentPermissions = await harness.request(`/api/roles/${role.id}/permissions`, {
+    const currentPermissions = await harness.request(`/api/access/roles/${role.id}/scopes`, {
       headers: { cookie },
     })
     const etag = currentPermissions.headers.get('etag')
     expect(etag).toBeTruthy()
-    const replacePermissions = await harness.request(`/api/roles/${role.id}/permissions`, {
+    const replacePermissions = await harness.request(`/api/access/roles/${role.id}/scopes`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', cookie, 'if-match': etag! },
-      body: JSON.stringify({ permissions: [] }),
+      body: JSON.stringify({ scopes: [] }),
     })
     expect(replacePermissions.status).toBe(200)
     expect(replacePermissions.headers.get('etag')).toBeTruthy()
 
-    const rolePermissions = await harness.request(`/api/roles/${role.id}/permissions`, {
+    const rolePermissions = await harness.request(`/api/access/roles/${role.id}/scopes`, {
       headers: { cookie },
     })
-    expect(((await rolePermissions.json()) as { permissions: unknown[] }).permissions).toEqual([])
+    expect(((await rolePermissions.json()) as { scopes: unknown[] }).scopes).toEqual([])
 
     const assignment = (await (
-      await postJson(harness, cookie, '/api/role-assignments', {
+      await postJson(harness, cookie, '/api/access/assignments', {
         roleId: role.id,
         subjectType: 'user',
         subjectId: userId,
       })
     ).json()) as { id: string }
-    const assignments = await harness.request(`/api/role-assignments?roleId=${role.id}`, { headers: { cookie } })
+    const assignments = await harness.request(`/api/access/assignments?roleId=${role.id}`, { headers: { cookie } })
     expect(((await assignments.json()) as { assignments: Array<{ id: string }> }).assignments).toContainEqual(
       expect.objectContaining({ id: assignment.id }),
     )
 
-    expect((await harness.request(`/api/roles/${role.id}`, { method: 'DELETE', headers: { cookie } })).status).toBe(204)
+    expect(
+      (await harness.request(`/api/access/roles/${role.id}`, { method: 'DELETE', headers: { cookie } })).status,
+    ).toBe(204)
   })
 
   it('runs the organization / member / invitation lifecycle through real SQL [spec: management-api/management-restish-organization-crud]', async () => {
@@ -1163,9 +1166,9 @@ describe('authorization management over real D1', () => {
     expect(((await patchedMember.json()) as { role: string }).role).toBe('admin')
 
     const role = (await (
-      await postJson(harness, cookie, '/api/roles', { key: 'org-lead', name: 'Org Lead' })
+      await postJson(harness, cookie, '/api/access/roles', { key: 'org-lead', name: 'Org Lead' })
     ).json()) as { id: string }
-    await postJson(harness, cookie, '/api/role-assignments', {
+    await postJson(harness, cookie, '/api/access/assignments', {
       roleId: role.id,
       subjectType: 'user',
       subjectId: memberUserId,
@@ -1220,11 +1223,13 @@ describe('authorization management over real D1', () => {
         redirectUris: ['http://localhost/callback'],
       })
     ).json()) as { id: string }
-    const role = (await (await postJson(harness, cookie, '/api/roles', { key: 'svc', name: 'Service' })).json()) as {
+    const role = (await (
+      await postJson(harness, cookie, '/api/access/roles', { key: 'svc', name: 'Service' })
+    ).json()) as {
       id: string
     }
 
-    await postJson(harness, cookie, '/api/role-assignments', {
+    await postJson(harness, cookie, '/api/access/assignments', {
       roleId: role.id,
       subjectType: 'workload',
       subjectId: application.id,

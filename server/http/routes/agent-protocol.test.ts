@@ -16,7 +16,7 @@ describe('Agent protocol routes', () => {
 
   it('exposes the stable identity at its canonical resource path', async () => {
     vi.spyOn(agentIdentities, 'getAgentIdentityByProtocolAgent').mockResolvedValue(activeIdentity())
-    const response = await createRouteApp().request('/api/agent-identities/current', {
+    const response = await createRouteApp().request('/api/agent/status', {
       headers: { authorization: 'Bearer agent-jwt' },
     })
     expect(response.status).toBe(200)
@@ -53,14 +53,14 @@ describe('Agent protocol routes', () => {
     vi.spyOn(agentIdentities, 'getProtocolAgentEnrollment').mockResolvedValue(enrollment)
     const app = createRouteApp()
 
-    const created = await app.request('/api/installation-enrollments', {
+    const created = await app.request('/api/agent/enrollments', {
       method: 'POST',
       headers: { ...jsonHeaders(), 'idempotency-key': 'enrollment-key-1' },
-      body: JSON.stringify({ agentId: 'identity-1' }),
+      body: JSON.stringify({ kind: 'additional_installation', agentId: 'identity-1' }),
     })
     expect(created.status).toBe(201)
-    expect(created.headers.get('location')).toBe('https://auth.example.com/api/installation-enrollments/enrollment-1')
-    expect((await app.request('/api/installation-enrollments/enrollment-1')).status).toBe(200)
+    expect(created.headers.get('location')).toBe('https://auth.example.com/api/agent/enrollments/enrollment-1')
+    expect((await app.request('/api/agent/enrollments/enrollment-1')).status).toBe(200)
   })
 
   it('lists Resource Servers and provider-owned Resources without exposing RFC 9396 details [spec: agent-identity/agent-resource-server-model]', async () => {
@@ -102,9 +102,7 @@ describe('Agent protocol routes', () => {
       pagination: page(1),
     })
     const app = createRouteApp()
-    const servers = await app.request('/api/resource-servers')
     const resources = await app.request('/api/resource-servers/resource-1/resources')
-    expect(servers.status).toBe(200)
     expect(resources.status).toBe(200)
     expect(JSON.stringify(await resources.json())).not.toContain('authorizationDetail')
   })
@@ -154,7 +152,6 @@ describe('Agent protocol routes', () => {
     })
     const app = createRouteApp()
 
-    expect((await app.request('/api/resource-servers/resource-1')).status).toBe(200)
     expect((await app.request('/api/resource-servers/resource-1/resources/service')).status).toBe(200)
   })
 
@@ -175,14 +172,14 @@ describe('Agent protocol routes', () => {
     }
     vi.spyOn(externalResources, 'createAccessRequestCredential').mockResolvedValue(credential)
     const app = createRouteApp({ signJWT: vi.fn().mockResolvedValue({ token: 'signed' }) })
-    const created = await app.request('/api/access-requests', {
+    const created = await app.request('/api/access/requests', {
       method: 'POST',
       headers: jsonHeaders(),
       body: JSON.stringify({ resource: { href: resourceHref }, scopes: ['objects:read'] }),
     })
     expect(created.status).toBe(201)
     expect(await created.clone().json()).not.toHaveProperty('grantId')
-    const issued = await app.request('/api/access-requests/request-1/credentials', {
+    const issued = await app.request('/api/access/authorizations/grant-1/credentials', {
       method: 'POST',
       headers: { DPoP: 'proof' },
     })
@@ -212,8 +209,41 @@ function createRouteApp(overrides: { signJWT?: () => Promise<{ token: string }> 
     getAgentSession: vi.fn().mockResolvedValue(session()),
     ...overrides,
   }
+  const deps = createTestDeps()
+  vi.mocked(deps.agentIdentities.findActiveByProtocolAgent).mockResolvedValue({
+    identity: {
+      id: 'identity-1',
+      issuer: 'https://auth.example.com/api/auth',
+      subject: 'agt_1',
+      name: 'Build Agent',
+      ownerUserId: 'user-1',
+      ownerOrganizationId: null,
+      status: 'active',
+      retiredAt: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+    bindings: [
+      {
+        id: 'binding-1',
+        agentIdentityId: 'identity-1',
+        protocolAgentId: 'protocol-agent-1',
+        hostId: 'host-1',
+        status: 'active',
+        boundAt: now,
+        revokedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+  })
+  vi.mocked(deps.externalResources.findGrant).mockResolvedValue({
+    id: 'grant-1',
+    agentIdentityId: 'identity-1',
+  } as never)
+  vi.mocked(deps.externalResources.findAccessRequestByGrant).mockResolvedValue({ id: 'request-1' } as never)
   return new Hono()
-    .use('*', depsMiddleware(createTestDeps()))
+    .use('*', depsMiddleware(deps))
     .onError((error, c) => handleApiError(error, c))
     .route('/api', createAgentProtocolRoutes(authApi, 'https://auth.example.com/api/auth'))
 }
@@ -273,18 +303,18 @@ function accessRequest() {
     status: 'approved' as const,
     interaction: { type: 'user-approval' as const, status: 'completed' as const, url: null, expiresAt: null },
     links: {
-      self: 'https://auth.example.com/api/access-requests/request-1',
-      credentials: 'https://auth.example.com/api/access-requests/request-1/credentials',
+      self: 'https://auth.example.com/api/access/requests/request-1',
+      credentials: 'https://auth.example.com/api/access/authorizations/grant-1/credentials',
     },
     credentialOffer: {
       type: 'dpop' as const,
       resource: { href: resourceHref },
       resourceIndicator: 'https://drive.example.com/api',
-      endpoint: 'https://auth.example.com/api/access-requests/request-1/credentials',
+      endpoint: 'https://auth.example.com/api/access/authorizations/grant-1/credentials',
       proof: {
         algorithm: 'ES256' as const,
         method: 'POST' as const,
-        uri: 'https://auth.example.com/api/access-requests/request-1/credentials',
+        uri: 'https://auth.example.com/api/access/authorizations/grant-1/credentials',
       },
     },
     expiresAt,

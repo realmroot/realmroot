@@ -16,7 +16,7 @@ describe('management security policy routes', () => {
       securityPolicy: policy,
     })
 
-    const response = await app.request('/api/security/policy', {
+    const response = await app.request('/api/realm/security-policy', {
       method: 'PATCH',
       headers: _adminHeaders(),
       body: JSON.stringify({ policy: { mfa: { mode: 'required' } } }),
@@ -195,8 +195,8 @@ describe('management security policy routes', () => {
       securityPolicy: policy,
     })
 
-    const read = await app.request('/api/security/policy', { headers: _adminHeaders() })
-    const updated = await app.request('/api/security/policy', {
+    const read = await app.request('/api/realm/security-policy', { headers: _adminHeaders() })
+    const updated = await app.request('/api/realm/security-policy', {
       method: 'PATCH',
       headers: _adminHeaders(),
       body: JSON.stringify({

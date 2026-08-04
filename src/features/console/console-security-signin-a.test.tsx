@@ -27,7 +27,7 @@ afterEach(() => {
 function securityFetch(requests: unknown[]) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
-    if (url === '/api/security/policy' && init?.method === 'PATCH') {
+    if (url === '/api/realm/security-policy' && init?.method === 'PATCH') {
       requests.push(JSON.parse(String(init.body)))
       return Promise.resolve(jsonResponse(securityPolicy))
     }
@@ -58,7 +58,7 @@ describe('admin console security policies', () => {
       },
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      if (String(input) === '/api/security/policy') return Promise.resolve(jsonResponse(alternate))
+      if (String(input) === '/api/realm/security-policy') return Promise.resolve(jsonResponse(alternate))
       return consoleSharedFetch(input, init)
     })
 
@@ -286,7 +286,7 @@ describe('admin console security policies', () => {
   it('surfaces query and save errors and retries the security boundary', async () => {
     let reads = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      if (String(input) === '/api/security/policy') {
+      if (String(input) === '/api/realm/security-policy') {
         if (init?.method === 'PATCH') {
           return Promise.resolve(jsonResponse({ error: { message: 'Security save failed.' } }, 500))
         }

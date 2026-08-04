@@ -92,12 +92,12 @@ describe('account self-service over real D1', () => {
   it('creates and manages a consumer Organization without Console access [spec: account-center/account-organization-management] [spec: account-center/consumer-organization-boundary]', async () => {
     const { adminCookie, cookie: initialCookie, userId } = await signedInUser(harness)
     let cookie = initialCookie
-    const currentPolicyResponse = await harness.request('/api/organization-creation-policy', {
+    const currentPolicyResponse = await harness.request('/api/realm/organization-creation-policy', {
       headers: { cookie: adminCookie },
     })
     expect(currentPolicyResponse.status, await currentPolicyResponse.clone().text()).toBe(200)
     const currentPolicy = (await currentPolicyResponse.json()) as Record<string, unknown>
-    const policy = await harness.request('/api/organization-creation-policy', {
+    const policy = await harness.request('/api/realm/organization-creation-policy', {
       method: 'PUT',
       headers: {
         'content-type': 'application/json',
@@ -147,21 +147,21 @@ describe('account self-service over real D1', () => {
       (await harness.request('/api/account/developer-console-access', { headers: { cookie } })).json(),
     ).resolves.toMatchObject({ realmOperator: false, consoleOrganizations: [] })
 
-    const roleResponse = await harness.request('/api/roles', {
+    const roleResponse = await harness.request('/api/access/roles', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({ key: 'household.viewer', name: 'Household viewer' }),
     })
     expect(roleResponse.status, await roleResponse.clone().text()).toBe(201)
     const roleId = ((await roleResponse.json()) as { id: string }).id
-    const assignment = await harness.request('/api/role-assignments', {
+    const assignment = await harness.request('/api/access/assignments', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({ roleId, subjectType: 'user', subjectId: userId, organizationId }),
     })
     expect(assignment.status, await assignment.clone().text()).toBe(201)
 
-    const resourceResponse = await harness.request('/api/api-resources', {
+    const resourceResponse = await harness.request('/api/resource-servers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({
@@ -237,7 +237,7 @@ describe('account self-service over real D1', () => {
     expect(agents.status, await agents.clone().text()).toBe(200)
     await expect(agents.json()).resolves.toMatchObject({ items: [{ id: 'household-agent' }] })
     const roleAssignments = await harness.request(
-      `/api/role-assignments?organizationId=${organizationId}&status=active`,
+      `/api/access/assignments?organizationId=${organizationId}&status=active`,
       { headers: { cookie } },
     )
     expect(roleAssignments.status, await roleAssignments.clone().text()).toBe(200)
@@ -245,7 +245,7 @@ describe('account self-service over real D1', () => {
       assignments: [{ roleId, subjectId: userId, organizationId }],
     })
     const agentAccessGrants = await harness.request(
-      `/api/agent-access-grants?organizationId=${organizationId}&status=active`,
+      `/api/access/authorizations?organizationId=${organizationId}&status=active`,
       {
         headers: { cookie },
       },
@@ -295,7 +295,7 @@ describe('account self-service over real D1', () => {
     const adminCookie = await signInAdmin(harness)
     // Enable the web3 wallet provider so the account-center linking path is allowed.
     const chainId = 1
-    const enable = await harness.request('/api/sign-in-settings', {
+    const enable = await harness.request('/api/realm/sign-in-policy', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
       body: JSON.stringify({ builtInProviders: { web3Wallet: { enabled: true, chains: [chainId] } } }),

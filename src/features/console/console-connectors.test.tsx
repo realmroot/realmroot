@@ -49,8 +49,8 @@ function emptyConnectorFetch(input: RequestInfo | URL, init?: RequestInit) {
   if (url === '/api/connectors')
     return Promise.resolve(jsonResponse({ connectors: [], pagination: { ...pagination, total: 0 } }))
   if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-  if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-  if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+  if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+  if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
   return consoleSharedFetch(input, init)
 }
 

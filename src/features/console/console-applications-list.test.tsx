@@ -224,7 +224,7 @@ describe('admin console applications-list', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.includes('/api/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
+      if (url.includes('/api/realm/configuration-status')) return Promise.resolve(jsonResponse(readinessIncomplete))
       if (url === '/api/applications' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(application, 201))

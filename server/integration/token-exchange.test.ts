@@ -83,7 +83,7 @@ describe('OAuth token exchange over real D1', () => {
     const application = (await createApp.json()) as { id: string; clientId: string; clientSecret: string }
 
     // The API resource that defines the minted token's audience.
-    const createResource = await harness.request('/api/api-resources', {
+    const createResource = await harness.request('/api/resource-servers', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({ identifier: audience, name: 'Example API', resourceUrl: audience }),

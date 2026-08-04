@@ -46,7 +46,7 @@ export function createAuthMock() {
 
 export function createUserRepositoryMock(): UserRepository {
   return {
-    getUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+    getUser: vi.fn().mockResolvedValue({ id: 'user-1', email: 'ada@example.com' }),
     listManagedUsers: vi.fn().mockImplementation((page) => Promise.resolve(createPage(page))),
     createManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
     updateManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
@@ -58,6 +58,8 @@ export function createUserRepositoryMock(): UserRepository {
     listConsentedApplications: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     listSessions: vi.fn().mockResolvedValue(createPage({ limit: 50, offset: 0 })),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
+    createPasswordResetRequest: vi.fn().mockImplementation(async (input) => input),
+    findPasswordResetRequest: vi.fn().mockResolvedValue(null),
   }
 }
 
@@ -158,39 +160,16 @@ export function toManagementOperationKey(route: HonoRoute) {
   if (route.path === '/api/openapi.json') {
     return `${route.method} /openapi.json`
   }
-  const agentResourcePaths = [
-    '/api/agent-identities',
-    '/api/installation-enrollments',
-    '/api/resource-servers',
-    '/api/connection-requests',
-    '/api/access-requests',
-    '/api/capability-requests',
-  ]
+  const agentResourcePaths = ['/api/agent', '/api/resource-servers', '/api/access', '/api/assets']
   if (agentResourcePaths.some((path) => route.path === path || route.path.startsWith(`${path}/`))) {
     return `${route.method} ${normalizeManagementPath(route.path.replace('/api', ''))}`
   }
   const tenantPaths = [
     '/api/applications',
-    '/api/application-authorizations',
-    '/api/api-resources',
     '/api/agents',
-    '/api/agent-access-requests',
-    '/api/agent-access-grants',
-    '/api/audit-events',
     '/api/organizations',
-    '/api/roles',
-    '/api/role-assignments',
     '/api/users',
-    '/api/security',
-    '/api/sign-in-settings',
-    '/api/branding-settings',
-    '/api/organization-creation-policy',
-    '/api/developer-console-access-policy',
     '/api/realm',
-    '/api/email-delivery-configuration',
-    '/api/account-center-settings',
-    '/api/branding',
-    '/api/readiness',
     '/api/connectors',
     '/api/webhooks',
   ]
@@ -350,14 +329,16 @@ export type ManagementOpenApiMethod = (typeof managementOpenApiMethods)[number]
 export const managementOpenApiOperationKey = 'GET /openapi.json'
 export const methodsWithJsonRequestBody = new Set(['POST', 'PUT', 'PATCH'])
 export const operationsWithoutRequestBody = new Set([
-  'PUT /api-resources/{param}/archival',
+  'PUT /resource-servers/{param}/archival',
   'POST /applications/{param}/client-secrets',
   'POST /users/{param}/password-reset-requests',
-  'POST /webhooks/endpoints/{param}/secrets',
-  'POST /webhooks/requests/{param}/attempts',
-  'PUT /application-authorizations/{param}/revocation',
-  'PUT /role-assignments/{param}/revocation',
-  'POST /access-requests/{param}/credentials',
+  'POST /webhooks/{param}/secrets',
+  'POST /webhooks/{param}/deliveries/{param}/attempts',
+  'PUT /access/consents/{param}/revocation',
+  'PUT /access/assignments/{param}/revocation',
+  'PUT /access/authorizations/{param}/revocation',
+  'POST /access/authorizations/{param}/credentials',
+  'PUT /agents/{param}/retirement',
 ])
 
 export interface HonoRoute {

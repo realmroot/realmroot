@@ -1,19 +1,16 @@
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import {
   accessRequestSchema,
+  agentEnrollmentSchema,
   agentInstallationEnrollmentResponseSchema,
   agentInstallationEnrollmentSchema,
-  agentResponseSchema,
+  agentStatusSchema,
   createAccessRequestSchema,
-  createAgentEnrollmentSchema,
-  createAgentInstallationEnrollmentSchema,
+  createAgentSelfEnrollmentSchema,
   createResourceConnectionRequestSchema,
   resourceConnectionRequestSchema,
   resourceServerResourceSchema,
   resourceServerResourcesResponseSchema,
-  resourceServerSchema,
-  resourceServersResponseSchema,
-  targetTokenSchema,
 } from '@shared/api/agent-api'
 import { paginationQuerySchema } from '@shared/api/pagination'
 import { protectedResourceCapabilityNames, requiredProtectedCapability } from '@shared/authz'
@@ -21,7 +18,6 @@ import { z } from 'zod'
 import { agentGovernanceRoutes } from './management-routes/agent-governance'
 import { applicationAuthorizationRoutes } from './management-routes/applications-authorization'
 import {
-  credentialOfferResponseHeader,
   errorResponse,
   idempotencyKeyHeader,
   idempotencyReplayResponseHeader,
@@ -31,6 +27,7 @@ import {
   locationResponseHeader,
   type ManagementRouteConfig,
   managementSecurity,
+  uploadedAssetResponseSchema,
 } from './management-routes/helpers'
 import { platformWebhookRoutes } from './management-routes/platform-webhooks'
 import { userSecurityRoutes } from './management-routes/users-security'
@@ -51,6 +48,7 @@ interface UnifiedOpenApiDocument {
   [key: string]: unknown
 }
 interface RestishCliConfig {
+  command_layout: 'tags'
   profiles: Record<'default', RestishAgentProfile>
 }
 interface RestishAgentProfile {
@@ -73,32 +71,52 @@ export const unifiedOpenApiLinkHeader = [
 
 const managementRoutes: ManagementRouteConfig[] = [
   {
+    method: 'post',
+    path: '/assets',
+    operationId: 'createAsset',
+    summary: 'Create an Asset',
+    request: {
+      body: {
+        content: {
+          'multipart/form-data': {
+            schema: z.object({
+              purpose: z.enum(['avatar', 'application_logo', 'organization_logo', 'branding_logo', 'favicon']),
+              file: z.string().openapi({ format: 'binary' }),
+            }),
+          },
+        },
+      },
+    },
+    response: uploadedAssetResponseSchema,
+    status: 201,
+    responseHeaders: locationResponseHeader,
+  },
+  {
     method: 'get',
-    path: '/agent-identities/current',
-    operationId: 'getCurrentAgent',
-    summary: 'Read the current Agent',
+    path: '/assets/{assetId}',
+    operationId: 'getAsset',
+    summary: 'Get an Asset',
+    security: [],
+    request: { params: z.object({ assetId: z.string() }) },
+    response: z.unknown(),
+  },
+  {
+    method: 'get',
+    path: '/agent/status',
+    operationId: 'getAgentStatus',
+    summary: 'Read the current Agent status',
     cli: { group: 'auth', name: 'whoami' },
     security: [{ agentAuth: [] }],
-    response: agentResponseSchema,
+    response: agentStatusSchema,
   },
   {
     method: 'post',
-    path: '/agent-identities/current/enrollments',
-    operationId: 'enrollAgent',
-    summary: 'Create the current stable Agent',
+    path: '/agent/enrollments',
+    operationId: 'createAgentEnrollment',
+    summary: 'Create an Agent enrollment',
     security: [{ agentAuth: [] }],
-    request: { body: jsonBody(createAgentEnrollmentSchema) },
-    response: agentResponseSchema,
-    status: 201,
-  },
-  {
-    method: 'post',
-    path: '/installation-enrollments',
-    operationId: 'createAgentInstallationEnrollment',
-    summary: 'Create an Agent installation enrollment',
-    security: [{ agentAuth: [] }],
-    request: { headers: idempotencyKeyHeader, body: jsonBody(createAgentInstallationEnrollmentSchema) },
-    response: agentInstallationEnrollmentResponseSchema,
+    request: { headers: idempotencyKeyHeader, body: jsonBody(createAgentSelfEnrollmentSchema) },
+    response: z.union([agentEnrollmentSchema, agentInstallationEnrollmentResponseSchema]),
     status: 201,
     responseHeaders: { ...locationResponseHeader, ...idempotencyReplayResponseHeader },
     errors: {
@@ -108,31 +126,12 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/installation-enrollments/{enrollmentId}',
-    operationId: 'getAgentInstallationEnrollment',
-    summary: 'Read an Agent installation enrollment',
+    path: '/agent/enrollments/{enrollmentId}',
+    operationId: 'getAgentEnrollment',
+    summary: 'Read an Agent enrollment',
     security: [{ agentAuth: [] }],
     request: { params: z.object({ enrollmentId: z.string() }) },
     response: agentInstallationEnrollmentSchema,
-  },
-  {
-    method: 'get',
-    path: '/resource-servers',
-    operationId: 'listResourceServers',
-    summary: 'List Resource Servers available to the Agent',
-    security: [{ agentAuth: [] }],
-    request: { query: paginationQuerySchema },
-    response: resourceServersResponseSchema,
-  },
-  {
-    method: 'get',
-    path: '/resource-servers/{resourceServerId}',
-    operationId: 'getResourceServer',
-    summary: 'Read a Resource Server available to the Agent',
-    security: [{ agentAuth: [] }],
-    request: { params: z.object({ resourceServerId: z.string() }) },
-    response: resourceServerSchema,
-    errors: { 404: 'The Resource Server was not found.' },
   },
   {
     method: 'get',
@@ -163,7 +162,7 @@ const managementRoutes: ManagementRouteConfig[] = [
     path: '/resource-servers/{resourceServerId}/connection-requests',
     operationId: 'createConnectionRequest',
     summary: 'Request a controller-managed Resource Server connection',
-    cli: { group: 'connection-request', name: 'connect' },
+    cli: { name: 'connect' },
     security: [{ agentAuth: [] }],
     request: {
       params: z.object({ resourceServerId: z.string() }),
@@ -175,45 +174,25 @@ const managementRoutes: ManagementRouteConfig[] = [
   },
   {
     method: 'get',
-    path: '/connection-requests/{requestId}',
+    path: '/resource-servers/{resourceServerId}/connection-requests/{requestId}',
     operationId: 'getConnectionRequest',
     summary: 'Read a Resource Server connection request',
     security: [{ agentAuth: [] }],
-    request: { params: z.object({ requestId: z.string() }) },
+    request: { params: z.object({ resourceServerId: z.string(), requestId: z.string() }) },
     response: resourceConnectionRequestSchema,
     responseHeaders: interactiveResourceResponseHeaders,
   },
   {
     method: 'post',
-    path: '/access-requests',
-    operationId: 'createAccessRequest',
-    summary: 'Request exact Resource access',
-    cli: { group: 'access-request', name: 'access' },
+    path: '/access/requests',
+    operationId: 'createAgentAuthorizationRequest',
+    summary: 'Create an Agent authorization request',
+    cli: { name: 'access' },
     security: [{ agentAuth: [] }],
     request: { body: jsonBody(createAccessRequestSchema) },
     response: accessRequestSchema,
     status: 201,
     responseHeaders: { ...locationResponseHeader, ...interactiveResourceResponseHeaders },
-  },
-  {
-    method: 'get',
-    path: '/access-requests/{requestId}',
-    operationId: 'getAccessRequest',
-    summary: 'Read a Resource access request',
-    security: [{ agentAuth: [] }],
-    request: { params: z.object({ requestId: z.string() }) },
-    response: accessRequestSchema,
-    responseHeaders: interactiveResourceResponseHeaders,
-  },
-  {
-    method: 'post',
-    path: '/access-requests/{requestId}/credentials',
-    operationId: 'createAccessRequestCredential',
-    summary: 'Create a short-lived DPoP Resource credential',
-    security: [{ agentAuth: [] }],
-    request: { params: z.object({ requestId: z.string() }) },
-    response: targetTokenSchema,
-    responseHeaders: credentialOfferResponseHeader,
   },
   ...agentGovernanceRoutes,
   ...applicationAuthorizationRoutes,
@@ -260,6 +239,7 @@ function buildUnifiedOpenApi(): UnifiedOpenApiDocument {
   return {
     ...document,
     'x-cli-config': {
+      command_layout: 'tags',
       profiles: {
         default: restishAgentProfile(),
       },
@@ -287,14 +267,20 @@ function restishAgentProfile(): RestishAgentProfile {
 }
 
 function createManagementRoute(routeConfig: ManagementRouteConfig) {
-  const requiredAgentCapability = requiredProtectedCapability(routeConfig.method.toUpperCase(), routeConfig.path)
+  const requiredAgentCapability =
+    routeConfig.security === undefined
+      ? requiredProtectedCapability(routeConfig.method.toUpperCase(), routeConfig.path)
+      : null
   return createRoute({
     method: routeConfig.method,
     path: routeConfig.path,
     operationId: routeConfig.operationId,
     summary: routeConfig.summary,
     ...(routeConfig.cli
-      ? { tags: [routeConfig.cli.group], 'x-cli-name': routeConfig.cli.name }
+      ? {
+          ...(routeConfig.cli.group ? { tags: [routeConfig.cli.group] } : {}),
+          'x-cli-name': routeConfig.cli.name,
+        }
       : { 'x-cli-hidden': true }),
     security: routeConfig.security ?? managementSecurity,
     ...(requiredAgentCapability ? { 'x-required-agent-capability': requiredAgentCapability } : {}),

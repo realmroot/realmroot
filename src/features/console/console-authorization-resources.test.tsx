@@ -94,7 +94,7 @@ const contract = {
 }
 
 function rolePermissionsResponse(permissions: Array<{ resourceId: string; scope: string }>) {
-  return jsonResponse({ roleId: 'role-1', permissions }, 200, { etag: '"permissions-v1"' })
+  return jsonResponse({ roleId: 'role-1', scopes: permissions }, 200, { etag: '"permissions-v1"' })
 }
 
 describe('console API resources and roles', () => {
@@ -102,20 +102,20 @@ describe('console API resources and roles', () => {
     let permissionAttempts = 0
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/api-resources/resource-1') return jsonResponse(apiResource)
+      if (request.url === '/api/resource-servers/resource-1') return jsonResponse(apiResource)
       if (request.url === '/api/organizations') {
         return jsonResponse({ organizations: [organization], pagination })
       }
       if (request.url === '/api/connectors') {
         return jsonResponse({ connectors: [], pagination: emptyPagination })
       }
-      if (request.url === '/api/roles') return jsonResponse({ roles: [role], pagination })
-      if (request.url === '/api/roles/role-1/permissions') {
+      if (request.url === '/api/access/roles') return jsonResponse({ roles: [role], pagination })
+      if (request.url === '/api/access/roles/role-1/scopes') {
         permissionAttempts += 1
         if (permissionAttempts === 1) return jsonResponse({ error: 'permissions unavailable' }, 503)
         return rolePermissionsResponse([{ resourceId: apiResource.id, scope: 'projects:read' }])
       }
-      if (request.url === '/api/role-assignments') {
+      if (request.url === '/api/access/assignments') {
         return jsonResponse({ assignments: [], pagination: { ...pagination, total: 2 } })
       }
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
@@ -157,7 +157,7 @@ describe('console API resources and roles', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/role-assignments' && request.method === 'GET') {
+      if (request.url === '/api/access/assignments' && request.method === 'GET') {
         return jsonResponse({
           assignments: [
             {
@@ -212,7 +212,7 @@ describe('console API resources and roles', () => {
           pagination,
         })
       }
-      if (request.url === '/api/role-assignments' && request.method === 'POST') {
+      if (request.url === '/api/access/assignments' && request.method === 'POST') {
         const body = await request.body
         creations.push(body)
         return jsonResponse(
@@ -227,12 +227,12 @@ describe('console API resources and roles', () => {
           201,
         )
       }
-      if (request.url === '/api/role-assignments/assignment-1/revocation' && request.method === 'PUT') {
+      if (request.url === '/api/access/assignments/assignment-1/revocation' && request.method === 'PUT') {
         requests.push({ url: request.url, method: request.method })
         revokedAt = '2026-01-02T00:00:00.000Z'
         return jsonResponse({ roleAssignmentId: 'assignment-1', revokedAt })
       }
-      if (request.url === '/api/roles') return jsonResponse({ roles: [role], pagination })
+      if (request.url === '/api/access/roles') return jsonResponse({ roles: [role], pagination })
       if (request.url === '/api/users') return jsonResponse({ users: [user], pagination })
       if (request.url === '/api/applications') return jsonResponse({ applications: [application], pagination })
       if (request.url === '/api/agents') return jsonResponse({ items: [agent], pagination })
@@ -300,7 +300,7 @@ describe('console API resources and roles', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke assignment' }))
 
     await waitFor(() =>
-      expect(requests).toEqual([{ url: '/api/role-assignments/assignment-1/revocation', method: 'PUT' }]),
+      expect(requests).toEqual([{ url: '/api/access/assignments/assignment-1/revocation', method: 'PUT' }]),
     )
     fireEvent.change(screen.getByLabelText('Filter assignment status'), { target: { value: 'revoked' } })
     await waitFor(() => expect(screen.getAllByText('Revoked').some((element) => element.tagName === 'SPAN')).toBe(true))
@@ -317,7 +317,7 @@ describe('console API resources and roles', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const { url } = requestParts(input)
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [apiResource, external], pagination }))
       }
       if (url === '/api/connectors') {
@@ -353,11 +353,11 @@ describe('console API resources and roles', () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/api-resources' && request.method === 'POST') {
+      if (request.url === '/api/resource-servers' && request.method === 'POST') {
         requests.push({ ...request, body: await request.body })
         return jsonResponse({ ...apiResource, name: 'Projects API', connectorId: 'connector-1' }, 201)
       }
-      if (request.url === '/api/api-resources') {
+      if (request.url === '/api/resource-servers') {
         return jsonResponse({ items: [], pagination: emptyPagination })
       }
       if (request.url === '/api/connectors') {
@@ -392,7 +392,7 @@ describe('console API resources and roles', () => {
     await waitFor(() =>
       expect(requests).toEqual([
         {
-          url: '/api/api-resources',
+          url: '/api/resource-servers',
           method: 'POST',
           body: {
             name: 'Projects API',
@@ -435,11 +435,11 @@ describe('console API resources and roles', () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/api-resources' && request.method === 'POST') {
+      if (request.url === '/api/resource-servers' && request.method === 'POST') {
         requests.push(await request.body)
         return jsonResponse({ ...apiResource, id: 'resource-created', name: 'Selected API' }, 201)
       }
-      if (request.url === '/api/api-resources') {
+      if (request.url === '/api/resource-servers') {
         return jsonResponse({ items: [apiResource, disabledResource, archivedResource], pagination })
       }
       if (request.url === '/api/connectors') {
@@ -501,8 +501,8 @@ describe('console API resources and roles', () => {
   it('shows protected resources and their required scopes as a dedicated detail tab', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const { url } = requestParts(input)
-      if (url === '/api/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
-      if (url === '/api/api-resources/resource-1/contract') return Promise.resolve(jsonResponse(contract))
+      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/resource-servers/resource-1/contract') return Promise.resolve(jsonResponse(contract))
       if (url === '/api/connectors')
         return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
       if (url === '/api/organizations') {
@@ -554,8 +554,8 @@ describe('console API resources and roles', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const { url } = requestParts(input)
-      if (url === '/api/api-resources/resource-1') return Promise.resolve(jsonResponse(apiResource))
-      if (url === '/api/api-resources/resource-1/contract') {
+      if (url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(apiResource))
+      if (url === '/api/resource-servers/resource-1/contract') {
         contractAttempts += 1
         return Promise.resolve(
           contractAttempts === 1 ? jsonResponse({ error: 'contract unavailable' }, 503) : jsonResponse(complexContract),
@@ -603,13 +603,13 @@ describe('console API resources and roles', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/api-resources/resource-1' && request.method === 'PATCH') {
+      if (request.url === '/api/resource-servers/resource-1' && request.method === 'PATCH') {
         const body = await request.body
         requests.push(body)
         selected = { ...selected, ...(body as Partial<ApiResource>) }
         return jsonResponse(selected)
       }
-      if (request.url === '/api/api-resources/resource-1') return jsonResponse(selected)
+      if (request.url === '/api/resource-servers/resource-1') return jsonResponse(selected)
       if (request.url === '/api/connectors') {
         return jsonResponse({ connectors: [], pagination: emptyPagination })
       }
@@ -657,7 +657,7 @@ describe('console API resources and roles', () => {
   it('shows incomplete external authorization without inventing provider state', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const { url } = requestParts(input)
-      if (url === '/api/api-resources/resource-1') {
+      if (url === '/api/resource-servers/resource-1') {
         return Promise.resolve(jsonResponse({ ...apiResource, connectorId: 'connector-1', authorization: null }))
       }
       if (url === '/api/connectors') {
@@ -687,13 +687,13 @@ describe('console API resources and roles', () => {
     let selected: ApiResource = apiResource
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/api-resources/resource-1' && request.method === 'PATCH') {
+      if (request.url === '/api/resource-servers/resource-1' && request.method === 'PATCH') {
         const body = await request.body
         requests.push({ ...request, body })
         selected = { ...selected, ...(body as Partial<ApiResource>) }
         return jsonResponse(selected)
       }
-      if (request.url === '/api/api-resources/resource-1') return jsonResponse(selected)
+      if (request.url === '/api/resource-servers/resource-1') return jsonResponse(selected)
       if (request.url === '/api/connectors') {
         return jsonResponse({
           connectors: [genericConnector, { ...genericConnector, id: 'connector-2', displayName: 'Projects OIDC 2' }],
@@ -715,7 +715,7 @@ describe('console API resources and roles', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/api-resources/resource-1',
+        url: '/api/resource-servers/resource-1',
         method: 'PATCH',
         body: {
           name: 'Updated API',
@@ -728,7 +728,7 @@ describe('console API resources and roles', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Disable' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/api-resources/resource-1',
+        url: '/api/resource-servers/resource-1',
         method: 'PATCH',
         body: { enabled: false },
       }),
@@ -777,7 +777,7 @@ describe('console API resources and roles', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/api-resources/resource-1',
+        url: '/api/resource-servers/resource-1',
         method: 'PATCH',
         body: {
           connectorId: 'connector-2',
@@ -796,17 +796,17 @@ describe('console API resources and roles', () => {
     let selected: ApiResource = apiResource
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/api-resources/resource-1/archival' && request.method === 'PUT') {
+      if (request.url === '/api/resource-servers/resource-1/archival' && request.method === 'PUT') {
         requests.push({ url: request.url, method: request.method })
         selected = { ...selected, enabled: false, archivedAt: '2026-07-30T19:00:00.000Z' }
         return Promise.resolve(jsonResponse(selected))
       }
-      if (request.url === '/api/api-resources/resource-1/archival' && request.method === 'DELETE') {
+      if (request.url === '/api/resource-servers/resource-1/archival' && request.method === 'DELETE') {
         requests.push({ url: request.url, method: request.method })
         selected = { ...selected, enabled: false, archivedAt: null }
         return Promise.resolve(jsonResponse(selected))
       }
-      if (request.url === '/api/api-resources/resource-1') return Promise.resolve(jsonResponse(selected))
+      if (request.url === '/api/resource-servers/resource-1') return Promise.resolve(jsonResponse(selected))
       if (request.url === '/api/connectors')
         return Promise.resolve(jsonResponse({ connectors: [], pagination: emptyPagination }))
       if (request.url === '/api/organizations') {
@@ -825,8 +825,8 @@ describe('console API resources and roles', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Restore resource server' }))
     expect((await screen.findAllByText('Disabled')).length).toBeGreaterThan(0)
     expect(requests).toEqual([
-      { url: '/api/api-resources/resource-1/archival', method: 'PUT' },
-      { url: '/api/api-resources/resource-1/archival', method: 'DELETE' },
+      { url: '/api/resource-servers/resource-1/archival', method: 'PUT' },
+      { url: '/api/resource-servers/resource-1/archival', method: 'DELETE' },
     ])
   })
 
@@ -836,18 +836,18 @@ describe('console API resources and roles', () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/roles/role-1/permissions' && request.method === 'PUT') {
-        const body = (await request.body) as { permissions: typeof assigned }
+      if (request.url === '/api/access/roles/role-1/scopes' && request.method === 'PUT') {
+        const body = (await request.body) as { scopes: typeof assigned }
         requests.push({ ...request, body })
-        assigned = body.permissions
+        assigned = body.scopes
         return rolePermissionsResponse(assigned)
       }
-      if (request.url === '/api/roles/role-1/permissions') {
+      if (request.url === '/api/access/roles/role-1/scopes') {
         return rolePermissionsResponse(assigned)
       }
-      if (request.url === '/api/roles/role-1') return jsonResponse(customRole)
-      if (request.url === '/api/api-resources/resource-1/contract') return jsonResponse(contract)
-      if (request.url === '/api/api-resources') return jsonResponse({ items: [apiResource], pagination })
+      if (request.url === '/api/access/roles/role-1') return jsonResponse(customRole)
+      if (request.url === '/api/resource-servers/resource-1/contract') return jsonResponse(contract)
+      if (request.url === '/api/resource-servers') return jsonResponse({ items: [apiResource], pagination })
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
@@ -868,10 +868,10 @@ describe('console API resources and roles', () => {
 
     await waitFor(() =>
       expect(requests).toContainEqual({
-        url: '/api/roles/role-1/permissions',
+        url: '/api/access/roles/role-1/scopes',
         method: 'PUT',
         body: {
-          permissions: [
+          scopes: [
             { resourceId: 'resource-1', scope: 'projects:read' },
             { resourceId: 'resource-1', scope: 'projects:write' },
           ],
@@ -886,22 +886,22 @@ describe('console API resources and roles', () => {
     let deleted = false
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/roles/role-1' && request.method === 'DELETE') {
+      if (request.url === '/api/access/roles/role-1' && request.method === 'DELETE') {
         deleted = true
         return new Response(null, { status: 204 })
       }
-      if (deleted && request.url.startsWith('/api/roles/role-1')) {
+      if (deleted && request.url.startsWith('/api/access/roles/role-1')) {
         throw new Error(`Removed Role detail was refetched: ${request.method} ${request.url}`)
       }
-      if (request.url === '/api/roles/role-1' && request.method === 'PATCH') {
+      if (request.url === '/api/access/roles/role-1' && request.method === 'PATCH') {
         requests.push({ ...request, body: await request.body })
         return jsonResponse({ ...customRole, ...(requests[0]!.body as object) })
       }
-      if (request.url === '/api/roles/role-1/permissions') {
+      if (request.url === '/api/access/roles/role-1/scopes') {
         return rolePermissionsResponse([])
       }
-      if (request.url === '/api/roles/role-1') return jsonResponse(customRole)
-      if (request.url === '/api/api-resources') return jsonResponse({ items: [], pagination: emptyPagination })
+      if (request.url === '/api/access/roles/role-1') return jsonResponse(customRole)
+      if (request.url === '/api/resource-servers') return jsonResponse({ items: [], pagination: emptyPagination })
       throw new Error(`Unexpected request: ${request.method} ${request.url}`)
     })
 
@@ -914,7 +914,7 @@ describe('console API resources and roles', () => {
 
     await waitFor(() => expect(requests).toHaveLength(1))
     expect(requests[0]).toMatchObject({
-      url: '/api/roles/role-1',
+      url: '/api/access/roles/role-1',
       method: 'PATCH',
       body: { name: 'Updated role', description: 'Updated description' },
     })
@@ -930,18 +930,18 @@ describe('console API resources and roles', () => {
     const requests: Array<{ url: string; method: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const request = requestParts(input, init)
-      if (request.url === '/api/role-assignments' && request.method === 'POST') {
+      if (request.url === '/api/access/assignments' && request.method === 'POST') {
         requests.push({ ...request, body: await request.body })
         return jsonResponse({ id: 'assignment-1' }, 201)
       }
-      if (request.url === '/api/role-assignments') {
+      if (request.url === '/api/access/assignments') {
         return jsonResponse({ assignments: [], pagination: emptyPagination })
       }
-      if (request.url === '/api/roles/role-1/permissions') {
+      if (request.url === '/api/access/roles/role-1/scopes') {
         return rolePermissionsResponse([])
       }
-      if (request.url === '/api/roles/role-1') return jsonResponse({ ...role, system: false })
-      if (request.url === '/api/api-resources') return jsonResponse({ items: [], pagination: emptyPagination })
+      if (request.url === '/api/access/roles/role-1') return jsonResponse({ ...role, system: false })
+      if (request.url === '/api/resource-servers') return jsonResponse({ items: [], pagination: emptyPagination })
       if (request.url === '/api/users') return jsonResponse({ users: [user], pagination })
       if (request.url === '/api/applications') return jsonResponse({ applications: [application], pagination })
       if (request.url === '/api/agents') return jsonResponse({ items: [], pagination: emptyPagination })
@@ -961,7 +961,7 @@ describe('console API resources and roles', () => {
 
     await waitFor(() => expect(requests).toHaveLength(1))
     expect(requests[0]).toMatchObject({
-      url: '/api/role-assignments',
+      url: '/api/access/assignments',
       method: 'POST',
       body: {
         roleId: 'role-1',

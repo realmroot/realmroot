@@ -136,17 +136,17 @@ describe('management routes 2', () => {
     const app = createApp(auth, createTestDeps({ users: createUserRepositoryMock() }))
     const headers = adminHeaders()
 
-    await app.request('/api/users/password-reset-requests', {
+    await app.request('/api/users/user-1/password-reset-requests', {
       method: 'POST',
       headers,
       body: JSON.stringify({ email: 'ada@example.com', redirectTo: 'https://app.example.com/reset' }),
     })
-    await app.request('/api/users/user-1/ban', {
+    await app.request('/api/users/user-1/suspension', {
       method: 'PUT',
       headers,
       body: JSON.stringify({ reason: 'abuse', expiresInSeconds: 3600 }),
     })
-    await app.request('/api/users/user-1/ban', { method: 'DELETE', headers })
+    await app.request('/api/users/user-1/suspension', { method: 'DELETE', headers })
 
     expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
       body: {
@@ -178,7 +178,6 @@ describe('management routes 2', () => {
 
     const detail = await app.request('/api/users/user-1', { headers })
     const accounts = await app.request('/api/users/user-1/linked-accounts?limit=2&offset=4', { headers })
-    const applications = await app.request('/api/users/user-1/applications?limit=3&offset=6', { headers })
     const sessions = await app.request('/api/users/user-1/sessions?limit=4&offset=8', { headers })
     const reset = await app.request('/api/users/user-1/password-reset-requests', {
       method: 'POST',
@@ -187,7 +186,10 @@ describe('management routes 2', () => {
     })
 
     expect(detail.status).toBe(200)
-    await expect(detail.json()).resolves.toEqual({ user: { id: 'user-1', email: 'user-1@example.com' } })
+    await expect(detail.json()).resolves.toMatchObject({
+      user: { id: 'user-1', email: 'user-1@example.com' },
+      security: { userId: 'user-1', mfa: { enabled: true } },
+    })
     await expect(accounts.json()).resolves.toEqual({
       accounts: [],
       pagination: {
@@ -196,16 +198,6 @@ describe('management routes 2', () => {
         total: 10,
         hasMore: true,
         nextOffset: 6,
-      },
-    })
-    await expect(applications.json()).resolves.toEqual({
-      applications: [],
-      pagination: {
-        limit: 3,
-        offset: 6,
-        total: 10,
-        hasMore: true,
-        nextOffset: 9,
       },
     })
     await expect(sessions.json()).resolves.toEqual({
@@ -218,12 +210,11 @@ describe('management routes 2', () => {
         nextOffset: null,
       },
     })
-    await expect(reset.json()).resolves.toEqual({ status: true })
+    await expect(reset.json()).resolves.toMatchObject({ userId: 'user-1', status: 'accepted' })
 
     expect(auth.api.getUser).not.toHaveBeenCalled()
     expect(users.getUser).toHaveBeenCalledWith('user-1')
     expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
-    expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1', { limit: 3, offset: 6 })
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })
     expect(auth.api.requestPasswordReset).toHaveBeenCalledWith({
       body: {
@@ -245,22 +236,12 @@ describe('management routes 2', () => {
     )
     const headers = adminHeaders()
 
-    const securityState = await app.request('/api/users/user-1/security', { headers })
     const passkeys = await app.request('/api/users/user-1/passkeys?limit=2&offset=4', { headers })
     const deleted = await app.request('/api/users/user-1/passkeys/passkey-1', {
       method: 'DELETE',
       headers,
     })
 
-    expect(securityState.status).toBe(200)
-    await expect(securityState.json()).resolves.toEqual({
-      security: {
-        userId: 'user-1',
-        mfa: { enabled: true, factors: [] },
-        passkeys: { enabled: true, count: 1 },
-        policy: securityPolicy(),
-      },
-    })
     await expect(passkeys.json()).resolves.toEqual({
       passkeys: [
         {
@@ -283,7 +264,6 @@ describe('management routes 2', () => {
       },
     })
     expect(deleted.status).toBe(204)
-    expect(security.getSecurityState).toHaveBeenCalledWith('user-1')
     expect(security.listPasskeys).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
     expect(security.deletePasskey).toHaveBeenCalledWith('user-1', 'passkey-1')
   })
@@ -324,8 +304,8 @@ describe('management routes 2', () => {
       },
     }
 
-    const current = await app.request('/api/security/policy', { headers })
-    const updated = await app.request('/api/security/policy', {
+    const current = await app.request('/api/realm/security-policy', { headers })
+    const updated = await app.request('/api/realm/security-policy', {
       method: 'PATCH',
       headers,
       body: JSON.stringify(body),

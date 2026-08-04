@@ -11,8 +11,9 @@ import {
 import {
   createRoleRequestSchema,
   paginationQuerySchema,
-  replaceRolePermissionsRequestSchema,
+  replaceRoleScopesRequestSchema,
   roleResponseSchema,
+  roleScopesResponseSchema,
   updateRoleRequestSchema,
 } from '@shared/api/authorization'
 import { Hono } from 'hono'
@@ -27,7 +28,7 @@ managementRolesRoute.get('/', async (c) => c.json(await listRoles(getDeps(c), re
 
 managementRolesRoute.post('/', async (c) => {
   const role = roleResponseSchema.parse(await createRole(getDeps(c), await readJson(c, createRoleRequestSchema)))
-  c.header('Location', `/api/roles/${encodeURIComponent(role.id)}`)
+  c.header('Location', `/api/access/roles/${encodeURIComponent(role.id)}`)
   return c.json(role, 201)
 })
 
@@ -45,11 +46,11 @@ managementRolesRoute.delete('/:roleId', async (c) => {
   return c.body(null, 204)
 })
 
-managementRolesRoute.get('/:roleId/permissions', async (c) => {
+managementRolesRoute.get('/:roleId/scopes', async (c) => {
   await requireRoleReadAccess(c, c.req.param('roleId'))
   const current = await rolePermissions(getDeps(c), c.req.param('roleId'))
   c.header('ETag', current.etag)
-  return c.json(current.representation)
+  return c.json(roleScopesResponseSchema.parse({ scopes: current.representation.permissions }))
 })
 
 async function requireRoleReadAccess(c: Parameters<typeof getManagementAccessScope>[0], roleId: string) {
@@ -68,15 +69,15 @@ async function requireRoleReadAccess(c: Parameters<typeof getManagementAccessSco
   if (page.items.length === 0) throw forbidden()
 }
 
-managementRolesRoute.put('/:roleId/permissions', async (c) => {
+managementRolesRoute.put('/:roleId/scopes', async (c) => {
   const expected = c.req.header('If-Match')
   const current = await rolePermissions(getDeps(c), c.req.param('roleId'))
   requireMatchingIfMatch(expected, current.etag, 'Role permissions')
-  const body = await readJson(c, replaceRolePermissionsRequestSchema)
-  await replaceRolePermissions(getDeps(c), c.req.param('roleId'), body.permissions)
+  const body = await readJson(c, replaceRoleScopesRequestSchema)
+  await replaceRolePermissions(getDeps(c), c.req.param('roleId'), body.scopes)
   const updated = await rolePermissions(getDeps(c), c.req.param('roleId'))
   c.header('ETag', updated.etag)
-  return c.json(updated.representation)
+  return c.json(roleScopesResponseSchema.parse({ scopes: updated.representation.permissions }))
 })
 
 async function rolePermissions(deps: Parameters<typeof listRolePermissions>[0], roleId: string) {

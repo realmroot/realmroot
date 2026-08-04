@@ -49,8 +49,8 @@ function mountConnectors(options?: {
       return Promise.resolve(jsonResponse({ ...connector }, method === 'POST' ? 201 : 200))
     }
     if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-    if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(options?.signIn ?? signInSettings))
-    if (url === '/api/security/policy') return Promise.resolve(jsonResponse(options?.security ?? securityPolicy))
+    if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(options?.signIn ?? signInSettings))
+    if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(options?.security ?? securityPolicy))
     if (url === '/api/connectors') {
       return Promise.resolve(jsonResponse({ connectors: options?.connectors ?? [], pagination }))
     }
@@ -89,7 +89,7 @@ describe('console connectors built-in drawers', () => {
 
     await waitFor(() => {
       expect(requests).toContainEqual({
-        url: '/api/sign-in-settings',
+        url: '/api/realm/sign-in-policy',
         method: 'PATCH',
         body: { builtInProviders: { email: { enabled: true, otpLength: 8, expiresInSeconds: 600 } } },
       })
@@ -115,11 +115,11 @@ describe('console connectors built-in drawers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
-      expect(requests.some((r) => r.url === '/api/security/policy' && r.method === 'PATCH')).toBe(true)
+      expect(requests.some((r) => r.url === '/api/realm/security-policy' && r.method === 'PATCH')).toBe(true)
       expect(
         requests.some(
           (r) =>
-            r.url === '/api/security/policy' &&
+            r.url === '/api/realm/security-policy' &&
             r.method === 'PATCH' &&
             JSON.stringify(r.body) ===
               JSON.stringify({
@@ -135,7 +135,7 @@ describe('console connectors built-in drawers', () => {
         ),
       ).toBe(true)
       expect(requests).toContainEqual({
-        url: '/api/sign-in-settings',
+        url: '/api/realm/sign-in-policy',
         method: 'PATCH',
         body: { builtInProviders: { passkey: { allowSignUp: false } } },
       })
@@ -187,7 +187,7 @@ describe('console connectors built-in drawers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
-      expect(requests.some((r) => r.url === '/api/sign-in-settings' && r.method === 'PATCH')).toBe(true)
+      expect(requests.some((r) => r.url === '/api/realm/sign-in-policy' && r.method === 'PATCH')).toBe(true)
     })
   })
 
@@ -207,7 +207,7 @@ describe('console connectors built-in drawers', () => {
 
     await waitFor(() => {
       const web3 = requests.find(
-        (r) => r.url === '/api/sign-in-settings' && JSON.stringify(r.body).includes('web3Wallet'),
+        (r) => r.url === '/api/realm/sign-in-policy' && JSON.stringify(r.body).includes('web3Wallet'),
       )
       expect(web3).toBeTruthy()
     })
@@ -230,7 +230,7 @@ describe('console connectors built-in drawers', () => {
 
     await waitFor(() => {
       const oneTap = requests.find(
-        (r) => r.url === '/api/sign-in-settings' && JSON.stringify(r.body).includes('oneTap'),
+        (r) => r.url === '/api/realm/sign-in-policy' && JSON.stringify(r.body).includes('oneTap'),
       )
       expect(oneTap).toBeTruthy()
     })
@@ -311,8 +311,8 @@ describe('console connectors built-in drawers', () => {
         if (failTemplates) return Promise.resolve(jsonResponse({ message: 'boom' }, 500))
         return Promise.resolve(jsonResponse(connectorTemplates))
       }
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-      if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+      if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
       if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [], pagination }))
       return consoleSharedFetch(input, init)
     })

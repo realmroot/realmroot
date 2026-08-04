@@ -37,7 +37,7 @@ describe('createManagementWebhookRoutes', () => {
       await next()
     })
     app.route('/', createManagementWebhookRoutes())
-    const response = await app.request('/endpoints?limit=1&offset=0')
+    const response = await app.request('/?limit=1&offset=0')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual(result)

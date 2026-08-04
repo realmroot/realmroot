@@ -13,9 +13,9 @@ import { readJson } from '../validation'
 export function managementSecurityRoutes() {
   const app = new Hono()
 
-  app.get('/policy', async (c) => c.json({ policy: managementSecurityPolicy(await getDeps(c).security.getPolicy()) }))
+  app.get('/', async (c) => c.json({ policy: managementSecurityPolicy(await getDeps(c).security.getPolicy()) }))
 
-  app.patch('/policy', async (c) => {
+  app.patch('/', async (c) => {
     const deps = getDeps(c)
     const input = await readJson(c, updateSecurityPolicySchema)
     const current = await deps.security.getPolicy()

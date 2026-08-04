@@ -31,7 +31,7 @@ describe('admin console sign-in and preview controls', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if ((url === '/api/sign-in-settings' || url === '/api/security/policy') && init?.method === 'PATCH') {
+      if ((url === '/api/realm/sign-in-policy' || url === '/api/realm/security-policy') && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(url.endsWith('policy') ? securityPolicy : signInSettings))
       }
@@ -49,7 +49,7 @@ describe('admin console sign-in and preview controls', () => {
 
     await waitFor(() => expect(requests).toHaveLength(2))
     expect(requests).toContainEqual({
-      url: '/api/sign-in-settings',
+      url: '/api/realm/sign-in-policy',
       body: expect.objectContaining({
         signIn: expect.objectContaining({
           signupEnabled: false,
@@ -74,7 +74,7 @@ describe('admin console sign-in and preview controls', () => {
 
   it('surfaces sign-in management errors inside the editor', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      if (String(input) === '/api/sign-in-settings' && init?.method === 'PATCH') {
+      if (String(input) === '/api/realm/sign-in-policy' && init?.method === 'PATCH') {
         return Promise.resolve(jsonResponse({ error: { message: 'Sign-in save failed.' } }, 500))
       }
       return consoleSharedFetch(input, init)
@@ -105,7 +105,7 @@ describe('admin console sign-in and preview controls', () => {
       },
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      if (String(input) === '/api/sign-in-settings') return Promise.resolve(jsonResponse(otpOnly))
+      if (String(input) === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(otpOnly))
       return consoleSharedFetch(input, init)
     })
 
@@ -120,7 +120,7 @@ describe('admin console sign-in and preview controls', () => {
 
   it('keeps the hosted preview focused without editor-only viewport or open-page controls', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      if (String(input) === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+      if (String(input) === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
       return consoleSharedFetch(input, init)
     })
 

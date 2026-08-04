@@ -1,6 +1,6 @@
 import type { AppType } from '@server/http/app'
 import type { HostedConsentApprovalRequest } from '@shared/api/applications'
-import type { UploadedAssetResponse } from '@shared/api/assets'
+import type { AssetPurpose, UploadedAssetResponse } from '@shared/api/assets'
 import type { OnboardingAdminRequest } from '@shared/api/onboarding'
 import { type ClientResponse, hc } from 'hono/client'
 
@@ -98,31 +98,11 @@ export function createOnboardingAdmin(input: OnboardingAdminRequest): Promise<{
 export function uploadApiFile(path: string, file: File): Promise<UploadedAssetResponse> {
   const form = { file }
   if (path === '/api/account/avatar') return readRpcResponse(apiClient.api.account.avatar.$post({ form }))
-  if (path === '/api/branding/logo') {
-    return readRpcResponse(apiClient.api.branding.logo.$post({ form }))
-  }
-  if (path === '/api/branding/favicon') {
-    return readRpcResponse(apiClient.api.branding.favicon.$post({ form }))
-  }
-  const applicationLogo = path.match(/^\/api\/applications\/([^/]+)\/logo$/)
-  if (applicationLogo) {
-    return readRpcResponse(
-      apiClient.api.applications[':applicationId'].logo.$post({
-        param: { applicationId: applicationLogo[1] },
-        form,
-      }),
-    )
-  }
-  const organizationLogo = path.match(/^\/api\/organizations\/([^/]+)\/logo$/)
-  if (organizationLogo) {
-    return readRpcResponse(
-      apiClient.api.organizations[':organizationId'].logo.$post({
-        param: { organizationId: organizationLogo[1] },
-        form,
-      }),
-    )
-  }
   throw new Error(`Unsupported upload path: ${path}`)
+}
+
+export function uploadAsset(purpose: AssetPurpose, file: File): Promise<UploadedAssetResponse> {
+  return readRpcResponse(apiClient.api.assets.$post({ form: { purpose, file } }))
 }
 
 function query(search: string): Record<string, string> {

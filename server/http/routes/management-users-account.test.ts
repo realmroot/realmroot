@@ -62,7 +62,7 @@ describe('management users and account routes', () => {
         emailVerified: true,
       }),
     })
-    await app.request('/api/users/user-1/ban', {
+    await app.request('/api/users/user-1/suspension', {
       method: 'PUT',
       headers,
       body: JSON.stringify({
@@ -70,12 +70,12 @@ describe('management users and account routes', () => {
         expiresInSeconds: 3600,
       }),
     })
-    await app.request('/api/users/user-1/ban', { method: 'DELETE', headers })
+    await app.request('/api/users/user-1/suspension', { method: 'DELETE', headers })
     await app.request('/api/users/user-1', { method: 'DELETE', headers })
-    await app.request('/api/users/password-reset-requests', {
+    await app.request('/api/users/user-1/password-reset-requests', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ email: 'ada@example.com' }),
+      body: JSON.stringify({}),
     })
 
     expect(auth.api.listUsers).toHaveBeenCalledWith({
@@ -153,8 +153,9 @@ describe('management users and account routes', () => {
     })
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({
-      user: { id: 'user-1' },
+    await expect(response.json()).resolves.toMatchObject({
+      user: { id: 'user-1', email: 'ada@example.com' },
+      security: { userId: 'user-1', mfa: { enabled: true } },
     })
     expect(users.getUser).toHaveBeenCalledWith('user-1')
     expect(auth.api.getUser).not.toHaveBeenCalled()
@@ -169,7 +170,6 @@ describe('management users and account routes', () => {
     const headers = adminHeaders()
 
     const accounts = await app.request('/api/users/user-1/linked-accounts?limit=2&offset=4', { headers })
-    const applications = await app.request('/api/users/user-1/applications?limit=3&offset=6', { headers })
     const sessions = await app.request('/api/users/user-1/sessions?limit=4&offset=8', { headers })
 
     await expect(accounts.json()).resolves.toEqual({
@@ -180,16 +180,6 @@ describe('management users and account routes', () => {
         total: 10,
         hasMore: true,
         nextOffset: 6,
-      },
-    })
-    await expect(applications.json()).resolves.toEqual({
-      applications: [],
-      pagination: {
-        limit: 3,
-        offset: 6,
-        total: 10,
-        hasMore: true,
-        nextOffset: 9,
       },
     })
     await expect(sessions.json()).resolves.toEqual({
@@ -203,7 +193,6 @@ describe('management users and account routes', () => {
       },
     })
     expect(users.listLinkedAccounts).toHaveBeenCalledWith('user-1', { limit: 2, offset: 4 })
-    expect(users.listConsentedApplications).toHaveBeenCalledWith('user-1', { limit: 3, offset: 6 })
     expect(users.listSessions).toHaveBeenCalledWith('user-1', { limit: 4, offset: 8 })
   })
 
@@ -398,7 +387,7 @@ function createAuthMock() {
 
 function createUserRepositoryMock(): UserRepository {
   return {
-    getUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
+    getUser: vi.fn().mockResolvedValue({ id: 'user-1', email: 'ada@example.com' }),
     listManagedUsers: vi.fn().mockImplementation((page) => Promise.resolve(createPage(page))),
     createManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
     updateManagedUser: vi.fn().mockResolvedValue({ id: 'user-1' }),
@@ -410,6 +399,8 @@ function createUserRepositoryMock(): UserRepository {
     listConsentedApplications: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     listSessions: vi.fn().mockImplementation((_userId, page) => Promise.resolve(createPage(page))),
     getSessionToken: vi.fn().mockResolvedValue('session-token-1'),
+    createPasswordResetRequest: vi.fn().mockImplementation(async (input) => input),
+    findPasswordResetRequest: vi.fn().mockResolvedValue(null),
   }
 }
 

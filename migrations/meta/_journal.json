@@ -211,6 +211,13 @@
       "when": 1785780615554,
       "tag": "20260803181015_agent-connection-requests",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1785804468837,
+      "tag": "20260804004748_password-reset-requests",
+      "breakpoints": true
     }
   ]
 }

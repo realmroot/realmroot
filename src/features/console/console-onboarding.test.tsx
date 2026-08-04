@@ -33,7 +33,7 @@ describe('console onboarding', () => {
   it('returns completed setup to the dashboard [spec: admin-console/admin-onboarding-complete]', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.includes('/api/readiness')) {
+      if (url.includes('/api/realm/configuration-status')) {
         return Promise.resolve(
           jsonResponse({
             required: [],
@@ -73,7 +73,7 @@ describe('console onboarding', () => {
     })
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.includes('/api/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
+      if (url.includes('/api/realm/configuration-status')) return Promise.resolve(jsonResponse(readinessIncomplete))
       if (url === '/api/applications' && init?.method === 'POST') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(application, 201))
@@ -134,7 +134,7 @@ describe('console onboarding', () => {
   it('resets device login when switching away from a native client type', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url.includes('/api/readiness')) return Promise.resolve(jsonResponse(readinessIncomplete))
+      if (url.includes('/api/realm/configuration-status')) return Promise.resolve(jsonResponse(readinessIncomplete))
       return consoleSharedFetch(input, init)
     })
 

@@ -264,7 +264,7 @@ function organizationResponse(url: URL, currentOrganization: typeof organization
     return jsonResponse({ users: empty ? [] : users, pagination: page(empty ? 0 : users.length) })
   if (url.pathname === '/api/agents')
     return jsonResponse({ items: empty ? [] : agents, pagination: page(empty ? 0 : agents.length) })
-  if (url.pathname === '/api/audit-events')
+  if (url.pathname === '/api/realm/audit-events')
     return jsonResponse({ items: empty ? [] : events, pagination: page(empty ? 0 : events.length) })
   throw new Error(`Unexpected Organization request: ${url}`)
 }

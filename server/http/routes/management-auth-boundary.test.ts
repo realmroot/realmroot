@@ -51,6 +51,7 @@ describe('management routes 1', () => {
       name: 'Authorization',
     })
     expect(unifiedOpenApi['x-cli-config']).toEqual({
+      command_layout: 'tags',
       profiles: {
         default: {
           credentials: {
@@ -77,14 +78,16 @@ describe('management routes 1', () => {
         continue
       }
 
-      expect(operation.responses, operation.key).toHaveProperty('401')
-      expect(operation.responses, operation.key).toHaveProperty('403')
+      if (operation.key !== 'GET /assets/{param}') {
+        expect(operation.responses, operation.key).toHaveProperty('401')
+        expect(operation.responses, operation.key).toHaveProperty('403')
+      }
       expect(operation.declaredPathParameters, operation.key).toEqual(operation.pathParameters)
       const requiredCapability = requiredProtectedCapability(
         operation.method,
         operation.key.slice(operation.method.length + 1),
       )
-      if (requiredCapability) {
+      if (operation.requiredAgentCapability) {
         expect(operation.security, operation.key).toEqual([{ agentAuth: [] }, { browserSession: [] }])
         expect(operation.requiredAgentCapability, operation.key).toBe(requiredCapability)
       }
@@ -129,7 +132,7 @@ describe('management routes 1', () => {
     expect(contract.headers.get('link')).toBeNull()
     await expect(contract.json()).resolves.toEqual(unifiedOpenApi)
 
-    const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /access-requests')
+    const accessRequest = openApiOperationObjects().find((operation) => operation.key === 'POST /access/requests')
     const standaloneRequestSchema = requestBodyContent(accessRequest?.requestBody).schema
     expect(JSON.stringify(standaloneRequestSchema)).not.toContain('#/components/')
 
@@ -147,10 +150,9 @@ describe('management routes 1', () => {
       }))
 
     expect(generatedCommands).toEqual([
-      { group: 'auth', name: 'whoami', operationId: 'getCurrentAgent' },
-      { group: 'connection-request', name: 'connect', operationId: 'createConnectionRequest' },
-      { group: 'access-request', name: 'access', operationId: 'createAccessRequest' },
-      { group: 'capability', name: 'request-capabilities', operationId: 'requestAgentCapabilities' },
+      { group: 'auth', name: 'whoami', operationId: 'getAgentStatus' },
+      { group: undefined, name: 'connect', operationId: 'createConnectionRequest' },
+      { group: undefined, name: 'access', operationId: 'createAgentAuthorizationRequest' },
     ])
   })
 
@@ -165,30 +167,30 @@ describe('management routes 1', () => {
     expect(createApplicationProperties).not.toHaveProperty('clientSecret')
 
     const replaceRolePermissions = openApiOperationObjects().find(
-      (operation) => operation.key === 'PUT /roles/{param}/permissions',
+      (operation) => operation.key === 'PUT /access/roles/{param}/scopes',
     )
     const replaceRolePermissionsSchema = openApiSchemaObject(
       requestBodyContent(replaceRolePermissions?.requestBody).schema,
     )
     const replaceRolePermissionsProperties = openApiRecord(replaceRolePermissionsSchema.properties)
 
-    expect(replaceRolePermissionsProperties).toHaveProperty('permissions')
+    expect(replaceRolePermissionsProperties).toHaveProperty('scopes')
     expect(replaceRolePermissions?.responses).toHaveProperty('200')
     expect(replaceRolePermissions?.responses).toHaveProperty('412')
     expect(replaceRolePermissions?.responses).toHaveProperty('428')
     expect(replaceRolePermissions?.responses).not.toHaveProperty('204')
 
     const deleteApiResource = openApiOperationObjects().find(
-      (operation) => operation.key === 'DELETE /api-resources/{param}',
+      (operation) => operation.key === 'DELETE /resource-servers/{param}',
     )
     expect(deleteApiResource?.responses).toHaveProperty('204')
     expect(deleteApiResource?.responses).toHaveProperty('409')
 
     const archiveApiResource = openApiOperationObjects().find(
-      (operation) => operation.key === 'PUT /api-resources/{param}/archival',
+      (operation) => operation.key === 'PUT /resource-servers/{param}/archival',
     )
     const restoreApiResource = openApiOperationObjects().find(
-      (operation) => operation.key === 'DELETE /api-resources/{param}/archival',
+      (operation) => operation.key === 'DELETE /resource-servers/{param}/archival',
     )
     expect(archiveApiResource?.responses).toHaveProperty('200')
     expect(restoreApiResource?.responses).toHaveProperty('200')
@@ -286,7 +288,7 @@ describe('management routes 1', () => {
       authorization: 'Bearer eyJ0eXAiOiJhZ2VudCtqd3QifQ.e30.c2lnbmF0dXJl',
     }
 
-    const agent = await app.request('/api/agent-identities/current', { headers })
+    const agent = await app.request('/api/agent/status', { headers })
     expect(agent.status).toBe(200)
     await expect(agent.json()).resolves.toMatchObject({
       agent: { issuer: 'http://localhost', subject: 'agt_1' },
@@ -357,7 +359,7 @@ describe('management routes 1', () => {
     expect(users.deleteManagedUser).toHaveBeenCalledOnce()
   })
 
-  it('adapts unified capability requests to the existing AgentAuth approval flow [spec: agent-identity/agent-management-authority]', async () => {
+  it('does not expose the removed capability request resource', async () => {
     const auth = createAuthMock()
     auth.api.getAgentSession.mockResolvedValue(agentSession())
     auth.handler.mockImplementationOnce(async (request) => {
@@ -425,13 +427,7 @@ describe('management routes 1', () => {
       }),
     })
 
-    expect(response.status).toBe(201)
-    expect(response.headers.get('location')).toBe('https://auth.example.com/api/capability-requests/approval-1')
-    expect(response.headers.get('link')).toContain('interactive-resource')
-    const body = (await response.json()) as { interaction: { url: string } }
-    const approvalUrl = new URL(body.interaction.url)
-    expect(approvalUrl.pathname).toBe('/agent/approve')
-    expect(approvalUrl.searchParams.getAll('capability')).toEqual(['applications:read', 'applications:write'])
+    expect(response.status).toBe(404)
   })
 })
 

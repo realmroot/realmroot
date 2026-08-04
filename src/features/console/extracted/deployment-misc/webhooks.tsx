@@ -116,8 +116,8 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
     },
   })
   const retry = useAdminMutation({
-    mutationFn: ({ id, idempotencyKey }: { id: string; idempotencyKey: string }) =>
-      createWebhookDeliveryAttempt(id, idempotencyKey),
+    mutationFn: ({ endpointId, id, idempotencyKey }: { endpointId: string; id: string; idempotencyKey: string }) =>
+      createWebhookDeliveryAttempt(endpointId, id, idempotencyKey),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: consoleQueryKeys.webhookRequests }),
   })
   const error = organizations.error ?? (section === 'endpoints' ? endpoints.error : requests.error)
@@ -311,7 +311,13 @@ export function WebhooksPage({ section = 'endpoints' }: { section?: WebhooksSect
                     <TableCell className="text-right">
                       <Button
                         disabled={item.status === 'delivered' || retry.isPending}
-                        onClick={() => retry.mutate({ id: item.id, idempotencyKey: crypto.randomUUID() })}
+                        onClick={() =>
+                          retry.mutate({
+                            endpointId: item.endpointId,
+                            id: item.id,
+                            idempotencyKey: crypto.randomUUID(),
+                          })
+                        }
                         size="sm"
                         variant="ghost"
                       >

@@ -1,4 +1,4 @@
-import { badRequest } from '@server/domain/errors'
+import { badRequest, notFound } from '@server/domain/errors'
 import {
   createWebhookDeliveryAttempt,
   createWebhookEndpoint,
@@ -35,7 +35,7 @@ import { readJson, readQuery } from '../validation'
 export function createManagementWebhookRoutes() {
   const app = new Hono()
 
-  app.get('/endpoints', async (c) =>
+  app.get('/', async (c) =>
     c.json(
       listWebhookEndpointsResponseSchema.parse(
         await listWebhookEndpoints(
@@ -47,80 +47,88 @@ export function createManagementWebhookRoutes() {
     ),
   )
 
-  app.post('/endpoints', async (c) => {
+  app.post('/', async (c) => {
     const input = await readJson(c, createWebhookEndpointRequestSchema)
     requireConsoleOwnedOrganization(c, input.organizationId)
     const endpoint = await createWebhookEndpoint(getDeps(c), input, getActorUserId(c))
-    c.header('Location', `/api/webhooks/endpoints/${encodeURIComponent(endpoint.endpoint.id)}`)
+    c.header('Location', `/api/webhooks/${encodeURIComponent(endpoint.endpoint.id)}`)
     return c.json(webhookEndpointSecretResponseSchema.parse(endpoint), 201)
   })
 
-  app.get('/endpoints/:id', async (c) => c.json(webhookEndpointSchema.parse(await requireEndpointAccess(c))))
+  app.get('/:webhookId', async (c) => c.json(webhookEndpointSchema.parse(await requireEndpointAccess(c))))
 
-  app.patch('/endpoints/:id', async (c) => {
+  app.patch('/:webhookId', async (c) => {
     await requireEndpointAccess(c)
     const input = await readJson(c, updateWebhookEndpointRequestSchema)
     if (input.organizationId !== undefined) requireConsoleOwnedOrganization(c, input.organizationId)
-    return c.json(webhookEndpointSchema.parse(await updateWebhookEndpoint(getDeps(c), c.req.param('id'), input)))
+    return c.json(webhookEndpointSchema.parse(await updateWebhookEndpoint(getDeps(c), c.req.param('webhookId'), input)))
   })
 
-  app.delete('/endpoints/:id', async (c) => {
+  app.delete('/:webhookId', async (c) => {
     await requireEndpointAccess(c)
-    await deleteWebhookEndpoint(getDeps(c), c.req.param('id'))
+    await deleteWebhookEndpoint(getDeps(c), c.req.param('webhookId'))
     return c.body(null, 204)
   })
 
-  app.post('/endpoints/:id/secrets', async (c) => {
+  app.post('/:webhookId/secrets', async (c) => {
     await requireEndpointAccess(c)
-    const endpoint = await rotateWebhookSecret(getDeps(c), c.req.param('id'))
+    const endpoint = await rotateWebhookSecret(getDeps(c), c.req.param('webhookId'))
     return c.json(webhookEndpointSecretResponseSchema.parse(endpoint), 201)
   })
 
-  app.get('/requests', async (c) =>
-    c.json(
+  app.get('/:webhookId/deliveries', async (c) => {
+    await requireEndpointAccess(c)
+    const query = readQuery(c, listWebhookRequestsQuerySchema.omit({ endpointId: true }))
+    return c.json(
       listWebhookRequestsResponseSchema.parse(
         await listWebhookRequests(
           getDeps(c),
-          readQuery(c, listWebhookRequestsQuerySchema),
+          { ...query, endpointId: c.req.param('webhookId') },
           getConsoleOrganizationScope(c) ?? undefined,
         ),
       ),
-    ),
+    )
+  })
+
+  app.get('/:webhookId/deliveries/:deliveryId', async (c) =>
+    c.json(webhookRequestSchema.parse(await requireRequestAccess(c))),
   )
 
-  app.get('/requests/:id', async (c) => c.json(webhookRequestSchema.parse(await requireRequestAccess(c))))
-
-  app.get('/requests/:id/attempts', async (c) => {
+  app.get('/:webhookId/deliveries/:deliveryId/attempts', async (c) => {
     await requireRequestAccess(c)
     return c.json(
       listWebhookDeliveryAttemptsResponseSchema.parse(
         await listWebhookDeliveryAttempts(
           getDeps(c),
-          c.req.param('id'),
+          c.req.param('deliveryId'),
           readQuery(c, listWebhookRequestsQuerySchema.pick({ limit: true, offset: true })),
         ),
       ),
     )
   })
 
-  app.post('/requests/:id/attempts', async (c) => {
+  app.post('/:webhookId/deliveries/:deliveryId/attempts', async (c) => {
     await requireRequestAccess(c)
     const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
     if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
-    const { attempt, replayed } = await createWebhookDeliveryAttempt(getDeps(c), c.req.param('id'), parsedKey.data)
+    const { attempt, replayed } = await createWebhookDeliveryAttempt(
+      getDeps(c),
+      c.req.param('deliveryId'),
+      parsedKey.data,
+    )
     c.header(
       'Location',
-      `/api/webhooks/requests/${encodeURIComponent(c.req.param('id'))}/attempts/${encodeURIComponent(attempt.id)}`,
+      `/api/webhooks/${encodeURIComponent(c.req.param('webhookId'))}/deliveries/${encodeURIComponent(c.req.param('deliveryId'))}/attempts/${encodeURIComponent(attempt.id)}`,
     )
     if (replayed) c.header('Idempotency-Replayed', 'true')
     return c.json(webhookDeliveryAttemptSchema.parse(attempt), 201)
   })
 
-  app.get('/requests/:id/attempts/:attemptId', async (c) => {
+  app.get('/:webhookId/deliveries/:deliveryId/attempts/:attemptId', async (c) => {
     await requireRequestAccess(c)
     return c.json(
       webhookDeliveryAttemptSchema.parse(
-        await getWebhookDeliveryAttempt(getDeps(c), c.req.param('id'), c.req.param('attemptId')),
+        await getWebhookDeliveryAttempt(getDeps(c), c.req.param('deliveryId'), c.req.param('attemptId')),
       ),
     )
   })
@@ -129,13 +137,14 @@ export function createManagementWebhookRoutes() {
 }
 
 async function requireEndpointAccess(c: Parameters<typeof getConsoleOrganizationScope>[0]) {
-  const endpoint = await getWebhookEndpoint(getDeps(c), c.req.param('id')!)
+  const endpoint = await getWebhookEndpoint(getDeps(c), c.req.param('webhookId')!)
   requireConsoleOwnedOrganization(c, endpoint.organizationId)
   return endpoint
 }
 
 async function requireRequestAccess(c: Parameters<typeof getConsoleOrganizationScope>[0]) {
-  const request = await getWebhookRequest(getDeps(c), c.req.param('id')!)
+  const request = await getWebhookRequest(getDeps(c), c.req.param('deliveryId')!)
+  if (request.endpointId !== c.req.param('webhookId')) throw notFound('Webhook delivery was not found.')
   requireConsoleOwnedOrganization(c, request.organizationId)
   return request
 }

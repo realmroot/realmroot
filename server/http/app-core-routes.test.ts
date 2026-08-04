@@ -173,8 +173,8 @@ describe('app.test 1', () => {
     await expect(response.json()).resolves.toMatchObject({
       issuer: 'https://tenant.example.net/api/auth',
       agent_identity_issuer: 'https://tenant.example.net/api/auth',
-      agent_endpoint: 'https://tenant.example.net/api/agent-identities/current',
-      agent_enrollment_endpoint: 'https://tenant.example.net/api/agent-identities/current/enrollments',
+      agent_endpoint: 'https://tenant.example.net/api/agent/status',
+      agent_enrollment_endpoint: 'https://tenant.example.net/api/agent/enrollments',
       agentinfo_endpoint: 'https://tenant.example.net/api/auth/agentinfo',
       agentinfo_claims_supported: ['iss', 'sub', 'sub_profile', 'name', 'picture', 'updated_at'],
       default_location: 'https://tenant.example.net/api/auth/capability/execute',

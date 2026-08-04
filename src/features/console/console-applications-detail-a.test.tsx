@@ -69,7 +69,7 @@ describe('admin console applications-detail-a', () => {
       if (url === '/api/applications/app-1' && method === 'GET') {
         return Promise.resolve(jsonResponse(application))
       }
-      if (url === '/api/application-authorizations?applicationId=app-1&limit=50&offset=0' && method === 'GET') {
+      if (url === '/api/access/consents?applicationId=app-1&limit=50&offset=0' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             authorizations: active ? [authorization] : [],
@@ -83,7 +83,7 @@ describe('admin console applications-detail-a', () => {
           }),
         )
       }
-      if (url === '/api/application-authorizations?applicationId=app-1&limit=50&offset=50' && method === 'GET') {
+      if (url === '/api/access/consents?applicationId=app-1&limit=50&offset=50' && method === 'GET') {
         return Promise.resolve(
           jsonResponse({
             authorizations: active
@@ -99,7 +99,7 @@ describe('admin console applications-detail-a', () => {
           }),
         )
       }
-      if (url === '/api/application-authorizations/authorization-1/revocation' && method === 'PUT') {
+      if (url === '/api/access/consents/authorization-1/revocation' && method === 'PUT') {
         revocations += 1
         active = false
         return Promise.resolve(
@@ -157,7 +157,7 @@ describe('admin console applications-detail-a', () => {
       if (url === '/api/applications/app-1/federated-credentials') {
         return Promise.resolve(jsonResponse({ credentials: [] }))
       }
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
       }
       return consoleSharedFetch(input, init)
@@ -373,7 +373,7 @@ describe('admin console applications-detail-a', () => {
       if (url === '/api/applications/app-1/federated-credentials') {
         return Promise.resolve(jsonResponse({ credentials: [] }))
       }
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [], pagination: { ...pagination, total: 0 } }))
       }
       return consoleSharedFetch(input, init)

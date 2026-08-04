@@ -6,7 +6,15 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import type { AccountProfileUpdateInput } from '../../../shared/api/account'
 import type { AdminUpdateUserInput, AdminUserListQuery } from '../../../shared/api/users'
 import type { Database } from '../../db/client'
-import { account, application, applicationConsent, session, uploadedAsset, user } from '../../db/schema'
+import {
+  account,
+  application,
+  applicationConsent,
+  passwordResetRequest,
+  session,
+  uploadedAsset,
+  user,
+} from '../../db/schema'
 
 export function createUserRepository(db: Database): UserRepository {
   return {
@@ -195,6 +203,20 @@ export function createUserRepository(db: Database): UserRepository {
       }
 
       return row.token
+    },
+
+    async createPasswordResetRequest(input) {
+      await db.insert(passwordResetRequest).values(input)
+      return input
+    },
+
+    async findPasswordResetRequest(userId, requestId) {
+      const [row] = await db
+        .select()
+        .from(passwordResetRequest)
+        .where(and(eq(passwordResetRequest.userId, userId), eq(passwordResetRequest.id, requestId)))
+        .limit(1)
+      return row ? { ...row, status: 'accepted' as const } : null
     },
   }
 }

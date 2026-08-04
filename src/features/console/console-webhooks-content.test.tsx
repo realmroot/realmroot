@@ -35,10 +35,13 @@ describe('admin console authorization creation and Organization detail', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input).split('?')[0]
-      if (['/api/organizations', '/api/roles', '/api/api-resources'].includes(url) && init?.method === 'POST') {
+      if (
+        ['/api/organizations', '/api/access/roles', '/api/resource-servers'].includes(url) &&
+        init?.method === 'POST'
+      ) {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         if (url === '/api/organizations') return Promise.resolve(jsonResponse(organization, 201))
-        if (url === '/api/roles') return Promise.resolve(jsonResponse(role, 201))
+        if (url === '/api/access/roles') return Promise.resolve(jsonResponse(role, 201))
         return Promise.resolve(jsonResponse(apiResource, 201))
       }
       if (url === '/api/organizations') {
@@ -47,11 +50,11 @@ describe('admin console authorization creation and Organization detail', () => {
       if (url === '/api/organizations/org-1/members') {
         return Promise.resolve(jsonResponse({ members: [], pagination: emptyPagination }))
       }
-      if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-      if (url === '/api/roles/role-1/permissions') {
-        return Promise.resolve(jsonResponse({ roleId: 'role-1', permissions: [] }))
+      if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+      if (url === '/api/access/roles/role-1/scopes') {
+        return Promise.resolve(jsonResponse({ roleId: 'role-1', scopes: [] }))
       }
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
       }
       return consoleSharedFetch(input, init)
@@ -94,9 +97,9 @@ describe('admin console authorization creation and Organization detail', () => {
     await waitFor(() =>
       expect(requests).toEqual([
         { url: '/api/organizations', body: { slug: 'northwind', name: 'Northwind Traders' } },
-        { url: '/api/roles', body: { key: 'auditor', name: 'Auditor', description: 'Reads audit events' } },
+        { url: '/api/access/roles', body: { key: 'auditor', name: 'Auditor', description: 'Reads audit events' } },
         {
-          url: '/api/api-resources',
+          url: '/api/resource-servers',
           body: {
             identifier: 'billing-api',
             name: 'Billing API',
@@ -172,7 +175,8 @@ describe('admin console authorization creation and Organization detail', () => {
       }
       if (url === '/api/users') return Promise.resolve(jsonResponse({ users: [user], pagination }))
       if (url === '/api/agents') return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
-      if (url === '/api/audit-events') return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+      if (url === '/api/realm/audit-events')
+        return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
       throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${raw}`)
     })
 

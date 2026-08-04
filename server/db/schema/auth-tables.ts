@@ -48,6 +48,19 @@ export const session = sqliteTable(
   (table) => [index('session_userId_idx').on(table.userId)],
 )
 
+export const passwordResetRequest = sqliteTable(
+  'password_reset_request',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    status: text('status').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('passwordResetRequest_userId_idx').on(table.userId)],
+)
+
 export const account = sqliteTable(
   'account',
   {

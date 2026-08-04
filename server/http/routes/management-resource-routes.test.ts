@@ -95,10 +95,10 @@ describe('management resource routes', () => {
   it('routes API resource, role permission, and assignment requests', async () => {
     const { app, authorizationService } = await loadAuthorizationRoutes()
 
-    await expectJson(app, '/api-resources', 'GET', undefined, 200)
+    await expectJson(app, '/resource-servers', 'GET', undefined, 200)
     const createdResource = await expectJson(
       app,
-      '/api-resources',
+      '/resource-servers',
       'POST',
       {
         identifier: 'contacts',
@@ -107,42 +107,44 @@ describe('management resource routes', () => {
       },
       201,
     )
-    expect(createdResource.headers.get('location')).toBe('/api/api-resources/resource-1')
-    await expectJson(app, '/api-resources/resource-1', 'GET', undefined, 200)
-    await expectJson(app, '/api-resources/resource-1/contract', 'GET', undefined, 200)
-    await expectJson(app, '/api-resources/resource-1', 'PATCH', { enabled: false }, 200)
-    await expectJson(app, '/api-resources/resource-1/archival', 'PUT', undefined, 200)
-    await expectJson(app, '/api-resources/resource-1/archival', 'DELETE', undefined, 200)
-    await expectStatus(app, '/api-resources/resource-1', 'DELETE', undefined, 204)
-    await expectJson(app, '/roles', 'GET', undefined, 200)
-    const createdRole = await expectJson(app, '/roles', 'POST', { key: 'admin', name: 'Admin' }, 201)
-    expect(createdRole.headers.get('location')).toBe('/api/roles/role-1')
-    await expectJson(app, '/roles/role-1', 'GET', undefined, 200)
-    await expectJson(app, '/roles/role-1', 'PATCH', { name: 'Owner' }, 200)
-    await expectStatus(app, '/roles/role-1', 'DELETE', undefined, 204)
-    const permissionsResponse = await request(app, '/roles/role-1/permissions', 'GET', undefined)
+    expect(createdResource.headers.get('location')).toBe('/api/resource-servers/resource-1')
+    await expectJson(app, '/resource-servers/resource-1', 'GET', undefined, 200)
+    await expectJson(app, '/resource-servers/resource-1/contract', 'GET', undefined, 200)
+    await expectJson(app, '/resource-servers/resource-1', 'PATCH', { enabled: false }, 200)
+    await expectJson(app, '/resource-servers/resource-1/archival', 'GET', undefined, 200)
+    await expectJson(app, '/resource-servers/resource-1/archival', 'PUT', undefined, 200)
+    await expectJson(app, '/resource-servers/resource-1/archival', 'DELETE', undefined, 200)
+    await expectStatus(app, '/resource-servers/resource-1', 'DELETE', undefined, 204)
+    await expectJson(app, '/access/roles', 'GET', undefined, 200)
+    const createdRole = await expectJson(app, '/access/roles', 'POST', { key: 'admin', name: 'Admin' }, 201)
+    expect(createdRole.headers.get('location')).toBe('/api/access/roles/role-1')
+    await expectJson(app, '/access/roles/role-1', 'GET', undefined, 200)
+    await expectJson(app, '/access/roles/role-1', 'PATCH', { name: 'Owner' }, 200)
+    await expectStatus(app, '/access/roles/role-1', 'DELETE', undefined, 204)
+    const permissionsResponse = await request(app, '/access/roles/role-1/scopes', 'GET', undefined)
     expect(permissionsResponse.status).toBe(200)
     const etag = permissionsResponse.headers.get('etag')
     expect(etag).toBeTruthy()
     const replacePermissionsResponse = await request(
       app,
-      '/roles/role-1/permissions',
+      '/access/roles/role-1/scopes',
       'PUT',
-      { permissions: [{ resourceId: 'resource-1', scope: 'contacts.read' }] },
+      { scopes: [{ resourceId: 'resource-1', scope: 'contacts.read' }] },
       { 'if-match': etag! },
     )
     expect(replacePermissionsResponse.status).toBe(200)
-    await expectJson(app, '/role-assignments', 'GET', undefined, 200)
+    await expectJson(app, '/access/assignments', 'GET', undefined, 200)
     const createdAssignment = await expectJson(
       app,
-      '/role-assignments',
+      '/access/assignments',
       'POST',
       { roleId: 'role-1', subjectType: 'user', subjectId: 'user-1' },
       201,
     )
-    expect(createdAssignment.headers.get('location')).toBe('/api/role-assignments/assignment-1')
-    await expectJson(app, '/role-assignments/assignment-1', 'GET', undefined, 200)
-    await expectJson(app, '/role-assignments/assignment-1/revocation', 'PUT', undefined, 200)
+    expect(createdAssignment.headers.get('location')).toBe('/api/access/assignments/assignment-1')
+    await expectJson(app, '/access/assignments/assignment-1', 'GET', undefined, 200)
+    await expectJson(app, '/access/assignments/assignment-1/revocation', 'GET', undefined, 200)
+    await expectJson(app, '/access/assignments/assignment-1/revocation', 'PUT', undefined, 200)
 
     expect(authorizationService.replaceRolePermissions).toHaveBeenCalledWith('role-1', [
       { resourceId: 'resource-1', scope: 'contacts.read' },
@@ -282,10 +284,10 @@ async function loadAuthorizationRoutes() {
   const { managementRoleAssignmentsRoute } = await import('@server/http/routes/management/role-assignments')
   const { createProtectedResourceRoutes } = await import('@server/http/routes/management')
   const app = withAdminContext()
-  app.route('/api-resources', createManagementApiResourcesRoute())
+  app.route('/resource-servers', createManagementApiResourcesRoute())
   app.route('/organizations', managementOrganizationsRoute)
-  app.route('/roles', managementRolesRoute)
-  app.route('/role-assignments', managementRoleAssignmentsRoute)
+  app.route('/access/roles', managementRolesRoute)
+  app.route('/access/assignments', managementRoleAssignmentsRoute)
   app.route('/', createProtectedResourceRoutes({ authApi: {} as never, canonicalOrigin: 'https://auth.example.com' }))
   return { app, authorizationService }
 }

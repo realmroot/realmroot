@@ -1,12 +1,5 @@
 import { badRequest, forbidden } from '@server/domain/errors'
-import {
-  getAssetObject,
-  updateApplicationLogo,
-  updateBrandingAsset,
-  updateOrganizationLogo,
-  updateUserAvatar,
-  uploadAsset,
-} from '@server/usecases/assets'
+import { getAssetObject, updateUserAvatar, uploadAsset } from '@server/usecases/assets'
 import { defaultAccountCenterSettings, getConfig } from '@server/usecases/configz'
 import type { ConfigzAccountCenter } from '@server/usecases/ports'
 import type { SecurityPolicy } from '@shared/api/security'
@@ -49,7 +42,7 @@ export function createAccountAssetRoutes(securityPolicy?: SecurityPolicy) {
     const deps = getDeps(c)
     const asset = await uploadAsset(deps, {
       purpose: 'avatar',
-      file: await readUploadFile(c.req.raw),
+      file: await readUploadFile(await c.req.raw.formData()),
       actorUserId: getPrincipal(c).user!.id,
     })
     await updateUserAvatar(deps, getPrincipal(c).user!.id, asset.asset)
@@ -68,55 +61,32 @@ async function accountCenterSettings(c: Context, securityPolicy?: SecurityPolicy
 export function createProtectedResourceAssetRoutes() {
   const app = new Hono()
 
-  app.post('/applications/:applicationId/logo', async (c) => {
+  app.post('/assets', async (c) => {
     const deps = getDeps(c)
+    const form = await c.req.raw.formData()
+    const purpose = form.get('purpose')
+    if (
+      purpose !== 'avatar' &&
+      purpose !== 'application_logo' &&
+      purpose !== 'organization_logo' &&
+      purpose !== 'branding_logo' &&
+      purpose !== 'favicon'
+    ) {
+      throw badRequest('Asset purpose is required.')
+    }
     const asset = await uploadAsset(deps, {
-      purpose: 'application_logo',
-      file: await readUploadFile(c.req.raw),
+      purpose,
+      file: await readUploadFile(form),
       actorUserId: getPrincipal(c).user?.id ?? null,
     })
-    await updateApplicationLogo(deps, c.req.param('applicationId'), asset.asset)
-    return c.json(asset, 201)
-  })
-
-  app.post('/organizations/:organizationId/logo', async (c) => {
-    const deps = getDeps(c)
-    const asset = await uploadAsset(deps, {
-      purpose: 'organization_logo',
-      file: await readUploadFile(c.req.raw),
-      actorUserId: getPrincipal(c).user?.id ?? null,
-    })
-    await updateOrganizationLogo(deps, c.req.param('organizationId'), asset.asset)
-    return c.json(asset, 201)
-  })
-
-  app.post('/branding/logo', async (c) => {
-    const deps = getDeps(c)
-    const asset = await uploadAsset(deps, {
-      purpose: 'branding_logo',
-      file: await readUploadFile(c.req.raw),
-      actorUserId: getPrincipal(c).user?.id ?? null,
-    })
-    await updateBrandingAsset(deps, 'logo', asset.asset)
-    return c.json(asset, 201)
-  })
-
-  app.post('/branding/favicon', async (c) => {
-    const deps = getDeps(c)
-    const asset = await uploadAsset(deps, {
-      purpose: 'favicon',
-      file: await readUploadFile(c.req.raw),
-      actorUserId: getPrincipal(c).user?.id ?? null,
-    })
-    await updateBrandingAsset(deps, 'favicon', asset.asset)
+    c.header('Location', `/api/assets/${encodeURIComponent(asset.asset.id)}`)
     return c.json(asset, 201)
   })
 
   return app
 }
 
-async function readUploadFile(request: Request) {
-  const form = await request.formData()
+async function readUploadFile(form: FormData) {
   const file = form.get('file')
 
   if (!isUploadFile(file)) {

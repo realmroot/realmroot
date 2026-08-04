@@ -57,9 +57,9 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
     return Promise.resolve(jsonResponse({ activeOrganizationId: null }))
   }
   if (url === '/api/account/security') return Promise.resolve(jsonResponse({ security: accountSecurity }))
-  if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-  if (url === '/api/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
-  if (url === '/api/organization-creation-policy') {
+  if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+  if (url === '/api/realm/account-management-policy') return Promise.resolve(jsonResponse(accountCenterSettings))
+  if (url === '/api/realm/organization-creation-policy') {
     return Promise.resolve(
       jsonResponse(
         {
@@ -71,7 +71,7 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
       ),
     )
   }
-  if (url === '/api/developer-console-access-policy') {
+  if (url === '/api/realm/developer-console-access-policy') {
     return Promise.resolve(
       jsonResponse(
         {
@@ -85,14 +85,14 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
     )
   }
   if (url === '/api/realm') return Promise.resolve(jsonResponse(generalSettings, 200, { ETag: '"realm-v1"' }))
-  if (url === '/api/email-delivery-configuration') {
+  if (url === '/api/realm/email-delivery-configuration') {
     return Promise.resolve(jsonResponse(emailSettings, 200, { ETag: '"email-delivery-v1"' }))
   }
-  if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
-  if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
+  if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
+  if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
   if (url === '/api/connectors') return Promise.resolve(jsonResponse({ connectors: [connector], pagination }))
   if (url === '/api/connectors/templates') return Promise.resolve(jsonResponse(connectorTemplates))
-  if (url === '/api/readiness') {
+  if (url === '/api/realm/configuration-status') {
     return Promise.resolve(
       jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
     )
@@ -100,8 +100,14 @@ export function consoleSharedFetch(input: RequestInfo | URL, init?: RequestInit)
   if (url === '/api/agents') {
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
   }
-  if (url === '/api/audit-events') {
+  if (url === '/api/realm/audit-events') {
     return Promise.resolve(jsonResponse({ items: [], pagination: emptyPagination }))
+  }
+  if (url.startsWith('/api/access/consents')) {
+    return Promise.resolve(jsonResponse({ authorizations: [], pagination: emptyPagination }))
+  }
+  if (url === '/api/applications' || url.startsWith('/api/applications?')) {
+    return Promise.resolve(jsonResponse({ applications: [], pagination: emptyPagination }))
   }
   if (/^\/api\/users(?:\?|$)/.test(url)) {
     return Promise.resolve(jsonResponse({ users: [user], pagination }))
@@ -137,9 +143,9 @@ export function consoleRouteFetch(input: RequestInfo | URL) {
   if (url === '/api/account/profile') {
     return Promise.resolve(jsonResponse({ user: consoleAccountProfile, access: consoleAccountAccess }))
   }
-  if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(signInSettings))
-  if (url === '/api/account-center-settings') return Promise.resolve(jsonResponse(accountCenterSettings))
-  if (url === '/api/readiness') {
+  if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(signInSettings))
+  if (url === '/api/realm/account-management-policy') return Promise.resolve(jsonResponse(accountCenterSettings))
+  if (url === '/api/realm/configuration-status') {
     return Promise.resolve(
       jsonResponse({ admin: { setupRequired: false, setupHref: '/console/onboarding', missing: [] } }),
     )
@@ -159,18 +165,17 @@ export function consoleRouteFetch(input: RequestInfo | URL) {
     return Promise.resolve(jsonResponse({ organizations: [organization], pagination }))
   }
   if (url === '/api/organizations/org-1') return Promise.resolve(jsonResponse(organization))
-  if (url === '/api/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
-  if (url === '/api/api-resources') {
+  if (url === '/api/access/roles') return Promise.resolve(jsonResponse({ roles: [role], pagination }))
+  if (url === '/api/resource-servers') {
     return Promise.resolve(jsonResponse({ items: [{ ...apiResource, authorization: null }], pagination }))
   }
-  if (url.startsWith('/api/webhooks/endpoints')) {
-    return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
-  }
-  if (url.startsWith('/api/webhooks/requests')) {
+  if (/^\/api\/webhooks\/[^/]+\/deliveries/.test(url)) {
     return Promise.resolve(jsonResponse({ requests: [webhookRequest], pagination }))
   }
-  if (url === '/api/security/policy') return Promise.resolve(jsonResponse(securityPolicy))
-  if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(brandingSettings))
+  if (url.startsWith('/api/webhooks'))
+    return Promise.resolve(jsonResponse({ endpoints: [webhookEndpoint], pagination }))
+  if (url === '/api/realm/security-policy') return Promise.resolve(jsonResponse(securityPolicy))
+  if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(brandingSettings))
   return consoleSharedFetch(input)
 }
 

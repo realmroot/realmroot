@@ -100,7 +100,7 @@ describe('admin console application federated credentials', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return jsonResponse({
           items: [
             {
@@ -227,7 +227,7 @@ describe('admin console application federated credentials', () => {
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/api-resources') {
+      if (url === '/api/resource-servers') {
         return jsonResponse({
           items: [],
           pagination: { limit: 50, offset: 0, total: 0, hasMore: false, nextOffset: null },

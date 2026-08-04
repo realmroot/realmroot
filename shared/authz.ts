@@ -1,6 +1,6 @@
 export const resourceAccess = {
   applications: {
-    routePrefixes: ['applications', 'application-authorizations'],
+    routePrefixes: ['applications'],
     capabilities: { read: 'applications:read', write: 'applications:write' },
   },
   users: {
@@ -12,11 +12,11 @@ export const resourceAccess = {
     capabilities: { read: 'organizations:read', write: 'organizations:write' },
   },
   roles: {
-    routePrefixes: ['roles', 'role-assignments'],
+    routePrefixes: [],
     capabilities: { read: 'roles:read', write: 'roles:write' },
   },
   apiResources: {
-    routePrefixes: ['api-resources'],
+    routePrefixes: ['resource-servers'],
     capabilities: { read: 'api-resources:read', write: 'api-resources:write' },
   },
   connectors: {
@@ -24,20 +24,11 @@ export const resourceAccess = {
     capabilities: { read: 'connectors:read', write: 'connectors:write' },
   },
   settings: {
-    routePrefixes: [
-      'sign-in-settings',
-      'branding-settings',
-      'account-center-settings',
-      'organization-creation-policy',
-      'developer-console-access-policy',
-      'email-delivery-configuration',
-      'realm',
-      'branding',
-    ],
+    routePrefixes: ['realm'],
     capabilities: { read: 'settings:read', write: 'settings:write' },
   },
   security: {
-    routePrefixes: ['security'],
+    routePrefixes: [],
     capabilities: { read: 'security:read', write: 'security:write' },
   },
   webhooks: {
@@ -45,15 +36,15 @@ export const resourceAccess = {
     capabilities: { read: 'webhooks:read', write: 'webhooks:write' },
   },
   agents: {
-    routePrefixes: ['agents', 'agent-access-requests', 'agent-access-grants'],
+    routePrefixes: ['agents', 'access'],
     capabilities: { read: 'agents:read', write: 'agents:write' },
   },
   auditEvents: {
-    routePrefixes: ['audit-events'],
+    routePrefixes: [],
     capabilities: { read: 'audit-events:read' },
   },
   readiness: {
-    routePrefixes: ['readiness'],
+    routePrefixes: [],
     capabilities: { read: 'readiness:read' },
   },
 } as const
@@ -77,7 +68,18 @@ export const resourceByRoutePrefix = Object.fromEntries(
 ) as Record<string, ProtectedResource>
 
 export function protectedResourceForPath(path: string): ProtectedResource | null {
-  const prefix = path.replace(/^\/+/, '').split('/')[0]
+  const [prefix, child] = path.replace(/^\/+/, '').split('/')
+  if (prefix === 'access') {
+    if (child === 'consents') return 'applications'
+    if (child === 'roles' || child === 'assignments') return 'roles'
+    if (child === 'requests' || child === 'authorizations') return 'agents'
+  }
+  if (prefix === 'realm') {
+    if (child === 'security-policy') return 'security'
+    if (child === 'audit-events') return 'auditEvents'
+    if (child === 'configuration-status') return 'readiness'
+    return 'settings'
+  }
   return prefix ? (resourceByRoutePrefix[prefix] ?? null) : null
 }
 

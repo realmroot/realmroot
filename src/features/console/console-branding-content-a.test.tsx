@@ -33,7 +33,7 @@ describe('admin console hosted experience', () => {
     const patches: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/branding-settings' && init?.method === 'PATCH') {
+      if (url === '/api/realm/branding' && init?.method === 'PATCH') {
         patches.push(JSON.parse(String(init.body)))
         return Promise.resolve(jsonResponse(brandingSettings))
       }
@@ -95,7 +95,7 @@ describe('admin console hosted experience', () => {
       },
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      if (String(input) === '/api/branding-settings') return Promise.resolve(jsonResponse(customBranding))
+      if (String(input) === '/api/realm/branding') return Promise.resolve(jsonResponse(customBranding))
       return consoleSharedFetch(input, init)
     })
 
@@ -138,8 +138,8 @@ describe('admin console hosted experience', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/branding-settings') return Promise.resolve(jsonResponse(defaultBranding))
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(defaultSignIn))
+      if (url === '/api/realm/branding') return Promise.resolve(jsonResponse(defaultBranding))
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(defaultSignIn))
       return consoleSharedFetch(input, init)
     })
 
@@ -156,7 +156,7 @@ describe('admin console hosted experience', () => {
   it('retries all hosted experience dependencies after a load failure', async () => {
     let attempts = 0
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
-      if (String(input) === '/api/branding-settings') {
+      if (String(input) === '/api/realm/branding') {
         attempts += 1
         return attempts === 1
           ? Promise.resolve(jsonResponse({ error: { message: 'Experience unavailable.' } }, 503))
@@ -196,7 +196,7 @@ describe('admin console hosted experience', () => {
     const requests: Array<{ url: string; body: unknown }> = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if ((url === '/api/sign-in-settings' || url === '/api/security/policy') && init?.method === 'PATCH') {
+      if ((url === '/api/realm/sign-in-policy' || url === '/api/realm/security-policy') && init?.method === 'PATCH') {
         requests.push({ url, body: JSON.parse(String(init.body)) })
         return Promise.resolve(jsonResponse(url.endsWith('policy') ? securityPolicy : signInSettings))
       }
@@ -221,7 +221,7 @@ describe('admin console hosted experience', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(requests).toHaveLength(2))
     expect(requests).toContainEqual({
-      url: '/api/sign-in-settings',
+      url: '/api/realm/sign-in-policy',
       body: expect.objectContaining({
         signIn: expect.objectContaining({ passwordEnabled: false, emailOtpEnabled: true, socialLoginEnabled: false }),
       }),
@@ -232,11 +232,11 @@ describe('admin console hosted experience', () => {
     const requests: unknown[] = []
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/sign-in-settings' && init?.method === 'PATCH') {
+      if (url === '/api/realm/sign-in-policy' && init?.method === 'PATCH') {
         requests.push(JSON.parse(String(init.body)))
         return Promise.resolve(jsonResponse(signInSettings))
       }
-      if (url === '/api/branding-settings' && init?.method === 'PATCH') {
+      if (url === '/api/realm/branding' && init?.method === 'PATCH') {
         return Promise.resolve(jsonResponse(brandingSettings))
       }
       return consoleSharedFetch(input, init)
@@ -282,7 +282,7 @@ describe('admin console hosted experience', () => {
     }
     vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
-      if (url === '/api/sign-in-settings') return Promise.resolve(jsonResponse(oneTapSettings))
+      if (url === '/api/realm/sign-in-policy') return Promise.resolve(jsonResponse(oneTapSettings))
       if (url === '/api/connectors') {
         return Promise.resolve(jsonResponse({ connectors: [], pagination: { ...pagination, total: 0 } }))
       }

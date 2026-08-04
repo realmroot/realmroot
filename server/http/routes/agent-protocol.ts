@@ -1,7 +1,8 @@
 import { badRequest, forbidden, unauthorized } from '@server/domain/errors'
 import {
+  approveAgentEnrollment,
   createAdditionalAgentEnrollmentIntent,
-  createAgentLoginIdentity,
+  createAgentEnrollmentIntent,
   getAgentIdentityByProtocolAgent,
   getProtocolAgentEnrollment,
   getPublicAgentEnrollment,
@@ -15,27 +16,23 @@ import {
   createAgentConnectionRequest,
   getAccessRequest,
   getAgentConnectionRequest,
-  getAgentResourceServer,
   getAgentResourceServerResource,
   listAgentResourceServerResources,
-  listAgentResourceServers,
 } from '@server/usecases/external-resources'
 import {
   accessRequestSchema,
+  agentEnrollmentSchema,
   agentInstallationEnrollmentResponseSchema,
   agentInstallationEnrollmentSchema,
-  agentResponseSchema,
+  agentStatusSchema,
   createAccessRequestSchema,
-  createAgentEnrollmentSchema,
-  createAgentInstallationEnrollmentSchema,
+  createAgentSelfEnrollmentSchema,
   createResourceConnectionRequestSchema,
   credentialOfferProfile,
   interactiveResourceProfile,
   resourceConnectionRequestSchema,
   resourceServerResourceSchema,
   resourceServerResourcesResponseSchema,
-  resourceServerSchema,
-  resourceServersResponseSchema,
   targetTokenSchema,
 } from '@shared/api/agent-api'
 import { idempotencyKeySchema } from '@shared/api/idempotency'
@@ -56,36 +53,45 @@ interface AgentSessionApi {
 export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?: string) {
   const app = new Hono()
 
-  app.get('/agent-identities/current', async (c) => {
+  app.get('/agent/status', async (c) => {
     const session = await requireAgentSession(authApi, c.req.raw.headers)
-    const identity = await getAgentIdentityByProtocolAgent(getDeps(c), session.agent.id)
-    return c.json(agentResponseSchema.parse({ agent: toAgent(identity) }))
+    const aggregate = await getDeps(c).agentIdentities.findActiveByProtocolAgent(session.agent.id)
+    const binding = aggregate?.bindings.find((candidate) => candidate.protocolAgentId === session.agent.id) ?? null
+    return c.json(
+      agentStatusSchema.parse({
+        enrollment: { state: aggregate ? 'enrolled' : 'unenrolled', pending: null },
+        agent: aggregate ? toAgent(aggregate) : null,
+        installation: binding ? { id: binding.id, status: binding.status } : null,
+      }),
+    )
   })
 
-  app.post('/agent-identities/current/enrollments', async (c) => {
+  app.post('/agent/enrollments', async (c) => {
     const session = await requireAgentSession(authApi, c.req.raw.headers)
     if (!session.host?.userId) {
       throw forbidden('A controller-approved delegated Agent session is required.')
     }
-    const body = await readJson(c, createAgentEnrollmentSchema)
-    const identity = await createAgentLoginIdentity(
-      getDeps(c),
-      { protocolAgentId: session.agent.id, name: body.name },
-      requireOidcIssuer(),
-      session.host.userId,
-    )
-    c.header('Location', `${new URL(requireOidcIssuer()).origin}/api/agent-identities/current`)
-    return c.json(agentResponseSchema.parse({ agent: toAgent(identity) }), 201)
-  })
-
-  app.post('/installation-enrollments', async (c) => {
-    const session = await requireAgentSession(authApi, c.req.raw.headers)
-    if (!session.host?.userId) {
-      throw forbidden('A controller-approved delegated Agent session is required.')
+    const body = await readJson(c, createAgentSelfEnrollmentSchema)
+    if (body.kind === 'new_identity') {
+      const intent = await createAgentEnrollmentIntent(
+        getDeps(c),
+        {
+          protocolAgentId: session.agent.id,
+          name: body.name,
+          organizationId: body.organizationId,
+        },
+        session.host.userId,
+      )
+      await approveAgentEnrollment(getDeps(c), intent.id, requireOidcIssuer(), session.host.userId)
+      const enrollment = await getPublicAgentEnrollment(getDeps(c), intent.id, session.host.userId)
+      c.header(
+        'Location',
+        `${new URL(requireOidcIssuer()).origin}/api/agent/enrollments/${encodeURIComponent(intent.id)}`,
+      )
+      return c.json(agentEnrollmentSchema.parse(enrollment), 201)
     }
     const parsedKey = idempotencyKeySchema.safeParse(c.req.header('Idempotency-Key'))
     if (!parsedKey.success) throw badRequest('Idempotency-Key header is required and must contain 1 to 200 characters.')
-    const body = await readJson(c, createAgentInstallationEnrollmentSchema)
     const { intent, replayed } = await createAdditionalAgentEnrollmentIntent(
       getDeps(c),
       body.agentId,
@@ -96,7 +102,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     const verificationUri = hostedEnrollmentUrl(intent.id)
     c.header(
       'Location',
-      `${new URL(requireOidcIssuer()).origin}/api/installation-enrollments/${encodeURIComponent(intent.id)}`,
+      `${new URL(requireOidcIssuer()).origin}/api/agent/enrollments/${encodeURIComponent(intent.id)}`,
     )
     if (replayed) c.header('Idempotency-Replayed', 'true')
     return c.json(
@@ -108,39 +114,11 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     )
   })
 
-  app.get('/installation-enrollments/:enrollmentId', async (c) => {
+  app.get('/agent/enrollments/:enrollmentId', async (c) => {
     const session = await requireAgentSession(authApi, c.req.raw.headers)
     return c.json(
       agentInstallationEnrollmentSchema.parse(
         await getProtocolAgentEnrollment(getDeps(c), c.req.param('enrollmentId'), session.agent.id),
-      ),
-    )
-  })
-
-  app.get('/resource-servers', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
-    return c.json(
-      resourceServersResponseSchema.parse(
-        await listAgentResourceServers(
-          getDeps(c),
-          principal,
-          readQuery(c, paginationQuerySchema),
-          new URL(requireOidcIssuer()).origin,
-        ),
-      ),
-    )
-  })
-
-  app.get('/resource-servers/:resourceServerId', async (c) => {
-    const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
-    return c.json(
-      resourceServerSchema.parse(
-        await getAgentResourceServer(
-          getDeps(c),
-          c.req.param('resourceServerId'),
-          principal,
-          new URL(requireOidcIssuer()).origin,
-        ),
       ),
     )
   })
@@ -189,7 +167,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(resourceConnectionRequestSchema.parse(result), 201)
   })
 
-  app.get('/connection-requests/:requestId', async (c) => {
+  app.get('/resource-servers/:resourceServerId/connection-requests/:requestId', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
     const result = await getAgentConnectionRequest(
       getDeps(c),
@@ -197,11 +175,14 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
       principal,
       new URL(requireOidcIssuer()).origin,
     )
+    if (result.resourceServerId !== c.req.param('resourceServerId')) {
+      throw forbidden('Connection request does not belong to this Resource Server.')
+    }
     applyInteractionHeaders(c, result)
     return c.json(resourceConnectionRequestSchema.parse(result))
   })
 
-  app.post('/access-requests', async (c) => {
+  app.post('/access/requests', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
     const result = await createAccessRequest(
       getDeps(c),
@@ -214,7 +195,7 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(accessRequestSchema.parse(result), 201)
   })
 
-  app.get('/access-requests/:requestId', async (c) => {
+  app.get('/access/requests/:requestId', async (c) => {
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
     const result = await getAccessRequest(
       getDeps(c),
@@ -226,26 +207,25 @@ export function createAgentProtocolRoutes(authApi: AgentSessionApi, oidcIssuer?:
     return c.json(accessRequestSchema.parse(result))
   })
 
-  app.post('/access-requests/:requestId/credentials', async (c) => {
+  app.post('/access/authorizations/:authorizationId/credentials', async (c) => {
     if (!authApi.signJWT) throw unauthorized('Agent assertion signing is unavailable.')
     const principal = await resourcePrincipal(authApi, getDeps(c), c.req.raw.headers)
     const dpopProof = c.req.header('DPoP')
     if (!dpopProof) throw unauthorized('A DPoP proof is required.')
-    const credentialUrl = `${new URL(requireOidcIssuer()).origin}/api/access-requests/${encodeURIComponent(c.req.param('requestId'))}/credentials`
-    const result = await createAccessRequestCredential(
-      getDeps(c),
-      c.req.param('requestId'),
-      dpopProof,
-      credentialUrl,
-      principal,
-      {
-        issuer: requireOidcIssuer(),
-        sign: (payload, type) =>
-          authApi.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
-            ({ token }) => token,
-          ),
-      },
-    )
+    const grant = await getDeps(c).externalResources.findGrant(c.req.param('authorizationId'))
+    if (!grant || grant.agentIdentityId !== principal.identityId) {
+      throw forbidden('Agent authorization was not found.')
+    }
+    const request = await getDeps(c).externalResources.findAccessRequestByGrant(grant.id)
+    if (!request) throw forbidden('Agent authorization has no approved request.')
+    const credentialUrl = `${new URL(requireOidcIssuer()).origin}/api/access/authorizations/${encodeURIComponent(grant.id)}/credentials`
+    const result = await createAccessRequestCredential(getDeps(c), request.id, dpopProof, credentialUrl, principal, {
+      issuer: requireOidcIssuer(),
+      sign: (payload, type) =>
+        authApi.signJWT!({ body: { payload, overrideOptions: { jwt: { type } } }, asResponse: false }).then(
+          ({ token }) => token,
+        ),
+    })
     c.header('Link', `<${credentialOfferProfile}>; rel="profile"`)
     return c.json(targetTokenSchema.parse(result))
   })
