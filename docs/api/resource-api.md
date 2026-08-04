@@ -50,8 +50,7 @@ target credential workflows that span more than an ordinary resource request.
 The complete generated workflow surface is:
 
 ```text
-whoami
-request-capabilities
+auth whoami
 connect <resource-server-id>
 access
 ```
@@ -90,8 +89,9 @@ Read operations conventionally require `{resource}:read`; mutations require
 invalid authentication returns `401`, while an authenticated principal without
 the required authority receives `403`.
 
-The Agent enrollment and capability approval procedure belongs to the
-Realmroot skill and is intentionally not duplicated here.
+The Agent enrollment procedure belongs to the Realmroot skill and is
+intentionally not duplicated here. Realmroot management authority is assigned
+by a controller; it is not a generated Agent workflow command.
 
 Management capabilities authorize this Resource API only. Access requests and
 grants authorize exact scopes on a protected business API and never imply a

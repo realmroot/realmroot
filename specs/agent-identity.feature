@@ -57,41 +57,13 @@ Feature: Agent identity and delegated API authorization
       And another Realmroot issuer uses a separately secured local identity
       And an explicitly supplied AGENT runtime selects that runtime identity instead of the detected runtime
 
-    @e2e @entrypoint:restish @journey:agent-management-authority
-    Scenario: An Agent gains resource access without changing identity
-      Given an Agent identity has only its default self-service authority
-      When the Agent invokes an operation that requires a Realmroot resource scope
-      Then Realmroot rejects the operation and identifies the missing authority
-      When the Agent requests the missing management authority
-      Then Realmroot records the request through the existing AgentAuth capability approval flow
-      And Realmroot returns the existing hosted Agent approval URL for that request
-      And the Restish adapter opens the hosted approval URL in the controller's browser
-      And the capability request command waits for the approval decision
-      When an authorized controller reviews and approves the request
-      Then the existing approval request activates the management capability grant
-      And the hosted approval page replaces the request with a clear completion state that says it can be closed
-      And the capability request command completes with the active grants
-      And the same Agent identity can invoke only operations covered by the approved resource scopes
-      And assigned resource roles optionally restrict which OpenAPI scopes the Agent can request
-      And Restish does not automatically replay the previously denied operation
-      And the Agent does not log in again or adopt the controller's identity
-
-    @entrypoint:restish @journey:agent-capability-approval-renewal
-    Scenario: Repeating or renewing a capability request always returns a usable approval
-      Given an Agent has pending management capability grants
-      When the Agent repeats the capability request before its approval expires
-      Then Realmroot expires the previous approval and returns a new hosted approval URL
-      And Realmroot reuses the pending grants without creating duplicates
-      When the new approval expires and the Agent repeats the capability request
-      Then Realmroot returns another new hosted approval URL without an internal error
-
-    @e2e @entrypoint:product-ui @journey:agent-capability-denial
-    Scenario: A controller can deny Agent enrollment or requested capabilities
-      Given an Agent login or capability request is pending
+    @e2e @entrypoint:product-ui @journey:agent-enrollment-denial
+    Scenario: A controller can deny Agent enrollment
+      Given an Agent login request is pending
       When the authorized controller denies the request
       Then Realmroot resolves the existing AgentAuth approval as denied
       And the hosted approval page clearly says the request was denied and can be closed
-      And the waiting Restish command exits without receiving the requested authority
+      And the waiting Restish command exits without receiving an Agent identity
 
     @entrypoint:agent-protocol @journey:agent-multi-host-continuity
     Scenario: One Agent identity can be used from independently secured hosts

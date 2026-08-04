@@ -11,7 +11,7 @@ test.describe('new Agent stable identity enrollment', () => {
     await resetAndBootstrap()
   })
 
-  test('[spec: agent-identity/agent-identity-enrollment] [spec: agent-identity/agent-management-authority] a new Agent establishes its stable identity', async ({
+  test('[spec: agent-identity/agent-identity-enrollment] a new Agent establishes its stable identity', async ({
     page,
   }) => {
     await signIn(page)
@@ -45,7 +45,7 @@ test.describe('new Agent stable identity enrollment', () => {
     }
   })
 
-  test('[spec: agent-identity/agent-capability-denial] a controller can deny Agent enrollment', async ({ page }) => {
+  test('[spec: agent-identity/agent-enrollment-denial] a controller can deny Agent enrollment', async ({ page }) => {
     await signIn(page)
 
     const deniedEnrollmentPlugin = createRestishAgentPlugin(baseURL)

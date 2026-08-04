@@ -47,9 +47,9 @@ server remains visible with no requestable scopes, without hiding healthy
 servers. Request and credential issuance revalidate the target contract and
 fail closed if it changed.
 
-Realmroot management capabilities are separate. A capability request changes
-what the Agent may administer in Realmroot; it does not grant access to a
-Resource Server.
+Realmroot management authority is separate, controller-managed authority. It
+does not grant access to a Resource Server and is not part of the Agent's
+connection or access-request workflow.
 
 ## 3. Establish The Account Connection
 

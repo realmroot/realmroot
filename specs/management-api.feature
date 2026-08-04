@@ -27,8 +27,8 @@ Feature: Unified Realmroot resource API
     Then routine single-request operations remain discoverable from the published OpenAPI paths
     And those operations use Restish get, post, put, patch, delete, or edit instead of generated commands
     And Resource Server and Resource discovery use Restish's generic get command
-    And only Agent identity, connection approval, access approval, and capability approval retain generated workflow commands
-    And those workflows are exposed as whoami, connect, access, and request-capabilities
+    And only Agent identity, connection approval, and access approval retain generated workflow commands
+    And those workflows are exposed as whoami, connect, and access
     And polling and short-lived credential issuance remain hidden behind the plugin's generic response protocols
 
 
