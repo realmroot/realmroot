@@ -50,7 +50,7 @@ target credential workflows that span more than an ordinary resource request.
 The complete generated workflow surface is:
 
 ```text
-auth whoami
+whoami
 connect <resource-server-id>
 access
 ```
