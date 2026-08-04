@@ -71,9 +71,26 @@ the Restish adapter. After an Agent protocol or resource-authorization upgrade,
 update both with the procedure in [Use From Agents](../../README.md#use-from-agents)
 before running the smoke journey.
 
-The adapter migrates protected local state in place. Stable Agent and Host keys
-survive supported upgrades, while ambiguous legacy or authorization-mode-less
-DPoP credential caches are removed. This deliberately requires a current active
+The Agent lifecycle command surface requires adapter `0.10.0` or newer. That
+adapter is the sole owner of the top-level `restish auth` group. The deprecated
+generated `restish realmroot auth whoami` alias remains available during the
+transition and continues to read `GET /api/agent/status`. Upgrade the adapter
+before asking operators to use `restish auth login`, `status`,
+`list`, `use`, `logout`, `revoke`, `recover`, or `retire`. Older adapters still
+perform transparent first-use enrollment for protected OpenAPI requests, and
+the status resource remains available through generic HTTP access at
+`GET /api/agent/status`.
+
+The former `DELETE /api/agents/{agentId}/retirement` behavior was an unsafe
+recovery alias. It now remains discoverable as deprecated but returns `410
+Gone` without changing identity state. Recovery is exclusively
+`PUT /api/agents/{agentId}/recovery`; retirement is irreversible through
+`PUT /api/agents/{agentId}/retirement`.
+
+The adapter migrates protected local state to version 9 in place. Stable Agent
+and Host keys survive supported upgrades. Pre-0.10 platform tokens are removed
+so the next operation obtains the new `agent:write` scope, while ambiguous
+legacy or authorization-mode-less DPoP credential caches are removed. This deliberately requires a current active
 resource grant instead of silently carrying target authority across an
 incompatible model change. Do not restore discarded credentials from backups or
 manually edit the state files.

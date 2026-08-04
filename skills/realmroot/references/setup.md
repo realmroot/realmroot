@@ -40,7 +40,7 @@ origin and `API_NAME` is the stable service alias.
 ## Prepare Restish
 
 Require Restish 2.3 or newer, Go 1.25.3 or newer, and the `realmroot` adapter
-0.9.0 or newer:
+0.10.0 or newer:
 
 ```bash
 restish --version
@@ -156,9 +156,10 @@ PROFILE_ORIGIN="${PROFILE_ORIGIN%/}"
 restish api set "$API_NAME" \
   "profiles.${PROFILE_NAME}.base_url: ${PROFILE_ORIGIN}/api"
 restish api inspect "$API_NAME"
-restish -p "$PROFILE_NAME" "$API_NAME" whoami -o json
+restish auth login "$PROFILE_NAME" --api "$API_NAME" --api-profile "$PROFILE_NAME" \
+  --rsh-output-format json
+restish auth use "$PROFILE_NAME" --rsh-output-format json
 AUTH_ORIGIN="$PROFILE_ORIGIN"
-export RSH_PROFILE="$PROFILE_NAME"
 ```
 
 Validate `PROFILE_ORIGIN` by the same origin rules. Keep each profile's
@@ -167,15 +168,24 @@ Profiles resolving to the same issuer may reuse the stable identity; a
 different issuer uses a separate identity.
 
 Profile setup is complete when inspection shows the exact profile base URL and
-its explicit `whoami` call succeeds. Keep the selected `RSH_PROFILE` and
-matching `AUTH_ORIGIN` for every later branch command.
+its explicit lifecycle login succeeds. `auth use` selects the identity; pass
+`--rsh-profile "$PROFILE_NAME"` to generated API commands so Restish 2.3 also
+resolves the matching deployment URL. No environment-variable editing is
+required.
 
 ## Establish Identity
 
-Invoke the generated identity operation in the selected profile:
+Enroll or resume the named local lifecycle profile that points at the selected
+Restish API profile:
 
 ```bash
-restish "$API_NAME" whoami -o json
+LIFECYCLE_PROFILE="${PROFILE_NAME:-default}"
+restish auth login "$LIFECYCLE_PROFILE" \
+  --api "$API_NAME" \
+  --api-profile "$LIFECYCLE_PROFILE" \
+  --rsh-output-format json
+restish auth use "$LIFECYCLE_PROFILE" --rsh-output-format json
+restish auth status --profile "$LIFECYCLE_PROFILE" --rsh-output-format json
 ```
 
 On first use, the adapter registers a stable Agent, opens the controller's
@@ -183,6 +193,6 @@ approval page, waits, and resumes the same operation after approval. The
 controller signs in and decides; the Agent remains the Restish request
 identity.
 
-Repeat `whoami` after interruption to resume enrollment. Use
+Repeat the same `auth login` after interrupted first-use enrollment. Use
 `AUTH_ORIGIN/api/auth` as the returned OIDC issuer and consume its discovery
 metadata for OIDC endpoints.

@@ -1,15 +1,61 @@
 # Realmroot Restish Plugin
 
 `restish-realmroot` authenticates Realmroot and Resource Server requests for a
-stable Agent identity. It contributes no commands and contains no
-Resource-Server-specific business logic. Commands and schemas come from the
-OpenAPI contract.
+stable Agent identity. It contributes one plugin-local command group, `auth`,
+for local profile and identity lifecycle operations. Remote business resources
+and schemas still come from the OpenAPI contract.
+
+## Agent Identity Lifecycle
+
+Restish 2.3 mounts the plugin command declaration at its root, so the exact
+surface is:
+
+```text
+restish auth status [--profile NAME]
+restish auth list
+restish auth login [NAME] [--api realmroot] [--api-profile default] [--agent-name NAME]
+restish auth use NAME
+restish auth logout [--profile NAME]
+restish auth revoke INSTALLATION_ID [--profile NAME]
+restish auth recover [--profile NAME] [--yes]
+restish auth retire [--profile NAME] [--confirm SUBJECT]
+```
+
+`login` selects a configured Restish API/profile, enrolls or resumes its stable
+Agent identity, and records a named lifecycle profile. `use` switches the
+identity used by the authentication hook without environment-variable editing;
+its response includes the matching `--rsh-profile NAME` selector because the
+Restish 2.3 command-plugin protocol cannot rewrite an already resolved request
+URL. The hook fails instead of authenticating a request sent to a deployment
+that does not match the selected lifecycle profile. `status` reports the selected issuer,
+stable subject/name, local runtime and session context, and current installation
+without returning keys or tokens. `list` distinguishes local lifecycle profiles
+from the remote installations registered to the selected identity.
+
+The destructive operations are deliberately distinct:
+
+- `logout` deletes only the selected local keys, credentials, and lifecycle
+  profile. The remote Agent and its installations are unchanged.
+- `revoke` replaces one remote installation's revocation. When it revokes the
+  installation executing the command, that installation's local state is also
+  removed; the stable identity is not recovered or retired.
+- `recover` confirms the loss event locally, rotates the local protocol keys,
+  and opens a dedicated hosted recovery approval. That page names the stable
+  Agent and explains that approval revokes every obsolete binding and freezes
+  Resource access. Only the controller's explicit recovery approval performs
+  those remote changes and enrolls a replacement installation while preserving
+  the stable issuer and subject. Its idempotency marker makes an interrupted
+  recovery resumable.
+- `retire` permanently retires the stable identity and then removes its local
+  state. It requires the exact stable subject, either interactively or through
+  `--confirm SUBJECT`; a mismatch cancels without mutation.
 
 ## Responsibilities
 
 The plugin performs only work that must happen on the Agent's machine:
 
 - generate and protect Agent, Host, and DPoP private keys;
+- maintain named local lifecycle profiles and the currently selected profile;
 - enroll or reuse the stable Agent identity discovered from
   `/.well-known/agent-configuration`;
 - exchange the Agent assertion at the OAuth token endpoint and add a
@@ -23,7 +69,8 @@ The plugin performs only work that must happen on the Agent's machine:
 Target profiles identify this hook with `provider: realmroot-target`. They may
 also supply the discovered Realmroot `issuer`; the plugin uses it to select the
 right local identity when local, staging, or production authorize the same
-Resource Server URL.
+Resource Server URL. `auth use` governs this selection for subsequent target
+requests and rejects a target configured for another issuer.
 
 The plugin does not recognize Realmroot endpoint paths. It does not list or
 select account connections, grants, authorization details, token endpoints,
@@ -101,7 +148,10 @@ is removed and a new access request is required.
 ## State
 
 Identity state is keyed by the discovered issuer and Agent runtime. Restish API
-aliases and profiles reuse that identity. Active Resource selection is isolated
+aliases and profiles reuse that identity. A lifecycle profile points to one
+Restish API/profile, issuer, and runtime; it never copies identity state. The
+same issuer/runtime cannot be aliased by two lifecycle names, and one lifecycle
+name cannot silently switch to a different identity. Active Resource selection is isolated
 by a hashed Agent session identifier when the runtime exposes one, allowing
 concurrent sessions to use different Resources at the same service URL.
 
